@@ -7,8 +7,8 @@ pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-9";
 pub const WITNESS_CONTRACT_VERSION: u16 = 9;
 pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-11";
 pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 11;
-pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-34";
-pub const VALIDATOR_CONTRACT_VERSION: u16 = 34;
+pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-35";
+pub const VALIDATOR_CONTRACT_VERSION: u16 = 35;
 
 pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT09";
 pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM16";
@@ -45,7 +45,11 @@ pub struct ValidatorFeatureDescriptor {
 
 /// This list is the executable owner for rules that affect acceptance or safe witness reuse.
 /// Changing one rule requires changing its feature version, which changes the validator digest.
-pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 40] = [
+pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 41] = [
+    ValidatorFeatureDescriptor {
+        name: "scoped_shareable_owned_inputs",
+        version: 1,
+    },
     ValidatorFeatureDescriptor {
         name: "source_tied_owned_read_results",
         version: 1,
@@ -68,7 +72,7 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 40] = [
     },
     ValidatorFeatureDescriptor {
         name: "structured_parallel_owned_tasks",
-        version: 4,
+        version: 5,
     },
     ValidatorFeatureDescriptor {
         name: "structural_owned_choices",
@@ -80,12 +84,12 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 40] = [
     },
     ValidatorFeatureDescriptor {
         name: "symbolic_owned_parameters",
-        version: 5,
+        version: 6,
     },
     ValidatorFeatureDescriptor {
         name: "explicit_owned_implementation_witnesses",
         // Explicit application schemes preserve consumption, allowances and grants independently.
-        version: 7,
+        version: 8,
     },
     ValidatorFeatureDescriptor {
         name: "sealed_owned_i64_cells",
@@ -149,7 +153,7 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 40] = [
     },
     ValidatorFeatureDescriptor {
         name: "validation_dependency_projection",
-        version: 1,
+        version: 2,
     },
     ValidatorFeatureDescriptor {
         name: "test_dependency_projection",
@@ -197,7 +201,7 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 40] = [
     },
     ValidatorFeatureDescriptor {
         name: "same_task_owned_transfer",
-        version: 1,
+        version: 2,
     },
     ValidatorFeatureDescriptor {
         name: "structured_session_relations",

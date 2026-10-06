@@ -31,30 +31,72 @@ pub(super) fn ordinary_assumptions(
     read: &(impl ExpressionRead + ?Sized),
     scope: Option<DeclarationId>,
 ) -> Result<BTreeSet<TypeParameterId>, Diagnostic> {
+    ordinary_assumptions_in(
+        read,
+        scope.map(|declaration| DeclarationReference {
+            package: read.package_id(),
+            declaration,
+        }),
+    )
+}
+
+pub(super) fn ordinary_assumptions_in(
+    read: &(impl ExpressionRead + ?Sized),
+    scope: Option<DeclarationReference>,
+) -> Result<BTreeSet<TypeParameterId>, Diagnostic> {
     let mut assumptions = BTreeSet::new();
     let Some(scope) = scope else {
         return Ok(assumptions);
     };
     read.validation_work()?;
-    let Some(OwnerRecord::Declaration(declaration)) = read.owner(OwnerKey::Declaration(scope))?
-    else {
-        return Err(reject(
-            "transfer assumptions require an exact function scope",
-        ));
+    let key = OwnerKey::Declaration(scope.declaration);
+    let parameters = if scope.package == read.package_id() {
+        match read.owner(key)? {
+            Some(OwnerRecord::Declaration(declaration)) => match declaration.payload {
+                DeclarationPayload::Function(function) => function.type_parameters,
+                DeclarationPayload::OwnedImplementation(implementation) => {
+                    implementation.type_parameters
+                }
+                _ => return Ok(assumptions),
+            },
+            _ => {
+                return Err(reject(
+                    "transfer assumptions require an exact declaration scope",
+                ));
+            }
+        }
+    } else {
+        match read.package_interface_owner(scope.package, key)? {
+            Some(PackageInterfaceRecord::Declaration(declaration)) => match declaration.payload {
+                PackageInterfaceDeclarationPayload::Function(function) => function.type_parameters,
+                PackageInterfaceDeclarationPayload::OwnedImplementation(implementation) => {
+                    implementation.type_parameters
+                }
+                _ => return Ok(assumptions),
+            },
+            _ => {
+                return Err(reject(
+                    "transfer assumptions require an exact imported scope",
+                ));
+            }
+        }
     };
-    let DeclarationPayload::Function(function) = declaration.payload else {
-        // Closed carriers also occur as implementation Self and other declaration
-        // annotations. Such contexts contribute no open transfer assumptions.
-        return Ok(assumptions);
-    };
-    for parameter in function.type_parameters {
+    for parameter in parameters {
         read.validation_work()?;
-        let Some(OwnerRecord::TypeParameter(record)) =
-            read.owner(OwnerKey::TypeParameter(parameter))?
-        else {
-            return Err(reject("transfer assumption parameter is absent"));
+        let key = OwnerKey::TypeParameter(parameter);
+        let record = if scope.package == read.package_id() {
+            match read.owner(key)? {
+                Some(OwnerRecord::TypeParameter(record)) => record,
+                _ => return Err(reject("transfer assumption parameter is absent")),
+            }
+        } else {
+            match read.package_interface_owner(scope.package, key)? {
+                Some(PackageInterfaceRecord::TypeParameter(record)) => record,
+                _ => return Err(reject("imported transfer assumption parameter is absent")),
+            }
         };
-        if record.declaration != scope || record.header.owner != OwnerKey::TypeParameter(parameter)
+        if record.declaration != scope.declaration
+            || record.header.owner != OwnerKey::TypeParameter(parameter)
         {
             return Err(reject(
                 "transfer assumption has a foreign declaration owner",
@@ -68,18 +110,26 @@ pub(super) fn ordinary_assumptions(
     Ok(assumptions)
 }
 
-fn owned_parameter(
+fn owned_parameter_in(
     read: &(impl ExpressionRead + ?Sized),
     parameter: TypeParameterId,
-    scope: Option<DeclarationId>,
+    scope: Option<DeclarationReference>,
 ) -> Result<(), Diagnostic> {
     read.validation_work()?;
-    let Some(OwnerRecord::TypeParameter(record)) =
-        read.owner(OwnerKey::TypeParameter(parameter))?
-    else {
-        return Err(reject("transferable owner parameter is absent"));
+    let scope = scope.ok_or_else(|| reject("transferable owner requires an exact scope"))?;
+    let key = OwnerKey::TypeParameter(parameter);
+    let record = if scope.package == read.package_id() {
+        match read.owner(key)? {
+            Some(OwnerRecord::TypeParameter(record)) => record,
+            _ => return Err(reject("transferable owner parameter is absent")),
+        }
+    } else {
+        match read.package_interface_owner(scope.package, key)? {
+            Some(PackageInterfaceRecord::TypeParameter(record)) => record,
+            _ => return Err(reject("imported transferable owner parameter is absent")),
+        }
     };
-    if Some(record.declaration) != scope
+    if record.declaration != scope.declaration
         || record.header.owner != OwnerKey::TypeParameter(parameter)
         || !record.constraints.has_owned()
         || !record.constraints.requires_transfer()
@@ -88,18 +138,46 @@ fn owned_parameter(
             "an open owner requires an exact in-scope owned and transferable constraint",
         ));
     }
-    let Some(OwnerRecord::Declaration(declaration)) =
-        read.owner(OwnerKey::Declaration(record.declaration))?
-    else {
-        return Err(reject("transferable owner has no function declaration"));
+    let key = OwnerKey::Declaration(scope.declaration);
+    let parameters = if scope.package == read.package_id() {
+        match read.owner(key)? {
+            Some(OwnerRecord::Declaration(declaration)) => match declaration.payload {
+                DeclarationPayload::Function(function) => function.type_parameters,
+                DeclarationPayload::OwnedImplementation(implementation) => {
+                    implementation.type_parameters
+                }
+                _ => {
+                    return Err(reject(
+                        "transferable owner assumptions require a function or scheme",
+                    ));
+                }
+            },
+            _ => return Err(reject("transferable owner has no exact declaration")),
+        }
+    } else {
+        match read.package_interface_owner(scope.package, key)? {
+            Some(PackageInterfaceRecord::Declaration(declaration)) => match declaration.payload {
+                PackageInterfaceDeclarationPayload::Function(function) => function.type_parameters,
+                PackageInterfaceDeclarationPayload::OwnedImplementation(implementation) => {
+                    implementation.type_parameters
+                }
+                _ => {
+                    return Err(reject(
+                        "imported transferable assumptions require a function or scheme",
+                    ));
+                }
+            },
+            _ => {
+                return Err(reject(
+                    "transferable owner has no exact imported declaration",
+                ));
+            }
+        }
     };
-    let DeclarationPayload::Function(function) = declaration.payload else {
+    if !function_parameter_listed(read, &parameters, parameter)? {
         return Err(reject(
-            "transferable owner assumptions belong to graph functions",
+            "transferable owner escapes its exact parameter inventory",
         ));
-    };
-    if !function_parameter_listed(read, &function.type_parameters, parameter)? {
-        return Err(reject("transferable owner escapes its function signature"));
     }
     Ok(())
 }
@@ -119,9 +197,25 @@ pub(crate) fn admit(
     ty: TypeObjectDigest,
     scope: Option<DeclarationId>,
 ) -> Result<bool, Diagnostic> {
+    admit_in(
+        read,
+        ty,
+        scope.map(|declaration| DeclarationReference {
+            package: read.package_id(),
+            declaration,
+        }),
+    )
+}
+
+pub(crate) fn admit_in(
+    read: &(impl ExpressionRead + ?Sized),
+    ty: TypeObjectDigest,
+    scope: Option<DeclarationReference>,
+) -> Result<bool, Diagnostic> {
     read.validation_work()?;
-    let root_owned = super::memory::direct(read, ty)?;
-    let assumptions = ordinary_assumptions(read, scope)?;
+    let package = scope.map_or(read.package_id(), |scope| scope.package);
+    let root_owned = super::memory::direct_in(read, package, ty)?;
+    let assumptions = ordinary_assumptions_in(read, scope)?;
     if matches!(
         read.type_object(ty)?.map(|t| t.form),
         Some(
@@ -130,7 +224,7 @@ pub(crate) fn admit(
                 | TypeForm::OwnedSequence { .. }
         )
     ) {
-        super::owned_product::validate(read, ty, scope)?;
+        super::owned_product::validate_in_scope(read, ty, scope)?;
     }
     read.validation_work()?;
     let mut pending = vec![(ty, 0usize)];
@@ -155,8 +249,10 @@ pub(crate) fn admit(
             .ok_or_else(|| reject("transfer type is absent"))?;
         match object.form {
             TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => {}
-            TypeForm::TypeParameter { parameter } if super::memory::direct(read, current)? => {
-                owned_parameter(read, parameter, scope)?;
+            TypeForm::TypeParameter { parameter }
+                if super::memory::direct_in(read, package, current)? =>
+            {
+                owned_parameter_in(read, parameter, scope)?;
             }
             TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {
                 for field in fields {
@@ -168,7 +264,7 @@ pub(crate) fn admit(
                 read.validation_work()?;
                 pending.push((item, depth + 1));
             }
-            _ if super::owned_contract::ordinary_with_assumptions(
+            _ if super::owned_contract::ordinary_with_assumptions_in(
                 read,
                 current,
                 scope,

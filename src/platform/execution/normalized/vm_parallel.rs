@@ -19,6 +19,50 @@ struct ChildContext {
 }
 
 impl Machine<'_> {
+    /// Retain the complete checked read placement, including leaf and ancestor
+    /// guards, until the destination invocation has released its read lease.
+    /// The outbound token is a new read alias, never an unchecked raw extraction
+    /// of a borrowed-result packet.
+    fn prepare_scoped_arguments(
+        &mut self,
+        values: Vec<CheckedValue>,
+    ) -> Result<Vec<transfer::ScopedArgument>, ExecutionError> {
+        self.charge_allocation(super::super::value::collection_storage_bytes(
+            values.len() as u64,
+            std::mem::size_of::<transfer::ScopedArgument>() as u64,
+            "normalized_parallel_arguments",
+        )?)?;
+        let reads = values
+            .iter()
+            .filter(|value| value.raw().memory_is_borrowed())
+            .count();
+        self.charge_allocation(super::super::value::collection_storage_bytes(
+            reads as u64,
+            transfer::ScopedReadCustody::ALLOCATION_BYTES
+                + std::mem::size_of::<CheckedValue>() as u64,
+            "normalized_parallel_reads",
+        )?)?;
+        let mut arguments = Vec::new();
+        arguments.try_reserve_exact(values.len()).map_err(|_| {
+            resource_error(
+                "normalized_parallel_arguments",
+                "structured capture reservation failed",
+            )
+        })?;
+        for value in values {
+            arguments.push(if value.raw().memory_is_borrowed() {
+                let read = value.raw().memory_borrow()?;
+                transfer::ScopedArgument::Read {
+                    value: read,
+                    custody: transfer::ScopedReadCustody::new(value),
+                }
+            } else {
+                transfer::ScopedArgument::Value(value.into_raw())
+            });
+        }
+        Ok(arguments)
+    }
+
     /// Child actuals are authored in the caller's scope. Resolve them before the
     /// sealed application certificate is formed, reserving the new vectors first.
     /// A closed caller retains the original shared operand arrays.
@@ -143,7 +187,8 @@ impl Machine<'_> {
             .ok_or_else(|| type_error("structured argument count overflow"))?;
         self.charge_allocation(super::super::value::collection_storage_bytes(
             count as u64,
-            std::mem::size_of::<NormalizedValue>() as u64,
+            (std::mem::size_of::<NormalizedValue>()
+                + std::mem::size_of::<transfer::ScopedReadLease>()) as u64,
             "normalized_parallel_arguments",
         )?)?;
         let left_domain = super::super::value::ValueOrigin::fresh().ok_or_else(|| {
@@ -161,27 +206,23 @@ impl Machine<'_> {
         let program = self.program;
         let control = self.control;
         let source = self.memory_domain;
-        let left = transfer::TransferArguments::seal_applied(
+        let left_values = self.prepare_scoped_arguments(left_values)?;
+        let right_values = self.prepare_scoped_arguments(right_values)?;
+        let left = transfer::TransferArguments::seal_scoped_applied(
             program,
             source,
             left_domain,
             left,
-            left_values
-                .into_iter()
-                .map(CheckedValue::into_raw)
-                .collect(),
+            left_values,
             control,
             &mut |raw, ty| self.inspect_transfer_data(raw, ty),
         )?;
-        let right = transfer::TransferArguments::seal_applied(
+        let right = transfer::TransferArguments::seal_scoped_applied(
             program,
             source,
             right_domain,
             right,
-            right_values
-                .into_iter()
-                .map(CheckedValue::into_raw)
-                .collect(),
+            right_values,
             control,
             &mut |raw, ty| self.inspect_transfer_data(raw, ty),
         )?;
@@ -244,6 +285,7 @@ impl Machine<'_> {
                 control,
                 &mut |_| Ok(()),
             )?;
+            token.establish_admission(program.value_origin)?;
             return CheckedValue::memory(program, NormalizedValue::OwnedProduct(token));
         }
         self.charge_collection(2, std::mem::size_of::<(Name, NormalizedValue)>())?;
@@ -301,6 +343,10 @@ fn child(
     };
     let lists = super::super::list::Work::current();
     let maps = super::super::map::Work::current();
+    // Declared before the machine so unwind also destroys all child views and
+    // activations before releasing the invocation's lending anchors. These
+    // leases outlive tail calls, synchronous forwarding and nested groups.
+    let mut read_leases = Vec::new();
     let mut machine = Machine {
         shared_budget: Some(budget),
         structured_depth,
@@ -328,7 +374,9 @@ fn child(
         },
     };
     let result = (|| {
-        let (application, values) = envelope.adopt_applied(program, memory_domain, control)?;
+        let (application, values, leases) =
+            envelope.adopt_scoped_applied(program, memory_domain, control)?;
+        read_leases = leases;
         let function = application.function();
         let parameters = &program
             .functions
@@ -372,6 +420,8 @@ fn child(
     machine.rollback_all();
     machine.clear_execution_values();
     resources.release_all();
+    // Returning a child outcome certifies that its read authority has ended.
+    drop(read_leases);
     machine.observation.value_work.lists = lists.since();
     machine.observation.value_work.maps = maps.since();
     ChildOutcome {

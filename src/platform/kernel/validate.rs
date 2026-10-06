@@ -615,11 +615,19 @@ impl FullValidator<'_> {
                         );
                     }
                     if parameter.constraints.requires_transfer()
-                        && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::Function(_)))
+                        && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::Function(_) | DeclarationPayload::OwnedImplementation(_)))
                     {
                         self.error(
                             "kernel_transfer_parameter_owner",
-                            "Transferable is supported only by graph-function type parameters",
+                            "Transferable is supported by graph-function and implementation-scheme type parameters",
+                        );
+                    }
+                    if parameter.constraints.requires_share()
+                        && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::Function(_) | DeclarationPayload::OwnedImplementation(_)))
+                    {
+                        self.error(
+                            "kernel_share_parameter_owner",
+                            "Shareable is supported by graph-function and implementation-scheme type parameters",
                         );
                     }
                     if parameter.constraints != super::TypeParameterConstraints::None

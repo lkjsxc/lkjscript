@@ -44,7 +44,7 @@ fn strict_artifact_rejects_fully_rehashed_expanding_canonical_applications() {
                 .write_all(&current)
                 .unwrap();
         }
-        let (previous, retained) = match name {
+        let (previous, retained, expected) = match name {
             "direct" => (
                 include_bytes!(
                     "../../../tests/fixtures/finite-callable-compiler28/expanding-direct.lkja"
@@ -52,6 +52,10 @@ fn strict_artifact_rejects_fully_rehashed_expanding_canonical_applications() {
                 .as_slice(),
                 include_bytes!(
                     "../../../tests/fixtures/finite-callable-compiler29/expanding-direct.lkja"
+                )
+                .as_slice(),
+                include_bytes!(
+                    "../../../tests/fixtures/finite-callable-compiler30/expanding-direct.lkja"
                 )
                 .as_slice(),
             ),
@@ -62,6 +66,10 @@ fn strict_artifact_rejects_fully_rehashed_expanding_canonical_applications() {
                 .as_slice(),
                 include_bytes!(
                     "../../../tests/fixtures/finite-callable-compiler29/expanding-named.lkja"
+                )
+                .as_slice(),
+                include_bytes!(
+                    "../../../tests/fixtures/finite-callable-compiler30/expanding-named.lkja"
                 )
                 .as_slice(),
             ),
@@ -76,11 +84,21 @@ fn strict_artifact_rejects_fully_rehashed_expanding_canonical_applications() {
         assert_eq!(error.code, "kernel_callable_expansion", "{name}: {error:?}");
         assert_eq!(error.class, crate::platform::DiagnosticClass::Semantic);
         println!("strict-expanding-artifact {name}: {}", error.code);
-        expected_artifacts.push((name, retained, current));
+        expected_artifacts.push((name, retained, expected, current));
     }
-    for (name, retained, current) in expected_artifacts {
+    for (name, retained, expected, current) in expected_artifacts {
         assert!(
-            current.as_slice() == retained,
+            current.as_slice() == expected,
+            "current {name} fixture derived bytes changed"
+        );
+        assert_eq!(
+            load_artifact(retained).unwrap_err().code,
+            "artifact_bundle_contract",
+            "{name}: original compiler29 derived fixture remains frozen"
+        );
+        let retained_current = predecessor_attack_tests::current_derived_fixture(retained);
+        assert!(
+            current == retained_current,
             "current {name} fixture must preserve exact source and instructions"
         );
     }
@@ -285,6 +303,7 @@ fn replace_unit_checked(
         27 => (*b"LKJCUN27", "lkjscript.compiler-unit-envelope.v27"),
         28 => (*b"LKJCUN28", "lkjscript.compiler-unit-envelope.v28"),
         29 => (*b"LKJCUN29", "lkjscript.compiler-unit-envelope.v29"),
+        30 => (*b"LKJCUN30", "lkjscript.compiler-unit-envelope.v30"),
         other => panic!("unexpected forged-unit generation {other}"),
     };
     let bytes = crate::platform::packed::encode(

@@ -212,6 +212,7 @@ impl CompilationManifest {
                     | (27, 27, 22)
                     | (28, 28, 23)
                     | (29, 29, 24)
+                    | (30, 30, 25)
             )
         {
             return Err(manifest_error(
@@ -265,4 +266,57 @@ pub(crate) fn manifest_error(
     message: impl Into<String>,
 ) -> Diagnostic {
     Diagnostic::new(class, code, message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::platform::persistent_map::{MapWork, MemoryPageStore, PersistentMap};
+
+    #[test]
+    fn shareable_manifest_generation_round_trips_and_rejects_mixed_contracts() {
+        let mut pages = MemoryPageStore::default();
+        let units = PersistentMap::empty(&mut pages, &mut MapWork::default())
+            .unwrap()
+            .root();
+        let mut manifest = CompilationManifest {
+            contract_version: 3,
+            graph_contract_version: 30,
+            compiler_contract_version: 30,
+            bytecode_contract_version: 25,
+            repository_id: RepositoryId::migrate(b"shareable-manifest", 0),
+            package_id: PackageId::migrate(b"shareable-manifest", 0),
+            revision: RevisionId::from_digest([1; 32]),
+            package_revision: PackageRevisionDigest::from_bytes([2; 32]),
+            semantic_state: SemanticStateDigest::from_bytes([3; 32]),
+            package_interface: PackageInterfaceDigest::from_bytes([4; 32]),
+            optimization: OptimizationPolicy::DeterministicBaseline,
+            units,
+        };
+        for (graph, compiler, bytecode) in [(29, 29, 24), (30, 30, 25)] {
+            manifest.graph_contract_version = graph;
+            manifest.compiler_contract_version = compiler;
+            manifest.bytecode_contract_version = bytecode;
+            let (digest, bytes) = manifest.encode().unwrap();
+            assert_eq!(
+                CompilationManifest::decode(&bytes, digest).unwrap(),
+                manifest
+            );
+        }
+        for (graph, compiler, bytecode) in [
+            (29, 30, 25),
+            (30, 29, 24),
+            (30, 30, 24),
+            (30, 29, 25),
+            (29, 29, 25),
+        ] {
+            manifest.graph_contract_version = graph;
+            manifest.compiler_contract_version = compiler;
+            manifest.bytecode_contract_version = bytecode;
+            assert_eq!(
+                manifest.encode().unwrap_err().code,
+                "compilation_manifest_contract"
+            );
+        }
+    }
 }

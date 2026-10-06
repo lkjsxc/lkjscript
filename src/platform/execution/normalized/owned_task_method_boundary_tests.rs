@@ -3,7 +3,7 @@ use super::*;
 use crate::platform::kernel::*;
 
 #[test]
-fn owned_task_method_rejects_pure_calls_borrowing_and_effect_mismatch() {
+fn owned_task_method_rejects_pure_calls_mode_mismatch_and_effect_mismatch() {
     let valid = owned_task_method_fixture::input();
     let mutations = [
         (
@@ -45,12 +45,20 @@ fn owned_task_method_rejects_pure_calls_borrowing_and_effect_mismatch() {
 }
 
 #[test]
-fn owned_task_method_unused_contracts_require_closed_rows_and_consume() {
+fn owned_task_method_unused_contracts_accept_borrow_and_require_closed_rows() {
     let literal = "declarations.begin\n(units (module create unused (owned-contract create Unused (visibility public)
       (self Self) (type-parameter create Self (constraint owned))
       (method method_81000000000000000000000000000001 move (parameters (Self consume)) (returns Self) (effect (task))))))\ndeclarations.end\n";
     let source = byte_buffer_tests::author_only(literal).unwrap();
     assert!(memory_reference::accepts(&source));
+    let borrowed =
+        byte_buffer_tests::author_only(&literal.replace("(Self consume)", "(Self borrow)"))
+            .unwrap();
+    assert!(memory_reference::accepts(&borrowed));
+    assert!(validate_full(&borrowed).is_ok());
+    assert!(
+        super::super::reference_schema::NormalizedReferenceSchema::reconstruct([&borrowed]).is_ok()
+    );
     for package in [
         source.root.package_id,
         PackageId::migrate(b"missing-method-package", 1),
@@ -82,13 +90,22 @@ fn owned_task_method_unused_contracts_require_closed_rows_and_consume() {
                 .is_err()
         );
     }
-    for mode in [ParameterUse::Borrow, ParameterUse::Unrestricted] {
-        let mut invalid = source.clone();
+    for fault in ["unrestricted", "borrowed-result", "contract-generation"] {
+        let mut invalid = borrowed.clone();
         for owner in invalid.owners.values_mut() {
             if let OwnerRecord::Declaration(d) = owner
                 && let DeclarationPayload::OwnedContract(c) = &mut d.payload
             {
-                c.methods[0].parameters[0].use_mode = mode;
+                match fault {
+                    "unrestricted" => {
+                        c.methods[0].parameters[0].use_mode = ParameterUse::Unrestricted;
+                    }
+                    "borrowed-result" => c.methods[0].result_borrow = Some(0),
+                    "contract-generation" => {
+                        d.header.contract_version = contract::SHARE_GRAPH_CONTRACT_VERSION - 1;
+                    }
+                    _ => unreachable!(),
+                }
             }
         }
         assert!(!memory_reference::accepts(&invalid));

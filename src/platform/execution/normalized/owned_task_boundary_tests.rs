@@ -1,4 +1,4 @@
-//! A same-task transfer is neither a memory loan nor a raw-entry capability.
+//! Synchronous task loans preserve custody without granting raw-entry capability.
 use super::*;
 use crate::platform::kernel::*;
 
@@ -22,18 +22,30 @@ declarations.end
 "#;
 
 #[test]
-fn owned_task_rejects_unused_loans_unrestricted_order_alias_and_pure_call() {
+fn owned_task_accepts_unused_loans_but_rejects_unrestricted_order_alias_and_pure_call() {
+    for signature in [
+        "(parameter create owner (type ByteBuffer) (use borrow))",
+        "(type-parameter create T (constraint owned)) (parameter create owner (type T) (use borrow))",
+    ] {
+        let valid = format!(
+            "declarations.begin\n(units (module create valid-task (function create unused (visibility private) (effect (task)) {signature} (returns Unit) (body (unit)))))\ndeclarations.end\n"
+        );
+        let source = byte_buffer_tests::author(&valid).unwrap();
+        assert!(memory_reference::accepts(&source), "{signature}");
+        assert!(validate_full(&source).is_ok(), "{signature}");
+        assert!(
+            super::super::reference_schema::NormalizedReferenceSchema::reconstruct([&source])
+                .is_ok(),
+            "{signature}"
+        );
+    }
     for (signature, expected) in [
-        (
-            "(parameter create owner (type ByteBuffer) (use borrow))",
-            "kernel_buffer",
-        ),
         (
             "(parameter create owner (type ByteBuffer))",
             "kernel_buffer",
         ),
         (
-            "(type-parameter create T (constraint owned)) (parameter create owner (type T) (use borrow))",
+            "(type-parameter create T (constraint owned)) (parameter create owner (type T))",
             "kernel_buffer",
         ),
         (
@@ -68,7 +80,7 @@ fn owned_task_rejects_unused_loans_unrestricted_order_alias_and_pure_call() {
 }
 
 #[test]
-fn owned_task_independent_oracle_rejects_unused_task_loan_mutations() {
+fn owned_task_independent_oracle_accepts_loans_and_rejects_escape_and_old_generations() {
     let source = byte_buffer_tests::author(FUNCTIONS).unwrap();
     assert!(memory_reference::accepts(&source));
     let target = declaration_named(&source, "task-ignore");
@@ -81,8 +93,26 @@ fn owned_task_independent_oracle_rejects_unused_task_loan_mutations() {
         unreachable!()
     };
     let parameter = f.parameters[0];
-    for mode in [ParameterUse::Borrow, ParameterUse::Unrestricted] {
-        let mut invalid = source.clone();
+    let mut borrowed = source.clone();
+    let OwnerRecord::Parameter(p) = borrowed
+        .owners
+        .get_mut(&OwnerKey::Parameter(parameter))
+        .unwrap()
+    else {
+        unreachable!()
+    };
+    p.use_mode = ParameterUse::Borrow;
+    assert!(memory_reference::accepts(&borrowed));
+    assert!(validate_full(&borrowed).is_ok());
+    assert!(
+        super::super::reference_schema::NormalizedReferenceSchema::reconstruct([&borrowed]).is_ok()
+    );
+    for fault in [
+        "unrestricted",
+        "parameter-generation",
+        "function-generation",
+    ] {
+        let mut invalid = borrowed.clone();
         let OwnerRecord::Parameter(p) = invalid
             .owners
             .get_mut(&OwnerKey::Parameter(parameter))
@@ -90,7 +120,72 @@ fn owned_task_independent_oracle_rejects_unused_task_loan_mutations() {
         else {
             unreachable!()
         };
-        p.use_mode = mode;
+        match fault {
+            "unrestricted" => p.use_mode = ParameterUse::Unrestricted,
+            "parameter-generation" => {
+                p.header.contract_version = contract::SHARE_GRAPH_CONTRACT_VERSION - 1;
+            }
+            "function-generation" => {
+                let OwnerRecord::Declaration(d) = invalid
+                    .owners
+                    .get_mut(&OwnerKey::Declaration(target.declaration))
+                    .unwrap()
+                else {
+                    unreachable!()
+                };
+                d.header.contract_version = contract::SHARE_GRAPH_CONTRACT_VERSION - 1;
+            }
+            _ => unreachable!(),
+        }
+        assert!(!memory_reference::accepts(&invalid));
+        assert!(validate_full(&invalid).is_err());
+        assert!(
+            super::super::reference_schema::NormalizedReferenceSchema::reconstruct([&invalid])
+                .is_err()
+        );
+    }
+    // The loaned parameter is legal even when unused, but it must never become
+    // either an owned return or an escaping task read-result.
+    let source = byte_buffer_tests::author(
+        "declarations.begin\n(units (module create unused-task (function create unused (visibility private) (parameter create owner (type ByteBuffer) (use borrow)) (returns Unit) (effect (task)) (body (unit)))))\ndeclarations.end\n",
+    )
+    .unwrap();
+    let target = declaration_named(&source, "unused");
+    let OwnerRecord::Declaration(d) = &source.owners[&OwnerKey::Declaration(target.declaration)]
+    else {
+        unreachable!()
+    };
+    let DeclarationPayload::Function(f) = &d.payload else {
+        unreachable!()
+    };
+    let parameter = f.parameters[0];
+    let body = f.body;
+    let OwnerRecord::Parameter(p) = &source.owners[&OwnerKey::Parameter(parameter)] else {
+        unreachable!()
+    };
+    let result = p.ty;
+    for escapes_as_borrow in [false, true] {
+        let mut invalid = source.clone();
+        let OwnerRecord::Declaration(d) = invalid
+            .owners
+            .get_mut(&OwnerKey::Declaration(target.declaration))
+            .unwrap()
+        else {
+            unreachable!()
+        };
+        let DeclarationPayload::Function(f) = &mut d.payload else {
+            unreachable!()
+        };
+        f.result = result;
+        f.result_borrow = escapes_as_borrow.then_some(parameter);
+        let OwnerRecord::Expression(e) =
+            invalid.owners.get_mut(&OwnerKey::Expression(body)).unwrap()
+        else {
+            unreachable!()
+        };
+        e.operation = ExpressionOperation::Local {
+            value: LocalValueReference::FunctionParameter(parameter),
+        };
         assert!(!memory_reference::accepts(&invalid));
         assert!(validate_full(&invalid).is_err());
         assert!(

@@ -14,6 +14,10 @@ const TASK: &str = r#"declarations.begin
     (type-parameter create T (constraint owned))
     (parameter create value (type T) (use consume)) (returns T)
     (body (local value)))
+  (function create read-task (visibility public) (effect (task))
+    (type-parameter create T (constraint owned))
+    (parameter create value (type T) (use borrow)) (returns Unit)
+    (body (unit)))
   (function create mixed (visibility public) (effect pure)
     (type-parameter create T (constraint owned))
     (parameter create a (type T) (use borrow))
@@ -151,7 +155,9 @@ declarations.begin
   (function create task-flow (visibility public) (effect (task))
     (type-parameter create T (constraint owned))
     (parameter create owner (type T) (use consume)) (returns T)
-    (body (call task-library::relay-task (types T) (local owner))))
+    (body (sequence
+      (call task-library::read-task (types T) (local owner))
+      (call task-library::relay-task (types T) (local owner)))))
   (function create distinct-discard (visibility public) (effect pure)
     (parameter create a (type OwnedI64Cell) (use consume))
     (parameter create b (type OwnedI64Cell) (use consume)) (returns Unit)
@@ -311,13 +317,18 @@ fn imported_memory_oracle_rejects_duplicate_consumption_and_borrowed_return() {
 fn imported_memory_oracle_rejects_foreign_constraints_modes_and_open_actuals() {
     let source = imported();
     assert!(super::accepts(&source));
-    for mode in [ParameterUse::Borrow, ParameterUse::Unrestricted] {
+    for fault in [
+        "unrestricted",
+        "borrowed-result",
+        "parameter-generation",
+        "function-generation",
+    ] {
         let mut invalid = source.clone();
         for interface in invalid.dependency_interfaces.values_mut() {
             let function = interface
                 .values()
                 .find_map(|owner| match owner {
-                    PackageInterfaceRecord::Declaration(d) if d.name.as_str() == "relay-task" => {
+                    PackageInterfaceRecord::Declaration(d) if d.name.as_str() == "read-task" => {
                         match &d.payload {
                             PackageInterfaceDeclarationPayload::Function(f) => Some(f.clone()),
                             _ => None,
@@ -332,11 +343,87 @@ fn imported_memory_oracle_rejects_foreign_constraints_modes_and_open_actuals() {
             else {
                 unreachable!()
             };
-            p.use_mode = mode;
+            match fault {
+                "unrestricted" => p.use_mode = ParameterUse::Unrestricted,
+                "parameter-generation" => {
+                    p.header.contract_version = contract::SHARE_GRAPH_CONTRACT_VERSION - 1;
+                }
+                "borrowed-result" | "function-generation" => {
+                    let result = p.ty;
+                    let parameter = function.parameters[0];
+                    let d = interface
+                        .values_mut()
+                        .find_map(|owner| match owner {
+                            PackageInterfaceRecord::Declaration(d)
+                                if d.name.as_str() == "read-task" =>
+                            {
+                                Some(d)
+                            }
+                            _ => None,
+                        })
+                        .unwrap();
+                    if fault == "function-generation" {
+                        d.header.contract_version = contract::SHARE_GRAPH_CONTRACT_VERSION - 1;
+                    } else {
+                        let PackageInterfaceDeclarationPayload::Function(f) = &mut d.payload else {
+                            unreachable!()
+                        };
+                        f.result = result;
+                        f.result_borrow = Some(parameter);
+                    }
+                }
+                _ => unreachable!(),
+            }
         }
         assert!(
             !super::accepts(&invalid),
-            "unused task loans/unrestricted owned modes: {mode:?}"
+            "imported task loans must retain valid modes, generations and result boundary: {fault}"
+        );
+    }
+    for bound in [
+        TypeParameterConstraints::OwnedTransferable,
+        TypeParameterConstraints::OwnedShareable,
+        TypeParameterConstraints::OwnedTransferableShareable,
+    ] {
+        let mut stronger = source.clone();
+        for interface in stronger.dependency_interfaces.values_mut() {
+            let parameter = interface
+                .values()
+                .find_map(|owner| match owner {
+                    PackageInterfaceRecord::Declaration(d) if d.name.as_str() == "read-twice" => {
+                        match &d.payload {
+                            PackageInterfaceDeclarationPayload::Function(f) => {
+                                Some(f.type_parameters[0])
+                            }
+                            _ => None,
+                        }
+                    }
+                    _ => None,
+                })
+                .unwrap();
+            let PackageInterfaceRecord::TypeParameter(p) = interface
+                .get_mut(&OwnerKey::TypeParameter(parameter))
+                .unwrap()
+            else {
+                unreachable!()
+            };
+            p.constraints = bound;
+        }
+        assert!(
+            !super::accepts(&stronger),
+            "the symbolic owned-only actual cannot prove the imported {bound:?} bound"
+        );
+        let symbolic = declaration(&stronger, "symbolic-flow");
+        for owner in stronger.owners.values_mut() {
+            if let OwnerRecord::TypeParameter(p) = owner
+                && p.declaration == symbolic
+            {
+                p.constraints = bound;
+            }
+        }
+        assert!(
+            super::accepts(&stronger),
+            "an exact stronger caller proof must satisfy the imported {bound:?} bound"
         );
     }
     let mut constraint = source.clone();

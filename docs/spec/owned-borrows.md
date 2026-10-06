@@ -8,8 +8,10 @@ A type annotation alone cannot confer read or ownership rights.
 These expressions compose [products](owned-products.md), [choices](owned-choices.md)
 and [first-order Owned parameters](owned-generics.md). Their lexical forms introduce no reference type, mutable borrow or partial move.
 [Source-tied borrowed results](owned-read-results.md) permit controlled pure-function
-forwarding while retaining the exact source relationship. Existing pure borrow
-helpers and exact borrowed implementation methods remain the read interface.
+forwarding while retaining the exact source relationship. Pure helpers and
+synchronous borrowed graph tasks, including exact borrowed task methods, compose
+with these scopes. [Joined parallel reads](structured-parallel.md) additionally
+require a structural Shareable obligation.
 
 ## Product field scope
 
@@ -62,18 +64,24 @@ A selected ordinary value remains ordinary after that later consumption.
 
 ## Read rights, effects and escape
 
-A view may be passed as an exact borrowed argument to an existing pure helper or
-pure implementation method, reborrowed synchronously, or inspected with another
-child scope. Product views may read ordinary metadata. Repeated parent and sibling
-reads are legal while a nested view is active.
+A view may be passed as an exact borrowed argument to a pure helper or synchronous
+graph task, including an exact implementation method, reborrowed synchronously,
+or inspected with another child scope. Task callable kind and effect allowance
+remain exact; graph-function calls retain their final resource suffix.
+Synchronous task borrowing needs no
+Shareable bound. Product views may read ordinary metadata. Repeated parent and
+sibling reads are legal while a nested view is active.
 
 Neither a view nor a protected source/ancestor may be consumed through any alias.
 A view cannot become an owner, an unrestricted argument, an ordinary container
-member, a capture, a stored reference, or a task-transfer operand. A pure function can return a view
+member, a capture or a stored reference. A pure function can return a view
 only through its matching [source-tied result](owned-read-results.md).
 `unpack-owned`, `match-owned`, consuming methods and owner-returning local reads
 cannot transfer a loan. Branches and untaken syntax obey the same restrictions.
-Borrowed task parameters and borrowed task Self remain unsupported.
+Tasks cannot return borrowed results. A Shareable view may be passed to a borrowed
+input of a [joined child task](structured-parallel.md); its source and ancestor
+guards remain live until the entire group joins. This delegates scoped read rights
+without moving its owner. Any consuming alias in the group rejects in either order.
 
 The body may create or return an unrelated owner, consume an unrelated existing
 owner, and perform effects allowed by its containing task. A lexical read scope
@@ -132,8 +140,16 @@ Raw ingress, adapter results, retained values, JSON/data codecs, persistence and
 callable capture cannot manufacture or export these views. Sealed inert clones
 remain identity markers without read or ownership authority.
 
+Joined children have fresh invocation identities and checked scoped read envelopes.
+An envelope carries read permission for its admitted child, not owner custody.
+Nested child groups preserve that permission's source and ancestor chain. Cancellation,
+traps and quota refusal join every started descendant and release its loans before
+the surrounding scope guard or source owner. Ordinary task effects remain governed
+by their existing exact allowances; parallel child rows remain closed and empty.
+
 ## Encodings and evidence
 
+The following identifiers describe the original lexical child-read increment.
 Graph/owner generation 24 adds child-scope operations and borrowed lexical binding
 roles. Ordinary type forms, callable signatures, package-interface layout 13 and
 witness manifest contract 9 remain unchanged. Scope-bearing authored intent selects
@@ -148,6 +164,9 @@ feature. Owner summary contract 10 uses `LKJSUM15` to retain the new borrowed ro
 Unsupported formats reject clearly; maintained derived assets are rebuilt through
 their supported owners. No migration layer is added. Original source/publication
 evidence keeps its original identity and obligations.
+Borrowed task inputs and Shareable joined reads require their current advertised
+signature, constraint and derived-admission generations. These older identifiers
+do not confer new invocation read rights.
 
 The [native guide](../guides/native-owned-borrows.md) and
 [maintained example](../../examples/owned-borrows/README.md) explain ordinary use.

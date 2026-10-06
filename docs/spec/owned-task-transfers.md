@@ -1,7 +1,7 @@
-# Same-task owned transfer
+# Synchronous owned task calls
 
-A direct named graph task can consume and return owned memory within one runtime
-invocation. This extends [buffers](owned-byte-buffers.md),
+A direct named graph task can borrow owned memory or consume and return it within
+one runtime invocation. This extends [buffers](owned-byte-buffers.md),
 [Owned generics and static witnesses](owned-generics.md),
 [products](owned-products.md) and [choices](owned-choices.md). It does not create
 a child task, cross an invocation identity, enqueue a message or authorize I/O.
@@ -10,17 +10,19 @@ a child task, cross an invocation identity, enqueue a message or authorize I/O.
 
 Parameters have three ordered regions: ordinary data/callbacks, owned memory,
 and exact capability resources. Any region may be empty. Owned arguments remain
-exact live locals. A task's owned parameters must explicitly `consume`; even an
-unused `borrow` parameter is invalid. A pure helper may still borrow and reborrow
-synchronously, and cannot retain, return or consume a loan. A task may call such
-a pure helper, with its loans ending before control returns to the task.
+exact live locals and explicitly use `consume` or `borrow`. A borrowed task input
+retains a synchronous read loan through the entire call. It cannot be consumed,
+stored, captured or returned as a borrowed task result. Pure helpers may reborrow
+it and return [source-tied read results](owned-read-results.md) to lexical read
+scopes within the task. Synchronous borrowing requires Owned, with no additional
+Transferable or Shareable obligation.
 
 A task body may also enter a [scoped owned-child read](owned-borrows.md) over a
 local product or choice. It may perform authorized effects or return an unrelated
-owner from that scope while retaining child and ancestor read guards. This does
-not admit borrowed task parameters or borrowed task methods. Every exit releases
-child loans before ancestor guards and owners, including cancellation after an
-effect; cleanup does not replay or roll back that effect.
+owner from that scope while retaining child and ancestor read guards. Borrowed
+task parameters and exact borrowed task methods compose with these scopes. Every
+exit releases child loans before ancestor guards and owners, including cancellation
+after an effect; cleanup does not replay or roll back that effect.
 
 A direct result may be ByteBuffer, OwnedI64Cell, an owned product, choice or
 [sequence](owned-sequences.md), or an
@@ -29,8 +31,8 @@ partial application and capture do not gain permission to contain these values.
 A task can declare Owned type parameters and explicit implementation witnesses
 together with [effect and requirement parameters](owned-effects.md). Concrete task
 effect rows are supported, including the empty row. The [task-method extension](owned-generics.md#nominal-contracts-and-exact-static-operands)
-also permits monomorphic task methods with exact closed rows and consuming Self
-arguments. A witness selects that exact signature, never the caller's effect
+also permits monomorphic task methods with exact closed rows and borrowed or
+consuming Self arguments. A witness selects that exact signature, never the caller's effect
 allowance or an execution grant.
 
 For example, this helper transfers one owner without inspecting or copying it:
@@ -52,7 +54,10 @@ Repeated resource borrowing keeps its existing rules independently of memory.
 
 ## Custody, evaluation and failure
 
-Arguments are evaluated in authored order. Consuming an owned local transfers its
+Arguments are evaluated in authored order. The combined argument footprint rejects
+read/consume aliases in either order, including aliases through owned ancestors;
+repeated reads are valid. A task borrow remains active across its authorized effects
+and resource calls until the synchronous callee finishes. Consuming an owned local transfers its
 single custodian and invalidates that local. A later argument failure disposes of
 already evaluated transfers. A callee owns its consuming arguments for the call;
 returning an owner transfers custody back to the caller under the same invocation
@@ -76,13 +81,17 @@ stream elements and persistence retain their existing boundary restrictions.
 
 Kernel validation, independent source classification, canonical preparation and
 both evaluators enforce the signature and custody rules. Unused parameters,
-unreachable applications and imported signatures are checked. Semantic validator
+unreachable applications and imported signatures are checked. The original
+consuming-task extensions selected the following generations. Semantic validator
 22 invalidated prior proof reuse for the initial same-task extension, without a
 graph, owner/type, request, instruction or artifact format change. The subsequent
 task-method extension uses semantic validator 23 and authored request codec 24;
 the existing graph, instruction and artifact layouts remain unchanged.
 Historical accepted content remains historical; new task-owned meaning is not
 claimed executable by an older validator or host.
+Borrowed task signatures and methods require the current advertised owner and
+admission generations; historical consuming-only formats cannot acquire borrowing
+permission by recomputing their integrity hashes.
 
 Literal public examples live in `tests/fixtures/owned-task-library.lkjc` and
 `owned-task-consumer.lkjc`. The public task/resource fixture composes an owned
@@ -90,11 +99,11 @@ buffer with an exact DurableQueue lease. Source and executable tests separately
 cover concrete and generic calls, selected witnesses, product/choice transfers,
 source-free package artifacts, illegal loans, raw boundaries, traps, cancellation
 and allocation refusal. A test design is not an acceptance result; current run
-outcomes belong to the campaign and release owners.
+outcomes belong to the status and release owners.
 
-Development 0.1.68 adds a separate [structured parallel boundary](structured-parallel.md):
-two exact empty-effect child tasks consume owned inputs under fresh invocation
-identities and join before continuation. Development 0.1.69 also returns closed
-owned child results through a joined OwnedProduct, with separate child-to-parent
-custody and complete consuming decomposition. The same-task rules above remain intact.
+The separate [structured parallel boundary](structured-parallel.md) admits
+consuming inputs with Transferable proof and scoped borrowed inputs with Shareable
+proof under fresh child invocation identities. Both children join before parent
+continuation. Closed owned child results return through a joined OwnedProduct,
+with separate child-to-parent custody and complete consuming decomposition.
 Channels, owner-returning send refusal and receiver lifecycle remain separate work.

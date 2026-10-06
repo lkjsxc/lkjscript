@@ -1,20 +1,27 @@
-# Explicit transferable type parameters
+# Explicit transfer and sharing obligations
 
-Status: normative for development 0.1.71. [Status](../status.md) owns source and
-distribution acceptance. [Structured parallel tasks](structured-parallel.md) own
+[Status](../status.md) owns source and distribution acceptance.
+[Structured parallel tasks](structured-parallel.md) own
 evaluation order, custody, quotas and joined completion.
 
 ## Constraints and scope
 
-`Transferable` is a structural type obligation, independent of affine ownership
-and capture safety. Native function type parameters may declare
+`Transferable` proves safe custody transfer to a fresh invocation. `Shareable`
+proves safe scoped read access from joined child invocations. These structural
+obligations are independent of one another, affine ownership and capture safety.
+Native graph-function type parameters may declare
 `(constraint transferable)`, `(constraint capture-safe transferable)` or
-`(constraint owned transferable)`. JSON requests use the corresponding arrays
+`(constraint owned transferable)`. Owned parameters may additionally declare
+`(constraint owned shareable)` or `(constraint owned transferable shareable)`.
+JSON requests use the corresponding arrays
 `["transferable"]`, `["capture-safe", "transferable"]` and
-`["owned", "transferable"]`. Compact flat records quote combined values, such as
-`constraint="owned transferable"`. Canonical order puts the existing constraint first.
+`["owned", "transferable"]`, `["owned", "shareable"]` and
+`["owned", "transferable", "shareable"]`. Compact flat records quote combined values,
+such as `constraint="owned transferable shareable"`. Canonical order puts Owned
+or CaptureSafe first, then Transferable, then Shareable.
 Duplicate or unknown entries, combinations with `none`, and a combination of
-`owned` with `capture-safe` reject.
+`owned` with `capture-safe` reject. Shareable requires Owned; ordinary Shareable
+parameter forms are not admitted.
 
 Without `owned`, a transferable parameter admits only ordinary first-order data.
 With `owned`, it retains affine consumption and borrowing rules and additionally
@@ -25,11 +32,21 @@ capture-safe contract permits some callable types and therefore does not imply
 transferability. Concrete owned carriers still prove transfer structurally without
 requiring an authored type-parameter declaration.
 
-The new bounds belong only to graph-function type parameters, with exact signature
-membership and existing restrictions on owned generic effects and requirements.
+An owned Shareable parameter retains all affine rules while allowing read loans
+to span a joined group. It does not authorize moving the owner to a child. An
+owned Transferable parameter does not establish Shareable, even when all current
+concrete carriers satisfy both predicates. Borrowing during an ordinary synchronous
+task call needs only Owned. Neither obligation changes callable kind, effects or
+capability grants.
+
+The bounds belong to graph-function type parameters and the supported Owned
+parameters of generic implementation schemes, with exact declaration membership
+and existing restrictions on owned generic effects and requirements.
 Nominal declarations and owned-contract Self retain their prior constraint forms.
-A function's owned transferable parameter can satisfy an owned contract's Self
-requirement without granting effects or changing the contract identity.
+A stronger owned parameter can satisfy an owned contract's Self or additional
+Owned requirement without granting effects or changing the contract identity.
+Method maps must still prove every stronger obligation required by their selected
+generic function applications under the exact implementation scope.
 
 ## Complete bounded proof
 
@@ -49,6 +66,15 @@ type is transferable, including when empty. Every actual child crosses independe
 source and destination admission. Interrupted adoption retains custody of the whole
 sequence until cleanup; a partially transferred sequence cannot escape.
 
+Shareable admission has a distinct structural traversal. ByteBuffer and
+OwnedI64Cell support immutable scoped reads. Owned products and choices require
+every owned child to be Shareable and every ordinary member to be complete
+first-order data, including inactive cases and phantom nominal arguments.
+Owned sequences require a Shareable owned element type even when empty. An open
+owner requires an exact in-scope Shareable assumption; a Transferable assumption
+cannot substitute for it. Sharing preserves the source custodian and allocation
+origin throughout the complete join.
+
 Every nominal actual argument is checked in its caller scope, including phantom
 arguments. Nominal fields and cases are checked under a separate set of ordinary
 formal assumptions belonging to that declaration. Functions, task functions,
@@ -65,14 +91,17 @@ controls. Exhaustion is a resource result, not evidence of invalid meaning.
 
 ## Generic structured groups
 
-A generic task may form a parallel group using its own transferable type parameters
+A generic task may form a parallel group using its own transfer or sharing obligations
 and exact implementation parameters. Each child remains a direct named graph task
 with a closed empty effect row. An implementation operand names either an exact
 implementation or a parameter of the exact lexical function. Its nominal contract
 and substituted Self must agree. Equal Self types do not merge implementations.
 
-Ordinary child parameters precede consuming owned parameters. Loans cannot cross
-the boundary. An ordinary/ordinary result is a structural record; any owned child
+Ordinary child parameters precede owned parameters. Consuming inputs prove
+Transferable; borrowed inputs prove Shareable. Both call footprints remain active
+through preparation and join. Same-root read/read is valid; a read/consume alias,
+including an ancestor alias, rejects in either order. Borrowed task results remain
+unsupported. An ordinary/ordinary result is a structural record; any owned child
 result selects an owned product, including both mixed orientations. This ownership
 class is known while checking the generic body.
 
@@ -85,7 +114,10 @@ The independent reference evaluator reconstructs those facts from canonical mean
 Type resolution uses bounded comparisons of admitted identities without constructing
 temporary type objects. Raw generic admission reserves any required fallback
 substitution storage before cloning names, vectors or canonical encoding buffers.
-Public raw values cannot manufacture transfer authority. Existing allocation
+Scoped read envelopes independently bind exact child application and source/destination
+invocation identities while retaining owner custody at the source. Nested groups
+delegate only scoped read permission and join before releasing ancestor guards.
+Public raw values cannot manufacture transfer or sharing authority. Existing allocation
 identity, argument order, aggregate quota and joined cleanup contracts apply.
 
 ## Encoding and compatibility
@@ -103,6 +135,12 @@ implementation operands can represent the symbolic applications. Validator 27,
 function projection 12 and compact discovery 30 advertise the changed contracts.
 CLI observations 35 and existing type-object envelopes retain their forms.
 
-This extension supplies no task handles, detached tasks, channels, asynchronous
-borrowing, capability inheritance or user-defined transfer certificates. Region
+The encoding numbers above record the historical Transferable increment. New
+sharing obligations and borrowed task signatures require their advertised current
+owner, request and derived-admission generations. Recomputed hashes cannot turn
+an older constraint tag or task signature into current read permission. Exact
+generations belong to product discovery and the maintained encoding owners.
+
+This extension supplies no task handles, detached tasks, channels, escaping
+borrowing, capability inheritance or user-defined transfer/read certificates. Region
 policies and scheduling remain separate contracts.

@@ -15,6 +15,10 @@ pub(in super::super) use application::TaskApplication;
 mod types;
 pub(in super::super) use types::resolve as resolve_type;
 
+#[path = "scoped_read.rs"]
+mod scoped_read;
+pub(in super::super) use scoped_read::{ScopedArgument, ScopedReadCustody, ScopedReadLease};
+
 /// No Clone, payload projection or unchecked constructor. Pending custody owns
 /// both the exact application and every argument, including partial adoptions.
 pub(in super::super) struct TransferArguments {
@@ -23,6 +27,7 @@ pub(in super::super) struct TransferArguments {
     destination: ValueOrigin,
     application: Option<TaskApplication>,
     values: Option<Vec<NormalizedValue>>,
+    reads: Vec<ScopedReadLease>,
 }
 impl TransferArguments {
     #[cfg(test)]
@@ -59,6 +64,7 @@ impl TransferArguments {
         )
     }
 
+    #[cfg(test)]
     pub(in super::super) fn seal_applied(
         program: &NormalizedProgram,
         source: ValueOrigin,
@@ -74,6 +80,7 @@ impl TransferArguments {
             destination,
             application: Some(application),
             values: Some(values),
+            reads: Vec::new(),
         };
         let application = transfer.application.as_ref().ok_or_else(reject)?;
         control.check()?;
@@ -131,12 +138,16 @@ impl TransferArguments {
             .map(|(a, values)| (a.function(), values))
     }
 
+    #[cfg(test)]
     pub(in super::super) fn adopt_applied(
         mut self,
         program: &NormalizedProgram,
         destination: ValueOrigin,
         control: &ExecutionControl,
     ) -> Result<(TaskApplication, Vec<NormalizedValue>), ExecutionError> {
+        if !self.reads.is_empty() {
+            return Err(reject());
+        }
         control.check()?;
         if self.program != program.value_origin
             || self.application.as_ref().ok_or_else(reject)?.function().1 != program.value_origin
@@ -154,12 +165,149 @@ impl TransferArguments {
             self.values.take().ok_or_else(reject)?,
         ))
     }
+
+    /// Mode-aware child custody. A borrowed root is certified without walking
+    /// its payload; consuming carriers retain the complete recursive boundary.
+    pub(in super::super) fn seal_scoped_applied(
+        program: &NormalizedProgram,
+        source: ValueOrigin,
+        destination: ValueOrigin,
+        application: TaskApplication,
+        values: Vec<ScopedArgument>,
+        control: &ExecutionControl,
+        ordinary: &mut impl FnMut(&NormalizedValue, TypeObjectDigest) -> Result<(), ExecutionError>,
+    ) -> Result<Self, ExecutionError> {
+        // The envelope takes cleanup ownership before any admission can fail.
+        let mut transfer = Self {
+            program: program.value_origin,
+            source,
+            destination,
+            application: Some(application),
+            values: Some(Vec::with_capacity(values.len())),
+            reads: Vec::with_capacity(values.len()),
+        };
+        control.check()?;
+        let application = transfer.application.as_ref().ok_or_else(reject)?;
+        if source == destination || application.function().1 != program.value_origin {
+            return Err(reject());
+        }
+        let selected = program
+            .functions
+            .get(application.function().0 as usize)
+            .ok_or_else(reject)?;
+        if values.len() != selected.parameters.len()
+            || values.len() != selected.parameter_count as usize
+        {
+            return Err(reject());
+        }
+        let mut work = Work { control, nodes: 0 };
+        validate_type(program, application.result(), 0, &mut work)?;
+        let mut seen_owned = false;
+        for (index, (argument, parameter)) in values
+            .into_iter()
+            .zip(selected.parameters.iter())
+            .enumerate()
+        {
+            let ty = application.parameter(program, index)?;
+            if parameter.resource_requirement.is_some() {
+                return Err(reject());
+            }
+            let (value, lease, memory) = match (parameter.use_mode, argument) {
+                (ParameterUse::Borrow, ScopedArgument::Read { value, custody }) => {
+                    if !validate_shareable_type(program, ty, 0, &mut work)? {
+                        return Err(reject());
+                    }
+                    let lease = ScopedReadLease::seal(
+                        program,
+                        source,
+                        destination,
+                        application,
+                        index,
+                        &value,
+                        custody,
+                        control,
+                    )?;
+                    (value, Some(lease), true)
+                }
+                (ParameterUse::Consume, ScopedArgument::Value(value)) => {
+                    if !validate_type(program, ty, 0, &mut work)? {
+                        return Err(reject());
+                    }
+                    inspect_value(program, &value, ty, source, 0, &mut work, ordinary)?;
+                    (value, None, true)
+                }
+                (ParameterUse::Unrestricted, ScopedArgument::Value(value)) => {
+                    if validate_type(program, ty, 0, &mut work)? {
+                        return Err(reject());
+                    }
+                    inspect_value(program, &value, ty, source, 0, &mut work, ordinary)?;
+                    (value, None, false)
+                }
+                _ => return Err(reject()),
+            };
+            if seen_owned && !memory {
+                return Err(reject());
+            }
+            seen_owned |= memory;
+            transfer.values.as_mut().ok_or_else(reject)?.push(value);
+            if let Some(lease) = lease {
+                transfer.reads.push(lease);
+            }
+        }
+        control.check()?;
+        Ok(transfer)
+    }
+
+    /// Returned leases outlive the complete child Machine, including tail calls.
+    pub(in super::super) fn adopt_scoped_applied(
+        mut self,
+        program: &NormalizedProgram,
+        destination: ValueOrigin,
+        control: &ExecutionControl,
+    ) -> Result<(TaskApplication, Vec<NormalizedValue>, Vec<ScopedReadLease>), ExecutionError> {
+        control.check()?;
+        if self.program != program.value_origin
+            || self.application.as_ref().ok_or_else(reject)?.function().1 != program.value_origin
+            || self.destination != destination
+        {
+            return Err(reject());
+        }
+        let values = self.values.as_mut().ok_or_else(reject)?;
+        let mut work = Work { control, nodes: 0 };
+        let mut leases = self.reads.iter().peekable();
+        for (index, value) in values.iter_mut().enumerate() {
+            match leases.peek().filter(|lease| lease.position() == index) {
+                Some(lease) => lease.adopt(
+                    program,
+                    destination,
+                    self.application.as_ref().ok_or_else(reject)?,
+                    value,
+                    control,
+                )?,
+                None => adopt_value(value, self.source, destination, 0, &mut work)?,
+            }
+            if leases.peek().is_some_and(|lease| lease.position() == index) {
+                leases.next();
+            }
+        }
+        if leases.next().is_some() {
+            return Err(reject());
+        }
+        control.check()?;
+        Ok((
+            self.application.take().ok_or_else(reject)?,
+            self.values.take().ok_or_else(reject)?,
+            std::mem::take(&mut self.reads),
+        ))
+    }
 }
 impl Drop for TransferArguments {
     fn drop(&mut self) {
         if let Some(values) = self.values.take() {
             release_raw_values(values);
         }
+        // Release every leaf token before the retained ancestor custody.
+        self.reads.clear();
     }
 }
 
@@ -320,6 +468,16 @@ pub(in super::super) fn admit_type(
 ) -> Result<bool, ExecutionError> {
     validate_type(program, ty, 0, &mut Work { control, nodes: 0 })
 }
+
+/// Read sharing is checked independently from moving, even though today's
+/// concrete carriers satisfy both structural contracts.
+pub(in super::super) fn admit_shareable_type(
+    program: &NormalizedProgram,
+    ty: TypeObjectDigest,
+    control: &ExecutionControl,
+) -> Result<bool, ExecutionError> {
+    validate_shareable_type(program, ty, 0, &mut Work { control, nodes: 0 })
+}
 impl Work<'_> {
     fn visit(&mut self, depth: usize) -> Result<(), ExecutionError> {
         self.control.check()?;
@@ -366,6 +524,32 @@ fn validate_type(
         }
         // This prepared fixed-point includes all nominal arguments and cases and
         // excludes secret/function/resource/owned types. ordinary_types does not.
+        _ if program.comparable_types.contains(&ty) => Ok(false),
+        _ => Err(reject()),
+    }
+}
+
+fn validate_shareable_type(
+    program: &NormalizedProgram,
+    ty: TypeObjectDigest,
+    depth: usize,
+    work: &mut Work<'_>,
+) -> Result<bool, ExecutionError> {
+    work.visit(depth)?;
+    match &program.types.get(&ty).ok_or_else(reject)?.form {
+        TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Ok(true),
+        TypeForm::OwnedSequence { item } => {
+            if !validate_shareable_type(program, *item, depth + 1, work)? {
+                return Err(reject());
+            }
+            Ok(true)
+        }
+        TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {
+            for field in fields {
+                validate_shareable_type(program, field.ty, depth + 1, work)?;
+            }
+            Ok(true)
+        }
         _ if program.comparable_types.contains(&ty) => Ok(false),
         _ => Err(reject()),
     }
@@ -429,6 +613,16 @@ fn inspect_value(
             ordinary(value, ty)
         }
         _ => Err(reject()),
+    }?;
+    // A complete independent shape/type/origin inspection may certify this
+    // root. Read-only seal/adoption never reaches this recursive path.
+    match value {
+        NormalizedValue::ByteBuffer(token) => token.establish_admission(program.value_origin),
+        NormalizedValue::OwnedI64Cell(token) => token.establish_admission(program.value_origin),
+        NormalizedValue::OwnedProduct(token) => token.establish_admission(program.value_origin),
+        NormalizedValue::OwnedChoice(token) => token.establish_admission(program.value_origin),
+        NormalizedValue::OwnedSequence(token) => token.establish_admission(program.value_origin),
+        _ => Ok(()),
     }
 }
 

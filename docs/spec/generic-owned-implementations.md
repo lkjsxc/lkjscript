@@ -23,7 +23,8 @@ implementation search or a new runtime ownership mode.
 ```
 
 Type parameters have distinct semantic identities, the implementation
-as their declaring scope, and the exact Owned constraint. Their authored order
+as their declaring scope, and an Owned constraint optionally strengthened with
+Transferable, Shareable or both. Their authored order
 determines application order. Self, ordered contract arguments and mapped function
 arguments can contain these exact parameters inside supported finite owned
 structural types. An empty scheme remains a concrete implementation.
@@ -43,6 +44,12 @@ All mappings and all scheme parameters are checked, including unused methods and
 phantom parameters. A closed target or type argument still requires its complete
 admitted closure. Equal names, types or method bodies do not merge implementation
 identities. Adding a dependency cannot change a selected implementation.
+Every implementation actual and mapped function application satisfies its formal's
+exact declared bounds under the actual's package-qualified defining scope. An
+Owned-only contract remains reusable by a stronger scheme; a method map cannot
+erase the stronger requirements of its selected function. Unused callable or
+witness metadata acquires no additional transfer or sharing obligation; values
+crossing an invocation boundary prove their complete carrier obligation separately.
 
 ## Explicit prerequisites and method maps
 

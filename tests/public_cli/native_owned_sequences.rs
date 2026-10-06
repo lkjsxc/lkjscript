@@ -346,7 +346,7 @@ fn native_owned_sequence_rejects_invalid_meaning_preserves_draft_ids_and_recover
         ("view-escape", READ_SCOPE.replace("(returns I64)", "(returns OwnedI64Cell)").replace(observed, "(local view)")),
         ("view-storage", READ_SCOPE.replace(observed, "(let (binding destination (type (owned-sequence OwnedI64Cell)) (sequence-empty (type (owned-sequence OwnedI64Cell)))) (in (sequence (sequence-push (type (owned-sequence OwnedI64Cell)) (local view) (local destination)) (i64 0))))")),
         ("view-capture", READ_SCOPE.replace(observed, "(sequence (bind (function-value sequence-carriers::cell-read) (local view)) (i64 0))")),
-        ("borrowed-task-parameter", READ_SCOPE.replace("(effect pure)", "(effect (task))").replace("(use consume)", "(use borrow)")),
+        ("borrowed-task-consumption", READ_SCOPE.replace("(effect pure)", "(effect (task))").replace("(use consume)", "(use borrow)").replace(observed, "(call sequence-carriers::cell-finish (local view))")),
         ("wrong-self-witness", APPLICATION.replacen("concrete@sequence-carriers::Scalar", "concrete@sequence-carriers::Octets", 1)),
         ("double-pop", READ_SCOPE.replace("(borrow-owned-item (type (owned-sequence OwnedI64Cell)) (local values)\n      (index (i64 0)) (binding view (type OwnedI64Cell))\n      (in (call sequence-carriers::cell-read (local view))))", "(sequence (sequence-pop (type (owned-sequence OwnedI64Cell)) (local values)) (sequence-pop (type (owned-sequence OwnedI64Cell)) (local values)) (i64 0))")),
         ("ordinary-element", r#"declarations.begin
@@ -387,7 +387,14 @@ declarations.end
     for (name, body) in cases {
         rejected(public, &packages.source(&body), &before, name);
     }
-    author(public, &packages.source(APPLICATION));
+    let borrowed_task = READ_SCOPE
+        .replace("(effect pure)", "(effect (task))")
+        .replace("(use consume)", "(use borrow)");
+    author(
+        public,
+        &packages.source(&format!("{borrowed_task}\n{APPLICATION}")),
+    );
+    unchanged(public, "invalid-sequence");
     let accepted = public.revision();
     let original = unchanged(public, "owned-sequences-app");
     let modules = public.cli(&["query", "find", "module", "owned-sequences-app"], true);

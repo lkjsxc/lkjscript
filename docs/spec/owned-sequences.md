@@ -75,17 +75,19 @@ result. Scope exit ends the child loan before its ancestor guards, so the origin
 sequence can subsequently be read, pushed, popped or consumed.
 
 The rights match [other owned child reads](owned-borrows.md). A view may call exact
-pure borrowed helpers and implementation methods, reborrow synchronously and enter
+pure helpers or synchronous borrowed graph tasks and implementation methods, reborrow and enter
 another child scope. Nested sequence, product and choice inspection retains the
 complete provenance chain. Reading an ancestor's length or another sibling is
 legal; no internal storage lock remains held across user code.
 
 Neither a view nor a protected source or ancestor may be consumed through an
 alias. A view cannot become an owner, an unrestricted argument, an ordinary
-container member, a capture, a stored reference, or a task operand. A matching
+container member, a capture or a stored reference. A matching
 [source-tied pure result](owned-read-results.md) can return the selected view with
 its complete source and ancestor custody.
-Borrowed task parameters remain unsupported. The body may consume unrelated owners,
+Synchronous borrowed task inputs require only Owned; a read input spanning joined
+parallel child invocations additionally requires Shareable. Tasks cannot return
+borrowed results. The body may consume unrelated owners,
 return an unrelated new owner and perform effects authorized by its task. A scope
 confers no additional effect or task authority.
 

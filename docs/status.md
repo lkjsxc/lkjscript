@@ -1,81 +1,60 @@
 # Status
 
-Current snapshot: 2026-10-05. This page owns availability and unfinished acceptance.
+Current snapshot: 2026-10-06. This page owns availability and unfinished acceptance.
 [Direction](direction.md) owns goals, [specifications](spec/) own semantics and
 [roadmap](roadmap.md) orders future language work.
 
 ## Public binary
 
-Immutable [v0.1.79](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.79) is
-public/latest at accepted source `d87c8f4eb511e7f76cb83d3a2ae002e8e0c2b3f3`.
-[Producer 37290757320/1](https://github.com/lkjsxc/lkjscript/actions/runs/37290757320)
-completed `candidate_accepted`; [promotion 37302814563/1](https://github.com/lkjsxc/lkjscript/actions/runs/37302814563)
-completed `immutable_published_and_public_verified` at 11:33:45 UTC.
-Release `403643687` and annotation `b32ef1b8d62acdc19af739f560af00f78355b78e`
+Immutable [v0.1.80](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.80) is
+public/latest at accepted source `addbcf89eb93dd059ac5c6c42ef10923e8ca8fa2`.
+[Producer 37318246118/1](https://github.com/lkjsxc/lkjscript/actions/runs/37318246118)
+completed `candidate_accepted`.
+[Promotion 37411369691/1](https://github.com/lkjsxc/lkjscript/actions/runs/37411369691)
+completed `immutable_published_and_public_verified` at 2026-10-06 04:07:30 UTC.
+Release `404300838` and annotation `b14dce7d3f25bffdb7aecbad2bbf6ca154b5d6bd`
 retain that exact source. Independent anonymous exact, release-ID and latest
-metadata, all three accepted assets and executable readback passed at 11:39:02 UTC.
-No v0.1.79 publication gate remains.
+metadata, annotation, release notes, all three assets and executable readback
+passed; latest was reconfirmed after the terminal. No v0.1.80 gate remains.
 
 Original publication evidence is indexed by
-`.artifacts/20261005-generic-implementations/release-0179/completed-publication.json`
-in `/home/coder/workspace/lkjscript`. Original v0.1.79 source proof remains at
-`.artifacts/lkjscript-dev/check/1791191334326999367-4105781-0/receipt.json`, with its
-mapping at `.artifacts/20261005-generic-implementations/source-acceptance.json`.
-Earlier immutable releases, original fixtures and genuine failures remain preserved.
+`.artifacts/20261006-scoped-parallel/release-0180/completed-publication.json`.
+Promotion reused accepted assets without another product build. Original complete
+source proof remains at
+`.artifacts/lkjscript-dev/check/1791206395181466676-410128-0/receipt.json`, with its
+source mapping at
+`.artifacts/20261005-composable-implementations/source-acceptance.json`.
+The accepted source had 26 fresh passing gates, stable inputs, and no unrun gates.
+These observations do not validate subsequent implementation changes.
 
-## Composable implementations accepted and delivered to main
+## Borrowed tasks and scoped parallel reads awaiting source acceptance
 
-[Explicit implementation prerequisites](spec/generic-owned-implementations.md#explicit-prerequisites-and-method-maps)
-and shared prepared code for v0.1.80 are accepted at
-[`addbcf89eb93dd059ac5c6c42ef10923e8ca8fa2`](https://github.com/lkjsxc/lkjscript/commit/addbcf89eb93dd059ac5c6c42ef10923e8ca8fa2).
-The accepted tree is `96b433f002ea02dd970adc0425f30a7cf94bfe9f`. Normal fast-forward delivery and
-integration of that exact source were independently verified through Git and the
-GitHub branch API. Reporting descendants retain their separate identities.
+The selected checkout is `/home/coder/workspace/lkjscript`, on `main` at reporting
+base `52ad8322f0e48fd92c93edf53ad2d9d0a89a42e2`. The working candidate selects
+product identifier `0.1.81`. Its implementation adds synchronous borrowed task
+parameters and methods, independent Shareable constraints, and scoped read custody
+through recursive joined parallel children. The
+[public witness](../examples/scoped-parallel-reads/README.md) uses exact generic
+readers over flat and chunked storage, then drains and reuses the original owner.
 
-Exact nested witnesses map existing generic functions with explicit witness
-arguments. Compatible applications share immutable instruction bodies while
-retaining independently admitted witness identities and resolved call bindings.
-The [three-package witness](../examples/composable-owned-implementations/README.md)
-uses selectors and readers across cells, buffers and a nested product, including
-borrowed selections, owner reuse and joined consuming tasks.
-[Release notes](releases/v0.1.80.md) describe the capability and selected format cut.
+Independent semantic and physical-custody reviews are complete. Maintained standard,
+guide, policy and application programs pass 96, 79, 62 and 44 differential tests;
+their derived bundles and all eight generated reference pages are refreshed.
+Cold reproduction passes all four native checks without adding packs or changing
+native HEADs; the original receipt is
+`.artifacts/20261006-scoped-parallel/cold-native-04/receipt.txt`.
 
-The original complete source receipt is `.artifacts/lkjscript-dev/check/1791206395181466676-410128-0/receipt.json`:
-**26 fresh passing gates, zero reuse, no unrun gates and stable inputs**.
-Workspace tests report **2,104 passed, 29 ignored and zero failed**, including all
-228 selected public CLI cases. Counts exclude two nested filtered child-harness
-summaries already covered by their parent tests. The first full receipt, its stale
-service-pin failure and the corrected regression retain their original records in
-the source/commit mapping.
-The source/commit mapping is retained at `.artifacts/20261005-composable-implementations/source-acceptance.json`.
-Maintained native checks, tracked-source reproduction and derived-pack inspection
-retain their originals under `.artifacts/20261005-composable-implementations/`,
-including `cold-source-02/` and `native-pack-inspection-01.json`.
+Focused iterations and retained failures are under
+`.artifacts/20261006-scoped-parallel/`. The copied-executable witness passes the
+alias-rejection cases. Its corrected manual continuation authors three packages,
+checks 97 tests, executes all six storage backends and the matched serial path,
+then repeats execution with the original source and transport paths absent.
+This continuation does not relabel the earlier failed harness run as passing.
 
-[Current limits](spec/generic-owned-implementations.md#finite-preparation-and-independent-admission)
-remain explicit: potential recursion admission is conservative, so an unused
-same-contract alternative can make a selected acyclic application unsupported.
-Source analysis retains separate typed prerequisite paths, so a compact witness
-DAG can still exceed source proof capacity. Code sharing follows individual
-application materialization and retains its construction charges. Cheaper
-preparation and runtime speedups have not been established. Production application
-adoption and compiler self-hosting remain future work.
+Dependency-complete fresh source acceptance and the corrected fresh public harness
+remain pending. Then integrate the accepted source and independently authenticate
+the finalized executable candidate. Public/latest remains v0.1.80; no v0.1.81
+publication has been selected.
 
-## v0.1.80 candidate acceptance pending
-
-[Producer 37318246118/1](https://github.com/lkjsxc/lkjscript/actions/runs/37318246118)
-selects exact accepted product/controller source `addbcf89eb93dd059ac5c6c42ef10923e8ca8fa2`.
-Repository, workflow, main ref, head repository, source and attempt were independently
-authenticated. Required candidate job `111790369983` is
-`in_progress` at `Fetch locked dependencies and build immutable host tools`,
-observed at 2026-10-05 13:38:50 UTC.
-The retained handoff is `.artifacts/20261005-composable-implementations/candidate-handoff.json`; reuse this exact producer.
-
-Next require finalized assets, exact archived-executable admission and authenticated
-`candidate_accepted`. Then select the accepted-source annotation and scoped control,
-promote unchanged assets, require `immutable_published_and_public_verified` and
-complete independent anonymous readback. Source/mainline acceptance and finalized
-archive acceptance retain separate evidence. Public/latest remains v0.1.79.
-
-Preserve unrelated worktrees, stashes, original fixtures/failures and immutable
-publication history. No application deployment changes are part of this work.
+Preserve unrelated worktrees, stashes, original failures and immutable publication
+history. This work changes no application deployment.

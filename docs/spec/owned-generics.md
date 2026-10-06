@@ -18,13 +18,15 @@ the ordered additional parameters of an
 [owned contract](owned-contract-parameters.md). Graph functions may compose them
 with explicit effect and requirement schemes under
 [owned effect applications](owned-effects.md). Named tasks may use them under
-[same-task transfer](owned-task-transfers.md).
+[synchronous owned task calls](owned-task-transfers.md).
 Nominal records, variants and externals cannot advertise Owned parameters.
 
-Development 0.1.71 adds an orthogonal [transferable obligation](transferable-types.md)
-to function type parameters. `owned transferable` retains Owned's affine rules;
-ordinary `transferable` parameters admit first-order transferable data. Owned and
-CaptureSafe alone do not establish generic cross-task transfer permission.
+Graph-function type parameters may add independent [transfer and sharing
+obligations](transferable-types.md). `owned transferable` permits custody transfer
+at admitted boundaries; `owned shareable` permits scoped reads across joined child
+invocations. `owned transferable shareable` promises both. Owned and CaptureSafe
+alone prove neither, and Transferable does not imply Shareable. Ordinary
+`transferable` parameters admit first-order transferable data.
 
 A generic body is checked symbolically before any concrete application exists.
 Instantiation checks the exact substituted type, constraint and parameter modes
@@ -32,15 +34,16 @@ again. A direct Owned parameter, result or annotated lexical local has the same
 affine rules as its concrete carrier:
 
 - Ordinary parameters precede memory parameters; exact capability resources, when
-  present, form a final suffix after memory. Tasks must `consume` memory; only pure
-  helpers may declare synchronous read `borrow`.
+  present, form a final suffix after memory. Pure helpers and graph tasks may
+  declare synchronous read `borrow` or affine `consume`.
 - Every memory call argument is an exact local. Repeated reads may reborrow;
   any alias involving a consume rejects, in either argument order.
 - Consumption transfers the one owner. A moved local cannot be used again.
   Conditional paths join ownership conservatively, including untaken syntax.
 - An owning result transfers its owner. A pure [source-tied result](owned-read-results.md)
   may return a read view from its declared borrowed input. A borrowed parameter
-  cannot be consumed, stored, captured or transferred asynchronously.
+  cannot be consumed, stored or captured. Tasks cannot return borrowed results;
+  joined child reads have a separate Shareable boundary contract.
 - Scope exit disposes of remaining local owners. Traps, cancellation and exhausted
   quotas dispose of all remaining owners and loans. This cleanup invokes no
   user-defined method and confers no capability authority.
@@ -50,8 +53,11 @@ symbolic `Owned` types. A generic product or choice reader is checked before any
 concrete implementation exists. Substitution preserves child/ancestor loan
 provenance and exact borrowed method selection. Scope bodies may return unrelated
 owners and use authorized effects; protected sources and views cannot be consumed
-or escape except through a matching source-tied pure result. Borrowed task
-parameters remain unsupported.
+or escape except through a matching source-tied pure result. Exact borrowed task
+calls retain these loans through their authorized effects and resource operations.
+Synchronous borrowing needs only the Owned obligation. Joined parallel borrowing
+additionally requires Shareable and protects the complete combined argument
+footprint until every started child joins.
 
 Owned sequences provide dynamic homogeneous collections under their separate
 contract. General nominal owned containers, mutable borrows, escaping captures, memory-bearing indirect
@@ -104,8 +110,9 @@ Closed recursive, mutual and nested nominal data remain first order. The structu
 property is proved under each nominal declaration's ordinary parameter assumptions,
 with every actual argument independently checked in its enclosing scope. Even a
 phantom argument must be closed and ordinary; recursive binding reuse cannot erase it.
-Owned parameters form the final affine suffix. Pure methods may borrow or consume
-them; every task owned parameter must consume, including unused parameters.
+Owned method parameters form the final affine suffix after ordinary data. Pure
+and task methods may borrow or consume them, including Self. Task methods retain
+their exact closed effect rows; their borrowed results remain unsupported.
 [Parameterized contracts](owned-contract-parameters.md) permit finite owned
 products, choices and sequences containing exact contract parameters in method
 arguments and results. A result may also be ordinary closed data. A method need
@@ -140,6 +147,9 @@ extraction, effect/capability summaries, package interfaces and dependency closu
 an otherwise unused public contract retains its required interface metadata.
 Multiple implementations for the same Self and signature are valid and remain
 distinguishable through package transport, preparation and detached artifacts.
+Generic implementation schemes retain exact method modes after substitution;
+stronger Shareable or Transferable function assumptions cannot be erased by a
+method map whose generic actual arguments fail those obligations.
 
 Preparation closes finite applications by exact function and ordered selected
 implementation references; existing type/effect closure machinery checks type

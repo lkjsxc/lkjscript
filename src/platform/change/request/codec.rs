@@ -126,6 +126,7 @@ struct Writer {
     declaration_body_extension: bool,
     literal_extension: bool,
     transfer_constraint_extension: bool,
+    share_constraint_extension: bool,
     implementation_authority_extension: bool,
     owned_borrow_extension: bool,
     sequence_extension: bool,
@@ -152,6 +153,7 @@ impl Writer {
             declaration_body_extension: false,
             literal_extension: false,
             transfer_constraint_extension: false,
+            share_constraint_extension: false,
             implementation_authority_extension: false,
             owned_borrow_extension: false,
             sequence_extension: false,
@@ -163,7 +165,11 @@ impl Writer {
     }
 
     fn finish(mut self) -> Vec<u8> {
-        if self.implementation_prerequisite_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+        if self.share_constraint_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+            self.bytes[..8].copy_from_slice(b"LKJACR34");
+        } else if self.implementation_prerequisite_extension
+            && self.bytes.starts_with(&INTENT_MAGIC)
+        {
             self.bytes[..8].copy_from_slice(b"LKJACR33");
         } else if self.generic_implementation_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR32");
@@ -1081,6 +1087,7 @@ impl Writer {
                 self.owner_selector(parameter, definitions)?;
                 self.owned_extension |= constraints.has_owned();
                 self.transfer_constraint_extension |= constraints.requires_transfer();
+                self.share_constraint_extension |= constraints.requires_share();
                 self.tag(constraints.tag())
             }
             AuthoredChange::AddParameter { parent, parameter } => {
@@ -1517,6 +1524,7 @@ impl Writer {
         self.name(&value.name)?;
         self.owned_extension |= value.constraints.has_owned();
         self.transfer_constraint_extension |= value.constraints.requires_transfer();
+        self.share_constraint_extension |= value.constraints.requires_share();
         self.tag(value.constraints.tag())
     }
 

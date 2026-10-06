@@ -17,6 +17,7 @@ fn current_derived_fixture_from_source(
         b"LKJART19" => (*b"LKJAMF19", "lkjscript.artifact-manifest-envelope.v19"),
         b"LKJART20" => (*b"LKJAMF20", "lkjscript.artifact-manifest-envelope.v20"),
         b"LKJART21" => (*b"LKJAMF21", "lkjscript.artifact-manifest-envelope.v21"),
+        b"LKJART36" => (*b"LKJAMF36", "lkjscript.artifact-manifest-envelope.v36"),
         _ => panic!("fixture generation"),
     };
     let number = |at| u64::from_be_bytes(bytes[at..at + 8].try_into().unwrap()) as usize;
@@ -67,6 +68,16 @@ fn current_derived_fixture_from_source(
             )
             .unwrap()
             .into()
+        } else if value.starts_with(b"LKJCUN29") {
+            // Decode the frozen predecessor envelope without granting it current
+            // admission. Its source, tables and instructions have the same layout.
+            crate::platform::packed::decode::<CompilationUnit>(
+                &value,
+                *b"LKJCUN29",
+                "lkjscript.compiler-unit-envelope.v29",
+                super::super::unit::MAXIMUM_COMPILER_UNIT_BYTES,
+            )
+            .unwrap()
         } else {
             let (magic, domain) = match &value[..8] {
                 b"LKJCUN11" => (*b"LKJCUN11", "lkjscript.compiler-unit-envelope.v11"),
@@ -373,7 +384,7 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
                 .write_all(&current)
                 .unwrap();
         }
-        let (previous, retained) = match name {
+        let (previous, retained, expected) = match name {
             "requirements" => (
                 include_bytes!(
                     "../../../tests/fixtures/owned-predecessor-compiler28/requirements.lkja"
@@ -381,6 +392,10 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
                 .as_slice(),
                 include_bytes!(
                     "../../../tests/fixtures/owned-predecessor-compiler29/requirements.lkja"
+                )
+                .as_slice(),
+                include_bytes!(
+                    "../../../tests/fixtures/owned-predecessor-compiler30/requirements.lkja"
                 )
                 .as_slice(),
             ),
@@ -393,6 +408,10 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
                     "../../../tests/fixtures/owned-predecessor-compiler29/transactions.lkja"
                 )
                 .as_slice(),
+                include_bytes!(
+                    "../../../tests/fixtures/owned-predecessor-compiler30/transactions.lkja"
+                )
+                .as_slice(),
             ),
             "participation" => (
                 include_bytes!(
@@ -403,6 +422,10 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
                     "../../../tests/fixtures/owned-predecessor-compiler29/participation.lkja"
                 )
                 .as_slice(),
+                include_bytes!(
+                    "../../../tests/fixtures/owned-predecessor-compiler30/participation.lkja"
+                )
+                .as_slice(),
             ),
             _ => unreachable!(),
         };
@@ -411,11 +434,21 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
             "artifact_bundle_contract",
             "{name}: original compiler28 derived fixture remains frozen"
         );
-        expected_artifacts.push((name, retained, current));
+        expected_artifacts.push((name, retained, expected, current));
     }
-    for (name, retained, current) in expected_artifacts {
+    for (name, retained, expected, current) in expected_artifacts {
         assert!(
-            current.as_slice() == retained,
+            current.as_slice() == expected,
+            "{name}: current derived fixture bytes changed"
+        );
+        assert_eq!(
+            load_artifact(retained).unwrap_err().code,
+            "artifact_bundle_contract",
+            "{name}: original compiler29 derived fixture remains frozen"
+        );
+        let retained_current = current_derived_fixture(retained);
+        assert!(
+            current == retained_current,
             "{name}: canonical source and instructions changed"
         );
     }

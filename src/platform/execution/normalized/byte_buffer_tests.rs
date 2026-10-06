@@ -30,16 +30,18 @@ pub(crate) fn author_only(input: &str) -> Result<crate::platform::kernel::Kernel
 #[test]
 fn byte_buffer_creation_reserves_complete_owned_storage_before_allocation() {
     use super::super::byte_buffer::{ByteBuffer, StorageObservation};
+    use super::super::value::ValueOrigin;
     use std::mem::size_of;
     use std::sync::Mutex;
 
     let source = author("").unwrap();
     let program = prepare_snapshot(&source);
     let declaration = declaration_named(&source, "abandoned");
-    // Independently model the token, synchronized (optional Vec, loan count),
-    // and two Arc counters. This is admitted storage, not allocator/RSS usage.
+    // Independently model the token, synchronized payload, loan count,
+    // admitted-program identity and certificate flag, plus two Arc counters.
+    // This is admitted storage, not allocator/RSS usage.
     let expected = (size_of::<ByteBuffer>()
-        + size_of::<Mutex<(Option<Vec<u8>>, usize)>>()
+        + size_of::<Mutex<(Option<Vec<u8>>, usize, Option<ValueOrigin>, bool)>>()
         + 2 * size_of::<usize>()) as u64;
     let mut charges = vec![];
     for reference in [false, true] {
@@ -247,7 +249,7 @@ fn byte_buffer_meaning_rejects_copy_escape_generic_and_alias() {
         "(record create bad (visibility private) (field create storage (type ByteBuffer)))",
         "(function create bad (visibility private) (returns (function () ByteBuffer)) (effect pure) (body (function-value memory::empty)))",
         "(function create unused (visibility private) (type-parameter create T) (returns Unit) (effect pure) (body (unit))) (function create bad (visibility private) (returns Unit) (effect pure) (body (call unused (types ByteBuffer))))",
-        "(function create bad (visibility private) (parameter create b (type ByteBuffer) (use borrow)) (returns Unit) (effect (task)) (body (unit)))",
+        "(function create bad (visibility private) (parameter create b (type ByteBuffer) (use borrow)) (returns ByteBuffer (borrow-from b)) (effect (task)) (body (local b)))",
         "(record create Phantom (visibility private) (type-parameter create T) (field create tag (type I64))) (function create bad (visibility private) (returns (Phantom ByteBuffer)) (effect pure) (body (record Phantom (types ByteBuffer) (field Phantom::tag (i64 0)))))",
         "(function create alias (visibility private) (parameter create a (type ByteBuffer) (use borrow)) (parameter create b (type ByteBuffer) (use consume)) (returns Unit) (effect pure) (body (call memory::discard (local b)))) (function create bad (visibility private) (parameter create b (type ByteBuffer) (use consume)) (returns Unit) (effect pure) (body (call alias (local b) (local b))))",
     ] {
@@ -257,10 +259,56 @@ fn byte_buffer_meaning_rejects_copy_escape_generic_and_alias() {
         let failure = author(&extra).unwrap_err();
         assert!(
             failure.contains("kernel_buffer")
+                || failure.contains("kernel_borrow_result")
                 || failure.contains("kernel_affine")
                 || failure.contains("intrinsic_signature"),
             "wrong rejection for {body}: {failure}"
         );
+    }
+}
+
+#[test]
+fn byte_buffer_synchronous_task_borrows_retain_the_owner() {
+    let source = author(
+        r#"declarations.begin
+(units (module create borrowed-tasks
+  (function create inspect (visibility private) (effect (task))
+    (parameter create b (type ByteBuffer) (use borrow))
+    (returns I64) (body (call memory::length (local b))))
+  (function create synchronous-task-read (visibility public) (effect (task))
+    (returns Bytes)
+    (body (let
+      (binding empty (type ByteBuffer) (call memory::empty))
+      (binding filled (type ByteBuffer) (call memory::push (i64 17) (local empty)))
+      (binding count (type I64) (call inspect (local filled)))
+      (in (call memory::freeze (local filled))))))))
+declarations.end
+"#,
+    )
+    .unwrap();
+    assert!(crate::platform::kernel::memory_reference::accepts(&source));
+    let program = prepare_snapshot(&source);
+    let entry = declaration_named(&source, "synchronous-task-read");
+    for reference in [false, true] {
+        let storage = super::super::byte_buffer::StorageObservation::start();
+        let control = ExecutionControl::uncancelled();
+        let value = if reference {
+            NormalizedReferenceInterpreter::new(
+                &source,
+                &program,
+                NormalizedRunPolicy::foreground(),
+            )
+            .invoke(entry, vec![], None, &control)
+            .unwrap()
+            .0
+        } else {
+            NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
+                .invoke(entry, vec![], None, &control)
+                .unwrap()
+                .0
+        };
+        assert_eq!(value, NormalizedValue::bytes(vec![17]));
+        assert_eq!(storage.live(), (0, 0));
     }
 }
 

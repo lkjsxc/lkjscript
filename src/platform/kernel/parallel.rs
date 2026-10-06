@@ -63,6 +63,7 @@ pub(crate) fn admit_call(
     })?;
     if !signature.requirement_parameters.is_empty()
         || !signature.effect_parameters.is_empty()
+        || signature.result_borrow.is_some()
         || !matches!(&signature.effect, FunctionEffect::Task { requirements, effect_parameters }
             if requirements.is_empty() && effect_parameters.is_empty())
     {
@@ -92,7 +93,9 @@ pub(crate) fn admit_call(
                 _ => return Err(reject("missing imported child type parameter")),
             }
         };
-        let owned = admit_result(read, *ty, scope)?;
+        // Type operands describe the exact application. Only its declared
+        // constraints are obligations; transport modes belong to value carriers.
+        let owned = super::memory::direct(read, *ty)?;
         if parameter.declaration != function.declaration
             || owned != parameter.constraints.has_owned()
             || substitutions.insert(*id, *ty).is_some()
@@ -143,17 +146,33 @@ pub(crate) fn admit_call(
             ));
         }
         parameter.ty = applied.substitute(parameter.ty, &substitutions, 0)?;
-        match admit_result(&applied, parameter.ty, scope)? {
+        match super::memory::direct(&applied, parameter.ty)? {
             true => {
-                if parameter.use_mode != ParameterUse::Consume {
-                    return Err(reject("parallel child owned parameters must consume"));
+                match parameter.use_mode {
+                    ParameterUse::Borrow => {
+                        if parameter.header.contract_version
+                            < contract::SHARE_GRAPH_CONTRACT_VERSION
+                        {
+                            return Err(reject("parallel borrowed parameters require Graph 30"));
+                        }
+                        super::share::admit(&applied, parameter.ty, scope)?;
+                    }
+                    ParameterUse::Consume => {
+                        admit_result(&applied, parameter.ty, scope)?;
+                    }
+                    ParameterUse::Unrestricted => {
+                        return Err(reject(
+                            "parallel child owned parameters require borrow or consume",
+                        ));
+                    }
                 }
                 seen_owned = true;
             }
             false => {
+                admit_result(&applied, parameter.ty, scope)?;
                 if seen_owned || parameter.use_mode != ParameterUse::Unrestricted {
                     return Err(reject(
-                        "parallel child parameters require transferable data followed by consuming transferable owners",
+                        "parallel child parameters require transferable data followed by shareable reads or consuming transferable owners",
                     ));
                 }
             }

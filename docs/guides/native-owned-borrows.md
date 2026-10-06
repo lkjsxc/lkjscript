@@ -92,10 +92,12 @@ verification inputs; the guide alone is not evidence of a passing run.
 
 ## Rights and boundaries
 
-A view may call borrowed pure helpers, reborrow synchronously and enter another
-child scope. It cannot be consumed, returned, stored, captured, passed unrestricted
-or transferred to a task. The source and its ancestors also cannot be consumed
-until the scope ends. Borrowed task parameters remain unsupported.
+A view may call borrowed helpers, reborrow synchronously and enter another
+child scope. It cannot escape its source scope, be consumed, stored, captured,
+or passed unrestricted. The source and its ancestors also cannot be consumed
+until the scope ends. Named tasks and exact task methods can borrow synchronously;
+sharing those reads across joined children additionally requires Shareable. See
+the [scoped parallel reads guide](native-scoped-parallel-reads.md).
 
 A body may return an unrelated owner or perform effects authorized by its task.
 Cancellation, traps and allocation refusal release child loans before ancestor

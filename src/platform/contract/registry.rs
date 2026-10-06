@@ -790,9 +790,9 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: PredecessorPolicy::ReadHistorical,
             magic_values: &[
-                "LKJOWN29", "LKJOWN28", "LKJOWN27", "LKJOWN26", "LKJOWN25", "LKJOWN24", "LKJOWN23",
-                "LKJOWN22", "LKJOWN21", "LKJOWN20", "LKJOWN19", "LKJOWN18", "LKJOWN17", "LKJOWN16",
-                "LKJOWN15", "LKJOWN14", "LKJSMR01", "LKJDEP14", "LKJRET14",
+                "LKJOWN30", "LKJOWN29", "LKJOWN28", "LKJOWN27", "LKJOWN26", "LKJOWN25", "LKJOWN24",
+                "LKJOWN23", "LKJOWN22", "LKJOWN21", "LKJOWN20", "LKJOWN19", "LKJOWN18", "LKJOWN17",
+                "LKJOWN16", "LKJOWN15", "LKJOWN14", "LKJSMR01", "LKJDEP14", "LKJRET14",
             ],
             digest_domains: &[
                 super::super::kernel::contract::OWNER_ENVELOPE_DOMAIN,
@@ -1015,7 +1015,8 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             magic_values: &[
                 "LKJACR14", "LKJACR15", "LKJACR16", "LKJACR17", "LKJACR18", "LKJACR19", "LKJACR20",
                 "LKJACR21", "LKJACR22", "LKJACR23", "LKJACR24", "LKJACR25", "LKJACR26", "LKJACR27",
-                "LKJACR28", "LKJACR29", "LKJACR30", "LKJACR31", "LKJACR32", "LKJACR33", "LKJABG01",
+                "LKJACR28", "LKJACR29", "LKJACR30", "LKJACR31", "LKJACR32", "LKJACR33", "LKJACR34",
+                "LKJABG01",
             ],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
@@ -1096,8 +1097,8 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: PredecessorPolicy::ReadHistorical,
             magic_values: &[
-                "LKJPIF17", "LKJPIF16", "LKJPIF15", "LKJPIF14", "LKJPIF13", "LKJPIF12", "LKJPIF11",
-                "LKJPIF10",
+                "LKJPIF18", "LKJPIF17", "LKJPIF16", "LKJPIF15", "LKJPIF14", "LKJPIF13", "LKJPIF12",
+                "LKJPIF11", "LKJPIF10",
             ],
             digest_domains: &[
                 PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
@@ -1163,7 +1164,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: REJECT,
-            magic_values: &["LKJCUN29"],
+            magic_values: &["LKJCUN30"],
             digest_domains: &[
                 COMPILER_UNIT_ENVELOPE_DOMAIN,
                 COMPILER_UNIT_KEY_DOMAIN,
@@ -1185,7 +1186,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJAMF36"],
+            magic_values: &["LKJAMF37"],
             digest_domains: &[
                 ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
                 storage_contract::ARTIFACT_MANIFEST_DIGEST_DOMAIN,
@@ -1199,7 +1200,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJART36", "LKJAEN36"],
+            magic_values: &["LKJART37", "LKJAEN37"],
             digest_domains: &[
                 ARTIFACT_BUNDLE_DIGEST_DOMAIN,
                 ARTIFACT_BUNDLE_CHECKSUM_DOMAIN,
@@ -4446,13 +4447,25 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "kernel_owned_contract",
             DiagnosticClass::Semantic,
             "An owned method contract, implementation map or explicit witness is not exact.",
-            "Check nominal contract identity, Owned Self, exact monomorphic method signatures and closed effect rows, task-only consumption, caller allowances and lexical witness scope.",
+            "Check nominal contract identity, Owned Self, exact substituted method signatures and closed effect rows, explicit borrow/consume modes, caller allowances and lexical witness scope.",
         ),
         diagnostic(
             "kernel_parallel_call",
             DiagnosticClass::Semantic,
-            "A structured child is not an exact empty-effect graph task application with transferable input and output.",
-            "Use direct named task calls with exact type and implementation arguments and declare transferable bounds on open caller types; keep ordinary data first and consuming owned arguments last, and keep resources, loans, secrets and callables outside the child boundary.",
+            "A structured child is not an exact empty-effect graph task application with admitted input and output.",
+            "Use direct named task calls with exact type and implementation arguments; require shareable for borrowed memory and transferable for consumed inputs and returned values. Keep ordinary data before owned memory, preserve lending guards throughout both children's joined lifetime, and keep resources, secrets and callables outside the child boundary.",
+        ),
+        diagnostic(
+            "kernel_share_constraint_generation",
+            DiagnosticClass::Semantic,
+            "A shareable type-parameter constraint appears under a predecessor graph generation.",
+            "Author owned shareable or owned transferable shareable bounds under Graph 30 and rebuild derived artifacts.",
+        ),
+        diagnostic(
+            "kernel_share_constraint",
+            DiagnosticClass::Semantic,
+            "An exact supplied type does not prove the required structural or symbolic shared-read obligation.",
+            "Declare shareable on the exact owned caller parameter or supply the complete shareable type closure, including inactive cases and nested elements.",
         ),
         diagnostic(
             "kernel_transfer_constraint_generation",
@@ -4469,8 +4482,8 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "kernel_transfer_parameter_owner",
             DiagnosticClass::Semantic,
-            "A transferable bound belongs to a declaration other than a graph function.",
-            "Declare transfer constraints only on graph-function type parameters; retain existing nominal and owned-contract Self constraints.",
+            "A transferable bound belongs to an unsupported declaration.",
+            "Declare transferable constraints on graph-function parameters or owned implementation scheme parameters; retain nominal and owned-contract Self constraints.",
         ),
         diagnostic(
             "kernel_parallel_types",
@@ -4524,7 +4537,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "kernel_parallel_generation",
             DiagnosticClass::Semantic,
             "A parallel expression is labeled with a predecessor meaning generation.",
-            "Author parallel meaning under Graph 21 and rebuild derived artifacts from accepted source.",
+            "Author parallel meaning under Graph 21 or later, with borrowed children under Graph 30, and rebuild derived artifacts from accepted source.",
         ),
         diagnostic(
             "kernel_owned_choice",
@@ -4710,7 +4723,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "kernel_owned_parameter_owner",
             DiagnosticClass::Semantic,
             "An Owned constraint belongs to an unsupported declaration or foreign scope.",
-            "Use Owned on an exact graph function or its owned-contract Self and ordered additional parameters; task memory inputs must consume and implementation applications must supply exact type, effect and requirement operands.",
+            "Use owned bounds on an exact graph function or implementation scheme and exact Owned on owned-contract Self and ordered additional parameters; memory inputs declare borrow or consume and implementation applications supply exact type, effect and requirement operands.",
         ),
         diagnostic(
             "normalized_cell_token",
@@ -4722,7 +4735,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "kernel_buffer_ownership",
             DiagnosticClass::Semantic,
             "Direct owned memory, scoped read borrowing, or supported signature shape is invalid.",
-            "Order data, owned memory, then exact resources. Tasks consume memory; only pure synchronous helpers may borrow. Move each owner once and prevent loan escape.",
+            "Order data, owned memory, then exact resources. Synchronous pure functions and tasks may borrow or consume memory. Parallel borrows require shareable storage and remain live until both children join. Move each owner once and prevent loan escape.",
         ),
         diagnostic(
             "kernel_buffer_container",
@@ -5106,7 +5119,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "change_type_parameter_constraint",
             DiagnosticClass::Source,
             "The authored constraint set contains a duplicate, unknown, or incompatible name.",
-            "Select none or a compatible set of capture-safe, owned, and transferable; omission is permitted only when adding a parameter.",
+            "Select none or a compatible set of capture-safe, owned, transferable, and shareable; shareable requires owned and is independent of transferable. Omission is permitted only when adding a parameter.",
         ),
         diagnostic(
             "kernel_expression_generation",
@@ -8296,7 +8309,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ("layout-origin", "one-validated-preparation".to_owned()),
                     (
                         "constraints",
-                        "none,capture-safe,owned,transferable,capture-safe transferable,owned transferable; exact declaration scope; transfer bounds on graph functions only".to_owned(),
+                        "none,capture-safe,owned,transferable,capture-safe transferable,owned transferable,owned shareable,owned transferable shareable; exact declaration scope; transfer/share bounds on graph functions and owned implementation schemes".to_owned(),
                     ),
                     (
                         "eligibility",
@@ -8748,12 +8761,12 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         (
             "owned-contract",
             "(owned-contract MODE BINDING (visibility public|private) (self SELF) (type-parameter MODE SELF (constraint owned)) (type-parameter MODE ITEM (constraint owned))... (method method_HEX NAME (parameters (TYPE unrestricted|borrow|consume)...) (returns TYPE [(borrow-from ZERO_BASED_PARAMETER_POSITION)]) [(effect pure|(task (requirement REQUIREMENT)...))])...)",
-            "Nominal pure or closed-effect task methods with distinguished owned Self and ordered additional owned parameters. Pure methods may tie a borrowed result to an exact zero-based borrowed parameter position. Method types compose these parameters in owned products, choices and sequences; task memory arguments consume. Ordinary types remain closed and first order.",
+            "Nominal pure or closed-effect task methods with distinguished owned Self and ordered additional owned parameters. Pure methods may tie a borrowed result to an exact zero-based borrowed parameter position. Method types compose these parameters in owned products, choices and sequences; pure and task memory arguments explicitly borrow or consume. Ordinary types remain closed and first order.",
         ),
         (
             "owned-implementation",
-            "(owned-implementation MODE BINDING (visibility public|private) (type-parameter MODE PARAMETER (constraint owned))... (implementation-parameter implparam_HEX NAME CONTRACT SELF_TYPE [(types TYPE...)])... (contract DECLARATION) (self TYPE) [(types TYPE...)] (method method_HEX FUNCTION [(types TYPE...)] [(implementations OPERAND...)])...)",
-            "Ordered owned type and prerequisite parameters apply explicitly. Every method maps to an exact visible graph function with identical substituted signature, use modes, borrowed provenance, callable kind and closed effect row. Mappings forward direct same-scheme prerequisites or select parameter-free concrete witness trees. Complete applications retain every nested witness identity and grant no effects.",
+            "(owned-implementation MODE BINDING (visibility public|private) (type-parameter MODE PARAMETER (constraint owned|owned transferable|owned shareable|owned transferable shareable))... (implementation-parameter implparam_HEX NAME CONTRACT SELF_TYPE [(types TYPE...)])... (contract DECLARATION) (self TYPE) [(types TYPE...)] (method method_HEX FUNCTION [(types TYPE...)] [(implementations OPERAND...)])...)",
+            "Ordered owned type and prerequisite parameters apply explicitly with exact declared bounds. Every method maps to an exact visible graph function with identical substituted signature, use modes, borrowed provenance, callable kind and closed effect row. Mappings forward direct same-scheme prerequisites or select parameter-free concrete witness trees. Complete applications retain every nested witness identity and grant no effects.",
         ),
         (
             "implementation-parameter",
@@ -8762,8 +8775,8 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         ),
         (
             "type-parameter",
-            "(type-parameter MODE BINDING [(constraint none|capture-safe|owned|transferable|capture-safe transferable|owned transferable)])",
-            "Lexically scoped generic type; no escape to unrelated contracts.",
+            "(type-parameter MODE BINDING [(constraint none|capture-safe|owned|transferable|capture-safe transferable|owned transferable|owned shareable|owned transferable shareable)])",
+            "Lexically scoped generic type; no escape to unrelated contracts. Shareable requires owned and permits shared reading across a structured child boundary; transferable independently permits ownership movement. Names may be authored in any order but canonical drafts use the displayed order; duplicate and unknown names reject.",
         ),
         (
             "effect-parameter",
@@ -8937,7 +8950,7 @@ fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String
         (
             "owned-child-read-scope",
             "(borrow-owned-field (type PRODUCT) (local SOURCE) (field NAME (binding VIEW (type TYPE))) (in BODY))",
-            "one exact direct owned product field becomes a scoped read view; SOURCE is a live owning or borrowed local; the exact child annotation and all ancestor loans remain checked through BODY; nested inspection and explicit borrow calls are allowed; consumption, escape, capture, storage and task transfer reject; the original source remains available after the scope",
+            "one exact direct owned product field becomes a scoped read view; SOURCE is a live owning or borrowed local; the exact child annotation and all ancestor loans remain checked through BODY; nested inspection, explicit borrow calls and scoped lending to shareable parallel inputs are allowed; consumption, escape, capture, storage and ownership transfer reject; the original source remains available after the scope",
         ),
         (
             "owned-sequence",
@@ -8947,7 +8960,7 @@ fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String
         (
             "owned-item-read-scope",
             "(borrow-owned-item (type SEQUENCE) (local SOURCE) (index EXPRESSION) (binding VIEW (type TYPE)) (in BODY))",
-            "evaluate the I64 index once before acquiring the exact source and ancestor loans; negative or out-of-range indices trap; VIEW has only lexical read rights and cannot escape, be consumed, stored or transferred; retain scope custody through all exits and release internal storage locks before BODY",
+            "evaluate the I64 index once before acquiring the exact source and ancestor loans; negative or out-of-range indices trap; VIEW has only lexical read rights and may be lent to shareable parallel inputs while its scope remains live; it cannot escape, be consumed, stored or transferred; retain scope custody through all exits and release internal storage locks before BODY",
         ),
         (
             "borrowed-owned-choice-scope",
@@ -8987,7 +9000,7 @@ fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String
         (
             "structured-parallel-tasks",
             "(parallel LEFT-CALL RIGHT-CALL) ; each child is call or implementation-call with exact applications",
-            "task-only lexical scope; direct graph tasks with closed empty effect rows; caller type parameters require transferable or owned transferable bounds and exact lexical implementation arguments may be forwarded; ordinary data parameters before consuming owned parameters; evaluate left then right arguments once in the parent, transfer exact owned custody to fresh child invocations, join both children before returning fields left and right; two ordinary results form a record, otherwise results transfer back into an owned product consumed with unpack-owned; no borrowed inputs or results, capabilities, detached lifetime or child quota reset",
+            "task-only lexical scope; direct graph tasks with closed empty effect rows and no borrowed results; exact lexical implementation arguments may be forwarded; ordinary data parameters before borrow/consume owned parameters; borrow requires a shareable complete carrier type while consume and returned values require transferable. Evaluate all left arguments then all right arguments once in the parent, immediately holding each read loan through preparation and joined cleanup; repeated reads are legal but mutation or consumption of protected storage rejects. Lend scoped read rights or transfer exact owned custody to fresh child invocations, join both children before returning fields left and right; two ordinary results form a record, otherwise results transfer back into an owned product consumed with unpack-owned; no capabilities, escaping loans, detached lifetime or child quota reset",
         ),
         (
             "normalization",

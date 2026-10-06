@@ -1,7 +1,9 @@
 //! Supported graph generations, current type-object codec, and hostile-decoder limits.
 
-pub const GRAPH_CONTRACT_IDENTITY: &str = "lkjscript-meaning-graph-29";
-pub const GRAPH_CONTRACT_VERSION: u16 = 29;
+pub const GRAPH_CONTRACT_IDENTITY: &str = "lkjscript-meaning-graph-30";
+pub const GRAPH_CONTRACT_VERSION: u16 = 30;
+pub const SHARE_GRAPH_CONTRACT_VERSION: u16 = 30;
+pub const COMPOSABLE_IMPLEMENTATION_GRAPH_CONTRACT_VERSION: u16 = 29;
 pub const IMPLEMENTATION_SCHEME_GRAPH_CONTRACT_VERSION: u16 = 28;
 pub const BORROW_RESULT_GRAPH_CONTRACT_VERSION: u16 = 27;
 pub const PARAMETERIZED_CONTRACT_GRAPH_CONTRACT_VERSION: u16 = 26;
@@ -19,6 +21,7 @@ pub const REQUIREMENT_GRAPH_CONTRACT_VERSION: u16 = 15;
 pub const PREDECESSOR_GRAPH_CONTRACT_VERSION: u16 = 14;
 pub const fn supported_graph_contract(version: u16) -> bool {
     version == GRAPH_CONTRACT_VERSION
+        || version == COMPOSABLE_IMPLEMENTATION_GRAPH_CONTRACT_VERSION
         || version == IMPLEMENTATION_SCHEME_GRAPH_CONTRACT_VERSION
         || version == BORROW_RESULT_GRAPH_CONTRACT_VERSION
         || version == PARAMETERIZED_CONTRACT_GRAPH_CONTRACT_VERSION
@@ -71,7 +74,8 @@ pub const NOMINAL_APPLICATION_ENVELOPE_DOMAIN: &str =
     "lkjscript.kernel.nominal-application-envelope.v1";
 pub const SEMANTIC_STATE_CONTRACT_VERSION: u16 = 1;
 
-pub const OWNER_MAGIC: [u8; 8] = *b"LKJOWN29";
+pub const OWNER_MAGIC: [u8; 8] = *b"LKJOWN30";
+pub const COMPOSABLE_IMPLEMENTATION_OWNER_MAGIC: [u8; 8] = *b"LKJOWN29";
 pub const IMPLEMENTATION_SCHEME_OWNER_MAGIC: [u8; 8] = *b"LKJOWN28";
 pub const BORROW_RESULT_OWNER_MAGIC: [u8; 8] = *b"LKJOWN27";
 pub const PARAMETERIZED_CONTRACT_OWNER_MAGIC: [u8; 8] = *b"LKJOWN26";
@@ -92,7 +96,9 @@ pub const ROOT_MAGIC: [u8; 8] = *b"LKJSMR01";
 pub const DEPENDENCY_MAGIC: [u8; 8] = *b"LKJDEP14";
 pub const RETIREMENT_MAGIC: [u8; 8] = *b"LKJRET14";
 
-pub const OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v29";
+pub const OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v30";
+pub const COMPOSABLE_IMPLEMENTATION_OWNER_ENVELOPE_DOMAIN: &str =
+    "lkjscript.kernel.owner-envelope.v29";
 pub const IMPLEMENTATION_SCHEME_OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v28";
 pub const BORROW_RESULT_OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v27";
 pub const PARAMETERIZED_CONTRACT_OWNER_ENVELOPE_DOMAIN: &str =

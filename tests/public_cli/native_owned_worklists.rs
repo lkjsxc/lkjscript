@@ -767,9 +767,7 @@ fn native_owned_parameterized_contracts_reject_wrong_arguments_modes_and_witness
     for (name, from, to) in cases {
         rejected(&public, &replaced(SIGNATURES, from, to), &before, name);
     }
-    rejected(
-        &public,
-        r#"declarations.begin
+    let borrowed_task_contract = r#"declarations.begin
 (units (module create invalid-task-item
   (owned-contract create TaskItem (visibility public)
     (self Self) (type-parameter create Self (constraint owned))
@@ -777,10 +775,15 @@ fn native_owned_parameterized_contracts_reject_wrong_arguments_modes_and_witness
     (method method_89000000000000000000000000000002 read
       (parameters (Item borrow)) (returns I64) (effect (task))))))
 declarations.end
-"#,
+"#;
+    rejected(
+        &public,
+        &borrowed_task_contract.replace("(Item borrow)", "(Item unrestricted)"),
         &before,
-        "borrowed-task-contract-item",
+        "unrestricted-task-contract-item",
     );
+    author(&public, borrowed_task_contract);
+    unchanged(&public, "invalid-task-item");
     // The complete independent source is subsequently admitted unchanged; these
     // are invalid meanings rather than malformed notation or a broken base.
     author(&public, SIGNATURES);

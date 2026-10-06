@@ -3,6 +3,40 @@ use crate::platform::kernel::*;
 use crate::platform::semantic_id::*;
 
 #[test]
+fn read_generation_dependencies_preserve_pre30_bytes_and_bind_graph30() {
+    let package = PackageId::migrate(b"read-generation-summary", 0);
+    let kind = OwnerKind::Parameter;
+    let predecessor = SemanticDigest::of(VALIDATION_DEPENDENCY_DIGEST_DOMAIN, &[kind.tag()]);
+    for generation in 14..30 {
+        let actual = validation_dependency_digest(
+            package,
+            kind,
+            generation,
+            &[],
+            |_| Ok(None),
+            |_| Ok(None),
+        )
+        .unwrap();
+        assert_eq!(
+            actual, predecessor,
+            "Graph {generation} retains its original dimensions"
+        );
+    }
+    // The new tag is separate from relation tag 1 and dependency tag 2. Its
+    // literal payload is the canonical varint encoding of Graph 30.
+    let mut material = vec![kind.tag(), 3];
+    material.extend_from_slice(&1_u64.to_le_bytes());
+    material.push(30);
+    let current =
+        validation_dependency_digest(package, kind, 30, &[], |_| Ok(None), |_| Ok(None)).unwrap();
+    assert_eq!(
+        current,
+        SemanticDigest::of(VALIDATION_DEPENDENCY_DIGEST_DOMAIN, &material)
+    );
+    assert_ne!(current, predecessor);
+}
+
+#[test]
 fn original_graph27_implementation_and_operand_summary_material_remains_exact() {
     let seed = b"frozen-generic-implementation-summary";
     let reference = DeclarationReference {

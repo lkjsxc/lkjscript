@@ -263,6 +263,7 @@ pub(in crate::platform::change::request) fn lower_mutation<
                 ));
             };
             parameter.use_mode = *use_mode;
+            promote_borrowed_task_parameter(lowerer, owner)?;
             Ok(())
         }
         AuthoredChange::SetParameterType { parameter, ty } => {
@@ -272,6 +273,7 @@ pub(in crate::platform::change::request) fn lower_mutation<
                 return Err(mutation_kind("parameter", owner));
             };
             record.ty = ty;
+            promote_borrowed_task_parameter(lowerer, owner)?;
             Ok(())
         }
         AuthoredChange::SetPortContract {
@@ -557,7 +559,58 @@ fn lower_add_parameter<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Size
         ty,
         use_mode: parameter.use_mode,
         resource_requirement,
-    }))
+    }))?;
+    promote_borrowed_task_parameter(lowerer, OwnerKey::Parameter(parameter_id))
+}
+
+/// Extending an existing callable's read contract requires both signature owners
+/// to state the generation that admits borrowed task memory.
+fn promote_borrowed_task_parameter<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+    lowerer: &mut AuthoredLowerer<'_, B, W>,
+    owner: OwnerKey,
+) -> Result<(), Diagnostic> {
+    let OwnerRecord::Parameter(parameter) = lowerer.candidate_mut(owner)? else {
+        return Err(mutation_kind("parameter", owner));
+    };
+    let ParameterParent::Function(declaration) = parameter.parent else {
+        return Ok(());
+    };
+    if parameter.use_mode != ParameterUse::Borrow {
+        return Ok(());
+    }
+    let ty = parameter.ty;
+    if !matches!(
+        lowerer.candidate_type_object(ty)?.map(|object| object.form),
+        Some(
+            TypeForm::ByteBuffer
+                | TypeForm::OwnedI64Cell
+                | TypeForm::OwnedProduct { .. }
+                | TypeForm::OwnedChoice { .. }
+                | TypeForm::OwnedSequence { .. }
+                | TypeForm::TypeParameter { .. }
+        )
+    ) {
+        return Ok(());
+    }
+    let OwnerRecord::Declaration(parent) =
+        lowerer.candidate_mut(OwnerKey::Declaration(declaration))?
+    else {
+        return Err(mutation_kind(
+            "function declaration",
+            OwnerKey::Declaration(declaration),
+        ));
+    };
+    if !matches!(&parent.payload, DeclarationPayload::Function(function)
+        if matches!(function.effect, FunctionEffect::Task { .. }))
+    {
+        return Ok(());
+    }
+    parent.header.contract_version = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+    let OwnerRecord::Parameter(parameter) = lowerer.candidate_mut(owner)? else {
+        return Err(mutation_kind("parameter", owner));
+    };
+    parameter.header.contract_version = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+    Ok(())
 }
 
 fn lower_add_requirement<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
@@ -688,6 +741,10 @@ fn lower_set_function_contract<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead
     function.result = result;
     function.result_borrow = result_borrow;
     function.effect = effect;
+    let parameters = function.parameters.clone();
+    for parameter in parameters {
+        promote_borrowed_task_parameter(lowerer, OwnerKey::Parameter(parameter))?;
+    }
     Ok(())
 }
 

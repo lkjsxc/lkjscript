@@ -174,6 +174,15 @@ impl OwnerRecord {
                         "transferable constraints require Graph 22",
                     ));
                 }
+                if record.constraints.requires_share()
+                    && record.header.contract_version
+                        < super::contract::SHARE_GRAPH_CONTRACT_VERSION
+                {
+                    return Err(owner_error(
+                        "kernel_share_constraint_generation",
+                        "shareable constraints require Graph 30",
+                    ));
+                }
                 validate_names([&record.name])
             }
             Self::Field(record) => {
@@ -645,6 +654,8 @@ pub enum TypeParameterConstraints {
     Transferable,
     CaptureSafeTransferable,
     OwnedTransferable,
+    OwnedShareable,
+    OwnedTransferableShareable,
 }
 
 impl TypeParameterConstraints {
@@ -656,6 +667,8 @@ impl TypeParameterConstraints {
             Self::Transferable => 3,
             Self::CaptureSafeTransferable => 4,
             Self::OwnedTransferable => 5,
+            Self::OwnedShareable => 6,
+            Self::OwnedTransferableShareable => 7,
         }
     }
 
@@ -667,11 +680,19 @@ impl TypeParameterConstraints {
             Self::Transferable => "transferable",
             Self::CaptureSafeTransferable => "capture-safe transferable",
             Self::OwnedTransferable => "owned transferable",
+            Self::OwnedShareable => "owned shareable",
+            Self::OwnedTransferableShareable => "owned transferable shareable",
         }
     }
 
     pub const fn has_owned(self) -> bool {
-        matches!(self, Self::Owned | Self::OwnedTransferable)
+        matches!(
+            self,
+            Self::Owned
+                | Self::OwnedTransferable
+                | Self::OwnedShareable
+                | Self::OwnedTransferableShareable
+        )
     }
 
     pub const fn requires_capture_safe(self) -> bool {
@@ -688,8 +709,22 @@ impl TypeParameterConstraints {
     pub const fn requires_transfer(self) -> bool {
         matches!(
             self,
-            Self::Transferable | Self::CaptureSafeTransferable | Self::OwnedTransferable
+            Self::Transferable
+                | Self::CaptureSafeTransferable
+                | Self::OwnedTransferable
+                | Self::OwnedTransferableShareable
         )
+    }
+
+    pub const fn requires_share(self) -> bool {
+        matches!(
+            self,
+            Self::OwnedShareable | Self::OwnedTransferableShareable
+        )
+    }
+
+    pub const fn proves_share(self) -> bool {
+        self.requires_share()
     }
 
     pub const fn names(self) -> &'static [&'static str] {
@@ -700,19 +735,35 @@ impl TypeParameterConstraints {
             Self::Transferable => &["transferable"],
             Self::CaptureSafeTransferable => &["capture-safe", "transferable"],
             Self::OwnedTransferable => &["owned", "transferable"],
+            Self::OwnedShareable => &["owned", "shareable"],
+            Self::OwnedTransferableShareable => &["owned", "transferable", "shareable"],
         }
     }
 
     pub fn from_names(names: &[&str]) -> Option<Self> {
-        match names {
-            [] => Some(Self::None),
-            ["capture-safe"] => Some(Self::CaptureSafe),
-            ["owned"] => Some(Self::Owned),
-            ["transferable"] => Some(Self::Transferable),
-            ["capture-safe", "transferable"] | ["transferable", "capture-safe"] => {
-                Some(Self::CaptureSafeTransferable)
+        let mut present = 0u8;
+        for name in names {
+            let bit = match *name {
+                "capture-safe" => 1,
+                "owned" => 2,
+                "transferable" => 4,
+                "shareable" => 8,
+                _ => return None,
+            };
+            if present & bit != 0 {
+                return None;
             }
-            ["owned", "transferable"] | ["transferable", "owned"] => Some(Self::OwnedTransferable),
+            present |= bit;
+        }
+        match present {
+            0 => Some(Self::None),
+            1 => Some(Self::CaptureSafe),
+            2 => Some(Self::Owned),
+            4 => Some(Self::Transferable),
+            5 => Some(Self::CaptureSafeTransferable),
+            6 => Some(Self::OwnedTransferable),
+            10 => Some(Self::OwnedShareable),
+            14 => Some(Self::OwnedTransferableShareable),
             _ => None,
         }
     }
@@ -733,6 +784,8 @@ impl<Context> Decode<Context> for TypeParameterConstraints {
             3 => Ok(Self::Transferable),
             4 => Ok(Self::CaptureSafeTransferable),
             5 => Ok(Self::OwnedTransferable),
+            6 => Ok(Self::OwnedShareable),
+            7 => Ok(Self::OwnedTransferableShareable),
             _ => Err(DecodeError::Other("unknown type-parameter constraint set")),
         }
     }
@@ -763,8 +816,9 @@ impl<'de> Deserialize<'de> for TypeParameterConstraints {
         impl<'de> serde::de::Visitor<'de> for ConstraintSet {
             type Value = TypeParameterConstraints;
             fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                formatter
-                    .write_str("a closed set of capture-safe, owned, and transferable constraints")
+                formatter.write_str(
+                    "a closed set of capture-safe, owned, transferable, and shareable constraints",
+                )
             }
             fn visit_seq<A: serde::de::SeqAccess<'de>>(
                 self,
@@ -774,14 +828,21 @@ impl<'de> Deserialize<'de> for TypeParameterConstraints {
                     return Ok(TypeParameterConstraints::None);
                 };
                 let second = sequence.next_element::<String>()?;
+                let third = sequence.next_element::<String>()?;
                 if sequence.next_element::<serde::de::IgnoredAny>()?.is_some() {
                     return Err(serde::de::Error::custom(
                         "duplicate, incompatible, or unknown type-parameter constraint",
                     ));
                 }
-                let constraints = match second.as_deref() {
-                    Some(second) => TypeParameterConstraints::from_names(&[value.as_str(), second]),
-                    None => TypeParameterConstraints::from_names(&[value.as_str()]),
+                let constraints = match (second.as_deref(), third.as_deref()) {
+                    (Some(second), Some(third)) => {
+                        TypeParameterConstraints::from_names(&[value.as_str(), second, third])
+                    }
+                    (Some(second), None) => {
+                        TypeParameterConstraints::from_names(&[value.as_str(), second])
+                    }
+                    (None, None) => TypeParameterConstraints::from_names(&[value.as_str()]),
+                    (None, Some(_)) => None,
                 };
                 constraints.ok_or_else(|| {
                     serde::de::Error::custom(

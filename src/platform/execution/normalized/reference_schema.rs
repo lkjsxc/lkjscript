@@ -40,6 +40,7 @@ pub struct NormalizedReferenceSchema {
     pub(super) affine_variants: Vec<bool>,
     pub(super) capture_safe_types: BTreeSet<TypeObjectDigest>,
     pub(super) transferable_types: BTreeSet<TypeObjectDigest>,
+    pub(super) shareable_types: BTreeSet<TypeObjectDigest>,
     pub(super) ordinary_types: BTreeSet<TypeObjectDigest>,
     pub(super) buffer_free_types: BTreeSet<TypeObjectDigest>,
     pub(super) comparable_types: BTreeSet<TypeObjectDigest>,

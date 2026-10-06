@@ -64,6 +64,7 @@ impl Value {
         ) {
             return Err(reject("memory constructor requires a sealed token"));
         }
+        Self::validate_memory_admission(&datum, schema.value_origin)?;
         Ok(Self {
             datum,
             preparation: schema.value_origin,
@@ -72,6 +73,27 @@ impl Value {
             guards: None,
             reservation: None,
         })
+    }
+
+    // Only explicitly checked constructors and complete transfer admission mint
+    // certificates. A generic wrapper never confers trust on raw owner storage.
+    pub(super) fn validate_memory_admission(
+        datum: &NormalizedValue,
+        program: ValueOrigin,
+    ) -> Result<(), ExecutionError> {
+        macro_rules! validate {
+            ($token:expr) => {
+                $token.validate_admission(program)
+            };
+        }
+        match datum {
+            NormalizedValue::ByteBuffer(token) => validate!(token),
+            NormalizedValue::OwnedI64Cell(token) => validate!(token),
+            NormalizedValue::OwnedProduct(token) => validate!(token),
+            NormalizedValue::OwnedChoice(token) => validate!(token),
+            NormalizedValue::OwnedSequence(token) => validate!(token),
+            _ => Err(reject("certificate requires checked memory storage")),
+        }
     }
 
     pub(super) fn raw(&self) -> &NormalizedValue {
@@ -252,6 +274,7 @@ impl Value {
             .any(|(constraint, ty)| {
                 (constraint.requires_capture_safe() && !schema.capture_safe_types.contains(ty))
                     || (constraint.requires_transfer() && !schema.transferable_types.contains(ty))
+                    || (constraint.requires_share() && !schema.shareable_types.contains(ty))
             })
         {
             return Err(reject(
@@ -803,14 +826,19 @@ impl ReferenceState<'_> {
         input: bool,
     ) -> Result<Value, ExecutionError> {
         match self.inspect_raw(&datum, expected, bindings, authority, input) {
-            Ok(ownership) => Ok(Value {
-                datum,
-                preparation: self.schema.value_origin,
-                ownership,
-                provenance: None,
-                guards: None,
-                reservation: None,
-            }),
+            Ok(ownership) => {
+                if ownership == Ownership::Memory {
+                    Value::validate_memory_admission(&datum, self.schema.value_origin)?;
+                }
+                Ok(Value {
+                    datum,
+                    preparation: self.schema.value_origin,
+                    ownership,
+                    provenance: None,
+                    guards: None,
+                    reservation: None,
+                })
+            }
             Err(mut error) => {
                 super::super::value::release_raw_value(datum);
                 error.message = format!(
@@ -1311,6 +1339,11 @@ impl ReferenceState<'_> {
                                 "raw callback type argument fails transfer constraints",
                             ));
                         }
+                        if constraint.requires_share() && !schema.shareable_types.contains(ty) {
+                            return Err(reject(
+                                "raw callback type argument fails shared-read constraints",
+                            ));
+                        }
                     }
                     self.charge_reference_bindings(type_arguments.len())?;
                     let actual_bindings = Arc::new(
@@ -1517,6 +1550,9 @@ impl ReferenceState<'_> {
             }
             if constraint.requires_transfer() && !self.schema.transferable_types.contains(ty) {
                 return Err(reject("type argument is not canonical transferable data"));
+            }
+            if constraint.requires_share() && !self.schema.shareable_types.contains(ty) {
+                return Err(reject("type argument is not canonical shareable memory"));
             }
         }
         let bindings = signature
@@ -1886,4 +1922,41 @@ impl ReferenceState<'_> {
 
 fn reject(message: impl Into<String>) -> ExecutionError {
     reference_error("normalized_reference_value_admission", message)
+}
+
+#[cfg(test)]
+mod admission_tests {
+    use super::*;
+    use crate::platform::kernel::{StructuralTypeField, TypeObject, encode_type_object};
+
+    #[test]
+    fn reference_memory_wrapper_cannot_certify_raw_storage_with_a_false_child_type() {
+        let program = ValueOrigin::fresh().unwrap();
+        let cell = TypeObject::new(TypeForm::OwnedI64Cell).unwrap();
+        let cell_type = encode_type_object(&cell).unwrap().0;
+        let product = TypeObject::new(TypeForm::OwnedProduct {
+            fields: vec![StructuralTypeField {
+                name: Name::new("cell").unwrap(),
+                ty: cell_type,
+            }],
+        })
+        .unwrap();
+        let product_type = encode_type_object(&product).unwrap().0;
+        let mut canonical = NormalizedReferenceSchema::default();
+        canonical.types.insert(cell_type, cell);
+        canonical.types.insert(product_type, product);
+        let schema = BoundReferenceSchema {
+            canonical: Arc::new(canonical),
+            value_origin: program,
+        };
+        let raw = super::super::super::owned_product::OwnedProduct::create(
+            program,
+            product_type,
+            vec![NormalizedValue::I64(3)],
+            &ExecutionControl::uncancelled(),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
+        assert!(Value::memory(&schema, NormalizedValue::OwnedProduct(raw)).is_err());
+    }
 }

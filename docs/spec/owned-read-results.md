@@ -74,7 +74,10 @@ pass through multiple pure helper functions and through nested child scopes.
 Returning a view through an ordinary owning signature remains invalid.
 
 Borrowed results cannot cross entrypoints, first-class callable values, captures,
-containers, serialization, raw-value ingress, retained values or task transfer.
+containers, serialization, raw-value ingress, retained values or consuming task
+transfer. An adopted lexical view may be passed as a synchronous borrowed graph-task
+input, or as a Shareable borrowed input to a joined child group. These read calls
+retain the result packet's source and ancestor guards; tasks cannot return a loan.
 Mutable views, multiple alternative source roots, nullable borrowed results and
 general lifetime inference are outside this contract.
 

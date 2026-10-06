@@ -2,6 +2,9 @@
 use super::super::{owned_i64_cell, owned_product};
 use super::*;
 
+#[path = "borrowed_task_effect_tests.rs"]
+mod borrowed_task_effect_tests;
+
 const SOURCE: &str = r#"declarations.begin
 (units (module create loan-effect
   (interface create Clock (visibility private)

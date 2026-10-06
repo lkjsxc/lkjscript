@@ -22,9 +22,9 @@ Current normalized identity:
 - package: `pkg_20000000000000000000000000000001`;
 - semantic revision: `rev_a1d97c5d7deda1ece8e2e3383bd7a58ae1e267838368ec5b42678e40c9eb1640`;
 - semantic state: `semantic_state_3832cd12c3fee672d0bdfb975cb363cbc457f6ef45f15cb44a62d40ab47f2dee`;
-- package revision: `package_revision_395f9fef204408956b3cd59f22eba3a806572fae88bc2aa75a669106aaa3c6d5`;
-- artifact manifest: `artifact_manifest_d51c87a3a094cc2243ab0e6d4724b0f5a60221046dbbb82bf6a9f9061a4c5574`;
-- artifact bundle: `artifact_bundle_12021070fcdce928555aee62ce7044060978523595036874cb28b14107688245`;
+- package revision: `package_revision_b041ee3d4a53909d387314b55522b646a06f11c86d717823aa3cf9ed46476405`;
+- artifact manifest: `artifact_manifest_5b38c80df9bd30014ea938040aa04384f9cafeb131fb9ce45364d5e6e09b39f0`;
+- artifact bundle: `artifact_bundle_c92386466c86758454bc93c69e45f2809cec50ddd2947473ec58c16ddc5be314`;
 - 2,044 live root semantic owners and one exact built-in standard dependency.
 
 The original Graph 13 materialization preserved all existing application owner identities and behavior.
@@ -95,7 +95,7 @@ empty 404 and invokes none of them.
 
 All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,375,561-byte
 artifact bundle above (SHA-256
-`7baba652eb808dc47e9a59426aed72f0af73920edbe20f84bb8f881d94ebe44d`). The service descriptor
+`8d619433e3036075fa517f1c10b434aaaed520c9c72ab720218b7f94f2a5bb9f`). The service descriptor
 resolves `serve`, the worker descriptor resolves `work`, and `live.deployment.json` resolves
 `lkjournal-live-1`. Preparation strictly loads the standalone bundle,
 validates the runner, route-indexed handler and component requirement closure, grants, secrets, and adapters, and emits
@@ -217,7 +217,7 @@ The structured parallel compiler refresh rebuilds the current bundle for compile
 exact-supplier tests agree between production and reference execution. Accepted
 HEAD, dependency selection, application behavior and operational data are unchanged.
 
-The prerequisite-composition compiler refresh rebuilds the current bundle for
-compiler 29, bytecode 24 and artifact 36 through public check/build. All 44 tests
+The scoped-read compiler refresh rebuilds the current bundle for
+compiler 30, bytecode 25 and artifact 37 through public check/build. All 44 tests
 agree between production and reference execution. Accepted HEAD, exact historical
 standard supplier, application behavior and operational data remain unchanged.

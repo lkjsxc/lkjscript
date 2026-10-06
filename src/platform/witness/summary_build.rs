@@ -43,6 +43,7 @@ pub(crate) trait SummaryRead {
 struct WorkingSummary {
     owner: OwnerKey,
     kind: OwnerKind,
+    owner_contract_version: u16,
     record: crate::platform::kernel::OwnerObjectDigest,
     semantic_interface: SemanticDigest,
     implementation: SemanticDigest,
@@ -239,6 +240,7 @@ pub(crate) fn rebuild_selected_owner_summaries<R: SummaryRead>(
         summary.validation_dependencies = validation_dependency_digest(
             view.package_id(),
             summary.kind,
+            summary.owner_contract_version,
             &outgoing,
             |target| {
                 if let Some(summary) = semantic.get(&target) {
@@ -609,6 +611,7 @@ fn derive_validation_dependencies(
         summary.validation_dependencies = validation_dependency_digest(
             package,
             summary.kind,
+            summary.owner_contract_version,
             outgoing.get(owner).map_or(&[], Vec::as_slice),
             |target| Ok(frozen.get(&target).map(SummaryDimensions::from)),
             |target_package| {
@@ -627,6 +630,7 @@ fn derive_validation_dependencies(
 fn validation_dependency_digest<T, D>(
     package: PackageId,
     kind: OwnerKind,
+    owner_contract_version: u16,
     outgoing: &[RelationEdge],
     mut target_summary: T,
     mut dependency_digest: D,
@@ -638,6 +642,12 @@ where
     ) -> Result<Option<crate::platform::kernel::DependencyObjectDigest>, Diagnostic>,
 {
     let mut material = Material::new(kind);
+    // Graph 30 makes an owner's generation part of read-contract admission.
+    // Preserve predecessor dimensions, while binding a promoted owner to the
+    // proof rules that admit its scoped task reads.
+    if owner_contract_version >= crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION {
+        material.piece(3, &owner_contract_version)?;
+    }
     for edge in outgoing {
         let propagation = edge.kind.propagation();
         if matches!(
@@ -1355,6 +1365,7 @@ fn local_summary(
     Ok(WorkingSummary {
         owner,
         kind,
+        owner_contract_version: record.header().contract_version,
         record: record_digest,
         semantic_interface: interface.finish(INTERFACE_DIGEST_DOMAIN),
         implementation: implementation.finish(IMPLEMENTATION_DIGEST_DOMAIN),

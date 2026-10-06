@@ -235,13 +235,14 @@ fn generic_implementation_rejects_invalid_symbolic_mapping_before_equal_concrete
 }
 
 #[test]
-fn generic_implementation_rejects_foreign_constraint_owners_and_wrong_borrow_source() {
+fn generic_implementation_checks_stronger_bounds_foreign_owners_and_borrow_source() {
     let original = fixture();
     let reference = declaration(&original, "Flat");
     let i = implementation(&original);
     for constraint in [
-        TypeParameterConstraints::None,
         TypeParameterConstraints::OwnedTransferable,
+        TypeParameterConstraints::OwnedShareable,
+        TypeParameterConstraints::OwnedTransferableShareable,
     ] {
         let mut changed = original.clone();
         let OwnerRecord::TypeParameter(p) = changed
@@ -252,8 +253,38 @@ fn generic_implementation_rejects_foreign_constraint_owners_and_wrong_borrow_sou
             unreachable!()
         };
         p.constraints = constraint;
-        assert!(owned_contract::validate_implementation_at(&changed, reference, &i).is_err());
+        owned_contract::validate_implementation_at(&changed, reference, &i).unwrap();
+        // A concrete safe phantom satisfies the stronger declaration, while
+        // the caller's owned-only symbolic actual cannot prove that bound.
+        let cell = ty(&mut changed, TypeForm::OwnedI64Cell);
+        let concrete = ImplementationOperand::Concrete {
+            implementation: reference,
+            type_arguments: vec![cell, cell],
+            implementations: vec![],
+        };
+        owned_contract::witness_contract(&changed, &concrete, None).unwrap();
+        let symbolic = i.type_arguments[0];
+        let weaker = ImplementationOperand::Concrete {
+            implementation: reference,
+            type_arguments: vec![symbolic, symbolic],
+            implementations: vec![],
+        };
+        assert!(
+            owned_contract::witness_contract(&changed, &weaker, Some(reference.declaration))
+                .is_err(),
+            "unused phantom actuals must satisfy {constraint:?}"
+        );
     }
+    let mut changed = original.clone();
+    let OwnerRecord::TypeParameter(p) = changed
+        .owners
+        .get_mut(&OwnerKey::TypeParameter(i.type_parameters[1]))
+        .unwrap()
+    else {
+        unreachable!()
+    };
+    p.constraints = TypeParameterConstraints::None;
+    assert!(owned_contract::validate_implementation_at(&changed, reference, &i).is_err());
     let mut changed = original.clone();
     let at = declaration(&changed, "at");
     let OwnerRecord::Declaration(d) = changed

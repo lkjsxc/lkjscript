@@ -34,8 +34,8 @@ fn witness_contract_domains_are_closed_and_unique() {
         RelationKind::ALL.len()
     );
     assert_ne!(contract::validator_contract_digest().bytes(), [0_u8; 32]);
-    // Affine feature 10 keeps capability authority separate. Owned-memory feature
-    // 2 admits same-task consumption/returns, but still forbids task input loans.
+    // Affine feature 10 keeps capability authority separate. Scoped sharing and
+    // synchronous task loans have their own independently versioned obligations.
     assert_eq!(
         contract::VALIDATOR_FEATURES
             .iter()
@@ -73,20 +73,21 @@ fn witness_contract_domains_are_closed_and_unique() {
         "validator_contract_a4865032b8c53d9472988c166a7bce1d72eba3158026cb4a803482a08c2fc576"
     );
     for (name, version) in [
+        ("scoped_shareable_owned_inputs", 1),
         ("source_tied_owned_read_results", 1),
         ("parameterized_owned_contracts", 1),
         ("structural_owned_sequences", 1),
         ("lexical_owned_child_borrows", 1),
         ("explicit_transferable_type_parameters", 1),
-        ("structured_parallel_owned_tasks", 4),
+        ("structured_parallel_owned_tasks", 5),
         ("structural_owned_choices", 2),
         ("structural_owned_products", 3),
-        ("symbolic_owned_parameters", 5),
-        ("explicit_owned_implementation_witnesses", 7),
+        ("symbolic_owned_parameters", 6),
+        ("explicit_owned_implementation_witnesses", 8),
         ("finite_generic_callable_instantiation", 3),
         ("single_relation_extractor", 6),
         ("owner_summary_dimensions", 4),
-        ("same_task_owned_transfer", 1),
+        ("same_task_owned_transfer", 2),
         ("sealed_owned_i64_cells", 1),
     ] {
         assert_eq!(
@@ -169,9 +170,14 @@ fn witness_contract_domains_are_closed_and_unique() {
         digest,
         "validator_contract_42bb6265ce61f4c67aeff0f1e49a607539c7eae48c34bf85244f0177a17e1344"
     );
-    assert_eq!(
+    // Synchronous borrowed tasks and scoped Shareable reads need fresh admission.
+    assert_ne!(
         digest,
         "validator_contract_c3b83a1024698983f525fcc4206fc263a9668c1beab1e81b688888f8a0269b62"
+    );
+    assert_eq!(
+        digest,
+        "validator_contract_a495df56bb7989cc1d2f9299466007668eaa0c75f17d070e3c05c1485941f720"
     );
 }
 

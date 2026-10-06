@@ -47,6 +47,22 @@ impl OwnedChoice {
             case: self.case,
         })
     }
+    pub(super) fn establish_admission(&self, program: ValueOrigin) -> Result<(), ExecutionError> {
+        self.storage.establish_admission(program)
+    }
+    pub(super) fn validate_admission(&self, program: ValueOrigin) -> Result<(), ExecutionError> {
+        self.storage.validate_admission(program)
+    }
+    pub(super) fn inherit_admission(&self, program: ValueOrigin) -> Result<(), ExecutionError> {
+        self.storage.inherit_admission(program)
+    }
+    pub(super) fn adopt_scoped_read(
+        &mut self,
+        source: ValueOrigin,
+        destination: ValueOrigin,
+    ) -> Result<(), ExecutionError> {
+        self.storage.adopt_scoped_read(source, destination)
+    }
     pub(super) fn is_borrowed(&self) -> bool {
         self.storage.is_borrowed()
     }

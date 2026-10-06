@@ -31,6 +31,7 @@ pub(crate) mod owned_product;
 mod owner;
 pub(crate) mod parallel;
 pub(crate) mod parallel_types;
+pub(crate) mod share;
 pub(crate) mod transfer;
 pub use owned_contract::*;
 pub(crate) mod interface11;

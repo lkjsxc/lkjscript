@@ -2,7 +2,10 @@
 use super::super::{
     parallel,
     shared_budget::SharedBudget,
-    vm::transfer::{TaskApplication, TransferArguments, TransferResult},
+    vm::transfer::{
+        ScopedArgument, ScopedReadCustody, ScopedReadLease, TaskApplication, TransferArguments,
+        TransferResult,
+    },
 };
 use super::*;
 
@@ -240,7 +243,9 @@ impl ReferenceState<'_> {
                     ));
                 }
             };
-        let DeclarationPayload::Function(declaration) = self.declaration(function)?.payload else {
+        let owner = self.declaration(function)?;
+        let contract_version = owner.header.contract_version;
+        let DeclarationPayload::Function(declaration) = owner.payload else {
             return Err(reference_type_error(
                 "parallel branch must be a canonical graph function",
             ));
@@ -254,6 +259,7 @@ impl ReferenceState<'_> {
             || signature.parameters.len() != arguments.len()
             || signature.type_parameters.len() != types.len()
             || declaration.implementation_parameters.len() != implementations.len()
+            || signature.result_borrow.is_some()
         {
             return Err(reference_type_error(
                 "parallel child requires an exact closed empty-row task",
@@ -272,8 +278,12 @@ impl ReferenceState<'_> {
             .zip(&types)
             .zip(&signature.type_parameter_constraints)
         {
-            let memory = self.parallel_transfer_type(*ty, 0, &mut 0)?;
+            let memory =
+                direct_memory_type(&self.schema, *ty, &BTreeMap::new(), self.control)?.is_some();
             if memory != constraint.has_owned()
+                || (!memory && !self.schema.buffer_free_types.contains(ty))
+                || (constraint.requires_transfer() && !self.schema.transferable_types.contains(ty))
+                || (constraint.requires_share() && !self.schema.shareable_types.contains(ty))
                 || (constraint.requires_capture_safe()
                     && !self.schema.capture_safe_types.contains(ty))
                 || bindings.insert(*parameter, *ty).is_some()
@@ -310,7 +320,9 @@ impl ReferenceState<'_> {
                     self.schema
                         .transfer_type_identity(parameter.ty, &bindings, self.control)?;
             }
-            let memory = self.parallel_transfer_type(parameter.ty, 0, &mut 0)?;
+            let memory =
+                direct_memory_type(&self.schema, parameter.ty, &BTreeMap::new(), self.control)?
+                    .is_some();
             if seen_owned && !memory {
                 return Err(reference_type_error(
                     "parallel owned parameters must form the final suffix",
@@ -320,16 +332,32 @@ impl ReferenceState<'_> {
             if parameter.parent
                 != crate::platform::kernel::ParameterParent::Function(function.declaration)
                 || parameter.resource_requirement.is_some()
-                || parameter.use_mode
-                    != if memory {
-                        crate::platform::kernel::ParameterUse::Consume
-                    } else {
-                        crate::platform::kernel::ParameterUse::Unrestricted
-                    }
+                || if memory {
+                    !matches!(
+                        parameter.use_mode,
+                        ParameterUse::Borrow | ParameterUse::Consume
+                    )
+                } else {
+                    parameter.use_mode != ParameterUse::Unrestricted
+                }
             {
                 return Err(reference_type_error(
-                    "parallel child parameters require closed data or consumed owners",
+                    "parallel child parameters require closed data or scoped memory",
                 ));
+            }
+            if parameter.use_mode == ParameterUse::Borrow {
+                if contract_version
+                    < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION
+                    || parameter.header.contract_version
+                        < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION
+                    || !self.schema.shareable_types.contains(&parameter.ty)
+                {
+                    return Err(reference_type_error(
+                        "parallel read input requires an independently shareable complete carrier",
+                    ));
+                }
+            } else {
+                self.parallel_transfer_type(parameter.ty, 0, &mut 0)?;
             }
         }
         // Vec-to-Arc conversion has its own metadata storage; payloads stay untouched.
@@ -343,6 +371,34 @@ impl ReferenceState<'_> {
             arguments,
             signature,
         })
+    }
+
+    fn scoped_arguments(
+        &mut self,
+        values: Vec<CheckedValue>,
+    ) -> Result<Vec<ScopedArgument>, ExecutionError> {
+        self.charge_allocation(super::super::value::collection_storage_bytes(
+            values.len() as u64,
+            std::mem::size_of::<ScopedArgument>() as u64,
+            "normalized_parallel_arguments",
+        )?)?;
+        let mut captured = Vec::with_capacity(values.len());
+        for value in values {
+            if value.raw().memory_is_borrowed() {
+                self.charge_allocation(
+                    ScopedReadCustody::ALLOCATION_BYTES
+                        + std::mem::size_of::<CheckedValue>() as u64,
+                )?;
+                let raw = value.duplicate(ParameterUse::Borrow)?.release();
+                captured.push(ScopedArgument::Read {
+                    value: raw,
+                    custody: ScopedReadCustody::new(value),
+                });
+            } else {
+                captured.push(ScopedArgument::Value(value.release()));
+            }
+        }
+        Ok(captured)
     }
 
     fn inspect_transfer_data(
@@ -532,7 +588,8 @@ impl ReferenceState<'_> {
             .ok_or_else(|| reference_type_error("structured argument count overflow"))?;
         self.charge_allocation(super::super::value::collection_storage_bytes(
             count as u64,
-            std::mem::size_of::<NormalizedValue>() as u64,
+            (std::mem::size_of::<NormalizedValue>() + std::mem::size_of::<ScopedReadLease>())
+                as u64,
             "normalized_parallel_arguments",
         )?)?;
         let left_domain = super::super::value::ValueOrigin::fresh().ok_or_else(|| {
@@ -566,24 +623,23 @@ impl ReferenceState<'_> {
             control,
             &mut |bytes| self.charge_allocation(bytes),
         )?;
-        let left = TransferArguments::seal_applied(
+        let left_values = self.scoped_arguments(left_values)?;
+        let right_values = self.scoped_arguments(right_values)?;
+        let left = TransferArguments::seal_scoped_applied(
             program,
             source,
             left_domain,
             left_application,
-            left_values.into_iter().map(CheckedValue::release).collect(),
+            left_values,
             control,
             &mut |raw, ty| self.inspect_transfer_data(raw, ty),
         )?;
-        let right = TransferArguments::seal_applied(
+        let right = TransferArguments::seal_scoped_applied(
             program,
             source,
             right_domain,
             right_application,
-            right_values
-                .into_iter()
-                .map(CheckedValue::release)
-                .collect(),
+            right_values,
             control,
             &mut |raw, ty| self.inspect_transfer_data(raw, ty),
         )?;
@@ -616,6 +672,7 @@ impl ReferenceState<'_> {
                 control,
                 &mut |_| Ok(()),
             )?;
+            token.establish_admission(self.schema.value_origin)?;
             return CheckedValue::memory(&self.schema, NormalizedValue::OwnedProduct(token));
         }
         self.charge_items(2, std::mem::size_of::<(Name, NormalizedValue)>())?;
@@ -695,8 +752,11 @@ impl ReferenceState<'_> {
             },
         };
         let result = (|| {
-            let (application, values) =
-                envelope.adopt_applied(self.program, memory_domain, self.control)?;
+            let (application, values, leases) =
+                envelope.adopt_scoped_applied(self.program, memory_domain, self.control)?;
+            // These anchors belong to the complete child invocation, outside
+            // all replaceable call frames and nested structured groups.
+            let _read_leases = leases;
             let index = application.function();
             if application.types().as_ref() != task.types.as_ref() {
                 return Err(reference_type_error(

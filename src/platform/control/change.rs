@@ -60,10 +60,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-37";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 37;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-33";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 33;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-38";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 38;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-34";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 34;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -378,7 +378,7 @@ impl CompactChangeFieldForm {
             Self::ExternalVisibility => "none|possible",
             Self::ParameterUse => "unrestricted|borrow|consume",
             Self::TypeParameterConstraint => {
-                "none|capture-safe|owned|transferable|capture-safe transferable|owned transferable"
+                "none|capture-safe|owned|transferable|capture-safe transferable|owned transferable|owned shareable|owned transferable shareable"
             }
             Self::RequirementReference => "$NAME|pkg_HEX/req_HEX",
             Self::ImplementationName => "dot.separated.name",
@@ -6908,23 +6908,14 @@ fn parse_type_parameter_constraint(
     if value == "none" {
         return Ok(TypeParameterConstraints::None);
     }
-    let mut names = value.split(' ');
-    let first = names.next().unwrap_or("");
-    let second = names.next();
-    let constraints = if names.next().is_some() {
-        None
-    } else {
-        match second {
-            Some(second) => TypeParameterConstraints::from_names(&[first, second]),
-            None => TypeParameterConstraints::from_names(&[first]),
-        }
-    };
+    let names = value.split(' ').collect::<Vec<_>>();
+    let constraints = TypeParameterConstraints::from_names(&names);
     constraints.ok_or_else(|| {
         field_error(
             record,
             "constraint",
             "change_type_parameter_constraint",
-            "constraint must be none or a compatible set of capture-safe, owned, and transferable",
+            "constraint must be none or a compatible set of capture-safe, owned, transferable, and shareable",
         )
     })
 }

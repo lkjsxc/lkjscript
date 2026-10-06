@@ -87,7 +87,8 @@ fn parameterized_contract_oracle_admits_structured_methods_and_composite_phantom
 }
 
 #[test]
-fn parameterized_contract_source_rejects_invalid_unused_arguments_scope_and_task_borrows() {
+fn parameterized_contract_source_rejects_invalid_unused_arguments_scope_and_task_mapping_mismatch()
+{
     source();
     let task_borrow = SOURCE
         .replacen("))) consume))", "))) borrow))", 1)
@@ -142,7 +143,11 @@ fn parameterized_contract_source_rejects_invalid_unused_arguments_scope_and_task
                 1,
             ),
         ),
-        ("task method borrows", "kernel_owned_contract", task_borrow),
+        (
+            "task method has a pure consuming map",
+            "kernel_owned_contract",
+            task_borrow,
+        ),
     ] {
         assert_ne!(
             authored, SOURCE,
@@ -298,11 +303,15 @@ fn parameterized_contract_oracle_matches_complete_method_structure_and_owned_mod
         effect_parameters: vec![],
     };
     assert!(
-        !Oracle(&changed, None).valid_contract(DeclarationReference {
+        Oracle(&changed, None).valid_contract(DeclarationReference {
             package: changed.root.package_id,
             declaration: pipe,
         }),
-        "task methods cannot borrow structured owners"
+        "task methods can synchronously borrow structured owners"
+    );
+    assert!(
+        !accepts(&changed),
+        "the mapped function still has its original pure consuming signature"
     );
 }
 

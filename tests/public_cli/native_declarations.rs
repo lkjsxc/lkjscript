@@ -1686,6 +1686,8 @@ mod native_owned_sequences;
 mod native_owned_witnesses;
 #[path = "native_owned_worklists.rs"]
 mod native_owned_worklists;
+#[path = "native_parallel_reads.rs"]
+mod native_parallel_reads;
 
 #[path = "native_owned_mutation.rs"]
 mod native_owned_mutation;

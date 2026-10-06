@@ -27,6 +27,15 @@ const CURRENT_FILES: &[&str] = &[
     "examples/parallel-work/README.md",
     "examples/parallel-work/command.deployment.json",
     "examples/parallel-work/service.deployment.json",
+    "examples/scoped-parallel-reads/README.md",
+    "examples/scoped-parallel-reads/scoped-parallel-reads.deployment.json",
+    "examples/scoped-parallel-reads/scoped-read-cell-flat.deployment.json",
+    "examples/scoped-parallel-reads/scoped-read-cell-flat-serial.deployment.json",
+    "examples/scoped-parallel-reads/scoped-read-cell-chunked.deployment.json",
+    "examples/scoped-parallel-reads/scoped-read-buffer-flat.deployment.json",
+    "examples/scoped-parallel-reads/scoped-read-buffer-chunked.deployment.json",
+    "examples/scoped-parallel-reads/scoped-read-product-flat.deployment.json",
+    "examples/scoped-parallel-reads/scoped-read-product-chunked.deployment.json",
     "packages/standard/README.md",
 ];
 
@@ -37,6 +46,7 @@ const CURRENT_DIRECTORIES: &[(&str, &str)] = &[
     ("docs/spec", ".md"),
     ("examples/owned-effects", ".lkjc"),
     ("examples/parallel-work", ".lkjc"),
+    ("examples/scoped-parallel-reads", ".lkjc"),
 ];
 const HISTORICAL_FILES: &[&str] = &["docs/spec/semantic-diff-merge.md"];
 
@@ -577,6 +587,7 @@ mod tests {
             "docs/guides/examples",
             "examples/owned-effects",
             "examples/parallel-work",
+            "examples/scoped-parallel-reads",
         ] {
             let root = surface_fixture();
             let relative = format!("{directory}/native.lkjc");
@@ -605,6 +616,8 @@ mod tests {
             "examples/parallel-work/README.md",
             "examples/parallel-work/command.deployment.json",
             "examples/parallel-work/service.deployment.json",
+            "examples/scoped-parallel-reads/README.md",
+            "examples/scoped-parallel-reads/scoped-parallel-reads.deployment.json",
         ] {
             fs::write(root.path().join(relative), "Graph 5\n").unwrap();
             let (violations, scanned) = inspect_files(root.path()).unwrap();
@@ -625,6 +638,8 @@ mod tests {
             "examples/parallel-work/README.md",
             "examples/parallel-work/command.deployment.json",
             "examples/parallel-work/service.deployment.json",
+            "examples/scoped-parallel-reads/README.md",
+            "examples/scoped-parallel-reads/scoped-parallel-reads.deployment.json",
         ] {
             let root = surface_fixture();
             let descriptor = root.path().join(relative);
@@ -658,6 +673,7 @@ mod tests {
             "docs/guides/examples",
             "examples/owned-effects",
             "examples/parallel-work",
+            "examples/scoped-parallel-reads",
         ] {
             let root = surface_fixture();
             let examples = root.path().join(directory);

@@ -67,10 +67,12 @@ stay separate. Typed failures must compose with cancellation and resource comple
 
 ## Establish region custody and memory policies
 
-Select scoped reads spanning joined parallel children as the next ownership
-design. Specify loan provenance, child-capture admission, owner reuse after join
-and cleanup on trap or cancellation before implementing it. Use the same generic
-storage contracts to expose representation and lifetime requirements.
+Use [borrowed tasks and joined parallel reads](spec/structured-parallel.md) to
+separate storage custody from scoped access. The
+[recursive reduction witness](../examples/scoped-parallel-reads/README.md) lends
+flat and chunked storage to nested readers, then drains and reuses the original
+owner. Shareable read admission and Transferable movement are independent
+obligations. Exact availability and acceptance remain [status-owned](status.md).
 
 Extend scoped access into explicit region custody. Define escape, cross-region
 roots, freezing, transfer and reclamation before selecting placement mechanisms.
@@ -109,6 +111,13 @@ cleanup. Acceptance is distinct from processing completion. In-process custody
 does not establish distributed exactly-once delivery.
 
 ## Reduce repeated preparation and semantic-development work
+
+Select compact context-sensitive witness admission as the next preparation
+milestone. Current typed prerequisite paths can expand despite a compact selected
+witness DAG. Share equivalent proof states while preserving exact substitutions,
+defining scopes and distinct witness identities; retain expanding/permuting
+recursion adversaries and bounded refusal. Measure preparation and retained memory
+before changing limits or claiming a speedup.
 
 Share identical prepared instruction bodies for the same exact function, type
 arguments and closed effect/requirement context. Keep complete witness identities

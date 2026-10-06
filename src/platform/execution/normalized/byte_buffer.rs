@@ -14,9 +14,13 @@ enum Mode {
 struct Storage {
     bytes: Option<Vec<u8>>,
     loans: usize,
+    admitted_program: Option<ValueOrigin>,
+    admission_valid: bool,
 }
 pub struct ByteBuffer {
+    // Invocation access may differ from custody only for scoped read tokens.
     domain: ValueOrigin,
+    backing_domain: ValueOrigin,
     state: Arc<Mutex<Storage>>,
     mode: Mode,
 }
@@ -25,6 +29,7 @@ impl Clone for ByteBuffer {
     fn clone(&self) -> Self {
         Self {
             domain: self.domain,
+            backing_domain: self.backing_domain,
             state: Arc::clone(&self.state),
             mode: Mode::Inert,
         }
@@ -69,9 +74,12 @@ impl ByteBuffer {
         control.check()?;
         let buffer = Self {
             domain,
+            backing_domain: domain,
             state: Arc::new(Mutex::new(Storage {
                 bytes: Some(Vec::new()),
                 loans: 0,
+                admitted_program: None,
+                admission_valid: false,
             })),
             mode: Mode::Owner,
         };
@@ -97,13 +105,62 @@ impl ByteBuffer {
         consume: bool,
     ) -> Result<(), ExecutionError> {
         let s = self.lock();
+        self.validate_storage(&s, domain, consume)
+    }
+    fn validate_storage(
+        &self,
+        s: &Storage,
+        domain: ValueOrigin,
+        consume: bool,
+    ) -> Result<(), ExecutionError> {
         if self.domain != domain
             || self.mode == Mode::Inert
+            || (self.mode == Mode::Owner && self.domain != self.backing_domain)
             || s.bytes.is_none()
             || (consume && (self.mode != Mode::Owner || s.loans != 0))
         {
             return Err(reject());
         }
+        Ok(())
+    }
+    /// Only checked first-party construction or complete transfer admission may
+    /// establish this proof. It identifies this live allocation in one program.
+    pub(super) fn establish_admission(&self, program: ValueOrigin) -> Result<(), ExecutionError> {
+        let mut storage = self.lock();
+        self.validate_storage(&storage, self.domain, true)?;
+        if storage
+            .admitted_program
+            .is_some_and(|existing| existing != program)
+        {
+            return Err(reject());
+        }
+        storage.admitted_program = Some(program);
+        storage.admission_valid = true;
+        Ok(())
+    }
+    pub(super) fn validate_admission(&self, program: ValueOrigin) -> Result<(), ExecutionError> {
+        let storage = self.lock();
+        self.validate_storage(&storage, self.domain, false)?;
+        if storage.admitted_program != Some(program) || !storage.admission_valid {
+            return Err(reject());
+        }
+        Ok(())
+    }
+    /// A certified parent's exact selected child inherits its typed-root proof.
+    pub(super) fn inherit_admission(&self, program: ValueOrigin) -> Result<(), ExecutionError> {
+        if self.mode != Mode::Read {
+            return Err(reject());
+        }
+        let mut storage = self.lock();
+        self.validate_storage(&storage, self.domain, false)?;
+        if storage
+            .admitted_program
+            .is_some_and(|existing| existing != program)
+        {
+            return Err(reject());
+        }
+        storage.admitted_program = Some(program);
+        storage.admission_valid = true;
         Ok(())
     }
     pub(super) fn owns_live_loans(&self) -> bool {
@@ -118,17 +175,32 @@ impl ByteBuffer {
     ) -> Result<(), ExecutionError> {
         self.validate(source, true)?;
         self.domain = destination;
+        self.backing_domain = destination;
+        Ok(())
+    }
+    /// Retarget read access while the lender retains the allocation's custody.
+    pub(super) fn adopt_scoped_read(
+        &mut self,
+        source: ValueOrigin,
+        destination: ValueOrigin,
+    ) -> Result<(), ExecutionError> {
+        self.validate(source, false)?;
+        if self.mode != Mode::Read {
+            return Err(reject());
+        }
+        self.domain = destination;
         Ok(())
     }
     pub(super) fn is_borrowed(&self) -> bool {
         self.mode == Mode::Read
     }
     pub(super) fn borrow(&self) -> Result<Self, ExecutionError> {
-        self.validate(self.domain, false)?;
         let mut s = self.lock();
+        self.validate_storage(&s, self.domain, false)?;
         s.loans = s.loans.checked_add(1).ok_or_else(reject)?;
         Ok(Self {
             domain: self.domain,
+            backing_domain: self.backing_domain,
             state: Arc::clone(&self.state),
             mode: Mode::Read,
         })
@@ -277,12 +349,47 @@ mod tests {
     use super::*;
 
     #[test]
+    fn scoped_buffer_reads_preserve_payload_and_release_each_loan() {
+        let source = ValueOrigin::fresh().unwrap();
+        let destination = ValueOrigin::fresh().unwrap();
+        let nested_origin = ValueOrigin::fresh().unwrap();
+        let program = ValueOrigin::fresh().unwrap();
+        let control = ExecutionControl::uncancelled();
+        let mut owner = ByteBuffer::empty(source)
+            .push(211, &control, &mut |_| Ok(()))
+            .unwrap();
+        let identity = owner.allocation_identity();
+        owner.establish_admission(program).unwrap();
+        assert!(owner.adopt_scoped_read(source, destination).is_err());
+        let mut read = owner.borrow().unwrap();
+        read.adopt_scoped_read(source, destination).unwrap();
+        assert_eq!(read.get(0).unwrap(), 211);
+        assert_eq!(read.backing_domain, source);
+        assert_eq!(read.allocation_identity(), identity);
+        read.validate_admission(program).unwrap();
+        assert!(read.adopt_scoped_read(source, nested_origin).is_err());
+        assert!(read.adopt_transfer(destination, nested_origin).is_err());
+        assert!(owner.validate(source, true).is_err());
+        let mut nested = read.borrow().unwrap();
+        nested
+            .adopt_scoped_read(destination, nested_origin)
+            .unwrap();
+        assert_eq!(nested.backing_domain, source);
+        assert_eq!(owner.lock().loans, 2);
+        drop(read);
+        assert_eq!(nested.get(0).unwrap(), 211);
+        drop(nested);
+        assert_eq!(owner.lock().loans, 0);
+        assert_eq!(owner.freeze().unwrap().as_ptr() as usize, identity);
+    }
+
+    #[test]
     fn byte_buffer_creation_admits_before_storage_and_honors_cancellation() {
         use crate::platform::execution::ExecutionFailureClass;
         let observed = StorageObservation::start();
         let domain = ValueOrigin::fresh().unwrap();
         let expected = (std::mem::size_of::<ByteBuffer>()
-            + std::mem::size_of::<Mutex<(Option<Vec<u8>>, usize)>>()
+            + std::mem::size_of::<Mutex<Storage>>()
             + 2 * std::mem::size_of::<usize>()) as u64;
         let cancelled = ExecutionControl::uncancelled();
         cancelled.cancel();

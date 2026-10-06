@@ -14,10 +14,13 @@ enum Mode {
 struct Storage {
     scalar: Option<i64>,
     loans: usize,
+    admitted_program: Option<ValueOrigin>,
+    admission_valid: bool,
 }
 
 pub struct OwnedI64Cell {
     domain: ValueOrigin,
+    backing_domain: ValueOrigin,
     state: Arc<Mutex<Storage>>,
     mode: Mode,
 }
@@ -26,6 +29,7 @@ impl Clone for OwnedI64Cell {
     fn clone(&self) -> Self {
         Self {
             domain: self.domain,
+            backing_domain: self.backing_domain,
             state: Arc::clone(&self.state),
             mode: Mode::Inert,
         }
@@ -70,9 +74,12 @@ impl OwnedI64Cell {
     pub(super) fn new(domain: ValueOrigin, scalar: i64) -> Self {
         let cell = Self {
             domain,
+            backing_domain: domain,
             state: Arc::new(Mutex::new(Storage {
                 scalar: Some(scalar),
                 loans: 0,
+                admitted_program: None,
+                admission_valid: false,
             })),
             mode: Mode::Owner,
         };
@@ -91,13 +98,61 @@ impl OwnedI64Cell {
         consume: bool,
     ) -> Result<(), ExecutionError> {
         let storage = self.lock();
+        self.validate_storage(&storage, domain, consume)
+    }
+    fn validate_storage(
+        &self,
+        storage: &Storage,
+        domain: ValueOrigin,
+        consume: bool,
+    ) -> Result<(), ExecutionError> {
         if self.domain != domain
             || self.mode == Mode::Inert
+            || (self.mode == Mode::Owner && self.domain != self.backing_domain)
             || storage.scalar.is_none()
             || (consume && (self.mode != Mode::Owner || storage.loans != 0))
         {
             return Err(reject());
         }
+        Ok(())
+    }
+
+    /// Minted only after checked first-party construction or complete admission.
+    pub(super) fn establish_admission(&self, program: ValueOrigin) -> Result<(), ExecutionError> {
+        let mut storage = self.lock();
+        self.validate_storage(&storage, self.domain, true)?;
+        if storage
+            .admitted_program
+            .is_some_and(|existing| existing != program)
+        {
+            return Err(reject());
+        }
+        storage.admitted_program = Some(program);
+        storage.admission_valid = true;
+        Ok(())
+    }
+    pub(super) fn validate_admission(&self, program: ValueOrigin) -> Result<(), ExecutionError> {
+        let storage = self.lock();
+        self.validate_storage(&storage, self.domain, false)?;
+        if storage.admitted_program != Some(program) || !storage.admission_valid {
+            return Err(reject());
+        }
+        Ok(())
+    }
+    pub(super) fn inherit_admission(&self, program: ValueOrigin) -> Result<(), ExecutionError> {
+        if self.mode != Mode::Read {
+            return Err(reject());
+        }
+        let mut storage = self.lock();
+        self.validate_storage(&storage, self.domain, false)?;
+        if storage
+            .admitted_program
+            .is_some_and(|existing| existing != program)
+        {
+            return Err(reject());
+        }
+        storage.admitted_program = Some(program);
+        storage.admission_valid = true;
         Ok(())
     }
 
@@ -114,14 +169,28 @@ impl OwnedI64Cell {
     ) -> Result<(), ExecutionError> {
         self.validate(source, true)?;
         self.domain = destination;
+        self.backing_domain = destination;
+        Ok(())
+    }
+    pub(super) fn adopt_scoped_read(
+        &mut self,
+        source: ValueOrigin,
+        destination: ValueOrigin,
+    ) -> Result<(), ExecutionError> {
+        self.validate(source, false)?;
+        if self.mode != Mode::Read {
+            return Err(reject());
+        }
+        self.domain = destination;
         Ok(())
     }
     pub(super) fn borrow(&self) -> Result<Self, ExecutionError> {
-        self.validate(self.domain, false)?;
         let mut storage = self.lock();
+        self.validate_storage(&storage, self.domain, false)?;
         storage.loans = storage.loans.checked_add(1).ok_or_else(reject)?;
         Ok(Self {
             domain: self.domain,
+            backing_domain: self.backing_domain,
             state: Arc::clone(&self.state),
             mode: Mode::Read,
         })
@@ -205,6 +274,48 @@ impl Drop for StorageObservation {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scoped_cell_reads_relay_access_without_moving_custody() {
+        let source = ValueOrigin::fresh().unwrap();
+        let destination = ValueOrigin::fresh().unwrap();
+        let grandchild = ValueOrigin::fresh().unwrap();
+        let program = ValueOrigin::fresh().unwrap();
+        let foreign = ValueOrigin::fresh().unwrap();
+        let mut owner = OwnedI64Cell::new(source, 73);
+        let identity = owner.allocation_identity();
+        assert!(owner.validate_admission(program).is_err());
+        owner.establish_admission(program).unwrap();
+        assert!(owner.establish_admission(foreign).is_err());
+        assert!(owner.adopt_scoped_read(source, destination).is_err());
+        let marker = owner.clone();
+        assert!(marker.validate_admission(program).is_err());
+        assert!(marker.establish_admission(program).is_err());
+
+        let mut read = owner.borrow().unwrap();
+        read.adopt_scoped_read(source, destination).unwrap();
+        read.validate(destination, false).unwrap();
+        read.validate_admission(program).unwrap();
+        assert_eq!(read.backing_domain, source);
+        assert_eq!(read.allocation_identity(), identity);
+        assert!(read.validate(source, false).is_err());
+        assert!(read.establish_admission(program).is_err());
+        assert!(read.adopt_transfer(destination, grandchild).is_err());
+        assert!(owner.adopt_transfer(source, grandchild).is_err());
+        let mut nested = read.borrow().unwrap();
+        nested.adopt_scoped_read(destination, grandchild).unwrap();
+        assert_eq!(nested.read().unwrap(), 73);
+        assert_eq!(nested.backing_domain, source);
+        assert_eq!(owner.lock().loans, 2);
+        drop(nested);
+        drop(read);
+        assert_eq!(owner.lock().loans, 0);
+        owner.adopt_transfer(source, destination).unwrap();
+        assert_eq!(owner.backing_domain, destination);
+        owner.validate_admission(program).unwrap();
+        assert_eq!(owner.extract().unwrap(), 73);
+        assert!(marker.lock().scalar.is_none());
+    }
 
     #[test]
     fn owned_cell_seals_origin_and_clone_and_cleans_failed_transfer() {

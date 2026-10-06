@@ -12,6 +12,15 @@ const FAMILIES: [&str; 6] = [
     "native_parallel",
     "native_refresh",
 ];
+const REQUIRED_FAMILIES: [(&str, Option<&str>); 7] = [
+    ("native_owned_", None),
+    ("native_byte_buffer_", None),
+    ("native_byte_ranges_", None),
+    ("resident_policy", None),
+    ("native_parallel_", Some("parallel")),
+    ("native_parallel_reads_", Some("native_parallel_reads")),
+    ("native_refresh", None),
+];
 const TOPOLOGY: &str = "copied_binary_authors_builds_and_serves_interactive_topology_from_minimal";
 const MAXIMUM_TESTS: usize = 4096;
 
@@ -23,6 +32,18 @@ pub(super) struct Inventory {
 
 fn require(condition: bool, message: &str) -> Result<(), DevError> {
     super::require(condition, message)
+}
+
+fn required_family(name: &str, family: &str, namespace: Option<&str>) -> bool {
+    let (modules, test) = name.rsplit_once("::").unwrap_or(("", name));
+    // Prefix families identify test functions, not their enclosing namespaces.
+    let marker_matches = if family.ends_with('_') {
+        test.starts_with(family)
+    } else {
+        name.contains(family)
+    };
+    marker_matches
+        && namespace.is_none_or(|namespace| modules.split("::").any(|module| module == namespace))
 }
 
 pub(super) fn cargo_harness(output: &str, repository: &Path) -> Result<PathBuf, DevError> {
@@ -84,9 +105,10 @@ pub(super) fn inventory(output: &str) -> Result<Inventory, DevError> {
             "invalid, repeated or excessive public harness test identity",
         )?;
     }
-    for family in FAMILIES {
+    for (family, namespace) in REQUIRED_FAMILIES {
         require(
-            all.iter().any(|name| name.contains(family)),
+            all.iter()
+                .any(|name| required_family(name, family, namespace)),
             &format!("required public harness family is absent: {family}"),
         )?;
     }

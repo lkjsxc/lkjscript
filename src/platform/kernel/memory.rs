@@ -164,12 +164,13 @@ struct Signature {
     result: TypeObjectDigest,
     result_borrow: Option<crate::platform::semantic_id::ParameterId>,
     pure: bool,
+    generation: u16,
 }
 fn signature(
     read: &(impl ExpressionRead + ?Sized),
     d: DeclarationReference,
 ) -> Result<Option<Signature>, Diagnostic> {
-    let (type_parameters, parameters, result, result_borrow, pure) =
+    let (type_parameters, parameters, result, result_borrow, pure, generation) =
         if d.package == read.package_id() {
             match read.owner(OwnerKey::Declaration(d.declaration))? {
                 Some(OwnerRecord::Declaration(r)) => match r.payload {
@@ -179,10 +180,16 @@ fn signature(
                         f.result,
                         f.result_borrow,
                         matches!(f.effect, FunctionEffect::Pure),
+                        r.header.contract_version,
                     ),
-                    DeclarationPayload::External(f) => {
-                        (f.type_parameters, f.parameters, f.result, None, true)
-                    }
+                    DeclarationPayload::External(f) => (
+                        f.type_parameters,
+                        f.parameters,
+                        f.result,
+                        None,
+                        true,
+                        r.header.contract_version,
+                    ),
                     _ => return Ok(None),
                 },
                 _ => return Err(reject("missing direct memory callee")),
@@ -196,10 +203,16 @@ fn signature(
                         f.result,
                         f.result_borrow,
                         matches!(f.effect, FunctionEffect::Pure),
+                        r.header.contract_version,
                     ),
-                    PackageInterfaceDeclarationPayload::External(f) => {
-                        (f.type_parameters, f.parameters, f.result, None, true)
-                    }
+                    PackageInterfaceDeclarationPayload::External(f) => (
+                        f.type_parameters,
+                        f.parameters,
+                        f.result,
+                        None,
+                        true,
+                        r.header.contract_version,
+                    ),
                     _ => return Ok(None),
                 },
                 _ => return Err(reject("missing imported memory callee")),
@@ -220,6 +233,7 @@ fn signature(
         result,
         result_borrow,
         pure,
+        generation,
     }))
 }
 
@@ -251,6 +265,9 @@ fn instantiate(
         }
         if p.constraints.requires_transfer() {
             super::transfer::admit(read, *ty, scope)?;
+        }
+        if p.constraints.requires_share() {
+            super::share::admit(read, *ty, scope)?;
         }
         substitutions.insert(*id, *ty);
     }
@@ -286,10 +303,12 @@ fn admit_signature(read: &(impl ExpressionRead + ?Sized), s: &Signature) -> Resu
                     "owned parameters require an explicit use and no requirement",
                 ));
             }
-            if !s.pure && p.use_mode != ParameterUse::Consume {
-                return Err(reject(
-                    "task owned parameters must consume; memory loans are synchronous",
-                ));
+            if !s.pure
+                && p.use_mode == ParameterUse::Borrow
+                && (s.generation < contract::SHARE_GRAPH_CONTRACT_VERSION
+                    || p.header.contract_version < contract::SHARE_GRAPH_CONTRACT_VERSION)
+            {
+                return Err(reject("borrowed task memory parameters require Graph 30"));
             }
         } else if matches!(
             read.type_object(p.ty)?.map(|t| t.form),
@@ -659,6 +678,34 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
             || record.declared_type != Some(ty)
         {
             return Err(reject("child read binding contract mismatch"));
+        }
+        Ok(())
+    }
+
+    fn parallel_arguments(
+        &self,
+        call: &super::parallel::ParallelCall,
+        state: &mut State,
+        loans: &mut Vec<LocalValueReference>,
+        depth: usize,
+    ) -> Result<(), Diagnostic> {
+        for (parameter, argument) in call.parameters.iter().zip(&call.arguments) {
+            self.read.validation_work()?;
+            match parameter.use_mode {
+                ParameterUse::Borrow => {
+                    let source = self.source_local(*argument, parameter.ty, state, depth + 1)?;
+                    // A child is not executed during preparation. Its loan must
+                    // already freeze every ancestor while later arguments run.
+                    self.loan(source, state, true)?;
+                    loans.push(source);
+                }
+                ParameterUse::Consume => {
+                    self.consume_local(*argument, parameter.ty, state, depth + 1)?;
+                }
+                ParameterUse::Unrestricted => {
+                    self.eval(*argument, state, ParameterUse::Unrestricted, depth + 1)?;
+                }
+            }
         }
         Ok(())
     }
@@ -1281,13 +1328,26 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 direct(self.read, s.result)?
             }
             ExpressionOperation::Parallel { left, right } => {
-                super::parallel::admit_call(self.read, left, self.scope)?;
-                super::parallel::admit_call(self.read, right, self.scope)?;
-                // Admission consumes both argument sets in the same parent state.
-                // No branch-local fork can make one owner available to both children.
-                let left_owned = self.eval(left, state, ParameterUse::Consume, next)?;
-                let right_owned = self.eval(right, state, ParameterUse::Consume, next)?;
-                left_owned || right_owned
+                let left = super::parallel::admit_call(self.read, left, self.scope)?;
+                let right = super::parallel::admit_call(self.read, right, self.scope)?;
+                if left
+                    .parameters
+                    .iter()
+                    .chain(&right.parameters)
+                    .any(|parameter| parameter.use_mode == ParameterUse::Borrow)
+                    && e.contract_version < contract::SHARE_GRAPH_CONTRACT_VERSION
+                {
+                    return Err(reject("parallel read captures require Graph 30"));
+                }
+                // Both inventories prepare in one state, with read custody
+                // spanning all later argument trees and the joined child group.
+                let mut loans = Vec::new();
+                self.parallel_arguments(&left, state, &mut loans, next)?;
+                self.parallel_arguments(&right, state, &mut loans, next)?;
+                for source in loans.into_iter().rev() {
+                    self.loan(source, state, false)?;
+                }
+                left.result_owned || right.result_owned
             }
             ExpressionOperation::MethodCall {
                 witness,
@@ -1572,8 +1632,7 @@ pub(crate) fn validate_owner(
                         matches!(key, OwnerKey::TypeParameter(id) if f.type_parameters.contains(&id))
                     }
                     DeclarationPayload::OwnedImplementation(i) => {
-                        p.constraints == TypeParameterConstraints::Owned
-                            && p.header.contract_version >= 28
+                        p.header.contract_version >= 28
                             && matches!(key, OwnerKey::TypeParameter(id)
                                 if i.type_parameters.contains(&id))
                     }

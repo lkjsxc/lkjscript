@@ -103,6 +103,8 @@ mod generic_implementation_tests;
 mod implementation_effect_tests;
 #[path = "imported_memory_oracle_tests.rs"]
 mod imported_tests;
+#[path = "parallel_read_memory_oracle_tests.rs"]
+mod parallel_read_tests;
 #[path = "parameterized_contract_memory_oracle_tests.rs"]
 mod parameterized_contract_tests;
 #[path = "sequence_memory_oracle_tests.rs"]
@@ -153,6 +155,23 @@ impl Oracle<'_> {
     fn foreign(&self, package: PackageId, key: OwnerKey) -> Option<&PackageInterfaceRecord> {
         let revision = self.0.dependencies.get(&package)?.package_revision;
         self.0.dependency_interfaces.get(&revision)?.get(&key)
+    }
+    fn declaration_generation(&self, declaration: DeclarationReference) -> Option<u16> {
+        let key = OwnerKey::Declaration(declaration.declaration);
+        let generation = if declaration.package == self.0.root.package_id {
+            self.0.owners.get(&key)?.header().contract_version
+        } else {
+            self.foreign(declaration.package, key)?
+                .header()
+                .contract_version
+                .min(
+                    self.0
+                        .dependencies
+                        .get(&declaration.package)?
+                        .graph_contract_version,
+                )
+        };
+        Some(self.0.root.graph_contract_version.min(generation))
     }
     fn buffer(&self, t: TypeObjectDigest) -> bool {
         matches!(
@@ -254,7 +273,6 @@ impl Oracle<'_> {
         if parameters.len() != arguments.len() {
             return false;
         }
-        let mut remaining = contract::MAXIMUM_VALIDATION_WORK;
         parameters.iter().zip(arguments).all(|(id, ty)| {
             let p = if d.package == self.0.root.package_id {
                 match self.0.owners.get(&OwnerKey::TypeParameter(*id)) {
@@ -268,19 +286,28 @@ impl Oracle<'_> {
                 }
             };
             p.is_some_and(|p| {
-                p.declaration == d.declaration
-                    && (if p.constraints.has_owned() {
-                        self.buffer(*ty) && self.owned_type_in_scope(*ty)
-                    } else {
-                        !self.contains(*ty)
-                    })
-                    && (!p.constraints.requires_capture_safe() || self.capture_safe(*ty))
-                    && (!p.constraints.requires_transfer()
-                        || (self.function(d).is_some()
-                            && self.parallel_shape(*ty, &BTreeMap::new(), 0, &mut remaining)
-                                == Some(p.constraints.has_owned())))
+                p.declaration == d.declaration && self.satisfies_constraints(*ty, p.constraints)
             })
         })
+    }
+    // Bounds belong to their exact formal. A bound is not inferred from the
+    // callee's body, nor strengthened merely because an application is parallel.
+    fn satisfies_constraints(
+        &self,
+        ty: TypeObjectDigest,
+        bounds: TypeParameterConstraints,
+    ) -> bool {
+        let mut remaining = contract::MAXIMUM_VALIDATION_WORK;
+        (if bounds.has_owned() {
+            self.buffer(ty) && self.owned_type_in_scope(ty)
+        } else {
+            !self.contains(ty)
+        }) && (!bounds.requires_capture_safe() || self.capture_safe(ty))
+            && (!bounds.requires_transfer()
+                || self.parallel_shape(ty, &BTreeMap::new(), 0, &mut remaining)
+                    == Some(bounds.has_owned()))
+            && (!bounds.requires_share()
+                || self.read_shape(ty, &BTreeMap::new(), 0, &mut remaining) == Some(true))
     }
     fn owned_type_in_scope(&self, ty: TypeObjectDigest) -> bool {
         match self.form(ty) {
@@ -442,15 +469,21 @@ impl Oracle<'_> {
                 _ => return None,
             }
         };
-        Some((
-            parameters
-                .into_iter()
-                .map(|p| self.parameter(d.package, p))
-                .collect::<Option<Vec<_>>>()?,
-            result,
-            pure,
-            implementation,
-        ))
+        let parameters = parameters
+            .into_iter()
+            .map(|p| self.parameter(d.package, p))
+            .collect::<Option<Vec<_>>>()?;
+        if !pure
+            && parameters.iter().any(|p| {
+                p.use_mode == ParameterUse::Borrow
+                    && Oracle(self.0, Some(d)).buffer(p.ty)
+                    && (p.header.contract_version < 30
+                        || self.declaration_generation(d).is_none_or(|v| v < 30))
+            })
+        {
+            return None;
+        }
+        Some((parameters, result, pure, implementation))
     }
     fn result_source(
         &self,
@@ -471,10 +504,7 @@ impl Oracle<'_> {
         let mut classes = Vec::new();
         for p in parameters {
             let class = if self.buffer(p.ty) {
-                if p.resource_requirement.is_some()
-                    || p.use_mode == ParameterUse::Unrestricted
-                    || (!pure && p.use_mode != ParameterUse::Consume)
-                {
+                if p.resource_requirement.is_some() || p.use_mode == ParameterUse::Unrestricted {
                     return false;
                 }
                 1
@@ -723,6 +753,25 @@ impl Oracle<'_> {
         depth: usize,
         remaining: &mut usize,
     ) -> Option<bool> {
+        self.boundary_shape(ty, bindings, false, depth, remaining)
+    }
+    fn read_shape(
+        &self,
+        ty: TypeObjectDigest,
+        bindings: &BTreeMap<crate::platform::semantic_id::TypeParameterId, TypeObjectDigest>,
+        depth: usize,
+        remaining: &mut usize,
+    ) -> Option<bool> {
+        self.boundary_shape(ty, bindings, true, depth, remaining)
+    }
+    fn boundary_shape(
+        &self,
+        ty: TypeObjectDigest,
+        bindings: &BTreeMap<crate::platform::semantic_id::TypeParameterId, TypeObjectDigest>,
+        read: bool,
+        depth: usize,
+        remaining: &mut usize,
+    ) -> Option<bool> {
         if depth > contract::MAXIMUM_TYPE_DEPTH {
             return None;
         }
@@ -730,16 +779,19 @@ impl Oracle<'_> {
         match self.form(ty)? {
             TypeForm::TypeParameter { parameter } => {
                 if let Some(actual) = bindings.get(parameter) {
-                    return self.parallel_shape(*actual, &BTreeMap::new(), depth, remaining);
+                    return self.boundary_shape(*actual, &BTreeMap::new(), read, depth, remaining);
                 }
                 let p = self.scoped_parameter(*parameter)?;
-                p.constraints
-                    .requires_transfer()
-                    .then_some(p.constraints.has_owned())
+                (if read && p.constraints.has_owned() {
+                    p.constraints.requires_share()
+                } else {
+                    p.constraints.requires_transfer()
+                })
+                .then_some(p.constraints.has_owned())
             }
             TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Some(true),
             TypeForm::OwnedSequence { item } => self
-                .parallel_shape(*item, bindings, depth + 1, remaining)?
+                .boundary_shape(*item, bindings, read, depth + 1, remaining)?
                 .then_some(true),
             TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {
                 if fields.is_empty()
@@ -750,7 +802,7 @@ impl Oracle<'_> {
                 }
                 let mut owned = false;
                 for field in fields {
-                    owned |= self.parallel_shape(field.ty, bindings, depth + 1, remaining)?;
+                    owned |= self.boundary_shape(field.ty, bindings, read, depth + 1, remaining)?;
                 }
                 owned.then_some(true)
             }
@@ -793,14 +845,11 @@ impl Oracle<'_> {
         let mut remaining = contract::MAXIMUM_VALIDATION_WORK;
         if !self.application(function, types)
             || !self.witnesses(function, types, implementations)
-            || types.iter().any(|ty| {
-                self.parallel_shape(*ty, &BTreeMap::new(), 0, &mut remaining)
-                    .is_none()
-            })
             || !signature.requirement_parameters.is_empty()
             || !signature.effect_parameters.is_empty()
             || !matches!(&signature.effect, FunctionEffect::Task { requirements, effect_parameters } if requirements.is_empty() && effect_parameters.is_empty())
             || signature.parameters.len() != arguments.len()
+            || signature.result_borrow.is_some()
         {
             return None;
         }
@@ -813,16 +862,16 @@ impl Oracle<'_> {
         let mut owned = false;
         for id in signature.parameters {
             let p = self.parameter(function.package, id)?;
-            let memory = self.parallel_shape(p.ty, &bindings, 0, &mut remaining)?;
+            let memory = if p.use_mode == ParameterUse::Borrow {
+                self.read_shape(p.ty, &bindings, 0, &mut remaining)?
+            } else {
+                self.parallel_shape(p.ty, &bindings, 0, &mut remaining)?
+            };
             if p.parent != ParameterParent::Function(function.declaration)
                 || p.resource_requirement.is_some()
                 || (owned && !memory)
-                || p.use_mode
-                    != if memory {
-                        ParameterUse::Consume
-                    } else {
-                        ParameterUse::Unrestricted
-                    }
+                || (memory && p.use_mode == ParameterUse::Unrestricted)
+                || (!memory && p.use_mode != ParameterUse::Unrestricted)
             {
                 return None;
             }
@@ -838,12 +887,29 @@ impl Oracle<'_> {
         depth: usize,
         substitutions: &BTreeMap<crate::platform::semantic_id::TypeParameterId, TypeObjectDigest>,
     ) -> Option<()> {
+        let initial_loans = rights.loans.clone();
+        let loans = self.held_arguments(parameters, arguments, rights, depth, substitutions)?;
+        for loan in loans.into_iter().rev() {
+            rights.release(loan)?;
+        }
+        (rights.loans == initial_loans).then_some(())
+    }
+    // A structured group acquires both ordered argument inventories before
+    // either child can finish. Return cleanup custody instead of ending each
+    // call's loans while a later argument expression can still consume them.
+    fn held_arguments(
+        &self,
+        parameters: &[(TypeObjectDigest, TypeObjectDigest, ParameterUse)],
+        arguments: &[ExpressionId],
+        rights: &mut Rights,
+        depth: usize,
+        substitutions: &BTreeMap<crate::platform::semantic_id::TypeParameterId, TypeObjectDigest>,
+    ) -> Option<Vec<Vec<LocalValueReference>>> {
         if parameters.len() != arguments.len() {
             return None;
         }
         let mut moved = BTreeSet::new();
         let mut borrowed = BTreeSet::new();
-        let initial_loans = rights.loans.clone();
         let mut loans = Vec::new();
         let mut remaining = contract::MAXIMUM_VALIDATION_WORK;
         for ((template, ty, use_mode), argument) in parameters.iter().zip(arguments) {
@@ -877,10 +943,46 @@ impl Oracle<'_> {
                 return None;
             }
         }
-        for loan in loans.into_iter().rev() {
-            rights.release(loan)?;
+        moved.is_disjoint(&borrowed).then_some(loans)
+    }
+    fn prepare_parallel_child(
+        &self,
+        call: ExpressionId,
+        rights: &mut Rights,
+        depth: usize,
+    ) -> Option<Vec<Vec<LocalValueReference>>> {
+        let (function, type_arguments, arguments) = match self.expression(call)? {
+            ExpressionOperation::Call {
+                function,
+                type_arguments,
+                arguments,
+                ..
+            }
+            | ExpressionOperation::ImplementationCall {
+                function,
+                type_arguments,
+                arguments,
+                ..
+            } => (*function, type_arguments, arguments),
+            _ => return None,
+        };
+        let template = self.signature(function)?;
+        let signature = self.applied_signature(function, type_arguments)?;
+        if !self.legal_signature(&signature) {
+            return None;
         }
-        (moved.is_disjoint(&borrowed) && rights.loans == initial_loans).then_some(())
+        self.held_arguments(
+            &template
+                .0
+                .iter()
+                .zip(&signature.0)
+                .map(|(template, actual)| (template.ty, actual.ty, actual.use_mode))
+                .collect::<Vec<_>>(),
+            arguments,
+            rights,
+            depth,
+            &self.application_bindings(function, type_arguments)?,
+        )
     }
     // Invocation resolution is reconstructed from canonical signatures. In
     // particular, the source is a parameter position, never an allocation or
@@ -1594,12 +1696,35 @@ impl Oracle<'_> {
                 }
                 let left_owned = self.parallel_child(*left)?;
                 let right_owned = self.parallel_child(*right)?;
-                // Both argument inventories consume the same parent rights in
-                // authored order. Child results become fields of one owned pair
-                // whenever either child returns an owner.
-                if self.run(*left, rights, true, depth + 1)? != left_owned
-                    || self.run(*right, rights, true, depth + 1)? != right_owned
+                let generation = self.0.root.graph_contract_version.min(
+                    self.0
+                        .owners
+                        .get(&OwnerKey::Expression(id))?
+                        .header()
+                        .contract_version,
+                );
+                if generation < 30
+                    && [left, right]
+                        .into_iter()
+                        .any(|child| match self.expression(*child) {
+                            Some(
+                                ExpressionOperation::Call { function, .. }
+                                | ExpressionOperation::ImplementationCall { function, .. },
+                            ) => self.signature(*function).is_some_and(|s| {
+                                s.0.iter().any(|p| p.use_mode == ParameterUse::Borrow)
+                            }),
+                            _ => false,
+                        })
                 {
+                    return None;
+                }
+                let initial_loans = rights.loans.clone();
+                let mut loans = self.prepare_parallel_child(*left, rights, depth + 1)?;
+                loans.extend(self.prepare_parallel_child(*right, rights, depth + 1)?);
+                for loan in loans.into_iter().rev() {
+                    rights.release(loan)?;
+                }
+                if rights.loans != initial_loans {
                     return None;
                 }
                 left_owned || right_owned
@@ -1840,6 +1965,12 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                 .graph_contract_version
                 .min(dependency.graph_contract_version)
                 .min(owner.header().contract_version);
+            if generation < 30
+                && matches!(owner, PackageInterfaceRecord::TypeParameter(p)
+                    if p.constraints.requires_share())
+            {
+                return false;
+            }
             if let PackageInterfaceRecord::Declaration(declaration) = owner
                 && match &declaration.payload {
                     PackageInterfaceDeclarationPayload::OwnedContract(c) => {
@@ -1909,7 +2040,9 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                                 && (!p.constraints.requires_transfer()
                                     || p.header.contract_version >= 22) => {}
                         PackageInterfaceDeclarationPayload::OwnedImplementation(i)
-                            if p.constraints == TypeParameterConstraints::Owned
+                            if p.constraints.has_owned()
+                                && (p.constraints == TypeParameterConstraints::Owned
+                                    || generation >= 30)
                                 && matches!(key, OwnerKey::TypeParameter(id) if i.type_parameters.contains(id)) =>
                             {}
                         _ => return false,
@@ -2004,6 +2137,11 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
             .root
             .graph_contract_version
             .min(owner.header().contract_version);
+        if generation < 30
+            && matches!(owner, OwnerRecord::TypeParameter(p) if p.constraints.requires_share())
+        {
+            return false;
+        }
         if let OwnerRecord::Declaration(declaration) = owner
             && match &declaration.payload {
                 DeclarationPayload::OwnedContract(c) => !oracle.contract_generation(c, generation),
@@ -2140,7 +2278,13 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                     DeclarationPayload::Function(f) if matches!(key, OwnerKey::TypeParameter(id) if f.type_parameters.contains(id)) =>
                         {}
                     DeclarationPayload::OwnedImplementation(i)
-                        if p.constraints == TypeParameterConstraints::Owned
+                        if p.constraints.has_owned()
+                            && (p.constraints == TypeParameterConstraints::Owned
+                                || snapshot
+                                    .root
+                                    .graph_contract_version
+                                    .min(p.header.contract_version)
+                                    >= 30)
                             && matches!(key, OwnerKey::TypeParameter(id) if i.type_parameters.contains(id)) =>
                         {}
                     _ => return false,

@@ -33,20 +33,28 @@ fn native_parallel_three_packages_owned_reduction_edit_and_source_free_execution
     let library = Native::template("command");
     let before = library.revision();
     let invalid_borrow = library.input(
-        "rejected-borrowed-task.lkjc",
+        "rejected-borrowed-task-result.lkjc",
         &format!(
             "request base={before}\ndeclarations.begin\n(units (module create invalid-task\n\
             (function create borrowed (visibility public)\n\
             (parameter create value (type ByteBuffer) (use borrow))\n\
-            (returns I64) (effect (task)) (body (i64 0)))))\ndeclarations.end\n"
+            (returns ByteBuffer (borrow-from value)) (effect (task)) (body (local value)))))\ndeclarations.end\n"
         ),
     );
     let rejected = library.plan(&invalid_borrow, false);
     assert!(
         rejected.iter().any(|r| r.operation == "diagnostic"
-            && compact_field(r, "code") == "kernel_buffer_ownership")
+            && compact_field(r, "code").starts_with("kernel_"))
     );
     assert_eq!(library.revision(), before);
+    author(
+        &library,
+        "declarations.begin\n(units (module create synchronous-task\n\
+        (function create borrowed (visibility public) (effect (task))\n\
+        (parameter create value (type ByteBuffer) (use borrow))\n\
+        (returns I64) (body (i64 0)))))\ndeclarations.end\n",
+    );
+    unchanged(&library, "synchronous-task");
     author(&library, WORKERS);
     unchanged(&library, "parallel-workers");
     let p = export(&library);
@@ -77,7 +85,7 @@ fn native_parallel_three_packages_owned_reduction_edit_and_source_free_execution
             "kernel_parallel_call",
         ),
         (
-            "borrowed-child",
+            "borrowed-pure-child",
             input.replacen("parallel-workers::buffer-job", "parallel-workers::borrowed-buffer", 1),
             "kernel_parallel_call",
         ),

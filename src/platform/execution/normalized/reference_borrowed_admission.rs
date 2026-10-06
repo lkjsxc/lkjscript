@@ -73,6 +73,29 @@ pub(super) fn inventory(closure: &mut Closure<'_>) -> Result<(), ExecutionError>
                 declaration: *id,
             };
             match &owner.payload {
+                DeclarationPayload::Function(function) => {
+                    if !matches!(function.effect, FunctionEffect::Pure) {
+                        if function.result_borrow.is_some() {
+                            return Err(reject());
+                        }
+                        for id in &function.parameters {
+                            let OwnerRecord::Parameter(parameter) =
+                                closure.owner(reference.package, OwnerKey::Parameter(*id))?
+                            else {
+                                return Err(reject());
+                            };
+                            if parameter.use_mode == ParameterUse::Borrow
+                                && closure.scoped_owned(parameter.ty, Some(reference))?
+                                && (owner.header.contract_version
+                                    < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION
+                                    || parameter.header.contract_version
+                                        < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION)
+                            {
+                                return Err(reject());
+                            }
+                        }
+                    }
+                }
                 DeclarationPayload::OwnedContract(contract) => {
                     allocate::<crate::platform::semantic_id::TypeParameterId>(
                         &mut closure.allocated,
@@ -106,7 +129,9 @@ pub(super) fn inventory(closure: &mut Closure<'_>) -> Result<(), ExecutionError>
                                 owned_suffix = true;
                                 if parameter.use_mode == ParameterUse::Unrestricted
                                     || (method.effect != FunctionEffect::Pure
-                                        && parameter.use_mode != ParameterUse::Consume)
+                                        && parameter.use_mode == ParameterUse::Borrow
+                                        && owner.header.contract_version
+                                            < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION)
                                 {
                                     return Err(reject());
                                 }
@@ -238,6 +263,21 @@ pub(super) fn inventory(closure: &mut Closure<'_>) -> Result<(), ExecutionError>
                                 return Err(reject());
                             }
                         }
+                        index_node::<(
+                            DeclarationReference,
+                            Vec<TypeObjectDigest>,
+                            Option<DeclarationReference>,
+                        )>(&mut closure.allocated)?;
+                        allocate::<TypeObjectDigest>(&mut closure.allocated, target_types.len())?;
+                        closure.constrained_applications.insert((
+                            target,
+                            function
+                                .type_parameters
+                                .iter()
+                                .map(|formal| target_types[formal])
+                                .collect(),
+                            Some(reference),
+                        ));
                         closure.scoped_type_parameters(function.result, &target_parameters, 0)?;
                         closure.owned_witness_type(function.result, Some(target), 0)?;
                         if function.effect != method.effect
@@ -429,7 +469,9 @@ impl Checker<'_, '_> {
             self.closure.tick()?;
             let operation = self.operation(id)?.clone();
             match &operation {
-                ExpressionOperation::BorrowCall { .. } => return Ok(true),
+                ExpressionOperation::BorrowCall { .. } | ExpressionOperation::Parallel { .. } => {
+                    return Ok(true);
+                }
                 ExpressionOperation::Call { function, .. }
                 | ExpressionOperation::ImplementationCall { function, .. }
                 | ExpressionOperation::FunctionValue { function, .. } => {
@@ -934,6 +976,20 @@ impl Checker<'_, '_> {
         locals: &mut Locals,
         depth: usize,
     ) -> Result<Option<LocalValueReference>, ExecutionError> {
+        let (selected, retained) = self.arguments_retained(signature, arguments, locals, depth)?;
+        for guards in retained.into_iter().rev() {
+            self.release(locals, guards)?;
+        }
+        Ok(selected)
+    }
+
+    fn arguments_retained(
+        &mut self,
+        signature: &Signature,
+        arguments: &[ExpressionId],
+        locals: &mut Locals,
+        depth: usize,
+    ) -> Result<(Option<LocalValueReference>, Vec<Vec<LocalValueReference>>), ExecutionError> {
         if signature.parameters.len() != arguments.len() {
             return Err(reject());
         }
@@ -964,13 +1020,10 @@ impl Checker<'_, '_> {
                 self.flow(*argument, locals, Demand::Data, depth + 1)?;
             }
         }
-        for guards in retained.into_iter().rev() {
-            self.release(locals, guards)?;
-        }
         if signature.source.is_some() && selected.is_none() {
             return Err(reject());
         }
-        Ok(selected)
+        Ok((selected, retained))
     }
 
     fn flow(
@@ -1051,7 +1104,9 @@ impl Checker<'_, '_> {
             ExpressionOperation::Sequence { items } => {
                 if let Some((last, preceding)) = items.split_last() {
                     for item in preceding {
-                        self.flow(*item, locals, Demand::Data, depth + 1)?;
+                        // A sequence discards preceding values. Owning results
+                        // are legal here and their affine custody ends immediately.
+                        self.flow(*item, locals, Demand::Owner, depth + 1)?;
                     }
                     self.flow(*last, locals, demand, depth + 1)?
                 } else {
@@ -1406,12 +1461,31 @@ impl Checker<'_, '_> {
                 Some(self.closure.identity(choice_type, self.types, 0)?)
             }
             ExpressionOperation::Parallel { left, right } => {
-                self.flow(left, locals, Demand::Owner, depth + 1)?;
-                self.flow(right, locals, Demand::Owner, depth + 1)?;
-                let left = self.operation(left)?.clone();
-                let right = self.operation(right)?.clone();
-                let left = self.signature(&left)?.result;
-                let right = self.signature(&right)?.result;
+                let left_call = self.operation(left)?.clone();
+                let right_call = self.operation(right)?.clone();
+                let left_signature = self.signature(&left_call)?;
+                let right_signature = self.signature(&right_call)?;
+                if left_signature.source.is_some() || right_signature.source.is_some() {
+                    return Err(reject());
+                }
+                let arguments = |call: &ExpressionOperation| match call {
+                    ExpressionOperation::Call { arguments, .. }
+                    | ExpressionOperation::ImplementationCall { arguments, .. } => {
+                        Ok(arguments.clone())
+                    }
+                    _ => Err(reject()),
+                };
+                let left_arguments = arguments(&left_call)?;
+                let right_arguments = arguments(&right_call)?;
+                let (_, left_loans) =
+                    self.arguments_retained(&left_signature, &left_arguments, locals, depth + 1)?;
+                let (_, right_loans) =
+                    self.arguments_retained(&right_signature, &right_arguments, locals, depth + 1)?;
+                for guards in left_loans.into_iter().chain(right_loans).rev() {
+                    self.release(locals, guards)?;
+                }
+                let left = left_signature.result;
+                let right = right_signature.result;
                 let owned = self.owned(left)? || self.owned(right)?;
                 allocate::<crate::platform::kernel::StructuralTypeField>(
                     &mut self.closure.allocated,
@@ -1666,6 +1740,135 @@ declarations.end
             ..super::super::NormalizedReferenceSchema::default()
         };
         super::super::complete(&mut schema, &[snapshot], &ExecutionControl::uncancelled())
+    }
+
+    const PARALLEL_READ: &str = r#"declarations.begin
+(units (module create independent-parallel-reads
+  (external create read (visibility public) (implementation core.cell.read)
+    (parameter create value (type OwnedI64Cell) (use borrow)) (returns I64))
+  (function create discard (visibility public) (effect pure)
+    (parameter create value (type OwnedI64Cell) (use consume))
+    (returns I64) (body (i64 0)))
+  (function create left-worker (visibility public) (effect (task))
+    (parameter create value (type OwnedI64Cell) (use borrow))
+    (returns I64) (body (call read (local value))))
+  (function create right-worker (visibility public) (effect (task))
+    (parameter create padding (type I64))
+    (parameter create value (type OwnedI64Cell) (use borrow))
+    (returns I64) (body (call read (local value))))
+  (function create group (visibility public) (effect (task))
+    (parameter create value (type OwnedI64Cell) (use consume))
+    (parameter create other (type OwnedI64Cell) (use consume))
+    (returns (record (left I64) (right I64)))
+    (body (parallel (call left-worker (local value))
+      (call right-worker (i64 1) (local other)))))))
+declarations.end"#;
+
+    fn parallel_read_source() -> KernelSnapshot {
+        super::super::super::tests::byte_buffer_tests::author_only(PARALLEL_READ).unwrap()
+    }
+
+    #[test]
+    fn independent_parallel_admission_allows_discarding_an_inferred_owning_pair() {
+        let mut snapshot = super::super::super::tests::byte_buffer_tests::author_only(
+            r#"
+declarations.begin
+(units (module create independent-discarded-pair
+  (function create give (visibility public) (effect (task))
+    (parameter create value (type OwnedI64Cell) (use consume))
+    (returns OwnedI64Cell) (body (local value)))
+  (function create main (visibility public) (effect (task))
+    (parameter create a (type OwnedI64Cell) (use consume))
+    (parameter create b (type OwnedI64Cell) (use consume))
+    (returns I64)
+    (body (sequence (parallel (call give (local a)) (call give (local b))) (i64 41))))))
+declarations.end
+"#,
+        )
+        .unwrap();
+        let cell = snapshot
+            .types
+            .iter()
+            .find_map(|(ty, object)| matches!(object.form, TypeForm::OwnedI64Cell).then_some(*ty))
+            .unwrap();
+        let pair = crate::platform::kernel::TypeObject::new(TypeForm::OwnedProduct {
+            fields: ["left", "right"]
+                .into_iter()
+                .map(|name| crate::platform::kernel::StructuralTypeField {
+                    name: crate::platform::kernel::Name::new(name).unwrap(),
+                    ty: cell,
+                })
+                .collect(),
+        })
+        .unwrap();
+        let pair_type = crate::platform::kernel::encode_type_object(&pair)
+            .unwrap()
+            .0;
+        snapshot.types.remove(&pair_type);
+        snapshot.dependency_types.remove(&pair_type);
+        admit(&snapshot).unwrap();
+    }
+
+    #[test]
+    fn independent_parallel_reads_hold_left_loans_during_later_argument_calls() {
+        let mut snapshot = parallel_read_source();
+        admit(&snapshot).unwrap();
+        let body = function(&snapshot, "group").body;
+        let ExpressionOperation::Parallel { left, right } = *operation(&mut snapshot, body) else {
+            panic!("parallel");
+        };
+        let ExpressionOperation::Call { arguments, .. } = operation(&mut snapshot, left) else {
+            panic!("left child");
+        };
+        let source = arguments[0];
+        let discard = reference(&snapshot, "discard");
+        let call = expression(
+            &mut snapshot,
+            b"independent-parallel-hidden-consume",
+            ExpressionOperation::Call {
+                function: discard,
+                type_arguments: vec![],
+                effect_arguments: vec![],
+                requirement_arguments: vec![],
+                arguments: vec![source],
+            },
+        );
+        let ExpressionOperation::Call { arguments, .. } = operation(&mut snapshot, right) else {
+            panic!("right child");
+        };
+        arguments[0] = call;
+        assert!(admit(&snapshot).is_err());
+    }
+
+    #[test]
+    fn independent_parallel_reads_reject_consume_alias_in_both_child_orders() {
+        for consumed in ["left-worker", "right-worker"] {
+            let mut snapshot = parallel_read_source();
+            let body = function(&snapshot, "group").body;
+            let ExpressionOperation::Parallel { left, right } = *operation(&mut snapshot, body)
+            else {
+                panic!("parallel");
+            };
+            let ExpressionOperation::Call { arguments, .. } = operation(&mut snapshot, left) else {
+                panic!("left child");
+            };
+            let source = arguments[0];
+            let ExpressionOperation::Call { arguments, .. } = operation(&mut snapshot, right)
+            else {
+                panic!("right child");
+            };
+            arguments[1] = source;
+            let parameter = *function(&snapshot, consumed).parameters.last().unwrap();
+            let OwnerRecord::Parameter(parameter) = snapshot
+                .owners
+                .get_mut(&OwnerKey::Parameter(parameter))
+                .unwrap()
+            else {
+                panic!("memory parameter");
+            };
+            parameter.use_mode = ParameterUse::Consume;
+            assert!(admit(&snapshot).is_err(), "{consumed}");
+        }
     }
 
     #[test]

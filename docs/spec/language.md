@@ -738,7 +738,7 @@ resource accounting do not make an accepted program a hostile-code sandbox.
 
 A type-parameter owner carries an explicit constraint set. Tags 0 (empty) and
 1 (capture-safe) retain their original meanings. [Owned generics](owned-generics.md)
-add tag 2; [transferable types](transferable-types.md) define tags 3–5 and their
+add tag 2; [transfer and sharing obligations](transferable-types.md) define tags 3–7 and their
 permitted combinations. Unknown tags, names and duplicates reject. Omission in
 authoring creates the empty set. Constraints attach to the stable parameter
 identity and its exact declaration and are interface meaning even when the parameter is unused.
@@ -765,7 +765,12 @@ specialization, generic extraction, anonymous lexical capture inference, affine 
 trait or higher-rank quantification. Explicit named task descriptor binding is supported.
 Capture safety does not confer transferability, equality, serialization, session
 retention or capability authority. Ordinary transferable parameters also prove
-capture safety; owned transferable parameters remain noncapturable.
+capture safety; owned transferable and shareable parameters remain noncapturable.
+Transferable and Shareable are independent obligations. Synchronous borrowed graph
+task inputs need only Owned; borrowed inputs spanning joined child invocations need
+Shareable, while consumed child inputs and owning child results need Transferable.
+Callable and witness type metadata obey their exact declared bounds; the complete
+crossing carrier type, including phantom actuals, obeys its boundary obligation.
 Existing lifetime, affine resource, pure evaluation order, tail transfer and data rules still apply.
 
 An out-of-scope parameter fails exact declaration-scope validation before callee constraint checking.

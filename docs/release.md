@@ -125,6 +125,18 @@ predecessors remain readable; derived bundles must be rebuilt. Package interface
 13 and type-object 10 retain their layouts. Public projection 13 exposes the new
 operands and rejects predecessor continuations.
 
+Development v0.1.81 adds synchronous borrowed graph tasks and exact task methods,
+plus recursive scoped reads spanning joined parallel children. Shareable is
+independent of Transferable: synchronous task borrowing requires Owned, shared
+child reads require Owned and Shareable, and consumed inputs or owning results
+retain transfer admission. Graph/owner 30, validator 35, package interface 18,
+compiler unit 30, bytecode 25 and artifact 37 select the new admission contract.
+Rebuild derived bundles and maintained inputs through supported product owners;
+predecessor receipts cannot attest the successor source or finalized bytes.
+The same mandatory `native_owned_` and `native_parallel` public-harness families
+own its detached three-package witnesses. The [release notes](releases/v0.1.81.md)
+describe the capability; [status](status.md) owns actual acceptance and publication.
+
 The canonical manifest discriminator is `format: "lkjscript-release-content-1"`. It binds the product
 version/intended tag, exact product commit, repository, target/build policy and command, pinned Rust
 and Cargo, lockfile, static ELF executable, license/notices and deterministic packaging. It contains

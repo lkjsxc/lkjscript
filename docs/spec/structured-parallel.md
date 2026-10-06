@@ -1,7 +1,7 @@
 # Structured parallel tasks
 
-Status: normative for development 0.1.72. Current acceptance and publication state
-belong to [status](../status.md).
+This specification owns consuming transfers and scoped shared reads. Current
+acceptance and publication state belong to [status](../status.md).
 
 ## Meaning and admission
 
@@ -10,26 +10,30 @@ are direct named applications of graph-defined tasks with closed empty effect
 rows. Native authoring spells this `(parallel LEFT-CALL RIGHT-CALL)`. Each child
 uses `call` or `implementation-call` with exact type and implementation arguments;
 a monomorphic call is the empty application. A generic enclosing task may supply
-its own [explicitly transferable types](transferable-types.md) and exact lexical
+its own [explicit transfer and sharing obligations](transferable-types.md) and exact lexical
 implementation parameters. Every application becomes concrete before execution.
 The enclosing computation must be a task, even though neither child has an external
 effect. A pure computation cannot acquire task authority through an empty row.
 
-Each child accepts a prefix of transferable ordinary data followed by a suffix of consumed
-owned values. Each region may be empty. Owned inputs can be ByteBuffer, OwnedI64Cell,
-or concrete nested owned products and choices. Every nested case and ordinary type
-argument is checked, including unused choice cases and phantom nominal arguments.
-Memory loans, capability resources, secrets and callables cannot cross this boundary.
-A child may declare type and implementation parameters; symbolic boundary arguments
-must prove their obligations under the exact caller scope. Even a phantom actual
-type must independently satisfy ordinary or owned transfer admission. Unconstrained,
-capture-safe-only and owned-only caller parameters cannot establish transferability.
+Each child accepts a prefix of transferable ordinary data followed by owned inputs
+whose modes are explicitly `consume` or `borrow`. Each region may be empty.
+Consumption requires Transferable; a borrow requires Shareable. These are independent
+obligations: a generic transferable owner does not prove safe shared access.
+Concrete carriers, nested owned products, choices and sequences must prove the
+complete relevant structural obligation, including inactive cases and phantom
+nominal arguments. Capability resources, secrets and callables cannot cross this boundary.
+A child may declare type and implementation parameters. Callable and witness type
+arguments prove their exact declared constraints, including unused metadata arguments;
+an unused metadata argument acquires no blanket transfer or sharing requirement.
+Values crossing the boundary prove their complete carrier obligation under the
+exact caller scope, including that carrier's phantom nominal arguments. Unconstrained,
+capture-safe-only and owned-only caller parameters cannot establish transfer or sharing rights.
 A child has no effect or requirement parameters. Its body may forward its admitted
 types and exact witnesses through generic libraries under the existing rules.
 An external declaration or dynamic callable is not a child-task identity.
 
-Each result must prove ordinary or owned transferability and become a closed admitted
-type at execution. If both results are ordinary, the expression returns
+Borrowed task results remain unsupported. Each result must prove ordinary or owned
+transferability and become a closed admitted type at execution. If both results are ordinary, the expression returns
 the existing structural record type `{left: L, right: R}`. If either result is owned,
 it returns `(owned-product (field left L) (field right R))`, including the ordinary
 field in a mixed pair. Return it directly or bind it to an explicitly typed owned
@@ -44,6 +48,10 @@ Evaluate every left-call argument, then every right-call argument, exactly once 
 the parent. Only after this preparation can either child body begin. An argument
 failure prevents both child bodies; already moved owners are disposed of. Consuming
 the same local twice is invalid even if the two children would run sequentially.
+Preparation retains the combined footprint of both calls through the entire join.
+Repeated reads of the same root are valid; read/consume aliases reject in either
+child order, including aliases through protected ancestors. Sequential child
+evaluation does not shorten the group loan or make an invalid footprint legal.
 Effects performed by argument expressions retain their ordinary authored order and
 failure behavior. Child effects are empty; no adapter or deployment grant is inherited.
 
@@ -60,6 +68,16 @@ updates every nested owned identity without cloning its live token or copying it
 payload allocation. Existing immutable ordinary metadata may retain its sharing.
 Raw host ingress still rejects owners and cannot construct a transfer certificate.
 
+A scoped read envelope separately binds the exact prepared application, concrete
+type, source invocation and destination child. It grants that child read access
+while the original custodian remains at the source. Nested groups may delegate
+only their admitted read rights to joined descendants. No child gains ownership,
+mutation, capture or detached lifetime from the envelope. Parent, child and ancestor
+read guards remain live until every started child has completed cleanup and joined.
+The token's owning invocation origin does not change; delegated read permission
+is checked independently of ownership. Internal storage locks are released before
+evaluating user code, including nested reads and user implementation methods.
+
 A separate nonduplicable result envelope owns each returned carrier between child
 local cleanup and parent adoption. It validates the exact prepared program, child
 task application, instantiated canonical result type, child source identity, parent destination identity and
@@ -74,6 +92,9 @@ contains ordinary data.
 Normal child return disposes of unreturned owners while the result envelope keeps
 returned owners alive. A trap, quota refusal or cancellation releases child locals,
 pending arguments and any unadopted or partly adopted input or result envelope.
+Scoped read envelopes and descendant loans are released before their ancestor
+guards or source owners. Parent unwind cannot dispose of a borrowed source while
+a started child can still read it.
 This includes a successful sibling's result when the other child fails, and all
 returned storage when parent adoption or result-pair allocation fails.
 Failure requests cooperative cancellation of the sibling;
@@ -120,6 +141,8 @@ The reference evaluator independently admits and evaluates canonical child calls
 authored order. Its serial result and ownership checks are a semantic oracle, not
 evidence of overlapping production execution. The sealed physical token custodian is
 shared; reference ordinary-type/value admission remains independently implemented.
+Its admission also independently reconstructs sharing obligations and the combined
+loan footprint; serial evaluation is not permission to consume a live group loan.
 
 ## Resource accounting and proof
 
@@ -148,7 +171,8 @@ unused task declarations and untaken expressions. Strict artifact loading also
 reconstructs canonical control, so retargeting or erasing a compiled parallel
 instruction cannot be authorized by recomputing hashes.
 
-Graph 21 introduced the expression; Graph 22 adds explicit transferable constraints.
+The following encoding selections describe the original consuming-child and worker
+increments. Graph 21 introduced the expression; Graph 22 adds explicit transferable constraints.
 Compiler 22, bytecode 17 and artifact 29 carry child type and implementation operands
 alongside the parallel-result type. Strict loaders reconstruct these from canonical
 applications, including unused declarations and untaken branches. Validator 27
@@ -159,9 +183,15 @@ advertise the constraints. Worker reuse changes no semantic, compiler or artifac
 encoding; CLI observations 36 and shared-runtime observations 2 describe its lifecycle.
 Existing nonparallel authored intent retains its bytes. This does not upgrade exact
 package selections, replace running services or publish a new public executable.
+Shareable constraints and borrowed child signatures select their current advertised
+owner and derived-admission generations. Older formats cannot gain scoped read
+authority by rehashing metadata; the exact cut belongs to the encoding owners and
+product discovery.
 
 Acceptance separates canonical and independent semantic checks, rehashed-artifact
-attacks including forged result types and substituted child types or witnesses, nested allocation identity through both
-directions and cleanup tests, controlled real-child overlap, aggregate quotas, and
+attacks including erased sharing obligations, forged read/consume modes or result
+types and substituted child types or witnesses, nested allocation identity through both
+directions and cleanup tests, same-root joined reads and ancestor-alias rejection,
+controlled real-child overlap, aggregate quotas, and
 copied-executable native cross-package computation with complete returned payloads. Each proves
 a different boundary; none alone establishes all concurrency properties.

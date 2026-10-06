@@ -1297,6 +1297,60 @@ impl ReferenceState<'_> {
         Ok((result, product))
     }
 
+    fn certify_sequence_pop(
+        &self,
+        value: &NormalizedValue,
+        sequence: TypeObjectDigest,
+        item: TypeObjectDigest,
+        result: TypeObjectDigest,
+        product: TypeObjectDigest,
+    ) -> Result<(), ExecutionError> {
+        self.control.check()?;
+        let expected_item = direct_memory_type(&self.schema, item, &BTreeMap::new(), self.control)?
+            .ok_or_else(|| reference_type_error("pop element must remain owned memory"))?;
+        let NormalizedValue::OwnedChoice(choice) = value else {
+            return Err(reference_type_error(
+                "pop did not construct its exact choice",
+            ));
+        };
+        if choice.ty() != result {
+            return Err(reference_type_error(
+                "pop constructed a foreign result choice",
+            ));
+        }
+        choice.inspect_transfer(self.memory_domain, |payload| {
+            match (choice.case(), payload) {
+                (0, NormalizedValue::OwnedSequence(rest)) if rest.ty() == sequence => {
+                    rest.validate(self.memory_domain, true)?;
+                    rest.validate_admission(self.schema.value_origin)
+                }
+                (1, NormalizedValue::OwnedProduct(pair)) if pair.ty() == product => {
+                    pair.inspect_transfer(self.memory_domain, |fields| {
+                        let [NormalizedValue::OwnedSequence(rest), value] = fields else {
+                            return Err(reference_type_error(
+                                "pop item product has foreign fields",
+                            ));
+                        };
+                        if rest.ty() != sequence || value.memory_form() != Some(expected_item) {
+                            return Err(reference_type_error(
+                                "pop item fields changed their exact types",
+                            ));
+                        }
+                        rest.validate(self.memory_domain, true)?;
+                        rest.validate_admission(self.schema.value_origin)?;
+                        value.memory_validate(self.memory_domain, true)?;
+                        CheckedValue::validate_memory_admission(value, self.schema.value_origin)
+                    })?;
+                    pair.establish_admission(self.schema.value_origin)
+                }
+                _ => Err(reference_type_error(
+                    "pop constructed a foreign selected payload",
+                )),
+            }
+        })?;
+        choice.establish_admission(self.schema.value_origin)
+    }
+
     fn consume_sequence_local(
         &mut self,
         source: ExpressionId,
@@ -1850,6 +1904,7 @@ impl ReferenceState<'_> {
                 || (constraint.requires_capture_safe()
                     && !self.schema.capture_safe_types.contains(ty))
                 || (constraint.requires_transfer() && !self.schema.transferable_types.contains(ty))
+                || (constraint.requires_share() && !self.schema.shareable_types.contains(ty))
             {
                 return Err(reference_type_error(
                     "canonical callable type arguments fail their exact structural constraints",
@@ -1870,6 +1925,24 @@ impl ReferenceState<'_> {
             Some(row)
         };
         let parameters = self.parameters(declaration.package, &function.parameters)?;
+        if !matches!(function.effect, FunctionEffect::Pure)
+            && parameters.iter().any(|parameter| {
+                parameter.use_mode == ParameterUse::Borrow
+                    && parameter.resource_requirement.is_none()
+            })
+            && (self.declaration(declaration)?.header.contract_version
+                < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION
+                || parameters.iter().any(|parameter| {
+                    parameter.use_mode == ParameterUse::Borrow
+                        && parameter.resource_requirement.is_none()
+                        && parameter.header.contract_version
+                            < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION
+                }))
+        {
+            return Err(reference_type_error(
+                "task read parameters require the scoped-read graph contract",
+            ));
+        }
         let types = function
             .type_parameters
             .iter()
@@ -2047,7 +2120,7 @@ impl ReferenceState<'_> {
         parameters: &[ParameterRecord],
         substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
         arguments: &[CheckedValue],
-        pure: bool,
+        _pure: bool,
     ) -> Result<(), ExecutionError> {
         let mut resource_seen = false;
         for (index, (parameter, argument)) in parameters.iter().zip(arguments).enumerate() {
@@ -2055,7 +2128,6 @@ impl ReferenceState<'_> {
                 direct_memory_type(&self.schema, parameter.ty, substitutions, self.control)?;
             if memory_form.is_some() {
                 if resource_seen
-                    || (!pure && parameter.use_mode != ParameterUse::Consume)
                     || parameter.resource_requirement.is_some()
                     || parameter.use_mode == ParameterUse::Unrestricted
                     || argument.ownership(&self.schema, &mut self.observation.value_work)?
@@ -2545,6 +2617,7 @@ impl ReferenceState<'_> {
                     control,
                     &mut |bytes| self.charge_allocation(bytes),
                 )?;
+                token.establish_admission(self.schema.value_origin)?;
                 CheckedValue::memory(&self.schema, NormalizedValue::OwnedSequence(token))
             }
             ExpressionOperation::SequenceLength {
@@ -2589,6 +2662,7 @@ impl ReferenceState<'_> {
                 let token = token.push(self.memory_domain, child, control, &mut |bytes| {
                     self.charge_allocation(bytes)
                 })?;
+                token.establish_admission(self.schema.value_origin)?;
                 CheckedValue::memory(&self.schema, NormalizedValue::OwnedSequence(token))
             }
             ExpressionOperation::SequencePop {
@@ -2609,11 +2683,15 @@ impl ReferenceState<'_> {
                     return Err(reference_type_error("sequence pop source type mismatch"));
                 }
                 let control = self.control;
-                let result =
+                token.validate_admission(self.schema.value_origin)?;
+                let popped =
                     token.pop(self.memory_domain, result, product, control, &mut |bytes| {
                         self.charge_allocation(bytes)
                     })?;
-                CheckedValue::memory(&self.schema, result)
+                // The independently checked result types above justify only the
+                // two new wrappers; existing sequence/element certificates are reused.
+                self.certify_sequence_pop(&popped, ty, item, result, product)?;
+                CheckedValue::memory(&self.schema, popped)
             }
             ExpressionOperation::BorrowOwnedItem {
                 sequence_type,
@@ -2808,6 +2886,7 @@ impl ReferenceState<'_> {
                     control,
                     &mut |bytes| self.charge_allocation(bytes),
                 )?;
+                token.establish_admission(self.schema.value_origin)?;
                 CheckedValue::memory(&self.schema, NormalizedValue::OwnedChoice(token))
             }
             ExpressionOperation::MatchOwned {
@@ -2873,6 +2952,7 @@ impl ReferenceState<'_> {
                     control,
                     &mut |n| self.charge_allocation(n),
                 )?;
+                token.establish_admission(self.schema.value_origin)?;
                 CheckedValue::memory(&self.schema, NormalizedValue::OwnedProduct(token))
             }
             ExpressionOperation::UnpackOwned {

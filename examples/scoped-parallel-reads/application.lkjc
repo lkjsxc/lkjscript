@@ -1,0 +1,167 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create scoped-read-app
+    (type-alias CellFlat (owned-sequence OwnedI64Cell))
+    (type-alias CellChunked (owned-product
+      (field chunks (owned-sequence (owned-sequence OwnedI64Cell))) (field size I64)))
+    (type-alias BufferFlat (owned-sequence ByteBuffer))
+    (type-alias BufferChunked (owned-product
+      (field chunks (owned-sequence (owned-sequence ByteBuffer))) (field size I64)))
+    (type-alias Product (owned-product
+      (field payload (owned-product (field cell OwnedI64Cell) (field tag I64))) (field stamp I64)))
+    (type-alias ProductFlat (owned-sequence Product))
+    (type-alias ProductChunked (owned-product
+      (field chunks (owned-sequence (owned-sequence Product))) (field size I64)))
+    (type-alias Scenario (record (length I64) (sum-left I64) (sum-right I64)
+      (method-sum I64) (drained (list I64)) (empty-length I64) (reused (list I64))))
+    (type-alias Result (record (cell-flat Scenario) (cell-chunked Scenario)
+      (buffer-flat Scenario) (buffer-chunked Scenario) (product-flat Scenario) (product-chunked Scenario)))
+    (function create scenario (visibility private) (effect (task))
+      (type-parameter create T (constraint owned transferable shareable))
+      (type-parameter create W (constraint owned transferable shareable))
+      (implementation-parameter implparam_91000000000000000000000000000001
+        element owned-worklists::Element T)
+      (implementation-parameter implparam_91000000000000000000000000000002
+        keys owned-worklists::Element T)
+      (implementation-parameter implparam_91000000000000000000000000000003
+        work owned-worklists::Worklist W (types T))
+      (implementation-parameter implparam_91000000000000000000000000000004
+        reader owned-read-results::IndexRead W (types T))
+      (parameter create serial (type Bool))
+      (parameter create inputs (type (list I64))) (returns Scenario)
+      (body (let
+        (binding storage (type W)
+          (implementation-call owned-worklists::build (types T W)
+            (implementations parameter@scenario@implparam_91000000000000000000000000000001
+              parameter@scenario@implparam_91000000000000000000000000000003) (local inputs)))
+        (binding length (type I64)
+          (method-call parameter@scenario@implparam_91000000000000000000000000000004
+            owned-read-results::IndexRead method_8a000000000000000000000000000001 (local storage)))
+        (binding sums (type (record (left I64) (right I64)))
+          (if (local serial)
+            (record structural
+              (field left (implementation-call scoped-parallel-reads::serial-sum (types T W)
+                (implementations parameter@scenario@implparam_91000000000000000000000000000001
+                  parameter@scenario@implparam_91000000000000000000000000000004) (local storage)))
+              (field right (implementation-call scoped-parallel-reads::serial-sum (types T W)
+                (implementations parameter@scenario@implparam_91000000000000000000000000000002
+                  parameter@scenario@implparam_91000000000000000000000000000004) (local storage))))
+            (implementation-call scoped-parallel-reads::parallel-sums (types T W)
+              (implementations parameter@scenario@implparam_91000000000000000000000000000001
+                parameter@scenario@implparam_91000000000000000000000000000002
+                parameter@scenario@implparam_91000000000000000000000000000004) (local storage))))
+        (binding method-sum (type I64)
+          (if (local serial)
+            (implementation-call scoped-parallel-reads::serial-sum (types T W)
+              (implementations parameter@scenario@implparam_91000000000000000000000000000001
+                parameter@scenario@implparam_91000000000000000000000000000004) (local storage))
+            (method-call (implementation scoped-parallel-reads::RecursiveSum (types T W)
+              (implementations parameter@scenario@implparam_91000000000000000000000000000001
+                parameter@scenario@implparam_91000000000000000000000000000004))
+              scoped-parallel-reads::Sum method_90000000000000000000000000000001 (local storage))))
+        (binding drained (type (owned-product (field rest W) (field values (list I64))))
+          (implementation-call owned-worklists::drain (types T W)
+            (implementations parameter@scenario@implparam_91000000000000000000000000000001
+              parameter@scenario@implparam_91000000000000000000000000000003) (local storage)))
+        (in (unpack-owned (type (owned-product (field rest W) (field values (list I64)))) (local drained)
+          (field rest (binding rest (type W))) (field values (binding drained-values (type (list I64))))
+          (in (let
+            (binding empty-length (type I64)
+              (method-call parameter@scenario@implparam_91000000000000000000000000000004
+                owned-read-results::IndexRead method_8a000000000000000000000000000001 (local rest)))
+            (binding value (type T)
+              (method-call parameter@scenario@implparam_91000000000000000000000000000001
+                owned-worklists::Element method_88000000000000000000000000000001 (i64 17)))
+            (binding next (type W)
+              (method-call parameter@scenario@implparam_91000000000000000000000000000003
+                owned-worklists::Worklist method_88000000000000000000000000000013 (local value) (local rest)))
+            (binding reused (type (owned-product (field rest W) (field values (list I64))))
+              (implementation-call owned-worklists::drain (types T W)
+                (implementations parameter@scenario@implparam_91000000000000000000000000000001
+                  parameter@scenario@implparam_91000000000000000000000000000003) (local next)))
+            (in (unpack-owned (type (owned-product (field rest W) (field values (list I64)))) (local reused)
+              (field rest (binding final-rest (type W))) (field values (binding reused-values (type (list I64))))
+              (in (record structural
+                (field length (local length))
+                (field sum-left (field (local sums) (name left)))
+                (field sum-right (field (local sums) (name right)))
+                (field method-sum (local method-sum)) (field drained (local drained-values))
+                (field empty-length (local empty-length)) (field reused (local reused-values)))))))))))))
+    (function create cell-flat (visibility public) (effect (task))
+      (parameter create inputs (type (list I64))) (returns Scenario)
+      (body (implementation-call scenario (types OwnedI64Cell CellFlat)
+        (implementations generic-elements::Cells generic-elements::CellKeys
+          (implementation generic-storage::Flat (types OwnedI64Cell))
+          (implementation generic-storage::FlatReader (types OwnedI64Cell))) (bool false) (local inputs))))
+    (function create cell-flat-serial (visibility public) (effect (task))
+      (parameter create inputs (type (list I64))) (returns Scenario)
+      (body (implementation-call scenario (types OwnedI64Cell CellFlat)
+        (implementations generic-elements::Cells generic-elements::CellKeys
+          (implementation generic-storage::Flat (types OwnedI64Cell))
+          (implementation generic-storage::FlatReader (types OwnedI64Cell))) (bool true) (local inputs))))
+    (function create cell-chunked (visibility public) (effect (task))
+      (parameter create inputs (type (list I64))) (returns Scenario)
+      (body (implementation-call scenario (types OwnedI64Cell CellChunked)
+        (implementations generic-elements::Cells generic-elements::CellKeys
+          (implementation generic-storage::Chunked (types OwnedI64Cell))
+          (implementation generic-storage::ChunkedReader (types OwnedI64Cell))) (bool false) (local inputs))))
+    (function create buffer-flat (visibility public) (effect (task))
+      (parameter create inputs (type (list I64))) (returns Scenario)
+      (body (implementation-call scenario (types ByteBuffer BufferFlat)
+        (implementations generic-elements::Buffers generic-elements::BufferKeys
+          (implementation generic-storage::Flat (types ByteBuffer))
+          (implementation generic-storage::FlatReader (types ByteBuffer))) (bool false) (local inputs))))
+    (function create buffer-chunked (visibility public) (effect (task))
+      (parameter create inputs (type (list I64))) (returns Scenario)
+      (body (implementation-call scenario (types ByteBuffer BufferChunked)
+        (implementations generic-elements::Buffers generic-elements::BufferKeys
+          (implementation generic-storage::Chunked (types ByteBuffer))
+          (implementation generic-storage::ChunkedReader (types ByteBuffer))) (bool false) (local inputs))))
+    (function create product-flat (visibility public) (effect (task))
+      (parameter create inputs (type (list I64))) (returns Scenario)
+      (body (implementation-call scenario (types Product ProductFlat)
+        (implementations generic-elements::Products generic-elements::ProductKeys
+          (implementation generic-storage::Flat (types Product))
+          (implementation generic-storage::FlatReader (types Product))) (bool false) (local inputs))))
+    (function create product-chunked (visibility public) (effect (task))
+      (parameter create inputs (type (list I64))) (returns Scenario)
+      (body (implementation-call scenario (types Product ProductChunked)
+        (implementations generic-elements::Products generic-elements::ProductKeys
+          (implementation generic-storage::Chunked (types Product))
+          (implementation generic-storage::ChunkedReader (types Product))) (bool false) (local inputs))))
+    (function create main (visibility public) (effect (task))
+      (parameter create inputs (type (list I64))) (returns Result)
+      (body (record structural
+        (field cell-flat (call cell-flat (local inputs)))
+        (field cell-chunked (call cell-chunked (local inputs)))
+        (field buffer-flat (call buffer-flat (local inputs)))
+        (field buffer-chunked (call buffer-chunked (local inputs)))
+        (field product-flat (call product-flat (local inputs)))
+        (field product-chunked (call product-chunked (local inputs))))))
+    (component create command (visibility private)
+      (port create main (type (task-function ((list I64)) Result (row))) (function main))
+      (port create cell-flat (type (task-function ((list I64)) Scenario (row))) (function cell-flat))
+      (port create cell-flat-serial (type (task-function ((list I64)) Scenario (row))) (function cell-flat-serial))
+      (port create cell-chunked (type (task-function ((list I64)) Scenario (row))) (function cell-chunked))
+      (port create buffer-flat (type (task-function ((list I64)) Scenario (row))) (function buffer-flat))
+      (port create buffer-chunked (type (task-function ((list I64)) Scenario (row))) (function buffer-chunked))
+      (port create product-flat (type (task-function ((list I64)) Scenario (row))) (function product-flat))
+      (port create product-chunked (type (task-function ((list I64)) Scenario (row))) (function product-chunked))))
+  (target create scoped-parallel-reads (component scoped-read-app::command)
+    (runner command) (port scoped-read-app::command::main))
+  (target create scoped-read-cell-flat (component scoped-read-app::command)
+    (runner command) (port scoped-read-app::command::cell-flat))
+  (target create scoped-read-cell-flat-serial (component scoped-read-app::command)
+    (runner command) (port scoped-read-app::command::cell-flat-serial))
+  (target create scoped-read-cell-chunked (component scoped-read-app::command)
+    (runner command) (port scoped-read-app::command::cell-chunked))
+  (target create scoped-read-buffer-flat (component scoped-read-app::command)
+    (runner command) (port scoped-read-app::command::buffer-flat))
+  (target create scoped-read-buffer-chunked (component scoped-read-app::command)
+    (runner command) (port scoped-read-app::command::buffer-chunked))
+  (target create scoped-read-product-flat (component scoped-read-app::command)
+    (runner command) (port scoped-read-app::command::product-flat))
+  (target create scoped-read-product-chunked (component scoped-read-app::command)
+    (runner command) (port scoped-read-app::command::product-chunked)))
+declarations.end

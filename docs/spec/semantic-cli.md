@@ -1218,8 +1218,11 @@ set.type-parameter-constraint parameter=OWNER_SELECTOR constraint=CONSTRAINT
 
 Both lower to typed changes with the same closed constraint set as canonical/JSON authoring.
 `CONSTRAINT` accepts `none`, `capture-safe`, `owned`, `transferable`,
-`"capture-safe transferable"` or `"owned transferable"`. Combined values are quoted.
-Transfer bounds belong only to graph functions; see [transferable types](transferable-types.md)
+`"capture-safe transferable"`, `"owned transferable"`, `"owned shareable"` or
+`"owned transferable shareable"`. Combined values are quoted.
+Transfer and sharing bounds belong to graph functions and supported owned generic
+implementation schemes; owned-contract Self and additional parameters remain Owned.
+See [transfer and sharing obligations](transferable-types.md)
 for the exact scope and structural obligations.
 The setter requires an exact type-parameter owner, preserves its identity and declaration order,
 and constitutes an interface edit. Plan and apply validate the entire final candidate: strengthening
@@ -1229,7 +1232,8 @@ malformed constraints, cancellation and exhausted validation cannot partially ad
 Owner queries, full function definitions and built-in/staged interfaces expose the
 exact canonical constraint set; definition continuations remain revision-pinned and reject after edits.
 
-The declaration selector accepts pure and task functions, records and variants. Nominal applications use
+The declaration selector accepts pure and task functions, records, variants and
+owned implementation schemes under their exact constraint rules. Nominal applications use
 `type.application as=@Applied declaration=DECLARATION` followed by ordered
 `type.argument parent=@Applied index=INDEX type=TYPE` records. Positive arity is mandatory; use
 `type.named` for zero-arity declarations. Record and variant constructors accept the same ordered

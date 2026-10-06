@@ -129,8 +129,9 @@ The [parallel contract](structured-parallel.md) requires independent canonical,
 ownership and reference admission, including unused children and hidden authority
 in unselected cases or nominal arguments. Flat and structural requests must produce
 the same typed intent; drafts and child-argument edits must retain intended identities.
-Pure enclosing functions and non-task, effectful, borrowed or dynamic children reject
-before publication. Ordinary/ordinary results retain a structural record; both mixed
+Pure enclosing functions and non-task, effectful or dynamic children reject
+before publication. Borrowed children require Shareable input carriers and joined
+source custody; borrowed child results reject. Ordinary/ordinary results retain a structural record; both mixed
 orientations and all-owned results require an owned product. Rehashed compiled target
 swaps, forged result-type references and erased parallel instructions must fail strict
 loading independently of the producer. Exported generic consume, borrow and return
@@ -1742,11 +1743,13 @@ allocation counts and zero surviving owned storage or loans. Raw owner ingress,
 raw owner results, traps, cancellation and refused allocation must fail cleanly
 and permit a subsequent valid invocation.
 
-Reject unused task memory loans, unrestricted owned parameters, ordinary data
+Accept valid synchronous borrowed task inputs, including unused inputs. Reject
+unrestricted owned parameters, ordinary data
 after memory, memory after resources, duplicate consumption, wrong witnesses and
 pure callers of empty-row tasks. Independently mutate otherwise admitted source
-parameters to borrowing/unrestricted modes; the independent ownership oracle and
-full source schema must reject. Rehash a task artifact's source and compiled code
+parameters to incompatible modes or reinterpret predecessor task signatures as
+borrowed inputs; the independent ownership oracle and full source schema must reject.
+Rehash a task artifact's source and compiled code
 consistently to duplicate a transfer in an untaken branch; loader admission must
 still reject it. Existing capability-effect, grant and source-closure tests remain
 required and are not replaced by the new memory tests.
@@ -1759,14 +1762,16 @@ acceptance, fairness, an exactly-once external effect or a shared scheduler.
 
 A nominal Owned method may be pure or a named task with an exact closed concrete
 requirement row. A selected monomorphic implementation must match callable kind,
-row, substituted parameter types, use modes and result. Task Self arguments must
-consume even when unused. Empty-row tasks are not pure. Method selection, caller
+row, substituted parameter types, use modes and result. Task Self arguments may
+borrow or consume, including when unused. Synchronous borrowed inputs require Owned
+and retain their source guards across authorized effects; joined child read inputs
+additionally require Shareable. Empty-row tasks are not pure. Method selection, caller
 effect allowance and deployment grants remain separately checked boundaries.
 
 Maintained evidence must cover omitted/explicit pure authored-intent equivalence,
 distinct empty-task intent, unchanged task-method drafts, and public inspection of
 method kind and exact requirements. Unused contracts with open or dangling rows,
-borrowed task Self, wrong witnesses, pure callers, missing caller effects and
+borrowed task results, wrong witnesses, pure callers, missing caller effects and
 same-kind implementation row mismatches must be rejected. Independent memory and
 reference-schema readers must reject forged implementation metadata without
 relying on the compiler or executed body as their only oracle.
@@ -2034,7 +2039,9 @@ checks length before selecting.
 Reject local-owner escape, wrong-source returns including physically aliased inputs,
 wrong method source positions, owning-result substitution, ordinary call exposure,
 forged owning bindings, protected-source or ancestor consumption, first-class
-callable exposure, capture, task and serialization escape. Every failed authoring
+callable exposure, capture, borrowed task results and serialization escape.
+Synchronous borrowed task inputs and admitted Shareable joined-child inputs remain
+valid while retaining the complete source guard chain. Every failed authoring
 candidate preserves accepted HEAD. A later unchanged valid request must still
 admit. Consistently rehashed transport and artifact attacks must fail independently
 when they erase guards, change source relationships or counterfeit result modes.
@@ -2047,3 +2054,50 @@ Unrelated owners retain their original custody until their own cleanup. Independ
 check preserved allocation identity where promised and require a healthy subsequent
 invocation. No storage lock may remain held across user code, and activation
 replacement cannot erase the borrowed-result cleanup boundary.
+
+## Borrowed tasks and scoped parallel read obligations
+
+Check synchronous graph-task borrowing separately from cross-invocation read
+sharing. Ordinary borrowed task inputs require Owned; a parallel read boundary
+requires Shareable; consumed inputs and owning results require Transferable.
+Neither structural property implies the other. Canonical and independent oracles
+check exact declared callable and implementation bounds, all mapped methods and
+prerequisites, plus the complete carried type closure including inactive cases and
+phantom arguments. Task results never return loans.
+
+The public witness authors a generic recursive range reduction before concrete
+elements exist, then composes flat and chunked cells, buffers and nested products
+across exact package boundaries. Each split lends the same owner to two children;
+leaf readers use source-tied pure results. Check independent results, canonical
+draft re-entry, detached artifact execution, unchanged payload allocations and
+draining/reusing the original owner after the complete group joins. Cover empty,
+singleton, 31/32/33 and larger recursive workloads through a copied executable.
+
+Both argument inventories share a loan footprint. Reject read/consume conflicts
+in either child order, ancestor consumption, and mutation or consumption hidden
+inside later ordinary arguments. Duplicate reads and unrelated owned transfers
+remain legal. Rejected proposals preserve accepted HEAD and subsequent valid use.
+Forged and rehashed owners, interfaces and artifacts cannot erase a sharing bound,
+substitute a witness or result mode, or grant new generation semantics to an old
+envelope.
+
+Read leases bind exact program, application, source/destination, parameter and
+backing allocation. Reject swapped same-type roots, raw uncertified roots,
+foreign-program certificates, inert clones and stale/replayed leases. Mint storage
+admission only after checked construction or completed admission, and preserve it
+through exact typed mutations. A declared type digest alone is not that proof.
+
+Use controlled simultaneous execution as well as zero-worker, nested and reused
+worker paths. Sweep capture reservation, argument preparation, adoption, child
+failure, parent result construction, cancellation, deadline, quota and unwind
+boundaries. Every started descendant joins; child views and invocation leases end
+before completion is exposed and before lender owners can be reclaimed. No storage
+lock spans user computation. Tail calls and borrowed-result forwarding must retain
+the invocation anchor. Require healthy execution after each failure.
+
+Separate unchanged allocation identity from capture complexity. At fixed captures,
+projections and nesting, increasing a sequence payload must not increase read
+seal/adoption traversal or allocation. Count construction, selected projections,
+user iteration, consuming transfer and final draining separately. Report matched
+serial/parallel preparation and execution observations without inferring a speedup
+or API-cost saving from storage sharing alone.

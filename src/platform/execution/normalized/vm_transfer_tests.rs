@@ -191,6 +191,211 @@ fn sequence_payload(
 }
 
 #[test]
+fn scoped_read_lease_rejects_same_typed_replacement_and_wrong_child_application() {
+    let (prepared, functions) = fixture();
+    // Exercise the private physical boundary without executing this synthetic
+    // target. Canonical borrowed-task admission has separate integration tests.
+    let mut program = (*prepared).clone();
+    let function = functions["buffer"];
+    Arc::make_mut(&mut Arc::make_mut(&mut program.functions)[function.0 as usize].parameters)[0]
+        .use_mode = ParameterUse::Borrow;
+    let source = ValueOrigin::fresh().unwrap();
+    let destination = ValueOrigin::fresh().unwrap();
+    let control = ExecutionControl::uncancelled();
+    let first = ByteBuffer::empty(source);
+    let second = ByteBuffer::empty(source);
+    first.establish_admission(program.value_origin).unwrap();
+    second.establish_admission(program.value_origin).unwrap();
+    let mut first_read = NormalizedValue::ByteBuffer(first.borrow().unwrap());
+    let mut second_read = NormalizedValue::ByteBuffer(second.borrow().unwrap());
+    let application =
+        TaskApplication::bind(&program, function, Arc::from([]), &control, &mut |_| Ok(()))
+            .unwrap();
+    let lease = ScopedReadLease::seal(
+        &program,
+        source,
+        destination,
+        &application,
+        0,
+        &first_read,
+        ScopedReadCustody::new(first.borrow().unwrap()),
+        &control,
+    )
+    .unwrap();
+    assert!(
+        lease
+            .adopt(
+                &program,
+                destination,
+                &application,
+                &mut second_read,
+                &control
+            )
+            .is_err()
+    );
+    let wrong = TaskApplication::bind(
+        &program,
+        functions["buffer-result"],
+        Arc::from([]),
+        &control,
+        &mut |_| Ok(()),
+    )
+    .unwrap();
+    assert!(
+        lease
+            .adopt(&program, destination, &wrong, &mut first_read, &control)
+            .is_err()
+    );
+    lease
+        .adopt(
+            &program,
+            destination,
+            &application,
+            &mut first_read,
+            &control,
+        )
+        .unwrap();
+    assert!(first_read.memory_validate(source, false).is_err());
+    first_read.memory_validate(destination, false).unwrap();
+    drop(first_read);
+    drop(second_read);
+    drop(lease);
+    first.validate(source, true).unwrap();
+    second.validate(source, true).unwrap();
+}
+
+#[test]
+fn scoped_sequence_capture_and_adoption_work_does_not_depend_on_stored_length() {
+    let (mut program, function, ty) = sequence_fixture();
+    let unit = *program
+        .types
+        .iter()
+        .find(|(_, object)| matches!(object.form, TypeForm::Unit))
+        .unwrap()
+        .0;
+    let target = &mut Arc::make_mut(&mut program.functions)[function.0 as usize];
+    Arc::make_mut(&mut target.parameters)[0].use_mode = ParameterUse::Borrow;
+    target.result = unit;
+    let source = ValueOrigin::fresh().unwrap();
+    let mut successful_thresholds = Vec::new();
+    for length in [0, 1, 4096] {
+        let (owner, identities) = sequence_payload(source, ty, &vec![37; length]);
+        let NormalizedValue::OwnedSequence(sequence) = &owner else {
+            panic!("sequence");
+        };
+        sequence.establish_admission(program.value_origin).unwrap();
+        let mut first_success = None;
+        for checks in 0..64 {
+            let destination = ValueOrigin::fresh().unwrap();
+            let application = TaskApplication::bind(
+                &program,
+                function,
+                Arc::from([]),
+                &ExecutionControl::uncancelled(),
+                &mut |_| Ok(()),
+            )
+            .unwrap();
+            let outbound = owner.memory_borrow().unwrap();
+            let custody = ScopedReadCustody::new(owner.memory_borrow().unwrap());
+            let control = ExecutionControl::cancel_after_checks(checks);
+            let result = TransferArguments::seal_scoped_applied(
+                &program,
+                source,
+                destination,
+                application,
+                vec![ScopedArgument::Read {
+                    value: outbound,
+                    custody,
+                }],
+                &control,
+                &mut |_, _| panic!("read lending must not inspect stored payloads"),
+            )
+            .and_then(|input| input.adopt_scoped_applied(&program, destination, &control));
+            match result {
+                Ok((_, mut values, leases)) => {
+                    let NormalizedValue::OwnedSequence(view) = values.pop().unwrap() else {
+                        panic!("view");
+                    };
+                    assert_eq!(
+                        view.len(destination, &ExecutionControl::uncancelled())
+                            .unwrap(),
+                        length
+                    );
+                    if let Some(identity) = identities.last() {
+                        let NormalizedValue::OwnedI64Cell(cell) = view
+                            .borrow_item(
+                                destination,
+                                (length - 1) as i64,
+                                &ExecutionControl::uncancelled(),
+                                &mut |_| Ok(()),
+                            )
+                            .unwrap()
+                        else {
+                            panic!("cell");
+                        };
+                        assert_eq!(cell.allocation_identity(), *identity);
+                        assert_eq!(cell.read().unwrap(), 37);
+                    }
+                    drop(view);
+                    drop(values);
+                    drop(leases);
+                    first_success = Some(checks);
+                    break;
+                }
+                Err(error) => assert_eq!(error.class, ExecutionFailureClass::Cancelled),
+            }
+            owner.memory_validate(source, true).unwrap();
+        }
+        owner.memory_validate(source, true).unwrap();
+        successful_thresholds.push(first_success.expect("read seal/adoption must complete"));
+    }
+    assert!(
+        successful_thresholds
+            .windows(2)
+            .all(|pair| pair[0] == pair[1]),
+        "lending checkpoints may depend on type/captures, never stored element count: {successful_thresholds:?}"
+    );
+}
+
+#[test]
+fn raw_malformed_owned_root_cannot_gain_a_read_admission_certificate() {
+    let (program, _function, ty) = sequence_fixture();
+    let source = ValueOrigin::fresh().unwrap();
+    let control = ExecutionControl::uncancelled();
+    let sequence = OwnedSequence::create(source, ty, &control, &mut |_| Ok(()))
+        .unwrap()
+        .push(
+            source,
+            NormalizedValue::ByteBuffer(ByteBuffer::empty(source)),
+            &control,
+            &mut |_| Ok(()),
+        )
+        .unwrap();
+    assert!(sequence.validate_admission(program.value_origin).is_err());
+    let raw = NormalizedValue::OwnedSequence(sequence);
+    assert!(
+        inspect_value(
+            &program,
+            &raw,
+            ty,
+            source,
+            0,
+            &mut Work {
+                control: &control,
+                nodes: 0
+            },
+            &mut |_, _| Ok(())
+        )
+        .is_err()
+    );
+    let NormalizedValue::OwnedSequence(sequence) = &raw else {
+        panic!("sequence");
+    };
+    assert!(sequence.validate_admission(program.value_origin).is_err());
+    assert!(super::super::checked::Value::memory(&program, raw).is_err());
+}
+
+#[test]
 fn sequence_transfer_preserves_empty_affinity_and_every_item_allocation() {
     let (program, function, ty) = sequence_fixture();
     let control = ExecutionControl::uncancelled();

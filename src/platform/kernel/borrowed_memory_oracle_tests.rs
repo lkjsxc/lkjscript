@@ -303,7 +303,7 @@ fn borrowed_memory_oracle_rejects_root_consumption_view_escape_and_task_transfer
     *operation(&mut changed, items[1]) = call(reference(&source, "worker"), arguments[0]);
     assert!(
         !accepts(&changed),
-        "a task consumes owners, never read views"
+        "a consuming task parameter requires owning authority"
     );
 }
 

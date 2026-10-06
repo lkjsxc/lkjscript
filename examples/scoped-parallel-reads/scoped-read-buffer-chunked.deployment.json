@@ -1,0 +1,17 @@
+{
+  "artifact": "scoped-parallel-reads.lkja",
+  "target": "scoped-read-buffer-chunked",
+  "listen": null,
+  "http": null,
+  "session": null,
+  "worker": null,
+  "streams": {
+    "maximum_chunk_bytes": 65536,
+    "maximum_buffered_chunks": 8,
+    "maximum_total_bytes": 1048576,
+    "maximum_live_streams": 1024
+  },
+  "grants": [],
+  "secrets": [],
+  "configuration": {}
+}

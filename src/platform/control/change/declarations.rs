@@ -1696,8 +1696,10 @@ impl Lowering<'_> {
                 if kind == "type-parameter" {
                     if let Some(clause) = self.clause(&unit.clauses, "constraint")? {
                         let (_, operands) = self.parts(clause)?;
-                        if operands.is_empty() || operands.len() > 2 {
-                            return Err(self.error(clause, "constraint requires one or two names"));
+                        if operands.is_empty() || operands.len() > 3 {
+                            return Err(
+                                self.error(clause, "constraint requires one to three names")
+                            );
                         }
                         let names = operands
                             .iter()

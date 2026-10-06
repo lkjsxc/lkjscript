@@ -167,6 +167,9 @@ impl Machine<'_> {
             if constraint.requires_transfer() {
                 transfer::admit_type(self.program, *ty, self.control)?;
             }
+            if constraint.requires_share() {
+                transfer::admit_shareable_type(self.program, *ty, self.control)?;
+            }
             if constraint.requires_capture_safe() {
                 checked::Admission {
                     shared_budget: self.shared_budget.as_deref(),
@@ -323,13 +326,10 @@ impl Machine<'_> {
                     super::super::owned_i64_cell::OwnedI64Cell::ALLOCATION_BYTES,
                 )?;
                 self.control.check()?;
-                CheckedValue::memory(
-                    self.program,
-                    NormalizedValue::OwnedI64Cell(super::super::owned_i64_cell::OwnedI64Cell::new(
-                        self.memory_domain,
-                        scalar,
-                    )),
-                )
+                let cell =
+                    super::super::owned_i64_cell::OwnedI64Cell::new(self.memory_domain, scalar);
+                cell.establish_admission(self.program.value_origin)?;
+                CheckedValue::memory(self.program, NormalizedValue::OwnedI64Cell(cell))
             }
             "core.cell.replace" => {
                 let [scalar, cell]: [CheckedValue; 2] = arguments
@@ -341,10 +341,9 @@ impl Machine<'_> {
                     return Err(type_error("cell replace types"));
                 };
                 cell.validate(self.memory_domain, true)?;
-                CheckedValue::memory(
-                    self.program,
-                    NormalizedValue::OwnedI64Cell(cell.replace(scalar, self.control)?),
-                )
+                let cell = cell.replace(scalar, self.control)?;
+                cell.establish_admission(self.program.value_origin)?;
+                CheckedValue::memory(self.program, NormalizedValue::OwnedI64Cell(cell))
             }
             "core.cell.read" => {
                 let [cell]: [CheckedValue; 1] = arguments
@@ -387,6 +386,7 @@ impl Machine<'_> {
                     control,
                     &mut |bytes| self.charge_allocation(bytes),
                 )?;
+                buffer.establish_admission(self.program.value_origin)?;
                 CheckedValue::memory(self.program, NormalizedValue::ByteBuffer(buffer))
             }
             "core.buffer.push" => {
@@ -402,6 +402,7 @@ impl Machine<'_> {
                 let control = self.control;
                 let buffer =
                     buffer.push(octet, control, &mut |bytes| self.charge_allocation(bytes))?;
+                buffer.establish_admission(self.program.value_origin)?;
                 CheckedValue::memory(self.program, NormalizedValue::ByteBuffer(buffer))
             }
             "core.buffer.length" | "core.buffer.get" => {

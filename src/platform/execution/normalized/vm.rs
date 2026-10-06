@@ -41,6 +41,9 @@ pub(super) use structured::ChildProbe;
 #[path = "vm_borrow_result_tests.rs"]
 pub(super) mod borrow_result_tests;
 #[cfg(test)]
+#[path = "vm_scoped_parallel_tests.rs"]
+mod scoped_parallel_tests;
+#[cfg(test)]
 #[path = "vm_witness_dag_tests.rs"]
 mod witness_dag_tests;
 
@@ -962,6 +965,7 @@ impl Machine<'_> {
                         control,
                         &mut |bytes| self.charge_allocation(bytes),
                     )?;
+                    token.establish_admission(self.program.value_origin)?;
                     let value =
                         CheckedValue::memory(self.program, NormalizedValue::OwnedSequence(token))?;
                     self.push(value)?;
@@ -1006,6 +1010,7 @@ impl Machine<'_> {
                     let token = token.push(self.memory_domain, value, control, &mut |bytes| {
                         self.charge_allocation(bytes)
                     })?;
+                    token.establish_admission(self.program.value_origin)?;
                     let value =
                         CheckedValue::memory(self.program, NormalizedValue::OwnedSequence(token))?;
                     self.push(value)?;
@@ -1035,6 +1040,7 @@ impl Machine<'_> {
                         control,
                         &mut |bytes| self.charge_allocation(bytes),
                     )?;
+                    self.certify_sequence_pop(&raw, ty, item_type, result_type, item_product_type)?;
                     let value = CheckedValue::memory(self.program, raw)?;
                     self.push(value)?;
                 }
@@ -1085,6 +1091,7 @@ impl Machine<'_> {
                         control,
                         &mut |bytes| self.charge_allocation(bytes),
                     )?;
+                    token.establish_admission(self.program.value_origin)?;
                     let value =
                         CheckedValue::memory(self.program, NormalizedValue::OwnedChoice(token))?;
                     self.push(value)?;
@@ -1229,6 +1236,7 @@ impl Machine<'_> {
                         control,
                         &mut |n| self.charge_allocation(n),
                     )?;
+                    token.establish_admission(self.program.value_origin)?;
                     let value =
                         CheckedValue::memory(self.program, NormalizedValue::OwnedProduct(token))?;
                     self.push(value)?;
@@ -2018,6 +2026,53 @@ impl Machine<'_> {
         }
     }
 
+    /// Physical pop creates two bounded wrappers. The exact result/product
+    /// contracts were derived by sequence_pop_product_type before consumption;
+    /// certify only those wrappers while retaining certified descendant roots.
+    fn certify_sequence_pop(
+        &self,
+        raw: &NormalizedValue,
+        sequence: TypeObjectDigest,
+        item: TypeObjectDigest,
+        result: TypeObjectDigest,
+        product: TypeObjectDigest,
+    ) -> Result<(), ExecutionError> {
+        self.control.check()?;
+        let expected_item = direct_memory_type(self.program, item, &BTreeMap::new(), self.control)?
+            .ok_or_else(|| type_error("pop element must remain owned memory"))?;
+        let NormalizedValue::OwnedChoice(choice) = raw else {
+            return Err(type_error("pop did not construct its exact choice"));
+        };
+        if choice.ty() != result {
+            return Err(type_error("pop constructed a foreign result choice"));
+        }
+        choice.inspect_transfer(self.memory_domain, |payload| {
+            match (choice.case(), payload) {
+                (0, NormalizedValue::OwnedSequence(rest)) if rest.ty() == sequence => {
+                    rest.validate(self.memory_domain, true)?;
+                    rest.validate_admission(self.program.value_origin)
+                }
+                (1, NormalizedValue::OwnedProduct(pair)) if pair.ty() == product => {
+                    pair.inspect_transfer(self.memory_domain, |fields| {
+                        let [NormalizedValue::OwnedSequence(rest), value] = fields else {
+                            return Err(type_error("pop item product has foreign fields"));
+                        };
+                        if rest.ty() != sequence || value.memory_form() != Some(expected_item) {
+                            return Err(type_error("pop item fields changed their exact types"));
+                        }
+                        rest.validate(self.memory_domain, true)?;
+                        rest.validate_admission(self.program.value_origin)?;
+                        value.memory_validate(self.memory_domain, true)?;
+                        CheckedValue::validate_memory_admission(value, self.program.value_origin)
+                    })?;
+                    pair.establish_admission(self.program.value_origin)
+                }
+                _ => Err(type_error("pop constructed a foreign selected payload")),
+            }
+        })?;
+        choice.establish_admission(self.program.value_origin)
+    }
+
     fn product_child(
         &mut self,
         raw: NormalizedValue,
@@ -2788,6 +2843,9 @@ impl Machine<'_> {
             if constraint.requires_transfer() {
                 transfer::admit_type(self.program, *ty, self.control)?;
             }
+            if constraint.requires_share() {
+                transfer::admit_shareable_type(self.program, *ty, self.control)?;
+            }
         }
         if !type_arguments.is_empty() {
             self.charge_allocation(super::value::collection_storage_bytes(
@@ -2994,11 +3052,7 @@ impl Machine<'_> {
             let memory_form =
                 direct_memory_type(self.program, parameter.ty, substitutions, self.control)?;
             if memory_form.is_some() {
-                if (!matches!(
-                    function.effect,
-                    crate::platform::kernel::FunctionEffect::Pure
-                ) && parameter.use_mode != ParameterUse::Consume)
-                    || parameter.resource_requirement.is_some()
+                if parameter.resource_requirement.is_some()
                     || parameter.use_mode == ParameterUse::Unrestricted
                     || argument.class(self.program, &mut self.observation.value_work)?
                         != Class::Memory

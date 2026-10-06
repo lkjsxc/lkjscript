@@ -74,24 +74,37 @@ impl Value {
         program: &NormalizedProgram,
         raw: NormalizedValue,
     ) -> Result<Self, ExecutionError> {
-        if !matches!(
-            raw,
-            NormalizedValue::ByteBuffer(_)
-                | NormalizedValue::OwnedI64Cell(_)
-                | NormalizedValue::OwnedProduct(_)
-                | NormalizedValue::OwnedChoice(_)
-                | NormalizedValue::OwnedSequence(_)
-        ) {
-            return Err(admission_error(
-                "memory constructor requires a sealed token",
-            ));
-        }
+        Self::validate_memory_admission(&raw, program.value_origin)?;
         Ok(Self {
             raw,
             origin: program.value_origin,
             class: Class::Memory,
             borrow: None,
         })
+    }
+
+    pub(super) fn validate_memory_admission(
+        raw: &NormalizedValue,
+        program: ValueOrigin,
+    ) -> Result<(), ExecutionError> {
+        macro_rules! validate_memory {
+            ($token:expr) => {
+                $token.validate_admission(program)
+            };
+        }
+        // This wrapper cannot turn arbitrary physical storage into a trusted
+        // typed root. Verified constructors and complete transfer admission mint
+        // the allocation certificate before an owner or read placement arrives.
+        match raw {
+            NormalizedValue::ByteBuffer(token) => validate_memory!(token),
+            NormalizedValue::OwnedI64Cell(token) => validate_memory!(token),
+            NormalizedValue::OwnedProduct(token) => validate_memory!(token),
+            NormalizedValue::OwnedChoice(token) => validate_memory!(token),
+            NormalizedValue::OwnedSequence(token) => validate_memory!(token),
+            _ => Err(admission_error(
+                "memory constructor requires a sealed token",
+            )),
+        }
     }
 
     pub(super) fn raw(&self) -> &NormalizedValue {
@@ -298,6 +311,7 @@ impl Value {
             .any(|(constraint, ty)| {
                 (constraint.requires_capture_safe() && !program.capture_safe_types.contains(ty))
                     || (constraint.requires_transfer() && !program.comparable_types.contains(ty))
+                    || constraint.requires_share()
             })
         {
             return Err(admission_error(
@@ -1408,6 +1422,11 @@ impl Admission<'_> {
                         .iter()
                         .zip(type_arguments.iter())
                     {
+                        if constraint.requires_share() {
+                            return Err(admission_error(
+                                "raw callback cannot carry an owned shareable substitution",
+                            ));
+                        }
                         if constraint.requires_transfer()
                             && !self.program.comparable_types.contains(ty)
                         {

@@ -2912,6 +2912,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     super::transfer::admit(read, *supplied, context.declaration)
                 })?;
             }
+            if owner.constraints.requires_share() {
+                self.owned_read(|read| super::share::admit(read, *supplied, context.declaration))?;
+            }
         }
         let substitutions = type_parameters
             .into_iter()

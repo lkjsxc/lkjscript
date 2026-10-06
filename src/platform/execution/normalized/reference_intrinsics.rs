@@ -39,13 +39,10 @@ impl ReferenceState<'_> {
                     super::super::owned_i64_cell::OwnedI64Cell::ALLOCATION_BYTES,
                 )?;
                 self.control.check()?;
-                CheckedValue::memory(
-                    &self.schema,
-                    NormalizedValue::OwnedI64Cell(super::super::owned_i64_cell::OwnedI64Cell::new(
-                        self.memory_domain,
-                        scalar,
-                    )),
-                )
+                let cell =
+                    super::super::owned_i64_cell::OwnedI64Cell::new(self.memory_domain, scalar);
+                cell.establish_admission(self.schema.value_origin)?;
+                CheckedValue::memory(&self.schema, NormalizedValue::OwnedI64Cell(cell))
             }
             "core.cell.replace" => {
                 let [scalar, cell]: [CheckedValue; 2] = arguments
@@ -57,10 +54,9 @@ impl ReferenceState<'_> {
                     return Err(reference_type_error("cell replace types"));
                 };
                 cell.validate(self.memory_domain, true)?;
-                CheckedValue::memory(
-                    &self.schema,
-                    NormalizedValue::OwnedI64Cell(cell.replace(scalar, self.control)?),
-                )
+                let cell = cell.replace(scalar, self.control)?;
+                cell.establish_admission(self.schema.value_origin)?;
+                CheckedValue::memory(&self.schema, NormalizedValue::OwnedI64Cell(cell))
             }
             "core.cell.read" => {
                 let [cell]: [CheckedValue; 1] = arguments
@@ -103,6 +99,7 @@ impl ReferenceState<'_> {
                     control,
                     &mut |bytes| self.charge_allocation(bytes),
                 )?;
+                buffer.establish_admission(self.schema.value_origin)?;
                 CheckedValue::memory(&self.schema, NormalizedValue::ByteBuffer(buffer))
             }
             "core.buffer.push" => {
@@ -118,6 +115,7 @@ impl ReferenceState<'_> {
                 let control = self.control;
                 let buffer =
                     buffer.push(octet, control, &mut |bytes| self.charge_allocation(bytes))?;
+                buffer.establish_admission(self.schema.value_origin)?;
                 CheckedValue::memory(&self.schema, NormalizedValue::ByteBuffer(buffer))
             }
             "core.buffer.length" | "core.buffer.get" => {

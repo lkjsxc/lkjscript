@@ -435,6 +435,55 @@ pub(crate) struct AppliedOwnedMethod {
     pub(crate) types: BTreeMap<TypeObjectDigest, TypeObject>,
 }
 
+fn requires_task_borrow_generation(
+    read: &(impl ExpressionRead + ?Sized),
+    contract: &OwnedContract,
+) -> Result<bool, Diagnostic> {
+    for method in &contract.methods {
+        read.validation_work()?;
+        if matches!(method.effect, FunctionEffect::Task { .. }) {
+            for parameter in &method.parameters {
+                read.validation_work()?;
+                if parameter.use_mode == ParameterUse::Borrow {
+                    return Ok(true);
+                }
+            }
+        }
+    }
+    Ok(false)
+}
+
+fn require_share_generation_at(
+    read: &(impl ExpressionRead + ?Sized),
+    scope: DeclarationReference,
+    subject: &str,
+) -> Result<(), Diagnostic> {
+    read.validation_work()?;
+    admit_dependency(read, scope.package)?;
+    let key = OwnerKey::Declaration(scope.declaration);
+    let header = if scope.package == read.package_id() {
+        match read.owner(key)? {
+            Some(OwnerRecord::Declaration(declaration)) => declaration.header,
+            _ => return Err(reject("missing exact defining declaration generation")),
+        }
+    } else {
+        match read.package_interface_owner(scope.package, key)? {
+            Some(PackageInterfaceRecord::Declaration(declaration)) => declaration.header,
+            _ => {
+                return Err(reject(
+                    "missing exact imported defining declaration generation",
+                ));
+            }
+        }
+    };
+    if header.owner != key || header.contract_version < contract::SHARE_GRAPH_CONTRACT_VERSION {
+        return Err(reject(format!(
+            "{subject} requires exact Graph 30 authority"
+        )));
+    }
+    Ok(())
+}
+
 pub(crate) fn contract_record(
     read: &(impl ExpressionRead + ?Sized),
     reference: DeclarationReference,
@@ -446,6 +495,11 @@ pub(crate) fn contract_record(
             read.owner(OwnerKey::Declaration(reference.declaration))?
             && let DeclarationPayload::OwnedContract(c) = d.payload
         {
+            if d.header.contract_version < contract::SHARE_GRAPH_CONTRACT_VERSION
+                && requires_task_borrow_generation(read, &c)?
+            {
+                return Err(reject("borrowed task methods require Graph 30"));
+            }
             if d.header.contract_version < 26
                 && requires_parameterized_generation(read, reference.package, &c)?
             {
@@ -458,6 +512,11 @@ pub(crate) fn contract_record(
         OwnerKey::Declaration(reference.declaration),
     )? && let PackageInterfaceDeclarationPayload::OwnedContract(c) = d.payload
     {
+        if d.header.contract_version < contract::SHARE_GRAPH_CONTRACT_VERSION
+            && requires_task_borrow_generation(read, &c)?
+        {
+            return Err(reject("imported borrowed task methods require Graph 30"));
+        }
         if d.header.contract_version < 26
             && requires_parameterized_generation(read, reference.package, &c)?
         {
@@ -509,6 +568,30 @@ pub(crate) fn function_contract(
         .ok_or_else(|| reject("method target must be an exact visible graph function"))
 }
 
+fn validate_function_borrow_generation(
+    read: &(impl ExpressionRead + ?Sized),
+    package: PackageId,
+    signature: &PackageFunctionSignature,
+    generation: u16,
+) -> Result<(), Diagnostic> {
+    if !matches!(signature.effect, FunctionEffect::Task { .. }) {
+        return Ok(());
+    }
+    for id in &signature.parameters {
+        let parameter = parameter(read, package, *id)?;
+        if parameter.use_mode == ParameterUse::Borrow
+            && super::memory::direct_in(read, package, parameter.ty)?
+            && (generation < contract::SHARE_GRAPH_CONTRACT_VERSION
+                || parameter.header.contract_version < contract::SHARE_GRAPH_CONTRACT_VERSION)
+        {
+            return Err(reject(
+                "borrowed task memory parameters and functions require Graph 30",
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn optional_function_contract(
     read: &(impl ExpressionRead + ?Sized),
     reference: DeclarationReference,
@@ -520,7 +603,7 @@ pub(crate) fn optional_function_contract(
             read.owner(OwnerKey::Declaration(reference.declaration))?
             && let DeclarationPayload::Function(f) = d.payload
         {
-            return Ok(Some(PackageFunctionSignature {
+            let signature = PackageFunctionSignature {
                 implementation_parameters: f.implementation_parameters,
                 requirement_parameters: f.requirement_parameters,
                 effect_parameters: f.effect_parameters,
@@ -529,13 +612,26 @@ pub(crate) fn optional_function_contract(
                 result: f.result,
                 result_borrow: f.result_borrow,
                 effect: f.effect,
-            }));
+            };
+            validate_function_borrow_generation(
+                read,
+                reference.package,
+                &signature,
+                d.header.contract_version,
+            )?;
+            return Ok(Some(signature));
         }
     } else if let Some(PackageInterfaceRecord::Declaration(d)) = read.package_interface_owner(
         reference.package,
         OwnerKey::Declaration(reference.declaration),
     )? && let PackageInterfaceDeclarationPayload::Function(f) = d.payload
     {
+        validate_function_borrow_generation(
+            read,
+            reference.package,
+            &f,
+            d.header.contract_version,
+        )?;
         return Ok(Some(f));
     }
     Ok(None)
@@ -597,8 +693,7 @@ pub(crate) fn validate_owned_parameter(
                         || super::transfer::function_parameter_listed(read, &c.type_parameters, id)?
                 }
                 DeclarationPayload::OwnedImplementation(i) => {
-                    p.constraints == TypeParameterConstraints::Owned
-                        && super::transfer::function_parameter_listed(read, &i.type_parameters, id)?
+                    super::transfer::function_parameter_listed(read, &i.type_parameters, id)?
                 }
                 _ => false,
             },
@@ -617,8 +712,7 @@ pub(crate) fn validate_owned_parameter(
                         || super::transfer::function_parameter_listed(read, &c.type_parameters, id)?
                 }
                 PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
-                    p.constraints == TypeParameterConstraints::Owned
-                        && super::transfer::function_parameter_listed(read, &i.type_parameters, id)?
+                    super::transfer::function_parameter_listed(read, &i.type_parameters, id)?
                 }
                 _ => false,
             },
@@ -653,6 +747,54 @@ fn validate_owned_type(
         TypeForm::TypeParameter { parameter } => validate_owned_parameter(read, parameter, scope),
         _ => Err(reject("owned contract arguments require exact Owned types")),
     }
+}
+
+fn type_parameter_at(
+    read: &(impl ExpressionRead + ?Sized),
+    scope: DeclarationReference,
+    id: TypeParameterId,
+) -> Result<TypeParameterRecord, Diagnostic> {
+    read.validation_work()?;
+    admit_dependency(read, scope.package)?;
+    let parameter = if scope.package == read.package_id() {
+        match read.owner(OwnerKey::TypeParameter(id))? {
+            Some(OwnerRecord::TypeParameter(parameter)) => parameter,
+            _ => return Err(reject("missing exact application type parameter")),
+        }
+    } else {
+        match read.package_interface_owner(scope.package, OwnerKey::TypeParameter(id))? {
+            Some(PackageInterfaceRecord::TypeParameter(parameter)) => parameter,
+            _ => return Err(reject("missing exact imported application type parameter")),
+        }
+    };
+    if parameter.header.owner != OwnerKey::TypeParameter(id)
+        || parameter.declaration != scope.declaration
+    {
+        return Err(reject(
+            "application type parameter escapes its exact defining declaration",
+        ));
+    }
+    Ok(parameter)
+}
+
+/// Every actual retains the requirements of its formal, including phantom arguments.
+/// The formal's defining scope and the actual's lexical scope are independent.
+fn validate_type_argument_constraints(
+    read: &(impl ExpressionRead + ?Sized),
+    constraints: TypeParameterConstraints,
+    ty: TypeObjectDigest,
+    scope: Option<DeclarationReference>,
+) -> Result<(), Diagnostic> {
+    if constraints.has_owned() {
+        validate_owned_type(read, ty, scope)?;
+    }
+    if constraints.requires_transfer() {
+        super::transfer::admit_in(read, ty, scope)?;
+    }
+    if constraints.requires_share() {
+        super::share::admit_in(read, ty, scope)?;
+    }
+    Ok(())
 }
 
 fn validate_contract_arguments(
@@ -849,18 +991,25 @@ fn validate_implementation_definition(
                 _ => return Err(reject("missing imported implementation parameter")),
             }
         };
-        if p.constraints != TypeParameterConstraints::Owned
-            || p.header.contract_version < 28
-            || !names.insert(p.name)
-        {
+        if !p.constraints.has_owned() || p.header.contract_version < 28 || !names.insert(p.name) {
             return Err(reject(
-                "implementation schemes require distinct exact Owned parameters",
+                "implementation schemes require distinct exact owned-constrained parameters",
             ));
+        }
+        if p.constraints != TypeParameterConstraints::Owned {
+            require_share_generation_at(read, scope, "stronger implementation schemes")?;
         }
     }
     validate_owned_type(read, implementation.self_type, scope)?;
     let contract = contract_record(read, implementation.contract)?;
     validate_contract_at(read, implementation.contract, &contract)?;
+    if requires_task_borrow_generation(read, &contract)? {
+        require_share_generation_at(
+            read,
+            scope.ok_or_else(|| reject("borrowed task method maps require an exact scope"))?,
+            "borrowed task method maps",
+        )?;
+    }
     validate_contract_arguments(read, &contract, &implementation.type_arguments, scope)?;
     if implementation.methods.len() != contract.methods.len() {
         return Err(reject("missing implementation method"));
@@ -896,30 +1045,22 @@ fn validate_implementation_definition(
         let mut target_bindings = BTreeMap::new();
         for (id, ty) in f.type_parameters.iter().zip(&target.type_arguments) {
             read.validation_work()?;
-            let p = if target.function.package == read.package_id() {
-                match read.owner(OwnerKey::TypeParameter(*id))? {
-                    Some(OwnerRecord::TypeParameter(p)) => p,
-                    _ => return Err(reject("missing mapped function type parameter")),
-                }
-            } else {
-                match read.package_interface_owner(
-                    target.function.package,
-                    OwnerKey::TypeParameter(*id),
-                )? {
-                    Some(PackageInterfaceRecord::TypeParameter(p)) => p,
-                    _ => return Err(reject("missing imported mapped function type parameter")),
-                }
-            };
-            if p.header.owner != OwnerKey::TypeParameter(*id)
-                || p.declaration != target.function.declaration
-                || p.constraints != TypeParameterConstraints::Owned
-                || target_bindings.insert(*id, *ty).is_some()
-            {
+            let p = type_parameter_at(read, target.function, *id)?;
+            if !p.constraints.has_owned() || target_bindings.insert(*id, *ty).is_some() {
                 return Err(reject(
-                    "mapped function applications require distinct exact Owned parameters",
+                    "mapped function applications require distinct exact owned-constrained parameters",
                 ));
             }
-            validate_owned_type(read, *ty, scope)?;
+            if p.constraints != TypeParameterConstraints::Owned {
+                require_share_generation_at(
+                    read,
+                    scope.ok_or_else(|| {
+                        reject("stronger mapped applications require an exact scope")
+                    })?,
+                    "stronger mapped function applications",
+                )?;
+            }
+            validate_type_argument_constraints(read, p.constraints, *ty, scope)?;
         }
         for operand in &target.implementations {
             if matches!(operand, ImplementationOperand::Concrete { .. })
@@ -1160,8 +1301,9 @@ fn witness_contract_inner(
             if i.type_parameters.len() != type_arguments.len() {
                 return Err(reject("implementation scheme type argument arity mismatch"));
             }
-            for ty in type_arguments {
-                validate_owned_type(read, *ty, scope)?;
+            for (id, ty) in i.type_parameters.iter().zip(type_arguments) {
+                let parameter = type_parameter_at(read, *implementation, *id)?;
+                validate_type_argument_constraints(read, parameter.constraints, *ty, scope)?;
             }
             let bindings = i
                 .type_parameters
@@ -1273,23 +1415,26 @@ pub(crate) fn validate_application(
     if f.implementation_parameters.len() != operands.len() {
         return Err(reject("implementation witness arity mismatch"));
     }
-    if operands.is_empty() {
-        return Ok(());
-    }
     if types.len() != f.type_parameters.len() {
         return Err(reject(
             "implementation-bearing calls require exact type arguments",
         ));
     }
-    for _ in types {
+    let actual_scope = scope.map(|declaration| DeclarationReference {
+        package: read.package_id(),
+        declaration,
+    });
+    let mut substitutions = BTreeMap::new();
+    for (id, ty) in f.type_parameters.iter().zip(types) {
         read.validation_work()?;
+        let parameter = type_parameter_at(read, reference, *id)?;
+        if substitutions.insert(*id, *ty).is_some() {
+            return Err(reject(
+                "application type parameter inventory is not distinct",
+            ));
+        }
+        validate_type_argument_constraints(read, parameter.constraints, *ty, actual_scope)?;
     }
-    let substitutions: BTreeMap<_, _> = f
-        .type_parameters
-        .iter()
-        .copied()
-        .zip(types.iter().copied())
-        .collect();
     let mut derived = super::parallel_types::AppliedTypes::new(read);
     for (p, operand) in f.implementation_parameters.iter().zip(operands) {
         let application = witness_contract(read, operand, scope)?;
@@ -1339,6 +1484,9 @@ fn validate_contract_at(
     reference: DeclarationReference,
     c: &OwnedContract,
 ) -> Result<(), Diagnostic> {
+    if requires_task_borrow_generation(read, c)? {
+        require_share_generation_at(read, reference, "borrowed task methods")?;
+    }
     for method in &c.methods {
         read.validation_work()?;
         if let FunctionEffect::Task {
@@ -1389,13 +1537,6 @@ fn validate_contract_at(
                 suffix = true;
                 if parameter.use_mode == ParameterUse::Unrestricted {
                     return Err(reject("owned method parameters require borrow or consume"));
-                }
-                if !matches!(method.effect, FunctionEffect::Pure)
-                    && parameter.use_mode != ParameterUse::Consume
-                {
-                    return Err(reject(
-                        "task method owned parameters must consume ownership",
-                    ));
                 }
             } else if suffix
                 || parameter.use_mode != ParameterUse::Unrestricted
@@ -1463,16 +1604,31 @@ pub(super) fn ordinary_with_assumptions(
     scope: Option<DeclarationId>,
     assumptions: &BTreeSet<TypeParameterId>,
 ) -> Result<bool, Diagnostic> {
+    ordinary_with_assumptions_in(
+        read,
+        ty,
+        scope.map(|declaration| DeclarationReference {
+            package: read.package_id(),
+            declaration,
+        }),
+        assumptions,
+    )
+}
+
+pub(super) fn ordinary_with_assumptions_in(
+    read: &(impl ExpressionRead + ?Sized),
+    ty: TypeObjectDigest,
+    scope: Option<DeclarationReference>,
+    assumptions: &BTreeSet<TypeParameterId>,
+) -> Result<bool, Diagnostic> {
     // This property depends on ordinary parameter assumptions, not representation
     // identities. Check every actual argument in its caller scope, and prove each
     // nominal body under its own ordinary formal parameters. Recursive applications
     // then form a finite structural proof without overwriting actual substitutions.
-    let context = scope.map_or(OrdinaryAssumptionContext::Closed, |declaration| {
-        OrdinaryAssumptionContext::Function(DeclarationReference {
-            package: read.package_id(),
-            declaration,
-        })
-    });
+    let context = scope.map_or(
+        OrdinaryAssumptionContext::Closed,
+        OrdinaryAssumptionContext::Function,
+    );
     read.validation_work()?;
     let mut todo = vec![(ty, context, copy_assumptions(read, assumptions)?)];
     let mut seen = BTreeSet::new();

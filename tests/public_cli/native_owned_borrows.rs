@@ -250,10 +250,6 @@ fn native_owned_borrows_reject_escaping_or_consuming_views_and_preserve_draft_id
             "view-unrestricted-argument",
             include_str!("../fixtures/owned-borrows-unrestricted.lkjc").to_owned(),
         ),
-        (
-            "borrowed-task-parameter",
-            include_str!("../fixtures/owned-borrows-task-parameter.lkjc").to_owned(),
-        ),
     ]);
     for (name, invalid) in cases {
         let input = public.input(
@@ -268,7 +264,12 @@ fn native_owned_borrows_reject_escaping_or_consuming_views_and_preserve_draft_id
         );
         assert_eq!(public.revision(), before, "{name}");
     }
-    author(public, &packages.source(APPLICATION));
+    let borrowed_task = include_str!("../fixtures/owned-borrows-task-parameter.lkjc");
+    author(
+        public,
+        &packages.source(&format!("{borrowed_task}\n{APPLICATION}")),
+    );
+    unchanged(public, "borrowed-task-parameter");
     let accepted = public.revision();
     let original = unchanged(public, "owned-borrows-app");
     let modules = public.cli(&["query", "find", "module", "owned-borrows-app"], true);

@@ -253,7 +253,11 @@ impl ReferenceState<'_> {
             };
             if owner.header.owner != OwnerKey::TypeParameter(*parameter)
                 || owner.declaration != reference.declaration
-                || owner.constraints != TypeParameterConstraints::Owned
+                || !owner.constraints.has_owned()
+                || (owner.constraints.requires_transfer()
+                    && !self.schema.transferable_types.contains(actual))
+                || (owner.constraints.requires_share()
+                    && !self.schema.shareable_types.contains(actual))
                 || !scheme_parameters.insert(*parameter)
                 || !scheme_names.insert(owner.name)
                 || !self.owned_method_type(*actual, &BTreeSet::new())?
@@ -416,10 +420,15 @@ impl ReferenceState<'_> {
                     suffix = true;
                     if p.use_mode == ParameterUse::Unrestricted
                         || (!matches!(method.effect, FunctionEffect::Pure)
-                            && p.use_mode != ParameterUse::Consume)
+                            && p.use_mode == ParameterUse::Borrow
+                            && self
+                                .declaration(implementation.contract)?
+                                .header
+                                .contract_version
+                                < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION)
                     {
                         return Err(reference_type_error(
-                            "owned method parameters require scoped pure borrowing or consumption",
+                            "owned method parameters require scoped borrowing or consumption",
                         ));
                     }
                 } else if suffix || p.use_mode != ParameterUse::Unrestricted {
@@ -497,7 +506,11 @@ impl ReferenceState<'_> {
                 };
                 if owner.header.owner != OwnerKey::TypeParameter(*parameter)
                     || owner.declaration != target.declaration
-                    || owner.constraints != TypeParameterConstraints::Owned
+                    || !owner.constraints.has_owned()
+                    || (owner.constraints.requires_transfer()
+                        && !self.schema.transferable_types.contains(actual))
+                    || (owner.constraints.requires_share()
+                        && !self.schema.shareable_types.contains(actual))
                     || !target_parameters.insert(*parameter)
                     || !target_names.insert(owner.name)
                     || !self.owned_method_type(*actual, &BTreeSet::new())?

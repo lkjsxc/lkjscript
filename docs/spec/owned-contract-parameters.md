@@ -42,9 +42,11 @@ an ordinary nominal or container cannot hide an owned parameter or owner. Every
 type child and actual nominal argument is checked, including unused arguments,
 phantom arguments and unselected cases.
 
-Ordinary unrestricted parameters precede the owned suffix. Pure methods may
-borrow or consume owned parameters; named task methods must consume every owned
-parameter. A result is owned or closed ordinary data, never a loan. Methods retain
+Ordinary unrestricted parameters precede the owned suffix. Pure and named task
+methods may borrow or consume owned parameters, including Self. Synchronous
+borrowing needs only Owned and retains its read protection across authorized task
+effects. A result is owned or closed ordinary data; only a pure method may declare
+a [source-tied borrowed result](owned-read-results.md). Methods retain
 their exact callable kind and closed effect row and have no method-local generic,
 effect or requirement scheme. An empty-row task remains a task.
 

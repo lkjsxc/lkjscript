@@ -76,10 +76,7 @@ pub(crate) fn validate_in_scope(
     scope: Option<DeclarationReference>,
 ) -> Result<(), Diagnostic> {
     read.validation_work()?;
-    let local_scope = scope
-        .filter(|s| s.package == read.package_id())
-        .map(|s| s.declaration);
-    let ordinary_assumptions = super::transfer::ordinary_assumptions(read, local_scope)?;
+    let ordinary_assumptions = super::transfer::ordinary_assumptions_in(read, scope)?;
     let code = match read.type_object(ty)?.map(|t| t.form) {
         Some(TypeForm::OwnedSequence { .. }) => "kernel_owned_sequence",
         Some(TypeForm::OwnedChoice { .. }) => "kernel_owned_choice",
@@ -169,10 +166,10 @@ pub(crate) fn validate_in_scope(
                 _ if require_owned => {
                     return Err(reject("owned sequence elements require exact owned types"));
                 }
-                _ if !super::owned_contract::ordinary_with_assumptions(
+                _ if !super::owned_contract::ordinary_with_assumptions_in(
                     read,
                     child_type,
-                    local_scope,
+                    scope,
                     &ordinary_assumptions,
                 )? =>
                 {

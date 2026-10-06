@@ -1,0 +1,130 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create scoped-parallel-reads
+    (owned-contract create Sum (visibility public)
+      (self Self) (type-parameter create Self (constraint owned))
+      (method method_90000000000000000000000000000001 sum
+        (parameters (Self borrow)) (returns I64) (effect (task))))
+
+    (function create serial-range-sum (visibility public) (effect (task))
+      (type-parameter create T (constraint owned shareable))
+      (type-parameter create W (constraint owned shareable))
+      (implementation-parameter implparam_9000000000000000000000000000000a
+        element owned-worklists::Element T)
+      (implementation-parameter implparam_9000000000000000000000000000000b
+        reader owned-read-results::IndexRead W (types T))
+      (parameter create start (type I64)) (parameter create end (type I64))
+      (parameter create accumulated (type I64))
+      (parameter create storage (type W) (use borrow)) (returns I64)
+      (body (if (call std::i64-equal (local start) (local end)) (local accumulated)
+        (let
+          (binding observed (type I64)
+            (borrow-call
+              (method-call parameter@serial-range-sum@implparam_9000000000000000000000000000000b
+                owned-read-results::IndexRead method_8a000000000000000000000000000002
+                (local start) (local storage))
+              (binding view (type T))
+              (in (method-call parameter@serial-range-sum@implparam_9000000000000000000000000000000a
+                owned-worklists::Element method_88000000000000000000000000000002 (local view)))))
+          (in (implementation-call serial-range-sum (types T W)
+            (implementations parameter@serial-range-sum@implparam_9000000000000000000000000000000a
+              parameter@serial-range-sum@implparam_9000000000000000000000000000000b)
+            (call std::add (local start) (i64 1)) (local end)
+            (call std::add (local accumulated) (local observed)) (local storage)))))))
+
+    (function create range-sum (visibility public) (effect (task))
+      (type-parameter create T (constraint owned shareable))
+      (type-parameter create W (constraint owned shareable))
+      (implementation-parameter implparam_90000000000000000000000000000001
+        element owned-worklists::Element T)
+      (implementation-parameter implparam_90000000000000000000000000000002
+        reader owned-read-results::IndexRead W (types T))
+      (parameter create start (type I64)) (parameter create end (type I64))
+      (parameter create storage (type W) (use borrow)) (returns I64)
+      (body (if (call std::less
+          (call std::subtract (local end) (local start)) (i64 33))
+          (implementation-call serial-range-sum (types T W)
+            (implementations parameter@range-sum@implparam_90000000000000000000000000000001
+              parameter@range-sum@implparam_90000000000000000000000000000002)
+            (local start) (local end) (i64 0) (local storage))
+          (let
+            (binding middle (type I64)
+              (call std::add (local start)
+                (call std::divide (call std::subtract (local end) (local start)) (i64 2))))
+            (binding halves (type (record (left I64) (right I64)))
+              (parallel
+                (implementation-call range-sum (types T W)
+                  (implementations parameter@range-sum@implparam_90000000000000000000000000000001
+                    parameter@range-sum@implparam_90000000000000000000000000000002)
+                  (local start) (local middle) (local storage))
+                (implementation-call range-sum (types T W)
+                  (implementations parameter@range-sum@implparam_90000000000000000000000000000001
+                    parameter@range-sum@implparam_90000000000000000000000000000002)
+                  (local middle) (local end) (local storage))))
+            (in (call std::add (field (local halves) (name left))
+              (field (local halves) (name right))))))))
+
+    (function create sum (visibility public) (effect (task))
+      (type-parameter create T (constraint owned shareable))
+      (type-parameter create W (constraint owned shareable))
+      (implementation-parameter implparam_90000000000000000000000000000003
+        element owned-worklists::Element T)
+      (implementation-parameter implparam_90000000000000000000000000000004
+        reader owned-read-results::IndexRead W (types T))
+      (parameter create storage (type W) (use borrow)) (returns I64)
+      (body (implementation-call range-sum (types T W)
+        (implementations parameter@sum@implparam_90000000000000000000000000000003
+          parameter@sum@implparam_90000000000000000000000000000004)
+        (i64 0)
+        (method-call parameter@sum@implparam_90000000000000000000000000000004
+          owned-read-results::IndexRead method_8a000000000000000000000000000001 (local storage))
+        (local storage))))
+
+    (function create serial-sum (visibility public) (effect (task))
+      (type-parameter create T (constraint owned shareable))
+      (type-parameter create W (constraint owned shareable))
+      (implementation-parameter implparam_9000000000000000000000000000000c
+        element owned-worklists::Element T)
+      (implementation-parameter implparam_9000000000000000000000000000000d
+        reader owned-read-results::IndexRead W (types T))
+      (parameter create storage (type W) (use borrow)) (returns I64)
+      (body (implementation-call serial-range-sum (types T W)
+        (implementations parameter@serial-sum@implparam_9000000000000000000000000000000c
+          parameter@serial-sum@implparam_9000000000000000000000000000000d)
+        (i64 0)
+        (method-call parameter@serial-sum@implparam_9000000000000000000000000000000d
+          owned-read-results::IndexRead method_8a000000000000000000000000000001 (local storage))
+        (i64 0) (local storage))))
+
+    (owned-implementation create RecursiveSum (visibility public)
+      (type-parameter create T (constraint owned shareable))
+      (type-parameter create W (constraint owned shareable))
+      (implementation-parameter implparam_90000000000000000000000000000005
+        element owned-worklists::Element T)
+      (implementation-parameter implparam_90000000000000000000000000000006
+        reader owned-read-results::IndexRead W (types T))
+      (contract Sum) (self W)
+      (method method_90000000000000000000000000000001 sum (types T W)
+        (implementations parameter@RecursiveSum@implparam_90000000000000000000000000000005
+          parameter@RecursiveSum@implparam_90000000000000000000000000000006)))
+
+    (function create parallel-sums (visibility public) (effect (task))
+      (type-parameter create T (constraint owned shareable))
+      (type-parameter create W (constraint owned shareable))
+      (implementation-parameter implparam_90000000000000000000000000000007
+        element owned-worklists::Element T)
+      (implementation-parameter implparam_90000000000000000000000000000008
+        keys owned-worklists::Element T)
+      (implementation-parameter implparam_90000000000000000000000000000009
+        reader owned-read-results::IndexRead W (types T))
+      (parameter create storage (type W) (use borrow))
+      (returns (record (left I64) (right I64)))
+      (body (parallel
+        (implementation-call sum (types T W)
+          (implementations parameter@parallel-sums@implparam_90000000000000000000000000000007
+            parameter@parallel-sums@implparam_90000000000000000000000000000009) (local storage))
+        (implementation-call sum (types T W)
+          (implementations parameter@parallel-sums@implparam_90000000000000000000000000000008
+            parameter@parallel-sums@implparam_90000000000000000000000000000009) (local storage)))))))
+declarations.end

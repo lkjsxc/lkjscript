@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-29";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 29;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-24";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 24;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN29";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v29";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v29";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-30";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 30;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-25";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 25;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN30";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v30";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v30";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -552,7 +552,7 @@ impl CompilationUnit {
                 "compiler-unit bytes disagree with their exact object-domain digest",
             ));
         }
-        // Derived generations 10–28 require a rebuild from supported canonical owners.
+        // Derived generations 10–29 require a rebuild from supported canonical owners.
         // Refuse before decoding; old bytes never acquire current instruction meaning.
         if [
             b"LKJCUN10",
@@ -574,6 +574,7 @@ impl CompilationUnit {
             b"LKJCUN26",
             b"LKJCUN27",
             b"LKJCUN28",
+            b"LKJCUN29",
         ]
         .iter()
         .any(|magic| bytes.starts_with(*magic))
@@ -1209,10 +1210,9 @@ impl CompiledSignature {
         require_item_count("compiled type parameters", self.type_parameters.len(), true)?;
         if self.type_parameter_constraints.len() != self.type_parameters.len()
             || (kind == OwnerKind::External
-                && self
-                    .type_parameter_constraints
-                    .iter()
-                    .any(|constraints| constraints.requires_transfer()))
+                && self.type_parameter_constraints.iter().any(|constraints| {
+                    constraints.requires_transfer() || constraints.requires_share()
+                }))
         {
             return Err(unit_error(
                 DiagnosticClass::Corrupt,
@@ -2126,7 +2126,7 @@ fn validate_nominal_parameters(
         || parameters.iter().collect::<BTreeSet<_>>().len() != parameters.len()
         || constraints
             .iter()
-            .any(|constraint| constraint.requires_transfer())
+            .any(|constraint| constraint.requires_transfer() || constraint.requires_share())
     {
         return Err(unit_corrupt(
             "compiler_nominal_parameters",

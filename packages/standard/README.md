@@ -79,10 +79,10 @@ Current identity:
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
 - semantic revision: `rev_c3bcf5a07bdc9f8400fdf670fffcd5a0a85b54ff6f86ce7514c2c5f36cab41e4`;
-- package revision: `package_revision_45d0463d620aa51888557c5a02adc2517912fc50580f4f42c79882ba51c15b39`;
-- package transport: `package_transport_73674818b65da559a4c71578e5f5e429590755f1424bcf7c99d70bab51e4ff52`;
-- artifact manifest: `artifact_manifest_a78b9df9fb19f28a6b13b711f66a477b714ad663bb40096919ca9ddbd0f60c4f`;
-- artifact bundle: `artifact_bundle_2de5c43733d900c13045ed12b95d7541e3acf3e46f187f992cb3896ba5d4a970`;
+- package revision: `package_revision_0e4e6817d0e26a8a6d549f0ea94cf5dad160b6d40b2d66023f5c352c801943c5`;
+- package transport: `package_transport_d39a5c17b73d1ed8841dd1302f55d4e8db5ccd51e44d9785b0124d79263e1a1d`;
+- artifact manifest: `artifact_manifest_0d12e09689ae334bcce7a74a9580ffc88a0ee7ec31d6d56f1e1e82ada9a96724`;
+- artifact bundle: `artifact_bundle_9c9cd79ae2b4cb0bc4304cbe4d5f7ae9d6a3d6e7b91e212fdbe6ff67d5ccdede`;
 - 1,900 live semantic owners, 247 compiler units, and 96 graph tests.
 
 Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose
@@ -277,8 +277,10 @@ derived the Graph 21 transport and compiler 19 / bytecode 15 / artifact 26
 bundle through public export/build. All 89 graph tests agree between production and
 reference execution; accepted HEAD and standard operations retain their meaning.
 
-The current prerequisite-composition refresh derives the interface 17 transport
-through public export and the compiler 29 / bytecode 24 / artifact 36 bundle
+The current refresh for scoped task borrowing derives the interface 18 transport
+through public export and the compiler 30 / bytecode 25 / artifact 37 bundle
 through public check/build. All 96 tests agree between production and reference
 execution. The package revision and transport pins above select those current
 wrappers; accepted HEAD and standard operations retain their existing meaning.
+The [current release notes](../../docs/releases/v0.1.81.md) identify the selected
+compatibility boundary; [status](../../docs/status.md) owns actual acceptance.

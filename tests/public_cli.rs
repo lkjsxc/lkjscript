@@ -1507,7 +1507,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     for (name, syntax) in [
         (
             "type_parameter_constraint",
-            "none|capture-safe|owned|transferable|capture-safe transferable|owned transferable",
+            "none|capture-safe|owned|transferable|capture-safe transferable|owned transferable|owned shareable|owned transferable shareable",
         ),
         ("reference_alias", "$REFERENCE_ALIAS"),
         ("exact_declaration", "decl_HEX"),

@@ -16,8 +16,9 @@ Ordinary nominal and structural records and ordinary containers remain unrestric
 and cannot contain products. Generic functions can abstract over one or more Owned
 payloads. Product parameters must occur in their exact function scope or in the
 declaring scope of a [parameterized owned contract](owned-contract-parameters.md).
-Pure helpers may borrow; named tasks may only consume under
-[same-task transfer](owned-task-transfers.md).
+Pure helpers and named graph tasks may borrow or consume under
+[synchronous owned task calls](owned-task-transfers.md). Shared read inputs to
+joined parallel children additionally require Shareable.
 
 ## Meaning and scope
 
@@ -96,14 +97,16 @@ may select a closed product as Self under the existing first-order witness rules
 Parameterized owned contracts also admit products in method signatures and exact
 ordered contract arguments, including results containing both Self and an element
 parameter. Structural substitution preserves the complete field types and names.
-There is no implicit witness search or capability grant. Named tasks may consume
-and return products under [same-task transfer](owned-task-transfers.md). Indirect
+There is no implicit witness search or capability grant. Named graph tasks may
+borrow products synchronously or consume and return them under
+[synchronous owned task calls](owned-task-transfers.md). Indirect
 callable signatures, capture, nominal owned declarations
 and function extraction of product scopes remain unsupported. [Owned sequences](owned-sequences.md)
 provide runtime-sized homogeneous storage for products and other owned elements. The separate
-[structured parallel contract](structured-parallel.md) admits closed product inputs
-and, in development 0.1.69, returns owned child results in a joined product. This
-does not permit asynchronous borrowing or detached transfer.
+[structured parallel contract](structured-parallel.md) admits consuming Transferable
+product inputs and borrowed Shareable inputs, and returns owned child results in
+a joined product. Children remain named graph tasks with closed empty effect rows.
+The read permission ends with the complete join; detached transfer remains unsupported.
 
 ## Runtime and boundaries
 

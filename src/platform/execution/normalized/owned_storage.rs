@@ -13,9 +13,13 @@ enum Mode {
 struct Storage {
     fields: Option<Vec<NormalizedValue>>,
     loans: usize,
+    admitted_program: Option<ValueOrigin>,
+    admission_valid: bool,
 }
 pub struct OwnedStorage {
+    // Read access can enter a child invocation without moving backing custody.
     origin: ValueOrigin,
+    backing_origin: ValueOrigin,
     ty: TypeObjectDigest,
     storage: Arc<Mutex<Storage>>,
     mode: Mode,
@@ -30,6 +34,7 @@ impl Clone for OwnedStorage {
     fn clone(&self) -> Self {
         Self {
             origin: self.origin,
+            backing_origin: self.backing_origin,
             ty: self.ty,
             storage: Arc::clone(&self.storage),
             mode: Mode::Inert,
@@ -71,10 +76,13 @@ impl OwnedStorage {
         control.check()?;
         let product = Self {
             origin,
+            backing_origin: origin,
             ty,
             storage: Arc::new(Mutex::new(Storage {
                 fields: Some(fields),
                 loans: 0,
+                admitted_program: None,
+                admission_valid: false,
             })),
             mode: Mode::Owner,
         };
@@ -100,8 +108,17 @@ impl OwnedStorage {
         consume: bool,
     ) -> Result<(), ExecutionError> {
         let storage = self.lock();
+        self.validate_storage(&storage, origin, consume)
+    }
+    fn validate_storage(
+        &self,
+        storage: &Storage,
+        origin: ValueOrigin,
+        consume: bool,
+    ) -> Result<(), ExecutionError> {
         if self.origin != origin
             || self.mode == Mode::Inert
+            || (self.mode == Mode::Owner && self.origin != self.backing_origin)
             || storage.fields.is_none()
             || (consume && (self.mode != Mode::Owner || storage.loans != 0))
         {
@@ -109,12 +126,70 @@ impl OwnedStorage {
         }
         Ok(())
     }
-    pub(super) fn borrow(&self) -> Result<Self, ExecutionError> {
-        self.validate(self.origin, false)?;
+    /// The checked constructor admits the exact type and children before minting
+    /// this allocation-bound certificate. Raw storage never starts certified.
+    pub(super) fn establish_admission(&self, program: ValueOrigin) -> Result<(), ExecutionError> {
         let mut storage = self.lock();
+        self.validate_storage(&storage, self.origin, true)?;
+        if storage
+            .admitted_program
+            .is_some_and(|existing| existing != program)
+        {
+            return Err(reject());
+        }
+        storage.admitted_program = Some(program);
+        storage.admission_valid = true;
+        Ok(())
+    }
+    pub(super) fn validate_admission(&self, program: ValueOrigin) -> Result<(), ExecutionError> {
+        let storage = self.lock();
+        self.validate_storage(&storage, self.origin, false)?;
+        if storage.admitted_program != Some(program) || !storage.admission_valid {
+            return Err(reject());
+        }
+        Ok(())
+    }
+    /// Return only a live allocation's currently valid prepared-program proof.
+    pub(super) fn admitted_program(&self) -> Option<ValueOrigin> {
+        let storage = self.lock();
+        self.validate_storage(&storage, self.origin, false).ok()?;
+        storage.admitted_program.filter(|_| storage.admission_valid)
+    }
+    pub(super) fn inherit_admission(&self, program: ValueOrigin) -> Result<(), ExecutionError> {
+        if self.mode != Mode::Read {
+            return Err(reject());
+        }
+        let mut storage = self.lock();
+        self.validate_storage(&storage, self.origin, false)?;
+        if storage
+            .admitted_program
+            .is_some_and(|existing| existing != program)
+        {
+            return Err(reject());
+        }
+        storage.admitted_program = Some(program);
+        storage.admission_valid = true;
+        Ok(())
+    }
+    pub(super) fn adopt_scoped_read(
+        &mut self,
+        source: ValueOrigin,
+        destination: ValueOrigin,
+    ) -> Result<(), ExecutionError> {
+        self.validate(source, false)?;
+        if self.mode != Mode::Read {
+            return Err(reject());
+        }
+        self.origin = destination;
+        Ok(())
+    }
+    pub(super) fn borrow(&self) -> Result<Self, ExecutionError> {
+        let mut storage = self.lock();
+        self.validate_storage(&storage, self.origin, false)?;
         storage.loans = storage.loans.checked_add(1).ok_or_else(reject)?;
         Ok(Self {
             origin: self.origin,
+            backing_origin: self.backing_origin,
             ty: self.ty,
             storage: Arc::clone(&self.storage),
             mode: Mode::Read,
@@ -150,6 +225,7 @@ impl OwnedStorage {
         self.validate(origin, true)?;
         control.check()?;
         let mut storage = self.lock();
+        self.validate_storage(&storage, origin, true)?;
         let fields = storage.fields.as_mut().ok_or_else(reject)?;
         let length = fields.len().checked_add(1).ok_or_else(reject)?;
         if length as u64 > super::value::MAXIMUM_ADMISSION_ITEMS {
@@ -188,6 +264,10 @@ impl OwnedStorage {
                 })?;
         }
         control.check()?;
+        // The raw insertion API cannot preserve a checked-child certificate.
+        // Its checked caller must re-establish admission after attaching the child.
+        storage.admission_valid = false;
+        let fields = storage.fields.as_mut().ok_or_else(reject)?;
         fields.push(value);
         Ok(())
     }
@@ -197,9 +277,16 @@ impl OwnedStorage {
         origin: ValueOrigin,
         control: &ExecutionControl,
     ) -> Result<Option<NormalizedValue>, ExecutionError> {
-        self.validate(origin, true)?;
+        let mut storage = self.lock();
+        self.validate_storage(&storage, origin, true)?;
         control.check()?;
-        self.lock().fields.as_mut().map(Vec::pop).ok_or_else(reject)
+        let value = storage.fields.as_mut().map(Vec::pop).ok_or_else(reject)?;
+        if value.is_some() {
+            // Removal preserves a typed sequence only through its checked owner.
+            // The same raw storage API can also receive a fixed product/choice.
+            storage.admission_valid = false;
+        }
+        Ok(value)
     }
     /// Project a read token while a separately retained parent loan keeps the
     /// complete product in custody. The storage lock never crosses evaluation
@@ -224,8 +311,43 @@ impl OwnedStorage {
                 .and_then(|fields| fields.get(index))
                 .ok_or_else(reject)?;
             if value.memory_form().is_some() {
-                value.memory_validate(origin, false)?;
-                return value.memory_borrow();
+                value.memory_validate(self.backing_origin, false)?;
+                let mut borrowed = value.memory_borrow()?;
+                let admission = storage.admitted_program.filter(|_| storage.admission_valid);
+                match &mut borrowed {
+                    NormalizedValue::ByteBuffer(token) => {
+                        if let Some(program) = admission {
+                            token.inherit_admission(program)?;
+                        }
+                        token.adopt_scoped_read(self.backing_origin, origin)?;
+                    }
+                    NormalizedValue::OwnedI64Cell(token) => {
+                        if let Some(program) = admission {
+                            token.inherit_admission(program)?;
+                        }
+                        token.adopt_scoped_read(self.backing_origin, origin)?;
+                    }
+                    NormalizedValue::OwnedProduct(token) => {
+                        if let Some(program) = admission {
+                            token.inherit_admission(program)?;
+                        }
+                        token.adopt_scoped_read(self.backing_origin, origin)?;
+                    }
+                    NormalizedValue::OwnedChoice(token) => {
+                        if let Some(program) = admission {
+                            token.inherit_admission(program)?;
+                        }
+                        token.adopt_scoped_read(self.backing_origin, origin)?;
+                    }
+                    NormalizedValue::OwnedSequence(token) => {
+                        if let Some(program) = admission {
+                            token.inherit_admission(program)?;
+                        }
+                        token.adopt_scoped_read(self.backing_origin, origin)?;
+                    }
+                    _ => return Err(reject()),
+                }
+                return Ok(borrowed);
             }
         }
         self.read_metadata(origin, index, control, reserve)
@@ -257,9 +379,15 @@ impl OwnedStorage {
         self.validate(source, true)?;
         {
             let mut storage = self.lock();
+            // Interrupted descendant adoption is cleanup custody, never a new
+            // reusable typed root. Retain the program binding across invalidation.
+            let was_admitted = storage.admission_valid;
+            storage.admission_valid = false;
             adopt(storage.fields.as_deref_mut().ok_or_else(reject)?)?;
+            storage.admission_valid = was_admitted;
         }
         self.origin = destination;
+        self.backing_origin = destination;
         Ok(())
     }
     /// Callers resolve the index from this token's exact type and independently
@@ -496,5 +624,222 @@ impl Drop for OwnedStorage {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod scoped_read_tests {
+    use super::super::owned_choice::OwnedChoice;
+    use super::super::owned_i64_cell::{OwnedI64Cell, StorageObservation as Cells};
+    use super::super::owned_sequence::OwnedSequence;
+    use super::*;
+
+    #[test]
+    fn scoped_root_read_visits_only_the_selected_child() {
+        let cells = Cells::start();
+        let source = ValueOrigin::fresh().unwrap();
+        let destination = ValueOrigin::fresh().unwrap();
+        let program = ValueOrigin::fresh().unwrap();
+        let ty = TypeObjectDigest::from_bytes([201; 32]);
+        let control = ExecutionControl::uncancelled();
+        for length in [1, 4096] {
+            let fields = (0..length)
+                .map(|index| NormalizedValue::OwnedI64Cell(OwnedI64Cell::new(source, index as i64)))
+                .collect();
+            let mut owner =
+                OwnedStorage::create(source, ty, fields, &control, &mut |_| Ok(())).unwrap();
+            assert!(owner.validate_admission(program).is_err());
+            owner.establish_admission(program).unwrap();
+            let vector = owner.vector_identity();
+            assert!(owner.adopt_scoped_read(source, destination).is_err());
+            let mut read = owner.borrow().unwrap();
+            read.adopt_scoped_read(source, destination).unwrap();
+            assert_eq!(read.backing_origin, source);
+            assert_eq!(read.vector_identity(), vector);
+            assert_eq!(cells.live(), (length, 0));
+            let NormalizedValue::OwnedI64Cell(selected) = read
+                .borrow_field(destination, length - 1, &control, &mut |_| {
+                    panic!("read capture and owned projection allocate no payload")
+                })
+                .unwrap()
+            else {
+                panic!("selected cell")
+            };
+            selected.validate(destination, false).unwrap();
+            selected.validate_admission(program).unwrap();
+            assert_eq!(selected.read().unwrap(), (length - 1) as i64);
+            assert_eq!(cells.live(), (length, 1));
+            assert!(owner.validate(source, true).is_err());
+            drop(selected);
+            drop(read);
+            owner
+                .inspect_transfer(source, |fields| {
+                    for (index, value) in fields.iter().enumerate() {
+                        value.memory_validate(source, true)?;
+                        let NormalizedValue::OwnedI64Cell(cell) = value else {
+                            panic!("cell owner")
+                        };
+                        assert_eq!(
+                            cell.validate_admission(program).is_ok(),
+                            index == length - 1,
+                            "only the projected child inherits admission"
+                        );
+                    }
+                    Ok(())
+                })
+                .unwrap();
+            assert_eq!(owner.vector_identity(), vector);
+            drop(owner);
+            assert_eq!(cells.live(), (0, 0));
+        }
+    }
+
+    #[test]
+    fn scoped_nested_projection_reborrows_with_original_backing_custody() {
+        let source = ValueOrigin::fresh().unwrap();
+        let destination = ValueOrigin::fresh().unwrap();
+        let grandchild = ValueOrigin::fresh().unwrap();
+        let program = ValueOrigin::fresh().unwrap();
+        let control = ExecutionControl::uncancelled();
+        let ty = TypeObjectDigest::from_bytes([202; 32]);
+        let cell = OwnedI64Cell::new(source, 97);
+        let identity = cell.allocation_identity();
+        let sequence = OwnedSequence::create(source, ty, &control, &mut |_| Ok(()))
+            .unwrap()
+            .push(
+                source,
+                NormalizedValue::OwnedI64Cell(cell),
+                &control,
+                &mut |_| Ok(()),
+            )
+            .unwrap();
+        let choice = OwnedChoice::create(
+            source,
+            ty,
+            0,
+            NormalizedValue::OwnedSequence(sequence),
+            &control,
+            &mut |_| Ok(()),
+        )
+        .unwrap();
+        let owner = OwnedStorage::create(
+            source,
+            ty,
+            vec![NormalizedValue::OwnedChoice(choice)],
+            &control,
+            &mut |_| Ok(()),
+        )
+        .unwrap();
+        owner.establish_admission(program).unwrap();
+        let mut root = owner.borrow().unwrap();
+        root.adopt_scoped_read(source, destination).unwrap();
+        let NormalizedValue::OwnedChoice(choice) = root
+            .borrow_field(destination, 0, &control, &mut |_| Ok(()))
+            .unwrap()
+        else {
+            panic!("choice read")
+        };
+        choice.validate_admission(program).unwrap();
+        let NormalizedValue::OwnedSequence(sequence) = choice
+            .borrow_payload(destination, &control, &mut |_| Ok(()))
+            .unwrap()
+        else {
+            panic!("sequence read")
+        };
+        sequence.validate_admission(program).unwrap();
+        let mut nested = sequence.borrow().unwrap();
+        nested.adopt_scoped_read(destination, grandchild).unwrap();
+        let NormalizedValue::OwnedI64Cell(cell) = nested
+            .borrow_item(grandchild, 0, &control, &mut |_| Ok(()))
+            .unwrap()
+        else {
+            panic!("cell read")
+        };
+        cell.validate(grandchild, false).unwrap();
+        cell.validate_admission(program).unwrap();
+        assert_eq!(cell.allocation_identity(), identity);
+        assert_eq!(cell.read().unwrap(), 97);
+        assert!(owner.validate(source, true).is_err());
+        drop(cell);
+        drop(nested);
+        drop(sequence);
+        drop(choice);
+        drop(root);
+        owner.validate(source, true).unwrap();
+        owner.validate_admission(program).unwrap();
+    }
+
+    #[test]
+    fn admission_remains_program_bound_after_mutation_and_failed_adoption() {
+        let source = ValueOrigin::fresh().unwrap();
+        let destination = ValueOrigin::fresh().unwrap();
+        let program = ValueOrigin::fresh().unwrap();
+        let foreign = ValueOrigin::fresh().unwrap();
+        let control = ExecutionControl::uncancelled();
+        let ty = TypeObjectDigest::from_bytes([203; 32]);
+        let mut owner =
+            OwnedStorage::create(source, ty, vec![], &control, &mut |_| Ok(())).unwrap();
+        owner.establish_admission(program).unwrap();
+        assert!(owner.clone().validate_admission(program).is_err());
+        owner
+            .push(
+                source,
+                NormalizedValue::OwnedI64Cell(OwnedI64Cell::new(source, 11)),
+                &control,
+                &mut |_| Ok(()),
+            )
+            .unwrap();
+        assert!(owner.validate_admission(program).is_err());
+        assert!(owner.establish_admission(foreign).is_err());
+        owner.establish_admission(program).unwrap();
+        let read = owner.borrow().unwrap();
+        assert!(read.establish_admission(program).is_err());
+        assert!(read.inherit_admission(foreign).is_err());
+        drop(read);
+        assert!(
+            owner
+                .adopt_transfer(source, destination, |fields| {
+                    let [NormalizedValue::OwnedI64Cell(cell)] = fields else {
+                        panic!("one cell")
+                    };
+                    cell.adopt_transfer(source, destination)?;
+                    Err(ExecutionError::resource("test_adoption", "interrupted"))
+                })
+                .is_err()
+        );
+        assert_eq!(owner.backing_origin, source);
+        assert!(owner.validate_admission(program).is_err());
+        assert!(owner.establish_admission(foreign).is_err());
+    }
+
+    #[test]
+    fn raw_removal_invalidates_a_certified_fixed_product_shape() {
+        let origin = ValueOrigin::fresh().unwrap();
+        let program = ValueOrigin::fresh().unwrap();
+        let foreign = ValueOrigin::fresh().unwrap();
+        let control = ExecutionControl::uncancelled();
+        let ty = TypeObjectDigest::from_bytes([204; 32]);
+        let owner = OwnedStorage::create(
+            origin,
+            ty,
+            vec![NormalizedValue::I64(31)],
+            &control,
+            &mut |_| Ok(()),
+        )
+        .unwrap();
+        owner.establish_admission(program).unwrap();
+        assert_eq!(owner.admitted_program(), Some(program));
+        assert_eq!(
+            owner.pop(origin, &control).unwrap(),
+            Some(NormalizedValue::I64(31))
+        );
+        assert_eq!(owner.admitted_program(), None);
+        assert!(owner.validate_admission(program).is_err());
+        assert!(owner.establish_admission(foreign).is_err());
+
+        let empty = OwnedStorage::create(origin, ty, vec![], &control, &mut |_| Ok(())).unwrap();
+        empty.establish_admission(program).unwrap();
+        assert_eq!(empty.pop(origin, &control).unwrap(), None);
+        assert_eq!(empty.admitted_program(), Some(program));
     }
 }

@@ -37,6 +37,25 @@ impl OwnedSequence {
             storage: self.storage.borrow()?,
         })
     }
+    pub(super) fn establish_admission(&self, program: ValueOrigin) -> Result<(), ExecutionError> {
+        self.storage.establish_admission(program)
+    }
+    pub(super) fn validate_admission(&self, program: ValueOrigin) -> Result<(), ExecutionError> {
+        self.storage.validate_admission(program)
+    }
+    pub(super) fn admitted_program(&self) -> Option<ValueOrigin> {
+        self.storage.admitted_program()
+    }
+    pub(super) fn inherit_admission(&self, program: ValueOrigin) -> Result<(), ExecutionError> {
+        self.storage.inherit_admission(program)
+    }
+    pub(super) fn adopt_scoped_read(
+        &mut self,
+        source: ValueOrigin,
+        destination: ValueOrigin,
+    ) -> Result<(), ExecutionError> {
+        self.storage.adopt_scoped_read(source, destination)
+    }
     pub(super) fn is_borrowed(&self) -> bool {
         self.storage.is_borrowed()
     }
@@ -73,6 +92,7 @@ impl OwnedSequence {
         reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
     ) -> Result<NormalizedValue, ExecutionError> {
         self.validate(origin, true)?;
+        let admitted_program = self.admitted_program();
         let empty = self.len(origin, control)? == 0;
         let item_bytes = if empty {
             0
@@ -82,6 +102,9 @@ impl OwnedSequence {
         reserve(OwnedChoice::ALLOCATION_BYTES + item_bytes)?;
         control.check()?;
         let value = self.storage.pop(origin, control)?;
+        if let Some(program) = admitted_program {
+            self.establish_admission(program)?;
+        }
         let (case, payload) = if let Some(value) = value {
             let product = OwnedProduct::create(
                 origin,
@@ -94,8 +117,11 @@ impl OwnedSequence {
         } else {
             (0, NormalizedValue::OwnedSequence(self))
         };
-        OwnedChoice::create(origin, result_type, case, payload, control, &mut |_| Ok(()))
-            .map(NormalizedValue::OwnedChoice)
+        let choice =
+            OwnedChoice::create(origin, result_type, case, payload, control, &mut |_| Ok(()))?;
+        // These supplied wrapper digests require independent typed admission by
+        // the evaluator; the saved sequence proof certifies only the remaining self.
+        Ok(NormalizedValue::OwnedChoice(choice))
     }
     pub(super) fn borrow_item(
         &self,
@@ -182,6 +208,112 @@ mod tests {
         };
         assert!(fields.next().is_none());
         (sequence, Some(value))
+    }
+
+    #[test]
+    fn sequence_pop_preserves_parent_proof_without_certifying_raw_wrappers() {
+        let origin = ValueOrigin::fresh().unwrap();
+        let program = ValueOrigin::fresh().unwrap();
+        let control = ExecutionControl::uncancelled();
+        let [sequence_type, result_type, item_type] = types();
+        for admitted in [false, true] {
+            for empty in [false, true] {
+                let mut sequence =
+                    OwnedSequence::create(origin, sequence_type, &control, &mut |_| Ok(()))
+                        .unwrap();
+                if !empty {
+                    sequence = sequence
+                        .push(origin, cell(origin, 19), &control, &mut |_| Ok(()))
+                        .unwrap();
+                }
+                if admitted {
+                    sequence.establish_admission(program).unwrap();
+                }
+                let expected = admitted.then_some(program);
+                assert_eq!(sequence.admitted_program(), expected);
+                assert_eq!(sequence.clone().admitted_program(), None);
+                let NormalizedValue::OwnedChoice(choice) = sequence
+                    .pop(origin, result_type, item_type, &control, &mut |_| Ok(()))
+                    .unwrap()
+                else {
+                    panic!("pop choice")
+                };
+                assert_eq!(choice.storage.admitted_program(), None);
+                assert!(choice.validate_admission(program).is_err());
+                let (case, payload) = choice.select(origin, result_type, &control).unwrap();
+                assert_eq!(case, u32::from(!empty));
+                let rest = if empty {
+                    let NormalizedValue::OwnedSequence(rest) = payload else {
+                        panic!("empty sequence")
+                    };
+                    rest
+                } else {
+                    let NormalizedValue::OwnedProduct(product) = payload else {
+                        panic!("generated item product")
+                    };
+                    assert_eq!(product.admitted_program(), None);
+                    let mut fields = product
+                        .unpack(origin, item_type, &control)
+                        .unwrap()
+                        .into_iter();
+                    let NormalizedValue::OwnedSequence(rest) = fields.next().unwrap() else {
+                        panic!("remaining sequence")
+                    };
+                    let NormalizedValue::OwnedI64Cell(value) = fields.next().unwrap() else {
+                        panic!("removed value")
+                    };
+                    assert_eq!(value.extract().unwrap(), 19);
+                    assert!(fields.next().is_none());
+                    rest
+                };
+                assert_eq!(rest.admitted_program(), expected);
+                assert_eq!(rest.len(origin, &control).unwrap(), 0);
+            }
+        }
+    }
+
+    #[test]
+    fn raw_sequence_pop_cannot_certify_arbitrary_wrapper_type_digests() {
+        let origin = ValueOrigin::fresh().unwrap();
+        let program = ValueOrigin::fresh().unwrap();
+        let control = ExecutionControl::uncancelled();
+        let unrelated_choice_type = TypeObjectDigest::from_bytes([211; 32]);
+        let unrelated_product_type = TypeObjectDigest::from_bytes([212; 32]);
+        let sequence = OwnedSequence::create(origin, types()[0], &control, &mut |_| Ok(()))
+            .unwrap()
+            .push(origin, cell(origin, 37), &control, &mut |_| Ok(()))
+            .unwrap();
+        sequence.establish_admission(program).unwrap();
+        let NormalizedValue::OwnedChoice(choice) = sequence
+            .pop(
+                origin,
+                unrelated_choice_type,
+                unrelated_product_type,
+                &control,
+                &mut |_| Ok(()),
+            )
+            .unwrap()
+        else {
+            panic!("raw choice")
+        };
+        assert_eq!(choice.ty(), unrelated_choice_type);
+        assert!(choice.validate_admission(program).is_err());
+        let (case, payload) = choice
+            .select(origin, unrelated_choice_type, &control)
+            .unwrap();
+        assert_eq!(case, 1);
+        let NormalizedValue::OwnedProduct(product) = payload else {
+            panic!("raw product")
+        };
+        assert_eq!(product.ty(), unrelated_product_type);
+        assert!(product.validate_admission(program).is_err());
+        let fields = product
+            .unpack(origin, unrelated_product_type, &control)
+            .unwrap();
+        let NormalizedValue::OwnedSequence(rest) = &fields[0] else {
+            panic!("remaining sequence")
+        };
+        rest.validate_admission(program).unwrap();
     }
 
     #[test]

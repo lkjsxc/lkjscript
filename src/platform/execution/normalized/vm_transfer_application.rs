@@ -45,14 +45,24 @@ impl TaskApplication {
             || f.type_parameter_constraints.len() != types.len()
             || (!f.type_arguments.is_empty() && f.type_arguments.as_ref() != types.as_ref())
             || f.implementation_parameters.len() != f.implementation_arguments.len()
+            || f.result_borrow.is_some()
         {
             return Err(reject());
         }
         let mut work = Work { control, nodes: 0 };
         for (ty, constraint) in types.iter().zip(f.type_parameter_constraints.iter()) {
-            let owned = validate_type(program, *ty, 0, &mut work)?;
+            work.visit(0)?;
+            let owned = closed_owned_type(program, *ty)?;
             if owned != constraint.has_owned()
+                || (!owned && !program.buffer_free_types.contains(ty))
                 || (constraint.requires_capture_safe() && !program.capture_safe_types.contains(ty))
+            {
+                return Err(reject());
+            }
+            if constraint.requires_transfer() {
+                validate_type(program, *ty, 0, &mut work)?;
+            }
+            if constraint.requires_share() && !validate_shareable_type(program, *ty, 0, &mut work)?
             {
                 return Err(reject());
             }
@@ -92,7 +102,7 @@ impl TaskApplication {
                 reserve,
             )?;
             for ty in application.implementation_type_arguments.iter() {
-                if !validate_type(program, *ty, 0, &mut work)? {
+                if !closed_owned_type(program, *ty)? {
                     return Err(reject());
                 }
             }
@@ -110,7 +120,7 @@ impl TaskApplication {
             {
                 work.visit(0)?;
                 if resolve_type(program, *expected, &bindings, control)? != *actual
-                    || !validate_type(program, *actual, 0, &mut work)?
+                    || !closed_owned_type(program, *actual)?
                 {
                     return Err(reject());
                 }
@@ -135,7 +145,7 @@ impl TaskApplication {
         for p in f.parameters.iter() {
             work.visit(0)?;
             let ty = resolve_type(program, p.ty, &bindings, control)?;
-            validate_type(program, ty, 0, &mut work)?;
+            validate_parameter_type(program, ty, p.use_mode, &mut work)?;
             parameters.push(ty);
         }
         let result = resolve_type(program, f.result, &bindings, control)?;
@@ -173,6 +183,40 @@ impl TaskApplication {
                 .map(|p| p.ty),
         }
         .ok_or_else(reject)
+    }
+}
+
+/// Metadata actuals prove their declared generic obligations; they do not gain
+/// moving or sharing obligations merely by appearing in a callable application.
+fn closed_owned_type(
+    program: &NormalizedProgram,
+    ty: TypeObjectDigest,
+) -> Result<bool, ExecutionError> {
+    let object = program.types.get(&ty).ok_or_else(reject)?;
+    if matches!(object.form, TypeForm::TypeParameter { .. }) {
+        return Err(reject());
+    }
+    Ok(matches!(
+        object.form,
+        TypeForm::ByteBuffer
+            | TypeForm::OwnedI64Cell
+            | TypeForm::OwnedProduct { .. }
+            | TypeForm::OwnedChoice { .. }
+            | TypeForm::OwnedSequence { .. }
+    ))
+}
+
+fn validate_parameter_type(
+    program: &NormalizedProgram,
+    ty: TypeObjectDigest,
+    mode: ParameterUse,
+    work: &mut Work<'_>,
+) -> Result<(), ExecutionError> {
+    match mode {
+        ParameterUse::Borrow if validate_shareable_type(program, ty, 0, work)? => Ok(()),
+        ParameterUse::Consume if validate_type(program, ty, 0, work)? => Ok(()),
+        ParameterUse::Unrestricted if !validate_type(program, ty, 0, work)? => Ok(()),
+        _ => Err(reject()),
     }
 }
 
@@ -221,7 +265,8 @@ fn validate_implementation(
         .chain(application.implementation_type_arguments.iter())
         .chain(application.type_arguments.iter())
     {
-        if !validate_type(program, *ty, 0, work)? {
+        work.visit(0)?;
+        if !closed_owned_type(program, *ty)? {
             return Err(reject());
         }
     }

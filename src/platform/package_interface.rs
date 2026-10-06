@@ -31,11 +31,11 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-17";
-pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 17;
-pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF17";
+pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-18";
+pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 18;
+pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF18";
 pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str =
-    "lkjscript.package-interface-owner-envelope.v17";
+    "lkjscript.package-interface-owner-envelope.v18";
 const PACKAGE_INTERFACE_IDENTITY_MAGIC: [u8; 8] = *b"LKJPIFI1";
 const PACKAGE_INTERFACE_IDENTITY_DOMAIN: &str = "lkjscript.package-interface-identity.v1";
 pub const MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES: usize = 1024 * 1024;
@@ -271,6 +271,8 @@ impl PackageInterfaceOwner {
                 15
             } else if canonical.header().contract_version < 29 {
                 16
+            } else if canonical.header().contract_version < 30 {
+                17
             } else {
                 PACKAGE_INTERFACE_CONTRACT_VERSION
             },
@@ -385,6 +387,15 @@ impl PackageInterfaceOwner {
             )?;
             return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
         }
+        if self.contract_version == 17 {
+            let bytes = crate::platform::packed::encode(
+                *b"LKJPIF17",
+                "lkjscript.package-interface-owner-envelope.v17",
+                self,
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
+        }
         let bytes = crate::platform::packed::encode(
             PACKAGE_INTERFACE_MAGIC,
             PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
@@ -406,7 +417,20 @@ impl PackageInterfaceOwner {
                 "package-interface owner bytes disagree with their exact digest",
             ));
         }
-        let value: Self = if bytes.starts_with(b"LKJPIF16") {
+        let value: Self = if bytes.starts_with(b"LKJPIF17") {
+            let value: Self = crate::platform::packed::decode(
+                bytes,
+                *b"LKJPIF17",
+                "lkjscript.package-interface-owner-envelope.v17",
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            if value.contract_version != 17 {
+                return Err(interface_corrupt(
+                    "predecessor interface envelope has a foreign generation",
+                ));
+            }
+            value
+        } else if bytes.starts_with(b"LKJPIF16") {
             let wire: PackageInterfaceOwner16 = crate::platform::packed::decode(
                 bytes,
                 *b"LKJPIF16",
@@ -554,11 +578,25 @@ impl PackageInterfaceOwner {
             && self.contract_version != 14
             && self.contract_version != 15
             && self.contract_version != 16
+            && self.contract_version != 17
         {
             return Err(interface_error(
                 DiagnosticClass::Source,
                 "package_interface_contract",
                 "package-interface owner uses a predecessor or foreign contract",
+            ));
+        }
+        if self.contract_version < 18
+            && matches!(&self.record,
+                PackageInterfaceRecord::TypeParameter(parameter) if parameter.constraints.requires_share())
+        {
+            return Err(interface_corrupt(
+                "shareable constraints require interface generation 18",
+            ));
+        }
+        if self.contract_version < 18 && self.record.header().contract_version >= 30 {
+            return Err(interface_corrupt(
+                "Graph 30 owners require interface generation 18",
             ));
         }
         if self.contract_version < 17
@@ -2264,7 +2302,7 @@ mod tests {
             }),
         };
         let (digest, bytes) = original.encode().unwrap();
-        assert_eq!(&bytes[..8], b"LKJPIF17");
+        assert_eq!(&bytes[..8], b"LKJPIF18");
         assert_eq!(
             PackageInterfaceOwner::decode(&bytes, owner, digest).unwrap(),
             original
@@ -2280,6 +2318,13 @@ mod tests {
         assert_ne!(erased.encode().unwrap().0, digest);
         let mut predecessor = original;
         predecessor.contract_version = 14;
+        // Isolate the borrowed-result layout boundary from Graph 30's newer
+        // interface envelope requirement.
+        let PackageInterfaceRecord::Declaration(declaration) = &mut predecessor.record else {
+            unreachable!()
+        };
+        declaration.header.contract_version =
+            crate::platform::kernel::contract::BORROW_RESULT_GRAPH_CONTRACT_VERSION;
         assert!(
             predecessor
                 .encode()
@@ -2614,6 +2659,80 @@ mod tests {
         };
         p.header.contract_version = 26;
         assert!(validate_owner_closure(package, &owners, &types).is_ok());
+    }
+
+    #[test]
+    fn interface18_preserves_share_bounds_and_freezes_interface17() {
+        use crate::platform::kernel::{
+            Name, OwnerHeader, TypeParameterConstraints as C, TypeParameterRecord,
+        };
+        let seed = b"interface-shared-read-bounds";
+        let owner = OwnerKey::TypeParameter(TypeParameterId::migrate(seed, 0));
+        let mut value = PackageInterfaceOwner {
+            contract_version: 17,
+            record: PackageInterfaceRecord::TypeParameter(TypeParameterRecord {
+                header: OwnerHeader {
+                    contract_version: 29,
+                    owner,
+                    kind: OwnerKind::TypeParameter,
+                },
+                declaration: DeclarationId::migrate(seed, 0),
+                name: Name::new("T").unwrap(),
+                constraints: C::OwnedTransferable,
+            }),
+        };
+        let original = crate::platform::packed::encode(
+            *b"LKJPIF17",
+            "lkjscript.package-interface-owner-envelope.v17",
+            &value,
+            MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+        )
+        .unwrap();
+        let (digest, bytes) = value.encode().unwrap();
+        assert_eq!(bytes, original);
+        assert_eq!(
+            PackageInterfaceOwner::decode(&bytes, owner, digest).unwrap(),
+            value
+        );
+        for bounds in [C::OwnedShareable, C::OwnedTransferableShareable] {
+            value.contract_version = 18;
+            let PackageInterfaceRecord::TypeParameter(parameter) = &mut value.record else {
+                unreachable!()
+            };
+            parameter.header.contract_version = 30;
+            parameter.constraints = bounds;
+            let (digest, bytes) = value.encode().unwrap();
+            assert_eq!(&bytes[..8], b"LKJPIF18");
+            assert_eq!(
+                PackageInterfaceOwner::decode(&bytes, owner, digest).unwrap(),
+                value
+            );
+            value.contract_version = 17;
+            assert!(value.encode().is_err());
+            let forged = crate::platform::packed::encode(
+                *b"LKJPIF17",
+                "lkjscript.package-interface-owner-envelope.v17",
+                &value,
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )
+            .unwrap();
+            assert!(
+                PackageInterfaceOwner::decode(
+                    &forged,
+                    owner,
+                    PackageInterfaceOwnerDigest::of(&forged),
+                )
+                .is_err()
+            );
+        }
+        let PackageInterfaceRecord::TypeParameter(parameter) = &mut value.record else {
+            unreachable!()
+        };
+        parameter.constraints = C::Owned;
+        assert!(
+            value.encode().is_err(),
+            "an old interface cannot label Graph 30 owners"
+        );
     }
 
     #[test]

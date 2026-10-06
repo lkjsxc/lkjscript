@@ -1787,12 +1787,6 @@ fn validate_normalized_resource_signature(
         let mut phase = 0;
         for p in parameters {
             let next = if is_memory(p.ty)? {
-                if task && p.use_mode != ParameterUse::Consume {
-                    return Err(runtime_corrupt(
-                        "normalized_buffer_signature",
-                        "task memory parameter is not consuming",
-                    ));
-                }
                 1
             } else if matches!(
                 types.get(&p.ty).map(|t| &t.form),

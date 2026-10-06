@@ -277,7 +277,7 @@ declarations.end"#;
 }
 
 #[test]
-fn native_transfer_constraint_sets_are_canonical_and_select_only_codec26() {
+fn native_transfer_and_share_constraint_sets_select_exact_canonical_codec() {
     use crate::platform::kernel::TypeParameterConstraints as C;
     for (names, expected, magic) in [
         ("none", C::None, b"LKJACR14"),
@@ -296,6 +296,38 @@ fn native_transfer_constraint_sets_are_canonical_and_select_only_codec26() {
             b"LKJACR26",
         ),
         ("transferable owned", C::OwnedTransferable, b"LKJACR26"),
+        ("owned shareable", C::OwnedShareable, b"LKJACR34"),
+        ("shareable owned", C::OwnedShareable, b"LKJACR34"),
+        (
+            "owned transferable shareable",
+            C::OwnedTransferableShareable,
+            b"LKJACR34",
+        ),
+        (
+            "owned shareable transferable",
+            C::OwnedTransferableShareable,
+            b"LKJACR34",
+        ),
+        (
+            "transferable owned shareable",
+            C::OwnedTransferableShareable,
+            b"LKJACR34",
+        ),
+        (
+            "transferable shareable owned",
+            C::OwnedTransferableShareable,
+            b"LKJACR34",
+        ),
+        (
+            "shareable owned transferable",
+            C::OwnedTransferableShareable,
+            b"LKJACR34",
+        ),
+        (
+            "shareable transferable owned",
+            C::OwnedTransferableShareable,
+            b"LKJACR34",
+        ),
     ] {
         let input = format!(
             "request base=rev_{}\ndeclarations.begin\n(units (module create constraints (function create f (visibility public) (type-parameter create T (constraint {names})) (returns Unit) (effect pure) (body (unit)))))\ndeclarations.end\n",
@@ -321,6 +353,8 @@ fn native_transfer_constraint_sets_are_canonical_and_select_only_codec26() {
             &canonical_authored_intent_bytes(&decoded.semantic).unwrap()[..8],
             magic
         );
+        let json = serde_json::to_vec(&expected).unwrap();
+        assert_eq!(serde_json::from_slice::<C>(&json).unwrap(), expected);
     }
     for names in [
         "",
@@ -330,6 +364,13 @@ fn native_transfer_constraint_sets_are_canonical_and_select_only_codec26() {
         "owned capture-safe",
         "capture-safe owned",
         "owned transferable capture-safe",
+        "shareable",
+        "transferable shareable",
+        "capture-safe shareable",
+        "owned shareable shareable",
+        "owned transferable shareable shareable",
+        "owned transferable shareable unknown",
+        "none owned shareable",
     ] {
         let input = format!(
             "request base=rev_{}\ndeclarations.begin\n(units (module create constraints (function create f (visibility public) (type-parameter create T (constraint {names})) (returns Unit) (effect pure) (body (unit)))))\ndeclarations.end\n",
@@ -343,7 +384,7 @@ fn native_transfer_constraint_sets_are_canonical_and_select_only_codec26() {
 }
 
 #[test]
-fn transfer_constraints_round_trip_native_drafts_without_concrete_callers() {
+fn transfer_and_share_constraints_round_trip_native_drafts_without_concrete_callers() {
     let temporary = tempfile::tempdir().unwrap();
     let initial = crate::platform::kernel::tests::witness_snapshot();
     let created =
@@ -351,7 +392,9 @@ fn transfer_constraints_round_trip_native_drafts_without_concrete_callers() {
     let input = format!("request base={}\ndeclarations.begin\n(units (module create transferable_bounds (as $module)
       (function create ordinary (visibility public) (type-parameter create T (constraint transferable)) (returns Unit) (effect pure) (body (unit)))
       (function create explicit_capture (visibility public) (type-parameter create T (constraint capture-safe transferable)) (returns Unit) (effect pure) (body (unit)))
-      (function create owner (visibility public) (type-parameter create T (constraint owned transferable)) (returns Unit) (effect pure) (body (unit)))))\ndeclarations.end\n", created.current.head.revision);
+      (function create owner (visibility public) (type-parameter create T (constraint owned transferable)) (returns Unit) (effect pure) (body (unit)))
+      (function create reader (visibility public) (type-parameter create T (constraint shareable owned)) (returns Unit) (effect pure) (body (unit)))
+      (function create moving_reader (visibility public) (type-parameter create T (constraint shareable transferable owned)) (returns Unit) (effect pure) (body (unit)))))\ndeclarations.end\n", created.current.head.revision);
     let decoded = decode_compact_change("bounds.lkjc", input.as_bytes()).unwrap();
     let prepared = created
         .repository
@@ -370,6 +413,8 @@ fn transfer_constraints_round_trip_native_drafts_without_concrete_callers() {
         "(constraint transferable)",
         "(constraint capture-safe transferable)",
         "(constraint owned transferable)",
+        "(constraint owned shareable)",
+        "(constraint owned transferable shareable)",
     ] {
         assert!(text.contains(clause), "{text}");
     }
@@ -382,6 +427,123 @@ fn transfer_constraints_round_trip_native_drafts_without_concrete_callers() {
         .unwrap_err();
     assert_eq!(errors.len(), 1, "{errors:#?}");
     assert_eq!(errors[0].code, "publication_semantic_no_change");
+}
+
+#[test]
+fn borrowed_task_mutations_promote_both_legacy_signature_owners() {
+    use crate::platform::kernel::{DeclarationPayload, OwnerRecord, ParameterUse};
+    let mut source = crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(
+        r#"declarations.begin
+(units (module create legacy-task-contracts
+  (function create helper (visibility public)
+    (parameter create payload (type OwnedI64Cell) (use borrow))
+    (returns I64) (effect pure) (body (i64 7)))
+  (function create consuming (visibility public)
+    (parameter create payload (type OwnedI64Cell) (use consume))
+    (returns I64) (effect (task)) (body (i64 11)))
+  (function create empty (visibility public)
+    (returns I64) (effect (task)) (body (i64 13)))))
+declarations.end"#,
+    )
+    .unwrap();
+    for owner in source.owners.values_mut() {
+        match owner {
+            OwnerRecord::Declaration(declaration)
+                if matches!(declaration.payload, DeclarationPayload::Function(_)) =>
+            {
+                declaration.header.contract_version = 29;
+            }
+            OwnerRecord::Parameter(parameter) => parameter.header.contract_version = 29,
+            _ => {}
+        }
+    }
+    let named = |name| {
+        source
+            .owners
+            .values()
+            .find_map(|owner| match owner {
+                OwnerRecord::Declaration(declaration) if declaration.name.as_str() == name => {
+                    Some(declaration.header.owner)
+                }
+                _ => None,
+            })
+            .unwrap()
+    };
+    let helper = named("helper");
+    let consuming = named("consuming");
+    let empty = named("empty");
+    let OwnerRecord::Declaration(declaration) = &source.owners[&consuming] else {
+        unreachable!()
+    };
+    let DeclarationPayload::Function(function) = &declaration.payload else {
+        unreachable!()
+    };
+    let consuming_parameter = OwnerKey::Parameter(function.parameters[0]);
+    let OwnerRecord::Declaration(declaration) = &source.owners[&helper] else {
+        unreachable!()
+    };
+    let DeclarationPayload::Function(function) = &declaration.payload else {
+        unreachable!()
+    };
+    let helper_parameter = OwnerKey::Parameter(function.parameters[0]);
+    let temporary = tempfile::tempdir().unwrap();
+    let created =
+        GraphRepository::create(&temporary.path().join("meaning"), &source, None).unwrap();
+    let input = format!(
+        "request base={}\nset.function-contract as=%helper function={helper} result=i64 effect=task\nset.parameter-use parameter={consuming_parameter} use=borrow\nadd.parameter as=$added function={empty} name=payload type=owned-i64-cell use=borrow\n",
+        created.current.head.revision,
+    );
+    let decoded = decode_compact_change("legacy-borrow-task.lkjc", input.as_bytes()).unwrap();
+    let prepared = created
+        .repository
+        .prepare_authored_change(&decoded.semantic, decoded.options)
+        .unwrap();
+    let crate::platform::publication::SemanticDiffBody::Change { owners, .. } =
+        &prepared.publication.semantic_diff.body
+    else {
+        unreachable!()
+    };
+    let promoted = owners
+        .iter()
+        .find(|entry| entry.owner == helper_parameter)
+        .unwrap();
+    assert!(!promoted.dimensions.executable());
+    assert!(promoted.dimensions.validation_dependencies);
+    assert!(
+        promoted
+            .classes
+            .contains(&crate::platform::publication::OwnerChangeClass::RelationSet)
+    );
+    assert!(
+        !promoted
+            .classes
+            .contains(&crate::platform::publication::OwnerChangeClass::SemanticPayloadChanged)
+    );
+    created.repository.publish(&prepared.publication).unwrap();
+    let current = created
+        .repository
+        .view_current()
+        .unwrap()
+        .reconstruct_full_oracle()
+        .unwrap()
+        .value;
+    for owner in [helper, consuming, empty] {
+        let OwnerRecord::Declaration(declaration) = &current.owners[&owner] else {
+            unreachable!()
+        };
+        assert_eq!(declaration.header.contract_version, 30);
+        let DeclarationPayload::Function(function) = &declaration.payload else {
+            unreachable!()
+        };
+        assert_eq!(function.parameters.len(), 1);
+        let OwnerRecord::Parameter(parameter) =
+            &current.owners[&OwnerKey::Parameter(function.parameters[0])]
+        else {
+            unreachable!()
+        };
+        assert_eq!(parameter.header.contract_version, 30);
+        assert_eq!(parameter.use_mode, ParameterUse::Borrow);
+    }
 }
 
 #[test]
