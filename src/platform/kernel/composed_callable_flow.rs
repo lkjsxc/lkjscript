@@ -4,6 +4,8 @@
 
 #[path = "prerequisite_callable_flow.rs"]
 mod prerequisites;
+#[path = "recursive_callable_flow.rs"]
+mod recursive;
 
 use super::{CallableFlowWork, MAXIMUM_ANALYSIS_BYTES, MAXIMUM_DIAGNOSTIC_PATH, semantic};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -184,6 +186,7 @@ struct Analysis<'a, R: ?Sized> {
     selections: Vec<SelectionInfo>,
     selection_indexes: BTreeMap<Selection, SelectionId>,
     pending: Vec<usize>,
+    calls: Vec<recursive::CallSite>,
     slot_owners: Vec<(usize, usize)>,
     edges: Vec<Edge>,
 }
@@ -415,12 +418,9 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
             }
             _ => {}
         }
-        let mut witnesses = Vec::new();
-        let mut total = parameters.len();
-        for (ordinal, selected) in key.implementations.iter().enumerate() {
-            self.reserve::<usize>(1)?;
-            self.witness_layout(*selected, vec![ordinal], &mut witnesses, &mut total)?;
-        }
+        // Discover exact callable contexts before expanding typed witness paths.
+        // Only contexts participating in a call cycle can contain a type-growth cycle.
+        let total = parameters.len();
         self.reserve::<ContextInfo>(1)?;
         self.reserve::<(Context, usize)>(1)?;
         self.reserve::<usize>(total)?;
@@ -438,11 +438,48 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         self.contexts.push(ContextInfo {
             key,
             parameters,
-            witnesses,
+            witnesses: Vec::new(),
             slots,
         });
         self.pending.push(index);
         Ok(index)
+    }
+    fn materialize_witnesses(&mut self, index: usize) -> Result<(), Diagnostic> {
+        self.steps(self.contexts[index].key.implementations.len())?;
+        self.reserve::<SelectionId>(self.contexts[index].key.implementations.len())?;
+        let selections = self.contexts[index].key.implementations.clone();
+        let start = self.contexts[index].parameters.len();
+        let mut total = start;
+        let mut witnesses = Vec::new();
+        for (ordinal, selected) in selections.into_iter().enumerate() {
+            self.reserve::<usize>(1)?;
+            self.witness_layout(selected, vec![ordinal], &mut witnesses, &mut total)?;
+        }
+        self.reserve::<usize>(total - start)?;
+        self.reserve::<(usize, usize)>(total - start)?;
+        for ordinal in start..total {
+            self.tick()?;
+            let slot = self.slot_owners.len();
+            self.slot_owners.push((index, ordinal));
+            self.contexts[index].slots.push(slot);
+        }
+        self.contexts[index].witnesses = witnesses;
+        Ok(())
+    }
+    fn record_call(
+        &mut self,
+        from: usize,
+        to: usize,
+        expression: Option<ExpressionId>,
+    ) -> Result<(), Diagnostic> {
+        self.tick()?;
+        self.reserve::<recursive::CallSite>(1)?;
+        self.calls.push(recursive::CallSite {
+            from,
+            to,
+            expression,
+        });
+        Ok(())
     }
     fn info(&mut self, index: usize) -> Result<ContextInfo, Diagnostic> {
         // Type-provenance paths remain separate, and are metered before their copies.
@@ -533,14 +570,30 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         arguments: &[TypeObjectDigest],
         expression: Option<ExpressionId>,
     ) -> Result<(), Diagnostic> {
-        if arguments.len() != target_slots.len() {
+        self.argument_types(
+            source,
+            target_slots.len(),
+            Some(target_slots),
+            arguments,
+            expression,
+        )
+    }
+    fn argument_types(
+        &mut self,
+        source: usize,
+        expected: usize,
+        targets: Option<&[usize]>,
+        arguments: &[TypeObjectDigest],
+        expression: Option<ExpressionId>,
+    ) -> Result<(), Diagnostic> {
+        if arguments.len() != expected {
             return Err(semantic(
                 "kernel_callable_flow_arity",
                 "callable application requires every ordered type argument",
             ));
         }
         let caller = self.contexts[source].key.owner;
-        for (argument, (ty, target)) in arguments.iter().zip(target_slots).enumerate() {
+        for (argument, ty) in arguments.iter().enumerate() {
             self.reserve::<(TypeObjectDigest, Vec<usize>)>(1)?;
             let mut pending = vec![(*ty, Vec::new())];
             let mut visited = BTreeSet::new();
@@ -569,8 +622,10 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                                 "callable argument contains a foreign source parameter",
                             )
                         })?;
-                    let from = self.contexts[source].slots[ordinal];
-                    self.edge(from, *target, caller, expression, argument, path)?;
+                    if let Some(targets) = targets {
+                        let from = self.contexts[source].slots[ordinal];
+                        self.edge(from, targets[argument], caller, expression, argument, path)?;
+                    }
                 } else {
                     for (index, child) in object.child_types().into_iter().enumerate() {
                         self.tick()?;
@@ -635,6 +690,15 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                         "applied witness requires every ordered scheme argument",
                     ));
                 }
+                // Acyclic contexts still admit every supplied type, including phantom
+                // arguments and operands in unused methods or untaken syntax.
+                self.argument_types(
+                    source,
+                    scheme.type_parameters.len(),
+                    None,
+                    type_arguments,
+                    None,
+                )?;
                 self.reserve::<SelectionId>(implementations.len())?;
                 let mut prerequisites = Vec::new();
                 for operand in implementations {
@@ -806,18 +870,38 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
             method: None,
             implementations,
         })?;
-        let info = self.info(target)?;
-        self.arguments(
+        self.argument_types(
             source,
-            &info.slots[..info.parameters.len()],
+            self.contexts[target].parameters.len(),
+            None,
             arguments,
             expression,
         )?;
+        self.record_call(source, target, expression)
+    }
+    fn connect_application(
+        &mut self,
+        source: usize,
+        target: &ContextInfo,
+        arguments: &[TypeObjectDigest],
+        operands: &[ImplementationOperand],
+        expression: Option<ExpressionId>,
+    ) -> Result<(), Diagnostic> {
+        self.arguments(
+            source,
+            &target.slots[..target.parameters.len()],
+            arguments,
+            expression,
+        )?;
+        if operands.len() != target.key.implementations.len() {
+            return Err(semantic(
+                "kernel_callable_flow_arity",
+                "callable witness arity changed",
+            ));
+        }
         for (ordinal, operand) in operands.iter().enumerate() {
-            // An unresolved symbolic witness has no declaration/type-argument slots yet. Every
-            // concrete downstream selection creates its separate fully known context.
-            if info.key.implementations[ordinal] != UNKNOWN_SELECTION {
-                self.witness_arguments(source, &info, &[ordinal], operand, expression)?;
+            if target.key.implementations[ordinal] != UNKNOWN_SELECTION {
+                self.witness_arguments(source, target, &[ordinal], operand, expression)?;
             }
         }
         Ok(())
@@ -918,8 +1002,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                             method: Some(*method),
                             implementations: prerequisites,
                         })?;
-                        let target = self.info(target)?;
-                        self.method_arguments(source, &target, witness, expression)?;
+                        self.record_call(source, target, Some(expression))?;
                     }
                 }
                 _ => {}
@@ -1026,6 +1109,15 @@ pub(crate) fn validate_callable_closure<R: CallableClosureRead + ?Sized>(
     work: &mut usize,
     maximum_work: usize,
 ) -> Result<CallableFlowWork, Diagnostic> {
+    validate_callable_closure_with_scope(read, work, maximum_work, recursive::ProofScope::Recursive)
+}
+
+fn validate_callable_closure_with_scope<R: CallableClosureRead + ?Sized>(
+    read: &R,
+    work: &mut usize,
+    maximum_work: usize,
+    scope: recursive::ProofScope,
+) -> Result<CallableFlowWork, Diagnostic> {
     let mut analysis = Analysis {
         read,
         work,
@@ -1036,6 +1128,7 @@ pub(crate) fn validate_callable_closure<R: CallableClosureRead + ?Sized>(
         selections: Vec::new(),
         selection_indexes: BTreeMap::new(),
         pending: Vec::new(),
+        calls: Vec::new(),
         slot_owners: Vec::new(),
         edges: Vec::new(),
     };
@@ -1083,6 +1176,7 @@ pub(crate) fn validate_callable_closure<R: CallableClosureRead + ?Sized>(
     while let Some(context) = analysis.pending.pop() {
         analysis.scan(context)?;
     }
+    recursive::connect(&mut analysis, scope)?;
     analysis.admit()?;
     analysis.observation.slots = analysis.slot_owners.len();
     analysis.observation.edges = analysis.edges.len();

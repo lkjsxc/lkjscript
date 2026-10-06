@@ -112,12 +112,15 @@ does not establish distributed exactly-once delivery.
 
 ## Reduce repeated preparation and semantic-development work
 
-Select compact context-sensitive witness admission as the next preparation
-milestone. Current typed prerequisite paths can expand despite a compact selected
-witness DAG. Share equivalent proof states while preserving exact substitutions,
-defining scopes and distinct witness identities; retain expanding/permuting
-recursion adversaries and bounded refusal. Measure preparation and retained memory
-before changing limits or claiming a speedup.
+Use [exact callable-cycle proof selection](decisions/context-scoped-callable-proof.md)
+to admit compact acyclic prerequisite DAGs without unfolding every typed path.
+All source operands remain independently admitted. Select demand-driven recursive
+provenance as the next proof milestone: typed prerequisite paths can still expand
+inside recursive contexts. Share equivalent proof states only while preserving
+exact substitutions, defining scopes and distinct witness identities; retain
+expanding/permuting recursion adversaries and bounded refusal. Concrete prepared
+witness materialization is a separate DAG-storage milestone. Measure preparation
+and retained memory before changing limits or claiming a speedup.
 
 Share identical prepared instruction bodies for the same exact function, type
 arguments and closed effect/requirement context. Keep complete witness identities

@@ -2101,3 +2101,31 @@ seal/adoption traversal or allocation. Count construction, selected projections,
 user iteration, consuming transfer and final draining separately. Report matched
 serial/parallel preparation and execution observations without inferring a speedup
 or API-cost saving from storage sharing alone.
+
+## Exact callable-cycle proof selection
+
+The [context-scoped decision](../decisions/context-scoped-callable-proof.md) omits
+only type-growth proof edges between different exact callable SCCs. Source
+admission must still reject every missing body/type, wrong argument count and
+foreign lexical type or implementation parameter, including phantom operands,
+unused mappings and untaken syntax on acyclic edges. Distinct methods, selected
+declarations and equal-shape witnesses with distinct type provenance cannot be
+unified.
+
+Compare compact typed prerequisite DAGs with unpruned path admission on bounded
+inputs, retaining the original large-input resource failure. An independent
+weighted transitive-closure oracle covers permutations, closed resets, phantom
+slots and structural growth. Test exact/N-1 work capacity and late cancellation;
+failed operations cannot alter accepted meaning or subsequent independent checks.
+Report modeled work and cumulative metadata reservation separately from elapsed
+time, live memory and process RSS. Compact source proof does not establish compact
+concrete preparation or faster execution.
+
+The copied-product `native_owned_compact_callable_proof` case admits and exports
+all 24 generic library layers before concrete readers exist. Its consumer uses
+bounded concrete layers, distinct same-Self implementations, borrowed observation
+and later consumption of the original owner. Preserve canonical drafts, reviewed
+edit/restore identities, exact package transport and unchanged HEAD on rejection.
+Run the artifact after removing its owned source projects and transport; compare
+complete independent results and cleanup. This remains part of the mandatory
+final-byte `native_owned_` family. Source-only unit evidence cannot replace it.

@@ -168,10 +168,24 @@ trees reject during loading. Public authored-input expansion, derived analysis
 and preparation have separate resource admissions; exhausting those capacities
 does not establish semantic invalidity.
 
-Source analysis currently retains separate type-provenance slots for every typed
-prerequisite path, including paths through shared witness nodes. A large acyclic
-application can therefore exhaust proof capacity while its retained witness DAG
-would remain small. Compact storage does not establish cheap source admission.
+Source analysis first discovers the complete graph of exact callable contexts:
+package/declaration, selected method and ordered prerequisite shapes. Every call
+and concrete witness independently admits all type arguments, phantom arguments
+and defining scopes, including unused mappings and untaken syntax. A type-slot
+cycle must project to a cycle in that context graph. Type-provenance slots are
+therefore materialized only for calls within the same context strongly connected
+component. Acyclic prerequisite DAGs do not require unfolding every typed path
+for the recursive-growth proof. This is proof selection, not dead-code elimination
+or permission to omit source admission.
+
+Within recursive contexts, every typed prerequisite path remains separate, even
+when shape nodes are shared: equal shapes can have different type provenance.
+Large recursive applications can still exhaust finite proof capacity. Exact
+context growth, literal input limits and concrete prepared-witness materialization
+remain separate bounds. The [decision](../decisions/context-scoped-callable-proof.md)
+records the cycle-projection argument; the
+[public workload](../../examples/compact-callable-proof/README.md) separates large
+generic-library admission from bounded concrete execution.
 
 Prepared applications retain their complete witness environments. Compatible
 immutable code may share after each application has been materialized; admission

@@ -556,12 +556,11 @@ fn equal_interned_selection_shapes_keep_distinct_type_argument_paths() {
     );
 }
 
-#[test]
-fn exponential_distinct_type_provenance_paths_exhaust_proof_capacity_as_resource() {
+fn typed_duplicate_prerequisites(depth: u64) -> Read {
     let mut read = Read::default();
     let terminal = read.expression(package(0), ExpressionOperation::I64 { value: 0 });
     read.function(0, 1, 1, terminal);
-    for n in 1..=24 {
+    for n in 1..=depth {
         let ty = read.p(n, 0);
         let body = read.expression(
             reference(n).package,
@@ -582,13 +581,18 @@ fn exponential_distinct_type_provenance_paths_exhaust_proof_capacity_as_resource
     read.implementation(1000, 1, vec![(0, 1002, vec![ty])]);
     read.prerequisites(1000, 2);
     read.mapping_prerequisites(1000, vec![lexical(1000, 0), lexical(1000, 1)]);
+    read
+}
+
+#[test]
+fn acyclic_typed_prerequisite_dag_admits_without_expanding_every_path() {
+    let read = typed_duplicate_prerequisites(24);
     let mut work = 0;
-    let error = validate_callable_closure(&read, &mut work, 1_000_000).unwrap_err();
-    assert_eq!(error.class, DiagnosticClass::Resource);
-    assert!(matches!(
-        error.code.as_str(),
-        "kernel_callable_flow_work" | "kernel_callable_flow_storage"
-    ));
+    let observation = validate_callable_closure(&read, &mut work, 1_000_000).unwrap();
+    eprintln!("typed DAG: work={work} observation={observation:?}");
+    assert!(observation.slots < 2_000);
+    assert!(observation.metadata_bytes < 16 * 1024 * 1024);
+    assert_eq!(observation.edges, 0);
     assert!(work <= 1_000_000);
 }
 
@@ -961,7 +965,22 @@ fn exhaustive_composed_permutations_resets_phantoms_and_nested_occurrences_match
                     let method_arguments = [a.clone(), b.clone()];
                     let next_arguments = [c.clone(), d.clone()];
                     let expected = reference_finite(&method_arguments, &next_arguments);
-                    let result = schema_callback(&method_arguments, &next_arguments).admit();
+                    let read = schema_callback(&method_arguments, &next_arguments);
+                    let result = read.admit();
+                    let unpruned = validate_callable_closure_with_scope(
+                        &read,
+                        &mut 0,
+                        1_000_000,
+                        recursive::ProofScope::All,
+                    );
+                    assert_eq!(
+                        result.as_ref().map(|_| ()).map_err(|e| (&e.class, &e.code)),
+                        unpruned
+                            .as_ref()
+                            .map(|_| ())
+                            .map_err(|e| (&e.class, &e.code)),
+                        "exact context pruning must preserve the full path proof",
+                    );
                     match result {
                         Ok(_) => {
                             assert!(
@@ -1075,4 +1094,132 @@ fn exact_selected_declaration_vectors_separate_finite_chain_from_expanding_cycle
         selected_chain(true).admit().unwrap_err().code,
         "kernel_callable_expansion"
     );
+}
+
+#[test]
+fn compact_acyclic_proof_matches_unpruned_paths_and_measures_reserved_work() {
+    for depth in [1, 2, 4, 6, 8] {
+        let read = typed_duplicate_prerequisites(depth);
+        let mut compact_work = 0;
+        let compact = validate_callable_closure(&read, &mut compact_work, 5_000_000).unwrap();
+        let mut unpruned_work = 0;
+        let unpruned = validate_callable_closure_with_scope(
+            &read,
+            &mut unpruned_work,
+            5_000_000,
+            recursive::ProofScope::All,
+        )
+        .unwrap();
+        assert_eq!(compact.functions, unpruned.functions);
+        assert_eq!(compact.applications, unpruned.applications);
+        assert_eq!(compact.edges, 0);
+        assert!(compact.metadata_bytes < unpruned.metadata_bytes);
+        assert!(compact_work < unpruned_work);
+        eprintln!(
+            "depth={depth} compact_work={compact_work} unpruned_work={unpruned_work} compact={compact:?} unpruned={unpruned:?}"
+        );
+    }
+    let read = typed_duplicate_prerequisites(24);
+    let failure =
+        validate_callable_closure_with_scope(&read, &mut 0, 1_000_000, recursive::ProofScope::All)
+            .unwrap_err();
+    assert_eq!(failure.class, DiagnosticClass::Resource);
+    assert!(matches!(
+        failure.code.as_str(),
+        "kernel_callable_flow_work" | "kernel_callable_flow_storage"
+    ));
+    // Pruning does not change meaning, globals, or subsequent independent admission.
+    read.admit().unwrap();
+}
+
+#[test]
+fn compact_proof_preserves_exact_work_boundary_and_late_cancellation() {
+    let read = typed_duplicate_prerequisites(8);
+    let mut required = 0;
+    let expected = validate_callable_closure(&read, &mut required, 1_000_000).unwrap();
+    assert!(required > 1);
+    let checkpoints = read.checkpoints.get();
+    let mut actual = 0;
+    let exact = validate_callable_closure(&read, &mut actual, required).unwrap();
+    assert_eq!(actual, required);
+    assert_eq!(exact.metadata_bytes, expected.metadata_bytes);
+    let mut work = 0;
+    let failure = validate_callable_closure(&read, &mut work, required - 1).unwrap_err();
+    assert_eq!(failure.class, DiagnosticClass::Resource);
+    assert_eq!(failure.code, "kernel_callable_flow_work");
+    assert!(work < required);
+    for after in [checkpoints / 2, checkpoints - 1, checkpoints] {
+        read.checkpoints.set(0);
+        read.cancel_after.set(Some(after));
+        let failure = read.admit().unwrap_err();
+        assert_eq!(failure.class, DiagnosticClass::Cancelled);
+        assert_eq!(failure.code, "test_cancelled");
+    }
+    read.cancel_after.set(None);
+    read.admit().unwrap();
+}
+
+#[test]
+fn acyclic_calls_still_admit_unused_nested_phantom_type_scope_and_arity() {
+    for fault in 0..3 {
+        let mut read = Read::default();
+        let terminal = read.expression(package(0), ExpressionOperation::I64 { value: 0 });
+        read.function(0, 1, 1, terminal);
+        let terminal = read.expression(package(1), ExpressionOperation::I64 { value: 1 });
+        read.function(1002, 1, 2, terminal);
+        let own = read.p(1000, 0);
+        read.implementation(1000, 1, vec![(0, 1002, vec![own])]);
+        read.prerequisites(1000, 2);
+        read.mapping_prerequisites(1000, vec![lexical(1000, 0), lexical(1000, 1)]);
+        let terminal = read.expression(package(1), ExpressionOperation::I64 { value: 2 });
+        read.function(1003, 1, 0, terminal);
+        let own = read.p(1001, 0);
+        read.implementation(1001, 1, vec![(0, 1003, vec![own])]);
+        let closed = read.ty(TypeForm::OwnedI64Cell);
+        let argument = match fault {
+            0 => read.p(999, 0),
+            // A missing digest is distinct from a foreign lexical type parameter.
+            1 => {
+                crate::platform::kernel::codec::encode_type_object(
+                    &TypeObject::new(TypeForm::List { item: closed }).unwrap(),
+                )
+                .unwrap()
+                .0
+            }
+            _ => closed,
+        };
+        let mut bad = vec![argument];
+        if fault == 2 {
+            bad.clear();
+        }
+        let body = read.expression(
+            package(1),
+            ExpressionOperation::ImplementationCall {
+                function: reference(0),
+                type_arguments: vec![closed],
+                implementations: vec![selected(
+                    1000,
+                    vec![closed],
+                    vec![
+                        selected(1001, vec![closed], vec![]),
+                        selected(1001, bad, vec![]),
+                    ],
+                )],
+                effect_arguments: vec![],
+                requirement_arguments: vec![],
+                arguments: vec![],
+            },
+        );
+        read.function(1, 0, 0, body);
+        let failure = read.admit().unwrap_err();
+        assert_eq!(failure.class, DiagnosticClass::Semantic);
+        assert_eq!(
+            failure.code,
+            [
+                "kernel_type_parameter_scope",
+                "kernel_callable_flow_type",
+                "kernel_callable_flow_arity"
+            ][fault]
+        );
+    }
 }

@@ -1672,6 +1672,8 @@ mod native_owned_parameters;
 mod native_composable_owned_implementations;
 #[path = "native_owned_borrows.rs"]
 mod native_owned_borrows;
+#[path = "native_owned_compact_proof.rs"]
+mod native_owned_compact_proof;
 #[path = "native_owned_effects.rs"]
 mod native_owned_effects;
 #[path = "native_owned_generic_implementations.rs"]

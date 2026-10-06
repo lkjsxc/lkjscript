@@ -2015,3 +2015,41 @@ Environment recorded after this comparison on the same supplied machine: AMD Ryz
 the visible CPU quota is `max 100000`, and the cgroup memory limit is 8,589,934,592
 bytes. These observations do not prove exclusive host use during measurement. The
 raw environment record is retained separately from the original timing samples.
+
+## Exact callable-cycle proof selection
+
+The `typed_duplicate_prerequisites` source-admission probe has one owned type
+parameter and repeatedly duplicates an explicit prerequisite in an acyclic chain.
+The same retained source and limits compare exact context-cycle selection with a
+test-only unpruned mode. The latter retains complete typed paths after the same
+context discovery; it is a reference for path cost, not a timing measurement of
+an older executable.
+
+| Layers | Compact work | Unpruned work | Compact reserved metadata (bytes) | Unpruned reserved metadata (bytes) |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 1,159 | 1,230 | 15,628 | 19,895 |
+| 2 | 2,066 | 2,333 | 24,284 | 38,731 |
+| 4 | 5,896 | 8,514 | 49,429 | 149,898 |
+| 6 | 12,030 | 31,883 | 85,018 | 627,517 |
+| 8 | 22,364 | 153,968 | 131,051 | 2,812,516 |
+
+At 24 layers the compact run uses 237,852 work units, 875,299 reserved bytes,
+326 function contexts, 301 recorded applications and 327 root type slots. There
+are no recursive type-flow edges in this acyclic fixture. The actual retained
+pre-change implementation fails the same 1,000,000-work admission with
+`kernel_callable_flow_work`; the unpruned comparison also remains a resource
+failure. No limit was increased.
+
+Counts are on the existing Linux x86-64 Rust 1.98.0 host. Work is an algorithmic
+admission counter. Metadata is cumulative conservative reservation, not live
+allocation, peak heap or RSS. These figures establish less source-proof work
+for this workload; they establish neither faster concrete preparation nor faster
+execution. Small recursive cases may also incur additional graph-discovery work.
+Distinct typed paths inside recursive contexts remain an explicit resource limit.
+
+Focused logs are retained at
+`.artifacts/20261006-compact-callable-proof/baseline/observed-regression.log` and
+`.artifacts/20261006-compact-callable-proof/focused-02.log`.
+The [literal public witness](../examples/compact-callable-proof/README.md) separates
+large generic-library admission from four-layer concrete execution. Final source
+and distributed-byte acceptance remain [status-owned](status.md).
