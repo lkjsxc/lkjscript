@@ -3,7 +3,7 @@
 The fixed shared service group is available in public v0.1.64 and later.
 Development v0.1.72 adds explicitly owned reusable auxiliary workers. Discover the actual executable with
 `lkjscript capabilities --section deployment` and `lkjscript capabilities serve`.
-The shared-runtime observation contract is version 2; the existing deployment
+The shared-runtime observation contract is version 3; the existing deployment
 descriptor, graph and artifact encodings are unchanged.
 
 ## Explicit process ownership
@@ -112,8 +112,13 @@ reused across invocations and exact programs. Child execution retains the
 [structured custody contract](structured-parallel.md), private cancellation and
 shared per-invocation quotas. Closing group dispatch makes existing groups execute
 new child work inline while service admission stops and current invocations drain.
-After every started service has joined, the host joins all owned auxiliary threads.
-Other independently owned groups retain their own lifetime and dispatch state.
+After every started service has joined, the host joins all still-owned auxiliary
+threads. Independent open groups can obtain receipt-joined idle workers through
+[demand-driven custody handoff](../decisions/idle-worker-custody.md), retaining the
+mailbox, join handle and physical reservation together. Active jobs do not move.
+Dispatch closure serializes with handoff; stopping the former owner cannot cancel
+or wait for work that now belongs to another owner. Other groups retain private
+programs, invocation controls, grants, quotas, lifetime and dispatch state.
 Resident root execution and blocking adapters remain on their existing executor;
 this auxiliary bound does not establish a bound on all process CPU work or fairness.
 
@@ -141,10 +146,13 @@ instance count, exact program digests, instances per program, loader-reported
 artifact object bytes, function/type counts, summed resident capacities, and
 the count of private configuration fields. Its `executor` observation reports
 dispatch openness, the process auxiliary ceiling, physical thread starts,
-active and peak dispatches, completed dispatches, inline fallbacks, remaining
-workers and joined workers. The ready snapshot may contain no workers because
+received and handed-off workers, active and peak dispatches, completed dispatches,
+inline fallbacks, remaining workers and joined workers. The ready snapshot may contain no workers because
 creation is lazy. A successful stopped receipt has closed dispatch, zero active
-dispatches and remaining workers, and all started workers joined.
+dispatches and remaining workers. Before counter saturation, started plus received
+equals joined plus handed off plus remaining. The fixed CLI group has one executor
+owner, so its received/handed-off counts are zero and its starts equal joins.
+Library users must not apply that special-case equality across independent owners.
 Program entries are digest ordered;
 instance entries are argument ordered. These are structural observations, not
 RSS/PSS, allocator bytes, peak/live heap, a complete count of adapter storage,

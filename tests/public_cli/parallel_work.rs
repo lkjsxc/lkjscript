@@ -208,6 +208,9 @@ fn run(public: &Native, target: &str, n: usize, rounds: usize, seed: u8, label: 
     assert_eq!(executor["dispatch_open"], false);
     assert_eq!(executor["active_dispatches"], 0);
     assert_eq!(executor["remaining_workers"], 0);
+    // This CLI invocation owns one executor; no foreign process can lend a worker.
+    assert_eq!(executor["workers_received"], 0);
+    assert_eq!(executor["workers_handed_off"], 0);
     assert_eq!(executor["joined_workers"], executor["workers_started"]);
     assert!(
         observation["parallel_worker_dispatches"].as_u64().unwrap()

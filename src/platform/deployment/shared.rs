@@ -3,7 +3,7 @@
 use super::*;
 
 pub const MAXIMUM_SHARED_DEPLOYMENTS: usize = 64;
-pub const SHARED_RUNTIME_CONTRACT_VERSION: u16 = 2;
+pub const SHARED_RUNTIME_CONTRACT_VERSION: u16 = 3;
 
 /// These are retained encoded object bytes and table counts, not heap/RSS estimates.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]

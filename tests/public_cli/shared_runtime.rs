@@ -116,6 +116,7 @@ fn shared_runtime_edits_versions_and_keeps_secrets_configuration_and_data_privat
     let group = Group::start(&public, &descriptors, &environment);
     let observed = &group.ready["shared_runtime"];
     assert_eq!(observed["instances"], 4);
+    assert_eq!(observed["contract_version"], 3);
     let mut counts = observed["programs"]
         .as_array()
         .unwrap()

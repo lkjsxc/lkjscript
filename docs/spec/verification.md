@@ -92,6 +92,22 @@ The host must discard preparation code references while retaining the separate
 executor owner, close dispatch before draining, and derive stopped observations
 from joined workers rather than copying the ready snapshot.
 
+Idle handoff additionally requires actual physical thread identity across independent
+open owners at a one-worker ceiling, local preference and bounded slot reuse. Exclude
+active jobs and unreceived results; complete unreturned-result destruction before
+eligibility. A host-side destructor unwind must not strand an active receipt, donate
+the worker or report successful shutdown. Preserve the original failed test and
+distinguish joined thread cleanup from failed result disposal.
+
+Race handoff with shutdown and competing recipients. Every physical worker retains
+one join owner; started plus received balances joined plus handed off plus remaining
+before observational saturation. A former owner must stop without cancelling or
+waiting for transferred work. Repeated handoffs cannot retain a global program or
+owner root. Distinct admitted programs retain independently expected values, private
+quota/cancellation state and job-scoped list/map observations on the same thread.
+The existing copied-executable parallel and shared-service families remain required;
+one fixed CLI group is not evidence of cross-process worker sharing.
+
 The maintained native parallel-work family supplies exact generic witnesses for
 ByteBuffer and OwnedI64Cell transform/reduction implementations. Serial and parallel
 routes execute the same methods and return complete independently expected payloads.

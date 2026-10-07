@@ -315,18 +315,16 @@ fn worker_creation_refusal_preserves_a_previously_started_workers_join_owner() {
 }
 
 #[test]
-fn independently_owned_pools_share_a_physical_ceiling_and_return_it_after_join() {
-    let capacity = Arc::new(Capacity {
-        maximum: 1,
-        reserved: AtomicUsize::new(0),
-    });
-    let mut first = StructuredExecutor::with_capacity(Arc::clone(&capacity));
-    let mut second = StructuredExecutor::with_capacity(Arc::clone(&capacity));
+fn closing_owner_retains_physical_capacity_until_its_threads_are_joined() {
+    let mut first = StructuredExecutor::for_test(1);
+    let capacity = Arc::clone(&first.inner.capacity);
+    let mut second = first.sharing_capacity_for_test();
     let initial = first
         .handle()
         .run(&ExecutionControl::uncancelled(), || 17, || 29)
         .unwrap();
     assert!(initial.dispatched);
+    first.close_dispatch();
     let unavailable = second
         .handle()
         .run(&ExecutionControl::uncancelled(), || 17, || 29)

@@ -113,9 +113,16 @@ An accepted dispatch retains its reservation until its completion receipt is joi
 
 Workers are created lazily, up to a process-wide physical ceiling of available CPU
 parallelism minus one; unavailable CPU discovery selects zero auxiliary workers.
-Zero capacity is valid serial execution. Separate runtime owners share only this
-capacity accounting and may execute inline while another owner retains workers.
-Workers never run unrelated jobs while waiting for their own child. The finite
+Zero capacity is valid serial execution. Independent open runtime owners may
+hand off reusable idle workers on demand, preferring their own idle workers first.
+A worker is eligible only after its completion receipt is received, or its
+unreturned result is disposed of during caller unwind. Active jobs and unreceived
+results never move. The mailbox, join handle and still-held physical-capacity
+reservation move together; no invocation state or application authority follows.
+A bounded weak-owner catalogue coordinates custody without retaining programs or
+a permanent global executor. If neither idle custody nor new capacity is available,
+the job executes inline without waiting for another owner. Workers never run
+unrelated jobs while waiting for their own child. The finite
 structured nesting bound remains independent of cumulative quotas.
 
 Each job owns a shared handle to the admitted immutable program, its control and
@@ -127,8 +134,14 @@ on every exit, including panic; worker reuse cannot inherit previous work counts
 
 The executor owner is separate from dispatch handles and cannot travel inside a
 job. Stopping closes dispatch, drains and joins invocation scopes, then closes
-mailboxes and joins every worker before releasing process capacity. Caller unwind
+mailboxes and joins every still-owned worker before releasing process capacity.
+Dispatch closure serializes with idle handoff. Stopping a former owner neither
+waits for nor cancels a worker already handed to a different owner. Caller unwind
 cancels and joins an accepted child before disposing its result and reservation.
+If host-side unreturned-result disposal unwinds, a receipt guard returns active
+accounting without donating the worker and records an infrastructure failure for
+shutdown. Joined physical cleanup is still required; failed result cleanup cannot
+be reported as success. This does not recover process abort.
 A caught child panic reports infrastructure failure after cleanup; the worker may
 then execute another job with fresh invocation state. No detached cleanup is success.
 
@@ -161,8 +174,11 @@ Production observations aggregate child work and expose `parallel_scopes`,
 `parallel_worker_dispatches` and `parallel_inline_fallbacks`. Dispatches count
 accepted off-thread jobs, including reuse; fallbacks count pairs executed on their
 caller. They are invocation totals, not physical thread starts or simultaneous
-workers. Pool observations separately report starts, active/peak dispatches,
-completions, inline fallbacks, and remaining/joined workers. CLI observation 36
+workers. Pool observations separately report physical starts, received/handed-off custody,
+active/peak dispatches, completions, inline fallbacks, and remaining/joined workers.
+Before observational counter saturation, started plus received equals joined plus
+handed off plus remaining. Shared-runtime observation 3 and CLI observation 43
+select these added fields; an owner need not join a worker it already handed off. CLI observation 36
 intentionally replaces the former `parallel_workers_spawned` field rather than
 changing its meaning. Allocated bytes model admitted cumulative storage, not RSS
 or allocator overhead; thread stacks and system scheduling costs are not that metric.

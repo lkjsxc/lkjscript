@@ -140,6 +140,9 @@ impl Group {
         assert_eq!(stopped_executor["dispatch_open"], false);
         assert_eq!(stopped_executor["active_dispatches"], 0);
         assert_eq!(stopped_executor["remaining_workers"], 0);
+        // The fixed CLI service group has one executor owner in this process.
+        assert_eq!(stopped_executor["workers_received"], 0);
+        assert_eq!(stopped_executor["workers_handed_off"], 0);
         assert_eq!(
             stopped_executor["joined_workers"],
             stopped_executor["workers_started"]

@@ -9,6 +9,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, mpsc};
 use std::thread::{self, JoinHandle};
 
+#[path = "structured_lending.rs"]
+mod lending;
+use lending::IdleWorker;
+
+#[path = "structured_receipt.rs"]
+mod receipt;
+
 type Job = Box<dyn FnOnce() + Send + 'static>;
 
 enum Command {
@@ -19,6 +26,8 @@ enum Command {
 struct Capacity {
     maximum: usize,
     reserved: AtomicUsize,
+    // Bounded by physical workers; entries never retain their runtime owner.
+    idle: Mutex<Vec<IdleWorker>>,
 }
 
 impl Capacity {
@@ -46,6 +55,7 @@ fn process_capacity() -> Arc<Capacity> {
         Arc::new(Capacity {
             maximum: thread::available_parallelism().map_or(0, |n| n.get().saturating_sub(1)),
             reserved: AtomicUsize::new(0),
+            idle: Mutex::new(Vec::new()),
         })
     }))
 }
@@ -58,11 +68,15 @@ pub struct StructuredExecutorObservation {
     /// The process-wide ceiling, not a privately reserved worker entitlement.
     pub worker_limit: usize,
     pub workers_started: u64,
+    /// Existing physical workers whose join custody arrived from another owner.
+    pub workers_received: u64,
+    /// Idle workers whose join custody moved to another owner.
+    pub workers_handed_off: u64,
     pub active_dispatches: usize,
     pub maximum_active_dispatches: usize,
     pub completed_dispatches: u64,
     pub inline_fallbacks: u64,
-    /// Started worker owners whose thread handles have not yet been joined.
+    /// Currently owned workers whose thread handles have not yet been joined.
     pub remaining_workers: usize,
     pub joined_workers: u64,
 }
@@ -76,8 +90,7 @@ struct Worker {
 
 struct State {
     observation: StructuredExecutorObservation,
-    workers: Vec<Worker>,
-    idle: Vec<usize>,
+    workers: Vec<Option<Worker>>,
     shutdown_error: Option<ExecutionError>,
     #[cfg(test)]
     refuse_next_worker_start: bool,
@@ -149,6 +162,8 @@ impl StructuredExecutor {
                         dispatch_open: true,
                         worker_limit,
                         workers_started: 0,
+                        workers_received: 0,
+                        workers_handed_off: 0,
                         active_dispatches: 0,
                         maximum_active_dispatches: 0,
                         completed_dispatches: 0,
@@ -157,7 +172,6 @@ impl StructuredExecutor {
                         joined_workers: 0,
                     },
                     workers: Vec::new(),
-                    idle: Vec::new(),
                     shutdown_error: None,
                     #[cfg(test)]
                     refuse_next_worker_start: false,
@@ -174,7 +188,13 @@ impl StructuredExecutor {
         Self::with_capacity(Arc::new(Capacity {
             maximum: worker_limit,
             reserved: AtomicUsize::new(0),
+            idle: Mutex::new(Vec::new()),
         }))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn sharing_capacity_for_test(&self) -> Self {
+        Self::with_capacity(Arc::clone(&self.inner.capacity))
     }
 
     pub fn handle(&self) -> StructuredExecutorHandle {
@@ -189,15 +209,19 @@ impl StructuredExecutor {
 
     /// Future child work executes inline. This never cancels another invocation.
     pub fn close_dispatch(&self) {
-        lock(&self.inner.state).observation.dispatch_open = false;
+        // All operations spanning owners acquire the catalogue before any state.
+        let mut idle = lock(&self.inner.capacity.idle);
+        let mut state = lock(&self.inner.state);
+        state.observation.dispatch_open = false;
+        idle.retain(|entry| !entry.belongs_to(&self.inner));
     }
 
-    /// Close dispatch, retain every active join owner, then join every thread.
+    /// Close dispatch, retain active receipts, then join every still-owned thread.
     /// Application owners must separately stop and drain their resident invocations.
     pub fn shutdown(&mut self) -> Result<StructuredExecutorObservation, ExecutionError> {
+        self.close_dispatch();
         let workers = {
             let mut state = lock(&self.inner.state);
-            state.observation.dispatch_open = false;
             while state.observation.active_dispatches != 0 {
                 state = self
                     .inner
@@ -205,15 +229,14 @@ impl StructuredExecutor {
                     .wait(state)
                     .unwrap_or_else(std::sync::PoisonError::into_inner);
             }
-            state.idle.clear();
             std::mem::take(&mut state.workers)
         };
         // All accepted jobs have returned their receipts. No slot is reusable after
         // dispatch closes, so each mailbox can accept its termination message.
-        for worker in &workers {
+        for worker in workers.iter().flatten() {
             let _ = worker.sender.send(Command::Stop);
         }
-        for worker in workers {
+        for worker in workers.into_iter().flatten() {
             let Worker {
                 sender,
                 thread,
@@ -296,9 +319,11 @@ impl StructuredExecutorHandle {
         control: &ExecutionControl,
         right: F,
     ) -> Dispatch<R, F> {
+        let mut idle = lock(&self.inner.capacity.idle);
         let mut state = lock(&self.inner.state);
         let slot = if state.observation.dispatch_open {
-            state.idle.pop().or_else(|| self.start_worker(&mut state))
+            self.claim_idle(&mut state, &mut idle)
+                .or_else(|| self.start_worker(&mut state))
         } else {
             None
         };
@@ -323,13 +348,17 @@ impl StructuredExecutorHandle {
         });
         let command = Command::Run(job);
         #[cfg(test)]
-        let submitted = if std::mem::take(&mut state.refuse_next_submission) {
+        let refuse = std::mem::take(&mut state.refuse_next_submission);
+        #[cfg(not(test))]
+        let refuse = false;
+        let submitted = if refuse {
             Err(mpsc::TrySendError::Full(command))
         } else {
-            state.workers[slot].sender.try_send(command)
+            match &state.workers[slot] {
+                Some(worker) => worker.sender.try_send(command),
+                None => Err(mpsc::TrySendError::Disconnected(command)),
+            }
         };
-        #[cfg(not(test))]
-        let submitted = state.workers[slot].sender.try_send(command);
         match submitted {
             Ok(()) => {
                 let observation = &mut state.observation;
@@ -344,9 +373,15 @@ impl StructuredExecutorHandle {
                     control: control.clone(),
                 })
             }
-            Err(mpsc::TrySendError::Full(Command::Run(job)))
-            | Err(mpsc::TrySendError::Disconnected(Command::Run(job))) => {
-                state.idle.push(slot);
+            Err(mpsc::TrySendError::Full(Command::Run(job))) => {
+                idle.push(IdleWorker::new(&self.inner, slot));
+                state.observation.inline_fallbacks =
+                    state.observation.inline_fallbacks.saturating_add(1);
+                Dispatch::Refused(job, receiver)
+            }
+            Err(mpsc::TrySendError::Disconnected(Command::Run(job))) => {
+                // A failure discovered after handoff stays with the current join
+                // owner. Never recirculate the worker or return it to the donor.
                 state.observation.inline_fallbacks =
                     state.observation.inline_fallbacks.saturating_add(1);
                 Dispatch::Refused(job, receiver)
@@ -377,14 +412,12 @@ impl StructuredExecutorHandle {
                 }
             })
             .ok()?;
-        let slot = state.workers.len();
-        state.workers.push(Worker {
+        let slot = state.retain_worker(Worker {
             sender,
             thread,
             _reservation: reservation,
         });
         state.observation.workers_started = state.observation.workers_started.saturating_add(1);
-        state.observation.remaining_workers += 1;
         Some(slot)
     }
 }
@@ -421,20 +454,22 @@ struct JoinedChild<R> {
 impl<R> JoinedChild<R> {
     fn receive(&mut self) -> Result<R, ExecutionError> {
         let result = self.receiver.recv().map_err(|_| worker_failure());
-        self.release();
+        self.release(result.is_ok());
         result?
     }
 
-    fn release(&mut self) {
+    fn release(&mut self, reusable: bool) {
         if let Some(slot) = self.slot.take() {
+            let mut idle = lock(&self.inner.capacity.idle);
             let mut state = lock(&self.inner.state);
             state.observation.active_dispatches -= 1;
             state.observation.completed_dispatches =
                 state.observation.completed_dispatches.saturating_add(1);
-            if state.observation.dispatch_open {
-                state.idle.push(slot);
+            if reusable && state.observation.dispatch_open {
+                idle.push(IdleWorker::new(&self.inner, slot));
             }
             drop(state);
+            drop(idle);
             self.inner.joined.notify_all();
         }
     }
@@ -444,9 +479,7 @@ impl<R> Drop for JoinedChild<R> {
     fn drop(&mut self) {
         if self.slot.is_some() {
             self.control.cancel();
-            // Dispose the unreturned result before marking its custody joined.
-            drop(self.receiver.recv());
-            self.release();
+            self.discard();
         }
     }
 }
@@ -473,3 +506,48 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     reason = "controlled scheduler proofs"
 )]
 mod tests;
+
+#[cfg(test)]
+#[path = "structured_handoff_tests.rs"]
+#[allow(
+    clippy::unwrap_used,
+    clippy::panic,
+    reason = "controlled ownership handoff proofs"
+)]
+mod handoff_tests;
+
+#[cfg(test)]
+#[path = "structured_handoff_lifecycle_tests.rs"]
+#[allow(
+    clippy::unwrap_used,
+    clippy::panic,
+    reason = "controlled ownership lifecycle proofs"
+)]
+mod handoff_lifecycle_tests;
+
+#[cfg(test)]
+#[path = "structured_handoff_race_tests.rs"]
+#[allow(
+    clippy::unwrap_used,
+    clippy::panic,
+    reason = "controlled ownership race proofs"
+)]
+mod handoff_race_tests;
+
+#[cfg(test)]
+#[path = "structured_handoff_failure_tests.rs"]
+#[allow(
+    clippy::unwrap_used,
+    clippy::panic,
+    reason = "controlled late mailbox failure"
+)]
+mod handoff_failure_tests;
+
+#[cfg(test)]
+#[path = "structured_disposal_tests.rs"]
+#[allow(
+    clippy::unwrap_used,
+    clippy::panic,
+    reason = "controlled result custody proofs"
+)]
+mod disposal_tests;

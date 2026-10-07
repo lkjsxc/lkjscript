@@ -107,7 +107,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-23";
 pub const REGISTRY_CONTRACT_VERSION: u16 = 23;
-pub const CLI_CONTRACT_VERSION: u16 = 42;
+pub const CLI_CONTRACT_VERSION: u16 = 43;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -1217,7 +1217,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         simple_contract(
             ContractKey::SharedRuntime,
             "in-process exact-code service group with private deployment authority",
-            "lkjscript-shared-runtime-2",
+            "lkjscript-shared-runtime-3",
             SHARED_RUNTIME_CONTRACT_VERSION,
             ContractAuthority::Deployment,
         ),
@@ -8120,7 +8120,10 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ("fallback", "unsubmitted-right-job-executes-on-caller-without-retry-or-clone".to_owned()),
                 ("join", "reservation-held-through-receipt-caller-unwind-cancels-and-joins".to_owned()),
                 ("invocation-counters", "parallel_scopes,parallel_worker_dispatches,parallel_inline_fallbacks".to_owned()),
-                ("pool-counters", "workers_started,active_dispatches,maximum_active_dispatches,completed_dispatches,inline_fallbacks,remaining_workers,joined_workers".to_owned()),
+                ("pool-counters", "workers_started,workers_received,workers_handed_off,active_dispatches,maximum_active_dispatches,completed_dispatches,inline_fallbacks,remaining_workers,joined_workers".to_owned()),
+                ("idle-custody", "local-first-receipt-joined-foreign-worker-handoff-with-thread-and-reservation".to_owned()),
+                ("custody-balance", "started-plus-received-equals-joined-plus-handed-off-plus-remaining-unless-counters-saturate".to_owned()),
+                ("failed-result-disposal", "receipt-accounted-worker-retained-shutdown-fails".to_owned()),
                 ("scope", "auxiliary-workers-excludes-blocking-capable-resident-roots".to_owned()),
             ])?);
             for kind in RunnerKind::ALL {
@@ -8536,8 +8539,8 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ("readiness", "all-listeners-bound-before-one-group-ready-event".to_owned()),
                 ("shutdown", "close-auxiliary-dispatch-drain-and-join-services-then-join-owned-workers".to_owned()),
                 ("auxiliary-capacity", "process-wide-available-parallelism-minus-one-zero-if-unknown-lazy-creation".to_owned()),
-                ("auxiliary-admission", "nonblocking-idle-worker-reservation-caller-participates-inline-on-refusal".to_owned()),
-                ("auxiliary-observation", "physical-starts-dispatches-inline-fallbacks-active-high-water-remaining-and-joined-workers".to_owned()),
+                ("auxiliary-admission", "local-first-idle-custody-handoff-or-lazy-reservation-inline-on-refusal".to_owned()),
+                ("auxiliary-observation", "physical-starts-received-handed-off-dispatches-inline-fallbacks-active-high-water-remaining-and-joined-workers".to_owned()),
                 ("cpu-policy", "auxiliary-bound-not-total-root-cpu-bound-or-fairness".to_owned()),
                 ("memory-observation", "loader-object-bytes-and-table-counts-not-rss-or-live-heap".to_owned()),
                 ("retention", "no-global-cache-last-owning-service-reference-releases-code".to_owned()),
@@ -9730,7 +9733,7 @@ mod tests {
             .find(|descriptor| descriptor.key == ContractKey::SharedRuntime)
             .expect("shared runtime contract");
         assert_eq!(descriptor.version, SHARED_RUNTIME_CONTRACT_VERSION);
-        assert_eq!(descriptor.identity, "lkjscript-shared-runtime-2");
+        assert_eq!(descriptor.identity, "lkjscript-shared-runtime-3");
         let records = section_records(RegistrySection::Deployment).unwrap();
         let record = records
             .iter()

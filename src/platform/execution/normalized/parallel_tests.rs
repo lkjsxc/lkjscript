@@ -4,6 +4,11 @@ use super::*;
 #[path = "parallel_owned_result_tests.rs"]
 mod owned_results;
 
+#[path = "parallel_handoff_tests.rs"]
+mod handoff;
+#[path = "parallel_handoff_observation_tests.rs"]
+mod handoff_observations;
+
 const INPUT: &str = r#"declarations.begin
 (units (module create parallel-proof
   (external create new-cell (visibility private) (implementation core.cell.create)

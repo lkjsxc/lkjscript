@@ -101,9 +101,13 @@ Use retained cold/warm, overlap, cancellation and stop evidence to select root
 scheduling, local queues, batching and locality work. Reused auxiliary workers do
 not establish a total CPU bound, fairness or preemption. Blocking roots need a
 suspension/completion contract before joining a bounded CPU scheduler.
-Idle executors retaining process-wide worker capacity are a separate runtime
-milestone: specify capacity release, new admission, fairness, cancellation and
-joined cleanup before changing the pool's ownership.
+Use [demand-driven idle worker custody](decisions/idle-worker-custody.md) to let
+independent open executors reuse receipt-joined workers without another physical
+start. Keep active jobs, grants, programs, cancellation and quotas private. Each
+worker retains one join owner through handoff and shutdown races; eligibility does
+not precede result cleanup. This is not fair CPU entitlement or root scheduling.
+Measure contention, locality and retained owner metadata before selecting more
+complex queueing or retirement policies. Exact acceptance remains status-owned.
 
 Introduce typed bounded channels only with exact destination admission, capacity
 reservation, irrevocable acceptance, owner-returning refusal and joined receiver
