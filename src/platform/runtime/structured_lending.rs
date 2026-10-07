@@ -1,15 +1,16 @@
-//! Idle-worker custody transfer under one bounded process-capacity catalogue.
-//! Lock order is catalogue, destination state, source state. No job or thread join
-//! runs under those locks. Single-owner observers/waiters never acquire the catalogue.
+//! Shared directory of worker custody, not a promise of idle availability.
+//! Cross-owner lock order is directory, destination state, source state. Local
+//! dispatch and receipt completion use only their owner state. No job or join
+//! executes under those locks.
 use super::*;
 use std::sync::Weak;
 
-pub(super) struct IdleWorker {
+pub(super) struct WorkerCustody {
     owner: Weak<Inner>,
     slot: usize,
 }
 
-impl IdleWorker {
+impl WorkerCustody {
     pub(super) fn new(owner: &Arc<Inner>, slot: usize) -> Self {
         Self {
             owner: Arc::downgrade(owner),
@@ -26,34 +27,48 @@ impl StructuredExecutorHandle {
     pub(super) fn claim_idle(
         &self,
         state: &mut State,
-        idle: &mut Vec<IdleWorker>,
+        custody: &mut Vec<WorkerCustody>,
     ) -> Option<usize> {
-        // Prefer local reuse. Identity here is lifetime ownership, never meaning.
-        while let Some(index) = idle.iter().rposition(|entry| entry.belongs_to(&self.inner)) {
-            let entry = idle.swap_remove(index);
-            if state.reusable(entry.slot) {
-                return Some(entry.slot);
-            }
+        // The caller dropped its state lock to acquire the directory. A receipt
+        // may have returned meanwhile; local work still wins over a foreign owner.
+        if let Some(slot) = state.claim_local() {
+            return Some(slot);
         }
-        while let Some(entry) = idle.pop() {
+        let mut index = custody.len();
+        while index != 0 {
+            index -= 1;
+            let entry = &custody[index];
+            if entry.belongs_to(&self.inner) {
+                continue;
+            }
             let Some(owner) = entry.owner.upgrade() else {
+                custody.swap_remove(index);
                 continue;
             };
             let mut source = lock(&owner.state);
-            if !source.observation.dispatch_open || !source.reusable(entry.slot) {
+            if !source.observation.dispatch_open {
+                custody.swap_remove(index);
                 continue;
             }
-            let Some(worker) = source.workers[entry.slot].take() else {
+            if !source.reusable(entry.slot) {
+                // Active, unreceived and failed-result workers retain custody but
+                // confer no right to run. Their later receipt needs no reindexing.
+                continue;
+            }
+            let Some(mut worker) = source.workers[entry.slot].take() else {
                 continue;
             };
-            // Transfer the mailbox, thread join handle and unreleased physical
-            // reservation as one value. No task, program or grant follows it.
+            worker.available = false;
             source.observation.remaining_workers -= 1;
             source.observation.workers_handed_off =
                 source.observation.workers_handed_off.saturating_add(1);
             state.observation.workers_received =
                 state.observation.workers_received.saturating_add(1);
-            return Some(state.retain_worker(worker));
+            let slot = state.retain_worker(worker);
+            // Keep exactly one weak entry for this physical worker. Its mailbox,
+            // join handle and unreleased physical reservation move as one value.
+            custody[index] = WorkerCustody::new(&self.inner, slot);
+            return Some(slot);
         }
         None
     }
@@ -64,7 +79,21 @@ impl State {
         self.workers
             .get(slot)
             .and_then(Option::as_ref)
-            .is_some_and(|worker| !worker.thread.is_finished())
+            .is_some_and(|worker| worker.available && !worker.thread.is_finished())
+    }
+
+    pub(super) fn claim_local(&mut self) -> Option<usize> {
+        let slot = (0..self.workers.len())
+            .rev()
+            .find(|&slot| self.reusable(slot))?;
+        self.release_slot(slot, false);
+        Some(slot)
+    }
+
+    pub(super) fn release_slot(&mut self, slot: usize, reusable: bool) {
+        if let Some(worker) = self.workers.get_mut(slot).and_then(Option::as_mut) {
+            worker.available = reusable && self.observation.dispatch_open;
+        }
     }
 
     pub(super) fn retain_worker(&mut self, worker: Worker) -> usize {

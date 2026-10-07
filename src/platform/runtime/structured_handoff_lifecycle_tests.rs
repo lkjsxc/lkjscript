@@ -149,9 +149,17 @@ fn missing_completion_receipt_keeps_the_worker_with_its_cleanup_owner() {
     assert_eq!(error.code, "normalized_parallel_worker");
     assert!(failed.is_cancelled());
     assert_eq!(first.observe().active_dispatches, 0);
-    assert!(lock(&first.inner.capacity.idle).is_empty());
+    assert_eq!(lock(&first.inner.capacity.custody).len(), 1);
+    assert!(
+        lock(&first.inner.state)
+            .workers
+            .iter()
+            .flatten()
+            .all(|worker| !worker.available)
+    );
     assert!(!pair(&second).dispatched);
     assert_eq!(first.observe().workers_handed_off, 0);
     assert_balance(&first.shutdown().unwrap());
+    assert!(lock(&first.inner.capacity.custody).is_empty());
     assert!(pair(&second).dispatched);
 }

@@ -20,15 +20,16 @@ fn failure_first_observed_after_handoff_keeps_the_recipient_as_join_owner() {
     // The thread remains live: is_finished cannot predict this late failure.
     assert!(!thread.is_finished());
     {
-        let mut idle = lock(&first.inner.capacity.idle);
+        let mut custody = lock(&first.inner.capacity.custody);
         let mut state = lock(&first.inner.state);
         let slot = state.retain_worker(Worker {
             sender,
             thread,
+            available: true,
             _reservation: reservation,
         });
         state.observation.workers_started = 1;
-        idle.push(IdleWorker::new(&first.inner, slot));
+        custody.push(WorkerCustody::new(&first.inner, slot));
     }
     let executions = Arc::new(AtomicUsize::new(0));
     let count = Arc::clone(&executions);
@@ -53,7 +54,8 @@ fn failure_first_observed_after_handoff_keeps_the_recipient_as_join_owner() {
     assert_eq!(second.observe().workers_received, 1);
     assert_eq!(second.observe().active_dispatches, 0);
     assert_eq!(second.observe().completed_dispatches, 0);
-    assert!(lock(&first.inner.capacity.idle).is_empty());
+    // Custody remains recorded, but a disconnected mailbox is never available.
+    assert_eq!(lock(&first.inner.capacity.custody).len(), 1);
     assert!(!pair(&third).dispatched);
     let stopped = first.shutdown().unwrap();
     assert_eq!((stopped.joined_workers, stopped.remaining_workers), (0, 0));

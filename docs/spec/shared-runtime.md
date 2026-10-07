@@ -119,6 +119,14 @@ mailbox, join handle and physical reservation together. Active jobs do not move.
 Dispatch closure serializes with handoff; stopping the former owner cannot cancel
 or wait for work that now belongs to another owner. Other groups retain private
 programs, invocation controls, grants, quotas, lifetime and dispatch state.
+[Owner-local dispatch](../decisions/owner-local-worker-dispatch.md) separates each
+physical worker's weak custody-directory entry from its current owner's
+receipt-joined availability. Stable local reuse and receipt completion take only
+that owner's state lock; they do not acquire the shared directory. A local miss
+drops its state lock before entering shared custody and rechecks closure and
+local availability. Active, unreceived and failed-result workers retain custody
+without permission to run. New starts, handoff and closing dispatch still serialize
+through shared management. This is not lock-free execution or a measured speedup.
 Resident root execution and blocking adapters remain on their existing executor;
 this auxiliary bound does not establish a bound on all process CPU work or fairness.
 

@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "structured_locality_tests.rs"]
+mod locality;
+
 pub(super) const WAIT: std::time::Duration = std::time::Duration::from_secs(5);
 
 pub(super) fn pair(executor: &StructuredExecutor) -> StructuredPair<i64, thread::ThreadId> {
@@ -62,7 +65,7 @@ fn repeated_handoffs_reuse_bounded_slots_and_leave_no_retention_root() {
         assert_eq!(result.left, 17);
         assert_eq!(*thread.get_or_insert(result.right), result.right);
         assert_eq!(capacity.reserved.load(Ordering::Acquire), 1);
-        assert_eq!(lock(&capacity.idle).len(), 1);
+        assert_eq!(lock(&capacity.custody).len(), 1);
         assert!(lock(&first.inner.state).workers.len() <= 1);
         assert!(lock(&second.inner.state).workers.len() <= 1);
         assert_balance(&first.observe());
@@ -90,7 +93,7 @@ fn repeated_handoffs_reuse_bounded_slots_and_leave_no_retention_root() {
     drop(second);
     assert!(weak_second.upgrade().is_none());
     assert_eq!(capacity.reserved.load(Ordering::Acquire), 0);
-    assert!(lock(&capacity.idle).is_empty());
+    assert!(lock(&capacity.custody).is_empty());
 }
 
 #[test]

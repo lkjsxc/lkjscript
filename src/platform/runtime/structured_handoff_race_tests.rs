@@ -40,7 +40,7 @@ fn simultaneous_handoff_and_shutdown_keep_exactly_one_join_owner() {
         );
         assert!(first.workers_started + second.workers_started <= 2);
         assert_eq!(capacity.reserved.load(Ordering::Acquire), 0);
-        assert!(lock(&capacity.idle).is_empty());
+        assert!(lock(&capacity.custody).is_empty());
     }
 }
 

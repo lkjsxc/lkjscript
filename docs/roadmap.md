@@ -106,8 +106,13 @@ independent open executors reuse receipt-joined workers without another physical
 start. Keep active jobs, grants, programs, cancellation and quotas private. Each
 worker retains one join owner through handoff and shutdown races; eligibility does
 not precede result cleanup. This is not fair CPU entitlement or root scheduling.
-Measure contention, locality and retained owner metadata before selecting more
-complex queueing or retirement policies. Exact acceptance remains status-owned.
+Use [owner-local dispatch](decisions/owner-local-worker-dispatch.md) to separate
+physical custody from receipt-joined availability. Stable local dispatch and result
+completion use only their current owner state; cold misses, new starts, handoff and
+closure retain shared coordination. A directory entry is not availability, and
+failed cleanup never grants transfer. Measure contention, locality and retained
+owner metadata before selecting more complex queueing or retirement policies.
+Exact acceptance remains status-owned.
 
 Introduce typed bounded channels only with exact destination admission, capacity
 reservation, irrevocable acceptance, owner-returning refusal and joined receiver

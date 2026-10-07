@@ -11,10 +11,13 @@ use std::thread::{self, JoinHandle};
 
 #[path = "structured_lending.rs"]
 mod lending;
-use lending::IdleWorker;
+use lending::WorkerCustody;
 
 #[path = "structured_receipt.rs"]
 mod receipt;
+
+#[path = "structured_dispatch.rs"]
+mod dispatch;
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
 
@@ -27,7 +30,7 @@ struct Capacity {
     maximum: usize,
     reserved: AtomicUsize,
     // Bounded by physical workers; entries never retain their runtime owner.
-    idle: Mutex<Vec<IdleWorker>>,
+    custody: Mutex<Vec<WorkerCustody>>,
 }
 
 impl Capacity {
@@ -55,7 +58,7 @@ fn process_capacity() -> Arc<Capacity> {
         Arc::new(Capacity {
             maximum: thread::available_parallelism().map_or(0, |n| n.get().saturating_sub(1)),
             reserved: AtomicUsize::new(0),
-            idle: Mutex::new(Vec::new()),
+            custody: Mutex::new(Vec::new()),
         })
     }))
 }
@@ -84,6 +87,8 @@ pub struct StructuredExecutorObservation {
 struct Worker {
     sender: mpsc::SyncSender<Command>,
     thread: JoinHandle<()>,
+    // Receipt-joined availability belongs to this owner, not the shared directory.
+    available: bool,
     // Physical capacity is retained through joining the thread, including failure.
     _reservation: ThreadReservation,
 }
@@ -188,7 +193,7 @@ impl StructuredExecutor {
         Self::with_capacity(Arc::new(Capacity {
             maximum: worker_limit,
             reserved: AtomicUsize::new(0),
-            idle: Mutex::new(Vec::new()),
+            custody: Mutex::new(Vec::new()),
         }))
     }
 
@@ -210,10 +215,10 @@ impl StructuredExecutor {
     /// Future child work executes inline. This never cancels another invocation.
     pub fn close_dispatch(&self) {
         // All operations spanning owners acquire the catalogue before any state.
-        let mut idle = lock(&self.inner.capacity.idle);
+        let mut custody = lock(&self.inner.capacity.custody);
         let mut state = lock(&self.inner.state);
         state.observation.dispatch_open = false;
-        idle.retain(|entry| !entry.belongs_to(&self.inner));
+        custody.retain(|entry| !entry.belongs_to(&self.inner));
     }
 
     /// Close dispatch, retain active receipts, then join every still-owned thread.
@@ -241,6 +246,7 @@ impl StructuredExecutor {
                 sender,
                 thread,
                 _reservation,
+                ..
             } = worker;
             drop(sender);
             let result = thread.join();
@@ -313,113 +319,6 @@ impl StructuredExecutorHandle {
             }
         }
     }
-
-    fn dispatch<R: Send + 'static, F: FnOnce() -> R + Send + 'static>(
-        &self,
-        control: &ExecutionControl,
-        right: F,
-    ) -> Dispatch<R, F> {
-        let mut idle = lock(&self.inner.capacity.idle);
-        let mut state = lock(&self.inner.state);
-        let slot = if state.observation.dispatch_open {
-            self.claim_idle(&mut state, &mut idle)
-                .or_else(|| self.start_worker(&mut state))
-        } else {
-            None
-        };
-        let Some(slot) = slot else {
-            state.observation.inline_fallbacks =
-                state.observation.inline_fallbacks.saturating_add(1);
-            return Dispatch::Inline(right);
-        };
-        let (sender, receiver) = mpsc::sync_channel(1);
-        let job_control = control.clone();
-        let job: Job = Box::new(move || {
-            let mut guard = CancelOnUnwind::new(job_control.clone());
-            let outcome = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(right)) {
-                Ok(value) => Ok(value),
-                Err(_) => {
-                    job_control.cancel();
-                    Err(worker_failure())
-                }
-            };
-            let _ = sender.send(outcome);
-            guard.armed = false;
-        });
-        let command = Command::Run(job);
-        #[cfg(test)]
-        let refuse = std::mem::take(&mut state.refuse_next_submission);
-        #[cfg(not(test))]
-        let refuse = false;
-        let submitted = if refuse {
-            Err(mpsc::TrySendError::Full(command))
-        } else {
-            match &state.workers[slot] {
-                Some(worker) => worker.sender.try_send(command),
-                None => Err(mpsc::TrySendError::Disconnected(command)),
-            }
-        };
-        match submitted {
-            Ok(()) => {
-                let observation = &mut state.observation;
-                observation.active_dispatches += 1;
-                observation.maximum_active_dispatches = observation
-                    .maximum_active_dispatches
-                    .max(observation.active_dispatches);
-                Dispatch::Accepted(JoinedChild {
-                    inner: Arc::clone(&self.inner),
-                    slot: Some(slot),
-                    receiver,
-                    control: control.clone(),
-                })
-            }
-            Err(mpsc::TrySendError::Full(Command::Run(job))) => {
-                idle.push(IdleWorker::new(&self.inner, slot));
-                state.observation.inline_fallbacks =
-                    state.observation.inline_fallbacks.saturating_add(1);
-                Dispatch::Refused(job, receiver)
-            }
-            Err(mpsc::TrySendError::Disconnected(Command::Run(job))) => {
-                // A failure discovered after handoff stays with the current join
-                // owner. Never recirculate the worker or return it to the donor.
-                state.observation.inline_fallbacks =
-                    state.observation.inline_fallbacks.saturating_add(1);
-                Dispatch::Refused(job, receiver)
-            }
-            // Only Run is submitted here; retaining exhaustive command handling
-            // makes this refusal path safe if another internal command is added.
-            Err(mpsc::TrySendError::Full(Command::Stop))
-            | Err(mpsc::TrySendError::Disconnected(Command::Stop)) => {
-                unreachable!("dispatch submits only child jobs")
-            }
-        }
-    }
-
-    fn start_worker(&self, state: &mut State) -> Option<usize> {
-        let reservation = self.inner.capacity.reserve()?;
-        #[cfg(test)]
-        if std::mem::take(&mut state.refuse_next_worker_start) {
-            return None;
-        }
-        let (sender, receiver) = mpsc::sync_channel(1);
-        let thread = thread::Builder::new()
-            .name("lkjscript-structured".to_owned())
-            .spawn(move || {
-                while let Ok(Command::Run(job)) = receiver.recv() {
-                    // The typed wrapper reports child panics. This outer boundary
-                    // also retains the worker if a panic payload's destructor fails.
-                    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(job));
-                }
-            })
-            .ok()?;
-        let slot = state.retain_worker(Worker {
-            sender,
-            thread,
-            _reservation: reservation,
-        });
-        state.observation.workers_started = state.observation.workers_started.saturating_add(1);
-        Some(slot)
-    }
 }
 
 struct CancelOnUnwind {
@@ -460,16 +359,12 @@ impl<R> JoinedChild<R> {
 
     fn release(&mut self, reusable: bool) {
         if let Some(slot) = self.slot.take() {
-            let mut idle = lock(&self.inner.capacity.idle);
             let mut state = lock(&self.inner.state);
             state.observation.active_dispatches -= 1;
             state.observation.completed_dispatches =
                 state.observation.completed_dispatches.saturating_add(1);
-            if reusable && state.observation.dispatch_open {
-                idle.push(IdleWorker::new(&self.inner, slot));
-            }
+            state.release_slot(slot, reusable);
             drop(state);
-            drop(idle);
             self.inner.joined.notify_all();
         }
     }
@@ -551,3 +446,21 @@ mod handoff_failure_tests;
     reason = "controlled result custody proofs"
 )]
 mod disposal_tests;
+
+#[cfg(test)]
+#[path = "structured_locality_race_tests.rs"]
+#[allow(
+    clippy::unwrap_used,
+    clippy::panic,
+    reason = "controlled local custody races"
+)]
+mod locality_race_tests;
+
+#[cfg(test)]
+#[path = "structured_locality_failure_tests.rs"]
+#[allow(
+    clippy::unwrap_used,
+    clippy::panic,
+    reason = "controlled local cleanup failures"
+)]
+mod locality_failure_tests;
