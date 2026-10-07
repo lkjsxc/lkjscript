@@ -126,9 +126,12 @@ to admit compact acyclic prerequisite DAGs without unfolding every typed path.
 All source operands remain independently admitted. Use
 [demanded recursive provenance](decisions/demanded-callable-provenance.md) to follow
 only exact paths that can feed declaration type slots, preserving all expanding
-cycles without merging same-shaped witnesses. Repeated incoming-call reads and
-large genuinely demanded path sets remain separate proof costs; retain exact
-substitutions, scopes, expansion adversaries and bounded refusal.
+cycles without merging same-shaped witnesses. Use
+[operation-local incoming call inputs](decisions/operation-local-callable-inputs.md)
+to read each demanded call once while preserving its distinct witness paths. Lexical
+declaration and type-object reads, plus large genuinely demanded path sets, remain
+separate proof costs. Retain exact substitutions, scopes, expansion adversaries and
+bounded refusal.
 
 Use [whole immutable prepared witness nodes](decisions/shared-prepared-witness-nodes.md)
 to share complete exact applications across catalogue entries, prerequisite edges

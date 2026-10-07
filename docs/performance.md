@@ -2273,3 +2273,62 @@ admission-local lifetime; the [four-package public workload](guides/native-share
 keeps same-Self private reader choices distinct and checks borrowed then consumed
 values after source deletion. [Status](status.md) owns actual accepted source,
 final product evidence and publication, not this earlier measurement snapshot.
+
+## Operation-local callable transfer inputs
+
+The predecessor is exact mainline source `e9f0289319be9c8be20de02474319aa3f80eef70`
+(v0.1.87). Its separate detached worktree adds only the same test fixture and a
+five-line `cfg(test)` phase observer; no production transfer behavior is changed.
+Both versions use pinned Rust/Cargo 1.98.0 and the same Linux x86-64 development
+host. The phase observer has no production build presence.
+
+The two-package canonical fixture defines `F<T; P0..Pn>` and one selected scheme
+`S<X>`. Every `Pi` method maps back to `F<X; S<X>..S<X>>`. Each distinct ordered
+witness path therefore needs the same original implementation mapping. The source
+reader counts actual reads of that declaration during demanded provenance transfer,
+not earlier discovery, all source reads, elapsed time or inferred clone counts.
+The fixture's fixed cell Self keeps its generic X independently visible in type flow.
+
+| Ordered witness paths | Mapping reads before / after | Internal proof work before / after | Cumulative reserved metadata before / after, bytes |
+| --- | ---: | ---: | ---: |
+| 1 | 2 / 1 | 895 / 899 | 14,727 / 15,575 |
+| 4 | 5 / 1 | 2,488 / 2,498 | 23,397 / 25,853 |
+| 16 | 17 / 1 | 10,408 / 10,442 | 58,077 / 66,965 |
+| 64 | 65 / 1 | 56,344 / 56,474 | 196,797 / 231,413 |
+
+The 64-path fixture reduces this mapping's reads by 98.46%. A mapping read returns
+its complete source record, including the full ordered operand vector. Reusing its
+input projection avoids repeatedly retrieving that record; it does not merge the
+64 independently demanded provenance paths. The unchanged slot/edge counts are
+5/3, 8/9, 20/33 and 68/129 respectively. Growing a constructor at every distinct
+otherwise equal-shaped witness position still rejects as semantic type expansion.
+
+This is a tradeoff, not a claim of uniformly smaller verification. At 64 paths,
+modeled metadata reservation rises 34,616 bytes (17.59%) and internal proof work
+rises 130 steps (0.23%). Retained input projections and their explicit operand
+accounting add storage and traversal. Source-read observations and internal proof
+steps are different metrics; no unmeasured clone traffic is subtracted from these
+reported ledgers. They are neither actual allocator traffic nor live memory/RSS.
+
+The existing 24-layer recursive duplicate-prerequisite DAG also retains its small
+adverse single-use cost: work rises from 252,517 to 252,592, and modeled metadata
+from 912,878 to 923,478 bytes. Slot and edge results remain unchanged. The smaller
+one-layer case rises from 1,657/18,339 to 1,663/19,187 (work/bytes). No analysis limit
+is enlarged. No controlled elapsed-time, whole-compilation, runtime-speed, RSS/PSS
+or API-cost improvement is claimed from these observations.
+
+Original evidence is under `.artifacts/20261007-call-transfer-inputs/`:
+`predecessor-results.log` retains the unchanged predecessor's 34 successful
+callable-flow cases. `predecessor-regression.log` retains all four ladder points and
+the expected failing one-read assertion (exit 101); this is a reproduced regression,
+not a successful predecessor run. `predecessor-instrumentation.sha256` binds the
+same fixture and phase-only instrumentation. `second-focused.log` retains all 42
+successor callable-flow cases, including exact/N-1 work and cancellation after
+input reuse. Copied predecessor and successor test executables retain separate
+SHA-256 inventories. The two initial lib/bin-only selectors found zero tests and
+are not counted as coverage; the workspace-selected suite owns these observations.
+
+The [decision](decisions/operation-local-callable-inputs.md) defines the lifetime
+and proof boundaries. [Status](status.md) owns later stabilized-source acceptance,
+public product evidence and distribution; these focused test measurements do not
+substitute for those separate acceptance gates.

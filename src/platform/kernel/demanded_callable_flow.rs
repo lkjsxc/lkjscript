@@ -1,10 +1,16 @@
 //! Backward closure from declaration type slots. Every constructor edge starts at
 //! such a slot; therefore every expanding cycle is in this closure. Pure witness
 //! forwarding outside it cannot grow a type. Keep exact paths, never shape aliases.
+#[path = "demanded_callable_inputs.rs"]
+mod inputs;
+#[cfg(test)]
+#[path = "demanded_callable_read_tests.rs"]
+mod read_tests;
 #[path = "demanded_callable_transfer.rs"]
 mod transfer;
 
 use super::*;
+use inputs::{Incoming, Inputs};
 
 struct Request {
     context: usize,
@@ -15,7 +21,7 @@ struct Demands {
     requests: Vec<Request>,
     indexes: BTreeMap<(usize, Vec<usize>), usize>,
     pending: Vec<usize>,
-    incoming: Vec<Vec<CallSite>>,
+    incoming: Vec<Vec<Incoming>>,
 }
 impl Demands {
     fn request<R: CallableClosureRead + ?Sized>(
@@ -147,19 +153,21 @@ pub(super) fn connect<R: CallableClosureRead + ?Sized>(
     analysis: &mut Analysis<'_, R>,
     components: &[usize],
 ) -> Result<(), Diagnostic> {
-    analysis.reserve::<Vec<CallSite>>(analysis.contexts.len())?;
+    #[cfg(test)]
+    let _phase = read_tests::Phase::enter();
+    analysis.reserve::<Vec<Incoming>>(analysis.contexts.len())?;
     let mut demands = Demands {
         requests: Vec::new(),
         indexes: BTreeMap::new(),
         pending: Vec::new(),
-        incoming: vec![Vec::new(); analysis.contexts.len()],
+        incoming: (0..analysis.contexts.len()).map(|_| Vec::new()).collect(),
     };
     for index in 0..analysis.calls.len() {
         analysis.tick()?;
         let call = analysis.calls[index];
         if components[call.from] == components[call.to] {
-            analysis.reserve::<CallSite>(1)?;
-            demands.incoming[call.to].push(call);
+            analysis.reserve::<Incoming>(1)?;
+            demands.incoming[call.to].push(Incoming::new(call));
         }
     }
     for context in 0..analysis.contexts.len() {
@@ -174,9 +182,12 @@ pub(super) fn connect<R: CallableClosureRead + ?Sized>(
         analysis.tick()?;
         let request = demands.copy(analysis, index)?;
         for index in 0..demands.incoming[request.context].len() {
+            // Cache hits retain cancellation/work admission and exact path transfer.
             analysis.tick()?;
-            let call = demands.incoming[request.context][index];
-            transfer::connect(analysis, &mut demands, &request, call)?;
+            let incoming = &mut demands.incoming[request.context][index];
+            let call = incoming.call;
+            let inputs = incoming.resolve(|call| inputs::load(analysis, call))?;
+            transfer::connect(analysis, &mut demands, &request, call, &inputs)?;
         }
     }
     Ok(())

@@ -77,6 +77,8 @@ require more work. [Status](../status.md) owns actual acceptance and distributio
 
 This does not prove polynomial preparation in general. The exact context inventory
 and the number of genuinely demanded paths may still grow substantially. Concrete
-prepared-witness materialization, repeated source reads during transfer and shared
-immutable dependency admission remain separate costs. No graph, interface,
-type-object or artifact encoding changes are required by this derived analysis.
+prepared-witness materialization, lexical declaration and type-object reads, and
+complete dependency admission remain separate costs.
+[Operation-local incoming inputs](operation-local-callable-inputs.md) now share
+original call projections without merging those independently demanded paths.
+No graph, interface, type-object or artifact encoding changes are required by this derived analysis.

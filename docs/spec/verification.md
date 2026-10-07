@@ -2172,3 +2172,34 @@ and selected implementation identities through an edit and restore, and checks
 full borrowed-read/consumption results after disposable source projects and exact
 transport are removed. Generic-source scale and bounded concrete execution remain
 separate obligations; local product proof does not replace final-archive acceptance.
+
+## Operation-local callable transfer input obligations
+
+The [input-sharing decision](../decisions/operation-local-callable-inputs.md) retains
+only source operands within one demanded recursive proof. An independent source
+reader must count actual mapping reads across a multi-path cross-package fixture.
+Run the same fixture against the unchanged predecessor, adding only a test-only
+phase observer; retain its failed one-read assertion and every ladder observation.
+The successor must read one demanded mapping once even when distinct witness paths
+converge on it. Acyclic undemanded mappings must not allocate or read a projection.
+
+Insert type growth at every distinct otherwise equal-shaped witness position and
+retain semantic rejection. Keep complete discovery, exact contexts, source scopes,
+ordered paths and weighted-cycle admission; sharing source inputs is not sharing
+provenance or skipping a proof. Existing independent oracle, invalid-unused-source,
+package and artifact adversaries remain required.
+
+Exercise exact/N-1 work and early, intermediate and late cancellation, including
+input reuse. Failed loading or reservation cannot publish a partial reusable entry.
+After refusal or cancellation, a fresh complete proof must remain healthy. Distinct
+contexts and renewed operations receive separate entries; last-handle release must
+reclaim input storage. Account retained operand trees, type vectors and traversal
+storage before reuse under unchanged limits. Report single-use bookkeeping costs
+alongside read reductions, separately from elapsed time, RSS and invocation costs.
+
+All maintained native-owned public cases remain part of fresh source and finalized
+archive acceptance. In particular, the copied executable must still author the
+full recursive generic library, preserve reviewed identities, reject invalid unused
+source with unchanged accepted HEAD, and execute its independent concrete consumer
+after removal of its disposable source and transport. Internal fixture success is
+not a substitute for that public behavior or final distributed-byte acceptance.
