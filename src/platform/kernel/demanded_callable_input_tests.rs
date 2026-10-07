@@ -43,13 +43,13 @@ fn equal_inputs_never_merge_distinct_call_contexts_or_new_proof_operations()
     let mut first = Incoming::new(call(1, 2));
     let mut second = Incoming::new(call(3, 2));
     let mut renewed = Incoming::new(call(1, 2));
-    let mut load = |_: CallSite| {
+    let load = |_: CallSite| {
         loads.set(loads.get() + 1);
         Ok(empty())
     };
-    let a = first.resolve(&mut load)?;
-    let b = second.resolve(&mut load)?;
-    let c = renewed.resolve(&mut load)?;
+    let a = first.resolve(load)?;
+    let b = second.resolve(load)?;
+    let c = renewed.resolve(load)?;
     assert!(!Rc::ptr_eq(&a, &b));
     assert!(!Rc::ptr_eq(&a, &c));
     assert_eq!(loads.get(), 3);
