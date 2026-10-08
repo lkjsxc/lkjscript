@@ -50,6 +50,7 @@ fn native_checker_rejects_false_plans_and_guards_an_independent_producer() {
         .map(|(_, input, expected)| (input.clone(), expected.clone()))
         .collect();
     let adversaries = verification::batches(&public, "mutations", &mutation_samples);
+    let outcome_suite = verification::outcomes::Suite::new(&public);
     let mut observations = Vec::new();
     for phase in ["attached", "source-deleted"] {
         if phase == "source-deleted" {
@@ -83,6 +84,7 @@ fn native_checker_rejects_false_plans_and_guards_an_independent_producer() {
                 "observation":quoted(&output,"production-observation")}),
             );
         }
+        observations.extend(outcome_suite.compare(&public, phase));
     }
     for (family, batches) in [("candidates", &candidates), ("mutations", &adversaries)] {
         for (index, batch) in batches.iter().enumerate() {
@@ -125,6 +127,7 @@ fn native_checker_rejects_false_plans_and_guards_an_independent_producer() {
         public.compare(&format!("empty-{mode}"), descriptor, &empty, &json!([]));
     }
     verification::refusals(&public, &descriptors[4]);
+    outcome_suite.finish(&public);
     assert_eq!(executable_hash, digest(&public.root.join("lkjscript")));
     assert_eq!(verifier_hash, digest(&verifier_artifact));
     assert_eq!(producer_hash, digest(&producer_artifact));
@@ -135,15 +138,27 @@ fn native_checker_rejects_false_plans_and_guards_an_independent_producer() {
         .chain(&adversaries)
         .map(|b| b.bytes)
         .max()
-        .unwrap();
-    let conditions = proposals.len() * 6 + exhaustive.len() + mutations.len();
+        .unwrap()
+        .max(outcome_suite.maximum_bytes());
+    let maximum_items = plans
+        .iter()
+        .chain(&claims)
+        .chain(&candidates)
+        .chain(&adversaries)
+        .map(|batch| batch.items)
+        .max()
+        .unwrap()
+        .max(outcome_suite.maximum_items());
+    let conditions =
+        proposals.len() * 6 + exhaustive.len() + mutations.len() + 2 * outcome_suite.count();
     public.input("witness-summary.json", &json!({
         "purpose":"Native result-checker evidence; not a source or distribution acceptance receipt",
         "status":"passed", "source_graphs":proposals.len(), "checked_plan_comparisons":proposals.len()*4,
         "ordinary_claim_comparisons":proposals.len()*2, "exhaustive_candidate_claims":exhaustive.len(),
         "valid_exhaustive_claims":512,"rejected_exhaustive_claims":11264,"targeted_mutations_and_recovery":mutations.len(),
-        "batch_conditions":conditions,"batch_executions":observations.len(),"maximum_argument_bytes":maximum_input,
-        "single_executions":3,"empty_batches":3,"raw_and_resource_refusals":2,"subsequent_recoveries":2,
+        "batch_conditions":conditions,"batch_executions":observations.len(),"maximum_argument_bytes":maximum_input,"maximum_argument_items":maximum_items,
+        "single_executions":5,"empty_batches":4,"raw_and_resource_refusals":6,"subsequent_recoveries":6,
+        "outcome_verification":outcome_suite.summary(),"standalone_before_producer_executions":3,
         "source_projects_and_transports_deleted":true,"binary_sha256":executable_hash,
         "verifier_artifact_sha256":verifier_hash,"producer_artifact_sha256":producer_hash,
         "verifier_transport_sha256":verifier_transport_hash,"observations":observations,

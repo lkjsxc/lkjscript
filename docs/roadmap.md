@@ -216,7 +216,10 @@ to check a claimed component partition and earliest stages against its complete
 proposal. The checker admits the source through the existing validator, but checks
 internal forward/reverse connectivity and level equations without the producer's
 SCC or readiness algorithms. Checked native planner entrypoints import that exact
-checker package before returning a valid result. A report is ordinary data, not
+checker package before returning a valid plan or a source-invalid/capacity result.
+Complete-outcome checking retains exact diagnostic identity and precedence, rather
+than trusting negative producer reports. Internal failures stay failures.
+A report is ordinary data, not
 publication or execution authority; shared source admission and runtime machinery
 remain explicit trust boundaries. Prefer binding this checked interface to a real
 compiler consumer over adding another disconnected graph-analysis example.

@@ -3,7 +3,9 @@
 Build a native result checker independently of the native planner. The checker
 accepts an original proposal and an untrusted claimed plan, not the planner's code
 or a purported producer certificate. Checked flat and chunked entrypoints then use
-that checker through an exact exported package before returning a valid plan.
+that checker through an exact exported package before returning a complete valid,
+invalid or capacity outcome. The [complete-outcome interface](outcomes/README.md)
+checks negative reports as well as successful plans.
 [The decision](../../../docs/decisions/native-plan-result-checking.md) owns the
 predicates and trust boundary; [status](../../../docs/status.md) owns acceptance.
 
@@ -33,9 +35,10 @@ strong connectivity and stage equations does not call those producer algorithms.
 In a separate fresh producer project, stage the standard, worklist and carrier
 packages and this checker transport. Bind its exact observed identity under alias
 `dependency-verifier`. Follow the [planner's authoring sequence](../README.md),
-then author this directory's `application.lkjc` and `batch.lkjc`. The consumer names
-`dependency-verifier::verify-dependency-plan` and the nominal
-`dependency-verifier::Verification` exported by that independently built package.
+then author this directory's `application.lkjc` and `batch.lkjc`. The consumer
+selects `dependency-verifier::verify-dependency-outcome`,
+`ClaimedDependencyOutcome` and `OutcomeVerification` from that independently built
+package. The original successful-plan verifier remains separately available.
 Run `check`, verify unchanged drafts, and build `verified-dependency-plan.lkja`.
 No external semantic generator or privileged graph writer participates.
 
@@ -92,8 +95,8 @@ host oracle's expected results. Retain literal requests and inputs as evidence.
 
 Complete source validation and its capacity precedence run before claim checking.
 Malformed raw types in any argument still fail before native execution, including
-a malformed claimed field paired with an already invalid source. The checker
-inherits `invalid` and `capacity` source outcomes rather than claiming verification
+a malformed claimed field paired with an already invalid source. The original
+`[PROPOSAL, PLAN]` checker inherits `invalid` and `capacity` source outcomes rather than claiming verification
 of such a plan. Runtime refusal or interruption cannot produce a successful partial
 verification result.
 
@@ -131,14 +134,16 @@ one-way connectivity, delayed stages and source-before-claim precedence.
 
 The test-only oracle uses pairwise reachability and synchronous level relaxation.
 It does not run the native finish-order SCC algorithm, producer readiness queue or
-checker traversal. Eight new fixed native tests exercise both evaluators, including
-both one-way false merges and propagation of checker failure by the consumer.
+checker traversal. Seventeen fixed native tests exercise both evaluators, including both one-way
+false merges, consumer propagation of checker failure and exact negative outcomes.
+The [complete-outcome extension](outcomes/README.md) retains its additional
+8,760 claims per source-present/deleted phase and refusal/recovery checks.
 The public matrix uses production execution, not differential evaluator pairs.
 
 Every successful public run checks joined cleanup and no remaining owned handles,
 locals, operands, frames, transactions or type bindings. Test batches fit the
-unchanged 1 MiB argument limit; large inputs are separated, not admitted by raising
-that limit. Artifact/executable bytes are checked unchanged across detachment.
+unchanged 1 MiB argument and 100,000 aggregate JSON-entry limits; large inputs
+are separated without raising either limit. Artifact/executable bytes are checked unchanged across detachment.
 Counts and original receipts describe successful acceptance only where status says
 so; development failures remain retained separately.
 

@@ -89,13 +89,13 @@ reachability, dependencies, cyclic flags, stages and internal strong connectivit
 Raw type refusal, interruption and execution-policy exhaustion remain unsuccessful
 runtime invocations, never successful partial verification reports.
 
-Checked planner entrypoints invoke the exact imported checker for every generated
-valid plan. Verification success returns that plan unchanged. Rejection becomes the
-planner's existing `inconsistent` outcome, not a valid plan. A disagreement about
-source admission is also inconsistent. Original invalid/capacity/inconsistent
-producer outcomes are forwarded; these wrappers do not independently certify an
-untrusted producer's negative outcomes. The standalone checker instead admits its
-own input before considering any purported valid-plan payload.
+Checked planner entrypoints invoke the exact imported complete-outcome checker for
+every generated valid, invalid or capacity result. Verification success forwards
+only the immutable claim actually checked; there is no distinct original-result
+argument that could disagree. Rejection becomes the planner's existing
+`inconsistent` outcome, never a valid plan or a verified negative diagnosis.
+An existing `inconsistent` producer result is preserved as an internal failure,
+not certified as a source outcome.
 
 A verification report is ordinary data, not an unforgeable certificate, a program
 acceptance token, an execution grant or a publication right. Reusing evidence needs
@@ -109,6 +109,35 @@ runtime with the producer. Its imported implementation identity must be selected
 and independently admitted; a matching function type alone cannot make a malicious
 replacement checker trustworthy. Cyclic units still have no implied sequential
 member schedule, and a stage still grants no parallel-effect or memory authority.
+
+## Complete outcome checking
+
+The additive `ClaimedDependencyOutcome` interface represents `valid(Plan)`,
+`invalid(Diagnostic)` and `capacity(Text)`. `verify-dependency-outcome` independently
+runs the complete source validator once, then compares that outcome with the claim.
+For a valid source, it passes the admitted partition into the existing plan predicates
+without repeating source admission. Wrong outcome kinds reject with `source-outcome`.
+
+An invalid claim must match the first required diagnostic exactly: code text, owner
+and target identity. Later but genuine errors are not interchangeable. A mismatch
+rejects with `source-diagnostic`. A capacity claim must name the exact first exceeded
+dimension under the existing nodes/roots/edges precedence; any mismatch rejects with
+`source-capacity`. Text equality is exact, including whitespace, case and null bytes.
+
+The separate two-case `OutcomeVerification` result is `verified(Unit)` or
+`rejected(Text)`. Verified negative outcomes do not establish graph validity.
+The old successful-plan interface and its source-invalid/capacity precedence remain
+unchanged. Complete raw admission still checks the selected claim's entire payload,
+even when native source checking would stop before inspecting it. Runtime resource
+refusal and interruption remain unsuccessful execution, not claim-verification
+outcomes. An `inconsistent` value is not representable as a complete source claim.
+
+Both public interfaces and the checked consumers retain exact separately exported
+checker selection. This closes the native wrapper's unchecked-negative-report path;
+it does not eliminate shared source-validation trust or adopt the checker in the
+production compiler. The [outcome guide](../../examples/dependency-plan/verification/outcomes/README.md)
+owns public invocation and the additional diagnostic, capacity and false-negative
+matrices. No new source or encoding authority follows from an ordinary report.
 
 ## Cost and acceptance
 

@@ -2,8 +2,13 @@ use crate::components::{Native, path};
 use serde_json::{Value, json};
 
 mod author;
+mod batches;
+pub use batches::{Batch, batches};
 pub mod cases;
 pub mod mutations;
+mod outcome_cases;
+mod outcome_refusals;
+pub mod outcomes;
 pub use author::author;
 
 pub const VERIFIER: [(&str, &str); 6] = [
@@ -68,50 +73,6 @@ pub const DESCRIPTORS: [(&str, &str); 6] = [
         include_str!("../../examples/dependency-plan/verification/verify-batch.deployment.json"),
     ),
 ];
-
-pub struct Batch {
-    pub arguments: std::path::PathBuf,
-    pub expected: Value,
-    pub count: usize,
-    pub bytes: usize,
-}
-
-pub fn batches(public: &Native, prefix: &str, samples: &[(Value, Value)]) -> Vec<Batch> {
-    let mut batches = Vec::new();
-    let (mut inputs, mut outputs) = (Vec::new(), Vec::new());
-    let mut bytes = 4;
-    let flush = |batches: &mut Vec<Batch>, inputs: &mut Vec<Value>, outputs: &mut Vec<Value>| {
-        if inputs.is_empty() {
-            return;
-        }
-        let text = json!([inputs]).to_string();
-        assert!(text.len() <= 1_048_576);
-        batches.push(Batch {
-            arguments: public.input(&format!("{prefix}-{:03}.json", batches.len()), &text),
-            expected: json!(outputs),
-            count: inputs.len(),
-            bytes: text.len(),
-        });
-        inputs.clear();
-        outputs.clear();
-    };
-    for (input, output) in samples {
-        let next = input.to_string().len() + 1;
-        assert!(
-            next + 4 <= 1_048_576,
-            "single case exceeds unchanged runner limit"
-        );
-        if !inputs.is_empty() && (inputs.len() == 128 || bytes + next > 900_000) {
-            flush(&mut batches, &mut inputs, &mut outputs);
-            bytes = 4;
-        }
-        inputs.push(input.clone());
-        outputs.push(output.clone());
-        bytes += next;
-    }
-    flush(&mut batches, &mut inputs, &mut outputs);
-    batches
-}
 
 pub fn refusals(public: &Native, descriptor: &std::path::Path) {
     let empty_plan = cases::empty_plan();

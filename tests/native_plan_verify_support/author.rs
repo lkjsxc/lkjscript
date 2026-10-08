@@ -75,6 +75,7 @@ pub fn author(public: &Native) {
         "shared_source_admission":"provisional-graph::flat",
         "independent_of":"component-order, component-groups, component-data, dependency-components, plan-edges, plan-stages, plan-presentation, dependency-plan",
     }).to_string());
+    super::outcomes::before_producer(public);
     let verifier_export = public.export(Some(&verifier), "verifier");
     let application = public.project("application");
     let dependencies = [
