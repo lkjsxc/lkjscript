@@ -1,0 +1,17 @@
+{
+  "artifact": "verified-dependency-plan.lkja",
+  "target": "dependency-plan-checked-chunked",
+  "listen": null,
+  "http": null,
+  "session": null,
+  "worker": null,
+  "streams": {
+    "maximum_chunk_bytes": 65536,
+    "maximum_buffered_chunks": 16,
+    "maximum_total_bytes": 16777216,
+    "maximum_live_streams": 16
+  },
+  "configuration": {},
+  "secrets": [],
+  "grants": []
+}

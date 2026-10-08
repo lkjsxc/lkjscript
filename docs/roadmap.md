@@ -211,6 +211,16 @@ own independent admission; extend those boundaries only with an exact checked
 construction/extraction contract. Neither shape equality nor a type annotation
 authorizes skipped raw admission.
 
+Use the separately exported [native plan result checker](decisions/native-plan-result-checking.md)
+to check a claimed component partition and earliest stages against its complete
+proposal. The checker admits the source through the existing validator, but checks
+internal forward/reverse connectivity and level equations without the producer's
+SCC or readiness algorithms. Checked native planner entrypoints import that exact
+checker package before returning a valid result. A report is ordinary data, not
+publication or execution authority; shared source admission and runtime machinery
+remain explicit trust boundaries. Prefer binding this checked interface to a real
+compiler consumer over adding another disconnected graph-analysis example.
+
 ## Evidence and development cost
 
 Use independent expected results, rejected proposals with unchanged accepted state,
