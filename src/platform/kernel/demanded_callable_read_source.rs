@@ -24,11 +24,17 @@ impl CallableClosureRead for Fixture {
         owner: OwnerKey,
     ) -> Result<Option<OwnerRecord>, Diagnostic> {
         self.validation_checkpoint()?;
-        if super::super::IN_PROOF.with(Cell::get)
-            && package == self.mapping.package
-            && owner == OwnerKey::Declaration(self.mapping.declaration)
-        {
-            self.mapping_reads.set(self.mapping_reads.get() + 1);
+        if super::super::IN_PROOF.with(Cell::get) {
+            if package == self.mapping.package
+                && owner == OwnerKey::Declaration(self.mapping.declaration)
+            {
+                self.mapping_reads.set(self.mapping_reads.get() + 1);
+            }
+            if package == self.caller.package
+                && owner == OwnerKey::Declaration(self.caller.declaration)
+            {
+                self.lexical_reads.set(self.lexical_reads.get() + 1);
+            }
         }
         Ok(self.owners.get(&(package, owner)).cloned())
     }
@@ -39,6 +45,9 @@ impl CallableClosureRead for Fixture {
         ty: TypeObjectDigest,
     ) -> Result<Option<TypeObject>, Diagnostic> {
         self.validation_checkpoint()?;
+        if super::super::IN_PROOF.with(Cell::get) {
+            self.type_reads.set(self.type_reads.get() + 1);
+        }
         Ok(self.types.get(&ty).cloned())
     }
 

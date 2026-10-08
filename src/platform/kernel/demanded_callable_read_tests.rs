@@ -31,16 +31,28 @@ fn incoming_mapping_is_read_once_across_all_demanded_witness_paths() -> Result<(
         let mut work = 0;
         let observation = validate_callable_closure(&fixture, &mut work, WORK_LIMIT)?;
         let reads = fixture.mapping_reads.get();
+        let lexical_reads = fixture.lexical_reads.get();
+        let type_reads = fixture.type_reads.get();
         eprintln!(
-            "incoming-input width={width} mapping_reads={reads} work={work} observation={observation:?}"
+            "incoming-input width={width} mapping_reads={reads} lexical_reads={lexical_reads} type_reads={type_reads} work={work} observation={observation:?}"
         );
         assert!(observation.slots >= width + 2);
         assert_eq!(observation.edges, width * 2 + 1);
-        counts.push((width, reads));
+        counts.push((width, reads, lexical_reads, type_reads));
     }
     // Check after the entire ladder so a predecessor retains every adverse point.
-    for (width, reads) in counts {
+    for (width, reads, lexical_reads, type_reads) in counts {
         assert_eq!(reads, 1, "one mapping was reread for {width} witness paths");
+        assert_eq!(
+            lexical_reads,
+            width + 1,
+            "lexical declaration rereads at width {width}"
+        );
+        assert_eq!(
+            type_reads,
+            width + 1,
+            "type flow still visits every demanded input"
+        );
     }
     Ok(())
 }
@@ -50,6 +62,8 @@ fn undemanded_acyclic_mapping_keeps_input_projection_lazy() -> Result<(), Diagno
     let fixture = Fixture::new(0, None)?;
     let observation = validate_callable_closure(&fixture, &mut 0, WORK_LIMIT)?;
     assert_eq!(fixture.mapping_reads.get(), 0);
+    assert_eq!(fixture.lexical_reads.get(), 0);
+    assert_eq!(fixture.type_reads.get(), 0);
     assert_eq!(observation.edges, 0);
     Ok(())
 }

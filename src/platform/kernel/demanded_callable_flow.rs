@@ -6,6 +6,8 @@ mod inputs;
 #[cfg(test)]
 #[path = "demanded_callable_read_tests.rs"]
 mod read_tests;
+#[path = "demanded_callable_scopes.rs"]
+mod scopes;
 #[path = "demanded_callable_transfer.rs"]
 mod transfer;
 
@@ -22,6 +24,7 @@ struct Demands {
     indexes: BTreeMap<(usize, Vec<usize>), usize>,
     pending: Vec<usize>,
     incoming: Vec<Vec<Incoming>>,
+    scopes: scopes::Scopes,
 }
 impl Demands {
     fn request<R: CallableClosureRead + ?Sized>(
@@ -160,6 +163,7 @@ pub(super) fn connect<R: CallableClosureRead + ?Sized>(
         requests: Vec::new(),
         indexes: BTreeMap::new(),
         pending: Vec::new(),
+        scopes: scopes::Scopes::default(),
         incoming: (0..analysis.contexts.len()).map(|_| Vec::new()).collect(),
     };
     for index in 0..analysis.calls.len() {

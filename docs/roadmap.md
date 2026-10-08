@@ -130,8 +130,11 @@ cycles without merging same-shaped witnesses. Use
 [operation-local incoming call inputs](decisions/operation-local-callable-inputs.md)
 to read each demanded call once while preserving its distinct witness paths. Lexical
 declaration and type-object reads, plus large genuinely demanded path sets, remain
-separate proof costs. Retain exact substitutions, scopes, expansion adversaries and
-bounded refusal.
+separate proof costs. Use [operation-local lexical projections](decisions/operation-local-lexical-projections.md)
+to retain ordered implementation-parameter IDs without repeatedly cloning their
+whole declaration. Exact lexical owners, witness paths and type slots stay separate;
+modeled lookup work and retained metadata are additional measured costs. Retain exact
+substitutions, scopes, expansion adversaries and bounded refusal.
 
 Use [whole immutable prepared witness nodes](decisions/shared-prepared-witness-nodes.md)
 to share complete exact applications across catalogue entries, prerequisite edges
@@ -191,6 +194,11 @@ the checked ownership/type signature. Integrating these passes into the
 production compiler requires an explicit host boundary that retains ordinary
 admission and publication authority. Larger typed passes should justify storage,
 view and region abstractions through working-set and reclamation measurements.
+The [owned metadata workload](../examples/owned-metadata-costs/README.md) separates
+ordinary list/map projection from packing, unpacking and borrowed metadata reads.
+Use its complete ingress checks and non-regressing cost ceilings when evaluating
+allocation-bound immutable proof propagation; the witness does not implement that
+optimization or authorize skipped raw admission.
 
 ## Evidence and development cost
 

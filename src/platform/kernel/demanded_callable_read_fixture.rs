@@ -17,6 +17,9 @@ pub(super) struct Fixture {
     owners: BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
     types: BTreeMap<TypeObjectDigest, TypeObject>,
     mapping: DeclarationReference,
+    caller: DeclarationReference,
+    pub(super) lexical_reads: Cell<usize>,
+    pub(super) type_reads: Cell<usize>,
     pub(super) mapping_reads: Cell<usize>,
     pub(super) proof_checkpoints: Cell<usize>,
     stop_at: Cell<Option<usize>>,
@@ -25,6 +28,8 @@ pub(super) struct Fixture {
 impl Fixture {
     pub(super) fn reset(&self, stop_at: Option<usize>) {
         self.mapping_reads.set(0);
+        self.lexical_reads.set(0);
+        self.type_reads.set(0);
         self.proof_checkpoints.set(0);
         self.stop_at.set(stop_at);
     }
@@ -97,6 +102,9 @@ impl Fixture {
             owners: BTreeMap::new(),
             types: BTreeMap::new(),
             mapping,
+            caller,
+            lexical_reads: Cell::new(0),
+            type_reads: Cell::new(0),
             mapping_reads: Cell::new(0),
             proof_checkpoints: Cell::new(0),
             stop_at: Cell::new(None),

@@ -64,8 +64,7 @@ fn operand<R: CallableClosureRead + ?Sized>(
                         "witness parameter escapes its exact callable scope",
                     ));
                 }
-                let declaration = analysis.declaration(owner)?;
-                let ordinal = analysis.parameter_ordinal(&declaration.payload, *parameter)?;
+                let ordinal = demands.scopes.ordinal(analysis, owner, *parameter)?;
                 return demands.forward(analysis, call, target, ordinal, suffix);
             }
         }
