@@ -169,3 +169,7 @@ pub(super) fn passed(output: &str, inventory: &Inventory) -> Result<(), DevError
 #[cfg(test)]
 #[path = "public_inventory_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "public_inventory_map_tests.rs"]
+mod map_tests;
