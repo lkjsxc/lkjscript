@@ -5,67 +5,105 @@ applications are separate boundaries. Product identifier components remain opaqu
 
 ## Accepted source
 
-Accepted source: `3389860cd34b1997a4f9a0a7737588ba2697f63a`, tree
-`39c51f302171d9ef91479e68d1bab4c9c8a46909`. Its fresh full source verification passed
+Accepted source: `567b4d3152fb51158b3b595362b5bdc0f065b854`, tree
+`1e0b9fbe7cc694b0512469838d8fd07ed86fb266`. Its fresh full source verification passed
 26/26 gates, with stable inputs, zero reused evidence and zero unrun gates.
-Workspace tests passed 2,228, failed 0 and retained 29 existing ignored tests.
+Workspace tests passed 2,231, failed 0 and retained 29 existing ignored tests.
 The 234 public CLI tests are included in that total; two filtered child probes
-are separate. The status-only reporting descendant is not the tested source.
+are separate. A status-only reporting descendant is not the tested source.
 
 Receipt:
-`.artifacts/lkjscript-dev/check/1791442547071589942-2964229-0/receipt.json`, digest
-`verification_0a99bd38eff0a4420c41f4ce44d837d24c3b69273f4bd06c2f0c3a516d4ee259`.
-The receipt and its complete run directory are also retained outside checker
-rotation in `.artifacts/20261008-borrowed-metadata/full-source-verification/`.
-The evidence index is `.artifacts/20261008-borrowed-metadata/evidence-index.json`.
+`.artifacts/lkjscript-dev/check/1791446554781283924-3129190-0/receipt.json`, digest
+`verification_1b8c76cc1213a5265f7d5b737deb24699026e8241125c530db8fa8419f38a2a5`.
+The complete run is additionally retained outside checker rotation in
+`.artifacts/20261008-native-plan/full-source-verification/`.
+The evidence index is `.artifacts/20261008-native-plan/evidence-index.json`.
 
-## Borrowed immutable metadata
+## Native dependency-first planning
 
-Production borrowed product field selection now retains its live allocation's
-exact prepared-program admission instead of recursively re-admitting immutable
-metadata at each read. Exact type/field selection, current read domain and live
-admission remain required. Raw input, packing, consuming unpack, captures and
-ownership transfer retain their existing admission. The reference evaluator is
-unchanged. See the [decision](decisions/borrowed-immutable-metadata.md) and
-[native workload](../examples/owned-metadata-costs/README.md).
+Five ordinary lkjscript modules extend the complete dependency-component witness
+with distinct component dependencies and earliest dependency-first stages. For
+A -> B, `successors` means that A depends on B: B's component appears earlier.
+Cycles remain explicit mutually dependent units, not invalid graphs or a claim
+that their members have a valid sequential execution order. Components, members
+and stage peers preserve authored identity order; dependency lists preserve the
+first distinct cross-component reference. Roots select reported reachability;
+they do not narrow complete input validation or the all-component plan. See the
+[decision](decisions/native-dependency-plan.md) and
+[public authoring guide](../examples/dependency-plan/README.md).
 
-Eleven new boundary probes pass, covering foreign program/slot classifications,
-unadmitted and revoked storage, restored raw shape, failed adoption, scoped read
-domains, reservation refusal, cancellation and owner-independent immutable results.
-The detached public matrix passes 100 conditions plus its input/refusal recovery
-checks. The stricter regression intentionally rejects the predecessor and accepts
-the candidate; that expected rejection is not a candidate test failure.
+The planner removes internal and repeated component edges, counts distinct pending
+dependencies, propagates maximum dependency levels and groups the result separately
+from queue order. Derived counter, range, duplicate and completion contradictions
+cannot become a valid partial traversal. Internal helper signatures do not prove
+arbitrary graph invariants; they require the exact validated proposal and complete
+component partition. The inherited SCC pass still needs the selected worklist's
+LIFO law, which ownership/type signatures alone do not prove.
 
-At N=1,024 and K=128, borrowed metadata raw-result admission drops from 132,354
-to 1,026 nodes; complete input admission stays 1,027. Pack/unpack and pack/drop
-remain 262,656 and 131,328. Matched invocation medians are 7.066 to 0.465 ms at
-N=1,024 and 103.848 to 2.458 ms at N=16,384, with K=128. Preparation remains a
-separate roughly 74–77 ms cost. These are not overall application speedups.
+The focused public suite passes all three Rust tests. Its 4,635 proposals include
+all 512 three-vertex directed graphs, all 4,096 loop-free four-vertex graphs,
+cyclic diamonds, repeated cross-member edges, signed extremes, long chains,
+root/order changes and inherited capacity/invalidity cases. Both maintained flat
+and chunked carriers match complete independent results before and after deleting
+source projects and transports: 18,540 proposal comparisons. The suite uses
+19 input batches and 76 batch executions; the largest argument file is 687,760
+bytes, below the unchanged 1 MiB runner limit.
 
-The dependency-component witness still matches 532 independent expected graphs
-across two carriers and source-present/deleted phases: 2,128 batch comparisons,
-plus two individual and two empty runs. Its raw work is unchanged: flat 50,768,886
-and chunked 51,024,684 nodes. Matched invocation medians are 7.194 to 7.291 seconds
-for flat and 18.376 to 18.254 seconds for chunked. These overlapping samples do not
-establish a speed improvement. All 288 metadata and 24 component measurements,
-including warmups and unfavorable results, are retained in the evidence root.
+Two single commands, two empty batches, four raw-type/resource refusals and four
+subsequent valid recoveries also pass. Successful runs retain no live owned handles,
+locals, operands, frames, transactions or type bindings and join all tasks/workers.
+Eleven new fixed native tests supplement the public matrix; the complete authored
+application reports 122 passing tests with agreement between both evaluators.
+The 18,540 public comparisons are production runs, not differential evaluator pairs.
+The independent oracle uses pairwise reachability and synchronous level relaxation,
+not the native two-pass SCC and readiness-count algorithms.
 
-The focused executable and the final full-verification release producer have
-identical SHA-256 `b14bd646f96061f172e0947f46c0743038a51c0344a1069019afb61441869f72`.
-No encoding, native intrinsic, dependency, version identifier or application
-source changes are introduced by this step; development remains `0.1.88`.
+Focused originals, including three failed development attempts, are retained in
+`.artifacts/20261008-native-plan/`. The corrected suite divides input batches rather
+than raising limits. Focused executable and final full-verification release producer
+share SHA-256 `b14bd646f96061f172e0947f46c0743038a51c0344a1069019afb61441869f72`.
+The focused artifact is
+`e83ef4e0b6bccf02c58685ab83de0db9ea5268f84686b8cbdb0732ae89228f15`.
+This addition changes no Rust runtime, intrinsic, dependency, encoding, existing
+component-analysis API or product identifier; development remains `0.1.88`.
+
+Stages express graph precedence, not parallel-execution or publication authority.
+No production compiler pass or checker scheduler is replaced. The optional
+experiment against the actual checker DAG was refused by the tool and was not
+executed; it is not adoption evidence. Bounded graph visits do not establish
+linear wall time, zero copying, bounded RSS, complete self-hosting or an application
+speedup. Existing applications and deployed services are unchanged.
+
+## Retained runtime frontier
+
+The preceding [borrowed immutable metadata](decisions/borrowed-immutable-metadata.md)
+implementation remains intact. It retains a live allocation's exact prepared-program
+admission when selecting an ordinary immutable field through a live read. Raw input,
+packing, consuming unpack, captures and ownership transfer retain their existing
+admission. Its source, independent boundary probes and matched cost measurements
+remain in `.artifacts/20261008-borrowed-metadata/evidence-index.json`; the retained
+[native metadata workload](../examples/owned-metadata-costs/README.md) still runs in
+the fresh full profile. This planner does not claim to fix the remaining consuming
+admission costs. Additional consuming-boundary inspection was refused by the tool;
+no optimization at that boundary was implemented.
 
 ## Publication and next boundary
 
 The latest independently observed public release remains immutable `v0.1.83`.
 Existing `v0.1.88` candidate producer `37643217328/1` completed successfully for
 source `6a15fdab20cdbf89ebc8683e8aa1d8b0f64b7142`, not this accepted source. This
-step does not replace its artifacts, promote a release or switch running apps.
-A later selected distribution must independently bind its own final source and
-transferred-executable evidence; the existing candidate must not be relabeled.
+step does not replace its artifacts, dispatch another producer, promote a release
+or switch running apps. Publication is deferred for this native-only addition;
+its selected host executable is unchanged from the preceding accepted runtime.
+When selecting a successor distribution after the next accepted runtime boundary,
+bind that final source and its transferred executable through the ordinary release
+procedure. The existing candidate must not be relabeled as current-source evidence.
 
-Next, retain the exact admitted parent's proof through consuming extraction,
-keeping the extracted value and its field proof inseparable. Only then extend
-checked construction where needed: a free-value classification alone does not
-prove an exact field type. Do not remove raw validation merely to lower counters,
-add an address cache, or claim the remaining SCC admission bottleneck is solved.
+The next compiler-integration boundary must retain exact source-scoped identities,
+complete candidate validation, the fixed admitted analysis implementation and
+independent result/authority checks. A generic worklist type does not grant freedom
+to substitute an implementation that violates the needed algorithmic laws.
+Prefer this concrete connection over accumulating disconnected compiler examples.
+Separately, consuming extraction needs an inseparable exact-parent/field proof
+before checked construction can reuse it. Neither a free-value classification nor
+an address cache proves an exact extracted field type.
