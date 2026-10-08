@@ -1997,30 +1997,17 @@ impl Machine<'_> {
         value: CheckedValue,
         selector: &NormalizedFieldSelector,
     ) -> Result<CheckedValue, ExecutionError> {
-        if let (NormalizedValue::OwnedProduct(token), NormalizedFieldSelector::Structural(name)) =
+        if let (NormalizedValue::OwnedProduct(_), NormalizedFieldSelector::Structural(name)) =
             (value.raw(), selector)
         {
-            let Some(crate::platform::kernel::TypeObject {
-                form: TypeForm::OwnedProduct { fields },
-                ..
-            }) = self.program.types.get(&token.ty())
-            else {
-                return Err(type_error("product metadata has no exact type"));
-            };
-            let index = fields
-                .binary_search_by(|field| field.name.cmp(name))
-                .map_err(|_| type_error("unknown product metadata field"))?;
-            let ty = fields[index].ty;
-            if !self.program.ordinary_types.contains(&ty) {
-                return Err(type_error(
-                    "product field read cannot expose owned children",
-                ));
-            }
             let control = self.control;
-            let raw = token.read_metadata(self.memory_domain, index, control, &mut |bytes| {
-                self.charge_allocation(bytes)
-            })?;
-            self.admit(raw, ty, None, false)
+            value.owned_metadata(
+                self.program,
+                self.memory_domain,
+                name,
+                control,
+                &mut |bytes| self.charge_allocation(bytes),
+            )
         } else {
             value.field(selector, self.program)
         }

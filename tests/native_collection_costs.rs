@@ -17,7 +17,7 @@ fn within_ceiling(mode: u64, n: u64, k: u64, work: &Value) -> bool {
         0 | 1 => Some(0),
         2 => k.checked_mul(2),
         3 => Some(k),
-        4 => k.checked_add(1),
+        4 => Some(1),
         _ => None,
     };
     let Some(ceiling) = repetitions.and_then(|k| n.checked_add(2)?.checked_mul(k)) else {
@@ -33,7 +33,7 @@ fn within_ceiling(mode: u64, n: u64, k: u64, work: &Value) -> bool {
 
 #[test]
 fn metadata_cost_oracle_rejects_underchecked_input_and_worsened_work() {
-    for (mode, ceiling) in [(0, 0), (1, 0), (2, 262656), (3, 131328), (4, 132354)] {
+    for (mode, ceiling) in [(0, 0), (1, 0), (2, 262656), (3, 131328), (4, 1026)] {
         let work = json!({"input_admission_nodes":1027, "raw_result_admission_nodes":ceiling,
             "internal_guard_descendant_visits":0,"capture_admission_nodes":0});
         assert!(within_ceiling(mode, 1024, 128, &work));

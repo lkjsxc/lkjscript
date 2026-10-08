@@ -1,6 +1,9 @@
 //! Production-only construction and admission of immutable execution values.
 //! No caller can attach an affine classification to a raw value.
 
+#[path = "vm_owned_metadata.rs"]
+mod owned_metadata;
+
 use super::super::prepare::{NormalizedFieldSelector, NormalizedProgram};
 use super::super::resource::NormalizedResourceScope;
 use super::super::value::{
@@ -1760,3 +1763,10 @@ fn admission_error(message: &'static str) -> ExecutionError {
 #[cfg(test)]
 #[path = "vm_checked_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "vm_owned_metadata_reservation_tests.rs"]
+mod metadata_reservation_tests;
+#[cfg(test)]
+#[path = "vm_owned_metadata_tests.rs"]
+mod metadata_tests;

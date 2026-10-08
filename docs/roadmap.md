@@ -196,9 +196,13 @@ admission and publication authority. Larger typed passes should justify storage,
 view and region abstractions through working-set and reclamation measurements.
 The [owned metadata workload](../examples/owned-metadata-costs/README.md) separates
 ordinary list/map projection from packing, unpacking and borrowed metadata reads.
-Use its complete ingress checks and non-regressing cost ceilings when evaluating
-allocation-bound immutable proof propagation; the witness does not implement that
-optimization or authorize skipped raw admission.
+Use its complete ingress checks and non-regressing cost ceilings.
+The [borrowed immutable metadata projection](decisions/borrowed-immutable-metadata.md)
+retains a live owned product's exact allocation-bound admission when selecting an
+ordinary immutable field. Raw input, packing, consuming unpack and transfer still
+own independent admission; extend those boundaries only with an exact checked
+construction/extraction contract. Neither shape equality nor a type annotation
+authorizes skipped raw admission.
 
 ## Evidence and development cost
 
