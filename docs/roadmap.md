@@ -194,6 +194,13 @@ the checked ownership/type signature. Integrating these passes into the
 production compiler requires an explicit host boundary that retains ordinary
 admission and publication authority. Larger typed passes should justify storage,
 view and region abstractions through working-set and reclamation measurements.
+Use the [native dependency-first planner](../examples/dependency-plan/README.md)
+to condense complete proposals into explicit cyclic units, distinct component
+dependencies and earliest dependency-first stages. Preserve authored identities,
+complete unreachable validation and the separate scope of derived consistency
+checks. A stage is graph precedence, not parallel-execution or publication
+authority. Integrate this witness into a maintained compiler consumer only through
+an independently admitted boundary; exact availability remains status-owned.
 The [owned metadata workload](../examples/owned-metadata-costs/README.md) separates
 ordinary list/map projection from packing, unpacking and borrowed metadata reads.
 Use its complete ingress checks and non-regressing cost ceilings.
