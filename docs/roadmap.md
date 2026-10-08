@@ -181,7 +181,13 @@ without an external semantic generator.
 
 Use the native worklist-based dependency-graph validator as a tooling witness over
 provisional proposals. It validates all nodes and references before reachability;
-its owned working collection carries candidate identities. Integrating it into the
+its owned working collection carries candidate identities. The native
+[dependency-component pass](../examples/dependency-components/README.md) additionally
+partitions all admitted nodes, including unreachable nodes, and distinguishes
+singleton self-loops. Explicit enter/leave frames keep graph depth out of the
+call stack; complete public results retain authored identity order across flat
+and chunked worklists. The first pass needs their LIFO behavior in addition to
+the checked ownership/type signature. Integrating these passes into the
 production compiler requires an explicit host boundary that retains ordinary
 admission and publication authority. Larger typed passes should justify storage,
 view and region abstractions through working-set and reclamation measurements.

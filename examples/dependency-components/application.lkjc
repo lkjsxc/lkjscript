@@ -1,0 +1,106 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create dependency-components
+    (type-alias Node (record (id I64) (successors (list I64))))
+    (type-alias Proposal (record (roots (list I64)) (nodes (list Node))))
+    (type-alias Diagnostic (record (code Text) (owner I64) (target I64)))
+    (type-alias Partition (record (reachable (list I64)) (unreachable (list I64))))
+    (type-alias Component (record (members (list I64)) (cyclic Bool)))
+    (type-alias Analysis (record (components (list Component))
+      (reachable (list I64)) (unreachable (list I64))))
+    (type-alias Flat (owned-sequence OwnedI64Cell))
+    (type-alias Chunked (owned-product
+      (field chunks (owned-sequence (owned-sequence OwnedI64Cell))) (field size I64)))
+    (variant create Outcome (visibility public)
+      (case create valid (payload Analysis))
+      (case create invalid (payload Diagnostic))
+      (case create capacity (payload Text)))
+
+    (function create analyze (visibility public) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_c8030000000000000000000000000001
+        work owned-worklists::Worklist W (types OwnedI64Cell))
+      (parameter create proposal (type Proposal)) (returns Outcome)
+      (body (match (implementation-call provisional-graph::analyze (types W)
+        (implementations parameter@analyze@implparam_c8030000000000000000000000000001)
+        (local proposal))
+        (arm provisional-graph::Outcome::invalid (payload diagnostic Diagnostic)
+          (variant Outcome::invalid (local diagnostic)))
+        (arm provisional-graph::Outcome::capacity (payload dimension Text)
+          (variant Outcome::capacity (local dimension)))
+        (arm provisional-graph::Outcome::valid (payload partition Partition)
+          (let
+            (binding nodes (type (list Node)) (field (local proposal) (name nodes)))
+            (binding positions (type (map I64 I64)) (call component-data::positions (local nodes)))
+            (binding reverse (type (map I64 (list I64)))
+              (call component-data::reverse (local nodes) (local positions)))
+            (binding order (type (list I64)) (implementation-call component-order::finish (types W)
+              (implementations parameter@analyze@implparam_c8030000000000000000000000000001)
+              (local nodes) (local positions)))
+            (binding labels (type (map I64 I64)) (implementation-call component-groups::assign (types W)
+              (implementations parameter@analyze@implparam_c8030000000000000000000000000001)
+              (local reverse) (local order)))
+            (in (variant Outcome::valid (record structural
+              (field components (call component-data::summarize (local nodes) (local labels)))
+              (field reachable (field (local partition) (name reachable)))
+              (field unreachable (field (local partition) (name unreachable)))))))))))
+
+    (function create flat (visibility public) (effect pure)
+      (parameter create proposal (type Proposal)) (returns Outcome)
+      (body (implementation-call analyze (types Flat)
+        (implementations concrete@worklist-carriers::FlatCells) (local proposal))))
+    (function create chunked (visibility public) (effect pure)
+      (parameter create proposal (type Proposal)) (returns Outcome)
+      (body (implementation-call analyze (types Chunked)
+        (implementations concrete@worklist-carriers::ChunkedCells) (local proposal))))
+
+    (function create example (visibility private) (effect pure) (returns Proposal)
+      (body (record structural
+        (field roots (list I64 (i64 10)))
+        (field nodes (list Node
+          (record structural (field id (i64 10)) (field successors (list I64 (i64 20) (i64 30))))
+          (record structural (field id (i64 20)) (field successors (list I64 (i64 40))))
+          (record structural (field id (i64 30)) (field successors (list I64 (i64 40))))
+          (record structural (field id (i64 40)) (field successors (list I64 (i64 20))))
+          (record structural (field id (i64 50)) (field successors (list I64 (i64 50))))
+          (record structural (field id (i64 60)) (field successors (list I64))))))))
+    (function create expected-example (visibility private) (effect pure) (returns Outcome)
+      (body (variant Outcome::valid (record structural
+        (field components (list Component
+          (record structural (field members (list I64 (i64 10))) (field cyclic (bool false)))
+          (record structural (field members (list I64 (i64 20) (i64 40))) (field cyclic (bool true)))
+          (record structural (field members (list I64 (i64 30))) (field cyclic (bool false)))
+          (record structural (field members (list I64 (i64 50))) (field cyclic (bool true)))
+          (record structural (field members (list I64 (i64 60))) (field cyclic (bool false)))))
+        (field reachable (list I64 (i64 10) (i64 20) (i64 30) (i64 40)))
+        (field unreachable (list I64 (i64 50) (i64 60)))))))
+    (test create example-flat (visibility private)
+      (actual (call flat (call example))) (expected (call expected-example)))
+    (test create example-chunked (visibility private)
+      (actual (call chunked (call example))) (expected (call expected-example)))
+    (test create empty (visibility private)
+      (actual (call flat (record structural (field roots (list I64)) (field nodes (list Node)))))
+      (expected (variant Outcome::valid (record structural
+        (field components (list Component)) (field reachable (list I64)) (field unreachable (list I64))))))
+    (test create pending-sibling-edge (visibility private)
+      (actual (call chunked (record structural (field roots (list I64 (i64 0)))
+        (field nodes (list Node
+          (record structural (field id (i64 0)) (field successors (list I64 (i64 1) (i64 2))))
+          (record structural (field id (i64 1)) (field successors (list I64)))
+          (record structural (field id (i64 2)) (field successors (list I64 (i64 1)))))))))
+      (expected (variant Outcome::valid (record structural
+        (field components (list Component
+          (record structural (field members (list I64 (i64 0))) (field cyclic (bool false)))
+          (record structural (field members (list I64 (i64 1))) (field cyclic (bool false)))
+          (record structural (field members (list I64 (i64 2))) (field cyclic (bool false)))))
+        (field reachable (list I64 (i64 0) (i64 1) (i64 2))) (field unreachable (list I64))))))
+
+    (component create command (visibility private)
+      (port create flat (type (function (Proposal) Outcome)) (function flat))
+      (port create chunked (type (function (Proposal) Outcome)) (function chunked))))
+  (target create dependency-components-flat (component dependency-components::command)
+    (runner command) (port dependency-components::command::flat))
+  (target create dependency-components-chunked (component dependency-components::command)
+    (runner command) (port dependency-components::command::chunked)))
+declarations.end

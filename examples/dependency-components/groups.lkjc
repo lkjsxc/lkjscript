@@ -1,0 +1,115 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create component-groups
+    (type-alias Reverse (map I64 (list I64)))
+    (type-alias Labels (map I64 I64))
+
+    (function create queue (visibility private) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_c8020000000000000000000000000001
+        work owned-worklists::Worklist W (types OwnedI64Cell))
+      (parameter create positions (type (list I64))) (parameter create offset (type I64))
+      (parameter create work (type W) (use consume)) (returns W)
+      (body (if (call std::less (local offset) (call std::list-length (types I64) (local positions)))
+        (let
+          (binding position (type I64) (call std::list-get (types I64) (local positions) (local offset)))
+          (binding frame (type OwnedI64Cell) (call worklist-carriers::cell-create (local position)))
+          (binding next (type W)
+            (method-call parameter@queue@implparam_c8020000000000000000000000000001
+              owned-worklists::Worklist method_88000000000000000000000000000013
+              (local frame) (local work)))
+          (in (implementation-call queue (types W)
+            (implementations parameter@queue@implparam_c8020000000000000000000000000001)
+            (local positions) (call std::add (local offset) (i64 1)) (local next))))
+        (local work))))
+
+    ; Labels are bounded internal positions. -1 is absence, not an authored ID.
+    ; Duplicate pending entries are consumed; each node's edges are expanded once.
+    (function create walk (visibility private) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_c8020000000000000000000000000002
+        work owned-worklists::Worklist W (types OwnedI64Cell))
+      (parameter create reverse (type Reverse)) (parameter create label (type I64))
+      (parameter create labels (type Labels)) (parameter create work (type W) (use consume))
+      (returns (owned-product (field work W) (field labels Labels)))
+      (body (let (binding outcome
+        (type (owned-choice (case empty W)
+          (case item (owned-product (field rest W) (field value OwnedI64Cell)))))
+        (method-call parameter@walk@implparam_c8020000000000000000000000000002
+          owned-worklists::Worklist method_88000000000000000000000000000014 (local work)))
+        (in (match-owned (type (owned-choice (case empty W)
+          (case item (owned-product (field rest W) (field value OwnedI64Cell))))) (local outcome)
+          (case empty (binding rest (type W))
+            (in (pack-owned (type (owned-product (field work W) (field labels Labels)))
+              (field work (local rest)) (field labels (local labels)))))
+          (case item (binding item (type (owned-product (field rest W) (field value OwnedI64Cell))))
+            (in (unpack-owned (type (owned-product (field rest W) (field value OwnedI64Cell))) (local item)
+              (field rest (binding rest (type W))) (field value (binding frame (type OwnedI64Cell)))
+              (in (let (binding position (type I64) (call worklist-carriers::cell-finish (local frame)))
+                (in (if (call std::less
+                  (call std::map-get-or (types I64 I64) (local labels) (local position) (i64 -1)) (i64 0))
+                  (let
+                    (binding predecessors (type (list I64))
+                      (call std::map-get-or (types I64 (list I64)) (local reverse) (local position) (list I64)))
+                    (binding next (type W) (implementation-call queue (types W)
+                      (implementations parameter@walk@implparam_c8020000000000000000000000000002)
+                      (local predecessors) (i64 0) (local rest)))
+                    (in (implementation-call walk (types W)
+                      (implementations parameter@walk@implparam_c8020000000000000000000000000002)
+                      (local reverse) (local label)
+                      (call std::map-insert (types I64 I64) (local labels) (local position) (local label))
+                      (local next))))
+                  (implementation-call walk (types W)
+                    (implementations parameter@walk@implparam_c8020000000000000000000000000002)
+                    (local reverse) (local label) (local labels) (local rest))))))))))))))
+
+    (function create forest (visibility private) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_c8020000000000000000000000000003
+        work owned-worklists::Worklist W (types OwnedI64Cell))
+      (parameter create reverse (type Reverse)) (parameter create order (type (list I64)))
+      (parameter create offset (type I64)) (parameter create labels (type Labels))
+      (parameter create work (type W) (use consume)) (returns Labels)
+      (body (if (call std::less (i64 0) (local offset))
+        (let (binding position (type I64)
+          (call std::list-get (types I64) (local order) (call std::subtract (local offset) (i64 1))))
+          (in (if (call std::less
+            (call std::map-get-or (types I64 I64) (local labels) (local position) (i64 -1)) (i64 0))
+            (let
+              (binding frame (type OwnedI64Cell) (call worklist-carriers::cell-create (local position)))
+              (binding pending (type W)
+                (method-call parameter@forest@implparam_c8020000000000000000000000000003
+                  owned-worklists::Worklist method_88000000000000000000000000000013
+                  (local frame) (local work)))
+              (binding visited (type (owned-product (field work W) (field labels Labels)))
+                (implementation-call walk (types W)
+                  (implementations parameter@forest@implparam_c8020000000000000000000000000003)
+                  (local reverse) (local position) (local labels) (local pending)))
+              (in (unpack-owned (type (owned-product (field work W) (field labels Labels))) (local visited)
+                (field work (binding work (type W))) (field labels (binding labels (type Labels)))
+                (in (implementation-call forest (types W)
+                  (implementations parameter@forest@implparam_c8020000000000000000000000000003)
+                  (local reverse) (local order) (call std::subtract (local offset) (i64 1))
+                  (local labels) (local work))))))
+            (implementation-call forest (types W)
+              (implementations parameter@forest@implparam_c8020000000000000000000000000003)
+              (local reverse) (local order) (call std::subtract (local offset) (i64 1))
+              (local labels) (local work)))))
+        (local labels))))
+
+    ; Internal companion API, called only with the admitted finish-order result.
+    (function create assign (visibility public) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_c8020000000000000000000000000004
+        work owned-worklists::Worklist W (types OwnedI64Cell))
+      (parameter create reverse (type Reverse)) (parameter create order (type (list I64)))
+      (returns Labels)
+      (body (let (binding work (type W)
+        (method-call parameter@assign@implparam_c8020000000000000000000000000004
+          owned-worklists::Worklist method_88000000000000000000000000000011))
+        (in (implementation-call forest (types W)
+          (implementations parameter@assign@implparam_c8020000000000000000000000000004)
+          (local reverse) (local order) (call std::list-length (types I64) (local order))
+          (map I64 I64) (local work))))))))
+declarations.end
