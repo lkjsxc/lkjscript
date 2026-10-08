@@ -3,6 +3,40 @@
 Snapshot: 2026-10-08. Source acceptance, distribution acceptance and running
 applications are separate boundaries. Product identifier components remain opaque.
 
+## Selected worktree and unfinished work
+
+The current worktree is `/home/coder/workspace/lkjscript`, branch `main`. The
+resumption began at reporting source `6a95fcd27ee4957ff1678c084af1e2c4ac2d87ad`,
+tree `09f77288edae71b6e2f9846b6b2209bbcaada3a2`, independently matching remote main.
+Two pre-existing local test changes remain deliberately unintegrated:
+`src/platform/execution/normalized/vm_map_tests.rs` and the untracked
+`src/platform/execution/normalized/vm_map_entry_scan_tests.rs`. Neither is a runtime
+fix. Preserve them and the original failed evidence; do not mistake this reporting
+update for a tested implementation successor.
+
+A new execution of `cargo test --locked -p lkjscript --lib map_ -- --nocapture`
+used the existing pinned test-profile executable and passed 59 tests, failed one,
+ignored zero and filtered 1,637. Only the new lookup-free entry-scan law failed.
+Complete independently expected integer entries matched both evaluators at all
+seven sizes, with unchanged retained input and zero live resources observed by the
+test helper. Subtracting the same raw input's header-only length-query visits,
+1,024 entries require 10,252 scan visits and 4,096 require 49,166 in both evaluators.
+The new target is one production traversal visit per entry. These counters do not
+establish a wall-time or application speedup, and this target is not a previously
+established public complexity guarantee. Reverse input collection does not produce
+different AVL shapes because construction first collects into an ordered host map.
+
+The source-review request `lkjscript-resume-map-projection-20261008-9a751c` was
+refused by the tool before execution and was not retried or bypassed. The runtime
+optimization is not implemented. The next acceptance boundary is a lookup-free
+production entry projection retaining exact parent/type admission, complete raw
+validation, reservation/refusal/cancellation and cleanup, with independent and
+detached public result/cost evidence followed by fresh full source acceptance.
+No new full acceptance, producer dispatch, promotion or deployment occurred here.
+Originals, the repeated test log, exact source/test hashes and the unfinished scope
+are indexed at `.artifacts/20261008-map-entry-scan/resume-evidence-index.json`.
+No test process from this resumption remains running.
+
 ## Accepted source
 
 Accepted source: `567b4d3152fb51158b3b595362b5bdc0f065b854`, tree
