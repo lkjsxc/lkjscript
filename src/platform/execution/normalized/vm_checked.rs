@@ -1,6 +1,9 @@
 //! Production-only construction and admission of immutable execution values.
 //! No caller can attach an affine classification to a raw value.
 
+#[path = "vm_map_entries.rs"]
+mod map_entries;
+
 #[path = "vm_owned_metadata.rs"]
 mod owned_metadata;
 

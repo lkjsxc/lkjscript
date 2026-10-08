@@ -11,6 +11,18 @@ use normalized::vm::{NormalizedRunPolicy, NormalizedVm};
 #[path = "vm_map_key_tests.rs"]
 mod vm_map_key_tests;
 
+#[path = "vm_map_entry_scan_tests.rs"]
+mod vm_map_entry_scan_tests;
+
+#[path = "vm_map_entry_cursor_tests.rs"]
+mod vm_map_entry_cursor_tests;
+
+#[path = "vm_map_entry_update_tests.rs"]
+mod vm_map_entry_update_tests;
+
+#[path = "vm_map_entry_policy_tests.rs"]
+mod vm_map_entry_policy_tests;
+
 #[derive(Debug)]
 struct Observed {
     value: Result<NormalizedValue, ExecutionError>,
@@ -381,6 +393,24 @@ fn maps_reject_final_children_foreign_origins_and_hidden_authority_before_callba
                 "foreign map ingress cannot release another owner's lease"
             );
             assert_eq!(&retained, raw);
+            let projected = invoke(
+                &program,
+                &reader,
+                reference,
+                "core.map.entries",
+                &[integer, *ty],
+                vec![raw.clone()],
+                Default::default(),
+                &ExecutionControl::uncancelled(),
+                Some(&host),
+            );
+            assert_eq!(
+                projected.value.unwrap_err().code,
+                result.value.as_ref().unwrap_err().code,
+                "entry projection must independently admit every raw child: {reference}/{name}"
+            );
+            assert_eq!(host.calls.load(Ordering::Relaxed), 0);
+            assert_eq!(projected.calls, 0);
             if *name == "wrong-final-scalar" {
                 assert_eq!(
                     result.work.input_admission_nodes, 1025,
