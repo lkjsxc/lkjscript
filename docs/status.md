@@ -1,143 +1,130 @@
 # Current status
 
 Snapshot: 2026-10-08. Source acceptance, distribution acceptance and running
-applications are separate boundaries. Product identifier components remain opaque.
+applications remain separate boundaries. Product identifier components are opaque.
 
-## Selected worktree and unfinished work
+## Accepted source and retained evidence
 
-The current worktree is `/home/coder/workspace/lkjscript`, branch `main`. The
-resumption began at reporting source `6a95fcd27ee4957ff1678c084af1e2c4ac2d87ad`,
-tree `09f77288edae71b6e2f9846b6b2209bbcaada3a2`, independently matching remote main.
-Two pre-existing local test changes remain deliberately unintegrated:
-`src/platform/execution/normalized/vm_map_tests.rs` and the untracked
-`src/platform/execution/normalized/vm_map_entry_scan_tests.rs`. Neither is a runtime
-fix. Preserve them and the original failed evidence; do not mistake this reporting
-update for a tested implementation successor.
+Accepted source: `403683601f5adfed4e6cd0750224dc2f48fe3dc4`, tree
+`269df09ff7ea4d11a070cef3e4905568b9c8a143`. Its fresh full source verification
+passed 26/26 gates, with stable inputs, zero reused evidence and zero unrun gates.
+Workspace tests passed 2,236, failed 0 and retained 29 existing ignored tests.
+The 234 public CLI tests are included; two successful filtered child probes are
+separate. The source was normally pushed to main and independently observed there
+through Git and the GitHub ref API. A status-only reporting descendant is not the
+source to which this full receipt belongs.
 
-A new execution of `cargo test --locked -p lkjscript --lib map_ -- --nocapture`
-used the existing pinned test-profile executable and passed 59 tests, failed one,
-ignored zero and filtered 1,637. Only the new lookup-free entry-scan law failed.
-Complete independently expected integer entries matched both evaluators at all
-seven sizes, with unchanged retained input and zero live resources observed by the
-test helper. Subtracting the same raw input's header-only length-query visits,
-1,024 entries require 10,252 scan visits and 4,096 require 49,166 in both evaluators.
-The new target is one production traversal visit per entry. These counters do not
-establish a wall-time or application speedup, and this target is not a previously
-established public complexity guarantee. Reverse input collection does not produce
-different AVL shapes because construction first collects into an ordered host map.
-
-The source-review request `lkjscript-resume-map-projection-20261008-9a751c` was
-refused by the tool before execution and was not retried or bypassed. The runtime
-optimization is not implemented. The next acceptance boundary is a lookup-free
-production entry projection retaining exact parent/type admission, complete raw
-validation, reservation/refusal/cancellation and cleanup, with independent and
-detached public result/cost evidence followed by fresh full source acceptance.
-No new full acceptance, producer dispatch, promotion or deployment occurred here.
-Originals, the repeated test log, exact source/test hashes and the unfinished scope
-are indexed at `.artifacts/20261008-map-entry-scan/resume-evidence-index.json`.
-No test process from this resumption remains running.
-
-## Accepted source
-
-Accepted source: `567b4d3152fb51158b3b595362b5bdc0f065b854`, tree
-`1e0b9fbe7cc694b0512469838d8fd07ed86fb266`. Its fresh full source verification passed
-26/26 gates, with stable inputs, zero reused evidence and zero unrun gates.
-Workspace tests passed 2,231, failed 0 and retained 29 existing ignored tests.
-The 234 public CLI tests are included in that total; two filtered child probes
-are separate. A status-only reporting descendant is not the tested source.
+Verification/evidence checkout:
+`/home/coder/workspace/lkjscript-native-plan-verification-20261008`, branch
+`work/native-plan-verification-20261008`. The following receipt and evidence paths
+are relative to that checkout, not to the original main checkout.
 
 Receipt:
-`.artifacts/lkjscript-dev/check/1791446554781283924-3129190-0/receipt.json`, digest
-`verification_1b8c76cc1213a5265f7d5b737deb24699026e8241125c530db8fa8419f38a2a5`.
-The complete run is additionally retained outside checker rotation in
-`.artifacts/20261008-native-plan/full-source-verification/`.
-The evidence index is `.artifacts/20261008-native-plan/evidence-index.json`.
+`.artifacts/lkjscript-dev/check/1791458711573539146-37009-0/receipt.json`, digest
+`verification_01dd79d3c40deec4f1edffb8872e380d38371dba23953b26072f08781d8bdbff`.
+The complete run is retained outside checker rotation in
+`.artifacts/native-plan-verification/full-source-verification/`.
+The evidence index is `.artifacts/native-plan-verification/evidence-index.json`.
 
-## Native dependency-first planning
+## Independently checked native plans
 
-Five ordinary lkjscript modules extend the complete dependency-component witness
-with distinct component dependencies and earliest dependency-first stages. For
-A -> B, `successors` means that A depends on B: B's component appears earlier.
-Cycles remain explicit mutually dependent units, not invalid graphs or a claim
-that their members have a valid sequential execution order. Components, members
-and stage peers preserve authored identity order; dependency lists preserve the
-first distinct cross-component reference. Roots select reported reachability;
-they do not narrow complete input validation or the all-component plan. See the
-[decision](decisions/native-dependency-plan.md) and
-[public authoring guide](../examples/dependency-plan/README.md).
+A separately authored native checker now verifies a complete claimed dependency
+plan against its original proposal. It is built and exported before the producer
+project exists. Checked flat and chunked planner entrypoints import that exact
+checker package, verify every generated valid plan and return the existing
+`inconsistent` outcome on a failed check instead of exposing a valid result.
+See the [decision](decisions/native-plan-result-checking.md) and
+[public authoring guide](../examples/dependency-plan/verification/README.md).
 
-The planner removes internal and repeated component edges, counts distinct pending
-dependencies, propagates maximum dependency levels and groups the result separately
-from queue order. Derived counter, range, duplicate and completion contradictions
-cannot become a valid partial traversal. Internal helper signatures do not prove
-arbitrary graph invariants; they require the exact validated proposal and complete
-component partition. The inherited SCC pass still needs the selected worklist's
-LIFO law, which ownership/type signatures alone do not prove.
+The standalone artifact contains the existing complete proposal validator and
+reachability implementation, but none of the producer's SCC, condensation or
+readiness-queue planner modules. It checks exact ordered member coverage,
+reachability lists, distinct cross-component dependencies, cyclic flags, stage
+coverage/order, earliest-level equations and two-way connectivity inside each
+component. Internal connectivity prevents false merges; strict cross-component
+level descent prevents splitting a true SCC. This is not a second execution of
+the producer algorithm, nor a formal verification of the checker implementation.
 
-The focused public suite passes all three Rust tests. Its 4,635 proposals include
-all 512 three-vertex directed graphs, all 4,096 loop-free four-vertex graphs,
-cyclic diamonds, repeated cross-member edges, signed extremes, long chains,
-root/order changes and inherited capacity/invalidity cases. Both maintained flat
-and chunked carriers match complete independent results before and after deleting
-source projects and transports: 18,540 proposal comparisons. The suite uses
-19 input batches and 76 batch executions; the largest argument file is 687,760
-bytes, below the unchanged 1 MiB runner limit.
+The final copied release-build executable passes all five tests in the new public
+integration target. Its 317 batch executions check 39,627 conditions: 18,540
+complete checked plans, 9,270 standalone reports for the existing 4,635-case graph
+family, 11,776 exhaustively enumerated three-vertex candidate plans and 41 targeted
+corruptions/source changes/recovery cases. Exactly 512 exhaustive claims are valid;
+the other 11,264 reject. These are candidate claims, not 11,776 different graphs.
+The largest argument file is 877,673 bytes; the 1 MiB runner limit is unchanged.
 
-Two single commands, two empty batches, four raw-type/resource refusals and four
-subsequent valid recoveries also pass. Successful runs retain no live owned handles,
-locals, operands, frames, transactions or type bindings and join all tasks/workers.
-Eleven new fixed native tests supplement the public matrix; the complete authored
-application reports 122 passing tests with agreement between both evaluators.
-The 18,540 public comparisons are production runs, not differential evaluator pairs.
-The independent oracle uses pairwise reachability and synchronous level relaxation,
-not the native two-pass SCC and readiness-count algorithms.
+Three single commands, three empty batches, two raw-type/resource refusals and two
+subsequent recoveries also pass. A separate standalone command executes before any
+producer project/artifact exists. Both carriers and ordinary standalone reports
+match independent results with sources present and deleted; adversarial claims run
+after deleting all four source projects and transports. Successful runs observe no
+remaining owned handles, locals, operands, frames, transactions, type bindings,
+tasks or workers. Eight new fixed native tests run through both evaluators; the
+complete checker and consumer projects report 106 and 139 passing tests respectively.
+The public matrix uses production execution, not differential evaluator pairs.
 
-Focused originals, including three failed development attempts, are retained in
-`.artifacts/20261008-native-plan/`. The corrected suite divides input batches rather
-than raising limits. Focused executable and final full-verification release producer
-share SHA-256 `b14bd646f96061f172e0947f46c0743038a51c0344a1069019afb61441869f72`.
-The focused artifact is
-`e83ef4e0b6bccf02c58685ab83de0db9ea5268f84686b8cbdb0732ae89228f15`.
-This addition changes no Rust runtime, intrinsic, dependency, encoding, existing
-component-analysis API or product identifier; development remains `0.1.88`.
+Final public originals are retained in
+`.artifacts/native-plan-verification/final-public-proof/` (original temporary root
+`/tmp/lkjscript-components-A5umOe`). The accepted-source test executable was selected
+from the full workspace Cargo output and copied before use. Both it and the selected
+product were executed without inherited publishing credentials. The product's
+SHA-256 is `c6af3e5a3f6a40a87ec27b3af55f0535647c339020d041b46c06115b530aa89c`;
+the test executable's is
+`6f3809340b024bc6b2b073d736d68922c4031b1d9a7eaa175f41267679e3d483`.
 
-Stages express graph precedence, not parallel-execution or publication authority.
-No production compiler pass or checker scheduler is replaced. The optional
-experiment against the actual checker DAG was refused by the tool and was not
-executed; it is not adoption evidence. Bounded graph visits do not establish
-linear wall time, zero copying, bounded RSS, complete self-hosting or an application
-speedup. Existing applications and deployed services are unchanged.
+The final standalone artifact has SHA-256
+`6ce27ca5083e76808171a247dcc36d2ef73d60a661e3c9fe03ba76c6dc5f1d27`; the checked
+producer artifact has
+`d2991ac50c4d9d51382f2b4bbde6861494e4d0bd75f34ed9990af4e726d9b22f`.
+Artifact and executable bytes stay unchanged during their detached proof. An
+earlier focused executable had different bytes, so its evidence was not silently
+assigned to this producer. Two corrected authoring failures, the earlier successful
+proof, full acceptance and the final executable's fresh proof remain distinguished.
 
-## Retained runtime frontier
+No Rust runtime, intrinsic, dependency, encoding, existing planner API or product
+identifier changes are introduced; development remains `0.1.88`. Additional result
+checking is real work. No speedup, copying, bounded-RSS or API-cost claim is made.
 
-The preceding [borrowed immutable metadata](decisions/borrowed-immutable-metadata.md)
-implementation remains intact. It retains a live allocation's exact prepared-program
-admission when selecting an ordinary immutable field through a live read. Raw input,
-packing, consuming unpack, captures and ownership transfer retain their existing
-admission. Its source, independent boundary probes and matched cost measurements
-remain in `.artifacts/20261008-borrowed-metadata/evidence-index.json`; the retained
-[native metadata workload](../examples/owned-metadata-costs/README.md) still runs in
-the fresh full profile. This planner does not claim to fix the remaining consuming
-admission costs. Additional consuming-boundary inspection was refused by the tool;
-no optimization at that boundary was implemented.
+## Trust and next compiler boundary
 
-## Publication and next boundary
+A `verified` report is ordinary data, not an unforgeable certificate, accepted
+meaning, an execution grant or publication authority. Reuse must bind the complete
+proposal/claim and exact trusted checker. The checker shares source admission,
+reachability, standard collections and runtime machinery with the producer.
+Checked wrappers guard valid outputs; they do not independently certify arbitrary
+negative producer outcomes. Cyclic groups have no implied sequential member order,
+and stages do not prove disjoint effects or authorize parallel execution.
 
-The latest independently observed public release remains immutable `v0.1.83`.
-Existing `v0.1.88` candidate producer `37643217328/1` completed successfully for
-source `6a15fdab20cdbf89ebc8683e8aa1d8b0f64b7142`, not this accepted source. This
-step does not replace its artifacts, dispatch another producer, promote a release
-or switch running apps. Publication is deferred for this native-only addition;
-its selected host executable is unchanged from the preceding accepted runtime.
-When selecting a successor distribution after the next accepted runtime boundary,
-bind that final source and its transferred executable through the ordinary release
-procedure. The existing candidate must not be relabeled as current-source evidence.
+The next concrete connection is a real compiler consumer binding exact source-scoped
+identities and complete dependency extraction to this checked interface. No compiler
+pass or scheduler is replaced here. Additional compiler inspection was refused by
+the tool and was not retried or bypassed; it is not adoption evidence. Prefer this
+connection over adding another disconnected graph-analysis example. Generic method
+types alone still do not prove implementation laws such as LIFO behavior.
 
-The next compiler-integration boundary must retain exact source-scoped identities,
-complete candidate validation, the fixed admitted analysis implementation and
-independent result/authority checks. A generic worklist type does not grant freedom
-to substitute an implementation that violates the needed algorithmic laws.
-Prefer this concrete connection over accumulating disconnected compiler examples.
-Separately, consuming extraction needs an inseparable exact-parent/field proof
-before checked construction can reuse it. Neither a free-value classification nor
-an address cache proves an exact extracted field type.
+## Preserved unfinished runtime work
+
+The original checkout `/home/coder/workspace/lkjscript` retains two unrelated,
+pre-existing, unintegrated test changes: `src/platform/execution/normalized/vm_map_tests.rs`
+and the untracked `src/platform/execution/normalized/vm_map_entry_scan_tests.rs`.
+They are not part of the accepted source above. Their last separately recorded run
+passed 59 tests and failed the new entry-scan complexity law; no lookup-free map
+projection is implemented by this native checker. Preserve those files, the existing
+stash and the original failed evidence. Their record remains at
+`.artifacts/20261008-map-entry-scan/resume-evidence-index.json` in the original checkout.
+
+The existing [borrowed immutable metadata](decisions/borrowed-immutable-metadata.md)
+implementation remains intact. Consuming extraction still needs an inseparable
+exact-parent/field proof before checked construction may reuse it. Free-value
+classification, apparent shape or an address cache is not that proof. Neither this
+work nor its full source acceptance completes the unfinished runtime optimizations.
+
+## Distribution and running applications
+
+The independently observed public release remains immutable `v0.1.83`. The previously
+observed `v0.1.88` producer `37643217328/1` belongs to source
+`6a15fdab20cdbf89ebc8683e8aa1d8b0f64b7142`, not this accepted source. This step did
+not dispatch a producer, replace artifacts, promote a release or deploy applications.
+Publication is deferred for this native-only addition. After the next selected
+runtime/distribution milestone, bind its exact final source and transferred
+executable through the maintained release procedure; do not relabel the old candidate.
