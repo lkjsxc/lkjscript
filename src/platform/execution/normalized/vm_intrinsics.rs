@@ -789,13 +789,8 @@ impl Machine<'_> {
             }
             self.charge_collection(entries.len(), std::mem::size_of::<CheckedValue>())?;
             let mut children = Vec::with_capacity(entries.len());
-            for key in entries.keys() {
-                self.control.check()?;
-                // Key projection shares its payload; the entry/list reserve their own storage.
-                let value = map
-                    .map_get(key, &mut |charge| self.charge_map(charge))?
-                    .ok_or_else(|| type_error("map key disappeared"))?;
-                let key = CheckedValue::scalar(self.program, key.to_value())?;
+            let mut cursor = map.map_entries(self.program)?;
+            while let Some((key, value)) = cursor.next(&mut |charge| self.charge_map(charge))? {
                 let mut work = std::mem::take(&mut self.observation.value_work);
                 let program = self.program;
                 let entry =

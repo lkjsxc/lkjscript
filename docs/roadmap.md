@@ -211,6 +211,13 @@ own independent admission; extend those boundaries only with an exact checked
 construction/extraction contract. Neither shape equality nor a type annotation
 authorizes skipped raw admission.
 
+Use [checked map-entry projection](decisions/checked-map-entry-projection.md)
+to enumerate actual admitted immutable children without searching from the root
+for every key. Complete raw admission, independent reference execution and
+output reservations remain intact. Measure output construction separately before
+selecting a native fold or borrowed cursor; a private runtime iterator is not
+a new public borrowing contract.
+
 Use the separately exported [native plan result checker](decisions/native-plan-result-checking.md)
 to check a claimed component partition and earliest stages against its complete
 proposal. The checker admits the source through the existing validator, but checks
