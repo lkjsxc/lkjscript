@@ -1699,3 +1699,6 @@ mod parallel_work;
 
 #[path = "native_owned_shared_interfaces.rs"]
 mod native_owned_shared_interfaces;
+
+#[path = "native_fold.rs"]
+mod native_fold;
