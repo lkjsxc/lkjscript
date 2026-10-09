@@ -6,6 +6,11 @@
 
 mod support;
 
+#[path = "public_cli/map_candidate_binding.rs"]
+mod map_candidate_binding;
+#[path = "public_cli/native_map_entries.rs"]
+mod native_map_entries;
+
 #[path = "public_cli/native_declarations.rs"]
 mod native_declarations;
 #[path = "public_cli/native_guides.rs"]

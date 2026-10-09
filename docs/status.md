@@ -12,8 +12,8 @@ independently checked. A later status-only descendant is not a newly tested runt
 The last independently observed public release is immutable **v0.1.83**. No release
 candidate was dispatched, no immutable tag/assets were replaced, and no application
 was deployed in this continuation. Mainline source availability and public-release
-closure are separate. Do not promote the Map successor before the outstanding
-final-byte coverage obligation below is implemented and accepted.
+closure are separate. Do not promote the Map successor before the final-byte correction below passes
+its fresh source and finalized-candidate acceptance.
 
 ## Accepted behavior and observed verification
 
@@ -69,32 +69,35 @@ main implementation, not the public v0.1.83 release. No comparison with C, Rust 
 Bun was performed here. See the [performance guide](performance.md) for stage and
 measurement boundaries.
 
-## Outstanding final-byte obligation
+## Final-byte correction under acceptance
 
-[Draft PR #8](https://github.com/lkjsxc/lkjscript/pull/8) contains only diagnostic
-regression tests. Its source is `493f58e4cf74aa4e048cca64287aa98090f7d7e3`; it is
-**unmerged and intentionally failing**, not accepted production implementation.
-Both original and exact-commit reruns reproduce the gap: 0 passed, 3 failed, no
-ignored tests. Those failing tests are not in main.
+[PR #8](https://github.com/lkjsxc/lkjscript/pull/8) now carries the correction to
+final-archive Map coverage. Its original diagnostic source
+`493f58e4cf74aa4e048cca64287aa98090f7d7e3` and failing originals remain preserved.
+The three inventory regressions again failed before the correction (0 passed,
+3 failed, exit 101); all pass with the complete matrix required.
 
-The final-archive public owner builds `public_cli`, while the complete Map matrix
-is a separate Cargo target and absent from its mandatory inventory. Moving the
-matrix alone would not bind the correct bytes: the copy helper reads
-`LKJSCRIPT_COMPONENT_CANDIDATE`, while the final public owner supplies
-`LKJSCRIPT_RELEASE_CANDIDATE`. The validated release candidate must explicitly
-reach the copying operation.
+The full Map suite is shared by `public_cli` and the standalone test entry. The
+public owner requires the exact detached execution matrix and every enumerated
+`native_map_entries::` case. Its validated release candidate reaches the copy
+helper explicitly; component-candidate and development-binary fallbacks cannot
+replace it. Candidate/copy identities, complete results, full raw admission,
+source deletion, refusal/recovery and joined cleanup remain required.
 
-The proposed correction registers the complete matrix under the final public owner,
-passes its validated candidate explicitly, requires the exact matrix and all Map
-cases, and advances the acceptance/workload contract with old/mixed-contract
-rejection. The correction script's execution was explicitly denied by the tool
-safety policy and was not retried through another path. **It remains unapplied.**
-No release contract, publication protection or permission was weakened.
+Final-candidate acceptance contract and native-public workload generation 4 reject
+predecessor and mixed generation 3/4 terminals. No unrelated encoding changes.
+The correction's focused inventory/runner checks pass, and the copied public
+harness passes the full matrix, its independent cost oracle and isolated candidate
+binding regression (3 passed, 0 failed/ignored). This is focused development
+proof, not fresh full-source or finalized-archive acceptance.
 
-The next delivery gate is ordinary authorized completion of that correction, its
-focused and fresh complete verification, and exact-final-archive admission through
-the maintained release owners. A source-check terminal or local copied-product test
-cannot substitute for final distributable and public-verification acceptance.
+Fresh full-source verification, normal main integration of the correction, a new
+candidate from integrated source, unchanged-asset promotion and anonymous public
+verification remain the release gates. The original correction proposal remains
+unused; the current change was reviewed against the actual source. Old candidate
+`37643217328/1` belongs to different source and cannot attest this successor.
+New originals are in `.artifacts/map-release-20261009/` in the diagnostic checkout;
+old proof and failures remain at their original paths below.
 
 ## Retained owners and continuation
 

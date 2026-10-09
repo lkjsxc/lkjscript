@@ -53,8 +53,21 @@ Five fixed native tests cover empty input, zero repetitions, sorted complete
 results, repeated enumeration, the length control and duplicate replacement. They
 run through both evaluators as part of the ordinary project check.
 
-`tests/native_map_entries.rs` performs fresh copied-product authoring and an
-attached smoke invocation, then deletes its source project and standard transport.
+`tests/public_cli/native_map_entries.rs` runs under `native_map_entries::` in
+`tests/public_cli.rs`; the standalone `tests/native_map_entries.rs` wrapper includes
+the same suite. Final-candidate contract 4 requires every enumerated Map
+case and the exact
+`native_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment`
+matrix against the executable extracted from the finalized archive. A cost-only
+case, similar name or substituted namespace cannot replace that matrix. The public
+harness passes its validated candidate path explicitly to the copy helper, which
+checks the selected source and copy around copying. The matrix checks both identities
+before and after execution; component candidate or development-binary fallbacks
+cannot replace these bytes. Standalone
+native tests retain their existing component-candidate selection.
+
+The matrix performs fresh copied-product authoring and an attached smoke invocation,
+then deletes its source project and standard transport.
 Its detached matrix has 8 sizes (0, 1, 31, 32, 33, 256, 1,024 and 4,096), 4 insertion
 orders/update patterns, 3 repetition counts (0, 1 and 8), and both modes: 192 full
 result comparisons. These are production invocations, not 192 differential pairs.
@@ -75,7 +88,11 @@ followed by valid recovery. Three explicitly limited invocations separately test
 instruction, allocated-byte and collection-item refusal, each without a result file
 and followed by recovery. Successful calls leave no owned handles, locals, operands,
 frames, type bindings, transactions, tasks or workers. Executable and artifact
-identities are checked before and after the detached proof.
+identities are checked before and after the detached proof. The required inventory
+and original logs reject missing, duplicate, ignored, failed, unexecuted or
+substituted cases and success-summary-only evidence. Contract/workload 3 and mixed
+3/4 combinations cannot attest this final-byte obligation; older evidence keeps
+its original meaning.
 
 ## Interpretation
 
