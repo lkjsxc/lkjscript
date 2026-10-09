@@ -139,7 +139,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          "$VERIFIER" check release-source --fresh --machine | tee "$RUNNER_TEMP/source-summary.json"
+          # Keep workspace tests and release lifecycle Cargo builds from overlapping.
+          "$VERIFIER" check release-source --fresh --jobs 1 --machine | tee "$RUNNER_TEMP/source-summary.json"
           relative=$(jq -er '.receipt' "$RUNNER_TEMP/source-summary.json")
           [[ "$relative" == .artifacts/lkjscript-dev/check/*/receipt.json ]]
           [[ ! "$relative" =~ (^|/)\.\.(/|$) ]]
