@@ -147,7 +147,7 @@ The same mandatory `native_owned_` and `native_parallel` public-harness families
 own its detached three-package witnesses. The [release notes](releases/v0.1.81.md)
 describe the capability; [status](status.md) owns actual acceptance and publication.
 
-Development v0.1.89 improves checked Map-entry enumeration and requires the complete
+Published v0.1.89 improves checked Map-entry enumeration and requires the complete
 copied-product Map matrix against the finalized archive's executable. The matrix
 checks independent full results after source deletion, complete input admission,
 resource refusal, recovery and cleanup. This advances only the final-candidate
