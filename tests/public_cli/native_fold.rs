@@ -31,15 +31,22 @@ fn native_blocked_folds_import_exactly_and_preserve_complete_results_after_sourc
         for mode in 0..2 {
             let (_, empty) = folds.run("trap-probe", &json!([[], mode]), detached, true);
             assert_eq!(empty.unwrap(), json!(29));
-            let (failure, missing) = folds.run("trap-probe", &json!([[1], mode]), detached, false);
-            assert!(missing.is_none());
-            let diagnostic = compact_record(&failure, "diagnostic");
-            assert_eq!(compact_field(diagnostic, "code"), "normalized_list_index");
-            if detached {
-                cases::failed_join(diagnostic);
+            // Failure after successful prefixes covers scalar, full-block and remainder paths.
+            for prefix in [0, 3, 7, 8, 16] {
+                let mut items = vec![1_i64; prefix];
+                items.push(-1);
+                let (failure, missing) =
+                    folds.run("trap-probe", &json!([items, mode]), detached, false);
+                assert!(missing.is_none());
+                let diagnostic = compact_record(&failure, "diagnostic");
+                assert_eq!(compact_field(diagnostic, "code"), "normalized_list_index");
+                if detached {
+                    cases::failed_join(diagnostic);
+                }
+                let (_, recovered) =
+                    folds.run("trap-probe", &json!([[1, 2, 3], mode]), detached, true);
+                assert_eq!(recovered.unwrap(), json!(35));
             }
-            let (_, recovered) = folds.run("trap-probe", &json!([[], mode]), detached, true);
-            assert_eq!(recovered.unwrap(), json!(29));
         }
     }
     folds.verify_identity();
@@ -97,9 +104,10 @@ fn native_blocked_folds_admit_the_complete_argument_before_invoking_a_callback()
             folds.detach();
         }
         for mode in 0..2 {
+            // The first item would trap, but complete raw admission must reject the last item first.
             let (failure, absent) = folds.run(
                 "trap-probe",
-                &json!([[1, "invalid"], mode]),
+                &json!([[-1, "invalid"], mode]),
                 detached,
                 false,
             );
@@ -107,8 +115,8 @@ fn native_blocked_folds_admit_the_complete_argument_before_invoking_a_callback()
             let diagnostic = compact_record(&failure, "diagnostic");
             assert_eq!(compact_field(diagnostic, "class"), "source");
             assert_eq!(compact_field(diagnostic, "code"), "normalized_json_type");
-            let (_, recovered) = folds.run("trap-probe", &json!([[], mode]), detached, true);
-            assert_eq!(recovered.unwrap(), json!(29));
+            let (_, recovered) = folds.run("trap-probe", &json!([[1, 2, 3], mode]), detached, true);
+            assert_eq!(recovered.unwrap(), json!(35));
         }
     }
     folds.verify_identity();
