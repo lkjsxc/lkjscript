@@ -4,6 +4,9 @@ use serde_json::Value;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+#[path = "public_inventory_fold.rs"]
+mod folds;
+
 const FAMILIES: [&str; 6] = [
     "native_owned_",
     "native_byte_buffer_",
@@ -121,11 +124,13 @@ pub(super) fn inventory(output: &str) -> Result<Inventory, DevError> {
         all.contains(MAP_MATRIX),
         "required complete detached Map execution matrix is absent",
     )?;
+    folds::admit(&all)?;
     let selected = all
         .iter()
         .filter(|name| {
             FAMILIES.iter().any(|family| name.contains(family))
                 || name.starts_with("native_map_entries::")
+                || folds::selected(name)
                 || *name == TOPOLOGY
         })
         .cloned()
@@ -182,3 +187,7 @@ mod tests;
 #[cfg(test)]
 #[path = "public_inventory_map_tests.rs"]
 mod map_tests;
+
+#[cfg(test)]
+#[path = "public_inventory_fold_tests.rs"]
+mod fold_tests;

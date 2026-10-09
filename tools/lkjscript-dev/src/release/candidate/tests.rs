@@ -50,8 +50,8 @@ fn terminal() -> Terminal {
         source_commit: "1".repeat(40),
         controller_source_commit: "1".repeat(40),
         tag: "v0.1.39".to_owned(),
-        acceptance_contract: "lkjscript-final-candidate-acceptance-4".to_owned(),
-        workload: "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-4"
+        acceptance_contract: "lkjscript-final-candidate-acceptance-5".to_owned(),
+        workload: "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-5"
             .to_owned(),
         target_triple: "x86_64-unknown-linux-musl".to_owned(),
         target_policy_sha256: target::policy_sha256().expect("current target policy"),
@@ -345,21 +345,30 @@ fn candidate_requires_native_public_proof_without_relabelling_the_old_contract()
 }
 
 #[test]
-fn candidate_terminal_rejects_pre_map_and_mixed_acceptance_generations_then_recovers() {
+fn candidate_terminal_rejects_pre_fold_and_mixed_acceptance_generations_then_recovers() {
     let temporary = tempfile::tempdir().expect("contract fixtures");
     let path = temporary.path().join("terminal.json");
     let current = terminal();
     assert_eq!(
         current.acceptance_contract,
-        "lkjscript-final-candidate-acceptance-4"
+        "lkjscript-final-candidate-acceptance-5"
     );
     assert_eq!(
         current.workload,
-        "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-4"
+        "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-5"
     );
     write_terminal(&path, &current);
     assert!(read_terminal(&path).is_ok());
-    for (contract, workload) in [(3, 3), (3, 4), (4, 3)] {
+    for (contract, workload) in [
+        (3, 3),
+        (3, 4),
+        (4, 3),
+        (4, 4),
+        (3, 5),
+        (5, 3),
+        (4, 5),
+        (5, 4),
+    ] {
         let mut predecessor = current.clone();
         predecessor.acceptance_contract =
             format!("lkjscript-final-candidate-acceptance-{contract}");

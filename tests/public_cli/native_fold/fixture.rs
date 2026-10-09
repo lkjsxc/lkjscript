@@ -5,6 +5,8 @@ const LIBRARY: &str =
     include_str!("../../../examples/map-entry-projection/consumer-fold/library.lkjc");
 const CONSUMER: &str =
     include_str!("../../../examples/map-entry-projection/consumer-fold/consumer.lkjc");
+const HISTORY: &str =
+    include_str!("../../../examples/map-entry-projection/consumer-fold/history.lkjc");
 
 pub(super) struct Folds {
     supplier: Native,
@@ -19,6 +21,14 @@ pub(super) struct Folds {
 
 impl Folds {
     pub fn new() -> Self {
+        Self::from_request(CONSUMER, &["imported", "trap-probe"], "108")
+    }
+
+    pub fn history() -> Self {
+        Self::from_request(HISTORY, &["history"], "104")
+    }
+
+    fn from_request(request: &str, targets: &[&str], expected_tests: &str) -> Self {
         let supplier = Native::template("command");
         let library = supplier.input(
             "library.lkjc",
@@ -57,7 +67,7 @@ impl Folds {
             ],
             true,
         );
-        let source = CONSUMER
+        let source = request
             .replacen("base=BASE", &format!("base={}", consumer.revision()), 1)
             .replace("FOLD_PACKAGE", compact_field(package, "id"))
             .replace("FOLD_SEMANTIC", compact_field(package, "revision"))
@@ -67,7 +77,7 @@ impl Folds {
         let checked = consumer.cli(&["check"], true);
         assert_eq!(
             compact_field(compact_record(&checked, "tests"), "passed"),
-            "108"
+            expected_tests
         );
         assert_eq!(
             compact_field(compact_record(&checked, "tests"), "differential"),
@@ -85,7 +95,7 @@ impl Folds {
             consumer.executable.clone(),
             artifact.clone(),
         ];
-        for target in ["imported", "trap-probe"] {
+        for target in targets {
             descriptor["target"] = json!(target);
             paths.push(consumer.input(
                 &format!("{target}.deployment.json"),

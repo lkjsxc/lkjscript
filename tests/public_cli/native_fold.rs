@@ -6,6 +6,8 @@ use serde_json::json;
 mod cases;
 #[path = "native_fold/fixture.rs"]
 mod fixture;
+#[path = "native_fold/history.rs"]
+mod history;
 use fixture::Folds;
 
 #[test]

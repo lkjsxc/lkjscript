@@ -81,3 +81,39 @@ blocked-eight route took 0.175ms versus 0.133ms for the reused-list standard fol
 Small/cold workloads, large callback states and other payload shapes require their
 own decisions. The measured executable is a selected source-built product, not an
 assertion that these library functions are present in the latest public release.
+
+## Nested persistent histories
+
+[history.lkjc](history.lkjc) is a second independently imported consumer. Its Item
+is a record containing text and a list of integers. Its History state holds a
+current list of items and a list of every retained prefix. Each callback appends
+one item, then retains that new prefix without changing any earlier value.
+
+The maintained history matrix compares complete results against an independent
+prefix-slicing oracle, not the callback's recurrence. Fifteen lengths cover both
+sides of four/eight-item blocks and the 32-way persistent-list boundary, with two
+initial states, three implementations and attached/source-deleted execution:
+180 complete result runs. The seeded initial history is deliberately independent
+of the current list. Empty input preserves both exactly; the API does not impose
+an unstated consistency law. Separate cases reject a malformed nested final item
+and malformed unused initial history, including for an empty input, then require
+successful recovery. Standard-fold results and all retained prefixes remain checked.
+
+Run the complete seven-case family, including both independent oracle tests:
+
+```sh
+cargo test --locked --test public_cli native_fold -- --test-threads=1
+```
+
+These correctness cases set no timing threshold and do not remeasure the old
+scalar study. The nested state may retain substantially more data; no speed or
+memory benefit follows merely from block traversal. No unchecked cursor, owned
+carrier or borrowed-result interface is added.
+
+The final-byte public harness requires the exact scalar and history behavior
+witnesses and every enumerated case in `native_declarations::native_fold::` under
+candidate acceptance/workload generation 5. It uses the extracted candidate, not
+a development-binary fallback, and requires unchanged identities and joined
+cleanup. Availability of a library example in source, full source acceptance,
+exact host-product proof and finalized distribution acceptance remain separate;
+[status](../../../docs/status.md) owns the current selection.

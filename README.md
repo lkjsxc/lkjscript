@@ -3,6 +3,12 @@
 A language and application platform for agents. Build, inspect, change, test and
 run typed programs through one executable.
 
+The long-term aim is to become stronger by building and owning as much of the
+platform as feasible: libraries, development tools, compiler, runtime and
+persistence, eventually in lkjscript itself. This is a direction, not a claim of
+completed self-hosting. Current Rust and operating-system boundaries are bootstrap
+mechanisms; native replacements must own useful behavior and its failures.
+
 The accepted typed meaning graph is the program's editable authority. Native text
 proposes reviewed changes; stable identities preserve declarations through edits.
 Types, ownership, effects and exact dependencies make execution authority explicit.

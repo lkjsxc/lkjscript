@@ -1,0 +1,54 @@
+request base=BASE
+add.dependency package=FOLD_PACKAGE semantic-revision=FOLD_SEMANTIC package-revision=FOLD_REVISION
+declarations.begin
+(units
+  (use std builtin)
+  (use folds FOLD_PACKAGE FOLD_REVISION)
+  (type-alias Item (record (name Text) (values (list I64))))
+  (type-alias History (record (current (list Item)) (prefixes (list (list Item)))))
+  (module create history
+    (function create step (visibility private)
+      (parameter create state (type History)) (parameter create item (type Item))
+      (returns History) (effect pure)
+      (body (let
+        (binding current (call std::list-append (types Item)
+          (field (local state) (name current)) (local item)))
+        (in (record structural
+          (field current (local current))
+          (field prefixes (call std::list-append (types (list Item))
+            (field (local state) (name prefixes)) (local current))))))))
+    (function create measure (visibility public)
+      (parameter create items (type (list Item))) (parameter create initial (type History))
+      (parameter create mode (type I64)) (returns History) (effect pure)
+      (body (if (call std::less (local mode) (i64 1))
+        (call folds::fold-four (types Item History) (local items) (local initial) (function-value step))
+        (if (call std::less (local mode) (i64 2))
+          (call folds::fold-eight (types Item History) (local items) (local initial) (function-value step))
+          (call std::list-fold-left (types Item History) (local items) (local initial) (function-value step))))))
+    (test create empty-preserves-independent-history (visibility private)
+      (actual (call measure (list Item)
+        (record structural
+          (field current (list Item (record structural (field name (text "seed")) (field values (list I64 (i64 -9))))))
+          (field prefixes (list (list Item) (list Item)))) (i64 1)))
+      (expected (record structural
+        (field current (list Item (record structural (field name (text "seed")) (field values (list I64 (i64 -9))))))
+        (field prefixes (list (list Item) (list Item))))))
+    (test create retained-prefix-does-not-grow (visibility private)
+      (actual (call measure
+        (list Item
+          (record structural (field name (text "a")) (field values (list I64 (i64 7))))
+          (record structural (field name (text "b")) (field values (list I64))))
+        (record structural (field current (list Item)) (field prefixes (list (list Item)))) (i64 0)))
+      (expected (record structural
+        (field current (list Item
+          (record structural (field name (text "a")) (field values (list I64 (i64 7))))
+          (record structural (field name (text "b")) (field values (list I64)))))
+        (field prefixes (list (list Item)
+          (list Item (record structural (field name (text "a")) (field values (list I64 (i64 7)))))
+          (list Item
+            (record structural (field name (text "a")) (field values (list I64 (i64 7))))
+            (record structural (field name (text "b")) (field values (list I64)))))))))
+    (component create console (visibility private)
+      (port create main (type (function ((list Item) History I64) History)) (function measure))))
+  (target create history (component history::console) (runner command) (port history::console::main)))
+declarations.end
