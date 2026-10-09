@@ -1,125 +1,103 @@
 # Current status
 
-## Source integrated; publication held
+## Source accepted and integrated
 
-The selected product identity is **0.1.89**. Its checked linear Map-entry projection
-is integrated through [PR #7](https://github.com/lkjsxc/lkjscript/pull/7).
-Integration commit `91d3a9b36a1d9fb2156de1114f238839dffd4f69` has the exact accepted
-source `b6a262f2e1ff95cb6f3889b0d10734a9ea93e078` as a parent and the identical tree
-`d9d0f42beccae454480a51d25bcab734b8e8dc25`. GitHub and the fetched Git objects were
-independently checked. A later status-only descendant is not a newly tested runtime.
+The selected product identity is **0.1.89**. Checked linear Map-entry projection
+and the final-byte verification correction are integrated through
+[PR #7](https://github.com/lkjsxc/lkjscript/pull/7) and
+[PR #8](https://github.com/lkjsxc/lkjscript/pull/8).
+The correction's accepted source is
+`4fba5833c7d7354f17e9413b73bb8935600a85d4`, tree
+`e964347611be1705c9f5d0849e1b86304810f53d`.
+Normal merge `440ff34d30760a125d4c766b85899cd8900fe3e7` has that source as its
+second parent and the identical tree; fetched Git objects and GitHub main were
+independently checked. Reporting descendants are not new product acceptance.
 
-The last independently observed public release is immutable **v0.1.83**. No release
-candidate was dispatched, no immutable tag/assets were replaced, and no application
-was deployed in this continuation. Mainline source availability and public-release
-closure are separate. Do not promote the Map successor before the final-byte correction below passes
-its fresh source and finalized-candidate acceptance.
+Fresh `check full --fresh --jobs 1 --machine` completed with original-process
+**exit code 0**, all **26/26 gates fresh passed**, zero reused or unrun gates,
+and identical initial/final input digests. Its original receipt was independently
+read. The selected checkout remains clean and frozen at `4fba5833`.
+The public CLI target passed 237 tests, failed 0 and retained one existing ignored
+case. Its complete Map matrix and candidate-binding regression passed. Standalone
+Map tests passed 2/2; tooling passed 259 with no failures and 19 existing ignored
+cases. The original library target passed 1,694 with 8 existing ignored cases.
 
-## Accepted behavior and observed verification
+Evidence checkout: `/home/coder/workspace/lkjscript-map-public-20261009`.
+Original full run:
+`.artifacts/lkjscript-dev/check/1791523334550838046-1232059-0/receipt.json`.
+Receipt digest:
+`verification_63bc0512ab1d5ec7fe9ad8751abf13d896eac86dcf8d0c6e194de85d2f39e843`.
+An unchanged copy is retained in `.artifacts/map-release-20261009/full-originals/`.
+Original terminal observation: `release-full-terminal-n3`.
 
-`core.map.entries` now walks the actual entries of one exact admitted immutable
-parent, rather than listing keys and restarting a tree search for each key. It
-preserves complete raw admission, exact origins, immutable sharing, retained Map
-versions, bounded reservation and joined failure cleanup. The independent reference
-evaluator keeps its lookup-based implementation. The cursor is private runtime
-machinery, not a new native borrowing interface.
+## Required final-byte Map coverage
 
-The official frozen-source `check full --fresh --jobs 1 --machine` completed with
-**exit code 0**, collected directly from its original process. The checker was built
-with the pinned locked source and `CARGO_BUILD_JOBS=4`. Its zero return requires all
-26 full-profile gates to pass, stable initial/final source inputs, no reused full
-proof and no final snapshot error. The source stayed at the accepted HEAD/tree and
-was clean after completion.
+The complete Map suite is shared by `public_cli` and the standalone entry. The
+final owner requires the exact detached matrix and every enumerated
+`native_map_entries::` case. The validated release-candidate path reaches the copy
+helper explicitly; component/development fallbacks cannot substitute other bytes.
+Executable identities are checked around copying and execution. A cost-only suite,
+similar name, wrong namespace, omitted/duplicate/ignored/failed test or forged
+success summary cannot satisfy admission.
 
-A scoped tool-policy denial prevented independent rereading of the detailed
-receipt/logs. That denied inspection was not repeated through another route. The
-completed command status and its maintained return conditions were observed; no
-individual workspace test total, receipt digest or hosted acceptance is claimed.
-The original source-check evidence remains retained, not replaced with a summary.
+The matrix retains 192 complete production results over 96 paired cases, independent
+ordered-map expectations, full raw input validation, source/transport deletion,
+resource refusal, recovery and joined cleanup. Acceptance contract and workload
+advance together to generation 4; old or mixed 3/4 terminals reject. No semantic
+encoding generation changes accompany this distribution-acceptance correction.
 
-A separately compiled, source-matched and copied executable harness passed **2/2
-tests**, including fresh public authoring/check/build, source/transport removal,
-**192 complete-result executions (96 paired cases)**, malformed-input/resource
-refusals, recovery and joined cleanup. Every complete result is checked against an
-independent ordered-map oracle. Candidate executable SHA-256:
-`f9d8d5aff6f40c391ce2e46be1b4ce7f804fc30197630acff891c861cb054e43`.
+The original diagnostic tests were rerun before the fix: 0 passed, 3 failed,
+exit 101. All three pass after the correction, alongside candidate identity,
+contract and controller regressions. New focused originals are in
+`.artifacts/map-release-20261009/`; earlier failed and independent runtime evidence
+remain in `.artifacts/map-public-acceptance/` at the same checkout.
 
-A second experiment used the same detached artifact and literal inputs under both
-preceding main source `f0fe59e90068cd2465bfb70af6e3f2feedf2b25a` and the candidate.
-All **384 complete-result executions** matched the independent expected bytes.
-The exact input domain, each version/control combination, complete raw input-node
-admission, unchanged input identities and joined cleanup were checked separately.
+## Distribution
 
-For shape 0 and eight repeated enumerations, subtracting each version's matched
-non-enumerating control gives:
+The last observed public/latest release remains immutable **v0.1.83**.
+Candidate [37892791430/1](https://github.com/lkjsxc/lkjscript/actions/runs/37892791430)
+selected source `440ff34d30760a125d4c766b85899cd8900fe3e7` but failed source
+acceptance: 19/20 fresh gates passed and `workspace_tests` reached its unchanged
+3,600-second deadline. Source inputs remained stable. The diagnostic ZIP
+`candidate-diagnostics-37892791430-1` (artifact `11601692753`) and original logs
+are retained; no finalized candidate was accepted or published.
 
-| Map entries | Preceding main extra tree visits | Candidate extra tree visits |
-| ---: | ---: | ---: |
-| 1 | 16 | 8 |
-| 32 | 1,336 | 256 |
-| 1,024 | 82,016 | 8,192 |
-| 4,096 | 393,328 | 32,768 |
+The workflow follow-up serializes source gates with `--jobs 1`, avoiding overlap
+between workspace tests and the release lifecycle Cargo build. Workloads, Cargo
+parallelism, test cases and deadlines remain unchanged. Its fresh full check and
+new integrated-source candidate remain required before annotation, promotion and
+anonymous public verification. No release tag or scoped publication control was
+changed. Failed attempt 1 is not reusable acceptance.
 
-At 4,096 entries, shape 2 needs 393,336 preceding-main visits; all four candidate
-shapes need 32,768. Additional modeled cumulative allocated bytes remain equal in
-all 96 groups: 19,919,104 bytes in both products at 4,096 entries and eight passes.
-These are operation counters and accounting, **not elapsed speed, RSS, actual total
-allocation traffic or whole-application gains**. The predecessor is the preceding
-main implementation, not the public v0.1.83 release. No comparison with C, Rust or
-Bun was performed here. See the [performance guide](performance.md) for stage and
-measurement boundaries.
+## Map behavior and measurement limits
 
-## Final-byte correction under acceptance
+`core.map.entries` projects the actual children of one exact admitted immutable
+parent in key order. It preserves complete raw admission, exact origins, persistent
+versions, bounded reservations and joined cleanup. The reference evaluator retains
+its independent lookup-based path. This is private runtime machinery, not a new
+native borrowing interface.
 
-[PR #8](https://github.com/lkjsxc/lkjscript/pull/8) now carries the correction to
-final-archive Map coverage. Its original diagnostic source
-`493f58e4cf74aa4e048cca64287aa98090f7d7e3` and failing originals remain preserved.
-The three inventory regressions again failed before the correction (0 passed,
-3 failed, exit 101); all pass with the complete matrix required.
+Earlier matched observations used the same artifact and literal inputs under
+preceding main `f0fe59e9` and Map implementation `b6a262f2`, with all 384 complete
+results matching independent expectations. At 4,096 entries and eight enumerations,
+additional modeled tree visits fell from about 393,328 to 32,768. Additional modeled
+cumulative allocation remained 19,919,104 bytes in both products. These counters
+are not elapsed speed, RSS, actual total allocation traffic or application gains.
+The comparison predecessor is preceding main, not public v0.1.83. See the
+[performance guide](performance.md) and [Map workload](../examples/map-entry-projection/README.md).
 
-The full Map suite is shared by `public_cli` and the standalone test entry. The
-public owner requires the exact detached execution matrix and every enumerated
-`native_map_entries::` case. Its validated release candidate reaches the copy
-helper explicitly; component-candidate and development-binary fallbacks cannot
-replace it. Candidate/copy identities, complete results, full raw admission,
-source deletion, refusal/recovery and joined cleanup remain required.
+## Retained originals
 
-Final-candidate acceptance contract and native-public workload generation 4 reject
-predecessor and mixed generation 3/4 terminals. No unrelated encoding changes.
-The correction's focused inventory/runner checks pass, and the copied public
-harness passes the full matrix, its independent cost oracle and isolated candidate
-binding regression (3 passed, 0 failed/ignored). This is focused development
-proof, not fresh full-source or finalized-archive acceptance.
+The original implementation/evidence checkout `/home/coder/workspace/lkjscript`
+remains at `b6a262f2`, with its old full run
+`.artifacts/lkjscript-dev/check/1791491548750073678-760500-0` preserved. Its original
+command exit 0 was previously recovered; its detailed receipt was not independently
+reread after the earlier tool refusal. The new correction acceptance above is a
+separate fresh run and does not relabel those historical observations.
 
-Fresh full-source verification, normal main integration of the correction, a new
-candidate from integrated source, unchanged-asset promotion and anonymous public
-verification remain the release gates. The original correction proposal remains
-unused; the current change was reviewed against the actual source. Old candidate
-`37643217328/1` belongs to different source and cannot attest this successor.
-New originals are in `.artifacts/map-release-20261009/` in the diagnostic checkout;
-old proof and failures remain at their original paths below.
-
-## Retained owners and continuation
-
-The frozen runtime/evidence checkout remains `/home/coder/workspace/lkjscript` at
-accepted source `b6a262f2`. New source-check originals are in
-`.artifacts/20261009-map-fresh-acceptance/`; the exact checker run is
-`.artifacts/lkjscript-dev/check/1791491548750073678-760500-0`. Launch request:
-`lkj-new-independent-full-20261009-b3`; completed original-session observation:
-`lkj-source-terminal-final-observation-20261009-o1`.
-
-The diagnostic worktree is `/home/coder/workspace/lkjscript-map-public-20261009`.
-Its evidence owner is `.artifacts/map-public-acceptance/HANDOFF.md`, with independent
-copied-product originals in `fresh-product-proof/`, matched originals in
-`matched-modeled-work/`, and negative controls in `negative-inventory.*` and
-`committed-negative.*`. The retained source-deleted native project is
-`/tmp/lkjscript-components-3PGENt`. Completion comments on PR #7 record the exact
-executable, harness, artifact and result-file identities. Preserve these originals,
-the earlier denied/failed evidence, unrelated stashes/worktrees and running apps.
-
-For the next performance step, measure actual consumers before introducing a new
-representation: list/entry-record construction remains a separate modeled cost.
-A traversal/fold or producer-consumer fusion may avoid a materialized intermediate
-when semantics permit; that is a hypothesis, not implemented capability or measured
-application speed. Language-first design, complete admission and independently
-checkable semantics remain the [project direction](direction.md).
+The handoff `.artifacts/map-public-acceptance/HANDOFF.md`, independent
+`fresh-product-proof/`, `matched-modeled-work/`, original diagnostic failures,
+source-deleted `/tmp/lkjscript-components-3PGENt`, and unused `implement.pl` remain
+preserved. Older candidate `37643217328/1` belongs to different source and is not
+this release's producer. Existing stashes, other checkouts and running applications
+remain outside this release task. No application deployment was performed here.
