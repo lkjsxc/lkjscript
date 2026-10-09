@@ -12,14 +12,14 @@ use std::time::{Duration, Instant};
 pub(super) mod public_harness;
 mod public_inventory;
 
-pub(super) const CONTRACT: &str = "lkjscript-final-candidate-acceptance-4";
+pub(super) const CONTRACT: &str = "lkjscript-final-candidate-acceptance-5";
 #[cfg(test)]
 pub(super) fn canonical_terminal_fixture(value: serde_json::Value) -> Result<Vec<u8>, DevError> {
     evidence::encode_json(&serde_json::from_value::<Terminal>(value)?)
 }
 #[cfg(test)]
 mod tests;
-const WORKLOAD: &str = "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-4";
+const WORKLOAD: &str = "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-5";
 const MAXIMUM_RECEIPT_BYTES: u64 = 4 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

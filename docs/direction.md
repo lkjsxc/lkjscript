@@ -14,6 +14,22 @@ The old ChatGPT-to-Codex prompt handoff is retired: campaigns remain historical
 evidence, with no obligation to create or reread one for each task. API costs require
 actual usage or billing measurements; shorter files alone do not quantify savings.
 
+## Build strength through self-reliance
+
+The owner clarified on 2026-10-09 that the long-term aim is to become stronger by
+building and owning as much as feasible, not merely to describe already self-written
+code. Make that trajectory explicit in project explanations. It includes libraries,
+development tools, compiler, runtime and persistence, and eventual complete
+self-hosting rather than a permanently thin wrapper around other implementations.
+
+Native ownership means controlling useful semantics, composition, failure and
+maintenance. It is not a native-line percentage or a demand to remove every
+bootstrap dependency immediately. Select a replacement against a real boundary;
+require ordinary public authoring, independent admission and complete behavior.
+A native library that reduces repeated generic loop work is progress on this axis
+without being a native compiler, a JIT, a region system or a reason to expand the
+trusted kernel. Retain the language-first priorities below.
+
 ## Success criteria: language design first
 
 The [2026-10-02 owner clarification](campaigns/20261002-language-priority.md)

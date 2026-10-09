@@ -1,8 +1,8 @@
 use super::*;
 use std::os::unix::fs::PermissionsExt;
 
-const LIST: &str = "native_owned_fixture: test\nnative_byte_buffer_fixture: test\nnative_byte_ranges_fixture: test\nresident_policy::fixture: test\nnative_declarations::native_owned_products::parallel::native_parallel_fixture: test\nnative_declarations::native_parallel_reads::native_parallel_reads_fixture: test\nnative_refresh::fixture: test\ncopied_binary_authors_builds_and_serves_interactive_topology_from_minimal: test\nnative_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment: test\nunrelated: test\n";
-const SUCCESS: &str = "\nrunning 9 tests\ntest native_owned_fixture ... ok\ntest native_byte_buffer_fixture ... ok\ntest native_byte_ranges_fixture ... ok\ntest resident_policy::fixture ... ok\ntest native_declarations::native_owned_products::parallel::native_parallel_fixture ... ok\ntest native_declarations::native_parallel_reads::native_parallel_reads_fixture ... ok\ntest native_refresh::fixture ... ok\ntest copied_binary_authors_builds_and_serves_interactive_topology_from_minimal ... ok\ntest native_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment ... ok\n\ntest result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s\n";
+const LIST: &str = "native_owned_fixture: test\nnative_byte_buffer_fixture: test\nnative_byte_ranges_fixture: test\nresident_policy::fixture: test\nnative_declarations::native_owned_products::parallel::native_parallel_fixture: test\nnative_declarations::native_parallel_reads::native_parallel_reads_fixture: test\nnative_refresh::fixture: test\ncopied_binary_authors_builds_and_serves_interactive_topology_from_minimal: test\nnative_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment: test\nnative_declarations::native_fold::native_blocked_folds_import_exactly_and_preserve_complete_results_after_source_removal: test\nnative_declarations::native_fold::native_blocked_folds_reject_wrong_contract_without_changing_accepted_consumer: test\nnative_declarations::native_fold::native_blocked_folds_admit_the_complete_argument_before_invoking_a_callback: test\nnative_declarations::native_fold::history::native_blocked_folds_retain_every_nested_prefix_across_blocks_and_source_removal: test\nnative_declarations::native_fold::history::native_blocked_folds_admit_nested_input_and_unused_initial_history_completely: test\nunrelated: test\n";
+const SUCCESS: &str = "\nrunning 14 tests\ntest native_owned_fixture ... ok\ntest native_byte_buffer_fixture ... ok\ntest native_byte_ranges_fixture ... ok\ntest resident_policy::fixture ... ok\ntest native_declarations::native_owned_products::parallel::native_parallel_fixture ... ok\ntest native_declarations::native_parallel_reads::native_parallel_reads_fixture ... ok\ntest native_refresh::fixture ... ok\ntest copied_binary_authors_builds_and_serves_interactive_topology_from_minimal ... ok\ntest native_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment ... ok\ntest native_declarations::native_fold::native_blocked_folds_import_exactly_and_preserve_complete_results_after_source_removal ... ok\ntest native_declarations::native_fold::native_blocked_folds_reject_wrong_contract_without_changing_accepted_consumer ... ok\ntest native_declarations::native_fold::native_blocked_folds_admit_the_complete_argument_before_invoking_a_callback ... ok\ntest native_declarations::native_fold::history::native_blocked_folds_retain_every_nested_prefix_across_blocks_and_source_removal ... ok\ntest native_declarations::native_fold::history::native_blocked_folds_admit_nested_input_and_unused_initial_history_completely ... ok\n\ntest result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s\n";
 
 fn runner<'a>(root: &'a Path, control: &'a process::ProcessControl) -> Runner<'a> {
     let candidate = root.join("candidate");
@@ -31,7 +31,7 @@ fn runner<'a>(root: &'a Path, control: &'a process::ProcessControl) -> Runner<'a
 fn harness(root: &Path, output: &str, exit: i32) -> PathBuf {
     let path = root.join("fixture-harness");
     let script = format!(
-        "#!/bin/sh\nset -eu\n[ \"$PATH\" = '' ]\n[ \"$HOME\" = \"$PWD/home\" ]\n[ \"$TMPDIR\" = \"$PWD/tmp\" ]\n[ -z \"${{CARGO_HOME+x}}\" ]\n[ -z \"${{GH_TOKEN+x}}\" ]\n[ -z \"${{GITHUB_TOKEN+x}}\" ]\n[ -f \"$LKJSCRIPT_RELEASE_CANDIDATE\" ]\nif [ \"$1\" = '--list' ]; then\nprintf '%s' '{LIST}'\nelse\n[ \"$1\" = '--exact' ]\n[ \"$2\" = '--test-threads=1' ]\n[ \"$3\" = '--color=never' ]\n[ \"$#\" = 12 ]\nprintf '%s' '{output}'\nexit {exit}\nfi\n"
+        "#!/bin/sh\nset -eu\n[ \"$PATH\" = '' ]\n[ \"$HOME\" = \"$PWD/home\" ]\n[ \"$TMPDIR\" = \"$PWD/tmp\" ]\n[ -z \"${{CARGO_HOME+x}}\" ]\n[ -z \"${{GH_TOKEN+x}}\" ]\n[ -z \"${{GITHUB_TOKEN+x}}\" ]\n[ -f \"$LKJSCRIPT_RELEASE_CANDIDATE\" ]\nif [ \"$1\" = '--list' ]; then\nprintf '%s' '{LIST}'\nelse\n[ \"$1\" = '--exact' ]\n[ \"$2\" = '--test-threads=1' ]\n[ \"$3\" = '--color=never' ]\n[ \"$#\" = 17 ]\nprintf '%s' '{output}'\nexit {exit}\nfi\n"
     );
     fs::write(&path, script).unwrap();
     fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
@@ -48,7 +48,10 @@ fn native_runner_uses_closed_environment_exact_inventory_and_retained_processes(
     runner
         .evaluate(&executable, &root.path().join("candidate"), work.path())
         .unwrap();
-    assert_eq!(runner.receipt.inventory.as_ref().unwrap().selected.len(), 9);
+    assert_eq!(
+        runner.receipt.inventory.as_ref().unwrap().selected.len(),
+        14
+    );
     assert_eq!(runner.receipt.phases.len(), 2);
     assert!(
         runner
@@ -61,7 +64,10 @@ fn native_runner_uses_closed_environment_exact_inventory_and_retained_processes(
     assert!(!runner.receipt.cleanup_complete);
     let record: serde_json::Value =
         serde_json::from_slice(&fs::read(root.path().join("receipt.json")).unwrap()).unwrap();
-    assert_eq!(record["inventory"]["selected"].as_array().unwrap().len(), 9);
+    assert_eq!(
+        record["inventory"]["selected"].as_array().unwrap().len(),
+        14
+    );
     assert!(root.path().join("inventory.stdout.log").is_file());
     assert!(root.path().join("execute.stderr.log").is_file());
 }

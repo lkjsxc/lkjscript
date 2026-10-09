@@ -80,9 +80,10 @@ substitute for final-byte acceptance. Normal promotion and anonymous acquisition
 still use the unchanged assets and existing authority; no credentials, protections,
 immutable tags or prior assets are changed.
 
-`lkjscript-final-candidate-acceptance-4` and workload
-`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-4`
-require the complete Map matrix and native-public proof in addition to all previous
+`lkjscript-final-candidate-acceptance-5` and workload
+`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-5`
+require the complete Map matrix, the exact native-fold behavior witnesses and
+native-public proof in addition to all previous
 source, six target-owner, two userland and installation boundaries. The current
 controller rejects predecessor contracts, predecessor workloads and mixed generations
 rather than relabelling them. Their original contracts and evidence remain historical facts;

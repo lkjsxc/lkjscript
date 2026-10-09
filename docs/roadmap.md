@@ -218,6 +218,13 @@ output reservations remain intact. Measure output construction separately before
 selecting a native fold or borrowed cursor; a private runtime iterator is not
 a new public borrowing contract.
 
+Use the native [generic consumer folds](../examples/map-entry-projection/consumer-fold/README.md)
+to study repeated loop and callback costs without adding a trusted cursor. The
+independently imported consumers cover both ordered scalar reduction and nested
+persistent histories, retaining every prior version across block boundaries.
+These are explicit library alternatives, not a replacement of the standard fold;
+small inputs and larger states retain separate cost and live-local obligations.
+
 Use the separately exported [native plan result checker](decisions/native-plan-result-checking.md)
 to check a claimed component partition and earliest stages against its complete
 proposal. The checker admits the source through the existing validator, but checks

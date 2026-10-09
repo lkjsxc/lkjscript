@@ -46,7 +46,7 @@ case alongside its existing native families. Inventory omission, ignored cases,
 substitution, incomplete output, failure, cancellation or unjoined cleanup blocks
 acceptance. The source-matched copied harness runs the exact executable extracted
 from the finalized archive outside the checkout. Current candidate acceptance
-contract 4 preserves this obligation alongside the complete Map matrix below;
+contract 5 preserves this obligation alongside the complete Map and native-fold matrices below;
 historical terminals retain their original contract and cannot be relabelled as
 current acceptance.
 
@@ -2239,10 +2239,51 @@ Inventory selection and original bounded logs must establish that each selected
 case ran once and passed. Missing, duplicate, ignored, unexecuted, failed or
 substituted cases and forged success summaries block admission. Keep the current
 complete matrix mandatory while selecting future cases in the same Map family.
-Final-candidate contract `lkjscript-final-candidate-acceptance-4` pairs only with
+Final-candidate contract `lkjscript-final-candidate-acceptance-5` pairs only with
 workload
-`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-4`.
-Reject contract 3, workload 3 and all mixed predecessor/current combinations even
+`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-5`.
+Reject predecessor contracts and workloads, including generations 3 and 4, and
+all mixed predecessor/current combinations even
 when other terminal counters and authenticated ZIP identities are valid. Earlier
 contracts retain their historical meaning; this acceptance change does not advance
 semantic graph, type or artifact encoding generations.
+
+## Native blocked fold composition and final-byte evidence
+
+The native generic fold library is ordinary pure lkjscript, not a compiler
+intrinsic or a replacement for the standard fold. Independently export the
+supplier before authoring consumers. Bind the exact imported package revision,
+then author, check, build and run through the copied product. The five required
+behavior cases live under the exact `native_declarations::native_fold::` namespace:
+complete ordered scalar results after source removal, wrong-contract refusal,
+complete raw argument admission before a trapping callback, complete retained
+nested histories, and nested/unused initial-history admission with recovery.
+Their exact test identities are selected by the maintained public-inventory owner;
+a host-only expected-value predicate or a similarly named test cannot substitute.
+
+The history consumer uses record items containing text and immutable lists, and a
+record state retaining its current list plus all earlier prefixes. Compare each
+complete result against independent prefix slicing for both empty and seeded
+states, lengths on both sides of four/eight-item and 32-way list boundaries, and
+the standard fold control. A later append must not change any retained prefix.
+Empty input preserves the exact initial state, including an independently seeded
+history; no unstated consistency law between its fields is imposed.
+
+Malformed deep item values and unused initial history must reject before execution,
+including on an empty input. Reject a mismatched generic callback contract without
+changing accepted meaning. Preserve traps after successful scalar/block/remainder
+prefixes, no partial result exposure, healthy subsequent calls, and joined cleanup.
+Remove both authoring projects and the supplier transport before repeating the
+standalone matrices. Check the executable, artifact, descriptors and literal
+arguments remain unchanged. Input/output equality is a value property, not proof
+of zero-copy storage, bounded RSS or affine/borrowed result support.
+
+Final-candidate acceptance generation 5 requires all five behavior witnesses and
+selects every enumerated case in this exact family, including independent oracle
+checks and future additions. Original bounded logs must prove each selected case
+passed exactly once. Missing, ignored, failed, duplicated or substituted cases
+reject. The full Map and other existing families remain mandatory; no timeout,
+byte bound, source/candidate binding or authority check is relaxed. Generation 4
+remains historical evidence for its own selected product, never proof of these
+additional obligations. A source-full pass and a host executable run are separate
+from a new finalized-archive producer, unchanged-asset promotion and public proof.
