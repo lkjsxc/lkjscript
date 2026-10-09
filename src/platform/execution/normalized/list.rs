@@ -613,3 +613,11 @@ impl ExactSizeIterator for Iter<'_> {}
 #[cfg(test)]
 #[path = "list_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "list_bulk_tests.rs"]
+mod bulk_tests;
+
+#[cfg(test)]
+#[path = "list_bulk_failure_tests.rs"]
+mod bulk_failure_tests;
