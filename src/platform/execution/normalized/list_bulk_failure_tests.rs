@@ -130,3 +130,63 @@ fn bulk_deep_pending_and_attached_payloads_drop_on_a_bounded_stack() {
         .join()
         .unwrap();
 }
+
+#[test]
+fn bulk_refusal_classes_release_real_cells_without_touching_an_unrelated_owner() {
+    use super::super::owned_i64_cell::{OwnedI64Cell, StorageObservation};
+    let origin = ValueOrigin::fresh().unwrap();
+    for length in [1, 65, 1057] {
+        let (leaves, branches, _) = model(length);
+        let calls = length as u64 + leaves + branches + 1;
+        let mut points = vec![1, 2, 3, calls / 2, calls];
+        points.sort_unstable();
+        points.dedup();
+        for refused in points {
+            for cancel in [false, true] {
+                let observed = StorageObservation::start();
+                let unrelated = OwnedI64Cell::new(origin, 101);
+                let raw = (0..length)
+                    .map(|i| NormalizedValue::OwnedI64Cell(OwnedI64Cell::new(origin, i as i64)))
+                    .collect();
+                assert_eq!(observed.live(), (length + 1, 0));
+                let control = ExecutionControl::uncancelled();
+                let mut visited = 0;
+                let error = List::from_items(raw, length as u64, &mut |_| {
+                    visited += 1;
+                    if visited == refused {
+                        if cancel {
+                            control.cancel();
+                        } else {
+                            return Err(failure());
+                        }
+                    }
+                    control.check()
+                })
+                .unwrap_err();
+                assert_eq!(visited, refused);
+                assert_eq!(
+                    error.class,
+                    if cancel {
+                        ExecutionFailureClass::Cancelled
+                    } else {
+                        ExecutionFailureClass::Resource
+                    }
+                );
+                assert_eq!(
+                    error.code,
+                    if cancel {
+                        "execution_cancelled"
+                    } else {
+                        "normalized_list_storage"
+                    }
+                );
+                assert!(!error.retryable && !error.possibly_visible);
+                assert_eq!(observed.created(), length + 1);
+                assert_eq!(observed.live(), (1, 0));
+                assert_eq!(unrelated.read().unwrap(), 101);
+                drop(unrelated);
+                assert_eq!(observed.live(), (0, 0));
+            }
+        }
+    }
+}

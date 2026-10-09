@@ -2332,3 +2332,56 @@ The [decision](decisions/operation-local-callable-inputs.md) defines the lifetim
 and proof boundaries. [Status](status.md) owns later stabilized-source acceptance,
 public product evidence and distribution; these focused test measurements do not
 substitute for those separate acceptance gates.
+
+## Direct bulk list construction (2026-10-09)
+
+The [construction decision](decisions/bulk-list-construction.md) replaces private
+persistent-prefix rebuilding with direct assembly of the same final immutable
+nodes. The unchanged reporting test constructs scalar values `17 * i - 9` and
+checks every value by indexing and forward/reverse traversal. It reports work
+before those checks and destruction. No native application or timing workload is
+substituted for this storage-level experiment.
+
+The predecessor runtime is main `440ff34d30760a125d4c766b85899cd8900fe3e7`, with
+regressions added in `403916225f24fbc2f83f2be156a0abdcadc77a32`. Its copied test
+executable SHA-256 is
+`e3c435b133c24de5404f18191ad1c66f45db42e2c42dc0dc86282ba4d0d5791d`.
+The implementation's copied focused executable SHA-256 is
+`afb955009e2a2b2a923e846b63826a103049659983503ae0c3060e7a93024873`.
+Both use the pinned locked `test` profile on this x86-64 host; the unchanged
+reporting function executes in each separately compiled source. Runtime/test
+input hashes, commands, complete output and executable copies are retained below.
+
+| Elements | Constructed nodes, before → after | Existing branch-handle copies, before → after | Modeled construction bytes, before → after |
+| ---: | ---: | ---: | ---: |
+| 32 | 1 → 1 | 0 → 0 | 3,608 → 3,608 |
+| 1,024 | 62 → 33 | 465 → 0 | 123,856 → 115,736 |
+| 4,096 | 349 → 133 | 2,234 → 0 | 523,704 → 463,224 |
+| 32,768 | 3,037 → 1,057 | 32,642 → 0 | 4,258,232 → 3,703,832 |
+| 262,144 | 31,708 → 8,457 | 297,619 → 0 | 36,141,216 → 29,630,936 |
+| 1,000,000 | 123,940 → 32,259 | 1,486,250 → 0 | 138,703,200 → 113,032,520 |
+
+Empty input allocates nothing in either executable. The one-million-item case
+removes 91,681 intermediate construction nodes and 25,670,680 modeled cumulative
+bytes. Each raw element still receives one element allocation; payload-handle
+copies and full materializations remain zero in both implementations. The final
+retained tree and its admission metadata are unchanged. These counts establish
+neither elapsed speedup, actual allocator traffic, peak/retained memory, RSS,
+application gains nor a comparison with C, Rust or Bun.
+
+The predecessor returns correct complete values but fails two newly declared cost
+regressions: a branch handle is copied at length 65, and the exact final-tree
+budget is insufficient at length 1,057. These are stronger construction-cost
+requirements, not evidence that predecessor language results were incorrect.
+The candidate passes all 17 focused list tests (nine new and eight existing),
+including every reservation refusal and cancellation checkpoint through 1,057
+items, exact/N-1 budgets, deep cleanup, real owned-cell release, unrelated-owner
+preservation and retained append/indexing compatibility. Public copied-executable
+and fresh full-source acceptance remain separate obligations.
+
+Original evidence is `.artifacts/list-bulk/` in
+`/home/coder/workspace/lkjscript-list-bulk-20261009`: `predecessor-focused.log`,
+`candidate-focused.log`, their `.exit` files, `predecessor-tests`,
+`candidate-focused-tests`, `candidate-focused-inputs.sha256` and the executable
+hash manifests. The frozen pre-implementation design and failing predecessor are
+retained. Current integration and full acceptance belong to [status](status.md).

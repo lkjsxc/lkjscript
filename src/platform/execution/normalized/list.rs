@@ -376,33 +376,13 @@ impl List {
         Ok(result)
     }
 
-    /// Private bounded bulk ingress. Raw items are moved; no existing list is flattened.
+    /// Private bounded bulk ingress. Raw items move into each final node once.
     pub(super) fn from_items(
         items: Vec<NormalizedValue>,
         maximum_length: u64,
         reserve: &mut impl FnMut(Charge) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
-        let mut pending = super::value::RawArguments::new(items);
-        let length = pending.len();
-        if length > MAXIMUM_LENGTH || length as u64 > maximum_length {
-            return Err(failure());
-        }
-        let mut result = Self::default();
-        while !pending.is_empty() {
-            let mut slots = leaf(None, reserve)?;
-            let count = pending.len().min(FANOUT);
-            for slot in slots.iter_mut().take(count) {
-                let item = pending.next().ok_or_else(invalid)?;
-                *slot = Some(element(item, reserve)?);
-            }
-            if let Some(tail) = result.tail.take() {
-                result.promote(tail, reserve)?;
-            }
-            result.tail = Some(node(Node::Leaf(slots)));
-            result.length = result.length.checked_add(count).ok_or_else(failure)?;
-        }
-        reserve(Charge::default())?;
-        Ok(result)
+        bulk::from_items(items, maximum_length, reserve)
     }
 
     pub(super) fn get(&self, index: usize) -> Option<&NormalizedValue> {
@@ -609,6 +589,9 @@ impl DoubleEndedIterator for Iter<'_> {
     }
 }
 impl ExactSizeIterator for Iter<'_> {}
+
+#[path = "list_bulk.rs"]
+mod bulk;
 
 #[cfg(test)]
 #[path = "list_tests.rs"]
