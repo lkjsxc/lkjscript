@@ -47,8 +47,16 @@ installed-recovery, pinned-userland and original-reader obligation.
 Final candidate acceptance now runs the source-matched public harness against the
 exact executable extracted from the finalized archive. It selects every enumerated
 case matching `native_owned_`, `native_byte_buffer_`, `native_byte_ranges_`,
-`resident_policy`, `native_parallel` and `native_refresh`, plus the exact
+`resident_policy`, `native_parallel`, `native_refresh` and the complete
+`native_map_entries::` family, plus the exact
 `copied_binary_authors_builds_and_serves_interactive_topology_from_minimal` case.
+The Map family must include the exact
+`native_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment`
+matrix; a cost predicate or similarly named/namespace-substituted case cannot replace it.
+The harness passes its validated release-candidate path explicitly to the Map copy
+helper, which checks the selected source and copy around copying. The matrix checks
+both identities before and after execution. An environment variable or
+development-binary fallback cannot replace those selected bytes.
 Every family must be present. The native owner rejects missing, duplicate, ignored,
 failed or unexpectedly substituted cases even when the harness exits successfully.
 It records the source-selected Cargo executable, copied harness and candidate
@@ -72,10 +80,12 @@ substitute for final-byte acceptance. Normal promotion and anonymous acquisition
 still use the unchanged assets and existing authority; no credentials, protections,
 immutable tags or prior assets are changed.
 
-`lkjscript-final-candidate-acceptance-3` requires the native-public proof in addition
-to all previous source, six target-owner, two userland and installation boundaries.
-The current controller intentionally rejects predecessor acceptance terminals rather
-than relabelling them. Their original contracts and evidence remain historical facts;
+`lkjscript-final-candidate-acceptance-4` and workload
+`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-4`
+require the complete Map matrix and native-public proof in addition to all previous
+source, six target-owner, two userland and installation boundaries. The current
+controller rejects predecessor contracts, predecessor workloads and mixed generations
+rather than relabelling them. Their original contracts and evidence remain historical facts;
 a corrected successor requires a fresh producer. In particular, producer 37046478616
 accepted the earlier 0.1.68 source without the joined-deadline repair and is superseded,
 not a candidate to promote after the repair.
@@ -136,6 +146,15 @@ predecessor receipts cannot attest the successor source or finalized bytes.
 The same mandatory `native_owned_` and `native_parallel` public-harness families
 own its detached three-package witnesses. The [release notes](releases/v0.1.81.md)
 describe the capability; [status](status.md) owns actual acceptance and publication.
+
+Development v0.1.89 improves checked Map-entry enumeration and requires the complete
+copied-product Map matrix against the finalized archive's executable. The matrix
+checks independent full results after source deletion, complete input admission,
+resource refusal, recovery and cleanup. This advances only the final-candidate
+acceptance/workload contract to 4; semantic graph, type and artifact encoding
+generations remain unchanged. Source proof and older candidate evidence do not
+attest these finalized bytes. The [Map guide](../examples/map-entry-projection/README.md)
+owns the workload; [status](status.md) owns actual acceptance and publication.
 
 The canonical manifest discriminator is `format: "lkjscript-release-content-1"`. It binds the product
 version/intended tag, exact product commit, repository, target/build policy and command, pinned Rust

@@ -139,6 +139,10 @@ impl Runner<'_> {
     }
 
     fn evaluate(&mut self, harness: &Path, candidate: &Path, work: &Path) -> Result<(), DevError> {
+        require(
+            self.receipt.candidate == file(candidate, "lkjscript")?,
+            "native public candidate differs from the admitted executable",
+        )?;
         let home = work.join("home");
         let temporary = work.join("tmp");
         fs::create_dir(&home)?;
@@ -187,7 +191,11 @@ impl Runner<'_> {
             .inventory
             .as_ref()
             .ok_or_else(|| DevError::corrupt("missing public harness inventory"))?;
-        public_inventory::passed(&observed, inventory)
+        public_inventory::passed(&observed, inventory)?;
+        require(
+            self.receipt.candidate == file(candidate, "lkjscript")?,
+            "native public candidate changed during execution",
+        )
     }
 }
 

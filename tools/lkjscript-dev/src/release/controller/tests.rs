@@ -850,7 +850,7 @@ fn compare_errors_are_not_false_ancestry_and_known_git_relations_remain_distinct
 fn portable_terminal(content: &CandidateContent) -> Value {
     let observation = json!({"status":"passed","exit_code":0,"signal":null,"reason":null,"elapsed_nanoseconds":1,"cpu_nanoseconds":null,"peak_rss_kib":null,"stdout_limit_bytes":16777216,"stderr_limit_bytes":16777216,"stdout_limit_exhausted":false,"stderr_limit_exhausted":false,"stdout":{"path":"retained.log","kind":"file","mode":420,"bytes":0,"digest":"blake3:af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","link_target":null},"stderr":{"path":"retained.log","kind":"file","mode":420,"bytes":0,"digest":"blake3:af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","link_target":null}});
     let proof = json!({"name":"receipt.json","sha256":"2".repeat(64),"byte_length":8});
-    json!({"schema":{"identity":"lkjscript-candidate-terminal","version":1},"status":"candidate_accepted","phase":"complete","source_commit":SOURCE,"controller_source_commit":SOURCE,"tag":content.tag,"acceptance_contract":"lkjscript-final-candidate-acceptance-3","workload":"release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-3","target_triple":"x86_64-unknown-linux-musl","target_policy_sha256":super::super::target::policy_sha256().expect("policy"),"producer":{"github_actions":"true","repository":REPOSITORY,"workflow":"Release","job":"candidate","run_id":"17","run_attempt":"2","run_url":"https://github.com/lkjsxc/lkjscript/actions/runs/17","runner_os":"Linux","runner_architecture":"X64","runner_image_os":"ubuntu24","runner_image_version":"fixture-image"},"verifier":content.verifier,"assets":content.assets,"manifest_sha256":"3".repeat(64),"executable":{"name":"lkjscript","sha256":"4".repeat(64),"byte_length":8},"source_gates":20,"target_owners":6,"userlands":2,"proofs":[{"name":"release-source","receipt":proof},{"name":"native-public-harness","receipt":proof},{"name":"final-target","receipt":proof},{"name":"installation","receipt":proof}],"stages":[{"name":"target-admission","process":observation},{"name":"installation","process":observation},{"name":"installation-reader","process":observation}],"started_unix_nanoseconds":1,"completed_unix_nanoseconds":2,"elapsed_nanoseconds":1,"cleanup_complete":true,"failure":null})
+    json!({"schema":{"identity":"lkjscript-candidate-terminal","version":1},"status":"candidate_accepted","phase":"complete","source_commit":SOURCE,"controller_source_commit":SOURCE,"tag":content.tag,"acceptance_contract":"lkjscript-final-candidate-acceptance-4","workload":"release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-4","target_triple":"x86_64-unknown-linux-musl","target_policy_sha256":super::super::target::policy_sha256().expect("policy"),"producer":{"github_actions":"true","repository":REPOSITORY,"workflow":"Release","job":"candidate","run_id":"17","run_attempt":"2","run_url":"https://github.com/lkjsxc/lkjscript/actions/runs/17","runner_os":"Linux","runner_architecture":"X64","runner_image_os":"ubuntu24","runner_image_version":"fixture-image"},"verifier":content.verifier,"assets":content.assets,"manifest_sha256":"3".repeat(64),"executable":{"name":"lkjscript","sha256":"4".repeat(64),"byte_length":8},"source_gates":20,"target_owners":6,"userlands":2,"proofs":[{"name":"release-source","receipt":proof},{"name":"native-public-harness","receipt":proof},{"name":"final-target","receipt":proof},{"name":"installation","receipt":proof}],"stages":[{"name":"target-admission","process":observation},{"name":"installation","process":observation},{"name":"installation-reader","process":observation}],"started_unix_nanoseconds":1,"completed_unix_nanoseconds":2,"elapsed_nanoseconds":1,"cleanup_complete":true,"failure":null})
 }
 
 // Independent uncompressed ZIP fixture writer: production uses the platform unzip
@@ -1042,6 +1042,45 @@ fn actual_selection_dispatch_uses_authenticated_zip_bytes_and_portable_reader_be
             zip,
         );
     }
+    let acceptance_url = format!("repos/{REPOSITORY}/actions/artifacts/12/zip");
+    let accepted_artifact = api.service.artifacts[2].clone();
+    let accepted_zip = api.zips[&acceptance_url].clone();
+    // Authenticate the changed ZIP itself, so rejection must come from the current
+    // terminal contract rather than a mismatched local or service digest.
+    for (contract, workload) in [(3, 3), (3, 4), (4, 3)] {
+        let mut predecessor = terminal.clone();
+        predecessor["acceptance_contract"] =
+            json!(format!("lkjscript-final-candidate-acceptance-{contract}"));
+        predecessor["workload"] = json!(format!(
+            "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-{workload}"
+        ));
+        let zip = zip_fixture(&[(
+            "release-receipt.json".to_owned(),
+            super::super::candidate::canonical_terminal_fixture(predecessor)
+                .expect("canonical predecessor terminal"),
+        )]);
+        let file = root.join(format!("acceptance-contract-{contract}-{workload}.zip"));
+        fs::write(&file, &zip).expect("authenticated predecessor ZIP");
+        let (sha, bytes) =
+            super::super::archive::sha256_file(&file).expect("predecessor service identity");
+        api.service.artifacts[2]["digest"] = json!(format!("sha256:{}", sha.as_str()));
+        api.service.artifacts[2]["size_in_bytes"] = json!(bytes);
+        api.zips.insert(acceptance_url.clone(), zip);
+        let rejected = root.join(format!("rejected-contract-{contract}-{workload}"));
+        fs::create_dir(&rejected).expect("owned rejected selection root");
+        let options = BTreeMap::from([
+            ("producer-run".to_owned(), "17".to_owned()),
+            ("producer-attempt".to_owned(), "2".to_owned()),
+            ("output".to_owned(), rejected.to_string_lossy().into_owned()),
+        ]);
+        assert!(
+            execute("select", &options, &rejected, &context(), &mut api).is_err(),
+            "selected contract {contract} with workload {workload}"
+        );
+        assert!(!root.join("forbidden-verifier-execution").exists());
+    }
+    api.service.artifacts[2] = accepted_artifact;
+    api.zips.insert(acceptance_url, accepted_zip);
     let selected = root.join("selected");
     fs::create_dir(&selected).expect("selection root");
     let options = BTreeMap::from([

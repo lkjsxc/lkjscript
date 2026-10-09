@@ -10,6 +10,7 @@ fn listing() -> String {
         "native_parallel_reads::native_parallel_reads_scoped: test",
         "native_refresh::reviewed: test",
         "copied_binary_authors_builds_and_serves_interactive_topology_from_minimal: test",
+        "native_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment: test",
         "unrelated_test: test",
     ]
     .join("\n")
@@ -28,8 +29,8 @@ fn success(inventory: &Inventory) -> String {
 #[test]
 fn all_required_families_and_exact_topology_are_selected_without_unrelated_cases() {
     let inventory = inventory(&listing()).unwrap();
-    assert_eq!(inventory.all.len(), 9);
-    assert_eq!(inventory.selected.len(), 8);
+    assert_eq!(inventory.all.len(), 10);
+    assert_eq!(inventory.selected.len(), 9);
     assert!(!inventory.selected.contains("unrelated_test"));
     passed(&success(&inventory), &inventory).unwrap();
 }
@@ -37,7 +38,7 @@ fn all_required_families_and_exact_topology_are_selected_without_unrelated_cases
 #[test]
 fn missing_families_or_topology_never_become_vacuous_success() {
     let original = listing();
-    for omitted in 0..8 {
+    for omitted in 0..9 {
         let text = original
             .lines()
             .enumerate()
@@ -94,7 +95,7 @@ fn required_parallel_namespaces_accept_nested_paths_and_reject_substring_imposto
         "native_declarations::native_parallel_reads::nested::native_parallel_reads_scoped",
     );
     let inventory = inventory(&nested).unwrap();
-    assert_eq!(inventory.selected.len(), 8);
+    assert_eq!(inventory.selected.len(), 9);
     passed(&success(&inventory), &inventory).unwrap();
 }
 
@@ -122,19 +123,19 @@ fn a_successful_exit_or_summary_cannot_hide_unrun_ignored_or_duplicate_tests() {
     let inventory = inventory(&listing()).unwrap();
     let original = success(&inventory);
     for changed in [
-        original.replace("8 passed", "7 passed"),
+        original.replace("9 passed", "7 passed"),
         original.replace("0 ignored", "1 ignored"),
         original.replace("0 failed", "1 failed"),
         original.replace("0 measured", "1 measured"),
         original.replace("1 filtered out", "2 filtered out"),
-        original.replace("running 8 tests", "running 0 tests"),
+        original.replace("running 9 tests", "running 0 tests"),
         original.replacen(" ... ok", " ... ignored", 1),
         original.replacen(" ... ok", " ... FAILED", 1),
         original.lines().filter(|line| !line.starts_with("test buffers::")).collect::<Vec<_>>().join("\n"),
         original.clone() + "test native_declarations::native_owned_products::parallel::native_parallel_joined ... ok\n",
         original.clone() + "test unrelated_test ... ok\n",
         original.clone() + &original,
-        "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s\n".to_owned(),
+        "test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s\n".to_owned(),
     ] {
         assert!(passed(&changed, &inventory).is_err(), "accepted {changed}");
     }

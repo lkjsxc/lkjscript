@@ -47,17 +47,24 @@ pub struct Native {
 }
 impl Native {
     pub fn new() -> Self {
+        let candidate = std::env::var_os("LKJSCRIPT_COMPONENT_CANDIDATE")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(env!("CARGO_BIN_EXE_lkjscript")));
+        Self::from_candidate(&candidate)
+    }
+    // Explicit selection is authoritative; never consult an environment fallback here.
+    pub fn from_candidate(candidate: &Path) -> Self {
+        let expected = digest(candidate);
         let temporary = tempfile::Builder::new()
             .prefix("lkjscript-components-")
             .tempdir()
             .unwrap();
         let root = temporary.path().to_path_buf();
         fs::create_dir(root.join("home")).unwrap();
-        let candidate = std::env::var_os("LKJSCRIPT_COMPONENT_CANDIDATE")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(env!("CARGO_BIN_EXE_lkjscript")));
-        fs::copy(&candidate, root.join("lkjscript")).unwrap();
-        assert_eq!(digest(&candidate), digest(&root.join("lkjscript")));
+
+        fs::copy(candidate, root.join("lkjscript")).unwrap();
+        assert_eq!(expected, digest(candidate));
+        assert_eq!(expected, digest(&root.join("lkjscript")));
         Self {
             temporary: Some(temporary),
             root,
