@@ -2,7 +2,7 @@
 
 ## Accepted source and mainline delivery
 
-The selected development product identity remains **0.1.89**. Direct immutable
+Published **v0.1.89** selects the Map predecessor described below. Direct immutable
 List construction is accepted at source
 `418cb56fef2fec63477f118e17f6a8458a0089a2`, tree
 `a2201001c22c5d3d3036aa86e929cd8c8abacb03`.
@@ -88,23 +88,64 @@ The final-candidate owner still requires all native families under acceptance
 contract/workload generation 4; no family, candidate-binding or inventory check
 is removed by this change. See [release acceptance](release.md).
 
-## Distribution and next boundary
+## Published Map release and successor boundary
 
-The independently rechecked public/latest release remains immutable **v0.1.83**.
-Existing candidate [37910899478/1](https://github.com/lkjsxc/lkjscript/actions/runs/37910899478)
-selects predecessor source `1b7e95badb13e5ddcc9d557027c1977fd4f2a271` and was still
-in progress at the last observation. It cannot attest this List optimization.
-No competing candidate, tag, publication-control change or application deployment
-was performed in this continuation. Preserve that producer and recheck its exact
-terminal before making any publication decision.
+**v0.1.89** is the immutable ordinary public/latest release:
+[release and notes](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.89).
+Its accepted product source is `1b7e95badb13e5ddcc9d557027c1977fd4f2a271`,
+with annotated tag object `ff39871407a911853c38ed17e38606f4655e4cee`.
+Local/remote tag objects, exact source and verbatim Markdown annotation were
+independently compared before the scoped publication selector was updated and
+read back. Existing immutability and protection settings were preserved.
 
-The next distribution boundary is a separately selected integrated-source
-candidate for this successor, with an unoccupied identity when required, complete
-finalized-archive acceptance, unchanged-asset promotion and anonymous verification.
-Do not relabel a predecessor's proof. Source integration is complete independently
-of that release boundary. Further optimization should measure actual consumers
-and per-element/intermediate-list costs rather than infer application speed from
-construction-node counts.
+[Candidate 37910899478/1](https://github.com/lkjsxc/lkjscript/actions/runs/37910899478)
+completed successfully under final-candidate acceptance contract/workload 4:
+20/20 fresh source gates, six target owners, two pinned userlands, installed
+recovery, original receipt readers and joined cleanup. Its final archive's
+executable SHA256 is `e24c054f9b3e44a71a8875aba5385aad82dc391a1eae88a6c115fca75bc5c9a9`.
+The required public harness executed all 69 selected cases once: 69 passed,
+zero failed or ignored, including the exact detached Map matrix and independent
+cost oracle. The complete matrix retains 192 complete result executions, deleted
+sources, full raw input admission, refusal/recovery and cleanup. Its copied
+candidate identity matches the executable extracted from the accepted archive.
+
+[Promotion 37925038733/1](https://github.com/lkjsxc/lkjscript/actions/runs/37925038733)
+completed with `immutable_published_and_public_verified`: authority authorized,
+publication and public verification successful, latest selected v0.1.89 and its
+exact accepted source. The controller came from main `1dcd76ab`; it executed zero
+product builds. Public bootstrap installation and the create/edit/build/run
+lifecycle passed in the separate read-only job with publishing credentials absent.
+Independent anonymous exact-tag, latest and release-ID reads agree on ordinary
+immutable release `407859944`; all three downloaded assets compare byte-for-byte
+with the accepted candidate.
+
+The archive, SHA256SUMS and install.sh were promoted without rebuilding. Their
+respective lengths and SHA256 values are:
+
+| Asset | Bytes | SHA256 |
+| --- | ---: | --- |
+| lkjscript-x86_64-unknown-linux-musl.tar.gz | 15300391 | `3b4ced16faa94142c3bcf70098be4168a462dc661d0d3095089dcfd9b0860418` |
+| SHA256SUMS | 109 | `307cb99a220fe33d63be2d61e7668a733162cc8fa2abaa3c32331beb7bc96ae5` |
+| install.sh | 3566 | `4399604f625b77da9e35eb2dff21a1bceb69f4daff6a4df22b4ec605eb2f4b8d` |
+
+Original candidate/publication artifacts, anonymous acquisition and final report
+checks remain in `/home/coder/workspace/lkjscript-map-release-final-report-20261009/.artifacts/final-report/`.
+The accepted Map correction `4fba5833` and serialized workflow follow-up `8f02fcf1`
+each have separate fresh 26/26 full-check acceptance; their retained original
+receipts are respectively `1791523334550838046-1232059-0` and
+`1791534915673731595-1782877-0` in the Map checkouts below. Original diagnostic
+regressions returned 0 passed / 3 failed / exit 101 before correction and all
+three passed afterward. A previous full attempt on `8f02fcf1` failed two existing
+timing-sensitive cases under concurrent host load; its originals remain under
+`.artifacts/release-report/serialized-full-failed-originals/`. The successful full
+used bounded local parallelism; tests, assertions and deadlines were unchanged.
+Failed candidate `37892791430/1` preceded source-gate serialization and is not the
+accepted producer. Older candidate `37643217328/1` was never substituted.
+
+The later bulk-List source described above is integrated but is **not included in
+v0.1.89**. Its future distribution requires an unoccupied product identity and a
+new integrated-source candidate with complete final-byte/public acceptance. Do
+not relabel v0.1.89 or its predecessor proof. No application deployment was made.
 
 ## Retained failures and continuation owners
 
