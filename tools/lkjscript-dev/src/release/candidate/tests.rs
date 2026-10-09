@@ -50,8 +50,8 @@ fn terminal() -> Terminal {
         source_commit: "1".repeat(40),
         controller_source_commit: "1".repeat(40),
         tag: "v0.1.39".to_owned(),
-        acceptance_contract: "lkjscript-final-candidate-acceptance-3".to_owned(),
-        workload: "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-3"
+        acceptance_contract: "lkjscript-final-candidate-acceptance-4".to_owned(),
+        workload: "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-4"
             .to_owned(),
         target_triple: "x86_64-unknown-linux-musl".to_owned(),
         target_policy_sha256: target::policy_sha256().expect("current target policy"),
@@ -342,4 +342,41 @@ fn candidate_requires_native_public_proof_without_relabelling_the_old_contract()
     relabelled.acceptance_contract = original.acceptance_contract;
     relabelled.workload = original.workload;
     assert!(validate_terminal(&relabelled).is_err());
+}
+
+#[test]
+fn candidate_terminal_rejects_pre_map_and_mixed_acceptance_generations_then_recovers() {
+    let temporary = tempfile::tempdir().expect("contract fixtures");
+    let path = temporary.path().join("terminal.json");
+    let current = terminal();
+    assert_eq!(
+        current.acceptance_contract,
+        "lkjscript-final-candidate-acceptance-4"
+    );
+    assert_eq!(
+        current.workload,
+        "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-4"
+    );
+    write_terminal(&path, &current);
+    assert!(read_terminal(&path).is_ok());
+    for (contract, workload) in [(3, 3), (3, 4), (4, 3)] {
+        let mut predecessor = current.clone();
+        predecessor.acceptance_contract =
+            format!("lkjscript-final-candidate-acceptance-{contract}");
+        predecessor.workload = format!(
+            "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-{workload}"
+        );
+        write_terminal(&path, &predecessor);
+        assert!(
+            read_terminal(&path).is_err(),
+            "accepted contract {contract} with workload {workload}"
+        );
+        assert!(
+            controller_content(&path, &"1".repeat(40), &"2".repeat(64), 101, 2).is_err(),
+            "controller admitted contract {contract} with workload {workload}"
+        );
+    }
+    write_terminal(&path, &current);
+    assert!(read_terminal(&path).is_ok());
+    assert!(controller_content(&path, &"1".repeat(40), &"2".repeat(64), 101, 2).is_ok());
 }

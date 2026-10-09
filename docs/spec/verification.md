@@ -45,9 +45,10 @@ The finalized public-harness owner requires every enumerated `native_refresh`
 case alongside its existing native families. Inventory omission, ignored cases,
 substitution, incomplete output, failure, cancellation or unjoined cleanup blocks
 acceptance. The source-matched copied harness runs the exact executable extracted
-from the finalized archive outside the checkout. Candidate acceptance contract 3
-requires this new obligation; historical terminals retain their original contract
-and cannot be relabelled as refresh acceptance.
+from the finalized archive outside the checkout. Current candidate acceptance
+contract 4 preserves this obligation alongside the complete Map matrix below;
+historical terminals retain their original contract and cannot be relabelled as
+current acceptance.
 
 ## Owned effect and requirement applications
 
@@ -1120,6 +1121,7 @@ external non-publishing candidate job completes, but the missing hosted proof mu
 | Checker correctness and no-Python/product-surface policy | Release-source `checker_self_test`, `rust_only_tooling`, `product_surface_audit`, `diff_check` |
 | Maintained standard/lkjournal and built-in artifacts/transports, generated discovery | The existing ten package/artifact gates and `generated_public_guides` in release-source |
 | Native development-tool source, all eight guides, exact derived artifact, fresh authoring, canonical re-entry, independent output and detached old/new execution | Existing `workspace_tests` through `tests/public_cli/native_guides.rs`; `generated_public_guides` separately checks published document bytes |
+| Complete checked Map-entry matrix and all enumerated Map cases; existing native public families | The source-matched `public_cli` harness runs the finalized executable outside the checkout, with explicit candidate identity binding and exact per-case terminal admission |
 | Distributed HTTP, outbound HTTP, offline packages, pure tail, stateful HTTP, standalone service | The six unchanged target owners run once against the immutable executable extracted from the final archive |
 | Embedded evaluator/reference/resource/cancellation probes used by offline packages and pure tail | The same source-built, identity-bound verifier executes and admits these source-only subprocesses within those target owners; they are explicitly not target-executable observations |
 | Static ELF/linkage and both pinned userlands | Exact-final-candidate target admission, with independent ELF inspection and unchanged pinned-userland lifecycles |
@@ -2203,3 +2205,44 @@ full recursive generic library, preserve reviewed identities, reject invalid unu
 source with unchanged accepted HEAD, and execute its independent concrete consumer
 after removal of its disposable source and transport. Internal fixture success is
 not a substitute for that public behavior or final distributed-byte acceptance.
+
+## Checked Map-entry projection
+
+The [checked projection decision](../decisions/checked-map-entry-projection.md)
+requires complete results against an independent ordered-map oracle. The maintained
+`tests/public_cli/native_map_entries.rs` suite runs in the final public owner
+`tests/public_cli.rs` under `native_map_entries::`; the standalone
+`tests/native_map_entries.rs` wrapper includes the same suite. Every enumerated case in that
+family is required, including the exact
+`native_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment`
+matrix. A cost-predicate-only suite, similar name or substituted namespace cannot
+satisfy the execution obligation.
+
+Pass the validated `LKJSCRIPT_RELEASE_CANDIDATE` path explicitly to the copying
+helper. Check the selected executable before and after copying and execution;
+`LKJSCRIPT_COMPONENT_CANDIDATE` or a development `CARGO_BIN_EXE` fallback cannot
+replace it. Standalone native tests retain their existing explicit component-candidate
+selection. The source-matched harness must exercise the exact executable extracted
+from the finalized archive outside the checkout, under the existing closed environment.
+
+Freshly author, check and build through the copied product, retain the literal
+requests, then remove the disposable source project and standard transport. The
+detached matrix covers 8 sizes (0, 1, 31, 32, 33, 256, 1,024 and 4,096), 4 insertion
+orders/update patterns, 3 repetition counts (0, 1 and 8), and both enumeration and
+length-control modes: 192 complete result comparisons. Check all keys and payloads,
+duplicate replacement, the full raw input including overwritten/unused values,
+matched traversal bounds and unchanged artifact identity. Resource refusal,
+malformed input, valid recovery and joined cleanup remain required. A standalone
+cost function or success summary cannot establish any candidate invocation.
+
+Inventory selection and original bounded logs must establish that each selected
+case ran once and passed. Missing, duplicate, ignored, unexecuted, failed or
+substituted cases and forged success summaries block admission. Keep the current
+complete matrix mandatory while selecting future cases in the same Map family.
+Final-candidate contract `lkjscript-final-candidate-acceptance-4` pairs only with
+workload
+`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-4`.
+Reject contract 3, workload 3 and all mixed predecessor/current combinations even
+when other terminal counters and authenticated ZIP identities are valid. Earlier
+contracts retain their historical meaning; this acceptance change does not advance
+semantic graph, type or artifact encoding generations.

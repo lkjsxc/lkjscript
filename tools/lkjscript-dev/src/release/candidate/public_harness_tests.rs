@@ -1,8 +1,8 @@
 use super::*;
 use std::os::unix::fs::PermissionsExt;
 
-const LIST: &str = "native_owned_fixture: test\nnative_byte_buffer_fixture: test\nnative_byte_ranges_fixture: test\nresident_policy::fixture: test\nnative_declarations::native_owned_products::parallel::native_parallel_fixture: test\nnative_declarations::native_parallel_reads::native_parallel_reads_fixture: test\nnative_refresh::fixture: test\ncopied_binary_authors_builds_and_serves_interactive_topology_from_minimal: test\nunrelated: test\n";
-const SUCCESS: &str = "\nrunning 8 tests\ntest native_owned_fixture ... ok\ntest native_byte_buffer_fixture ... ok\ntest native_byte_ranges_fixture ... ok\ntest resident_policy::fixture ... ok\ntest native_declarations::native_owned_products::parallel::native_parallel_fixture ... ok\ntest native_declarations::native_parallel_reads::native_parallel_reads_fixture ... ok\ntest native_refresh::fixture ... ok\ntest copied_binary_authors_builds_and_serves_interactive_topology_from_minimal ... ok\n\ntest result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s\n";
+const LIST: &str = "native_owned_fixture: test\nnative_byte_buffer_fixture: test\nnative_byte_ranges_fixture: test\nresident_policy::fixture: test\nnative_declarations::native_owned_products::parallel::native_parallel_fixture: test\nnative_declarations::native_parallel_reads::native_parallel_reads_fixture: test\nnative_refresh::fixture: test\ncopied_binary_authors_builds_and_serves_interactive_topology_from_minimal: test\nnative_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment: test\nunrelated: test\n";
+const SUCCESS: &str = "\nrunning 9 tests\ntest native_owned_fixture ... ok\ntest native_byte_buffer_fixture ... ok\ntest native_byte_ranges_fixture ... ok\ntest resident_policy::fixture ... ok\ntest native_declarations::native_owned_products::parallel::native_parallel_fixture ... ok\ntest native_declarations::native_parallel_reads::native_parallel_reads_fixture ... ok\ntest native_refresh::fixture ... ok\ntest copied_binary_authors_builds_and_serves_interactive_topology_from_minimal ... ok\ntest native_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment ... ok\n\ntest result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s\n";
 
 fn runner<'a>(root: &'a Path, control: &'a process::ProcessControl) -> Runner<'a> {
     let candidate = root.join("candidate");
@@ -31,7 +31,7 @@ fn runner<'a>(root: &'a Path, control: &'a process::ProcessControl) -> Runner<'a
 fn harness(root: &Path, output: &str, exit: i32) -> PathBuf {
     let path = root.join("fixture-harness");
     let script = format!(
-        "#!/bin/sh\nset -eu\n[ \"$PATH\" = '' ]\n[ \"$HOME\" = \"$PWD/home\" ]\n[ \"$TMPDIR\" = \"$PWD/tmp\" ]\n[ -z \"${{CARGO_HOME+x}}\" ]\n[ -z \"${{GH_TOKEN+x}}\" ]\n[ -z \"${{GITHUB_TOKEN+x}}\" ]\n[ -f \"$LKJSCRIPT_RELEASE_CANDIDATE\" ]\nif [ \"$1\" = '--list' ]; then\nprintf '%s' '{LIST}'\nelse\n[ \"$1\" = '--exact' ]\n[ \"$2\" = '--test-threads=1' ]\n[ \"$3\" = '--color=never' ]\n[ \"$#\" = 11 ]\nprintf '%s' '{output}'\nexit {exit}\nfi\n"
+        "#!/bin/sh\nset -eu\n[ \"$PATH\" = '' ]\n[ \"$HOME\" = \"$PWD/home\" ]\n[ \"$TMPDIR\" = \"$PWD/tmp\" ]\n[ -z \"${{CARGO_HOME+x}}\" ]\n[ -z \"${{GH_TOKEN+x}}\" ]\n[ -z \"${{GITHUB_TOKEN+x}}\" ]\n[ -f \"$LKJSCRIPT_RELEASE_CANDIDATE\" ]\nif [ \"$1\" = '--list' ]; then\nprintf '%s' '{LIST}'\nelse\n[ \"$1\" = '--exact' ]\n[ \"$2\" = '--test-threads=1' ]\n[ \"$3\" = '--color=never' ]\n[ \"$#\" = 12 ]\nprintf '%s' '{output}'\nexit {exit}\nfi\n"
     );
     fs::write(&path, script).unwrap();
     fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
@@ -48,7 +48,7 @@ fn native_runner_uses_closed_environment_exact_inventory_and_retained_processes(
     runner
         .evaluate(&executable, &root.path().join("candidate"), work.path())
         .unwrap();
-    assert_eq!(runner.receipt.inventory.as_ref().unwrap().selected.len(), 8);
+    assert_eq!(runner.receipt.inventory.as_ref().unwrap().selected.len(), 9);
     assert_eq!(runner.receipt.phases.len(), 2);
     assert!(
         runner
@@ -61,7 +61,7 @@ fn native_runner_uses_closed_environment_exact_inventory_and_retained_processes(
     assert!(!runner.receipt.cleanup_complete);
     let record: serde_json::Value =
         serde_json::from_slice(&fs::read(root.path().join("receipt.json")).unwrap()).unwrap();
-    assert_eq!(record["inventory"]["selected"].as_array().unwrap().len(), 8);
+    assert_eq!(record["inventory"]["selected"].as_array().unwrap().len(), 9);
     assert!(root.path().join("inventory.stdout.log").is_file());
     assert!(root.path().join("execute.stderr.log").is_file());
 }
@@ -176,4 +176,34 @@ fn native_source_witness_accepts_linked_worktrees_without_relaxing_root_identity
     fs::remove_file(worktree.join("Cargo.toml")).unwrap();
     std::os::unix::fs::symlink(root.join("Cargo.toml"), worktree.join("Cargo.toml")).unwrap();
     assert!(harness_repository(&worktree).is_err());
+}
+
+#[test]
+fn native_runner_rejects_substituted_or_changed_candidate_even_with_passing_output() {
+    for mutate_during in [false, true] {
+        let root = tempfile::tempdir().unwrap();
+        let work = tempfile::tempdir().unwrap();
+        let executable = harness(root.path(), SUCCESS, 0);
+        let control = process::ProcessControl::default();
+        let mut runner = runner(root.path(), &control);
+        if mutate_during {
+            let script = fs::read_to_string(&executable).unwrap().replace(
+                "exit 0",
+                "printf 'substituted' > \"$LKJSCRIPT_RELEASE_CANDIDATE\"\nexit 0",
+            );
+            fs::write(&executable, script).unwrap();
+        } else {
+            fs::write(root.path().join("candidate"), "substituted").unwrap();
+        }
+        assert!(
+            runner
+                .evaluate(&executable, &root.path().join("candidate"), work.path())
+                .is_err()
+        );
+        assert_eq!(
+            runner.receipt.phases.len(),
+            if mutate_during { 2 } else { 0 }
+        );
+        assert!(!runner.receipt.cleanup_complete);
+    }
 }

@@ -22,6 +22,7 @@ const REQUIRED_FAMILIES: [(&str, Option<&str>); 7] = [
     ("native_refresh", None),
 ];
 const TOPOLOGY: &str = "copied_binary_authors_builds_and_serves_interactive_topology_from_minimal";
+const MAP_MATRIX: &str = "native_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment";
 const MAXIMUM_TESTS: usize = 4096;
 
 #[derive(Debug, serde::Serialize)]
@@ -116,9 +117,17 @@ pub(super) fn inventory(output: &str) -> Result<Inventory, DevError> {
         all.contains(TOPOLOGY),
         "required interactive topology witness is absent",
     )?;
+    require(
+        all.contains(MAP_MATRIX),
+        "required complete detached Map execution matrix is absent",
+    )?;
     let selected = all
         .iter()
-        .filter(|name| FAMILIES.iter().any(|family| name.contains(family)) || *name == TOPOLOGY)
+        .filter(|name| {
+            FAMILIES.iter().any(|family| name.contains(family))
+                || name.starts_with("native_map_entries::")
+                || *name == TOPOLOGY
+        })
         .cloned()
         .collect();
     Ok(Inventory { all, selected })
@@ -169,3 +178,7 @@ pub(super) fn passed(output: &str, inventory: &Inventory) -> Result<(), DevError
 #[cfg(test)]
 #[path = "public_inventory_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "public_inventory_map_tests.rs"]
+mod map_tests;
