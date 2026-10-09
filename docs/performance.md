@@ -2385,3 +2385,19 @@ Original evidence is `.artifacts/list-bulk/` in
 `candidate-focused-tests`, `candidate-focused-inputs.sha256` and the executable
 hash manifests. The frozen pre-implementation design and failing predecessor are
 retained. Current integration and full acceptance belong to [status](status.md).
+
+## Paired native consumer observation (2026-10-10)
+
+The [same-artifact host comparison](../examples/map-entry-projection/consumer-fold/experiment/host-comparison.md)
+adds 400 complete before/after executions with rotated strategy and executable
+order, independent results/cleanup checking and all warm-up/adverse observations
+retained. Current native blocked-eight aggregation takes about 26% less invocation
+time than the current standard fold at 16,384 entries and eight repeats. That is
+an explicit library-strategy comparison, not a runtime change in this contribution.
+
+Across the predecessor and integrated bulk-List host executables, consumer timings
+are mixed; blocked-eight is slower in the successor while some other medians improve.
+The construction-node reduction does not establish a uniform consumer speedup.
+Preparation, allocation accounting and whole-process RSS remain separate metrics.
+Use the complete linked table and original identities, not historical sample times
+or node counts relabelled as a current whole-language or application gain.
