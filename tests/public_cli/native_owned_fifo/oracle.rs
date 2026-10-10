@@ -6,15 +6,16 @@ pub(super) fn action(kind: i64, value: i64) -> Value {
 }
 
 pub(super) fn expected(actions: &[Value], mode: usize) -> Value {
+    assert!(mode < 3, "unknown independent carrier mode");
     let encode = |value: i64| match mode {
         0 => value,
         1 => value * 255 + 255,
-        2 => value * 255 + 286,
-        _ => panic!("unknown independent carrier mode"),
+        _ => value * 255 + 286,
     };
     let mut queue = VecDeque::new();
     let events: Vec<Value> = actions.iter().map(|input| {
         let kind = input["kind"].as_i64().unwrap();
+        assert!((0..=3).contains(&kind), "invalid independent model operation");
         let observed = match kind {
             0 => {
                 let value = encode(input["value"].as_i64().unwrap());
@@ -23,8 +24,7 @@ pub(super) fn expected(actions: &[Value], mode: usize) -> Value {
             },
             1 => queue.pop_front(),
             2 => queue.front().copied(),
-            3 => { queue.clear(); None },
-            _ => panic!("invalid independent model operation"),
+            _ => { queue.clear(); None },
         };
         json!({"kind":kind,"present":observed.is_some(),"value":observed.unwrap_or(0),"length":queue.len()})
     }).collect();
