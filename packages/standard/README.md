@@ -78,12 +78,12 @@ Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_c3bcf5a07bdc9f8400fdf670fffcd5a0a85b54ff6f86ce7514c2c5f36cab41e4`;
-- package revision: `package_revision_0e4e6817d0e26a8a6d549f0ea94cf5dad160b6d40b2d66023f5c352c801943c5`;
-- package transport: `package_transport_d39a5c17b73d1ed8841dd1302f55d4e8db5ccd51e44d9785b0124d79263e1a1d`;
-- artifact manifest: `artifact_manifest_0d12e09689ae334bcce7a74a9580ffc88a0ee7ec31d6d56f1e1e82ada9a96724`;
-- artifact bundle: `artifact_bundle_9c9cd79ae2b4cb0bc4304cbe4d5f7ae9d6a3d6e7b91e212fdbe6ff67d5ccdede`;
-- 1,900 live semantic owners, 247 compiler units, and 96 graph tests.
+- semantic revision: `rev_bd483d9d5aa4cdc6a92b3802b57fac1f9347f137ea231b74331499bf1c2e976a`;
+- package revision: `package_revision_a33077c6f1ef1aba6027111a056fd66edf688c8cf5a4b461e0b3dd58ae1c722c`;
+- package transport: `package_transport_5350c037a901b7b8a918f9ccdbd5ef2f43b9095ac825c5389d04a9902bc6ef06`;
+- artifact manifest: `artifact_manifest_61ecc113becd28ca80fbcdc6f7293d2d9d4c27642be5206463bb5d4790c18983`;
+- artifact bundle: `artifact_bundle_bb62defe1f9548c44c540d437c02600abec83456a1fb94a752b995a5c54b5d05`;
+- 2,416 live semantic owners, 269 compiler units, and 106 graph tests.
 
 Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose
 ordinary parametric records with pure functions. Mapping invokes the first callback then the second,
@@ -277,10 +277,30 @@ derived the Graph 21 transport and compiler 19 / bytecode 15 / artifact 26
 bundle through public export/build. All 89 graph tests agree between production and
 reference execution; accepted HEAD and standard operations retain their meaning.
 
-The current refresh for scoped task borrowing derives the interface 18 transport
+The earlier refresh for scoped task borrowing derives the interface 18 transport
 through public export and the compiler 30 / bytecode 25 / artifact 37 bundle
 through public check/build. All 96 tests agree between production and reference
-execution. The package revision and transport pins above select those current
-wrappers; accepted HEAD and standard operations retain their existing meaning.
+execution. The package revision and transport pins at that checkpoint selected those
+wrappers; that refresh retained accepted HEAD and existing standard meaning.
 The [current release notes](../../docs/releases/v0.1.81.md) identify the selected
 compatibility boundary; [status](../../docs/status.md) owns actual acceptance.
+
+## Native owned FIFO
+
+The current source adds `fifo-empty<T: Owned>`, `fifo-length`, `fifo-push`,
+`fifo-pop`, `fifo-front` and `fifo-discard` as ordinary pure graph functions.
+Their structural owned product contains incoming and outgoing owned sequences.
+Push and pop transfer custody; both pop outcomes retain the queue for reuse.
+Front returns an exact source-tied borrowed element without removing it, and an
+empty front traps. Existing lexical loan rules protect every ancestor owner.
+
+The private refill moves each enqueued element between stacks at most once;
+this is an amortized sequence-transfer bound, not a constant VM-time or
+bounded-latency claim. No FIFO-specific runtime primitive or encoding change is
+introduced. The [native guide](../../docs/guides/native-owned-fifo.md) records
+representation, allocation, lifetime and resource limits. Ten additional fixed
+graph tests cover order, empty reuse, mixed stacks, repeated front reads and
+nested cleanup. The [independent consumer](../../examples/owned-fifo/README.md)
+exercises transported generic code and source-free execution over three distinct
+owned element representations. These development additions are not present in
+the immutable v0.1.89 executable; publication remains separately accepted.

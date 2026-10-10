@@ -1209,8 +1209,8 @@ fn run_workflow(
         isolated_root,
     )?;
     let check_records = compact_records("check", &checked.stdout)?;
-    // The current standard contributes 96 tests; the HTTP recipe contributes one.
-    require_field(&check_records, "tests", "passed", "97")?;
+    // The current standard contributes 106 tests; the HTTP recipe contributes one.
+    require_field(&check_records, "tests", "passed", "107")?;
     require_field(&check_records, "tests", "failed", "0")?;
     require_field(&check_records, "tests", "differential", "equal")?;
     let check_compilation = compiler_observation(&check_records)?;

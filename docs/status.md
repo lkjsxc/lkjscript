@@ -1,128 +1,88 @@
 # Current status
 
-Snapshot: 2026-10-10. Product identifiers are opaque. Accepted source, delivered
-mainline, exact host bytes, finalized publication and running applications remain
-separate boundaries.
+Snapshot: 2026-10-11. Product identifiers are opaque. Source acceptance,
+delivered mainline, exact host bytes, finalized publication and application
+selection remain separate boundaries.
 
-## Delivered runtime and failed candidate
+## Delivered source verification correction
 
-Remote main was independently reread through Git and the connected GitHub API as
-`b2bc935ed25c90c23a2b61a86271c2f792e7789f`. The delivered development 0.1.90 runtime
-remains source `5f46e96a8f0d648f286c58ac1617bbd9bf4e4515`, tree
-`2f832367988dc8391157d721f56119a6f4506ad4`, normally merged by `a065f740` through
-PR #12. Its original full source and exact-host native acceptance remain separate
-from this verification-tool correction. The host executable SHA256 is
-`9e2e2d8a49049974d246efdac955e22187cfb5396445f7fe4cb489e95d6cd6d6`.
+The original full run for `862ccb89275ae946ca8ecac2925eae5bae33f8f8`, tree
+`cf14b45f7ceccee59f069980e097404e26cc94a2`, completed with exit zero and
+**26/26 fresh gates**, stable inputs, zero reuse and zero unrun gates.
+Workspace targets passed **2,312**, failed **0**, with **29 existing ignored**;
+two filtered child probes are separate, not added to those totals.
 
-The non-publishing 0.1.90 candidate `38034392926/1`, source `a065f740`, failed its
-source-specific workspace-test deadline. The original source receipt reports
-19/20 fresh passes and the workspace timeout; final assets were not built or
-accepted. This is not a published defective archive. Original candidate diagnostics
-remain in `.artifacts/release-38034392926/` under
-`/home/coder/workspace/lkjscript-compiler-dependency-bridge-20261010`.
+PR #13 was normally merged as `574a8b5783077cb0654ecd85ede94105cb6912a1`.
+Git and the connected GitHub API independently agreed. The merge's second parent
+is the exact accepted source and its tree is identical. The change retains
+optimized verification with debug assertions and overflow checks, explicit
+unoptimized `test-debug`, and exact Cargo compiler-artifact/build-finished
+origin binding rather than accepting a pre-existing output pathname.
 
-Public/latest was last independently observed as immutable **v0.1.89**, release
-407859944, source `1b7e95badb13e5ddcc9d557027c1977fd4f2a271`, producer
-`37910899478/1` and promotion `37925038733/1`. Its executable SHA256 remains
-`e24c054f9b3e44a71a8875aba5385aad82dc391a1eae88a6c115fca75bc5c9a9`.
-No replacement tag, promotion, local runtime selection or application deployment
-has been performed by this continuation.
+Complete originals remain under
+`/home/coder/workspace/lkjscript-cargo-output-binding-20261010/.artifacts/`.
+The receipt owner is `lkjscript-dev/check/1791644693506512515-4012146-0/`, digest
+`verification_4e5ea52cac03550439897c8b08d63a3f5afa7cbcae06493fdf9cc70b35cef188`.
+`cargo-output-binding/full-862ccb89/final-audit-20261011.stdout` records the
+read-only corroboration of all 26 gates and 59 original log/output proofs.
+Earlier failed, partial and unavailable observations remain preserved; their
+summaries are not substituted for this exact full acceptance.
 
-## Selected correction: executable output origin
+## Current increment: ordinary native owned FIFO
 
-Current isolated worktree:
-`/home/coder/workspace/lkjscript-cargo-output-binding-20261010`, branch
-`work/cargo-output-binding-20261010`, based on corrected profile source
-`2916090e5c3a25d90cbb8bcfbcb5b2f5a0f5f77c`. This correction requires its own full
-source acceptance; the parent's observations do not certify the new verifier.
+The isolated worktree is
+`/home/coder/workspace/lkjscript-native-fifo-20261011`, branch
+`work/native-fifo-20261011`, based on that delivered merge. It adds six ordinary
+pure generic FIFO operations to the accepted standard graph. Existing owned
+sequences, products, choices and source-tied borrowed results own all behavior;
+there is no FIFO-specific runtime intrinsic or encoding transition.
 
-The source checker formerly accepted a declared regular output after successful
-Cargo exit even when Cargo wrote its actual executable to a different target
-location. A real independent Cargo fixture and the actual gate executor reproduce
-this: the original negative control reports one expected failure and one pass;
-the stale 19-byte file was incorrectly marked Passed and retained as gate output.
-This does not claim that a complete release was accepted with that fixture.
+The [guide](guides/native-owned-fifo.md) defines the public structural shape,
+empty behavior, custody and transfer-cost limits. Both dequeue outcomes retain
+the remaining queue. Front can be borrowed and forwarded without consuming or
+copying the payload. A pending refill can still have linear work and retain spare
+capacity; no universal runtime-speed or bounded-latency improvement is claimed.
 
-The [origin boundary](development-verification.md#cargo-output-origin-not-a-pre-existing-path)
-now checks the observed Cargo compiler-artifact and successful build-finished
-records: exact root manifest, binary target, non-test profile and declared executable
-path in both executable/filenames. Missing, duplicate, conflicting and malformed
-claims fail independently of file presence. Cargo's own fresh compilation outputs
-remain usable. The two maintained executable producers run Cargo each time rather
-than replaying gate-result evidence, so external output selection cannot be hidden
-by an old producer receipt. No Cargo configuration is silently overridden.
+The exact standard semantic revision is
+`rev_bd483d9d5aa4cdc6a92b3802b57fac1f9347f137ea231b74331499bf1c2e976a`.
+All **106 graph tests** pass in both evaluators, including ten new fixed cases.
+Public native plan/apply, build and export produced the new standard graph,
+transport and embedded artifact; generated projections are not a second source.
 
-The generic verification-cache store/load paths and the independent source reader
-also recheck the relation. Their negative controls consistently rehash modified
-logs, commands and dependent evidence, so a digest mismatch is not the only reason
-for refusal. Cargo/test output after build-finished cannot supply a missing build
-artifact. Cargo and its environment remain trusted; this is not a hostile-build
-sandbox or proof of arbitrary compiler behavior.
+The [independent consumer](../examples/owned-fifo/README.md) exports generic
+processing before a separate package supplies cells, two-byte buffers and
+stamped owned packets. The focused source run passes **5/5**, with no failures
+or ignored selections. It includes all 781 short operation words in three
+representations, attached differential and source-free execution: **4,686
+scenario comparisons**, plus long traces, scalar extremes, malformed input,
+rejected loan violations, finite fuel refusal and joined cleanup.
 
-Focused validation passes **66/66**, with no failures or ignored selections.
-The complete development-tool library passes **281**, fails **0**, and preserves
-**19 existing ignored tests**; the 66 are included, not additional. Clippy passes
-all development-tool targets/features with warnings denied. A working predecessor
-executable is also exercised: it still prints its old result while the redirected
-current executable prints its new result, and the old path is refused as the
-current producer's output. These are not yet a new 26-gate full-source receipt.
+Evidence belongs to `.artifacts/native-fifo/` in the current worktree. The initial
+focused run passed four cases and failed one incorrect diagnostic expectation:
+empty-front indexing is `semantic/normalized_sequence_index`, not the initially
+expected spelling/class. Independent attached and detached observations agreed;
+only the test expectation changed. Both runs and the complete successful
+`focused/public-v2` terminal remain. This is focused acceptance, not yet a new
+26-gate complete source receipt or mainline delivery of the FIFO increment.
 
-Original evidence is `.artifacts/cargo-output-binding/` in this worktree. It retains
-all focused stdout/stderr/exit/time files, the original expected failure, and
-`pre-fix-fixture.tar.gz` with its SHA256. The original failed fixture remains at
-`/tmp/.tmpqb10nu`; the archive is preserved on persistent storage. A reader fixture's
-initial positive-control failure serialized an OsStr as tagged data rather than a
-UTF-8 target name. Its failed originals remain separate; the fixture was corrected,
-not an admission condition weakened.
+The compiler's admission envelope is much larger than the bounded native
+planner's. Replacing its planner merely to claim self-hosting would regress
+supported scale. FIFO is maintained standard-library adoption and a composable
+building block, not a claim that the compiler already uses native planning.
 
-## Economical verification and original custody
+## Publication and completion
 
-The parent separates ordinary `profile.test` (optimization 2, line tables,
-debug assertions and overflow checks retained, no Rust incremental cache) from
-explicit `profile.test-debug` (optimization 0, full debug information, incremental).
-Development defaults, release optimization, coverage, gate inventory and deadlines
-are not reduced. The matched seven-fold observations, command/feature correction,
-immutable comparison archive and original failed measurement remain under
-`.artifacts/verification-profile/` in the preceding worktree. They are narrow
-same-workload observations, not a universal runtime or cold-build speedup.
+The selected development product remains **0.1.90**. The last independently
+observed public/latest is immutable **v0.1.89**, release 407859944. The earlier
+non-publishing 0.1.90 candidate `38034392926/1` failed its workspace deadline;
+no finalized archive from it was accepted or promoted. Its original failure
+remains under the compiler-dependency-bridge worktree.
 
-The original full ac167709 execution terminal was recovered: exit zero, 26/26 fresh
-passes, no reuse; receipt digest
-`verification_796e6051816f0f03dcc37b12577261bea485b8ebdf5bde068495e8771d801374`.
-Its tmpfs source and receipt are absent. The recovered summary is an observation,
-not a fabricated replacement for missing originals or portable source acceptance.
-
-A replacement full run for **2916090e** is executing in the persistent preceding
-worktree through its immutable source-matched checker. Original session:
-`lkj-elealanfojcdejaojlplgleiecnfpnin`; launch request
-`lkjscript-persistent-fresh-full-acceptance-20261010-1014`.
-Receipt owner:
-`.artifacts/lkjscript-dev/check/1791640266982142068-3867459-0/`.
-Recovery logs, immutable checker and environment are in
-`.artifacts/verification-profile/resumed-full/`. CPU affinity is 0-7, Cargo jobs 8,
-one gate worker. At this snapshot it has reached the workspace-tests gate; its
-actual terminal and complete original receipt still need collection. Do not run
-another copy or alter its tracked source while it is active.
-
-Capacity was reclaimed only from the original owned checkout's inactive Rust
-`target/debug/incremental`, after checking for build owners. Logical cache bytes
-were 508,947,001,344; filesystem available bytes rose from 4,591,673,344 to
-297,698,336,768. Source, Git state, executables, original proof, other worktrees and
-applications were retained. Before/after observations remain in resumed-full.
-
-## Completion boundary
-
-Collect and validate the parent's original full terminal without relabelling it.
-Then execute the complete fresh source profile for this origin correction with
-persistent evidence and a checker compiled for this exact checkout. Normally
-integrate accepted source, recheck the independent main ref, and only then select
-another configured non-publishing 0.1.90 candidate if the release identity remains
-unoccupied. Finalized static bytes, target owners, userlands, installation/recovery,
-native-public evidence and original-reader acceptance precede unchanged-asset
-promotion under [the release procedure](release.md).
-
-The independent native FIFO study in the preceding checkout contains only a copied
-existing standard baseline and an already accepted executable. It has no new queue
-implementation or accepted queue tests and is not a delivered language feature.
-Explicitly denied compiler/planner and owned-type specification inspections were
-not retried by another route. Existing stashes and unrelated services remain intact.
+The FIFO increment still requires source-matched complete fresh verification
+and normal integration before being called delivered. Finalized static bytes,
+exact native-public acceptance and unchanged-asset promotion are subsequent
+release boundaries. No new candidate dispatch, promotion, installation,
+application deployment or paid external agent has occurred in this continuation.
+Unrelated worktrees, stashes, service state and prior immutable publication remain
+unchanged. Auxiliary tool denials are retained separately from executable test
+failures and successful validation; denied inspections are not rerouted.

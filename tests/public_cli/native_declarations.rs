@@ -1705,3 +1705,6 @@ mod native_fold;
 
 #[path = "incremental_units.rs"]
 mod incremental_units;
+
+#[path = "native_owned_fifo.rs"]
+mod native_owned_fifo;

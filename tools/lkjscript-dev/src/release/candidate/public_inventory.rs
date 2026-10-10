@@ -200,3 +200,7 @@ mod fold_tests;
 #[cfg(test)]
 #[path = "public_inventory_incremental_tests.rs"]
 mod incremental_tests;
+
+#[cfg(test)]
+#[path = "public_inventory_fifo_tests.rs"]
+mod fifo_tests;

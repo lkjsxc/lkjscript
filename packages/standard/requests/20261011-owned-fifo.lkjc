@@ -1,0 +1,148 @@
+request base=rev_c3bcf5a07bdc9f8400fdf670fffcd5a0a85b54ff6f86ce7514c2c5f36cab41e4 idempotency=standard-owned-fifo
+reference.owner as=$core package=local class=module name=core
+reference.owner as=$add package=local class=declaration parent=$core name=add
+reference.owner as=$less package=local class=declaration parent=$core name=less
+reference.owner as=$subtract package=local class=declaration parent=$core name=subtract
+declarations.begin
+(units
+  ; Logical order is reverse(outgoing) followed by incoming. Both fields own storage.
+  (function create fifo-empty (in $core) (visibility public) (effect pure)
+    (type-parameter create T (constraint owned))
+    (returns (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+    (body (let
+      (binding incoming (type (owned-sequence T)) (sequence-empty (type (owned-sequence T))))
+      (binding outgoing (type (owned-sequence T)) (sequence-empty (type (owned-sequence T))))
+      (in (pack-owned
+        (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+        (field incoming (local incoming)) (field outgoing (local outgoing)))))))
+  (function create fifo-length (in $core) (visibility public) (effect pure)
+    (type-parameter create T (constraint owned))
+    (parameter create queue
+      (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (use borrow))
+    (returns I64)
+    (body (let (binding pending (type I64)
+      (borrow-owned-field
+        (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+        (local queue) (field incoming (binding incoming (type (owned-sequence T))))
+        (in (sequence-length (type (owned-sequence T)) (local incoming)))))
+      (in (borrow-owned-field
+        (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+        (local queue) (field outgoing (binding outgoing (type (owned-sequence T))))
+        (in (call $add (local pending) (sequence-length (type (owned-sequence T)) (local outgoing)))))))))
+  (function create fifo-push (in $core) (visibility public) (effect pure)
+    (type-parameter create T (constraint owned))
+    (parameter create value (type T) (use consume))
+    (parameter create queue
+      (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (use consume))
+    (returns (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+    (body (unpack-owned
+      (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (local queue)
+      (field incoming (binding incoming (type (owned-sequence T))))
+      (field outgoing (binding outgoing (type (owned-sequence T))))
+      (in (let (binding next (type (owned-sequence T))
+        (sequence-push (type (owned-sequence T)) (local value) (local incoming)))
+        (in (pack-owned
+          (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+          (field incoming (local next)) (field outgoing (local outgoing)))))))))
+  (function create fifo-front (in $core) (visibility public) (effect pure)
+    (type-parameter create T (constraint owned))
+    (parameter create queue
+      (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (use borrow))
+    (returns T (borrow-from queue))
+    (body (borrow-owned-field
+      (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+      (local queue) (field outgoing (binding outgoing (type (owned-sequence T))))
+      (in (let (binding ready (type I64) (sequence-length (type (owned-sequence T)) (local outgoing)))
+        (in (if (call $less (i64 0) (local ready))
+          (borrow-owned-item (type (owned-sequence T)) (local outgoing)
+            (index (call $subtract (local ready) (i64 1))) (binding value (type T)) (in (local value)))
+          (borrow-owned-field
+            (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+            (local queue) (field incoming (binding incoming (type (owned-sequence T))))
+            (in (borrow-owned-item (type (owned-sequence T)) (local incoming)
+              (index (i64 0)) (binding value (type T)) (in (local value))))))))))))
+  (function create fifo-discard (in $core) (visibility public) (effect pure)
+    (type-parameter create T (constraint owned))
+    (parameter create queue
+      (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (use consume))
+    (returns Unit) (body (unit)))
+  ; Only refill an empty outgoing stack. Each queued element moves at most once.
+  (function create fifo-reverse (in $core) (visibility private) (effect pure)
+    (type-parameter create T (constraint owned))
+    (parameter create incoming (type (owned-sequence T)) (use consume))
+    (parameter create outgoing (type (owned-sequence T)) (use consume))
+    (returns (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+    (body (let (binding popped
+      (type (owned-choice (case empty (owned-sequence T))
+        (case item (owned-product (field rest (owned-sequence T)) (field value T)))))
+      (sequence-pop (type (owned-sequence T)) (local incoming)))
+      (in (match-owned
+        (type (owned-choice (case empty (owned-sequence T))
+          (case item (owned-product (field rest (owned-sequence T)) (field value T))))) (local popped)
+        (case empty (binding rest (type (owned-sequence T)))
+          (in (pack-owned
+            (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+            (field incoming (local rest)) (field outgoing (local outgoing)))))
+        (case item (binding item (type (owned-product (field rest (owned-sequence T)) (field value T))))
+          (in (unpack-owned (type (owned-product (field rest (owned-sequence T)) (field value T))) (local item)
+            (field rest (binding rest (type (owned-sequence T)))) (field value (binding value (type T)))
+            (in (let (binding next (type (owned-sequence T))
+              (sequence-push (type (owned-sequence T)) (local value) (local outgoing)))
+              (in (call fifo-reverse (types T) (local rest) (local next)))))))))))))
+  (function create fifo-pop (in $core) (visibility public) (effect pure)
+    (type-parameter create T (constraint owned))
+    (parameter create queue
+      (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (use consume))
+    (returns (owned-choice
+      (case empty (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+      (case item (owned-product
+        (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+        (field value T)))))
+    (body (unpack-owned
+      (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (local queue)
+      (field incoming (binding incoming (type (owned-sequence T))))
+      (field outgoing (binding outgoing (type (owned-sequence T))))
+      (in (let (binding popped
+        (type (owned-choice (case empty (owned-sequence T))
+          (case item (owned-product (field rest (owned-sequence T)) (field value T)))))
+        (sequence-pop (type (owned-sequence T)) (local outgoing)))
+        (in (match-owned
+          (type (owned-choice (case empty (owned-sequence T))
+            (case item (owned-product (field rest (owned-sequence T)) (field value T))))) (local popped)
+          (case empty (binding outgoing (type (owned-sequence T)))
+            (in (if (call $less (i64 0) (sequence-length (type (owned-sequence T)) (local incoming)))
+              (let (binding ready
+                (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+                (call fifo-reverse (types T) (local incoming) (local outgoing)))
+                (in (call fifo-pop (types T) (local ready))))
+              (let (binding rest
+                (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+                (pack-owned
+                  (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+                  (field incoming (local incoming)) (field outgoing (local outgoing))))
+                (in (choose-owned (type (owned-choice
+                  (case empty (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+                  (case item (owned-product
+                    (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+                    (field value T))))) (case empty) (local rest)))))))
+          (case item (binding item (type (owned-product (field rest (owned-sequence T)) (field value T))))
+            (in (unpack-owned (type (owned-product (field rest (owned-sequence T)) (field value T))) (local item)
+              (field rest (binding outgoing (type (owned-sequence T)))) (field value (binding value (type T)))
+              (in (let
+                (binding rest
+                  (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+                  (pack-owned
+                    (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+                    (field incoming (local incoming)) (field outgoing (local outgoing))))
+                (binding result (type (owned-product
+                  (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+                  (field value T)))
+                  (pack-owned (type (owned-product
+                    (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+                    (field value T))) (field rest (local rest)) (field value (local value))))
+                (in (choose-owned (type (owned-choice
+                  (case empty (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+                  (case item (owned-product
+                    (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+                    (field value T))))) (case item) (local result))))))))))))))))
+declarations.end

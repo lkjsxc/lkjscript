@@ -1,0 +1,76 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create fifo-trace
+    (type-alias Action (record (kind I64) (value I64)))
+    (type-alias Event (record (kind I64) (present Bool) (value I64) (length I64)))
+    (type-alias Scenario (record (events (list Event)) (remaining (list I64)) (empty-length I64) (reused (list I64))))
+    (function create finish (visibility private) (effect pure)
+      (type-parameter create T (constraint owned))
+      (implementation-parameter implparam_94000000000000000000000000000003 element fifo-support::Element T)
+      (parameter create events (type (list Event)))
+      (parameter create queue (type (owned-product
+        (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (use consume))
+      (returns Scenario)
+      (body (let (binding drained (type (owned-product
+        (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (field values (list I64))))
+        (implementation-call fifo-support::drain (types T)
+          (implementations parameter@finish@implparam_94000000000000000000000000000003) (list I64) (local queue)))
+        (in (unpack-owned (type (owned-product
+          (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (field values (list I64))))
+          (local drained)
+          (field rest (binding rest (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))))
+          (field values (binding values (type (list I64))))
+          (in (let
+            (binding empty-length (type I64) (call std::fifo-length (types T) (local rest)))
+            (binding value (type T) (method-call parameter@finish@implparam_94000000000000000000000000000003
+              fifo-support::Element method_94000000000000000000000000000001 (i64 37)))
+            (binding reused (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+              (call std::fifo-push (types T) (local value) (local rest)))
+            (binding drained (type (owned-product
+              (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (field values (list I64))))
+              (implementation-call fifo-support::drain (types T)
+                (implementations parameter@finish@implparam_94000000000000000000000000000003) (list I64) (local reused)))
+            (in (record structural (field events (local events)) (field remaining (local values))
+              (field empty-length (local empty-length)) (field reused (field (local drained) (name values))))))))))))
+    (function create visit (visibility private) (effect pure)
+      (type-parameter create T (constraint owned))
+      (implementation-parameter implparam_94000000000000000000000000000004 element fifo-support::Element T)
+      (parameter create actions (type (list Action))) (parameter create offset (type I64))
+      (parameter create events (type (list Event)))
+      (parameter create queue (type (owned-product
+        (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (use consume))
+      (returns Scenario)
+      (body (if (call std::less (local offset) (call std::list-length (types Action) (local actions)))
+        (let
+          (binding action (type Action) (call std::list-get (types Action) (local actions) (local offset)))
+          (binding result (type (owned-product
+            (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+            (field present Bool) (field value I64)))
+            (implementation-call fifo-steps::step (types T)
+              (implementations parameter@visit@implparam_94000000000000000000000000000004)
+              (field (local action) (name kind)) (field (local action) (name value)) (local queue)))
+          (in (unpack-owned (type (owned-product
+            (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+            (field present Bool) (field value I64))) (local result)
+            (field rest (binding rest (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))))
+            (field present (binding present (type Bool))) (field value (binding value (type I64)))
+            (in (let (binding event (type Event)
+              (record structural (field kind (field (local action) (name kind))) (field present (local present))
+                (field value (local value)) (field length (call std::fifo-length (types T) (local rest)))))
+              (in (implementation-call visit (types T)
+                (implementations parameter@visit@implparam_94000000000000000000000000000004)
+                (local actions) (call std::add (local offset) (i64 1))
+                (call std::list-append (types Event) (local events) (local event)) (local rest))))))))
+        (implementation-call finish (types T)
+          (implementations parameter@visit@implparam_94000000000000000000000000000004) (local events) (local queue)))))
+    (function create run (visibility public) (effect pure)
+      (type-parameter create T (constraint owned))
+      (implementation-parameter implparam_94000000000000000000000000000005 element fifo-support::Element T)
+      (parameter create actions (type (list Action))) (returns Scenario)
+      (body (let (binding queue (type (owned-product
+        (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (call std::fifo-empty (types T)))
+        (in (implementation-call visit (types T)
+          (implementations parameter@run@implparam_94000000000000000000000000000005)
+          (local actions) (i64 0) (list Event) (local queue))))))))
+declarations.end
