@@ -440,7 +440,7 @@ fn concurrent_dependency_apply_has_one_complete_winner_and_one_stale_candidate()
             .check(&crate::platform::execution::ExecutionControl::uncancelled())
             .unwrap()
             .passed,
-        96
+        106
     );
 }
 

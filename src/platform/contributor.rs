@@ -3093,8 +3093,8 @@ mod tests {
         let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
         let before = std::fs::read(project.join("HEAD")).expect("standard HEAD before oracle");
         let inventory = semantic_inventory(&project).expect("standard semantic inventory");
-        // Five sequence wrappers, three graph helpers and seven tests add 274 owners.
-        assert_eq!(inventory.owners, 1_900);
+        // Six FIFO operations, one reversal helper and ten tests add 516 owners.
+        assert_eq!(inventory.owners, 2_416);
         assert_eq!(inventory.modules, 13);
         assert!(inventory.functions > 0);
         assert!(inventory.relations > 0);
