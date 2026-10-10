@@ -66,40 +66,54 @@ The owned implementation worktree is
 `work/economical-verification-20261010`, based on `b2bc935e`. Its directory name
 predates the narrowed change. Evidence is in `.artifacts/verification-profile/`.
 
-## Focused observations, not whole-source acceptance
+## Matched focused observations, not whole-source acceptance
 
-One immutable public-CLI harness selected two explicitly copied products, with
-unchanged source tests, CPU affinity 0,1 and two test threads. Every run passed all
-**seven unique native-fold cases**, including complete results, retained nested
-histories, source-deleted execution and negative admission. The paired order was
-baseline/candidate, then candidate/baseline:
+The preliminary comparison recorded in `ac167709` used `cargo test --no-run` for
+the level-1 product but `cargo build --profile test` for the level-2 product. A
+subsequent same-command audit compiled successfully but returned a **failed byte
+comparison**: the two level-2 selections were different. Those original passing
+behavior observations and timings are preserved, but their claim to isolate only
+optimization level is withdrawn. The audit failure is not relabelled as a pass.
+
+The corrected comparison selects both products with
+`cargo test --locked --test public_cli --no-run --message-format=json`, retains
+line-table debug information and disables Rust incremental compilation on both.
+The test profiles select different optimization levels. One immutable public-CLI harness runs
+the same seven unique native-fold cases, with CPU affinity 2,3 and two test threads.
+Every case passed in all four runs, including complete returned results, retained
+nested histories, source deletion and negative admission. Order was A1/C1/C2/A2:
 
 | Selection | First observation | Reverse-order observation | Executable bytes |
 | --- | ---: | ---: | ---: |
-| Level 1 control | 108.198 s | 108.751 s | 210,385,536 |
-| Level 2 candidate | 99.155 s | 99.144 s | 182,226,760 |
+| Level 1 control | 110.067 s | 106.779 s | 210,385,536 |
+| Level 2 matched candidate | 96.858 s | 97.542 s | 182,230,088 |
 
-Both comparison products used line-table debug information and disabled Rust
-incremental compilation. This isolates optimization-level behavior; it is **not**
-a matched measurement of the entire preceding default test profile, cold-build
-cost, CI completion or whole-language performance. No timing predicate replaces
-correctness checks. Original favorable and unfavorable observations are retained.
+These are two observed pairs on a shared host, not a timing gate, a statistical
+performance guarantee or a matched cold-build comparison of the entire preceding
+default profile. Complete source verification concurrently used the separately
+selected CPUs 0,1; affinity is not whole-host isolation. The previously published
+Release executable and whole-language performance are not changed by this result.
 
 The shared harness SHA256 is
 `2fc8d119f9d50dc54f2eb486f0d5f05e24ca6cd712af3446730402a6fee37699`;
-the candidate product SHA256 is
-`dbe545f2da6fd210195cb7d53d4fc6b150d0e9e830df182c83e427add379acef`.
-Source/copy identities were compared before selection and checked unchanged after
-both pairs. The independent tiny profile probe also exercised a failing debug
-assertion and runtime integer overflow under both test and test-debug settings;
-both guards trapped as required. It is not an additional language-product case.
+the matched candidate SHA256 is
+`2b30d05d81fba1645314e8d4dad61ebb4aecd8cd7475a955f4c02e0c080ad0db`.
+Source/copy bytes were compared before selection and rechecked unchanged after
+both pairs. Original `matched-*` logs, selected Cargo observations, the failed
+same-command identity audit and both old and corrected product copies are retained
+under `.artifacts/verification-profile/` in the owned implementation worktree.
+The independently compared `copied-byte-witnesses.tar.gz` has SHA256
+`fdaac87452de99b0066b8738671be322a900c34bb0ff2c62ab0064c251768013`.
 
-Maintained native checks passed standard **96**, lkjournal **44**, guides **79**
-and policy **62**, all with production/reference equality and no new tracked
-source packs. Formatting and whitespace checks passed for the focused change.
-The new source still requires frozen, source-matched full acceptance before main
-integration. The hosted release-source timeout is not declared repaired merely
-because this focused comparison passed.
+The independent tiny configuration probe exercised a failing debug assertion and
+runtime integer overflow under both test and test-debug settings; both guards
+trapped as required. These are configuration observations, not additional unique
+language-product cases. With the corrected matched candidate, maintained native
+checks passed standard **96**, lkjournal **44**, guides **79** and policy **62**,
+all with production/reference equality and unchanged selected executable bytes.
+The frozen new source still requires completed source-matched full acceptance
+before main integration. The hosted release-source timeout is not declared repaired
+merely because these focused observations passed.
 
 ## Public binary
 
@@ -108,6 +122,25 @@ release ID `407859944`, source `1b7e95badb13e5ddcc9d557027c1977fd4f2a271`,
 producer `37910899478/1` and promotion `37925038733/1`. Its genuine generation-4 acceptance does not include the later compiler/cache and
 bulk-List changes. Existing publication, applications and operational data remain
 unchanged.
+
+## Recovered terminal and renewed original custody
+
+The previously uncollected full run for `ac167709` returned exit zero and a
+`passed` summary: 26 selected, 26 fresh passed, zero reused. Its original receipt
+was 65,356 bytes with digest
+`verification_796e6051816f0f03dcc37b12577261bea485b8ebdf5bde068495e8771d801374`.
+The terminal was recovered through its original execution session, not inferred
+from the absence of a process. Its original tmpfs checkout and receipt are no
+longer present. That recovered summary is retained as an observation, not a
+replacement for the missing original source and per-gate evidence.
+
+A new complete source run is selected in the persistent worktree above, including
+the corrected profile comparison and specification. No previous result is renamed.
+Capacity was recovered only from the inactive Rust incremental directory of the
+original owned lkjscript checkout, after checking for build owners. Source, Git
+state, executables, evidence, other worktrees and running applications were not
+removed. Exact before/after observations are in
+`.artifacts/verification-profile/resumed-full/`.
 
 ## Next acceptance boundary
 

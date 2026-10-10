@@ -76,6 +76,13 @@ a substitute for the maintained source-acceptance command. Neither profile chang
 assertions, test inventories, failed-result handling, process cleanup or deadlines.
 Default `cargo build` and the finalized distribution's release profile are unchanged.
 
+Match the Cargo subcommand, selected targets and features as well as the profile.
+`cargo build --profile test` is not interchangeable with `cargo test --no-run`: test
+targets can include development dependencies and unify additional features. Equal
+optimization fields do not prove equal executable selection. Preserve a mismatched
+comparison as diagnosis and repeat it with the same target selection instead of
+renaming its measurements. See Cargo's [feature-resolution contract](https://doc.rust-lang.org/cargo/reference/features.html#feature-resolver-version-2).
+
 Select behavior and cost independently. Retain Cargo's actual executable/profile
 observations, including debug assertions and overflow checks, rather than inferring
 build flags from a directory name or an outer environment variable. Copy both
@@ -106,6 +113,14 @@ large run. Moving a build to tmpfs does not move every test's `/tmp` workspace.
 Keep target paths as real directories: a symlinked target is not a reason to weaken
 the existing non-symlink artifact-admission boundary. A complete owned tmpfs checkout
 can provide build capacity, but its original verification evidence is volatile.
+
+Prefer a persistent source checkout and original evidence owner once capacity is
+available. A terminal summary recovered after disconnect can establish the observed
+exit status; it cannot reconstruct missing receipts, per-gate logs, source manifests
+or original-reader context. Keep these distinct. Retain immutable executables and
+complete originals outside volatile storage before cleanup. An archived report or
+matching digest alone does not authorize reusing an unavailable original. Renew the
+missing acceptance boundary without relabelling prior observations.
 
 For a capacity-constrained local full run, an explicitly selected subset of the
 process's allowed Linux CPUs can bound default test concurrency without editing
