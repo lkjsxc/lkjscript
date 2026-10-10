@@ -48,12 +48,22 @@ unwrap_used = "deny"
 [lints.rust]
 unsafe_code = "forbid"
 
-# Whole-program source tests keep debug validation without interpreter-scale
-# unoptimized overhead. The ordinary dev and distribution profiles stay separate.
+# Source verification executes native programs and repeatedly copies the product.
+# Keep runtime checks and useful backtraces without full variable/type debug data
+# or a second, large incremental build store. Dev and distribution stay separate.
 [profile.test]
-opt-level = 1
+opt-level = 2
+debug = "line-tables-only"
 debug-assertions = true
 overflow-checks = true
+incremental = false
+
+# Opt in for interactive Rust debugging and short edit/build loops, not acceptance.
+[profile.test-debug]
+inherits = "test"
+opt-level = 0
+debug = 2
+incremental = true
 
 [profile.release]
 codegen-units = 1

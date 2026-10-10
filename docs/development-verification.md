@@ -54,6 +54,44 @@ Code capable of changing its own verifier still needs substantive review. A gree
 workflow is evidence about the inspected candidate, not an independent security
 certificate or an authorization to execute arbitrary code with greater authority.
 
+## Test execution versus interactive debugging
+
+The pinned Cargo test profile is an execution profile for the complete source
+suite, not the ordinary development or distribution profile. It enables level-2
+optimization, line-table debug information, debug assertions and integer overflow
+checks. Rust incremental compilation is disabled for this profile; this does not
+disable lkjscript's independently tested derived compiler cache.
+
+Line tables retain file/line backtrace information without the full variable/type
+debug records repeatedly copied with black-box executables. For interactive Rust
+debugging or a short edit/build loop, select the separate opt-in profile:
+
+```sh
+cargo test --locked --profile test-debug --lib FILTER
+```
+
+That profile inherits the test contract but selects unoptimized code, full debug
+information and Rust incremental compilation. It is a local diagnostic mode, not
+a substitute for the maintained source-acceptance command. Neither profile changes
+assertions, test inventories, failed-result handling, process cleanup or deadlines.
+Default `cargo build` and the finalized distribution's release profile are unchanged.
+
+Select behavior and cost independently. Retain Cargo's actual executable/profile
+observations, including debug assertions and overflow checks, rather than inferring
+build flags from a directory name or an outer environment variable. Copy both
+comparison products outside the checkout, bind their bytes and use the same test
+harness, inputs, CPU selection and concurrency. Preserve unfavorable measurements
+and fixture failures. A filtered comparison is not complete source acceptance;
+a faster test executable is not a speedup of the distributed release executable.
+
+Optimization levels are not a speed ranking. Test the selected workload, and account
+for compilation and copying as well as execution. Smaller debug records sacrifice
+interactive variable inspection, while disabling Rust incremental compilation can
+cost time on repeated Rust edits. The explicit diagnostic profile retains that
+workflow instead of imposing its storage cost on every complete acceptance run.
+See Cargo's [profile controls](https://doc.rust-lang.org/cargo/reference/profiles.html)
+for the separate optimization, debug-information and runtime-check settings.
+
 ## Local capacity and test concurrency
 
 Check workers, Cargo build jobs and Rust test workers are distinct controls.
