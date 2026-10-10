@@ -74,6 +74,12 @@ impl VerificationCache {
                 "passed gate has a non-passing child observation",
             ));
         }
+        super::cargo_outputs::verify(
+            &self.repository,
+            gate,
+            &resolve_proof_path(&self.repository, &process.stdout.path),
+            &process.stdout,
+        )?;
         let lock = self.lock()?;
         let result = (|| {
             self.store_log(&process.stdout)?;
@@ -209,6 +215,7 @@ impl VerificationCache {
             let mut process = record.process;
             process.stdout = stdout;
             process.stderr = stderr;
+            super::cargo_outputs::verify(&self.repository, gate, stdout_path, &process.stdout)?;
             Ok(CacheLoad {
                 cached: Some(CachedGate {
                     process,
@@ -475,7 +482,7 @@ pub(crate) fn gate_evidence_digest(
     Ok(VerificationDigest::of(&bytes))
 }
 
-fn read_bounded(path: &Path, maximum: u64) -> Result<Vec<u8>, DevError> {
+pub(super) fn read_bounded(path: &Path, maximum: u64) -> Result<Vec<u8>, DevError> {
     let metadata = fs::symlink_metadata(path).map_err(|error| {
         DevError::corrupt(format!("inspect cache file '{}': {error}", path.display()))
     })?;

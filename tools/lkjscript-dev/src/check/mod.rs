@@ -1,4 +1,5 @@
 mod cache;
+mod cargo_outputs;
 mod executor;
 mod model;
 mod policy;

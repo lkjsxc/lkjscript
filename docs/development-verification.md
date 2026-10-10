@@ -54,6 +54,51 @@ Code capable of changing its own verifier still needs substantive review. A gree
 workflow is evidence about the inspected candidate, not an independent security
 certificate or an authorization to execute arbitrary code with greater authority.
 
+## Test execution versus interactive debugging
+
+The pinned Cargo test profile is an execution profile for the complete source
+suite, not the ordinary development or distribution profile. It enables level-2
+optimization, line-table debug information, debug assertions and integer overflow
+checks. Rust incremental compilation is disabled for this profile; this does not
+disable lkjscript's independently tested derived compiler cache.
+
+Line tables retain file/line backtrace information without the full variable/type
+debug records repeatedly copied with black-box executables. For interactive Rust
+debugging or a short edit/build loop, select the separate opt-in profile:
+
+```sh
+cargo test --locked --profile test-debug --lib FILTER
+```
+
+That profile inherits the test contract but selects unoptimized code, full debug
+information and Rust incremental compilation. It is a local diagnostic mode, not
+a substitute for the maintained source-acceptance command. Neither profile changes
+assertions, test inventories, failed-result handling, process cleanup or deadlines.
+Default `cargo build` and the finalized distribution's release profile are unchanged.
+
+Match the Cargo subcommand, selected targets and features as well as the profile.
+`cargo build --profile test` is not interchangeable with `cargo test --no-run`: test
+targets can include development dependencies and unify additional features. Equal
+optimization fields do not prove equal executable selection. Preserve a mismatched
+comparison as diagnosis and repeat it with the same target selection instead of
+renaming its measurements. See Cargo's [feature-resolution contract](https://doc.rust-lang.org/cargo/reference/features.html#feature-resolver-version-2).
+
+Select behavior and cost independently. Retain Cargo's actual executable/profile
+observations, including debug assertions and overflow checks, rather than inferring
+build flags from a directory name or an outer environment variable. Copy both
+comparison products outside the checkout, bind their bytes and use the same test
+harness, inputs, CPU selection and concurrency. Preserve unfavorable measurements
+and fixture failures. A filtered comparison is not complete source acceptance;
+a faster test executable is not a speedup of the distributed release executable.
+
+Optimization levels are not a speed ranking. Test the selected workload, and account
+for compilation and copying as well as execution. Smaller debug records sacrifice
+interactive variable inspection, while disabling Rust incremental compilation can
+cost time on repeated Rust edits. The explicit diagnostic profile retains that
+workflow instead of imposing its storage cost on every complete acceptance run.
+See Cargo's [profile controls](https://doc.rust-lang.org/cargo/reference/profiles.html)
+for the separate optimization, debug-information and runtime-check settings.
+
 ## Local capacity and test concurrency
 
 Check workers, Cargo build jobs and Rust test workers are distinct controls.
@@ -68,6 +113,14 @@ large run. Moving a build to tmpfs does not move every test's `/tmp` workspace.
 Keep target paths as real directories: a symlinked target is not a reason to weaken
 the existing non-symlink artifact-admission boundary. A complete owned tmpfs checkout
 can provide build capacity, but its original verification evidence is volatile.
+
+Prefer a persistent source checkout and original evidence owner once capacity is
+available. A terminal summary recovered after disconnect can establish the observed
+exit status; it cannot reconstruct missing receipts, per-gate logs, source manifests
+or original-reader context. Keep these distinct. Retain immutable executables and
+complete originals outside volatile storage before cleanup. An archived report or
+matching digest alone does not authorize reusing an unavailable original. Renew the
+missing acceptance boundary without relabelling prior observations.
 
 For a capacity-constrained local full run, an explicitly selected subset of the
 process's allowed Linux CPUs can bound default test concurrency without editing
@@ -188,3 +241,37 @@ After confirmed mainline delivery and terminal jobs, delete an owned temporary
 branch only after rereading its tip and preserving unique work/evidence. A client
 without a safe branch-deletion operation must report the retained branch instead
 of rewriting it, force-updating it, or treating cleanup as a reason to hide delivery.
+
+## Cargo output origin, not a pre-existing path
+
+Source-verification Cargo gates that declare executable outputs select
+`--message-format=json`. Admission checks the actual producer's bounded, unchanged
+stdout before its first successful `build-finished`: exactly one non-test binary
+artifact from the checked root `Cargo.toml` must name each declared target and
+its exact output path in both `executable` and `filenames`. A redirected target
+with a stale regular file at the default path fails `cargo_output_binding`.
+The failed process/gate observations and retained old output remain diagnostics,
+not successful output authority. Later dependent gates cannot use the failed gate.
+
+The same relation is checked by the generic verification-cache boundary and when
+the original source receipt is independently read for release. The two maintained
+Cargo executable producers do not reuse gate-result evidence: they execute Cargo
+to observe its current output selection on every invocation, including configuration
+outside the repository that the source snapshot does not enumerate. A valid
+Cargo `fresh: true` artifact remains admissible: Cargo's compilation cache reuse
+is separate from reusing a verification-gate result. No output is deleted merely
+to force a timestamp change, and no Cargo setting is silently overwritten.
+
+The source checker currently consumes the root product at its declared host path.
+A custom `CARGO_TARGET_DIR`, `build.target-dir` or explicit compilation target must
+produce that exact declared output or be refused; an unrelated old file cannot
+satisfy the boundary. The configured static-distribution target has its separate
+producer and final-byte admission. This change neither disables Cargo's build
+cache nor changes language/runtime encodings or the published product.
+
+The selected Cargo executable/toolchain remains trusted. These records establish
+the claimed output relationship within that build, not a hostile-build sandbox or
+a cryptographic proof of arbitrary compiler behavior. Test/program output after
+`build-finished` cannot supply a missing Cargo artifact; process exit and joined
+cleanup must still succeed independently. See Cargo's
+[artifact and completion protocol](https://doc.rust-lang.org/cargo/reference/external-tools.html#artifact-messages).

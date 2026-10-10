@@ -175,6 +175,12 @@ fn admit(
             let expected = root.join(format!("{name}.{stream}.log"));
             verify_retained(repository, &expected, proof)?;
         }
+        super::cargo_outputs::verify(
+            repository,
+            gate,
+            &root.join(format!("{name}.stdout.log")),
+            &process.stdout,
+        )?;
         require(
             observed.outputs.len() == gate.required_outputs.len()
                 && observed.retained_outputs.len() == observed.outputs.len(),
@@ -532,5 +538,15 @@ mod tests {
         // even though its two processes and all their originals really passed.
         evidence::publish_json(&path, &baseline).expect("fixture receipt");
         assert!(read_release_source_receipt(&path, &repository, &snapshot.git_head).is_err());
+        super::cargo_tests::rejects_artifact_free_cargo_claim_and_recovers(
+            &baseline,
+            &repository,
+            &root,
+            &snapshot,
+        );
     }
 }
+
+#[cfg(test)]
+#[path = "cargo_outputs/reader_tests.rs"]
+mod cargo_tests;

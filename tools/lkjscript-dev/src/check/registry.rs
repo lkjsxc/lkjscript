@@ -387,10 +387,18 @@ pub(crate) fn base_registry(
     ];
     let mut release = cargo_gate(
         "release_build",
-        &["build", "--workspace", "--release", "--locked"],
+        &[
+            "build",
+            "--workspace",
+            "--release",
+            "--locked",
+            "--message-format=json",
+        ],
         &["fmt"],
     );
     release.required_outputs.push(binary.clone());
+    // Re-observe Cargo selection; its own compilation cache remains enabled.
+    release.cacheable = false;
     gates.push(release);
     let mut release_lifecycle = cargo_gate(
         "release_command_lifecycle",
@@ -398,6 +406,7 @@ pub(crate) fn base_registry(
             "test",
             "--locked",
             "--release",
+            "--message-format=json",
             "--test",
             "public_cli",
             "copied_binary_completes_normalized_standard_dependent_command_lifecycle",
@@ -409,6 +418,7 @@ pub(crate) fn base_registry(
     // Cargo's release test build can select a different feature-unified executable at the
     // same output path. Bind that last producer before any copied-candidate oracle starts.
     release_lifecycle.required_outputs.push(binary.clone());
+    release_lifecycle.cacheable = false;
     gates.push(release_lifecycle);
     let mut distributed_http = gate(
         "distributed_http_application",
@@ -1241,3 +1251,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "cargo_outputs/registry_tests.rs"]
+mod cargo_binding_tests;

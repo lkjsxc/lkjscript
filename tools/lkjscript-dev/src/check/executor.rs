@@ -326,6 +326,13 @@ fn execute_fresh(
         status = GateStatus::Failed;
         reason = Some("missing_declared_output".to_owned());
     }
+    if status == GateStatus::Passed
+        && let Err(error) =
+            super::cargo_outputs::verify(repository, gate, &stdout_path, &process.stdout)
+    {
+        status = GateStatus::Failed;
+        reason = Some(format!("cargo_output_binding:{}", error.message()));
+    }
     let evidence_digest =
         cache::gate_evidence_digest(&gate.name, &fingerprint, &process, &outputs)?;
     let (stdout_excerpt, stderr_excerpt) = if status == GateStatus::Passed {
@@ -621,3 +628,11 @@ mod worker_cleanup_tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "cargo_outputs/production_gate_tests.rs"]
+mod cargo_output_tests;
+
+#[cfg(test)]
+#[path = "cargo_outputs/cache_tests.rs"]
+mod cargo_cache_tests;

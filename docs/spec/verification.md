@@ -1238,15 +1238,20 @@ it excludes only the six external application owners moved to final candidate ad
 ordinary focused default tests remain available, while release-source retains the existing default
 release lifecycle and all-feature workspace proof without adding duplicate source test suites.
 
-The workspace test profile uses basic optimization (`opt-level = 1`) with debug assertions and
-integer-overflow checks explicitly enabled. It retains debug information and test unwinding;
-optimization must not be substituted for deleting cases, disabling checks or extending deadlines.
-The default development profile remains unoptimized, and the release profile and final-candidate
-admission remain separate. For an unoptimized test debugging run, explicitly select
-`CARGO_PROFILE_TEST_OPT_LEVEL=0 cargo test ...`; label its evidence with that configuration rather
-than treating it as an identical build. Ordinary source acceptance uses the checked-in test profile.
-The [delivery continuation](../campaigns/202609271910.md) retains the motivating timeout, matched
-workload results, interrupted attempts and the distinct hosted acceptance boundary.
+The workspace test profile uses level-2 optimization (`opt-level = 2`) with line-table debug
+information, debug assertions and integer-overflow checks. Rust incremental compilation is disabled
+for this profile; lkjscript's derived compiler cache and its tests are unchanged. Test unwinding is
+retained. Optimization must not replace cases, checks or existing deadlines. Default development,
+source acceptance and final-candidate release admission remain separate build selections.
+
+For unoptimized interactive Rust debugging, use `cargo test --locked --profile test-debug --lib FILTER`.
+That explicit profile keeps full variable/type debug information and Rust incremental builds while
+inheriting the test profile's runtime guards. Label its observations with the selected configuration;
+it is not the maintained acceptance build. The
+[verification guide](../development-verification.md#test-execution-versus-interactive-debugging)
+owns the tradeoffs and controlled-comparison boundaries. The earlier level-1 choice and its original
+timeout, interrupted attempts and hosted evidence remain historical in the
+[delivery continuation](../campaigns/202609271910.md).
 
 Persistent workspaces need build-cache housekeeping independently of source verification. Global
 `df` availability does not establish a user or project quota's remaining allocation. After confirming
@@ -2322,3 +2327,27 @@ all earlier or mixed pairs without relabelling their historical receipts. Existi
 source, Map/fold composition, target, userland, installation, candidate-binding and
 joined-cleanup requirements remain unchanged. This acceptance revision does not
 advance semantic/artifact encodings or itself publish a new executable.
+
+## Declared Cargo executable origin
+
+A source-checking Cargo build/test gate with declared executable outputs must
+request Cargo JSON before any `--` test-argument separator. A regular output at a
+known path is necessary but insufficient. Its original bounded stdout must retain
+an exact root-manifest, binary-target, non-test compiler-artifact record for each
+declared output. The artifact's executable and filenames must name that same path;
+missing, duplicate, conflicting, malformed or incomplete records refuse admission.
+A successful build-finished record must follow the complete artifact set. Later
+test output is not evidence of an additional Cargo artifact. Process success,
+output limits, regular-file identity and joined cleanup remain independently required.
+
+This origin relation is rechecked by fresh execution, verification-cache storage
+and loading, and the independent original source reader. Maintained Cargo
+executable-producing gates are not gate-result-cacheable: current Cargo selection
+is observed even when out-of-checkout Cargo configuration is not in the source
+snapshot. A consistently rehashed
+log without the artifact relation is insufficient. Cargo fresh artifacts remain
+valid selections; verification freshness and compilation reuse are different facts.
+The new command identity invalidates prior command/profile reuse without changing
+receipt encoding. Graph, artifact, application-data and publication identities are
+not changed by this source-verification correction. Cargo and its build environment
+remain trusted; no hostile-build sandbox or arbitrary compiler proof is asserted.
