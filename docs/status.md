@@ -78,7 +78,8 @@ Originals remain in the FIFO worktree under
 Corrections `a2757ebf` and `32594261` pass focused checks **2/2** and **3/3**.
 Resident fixtures derive a finite allowance from a tiny successful workload plus
 64 KiB; the heavy workload still refuses and the small request recovers under that
-same allowance. Production limits are unchanged. These corrections will enter the
+same allowance. Production limits are unchanged. These corrections are included by
+normal merge, with the current 2,796-owner and 116-test expectations retained for
 combined source acceptance; no duplicate intermediate full run is selected.
 
 The last corroborated remote main is
@@ -93,8 +94,8 @@ Development remains **0.1.90**. The latest observed immutable public release is
 `38034392926/1` failed source verification; no finalized bytes from it were accepted
 or promoted. No successor candidate has been dispatched in this increment.
 
-Next: include the correction ancestry, freeze the complete source, complete one
-fresh 26-gate source acceptance, integrate normally and verify remote ancestry.
+Next: complete one fresh 26-gate acceptance of the frozen combined source,
+integrate normally and verify remote ancestry.
 Then accept finalized static bytes and promote
 those unchanged assets through the configured release workflow. Application
 selection, deployment, operational data and unrelated resources remain unchanged.
