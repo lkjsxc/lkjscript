@@ -54,6 +54,57 @@ Code capable of changing its own verifier still needs substantive review. A gree
 workflow is evidence about the inspected candidate, not an independent security
 certificate or an authorization to execute arbitrary code with greater authority.
 
+## Local capacity and test concurrency
+
+Check workers, Cargo build jobs and Rust test workers are distinct controls.
+`check --jobs` schedules gates; `CARGO_BUILD_JOBS` schedules compilation. Neither
+limits the number of independently running libtest cases or threads created inside
+a case. Rust's [default test concurrency](https://doc.rust-lang.org/rustc/tests/index.html#--test-threads-num_threads)
+uses `available_parallelism`. On a many-core host, simultaneous copied executables
+and disposable projects can exhaust the test filesystem even when compilation fits.
+
+Observe both the build filesystem and the actual temporary filesystem before a
+large run. Moving a build to tmpfs does not move every test's `/tmp` workspace.
+Keep target paths as real directories: a symlinked target is not a reason to weaken
+the existing non-symlink artifact-admission boundary. A complete owned tmpfs checkout
+can provide build capacity, but its original verification evidence is volatile.
+
+For a capacity-constrained local full run, an explicitly selected subset of the
+process's allowed Linux CPUs can bound default test concurrency without editing
+source, removing tests or changing gate deadlines. Set `ALLOWED_CPUS` from the
+actual allowed CPU list, retain that selection and its observed affinity beside
+the original receipt, then run the source-matched immutable verifier:
+
+```sh
+CARGO_BUILD_JOBS=2 taskset -c "$ALLOWED_CPUS" "$VERIFIER" check full --fresh --jobs 1 --machine
+```
+
+This does not cap test-internal thread creation, establish a memory quota or prove
+unrestricted-host performance. The workflow's runner configuration is unchanged.
+The [process owner](../tools/lkjscript-dev/src/process.rs) forwards only its approved
+child environment. Check that owner before relying on parent-only overrides such
+as `CARGO_INCREMENTAL` or `RUST_TEST_THREADS`; merely supplying a variable to the
+outer verifier is not evidence that a supervised child received it.
+
+An out-of-space assertion or linker failure is a failed attempt, not a test pass.
+Retain its original result. Join owned processes before reclaiming only their
+recomputable build outputs, and preserve source, original receipts, logs, retained
+executables and consumer evidence. Do not clear a shared temporary directory or
+another project's files to obtain capacity. After remediation, accept a new complete
+run; do not rename the failed attempt or silently reduce its coverage.
+
+Inactive Rust `target/debug/incremental` data in a task-owned target is
+recomputable build state. It is not lkjscript project state under
+`derived/compiler`: reclaiming the former after joining its build owners does
+not disable or weaken the latter incremental-compilation behavior. Preserve
+completed executables and acceptance evidence before any broader Cargo cleanup.
+
+A copied Cargo target can retain a contributor executable compiled for its old
+checkout even when Cargo reports the build fresh. Rebuild relocated workspace
+packages before selecting that verifier, and confirm that its receipt belongs to
+the intended checkout and selects the actual working delta. A passing clean-tree
+check of another checkout is not acceptance of the requested source or report.
+
 ## Executable observations and compatibility
 
 Check/source receipt contract 7 and cache contract 3 bind each selected command to
