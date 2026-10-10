@@ -98,10 +98,18 @@ pub enum NormalizedInstruction {
     },
     SequencePush {
         sequence_type: TypeObjectDigest,
-        value_local: u32,
         source_local: u32,
     },
     SequencePop {
+        sequence_type: TypeObjectDigest,
+        result_type: TypeObjectDigest,
+        source_local: u32,
+    },
+    SequenceGet {
+        sequence_type: TypeObjectDigest,
+        source_local: u32,
+    },
+    SequenceReplace {
         sequence_type: TypeObjectDigest,
         result_type: TypeObjectDigest,
         source_local: u32,
@@ -525,6 +533,7 @@ pub struct NormalizedTest {
 
 #[derive(Clone, Debug)]
 pub struct NormalizedProgram {
+    pub(super) prepared_type_lookup: super::prepared_types::PreparedTypeLookup,
     pub(super) implementation_applications: Arc<[NormalizedImplementationArgument]>,
     pub(super) value_origin: super::value::ValueOrigin,
     pub(super) affine_variants: Arc<[bool]>,
@@ -669,6 +678,7 @@ impl NormalizedProgram {
             .sum();
         work.tests = tests.len() as u64;
         let mut program = Self {
+            prepared_type_lookup: super::prepared_types::PreparedTypeLookup::empty(value_origin),
             implementation_applications: Arc::from([]),
             value_origin,
             affine_variants,
@@ -2867,7 +2877,6 @@ fn translate_code(
             },
             CompiledInstruction::SequencePush {
                 sequence_type,
-                value_local,
                 source_local,
             } => NormalizedInstruction::SequencePush {
                 sequence_type: index_copy(
@@ -2875,7 +2884,34 @@ fn translate_code(
                     *sequence_type,
                     "owned sequence type",
                 )?,
-                value_local: *value_local,
+                source_local: *source_local,
+            },
+            CompiledInstruction::SequenceGet {
+                sequence_type,
+                source_local,
+            } => NormalizedInstruction::SequenceGet {
+                sequence_type: index_copy(
+                    &unit.tables.types,
+                    *sequence_type,
+                    "owned sequence type",
+                )?,
+                source_local: *source_local,
+            },
+            CompiledInstruction::SequenceReplace {
+                sequence_type,
+                result_type,
+                source_local,
+            } => NormalizedInstruction::SequenceReplace {
+                sequence_type: index_copy(
+                    &unit.tables.types,
+                    *sequence_type,
+                    "owned sequence type",
+                )?,
+                result_type: index_copy(
+                    &unit.tables.types,
+                    *result_type,
+                    "owned sequence replacement result type",
+                )?,
                 source_local: *source_local,
             },
             CompiledInstruction::SequencePop {

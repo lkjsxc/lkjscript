@@ -13,6 +13,18 @@ const QUOTAS: [&str; 4] = [
     "maximum_capability_calls",
 ];
 
+fn allocation_allowance(execution: &CompactRecord) -> u64 {
+    let work: Value =
+        serde_json::from_str(compact_field(execution, "production-observation")).unwrap();
+    // Complete type admission grows with the standard; retain a finite fixture-local
+    // allowance above successful tiny-work admission, including HTTP response overhead.
+    work["allocated_bytes"]
+        .as_u64()
+        .unwrap()
+        .checked_add(64 * 1024)
+        .unwrap()
+}
+
 struct Server {
     child: support::SpawnedChild,
     output: PathBuf,
@@ -206,6 +218,15 @@ fn detached_resident_quotas_remain_optional_and_operational_deadlines_still_join
 
     assert!(work["allocated_bytes"].as_u64().unwrap() > 268_435_456);
     eprintln!("resident quota work witness: {work}");
+    let baseline = public.cli(
+        &["run", "--deployment", path(&command), "--arguments", "[0]"],
+        true,
+    );
+    let baseline = compact_record(&baseline, "execution");
+    assert_eq!(compact_field(baseline, "value"), "0");
+    let allocation_limit = allocation_allowance(baseline);
+    assert!(work["allocated_bytes"].as_u64().unwrap() > allocation_limit);
+    eprintln!("resident allocation allowance: {allocation_limit}");
     let server = Server::start(&public, "unmetered", &descriptor);
     server.expect("/large", 200, "1000000");
     server.expect("/collections", 200, "100");
@@ -224,7 +245,7 @@ fn detached_resident_quotas_remain_optional_and_operational_deadlines_still_join
         ),
         (
             "maximum_allocated_bytes",
-            1_000_000,
+            allocation_limit,
             "/large",
             "normalized_allocation",
         ),
@@ -346,10 +367,18 @@ fn foreground_policy_reporting_does_not_hide_partial_cumulative_limits() {
     descriptor["execution"] = json!({"instruction_fuel":null,"maximum_call_depth":4096,
         "maximum_value_stack":1000000,"maximum_allocated_bytes":null,
         "maximum_collection_items":null,"maximum_capability_calls":null});
+    let baseline = public.input("profile-baseline.json", &descriptor.to_string());
+    let records = public.cli(&["run", "--deployment", path(&baseline)], true);
+    let allocation_limit = allocation_allowance(compact_record(&records, "execution"));
     for selection in 0..=4 {
         let mut selected = descriptor.clone();
         if selection < QUOTAS.len() {
-            selected["execution"][QUOTAS[selection]] = json!(1000000);
+            selected["execution"][QUOTAS[selection]] =
+                json!(if QUOTAS[selection] == "maximum_allocated_bytes" {
+                    allocation_limit
+                } else {
+                    1_000_000
+                });
         }
         let deployment = public.input(&format!("profile-{selection}.json"), &selected.to_string());
         let records = public.cli(&["run", "--deployment", path(&deployment)], true);

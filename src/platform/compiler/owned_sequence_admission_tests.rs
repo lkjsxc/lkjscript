@@ -1,6 +1,6 @@
 //! Independent artifact admission binds variable-cardinality custody to accepted syntax.
 use super::*;
-use crate::platform::kernel::KernelSnapshot;
+use crate::platform::kernel::{KernelSnapshot, ParameterUse};
 
 // Loan syntax is deliberately inactive. A runtime-selected path cannot bypass admission.
 const SOURCE: &str = r#"declarations.begin
@@ -29,6 +29,25 @@ const SOURCE: &str = r#"declarations.begin
     (returns (owned-choice (case empty (owned-sequence ByteBuffer))
       (case item (owned-product (field rest (owned-sequence ByteBuffer)) (field value ByteBuffer)))))
     (body (sequence-pop (type (owned-sequence ByteBuffer)) (local values))))
+  (function create data-empty (visibility private) (effect pure)
+    (type-parameter create T (constraint transferable))
+    (returns (owned-sequence T))
+    (body (sequence-empty (type (owned-sequence T)))))
+  (function create data-push (visibility private) (effect pure)
+    (parameter create values (type (owned-sequence I64)) (use consume))
+    (returns (owned-sequence I64))
+    (body (sequence-push (type (owned-sequence I64)) (if (bool true) (i64 23) (i64 42)) (local values))))
+  (function create data-get (visibility private) (effect pure)
+    (parameter create values (type (owned-sequence I64)) (use borrow))
+    (parameter create other (type (owned-sequence I64)) (use borrow))
+    (returns I64)
+    (body (if (bool true) (i64 7)
+      (sequence-get (type (owned-sequence I64)) (local values) (index (i64 3))))))
+  (function create data-replace (visibility private) (effect pure)
+    (parameter create values (type (owned-sequence I64)) (use consume))
+    (parameter create other (type (owned-sequence I64)) (use consume))
+    (returns (owned-product (field rest (owned-sequence I64)) (field value I64)))
+    (body (sequence-replace (type (owned-sequence I64)) (index (i64 3)) (i64 23) (local values))))
   (function create inspect (visibility private) (effect pure)
     (parameter create values (type (owned-sequence ByteBuffer)) (use borrow))
     (parameter create other (type (owned-sequence ByteBuffer)) (use borrow))
@@ -120,25 +139,27 @@ fn owned_sequence_lowering_binds_generic_empty_and_consuming_local_operands() {
     };
     reject_changed_unit(&loaded, empty_key, &forged_empty);
 
-    for (name, faults) in [("length", 1), ("push", 2), ("pop", 2)] {
+    for (name, faults) in [("length", 1), ("push", 3), ("pop", 2)] {
         let (key, original) = function_unit(&source, &loaded, name);
         load_artifact(&effect_tests::replace_unit(&loaded, key, &original, vec![]))
             .expect("neutral digest repair preserves sequence meaning");
         for fault in 0..faults {
             let mut changed = original.clone();
-            match &mut code_mut(&mut changed).instructions[0] {
+            // Owned values now use an explicit consuming load followed by stack insertion.
+            let index = usize::from(name == "push" && fault == 1);
+            match &mut code_mut(&mut changed).instructions[index] {
                 CompiledInstruction::SequenceLength { source_local, .. } => *source_local = 1,
-                CompiledInstruction::SequencePush {
-                    value_local,
-                    source_local,
-                    ..
-                } => {
-                    assert_eq!((*value_local, *source_local), (0, 2));
+                CompiledInstruction::LoadLocal { local, use_mode } if name == "push" => {
+                    assert_eq!((*local, *use_mode), (0, ParameterUse::Consume));
                     if fault == 0 {
-                        *value_local = 1;
+                        *local = 1;
                     } else {
-                        *source_local = 3;
+                        *use_mode = ParameterUse::Borrow;
                     }
+                }
+                CompiledInstruction::SequencePush { source_local, .. } => {
+                    assert_eq!(*source_local, 2);
+                    *source_local = 3;
                 }
                 CompiledInstruction::SequencePop {
                     sequence_type,
@@ -152,6 +173,83 @@ fn owned_sequence_lowering_binds_generic_empty_and_consuming_local_operands() {
                     }
                 }
                 _ => panic!("expected direct sequence instruction"),
+            }
+            reject_changed_unit(&loaded, key, &changed);
+        }
+    }
+}
+
+#[test]
+fn generalized_sequence_artifact_rejects_inactive_get_and_replacement_operand_forgery() {
+    let (source, loaded) = fixture();
+    let (_, empty) = function_unit(&source, &loaded, "data-empty");
+    assert!(matches!(
+        code(&empty).instructions[0],
+        CompiledInstruction::SequenceEmpty { .. }
+    ));
+    let (_, push) = function_unit(&source, &loaded, "data-push");
+    assert!(
+        code(&push)
+            .instructions
+            .iter()
+            .any(|i| matches!(i, CompiledInstruction::SequencePush { .. }))
+    );
+    assert!(
+        code(&push)
+            .instructions
+            .iter()
+            .any(|i| matches!(i, CompiledInstruction::JumpIfFalse(_)))
+    );
+
+    for name in ["data-get", "data-replace"] {
+        let (key, original) = function_unit(&source, &loaded, name);
+        let operation = code(&original)
+            .instructions
+            .iter()
+            .position(|i| {
+                matches!(
+                    i,
+                    CompiledInstruction::SequenceGet { .. }
+                        | CompiledInstruction::SequenceReplace { .. }
+                )
+            })
+            .unwrap();
+        load_artifact(&effect_tests::replace_unit(&loaded, key, &original, vec![]))
+            .expect("neutral digest repair preserves generalized sequence meaning");
+        for fault in ["index", "source", "element", "result", "erase"] {
+            let mut changed = original.clone();
+            let instructions = &mut code_mut(&mut changed).instructions;
+            let index = operation - usize::from(name == "data-replace") - 1;
+            match fault {
+                "index" => instructions[index] = CompiledInstruction::I64(4),
+                "erase" => instructions[operation] = CompiledInstruction::Drop,
+                "element" if name == "data-replace" => {
+                    instructions[operation - 1] = CompiledInstruction::I64(24)
+                }
+                _ => match &mut instructions[operation] {
+                    CompiledInstruction::SequenceGet {
+                        sequence_type,
+                        source_local,
+                    } => {
+                        if fault == "source" {
+                            *source_local = 1;
+                        } else {
+                            *sequence_type = u32::MAX;
+                        }
+                    }
+                    CompiledInstruction::SequenceReplace {
+                        sequence_type,
+                        result_type,
+                        source_local,
+                    } => {
+                        if fault == "source" {
+                            *source_local = 1;
+                        } else {
+                            *result_type = *sequence_type;
+                        }
+                    }
+                    _ => unreachable!(),
+                },
             }
             reject_changed_unit(&loaded, key, &changed);
         }

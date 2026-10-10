@@ -213,6 +213,7 @@ impl CompilationManifest {
                     | (28, 28, 23)
                     | (29, 29, 24)
                     | (30, 30, 25)
+                    | (31, 31, 26)
             )
         {
             return Err(manifest_error(
@@ -281,9 +282,9 @@ mod tests {
             .root();
         let mut manifest = CompilationManifest {
             contract_version: 3,
-            graph_contract_version: 30,
-            compiler_contract_version: 30,
-            bytecode_contract_version: 25,
+            graph_contract_version: 31,
+            compiler_contract_version: 31,
+            bytecode_contract_version: 26,
             repository_id: RepositoryId::migrate(b"shareable-manifest", 0),
             package_id: PackageId::migrate(b"shareable-manifest", 0),
             revision: RevisionId::from_digest([1; 32]),
@@ -293,7 +294,7 @@ mod tests {
             optimization: OptimizationPolicy::DeterministicBaseline,
             units,
         };
-        for (graph, compiler, bytecode) in [(29, 29, 24), (30, 30, 25)] {
+        for (graph, compiler, bytecode) in [(29, 29, 24), (30, 30, 25), (31, 31, 26)] {
             manifest.graph_contract_version = graph;
             manifest.compiler_contract_version = compiler;
             manifest.bytecode_contract_version = bytecode;
@@ -309,6 +310,9 @@ mod tests {
             (30, 30, 24),
             (30, 29, 25),
             (29, 29, 25),
+            (31, 30, 25),
+            (30, 31, 26),
+            (31, 31, 25),
         ] {
             manifest.graph_contract_version = graph;
             manifest.compiler_contract_version = compiler;

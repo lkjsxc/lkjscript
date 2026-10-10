@@ -21,7 +21,7 @@ fn author_library() -> Native {
     let checked = library.cli(&["check"], true);
     assert_eq!(
         compact_field(compact_record(&checked, "tests"), "passed"),
-        "171" // 65 local tests and 106 from the current standard.
+        "181" // 65 local tests and 116 from the current standard.
     );
     library
 }
@@ -68,7 +68,7 @@ fn import_consumer(library: &Native) -> Native {
     let checked = consumer.cli(&["check"], true);
     assert_eq!(
         compact_field(compact_record(&checked, "tests"), "passed"),
-        "172" // 66 local/dependency tests and 106 from the current standard.
+        "182" // 66 local/dependency tests and 116 from the current standard.
     );
     consumer
 }

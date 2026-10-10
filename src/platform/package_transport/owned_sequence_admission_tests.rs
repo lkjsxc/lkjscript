@@ -124,8 +124,16 @@ fn owned_sequence_unused_parameter_still_admits_its_complete_element_contract() 
     }).unwrap().clone();
     let (i64_type, i64_bytes) =
         encode_type_object(&TypeObject::new(TypeForm::I64).unwrap()).unwrap();
+    let (callable, callable_bytes) = encode_type_object(
+        &TypeObject::new(TypeForm::Function {
+            parameters: Vec::new(),
+            result: i64_type,
+        })
+        .unwrap(),
+    )
+    .unwrap();
     let (invalid, invalid_bytes) =
-        encode_type_object(&TypeObject::new(TypeForm::OwnedSequence { item: i64_type }).unwrap())
+        encode_type_object(&TypeObject::new(TypeForm::OwnedSequence { item: callable }).unwrap())
             .unwrap();
     let OwnerRecord::Parameter(parameter) = &mut replacement else {
         unreachable!()
@@ -135,6 +143,10 @@ fn owned_sequence_unused_parameter_still_admits_its_complete_element_contract() 
     hostile.objects.insert(
         ObjectKey::from_digest(ObjectDomain::Type, i64_type.bytes()),
         i64_bytes,
+    );
+    hostile.objects.insert(
+        ObjectKey::from_digest(ObjectDomain::Type, callable.bytes()),
+        callable_bytes,
     );
     hostile.objects.insert(
         ObjectKey::from_digest(ObjectDomain::Type, invalid.bytes()),

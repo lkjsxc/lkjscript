@@ -2244,14 +2244,14 @@ Inventory selection and original bounded logs must establish that each selected
 case ran once and passed. Missing, duplicate, ignored, unexecuted, failed or
 substituted cases and forged success summaries block admission. Keep the current
 complete matrix mandatory while selecting future cases in the same Map family.
-Final-candidate contract `lkjscript-final-candidate-acceptance-6` pairs only with
+Final-candidate contract `lkjscript-final-candidate-acceptance-7` pairs only with
 workload
-`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-6`.
-Reject predecessor contracts and workloads, including generations 3, 4 and 5, and
+`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-7`.
+Reject predecessor contracts and workloads, including generations 3, 4, 5 and 6, and
 all mixed predecessor/current combinations even
 when other terminal counters and authenticated ZIP identities are valid. Earlier
-contracts retain their historical meaning; this acceptance change does not advance
-semantic graph, type or artifact encoding generations.
+contracts retain their historical meaning; this acceptance inventory identity does
+not itself determine semantic graph, type or artifact encoding generations.
 
 ## Native blocked fold composition and final-byte evidence
 
@@ -2283,7 +2283,7 @@ standalone matrices. Check the executable, artifact, descriptors and literal
 arguments remain unchanged. Input/output equality is a value property, not proof
 of zero-copy storage, bounded RSS or affine/borrowed result support.
 
-Final-candidate acceptance generation 6 retains all five behavior witnesses and
+Final-candidate acceptance generation 7 retains all five behavior witnesses and
 selects every enumerated case in this exact family, including independent oracle
 checks and future additions. Original bounded logs must prove each selected case
 passed exactly once. Missing, ignored, failed, duplicated or substituted cases
@@ -2307,7 +2307,7 @@ work-bound and cycle refusal, and complete incremental manifest/artifact equalit
 with clean compilation through accepted add/rebind/move/delete operations. A
 synthetic ownership-law matrix does not substitute for complete source admission.
 
-Final-candidate generation 6 additionally requires these exact public cases under
+Final-candidate generation 7 additionally requires these exact public cases under
 `native_declarations::incremental_units::`:
 
 - `new_components_do_not_promote_ports_to_compiler_units`;
@@ -2322,11 +2322,11 @@ Malformed port contracts must preserve authority/cache contents and allow a late
 valid edit. Every present/future test in this exact namespace remains selected;
 case/namespace substitution or missing/ignored/failed/duplicate outcomes reject.
 
-The generation-6 contract and workload are inseparable. Reject generation 5 and
+The generation-7 contract and workload are inseparable. Reject generation 6 and
 all earlier or mixed pairs without relabelling their historical receipts. Existing
 source, Map/fold composition, target, userland, installation, candidate-binding and
-joined-cleanup requirements remain unchanged. This acceptance revision does not
-advance semantic/artifact encodings or itself publish a new executable.
+joined-cleanup requirements remain unchanged. This acceptance inventory revision
+does not itself determine semantic/artifact encodings or publish a new executable.
 
 ## Declared Cargo executable origin
 
@@ -2351,3 +2351,76 @@ The new command identity invalidates prior command/profile reuse without changin
 receipt encoding. Graph, artifact, application-data and publication identities are
 not changed by this source-verification correction. Cargo and its build environment
 remain trusted; no hostile-build sandbox or arbitrary compiler proof is asserted.
+
+## Generalized sequence storage and exact final-byte families
+
+Container ownership remains affine independently of its element type. Author and
+export a generic `T: Transferable` ordinary sequence library before its consumers
+exist, then use scalars, nested immutable aggregates and independent owned
+carriers through copied executables and detached artifacts. Check empty reuse,
+append, complete LIFO removal, stable indexed ordinary values and both ordinary
+and owned replacement. Retained ordinary reads must survive replacement, removal,
+destruction and task transfer of the sequence. Owned displacement must retain the
+previous child's exact custody and permit later inspection and consumption.
+
+Production and reference evaluators independently admit the complete type and
+value closures. Reject hidden resources, secrets, callables, unsafe unused and
+phantom substitutions, invalid inactive syntax, unrestricted container copies,
+raw counterfeit owners, active-loan mutation and use of ordinary get as an owned
+read. Rehash artifacts after changing element types, ownership modes, operations
+or result contracts; strict source/code and independent admission must reject
+without altering accepted meaning. Sequence ownership alone proves neither
+Transferable nor Shareable.
+
+Observe index-once evaluation and index/value/source order for replacement. Probe
+negative indices, upper bounds, signed extremes, exact/one-short reservations,
+cancellation and failures around ordinary clone storage, mutation and result
+construction. Bounds and allocation must be checked before the swap. Require no
+successful partial output, joined loans and owners, and healthy subsequent calls.
+Checked mutation preserves admission only from the exact valid prior sequence
+and independently admitted new value; raw mutation must invalidate it. Measure
+admission work to reject rescanning untouched prefixes on each checked update.
+
+The maintained native planner stores remaining counts and levels in I64 sequences,
+visited flags in a Bool sequence, and readiness indices in an append-only I64
+sequence with a scalar head. Retain all 4,635 independent planner cases, checker
+adversaries, complete-result comparisons and detached execution. Missing counters
+mean zero; unrelated input-map keys are ignored; successful level maps omit
+zero-level components. Invalid endpoints, duplicate releases, negative counters
+and stalled traversal refuse with `complete=false` and empty levels. Check signed
+endpoints before indexing and release every working owner on refusal. Matched
+chain, frontier and diamond workloads preserve existing graph capacities and
+report preparation, execution, storage growth and admission work separately.
+Retain slower outcomes and make monetary claims only from measured API usage.
+
+Final-candidate acceptance generation 7 makes two exact namespaces mandatory:
+`native_declarations::native_owned_fifo::` and
+`native_declarations::native_data_sequences::`. The FIFO family requires all five
+maintained witnesses: exhaustive generic interleavings and detached results,
+trap/input/cleanup recovery, finite-fuel detached cleanup, lexical loan rejection
+without publication, and the independent LIFO/nonconsuming-peek adversary. The
+generalized sequence family requires these exact public test identities:
+
+- `native_data_sequences_generic_export_finite_model_and_detached_execution`;
+- `native_data_sequences_immutable_reads_survive_replacement_removal_disposal_and_transfer`;
+- `native_data_sequences_owned_replacement_preserves_displaced_custody`;
+- `negative::native_data_sequences_reject_hidden_types_active_loans_and_unsafe_substitutions`;
+- `native_data_sequences_bounds_and_fuel_refusals_join_cleanup_and_recover`.
+
+Exact full identities, including namespace, are admitted before any harness
+execution. Removing an entire family, omitting one required case or substituting
+similarly named tests rejects; a remaining `native_owned_` case cannot stand in
+for FIFO. Every enumerated present or future test in each namespace is selected.
+Original bounded output must establish one passing outcome per selected test;
+unrun, ignored, failed, duplicated or substituted outcomes reject even with a
+successful exit and forged complete summary.
+
+The current contract `lkjscript-final-candidate-acceptance-7` pairs only with
+`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-7`.
+Reject predecessor and mixed pairs, including generation 6, at terminal and
+authenticated controller admission. Prior receipts retain their historical
+meaning; acceptance identity does not relabel distributed bytes or itself publish
+an executable. Existing Map, fold, incremental-compiler, target, userland,
+installation, candidate-binding and joined-cleanup obligations remain required.
+The coordinated semantic format cut is independently owned by graph/interface/
+compiler/artifact admission, rather than inferred from this acceptance generation.

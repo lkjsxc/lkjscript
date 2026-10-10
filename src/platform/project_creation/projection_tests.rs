@@ -440,6 +440,8 @@ fn visit_expression(
         | ExpressionOperation::SequenceLength { .. }
         | ExpressionOperation::SequencePush { .. }
         | ExpressionOperation::SequencePop { .. }
+        | ExpressionOperation::SequenceGet { .. }
+        | ExpressionOperation::SequenceReplace { .. }
         | ExpressionOperation::BorrowOwnedItem { .. }
         | ExpressionOperation::BorrowCall { .. }
         | ExpressionOperation::MatchBorrowedOwned { .. } => {

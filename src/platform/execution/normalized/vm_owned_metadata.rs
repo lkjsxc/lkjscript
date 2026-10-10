@@ -8,6 +8,50 @@ use crate::platform::execution::{ExecutionControl, ExecutionError};
 use crate::platform::kernel::{Name, TypeForm};
 
 impl Value {
+    pub(in super::super) fn sequence_item(
+        &self,
+        program: &NormalizedProgram,
+        domain: ValueOrigin,
+        index: i64,
+        control: &ExecutionControl,
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+    ) -> Result<Self, ExecutionError> {
+        control.check()?;
+        if self.origin != program.value_origin || self.class != Class::Memory {
+            return Err(admission_error(
+                "sequence projection requires this program's checked owner",
+            ));
+        }
+        let NormalizedValue::OwnedSequence(token) = &self.raw else {
+            return Err(admission_error(
+                "sequence projection requires an exact sequence",
+            ));
+        };
+        token.validate_admission(program.value_origin)?;
+        let Some(object) = program.types.get(&token.ty()) else {
+            return Err(admission_error("sequence has no exact prepared type"));
+        };
+        let TypeForm::OwnedSequence { item } = &object.form else {
+            return Err(admission_error(
+                "sequence token has a foreign prepared type",
+            ));
+        };
+        if !program.comparable_types.contains(item) {
+            return Err(admission_error(
+                "sequence projection requires ordinary first-order data",
+            ));
+        }
+        // Exact parent admission proves the selected child's closed type. The
+        // read placement excludes mutation until this independent clone exists.
+        let raw = token.get(domain, index, control, reserve)?;
+        control.check()?;
+        Ok(Self {
+            raw,
+            origin: program.value_origin,
+            class: Class::Free,
+            borrow: None,
+        })
+    }
     pub(in super::super) fn owned_metadata(
         &self,
         program: &NormalizedProgram,

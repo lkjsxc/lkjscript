@@ -70,10 +70,12 @@ Shareable admission has a distinct structural traversal. ByteBuffer and
 OwnedI64Cell support immutable scoped reads. Owned products and choices require
 every owned child to be Shareable and every ordinary member to be complete
 first-order data, including inactive cases and phantom nominal arguments.
-Owned sequences require a Shareable owned element type even when empty. An open
-owner requires an exact in-scope Shareable assumption; a Transferable assumption
-cannot substitute for it. Sharing preserves the source custodian and allocation
-origin throughout the complete join.
+Owned sequences require either a Shareable owned element type or complete ordinary
+first-order elements, including when empty. An ordinary element parameter proves
+the latter under its exact in-scope ordinary Transferable assumption. An open owned
+element requires an exact in-scope Shareable assumption; an owned Transferable
+assumption cannot substitute for it. Sharing preserves the source custodian and
+allocation origin throughout the complete join.
 
 Every nominal actual argument is checked in its caller scope, including phantom
 arguments. Nominal fields and cases are checked under a separate set of ordinary

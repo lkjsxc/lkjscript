@@ -1249,6 +1249,28 @@ impl Renderer<'_> {
                 self.ty(sequence_type)?,
                 self.expression(source, env)?,
             ),
+            E::SequenceGet {
+                sequence_type,
+                source,
+                index,
+            } => format!(
+                "(sequence-get (type {}) {} (index {}))",
+                self.ty(sequence_type)?,
+                self.expression(source, env)?,
+                self.expression(index, env)?,
+            ),
+            E::SequenceReplace {
+                sequence_type,
+                index,
+                value,
+                source,
+            } => format!(
+                "(sequence-replace (type {}) (index {}) {} {})",
+                self.ty(sequence_type)?,
+                self.expression(index, env)?,
+                self.expression(value, env)?,
+                self.expression(source, env)?,
+            ),
             E::BorrowOwnedItem {
                 sequence_type,
                 source,

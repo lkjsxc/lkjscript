@@ -11,9 +11,51 @@ pub(in super::super::super) fn resolve(
     control: &ExecutionControl,
 ) -> Result<TypeObjectDigest, ExecutionError> {
     let mut work = Work { control, nodes: 0 };
+    resolve_in(program, template, bindings, &mut work)
+}
+
+fn resolve_in(
+    program: &NormalizedProgram,
+    template: TypeObjectDigest,
+    bindings: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+    work: &mut Work<'_>,
+) -> Result<TypeObjectDigest, ExecutionError> {
+    // Closed roots and direct parameters already have a bounded fast path.
+    // Positive composite entries are private to this prepared program and the
+    // complete binding context; reads neither clone keys nor grow the index.
+    if !bindings.is_empty()
+        && !matches!(
+            program.types.get(&template).map(|object| &object.form),
+            Some(TypeForm::TypeParameter { .. })
+        )
+    {
+        work.control.check()?;
+        if let Some(actual) = program
+            .prepared_type_lookup
+            .get(program.value_origin, template, bindings)
+            .map_err(|()| reject())?
+        {
+            // Recheck the current shape even on a hit. A divergent synthetic
+            // clone or stale type table cannot turn derived metadata into proof.
+            let exact = matches(program, template, actual, bindings, 0, work)?;
+            work.control.check()?;
+            return if exact { Ok(actual) } else { Err(reject()) };
+        }
+    }
+    scan(program, template, bindings, work)
+}
+
+/// Legacy raw/synthetic contexts may be outside the prepared callable closure.
+/// Preserve their independent bounded matching behavior without caching misses.
+fn scan(
+    program: &NormalizedProgram,
+    template: TypeObjectDigest,
+    bindings: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+    work: &mut Work<'_>,
+) -> Result<TypeObjectDigest, ExecutionError> {
     // Closed types dominate calls and have the same admitted identity. Check this
     // candidate first so their cost does not depend on unrelated program types.
-    if matches(program, template, template, bindings, 0, &mut work)? {
+    if matches(program, template, template, bindings, 0, work)? {
         return Ok(template);
     }
     if let TypeForm::TypeParameter { parameter } =
@@ -26,13 +68,16 @@ pub(in super::super::super) fn resolve(
             .ok_or_else(reject);
     }
     for candidate in program.types.keys() {
-        if *candidate != template && matches(program, template, *candidate, bindings, 0, &mut work)?
-        {
+        if *candidate != template && matches(program, template, *candidate, bindings, 0, work)? {
             return Ok(*candidate);
         }
     }
     Err(reject())
 }
+
+#[cfg(test)]
+#[path = "vm_type_lookup_tests.rs"]
+mod lookup_tests;
 
 fn matches(
     program: &NormalizedProgram,

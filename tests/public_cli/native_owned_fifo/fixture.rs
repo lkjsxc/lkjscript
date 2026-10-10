@@ -71,7 +71,7 @@ impl Fifo {
         for (label, source) in SOURCES {
             accept(&supplier, label, source);
         }
-        checked(&supplier, "107"); // 106 exact standard tests and the command starter.
+        checked(&supplier, "117"); // 116 exact standard tests and the command starter.
         for module in ["fifo-support", "fifo-steps", "fifo-trace"] {
             let draft = unchanged(&supplier, module);
             assert!(draft.contains("(constraint owned)"));
@@ -91,7 +91,7 @@ impl Fifo {
             &format!("{}{imports}{ELEMENTS}", dependency(&generic)),
         );
         accept(&consumer, "application", &format!("{imports}{APPLICATION}"));
-        checked(&consumer, "108"); // One additional consumer-owned starter test.
+        checked(&consumer, "118"); // One additional consumer-owned starter test.
         let draft = unchanged(&consumer, "fifo-app");
         assert!(draft.contains("(borrow-from ") && draft.contains("(borrow-call "));
         let artifact = consumer.root.path().join("fifo.lkja");

@@ -47,6 +47,8 @@ impl Decoder {
                 "expression.choose-owned" => &["value"],
                 "expression.sequence-length" | "expression.sequence-pop" => &["source"],
                 "expression.sequence-push" => &["value", "source"],
+                "expression.sequence-get" => &["index", "source"],
+                "expression.sequence-replace" => &["index", "value", "source"],
                 "expression.borrow-call" => &["call", "body"],
                 "expression.borrow-owned-item" => &["index", "source", "body"],
                 "expression.match-owned" | "expression.match-borrowed-owned" => &["source"],

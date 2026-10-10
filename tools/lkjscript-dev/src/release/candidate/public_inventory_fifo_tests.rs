@@ -1,46 +1,41 @@
-//! Current native-owned selection must include every FIFO behavior witness.
+//! FIFO admission requires complete exact identities, then complete passing outcomes.
 use super::*;
 
-const PREFIX: &str = "native_declarations::native_owned_fifo::";
-const FIFO: [&str; 5] = [
-    "native_owned_fifo_exact_generic_library_exhaustive_interleavings_and_source_free_results",
-    "native_owned_fifo_traps_preserve_complete_input_admission_cleanup_and_following_invocations",
-    "native_owned_fifo_finite_fuel_refusal_joins_detached_custody_without_partial_results",
-    "negative::native_owned_fifo_rejects_read_escape_and_protected_consumption_without_publication",
-    "oracle::native_owned_fifo_oracle_distinguishes_lifo_and_nonconsuming_peek",
-];
+#[test]
+fn fifo_inventory_rejects_each_missing_substituted_and_entirely_absent_family() {
+    let original = super::tests::listing();
+    for suffix in fifo::REQUIRED {
+        let name = format!("{}{suffix}", fifo::PREFIX);
+        let record = format!("{name}: test\n");
+        assert!(inventory(&original.replace(&record, "")).is_err());
+        assert!(inventory(&original.replace(&name, &format!("{name}_substitute"))).is_err());
+        assert!(inventory(&original.replace(&name, &format!("impostor::{name}"))).is_err());
+    }
+    let absent = original
+        .lines()
+        .filter(|line| !line.starts_with(fifo::PREFIX))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(inventory(&absent).is_err());
+}
 
 #[test]
-fn current_native_owned_family_selects_all_fifo_witnesses_and_rejects_partial_execution() {
+fn every_fifo_case_is_selected_and_missing_or_ignored_outcomes_reject() {
     let mut listing = super::tests::listing();
-    if !listing.ends_with('\n') {
-        listing.push('\n');
-    }
-    for suffix in FIFO {
-        listing.push_str(&format!("{PREFIX}{suffix}: test\n"));
-    }
+    let future = format!("{}future_behavior", fifo::PREFIX);
+    listing.push_str(&format!("{future}: test\n"));
     let inventory = inventory(&listing).unwrap();
-    for suffix in FIFO {
-        assert!(inventory.selected.contains(&format!("{PREFIX}{suffix}")));
-    }
-    let count = inventory.selected.len();
-    let header = format!("running {count} tests\n");
-    let summary = format!(
-        "test result: ok. {count} passed; 0 failed; 0 ignored; 0 measured; {} filtered out; finished in 1.00s\n",
-        inventory.all.len() - count,
-    );
-    let mut complete = header.clone();
-    for name in &inventory.selected {
-        complete.push_str(&format!("test {name} ... ok\n"));
-    }
-    complete.push_str(&summary);
+    assert!(inventory.selected.contains(&future));
+    let complete = super::tests::success(&inventory);
     passed(&complete, &inventory).unwrap();
-    for suffix in FIFO {
-        let record = format!("test {PREFIX}{suffix} ... ok\n");
+    for suffix in fifo::REQUIRED {
+        let name = format!("{}{suffix}", fifo::PREFIX);
+        assert!(inventory.selected.contains(&name));
+        let record = format!("test {name} ... ok\n");
         assert!(passed(&complete.replace(&record, ""), &inventory).is_err());
         assert!(
             passed(
-                &complete.replace(&record, &format!("test {PREFIX}{suffix} ... ignored\n")),
+                &complete.replace(&record, &format!("test {name} ... ignored\n")),
                 &inventory,
             )
             .is_err()

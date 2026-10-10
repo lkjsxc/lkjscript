@@ -384,7 +384,7 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
                 .write_all(&current)
                 .unwrap();
         }
-        let (previous, retained, expected) = match name {
+        let (previous, retained, frozen, expected) = match name {
             "requirements" => (
                 include_bytes!(
                     "../../../tests/fixtures/owned-predecessor-compiler28/requirements.lkja"
@@ -396,6 +396,10 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
                 .as_slice(),
                 include_bytes!(
                     "../../../tests/fixtures/owned-predecessor-compiler30/requirements.lkja"
+                )
+                .as_slice(),
+                include_bytes!(
+                    "../../../tests/fixtures/owned-predecessor-compiler31/requirements.lkja"
                 )
                 .as_slice(),
             ),
@@ -412,6 +416,10 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
                     "../../../tests/fixtures/owned-predecessor-compiler30/transactions.lkja"
                 )
                 .as_slice(),
+                include_bytes!(
+                    "../../../tests/fixtures/owned-predecessor-compiler31/transactions.lkja"
+                )
+                .as_slice(),
             ),
             "participation" => (
                 include_bytes!(
@@ -426,6 +434,10 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
                     "../../../tests/fixtures/owned-predecessor-compiler30/participation.lkja"
                 )
                 .as_slice(),
+                include_bytes!(
+                    "../../../tests/fixtures/owned-predecessor-compiler31/participation.lkja"
+                )
+                .as_slice(),
             ),
             _ => unreachable!(),
         };
@@ -433,6 +445,11 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
             load_artifact(previous).unwrap_err().code,
             "artifact_bundle_contract",
             "{name}: original compiler28 derived fixture remains frozen"
+        );
+        assert_eq!(
+            load_artifact(frozen).unwrap_err().code,
+            "artifact_bundle_contract",
+            "{name}: original compiler30 derived fixture remains frozen"
         );
         expected_artifacts.push((name, retained, expected, current));
     }

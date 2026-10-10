@@ -251,6 +251,22 @@ impl Reference<'_> {
                 self.plain(*source, live)?;
                 Ok(Value::Plain)
             }
+            ExpressionOperation::SequenceGet { index, source, .. } => {
+                self.plain(*index, live)?;
+                self.plain(*source, live)?;
+                Ok(Value::Plain)
+            }
+            ExpressionOperation::SequenceReplace {
+                index,
+                value,
+                source,
+                ..
+            } => {
+                self.plain(*index, live)?;
+                self.plain(*value, live)?;
+                self.plain(*source, live)?;
+                Ok(Value::Plain)
+            }
             ExpressionOperation::BorrowOwnedItem {
                 index,
                 source,

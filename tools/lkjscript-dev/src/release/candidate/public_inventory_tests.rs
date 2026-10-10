@@ -1,7 +1,7 @@
 use super::*;
 
 pub(super) fn listing() -> String {
-    [
+    let mut listing = [
         "owned::native_owned_producer: test",
         "buffers::native_byte_buffer_move: test",
         "ranges::native_byte_ranges_slice: test",
@@ -22,10 +22,19 @@ pub(super) fn listing() -> String {
         "unrelated_test: test",
     ]
     .join("\n")
-        + "\n"
+        + "\n";
+    for (prefix, required) in [
+        (fifo::PREFIX, fifo::REQUIRED.as_slice()),
+        (sequences::PREFIX, sequences::REQUIRED.as_slice()),
+    ] {
+        for suffix in required {
+            listing.push_str(&format!("{prefix}{suffix}: test\n"));
+        }
+    }
+    listing
 }
 
-fn success(inventory: &Inventory) -> String {
+pub(super) fn success(inventory: &Inventory) -> String {
     let mut text = format!("\nrunning {} tests\n", inventory.selected.len());
     for name in &inventory.selected {
         text.push_str(&format!("test {name} ... ok\n"));
@@ -37,8 +46,8 @@ fn success(inventory: &Inventory) -> String {
 #[test]
 fn all_required_families_and_exact_topology_are_selected_without_unrelated_cases() {
     let inventory = inventory(&listing()).unwrap();
-    assert_eq!(inventory.all.len(), 18);
-    assert_eq!(inventory.selected.len(), 17);
+    assert_eq!(inventory.all.len(), 28);
+    assert_eq!(inventory.selected.len(), 27);
     assert!(!inventory.selected.contains("unrelated_test"));
     passed(&success(&inventory), &inventory).unwrap();
 }
@@ -46,15 +55,20 @@ fn all_required_families_and_exact_topology_are_selected_without_unrelated_cases
 #[test]
 fn missing_families_or_topology_never_become_vacuous_success() {
     let original = listing();
-    for omitted in 0..17 {
+    for (family, namespace) in REQUIRED_FAMILIES {
         let text = original
             .lines()
-            .enumerate()
-            .filter(|(i, _)| *i != omitted)
-            .map(|(_, line)| line)
+            .filter(|line| {
+                let name = line.strip_suffix(": test").unwrap();
+                !required_family(name, family, namespace)
+            })
             .collect::<Vec<_>>()
             .join("\n");
-        assert!(inventory(&text).is_err(), "omitted {omitted}");
+        assert!(inventory(&text).is_err(), "omitted family {family}");
+    }
+    for name in [TOPOLOGY, MAP_MATRIX] {
+        let text = original.replace(&format!("{name}: test\n"), "");
+        assert!(inventory(&text).is_err(), "omitted exact witness {name}");
     }
     assert!(inventory("").is_err());
     assert!(inventory(&original.replace(TOPOLOGY, &format!("prefix_{TOPOLOGY}"))).is_err());
@@ -103,7 +117,7 @@ fn required_parallel_namespaces_accept_nested_paths_and_reject_substring_imposto
         "native_declarations::native_parallel_reads::nested::native_parallel_reads_scoped",
     );
     let inventory = inventory(&nested).unwrap();
-    assert_eq!(inventory.selected.len(), 17);
+    assert_eq!(inventory.selected.len(), 27);
     passed(&success(&inventory), &inventory).unwrap();
 }
 
@@ -131,19 +145,19 @@ fn a_successful_exit_or_summary_cannot_hide_unrun_ignored_or_duplicate_tests() {
     let inventory = inventory(&listing()).unwrap();
     let original = success(&inventory);
     for changed in [
-        original.replace("17 passed", "7 passed"),
+        original.replace("27 passed", "7 passed"),
         original.replace("0 ignored", "1 ignored"),
         original.replace("0 failed", "1 failed"),
         original.replace("0 measured", "1 measured"),
         original.replace("1 filtered out", "2 filtered out"),
-        original.replace("running 17 tests", "running 0 tests"),
+        original.replace("running 27 tests", "running 0 tests"),
         original.replacen(" ... ok", " ... ignored", 1),
         original.replacen(" ... ok", " ... FAILED", 1),
         original.lines().filter(|line| !line.starts_with("test buffers::")).collect::<Vec<_>>().join("\n"),
         original.clone() + "test native_declarations::native_owned_products::parallel::native_parallel_joined ... ok\n",
         original.clone() + "test unrelated_test ... ok\n",
         original.clone() + &original,
-        "test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s\n".to_owned(),
+        "test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s\n".to_owned(),
     ] {
         assert!(passed(&changed, &inventory).is_err(), "accepted {changed}");
     }

@@ -21,6 +21,7 @@ owns executable availability; `lkjscript capabilities` discovers the installed s
 | [Recoverable owned outcomes](native-owned-choices.md) | Explicit success/rejection cases, owner-returning refusal and exhaustive consuming analysis. |
 | [Scoped reads of owned children](native-owned-borrows.md) | Generic product/choice inspection through exact witnesses while retaining the original owner. |
 | [Dynamic owned sequences](native-owned-sequences.md) | Runtime-sized owned collections, scoped indexed reads, exact element witnesses and consuming drain. |
+| [Ordinary data in owned sequences](native-data-sequences.md) | Affine working storage for ordinary data, stable indexed reads, owner-returning replacement and native planner adoption. |
 | [Parameterized owned worklists](native-owned-worklists.md) | One element contract across flat and chunked storage, explicit transfer and complete provisional graph validation. |
 | [Source-tied borrowed results](native-owned-read-results.md) | Return generic read-only views across packages, observe stable selection and regain consuming rights after scope exit. |
 | [Generic owned implementation schemes](native-generic-owned-implementations.md) | Apply reusable flat/chunked methods to independent owned items with explicit type applications, borrowed results and joined task cleanup. |

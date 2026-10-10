@@ -1,9 +1,10 @@
 # Work with owned sequences
 
 Use `(owned-sequence T)` when the number of owned elements is known only at
-runtime. Ordinary lists continue to hold ordinary values. Sequences own their
-elements, including while empty, and support append, last-element removal and
-scoped indexed inspection.
+runtime. Sequences retain affine storage custody, including while empty, and
+support append, last-element removal, indexed replacement and scoped owned-element
+inspection. The [ordinary-data guide](native-data-sequences.md) covers ordinary
+elements and stable indexed reads in the same container.
 
 See [status](../status.md) for exact source acceptance and public executable
 availability, and the

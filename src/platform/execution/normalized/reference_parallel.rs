@@ -162,11 +162,6 @@ impl ReferenceState<'_> {
         {
             TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Ok(true),
             TypeForm::OwnedSequence { item } => {
-                if direct_memory_type(&self.schema, *item, &BTreeMap::new(), self.control)?
-                    .is_none()
-                {
-                    return Err(reference_type_error("sequence element must be owned"));
-                }
                 self.parallel_transfer_type(*item, depth + 1, nodes)?;
                 Ok(true)
             }

@@ -50,16 +50,16 @@ mod code_admission;
 #[path = "artifact_flow.rs"]
 mod flow_admission;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-37";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-37";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 37;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF37";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART37";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN37";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-38";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-38";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 38;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF38";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART38";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN38";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v37";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v37";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v37";
+    "lkjscript.artifact-manifest-envelope.v38";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v38";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v38";
 pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v18";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
@@ -82,7 +82,7 @@ struct ArtifactWire {
 }
 fn artifact_wire(version: u16) -> Result<ArtifactWire, Diagnostic> {
     match version {
-        30..=36 => Err(artifact_error(
+        30..=37 => Err(artifact_error(
             DiagnosticClass::Source,
             "artifact_bundle_contract",
             "predecessor artifacts require rebuilding from canonical meaning",
@@ -432,6 +432,8 @@ impl ArtifactManifest {
             35
         } else if bytes.starts_with(b"LKJAMF36") {
             36
+        } else if bytes.starts_with(b"LKJAMF37") {
+            37
         } else {
             ARTIFACT_CONTRACT_VERSION
         })?;
@@ -524,6 +526,7 @@ impl ArtifactManifest {
                     | (28, 28, 23)
                     | (29, 29, 24)
                     | (30, 30, 25)
+                    | (31, 31, 26)
             )
             || self.compilation_manifest_contract_version != COMPILATION_MANIFEST_CONTRACT_VERSION
         {

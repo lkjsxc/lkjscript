@@ -49,7 +49,7 @@ fn sequence_memory_checks_source_liveness_after_index_effects() {
 }
 
 #[test]
-fn sequence_memory_rejects_ordinary_elements_and_temporary_read_sources() {
+fn sequence_memory_rejects_invalid_item_reads_and_temporary_read_sources() {
     for source in [
         SOURCE.replace("(constraint owned)", "(constraint transferable)"),
         SOURCE.replace("(owned-sequence ByteBuffer)", "(owned-sequence I64)"),

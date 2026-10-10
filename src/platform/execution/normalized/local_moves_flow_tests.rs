@@ -75,13 +75,12 @@ fn fallback_borrowed_slot_guards_preserve_earlier_occupancy() {
 }
 
 #[test]
-fn sequence_implicit_reads_preserve_both_push_operands_in_precise_and_fallback_analysis() {
+fn sequence_reads_preserve_source_and_consuming_stack_value_in_precise_and_fallback_analysis() {
     let ty = crate::platform::kernel::TypeObjectDigest::from_bytes([7; 32]);
     for fallback in [false, true] {
         for instruction in [
             I::SequencePush {
                 sequence_type: ty,
-                value_local: 1,
                 source_local: 0,
             },
             I::SequenceLength {
@@ -93,6 +92,15 @@ fn sequence_implicit_reads_preserve_both_push_operands_in_precise_and_fallback_a
                 result_type: ty,
                 source_local: 0,
             },
+            I::SequenceGet {
+                sequence_type: ty,
+                source_local: 0,
+            },
+            I::SequenceReplace {
+                sequence_type: ty,
+                result_type: ty,
+                source_local: 0,
+            },
             I::BorrowOwnedItem {
                 sequence_type: ty,
                 source_local: 0,
@@ -100,7 +108,25 @@ fn sequence_implicit_reads_preserve_both_push_operands_in_precise_and_fallback_a
                 binding_type: ty,
             },
         ] {
-            let mut input = code(vec![load(0), load(1), instruction, I::Return]);
+            let consumes_value = matches!(
+                instruction,
+                I::SequencePush { .. } | I::SequenceReplace { .. }
+            );
+            let mut instructions = vec![load(0), load(1)];
+            if matches!(
+                instruction,
+                I::SequenceGet { .. } | I::SequenceReplace { .. } | I::BorrowOwnedItem { .. }
+            ) {
+                instructions.push(I::I64(0));
+            }
+            if consumes_value {
+                instructions.push(I::LoadLocal {
+                    local: 1,
+                    use_mode: ParameterUse::Consume,
+                });
+            }
+            instructions.extend([instruction, I::Return]);
+            let mut input = code(instructions);
             let control = ExecutionControl::uncancelled();
             let mut work = Budget::new(&control);
             if fallback {
@@ -110,15 +136,18 @@ fn sequence_implicit_reads_preserve_both_push_operands_in_precise_and_fallback_a
             }
             assert_eq!(input.instructions[0], load(0));
             assert!(future_read(&input.instructions, 0, 0));
-            if matches!(input.instructions[2], I::SequencePush { .. }) {
+            if consumes_value {
                 assert_eq!(input.instructions[1], load(1));
                 assert!(future_read(&input.instructions, 1, 1));
             }
         }
         let mut invalid = code(vec![
+            I::LoadLocal {
+                local: 2,
+                use_mode: ParameterUse::Consume,
+            },
             I::SequencePush {
                 sequence_type: ty,
-                value_local: 2,
                 source_local: 0,
             },
             I::Return,

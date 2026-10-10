@@ -1,4 +1,4 @@
-//! A runtime-sized vector of independent owned children, with one sealed owner.
+//! A runtime-sized vector of owned children or immutable data, with one sealed owner.
 use super::owned_choice::OwnedChoice;
 use super::owned_product::OwnedProduct;
 use super::owned_storage::OwnedStorage;
@@ -132,7 +132,54 @@ impl OwnedSequence {
     ) -> Result<NormalizedValue, ExecutionError> {
         self.validate(origin, false)?;
         control.check()?;
-        let index = usize::try_from(index)
+        let index = self.index(origin, index)?;
+        self.storage.borrow_field(origin, index, control, reserve)
+    }
+    /// The caller retains a short parent read loan while immutable backing is
+    /// cloned. The returned data has no loan on this sequence.
+    pub(super) fn get(
+        &self,
+        origin: ValueOrigin,
+        index: i64,
+        control: &ExecutionControl,
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+    ) -> Result<NormalizedValue, ExecutionError> {
+        self.validate(origin, false)?;
+        control.check()?;
+        let index = self.index(origin, index)?;
+        self.storage.read_metadata(origin, index, control, reserve)
+    }
+    /// Reserve the exact result envelope before swapping the child. Raw
+    /// replacement invalidates admission, including admission of the remaining
+    /// sequence; the evaluator restores it from the prior proof and new child.
+    pub(super) fn replace(
+        self,
+        origin: ValueOrigin,
+        index: i64,
+        value: NormalizedValue,
+        result_type: TypeObjectDigest,
+        control: &ExecutionControl,
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+    ) -> Result<NormalizedValue, ExecutionError> {
+        self.validate(origin, true)?;
+        control.check()?;
+        let index = self.index(origin, index)?;
+        reserve(
+            OwnedProduct::ALLOCATION_BYTES + 2 * std::mem::size_of::<NormalizedValue>() as u64,
+        )?;
+        control.check()?;
+        let displaced = self.storage.replace(origin, index, value, control)?;
+        let product = OwnedProduct::create(
+            origin,
+            result_type,
+            vec![NormalizedValue::OwnedSequence(self), displaced],
+            control,
+            &mut |_| Ok(()),
+        )?;
+        Ok(NormalizedValue::OwnedProduct(product))
+    }
+    fn index(&self, origin: ValueOrigin, index: i64) -> Result<usize, ExecutionError> {
+        usize::try_from(index)
             .ok()
             .filter(|index| self.storage.len(origin).is_ok_and(|length| *index < length))
             .ok_or_else(|| {
@@ -141,8 +188,7 @@ impl OwnedSequence {
                     "normalized_sequence_index",
                     "owned sequence index is outside its elements",
                 )
-            })?;
-        self.storage.borrow_field(origin, index, control, reserve)
+            })
     }
     pub(super) fn inspect_transfer<R>(
         &self,
@@ -160,6 +206,10 @@ impl OwnedSequence {
         self.storage.adopt_transfer(source, destination, adopt)
     }
 }
+
+#[cfg(test)]
+#[path = "owned_sequence_data_tests.rs"]
+mod data_tests;
 
 #[cfg(test)]
 mod tests {

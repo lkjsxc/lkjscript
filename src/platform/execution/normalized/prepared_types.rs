@@ -19,6 +19,9 @@ mod implementations;
 mod product_depth;
 #[path = "prepared_shared_code.rs"]
 mod shared_code;
+#[path = "prepared_type_lookup.rs"]
+mod type_lookup;
+pub(super) use type_lookup::PreparedTypeLookup;
 
 type Context = (FunctionIndex, Vec<TypeObjectDigest>);
 type EffectBindings =
@@ -36,6 +39,7 @@ pub(super) struct Budget<'a> {
     steps: usize,
     bytes: usize,
     control: &'a crate::platform::execution::ExecutionControl,
+    type_lookup: type_lookup::TypeLookupBuilder,
 }
 
 impl<'a> Budget<'a> {
@@ -44,6 +48,7 @@ impl<'a> Budget<'a> {
             steps: 0,
             bytes: 0,
             control,
+            type_lookup: type_lookup::TypeLookupBuilder::default(),
         }
     }
     pub(super) fn reserve<T>(&mut self, count: usize) -> Result<(), Diagnostic> {
@@ -191,6 +196,7 @@ pub(super) fn share_code(
         steps: usize::try_from(program.work.type_derivation_steps).map_err(|_| missing())?,
         bytes: usize::try_from(program.work.type_metadata_bytes).map_err(|_| missing())?,
         control,
+        type_lookup: type_lookup::TypeLookupBuilder::default(),
     };
     shared_code::share(program, &mut work)?;
     program.capture_proof_bytes = work.bytes;
@@ -370,6 +376,7 @@ fn complete_budgeted(
     program.capture_proof_bytes = work.bytes;
     program.work.type_derivation_steps = work.steps as u64;
     program.work.type_metadata_bytes = program.capture_proof_bytes as u64;
+    program.prepared_type_lookup = work.finish_type_lookup(program.value_origin);
     Ok(())
 }
 
@@ -874,6 +881,14 @@ fn calls(
             sequence_type: product_type,
             ..
         }
+        | NormalizedInstruction::SequenceGet {
+            sequence_type: product_type,
+            ..
+        }
+        | NormalizedInstruction::SequenceReplace {
+            sequence_type: product_type,
+            ..
+        }
         | NormalizedInstruction::SequencePop {
             sequence_type: product_type,
             ..
@@ -891,7 +906,8 @@ fn calls(
             | NormalizedInstruction::AdoptBorrowResult { binding_type, .. } => {
                 substitute(types, *binding_type, bindings, 0, work)?;
             }
-            NormalizedInstruction::SequencePop { result_type, .. } => {
+            NormalizedInstruction::SequencePop { result_type, .. }
+            | NormalizedInstruction::SequenceReplace { result_type, .. } => {
                 substitute(types, *result_type, bindings, 0, work)?;
             }
             NormalizedInstruction::MatchBorrowedOwned { cases, .. } => {
@@ -1283,6 +1299,10 @@ fn close_effect_applications(
                     | NormalizedInstruction::SequencePush {
                         sequence_type: product_type,
                         ..
+                    }
+                    | NormalizedInstruction::SequenceGet {
+                        sequence_type: product_type,
+                        ..
                     } => {
                         *product_type = substitute_effect_type(
                             self.types,
@@ -1314,6 +1334,11 @@ fn close_effect_applications(
                         ..
                     }
                     | NormalizedInstruction::SequencePop {
+                        sequence_type: product_type,
+                        result_type: binding_type,
+                        ..
+                    }
+                    | NormalizedInstruction::SequenceReplace {
                         sequence_type: product_type,
                         result_type: binding_type,
                         ..
@@ -1850,6 +1875,9 @@ fn substitute(
         work.node::<(TypeObjectDigest, TypeObject)>()?;
     }
     types.entry(identity).or_insert(object);
+    if depth == 0 && identity != ty {
+        work.remember_type_substitution(ty, identity, bindings)?;
+    }
     Ok(identity)
 }
 
@@ -1904,7 +1932,6 @@ mod tests {
             },
             NormalizedInstruction::SequencePush {
                 sequence_type: sequence,
-                value_local: 1,
                 source_local: 0,
             },
             NormalizedInstruction::SequencePop {
@@ -1964,6 +1991,92 @@ mod tests {
             );
             if pop {
                 assert_eq!(actual.get(&concrete_pop_digest), Some(&concrete_pop));
+            }
+        }
+    }
+
+    #[test]
+    fn ordinary_sequence_reads_and_replacements_close_inactive_generic_type_roots() {
+        use crate::platform::kernel::StructuralTypeField;
+        use std::sync::Arc;
+        let parameter = TypeParameterId::migrate(b"prepared-data-sequence-roots", 0);
+        let mut types = BTreeMap::new();
+        let item = type_in(&mut types, TypeForm::TypeParameter { parameter });
+        let scalar = type_in(&mut types, TypeForm::I64);
+        let sequence = type_in(&mut types, TypeForm::OwnedSequence { item });
+        let replacement = type_in(
+            &mut types,
+            TypeForm::OwnedProduct {
+                fields: vec![
+                    StructuralTypeField {
+                        name: crate::platform::kernel::Name::new("rest").unwrap(),
+                        ty: sequence,
+                    },
+                    StructuralTypeField {
+                        name: crate::platform::kernel::Name::new("value").unwrap(),
+                        ty: item,
+                    },
+                ],
+            },
+        );
+        let concrete_sequence = TypeObject::new(TypeForm::OwnedSequence { item: scalar }).unwrap();
+        let concrete_sequence_digest = encode_type_object(&concrete_sequence).unwrap().0;
+        let concrete_replacement = TypeObject::new(TypeForm::OwnedProduct {
+            fields: vec![
+                StructuralTypeField {
+                    name: crate::platform::kernel::Name::new("rest").unwrap(),
+                    ty: concrete_sequence_digest,
+                },
+                StructuralTypeField {
+                    name: crate::platform::kernel::Name::new("value").unwrap(),
+                    ty: scalar,
+                },
+            ],
+        })
+        .unwrap();
+        let concrete_replacement_digest = encode_type_object(&concrete_replacement).unwrap().0;
+        let control = crate::platform::execution::ExecutionControl::uncancelled();
+        for instruction in [
+            NormalizedInstruction::SequenceGet {
+                sequence_type: sequence,
+                source_local: 0,
+            },
+            NormalizedInstruction::SequenceReplace {
+                sequence_type: sequence,
+                result_type: replacement,
+                source_local: 0,
+            },
+        ] {
+            let replace = matches!(instruction, NormalizedInstruction::SequenceReplace { .. });
+            let mut actual = types.clone();
+            let code = NormalizedCode {
+                parameter_count: 0,
+                local_count: 1,
+                instructions: Arc::from([
+                    NormalizedInstruction::Jump(2),
+                    instruction,
+                    NormalizedInstruction::Unit,
+                ]),
+            };
+            calls(
+                &code,
+                &BTreeMap::from([(parameter, scalar)]),
+                &mut actual,
+                &mut BTreeSet::new(),
+                &mut Budget::new(&control),
+                &[],
+                &[],
+            )
+            .unwrap();
+            assert_eq!(
+                actual.get(&concrete_sequence_digest),
+                Some(&concrete_sequence)
+            );
+            if replace {
+                assert_eq!(
+                    actual.get(&concrete_replacement_digest),
+                    Some(&concrete_replacement)
+                );
             }
         }
     }
@@ -2042,6 +2155,7 @@ mod tests {
             steps: MAXIMUM_WORK - 1,
             bytes: 0,
             control: &control,
+            type_lookup: type_lookup::TypeLookupBuilder::default(),
         };
         step(&mut budget).unwrap();
         assert_eq!(budget.steps, MAXIMUM_WORK);

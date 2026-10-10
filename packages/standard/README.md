@@ -41,6 +41,24 @@ repeated indexed reads, LIFO drainage, replacement, nesting and populated cleanu
 The [normative contract](../../docs/spec/owned-sequences.md) defines admission,
 transfer, reservation, cancellation and unsupported boundaries.
 
+The same affine container now holds ordinary first-order data. Seven pure wrappers
+use `T: Transferable`: `data-sequence-empty`, `data-sequence-length`,
+`data-sequence-push`, `data-sequence-pop`, `data-sequence-get`,
+`data-sequence-replace` and `data-sequence-discard`. Get returns an ordinary
+immutable value that remains valid after later replacement, removal, destruction
+or transfer of the source. Replace consumes the sequence and returns an owned
+product with `rest` and the displaced `value`. The owned `sequence-replace<T: Owned>`
+additionally consumes its exact replacement owner. Both forms retain allocation
+and capacity; invalid indices trap, and failure joins cleanup.
+
+The [wrapper request](requests/20261011-data-sequences.lkjc) and
+[ten fixed tests](requests/20261011-data-sequences-tests.lkjc) are ordinary native
+proposals. Tests cover empty reuse, repeated reads, signed scalar extremes, Bool
+updates, retained immutable aggregate snapshots, populated cleanup and displaced
+owned payloads. The [data-sequence guide](../../docs/guides/native-data-sequences.md)
+defines argument order and the maintained planner's working-storage use. Accepted
+graph meaning remains the authority; wrappers add no new runtime intrinsic.
+
 The current package also owns exact-interface affine capability resources and canonical operation
 parameter use. `DurableQueue` has nine operations: claim and heartbeat return the nominal
 absent/live `QueueLeaseState`; `lease-info` borrows its live resource; heartbeat, complete, and fail
@@ -78,12 +96,16 @@ Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_bd483d9d5aa4cdc6a92b3802b57fac1f9347f137ea231b74331499bf1c2e976a`;
-- package revision: `package_revision_a33077c6f1ef1aba6027111a056fd66edf688c8cf5a4b461e0b3dd58ae1c722c`;
-- package transport: `package_transport_5350c037a901b7b8a918f9ccdbd5ef2f43b9095ac825c5389d04a9902bc6ef06`;
-- artifact manifest: `artifact_manifest_61ecc113becd28ca80fbcdc6f7293d2d9d4c27642be5206463bb5d4790c18983`;
-- artifact bundle: `artifact_bundle_bb62defe1f9548c44c540d437c02600abec83456a1fb94a752b995a5c54b5d05`;
-- 2,416 live semantic owners, 269 compiler units, and 106 graph tests.
+- semantic revision: `rev_55fb7bfafcef4ec97b158b23e5f8d49c244e8cf64d32786fa81448f136effc59`;
+- package revision: `package_revision_638391ea909193383a6b0af9c2bcd2372902b4dceaabc6b8deb5aa8a81507df4`;
+- package transport: `package_transport_a2002a365e4bb15c32dcf7ab1e169a6075f2ab55d5c8d05042058af4553b0b8b`;
+- artifact manifest: `artifact_manifest_2aed4d1c1938396cc387020c686bd027320c1c89422be90153502a052b002b50`;
+- artifact bundle: `artifact_bundle_f087bdb14937fecba130b4bf91149079f96db34d057eb311a92befb053df4389`;
+- 2,796 live semantic owners, 290 compiler units, and 116 graph tests.
+
+The public check passes all 116 tests with zero failures and agreement between
+production and reference execution. Source-full and finalized-archive acceptance
+remain separate obligations recorded by status.
 
 Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose
 ordinary parametric records with pure functions. Mapping invokes the first callback then the second,
@@ -282,8 +304,13 @@ through public export and the compiler 30 / bytecode 25 / artifact 37 bundle
 through public check/build. All 96 tests agree between production and reference
 execution. The package revision and transport pins at that checkpoint selected those
 wrappers; that refresh retained accepted HEAD and existing standard meaning.
-The [current release notes](../../docs/releases/v0.1.81.md) identify the selected
+The [current release notes](../../docs/releases/v0.1.90.md) identify the selected
 compatibility boundary; [status](../../docs/status.md) owns actual acceptance.
+
+The generalized sequence increment uses Graph 31 and interface 19, with compiler
+31, bytecode 26 and artifact 38. Public check/build/export regenerates the derived
+owners from the accepted standard, including the new ordinary-data wrappers and
+replacement operation. All 116 graph tests agree between both evaluators.
 
 ## Native owned FIFO
 

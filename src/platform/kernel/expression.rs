@@ -41,6 +41,18 @@ impl ExpressionRecord {
                 ),
             ));
         }
+        if self.contract_version < 31
+            && matches!(
+                self.operation,
+                ExpressionOperation::SequenceGet { .. }
+                    | ExpressionOperation::SequenceReplace { .. }
+            )
+        {
+            return Err(expression_error(
+                "kernel_sequence_generation",
+                "ordinary sequence reads and indexed replacement require Graph 31",
+            ));
+        }
         if self.contract_version < 27
             && matches!(self.operation, ExpressionOperation::BorrowCall { .. })
         {
@@ -188,8 +200,14 @@ impl ExpressionRecord {
             ExpressionOperation::SequenceEmpty { sequence_type }
             | ExpressionOperation::SequenceLength { sequence_type, .. }
             | ExpressionOperation::SequencePush { sequence_type, .. }
+            | ExpressionOperation::SequenceGet { sequence_type, .. }
             | ExpressionOperation::BorrowOwnedItem { sequence_type, .. } => vec![*sequence_type],
             ExpressionOperation::SequencePop {
+                sequence_type,
+                result_type,
+                ..
+            }
+            | ExpressionOperation::SequenceReplace {
                 sequence_type,
                 result_type,
                 ..
@@ -422,6 +440,20 @@ pub enum ExpressionOperation {
         call: ExpressionId,
         binding: BindingId,
         body: ExpressionId,
+    },
+    /// Evaluate the index before taking a short source read; returns ordinary data.
+    SequenceGet {
+        sequence_type: TypeObjectDigest,
+        source: ExpressionId,
+        index: ExpressionId,
+    },
+    /// Evaluate index, replacement value and source, returning rest and displaced value.
+    SequenceReplace {
+        sequence_type: TypeObjectDigest,
+        result_type: TypeObjectDigest,
+        index: ExpressionId,
+        value: ExpressionId,
+        source: ExpressionId,
     },
 }
 
@@ -812,6 +844,8 @@ fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic>
         | ExpressionOperation::SequenceLength { .. }
         | ExpressionOperation::SequencePush { .. }
         | ExpressionOperation::SequencePop { .. }
+        | ExpressionOperation::SequenceGet { .. }
+        | ExpressionOperation::SequenceReplace { .. }
         | ExpressionOperation::BorrowOwnedItem { .. }
         | ExpressionOperation::Bool { .. }
         | ExpressionOperation::I64 { .. }
@@ -893,6 +927,45 @@ fn expression_children(operation: &ExpressionOperation) -> Vec<ExpressionChild> 
             );
         }
         ExpressionOperation::SequencePush { value, source, .. } => {
+            push_child(
+                &mut children,
+                *value,
+                ExpressionChildRole::OwnedSequenceValue,
+                0,
+            );
+            push_child(
+                &mut children,
+                *source,
+                ExpressionChildRole::OwnedSequenceSource,
+                0,
+            );
+        }
+        ExpressionOperation::SequenceGet { index, source, .. } => {
+            push_child(
+                &mut children,
+                *index,
+                ExpressionChildRole::OwnedSequenceIndex,
+                0,
+            );
+            push_child(
+                &mut children,
+                *source,
+                ExpressionChildRole::OwnedSequenceSource,
+                0,
+            );
+        }
+        ExpressionOperation::SequenceReplace {
+            index,
+            value,
+            source,
+            ..
+        } => {
+            push_child(
+                &mut children,
+                *index,
+                ExpressionChildRole::OwnedSequenceIndex,
+                0,
+            );
             push_child(
                 &mut children,
                 *value,

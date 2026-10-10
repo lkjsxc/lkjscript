@@ -201,7 +201,7 @@ fn sequence_oracle_rejects_wrong_pop_envelopes_and_push_element_types() {
     changed.types.get_mut(&ty).unwrap().form = TypeForm::OwnedSequence { item: i64 };
     assert!(
         !accepts(&changed),
-        "ordinary data cannot be a sequence element"
+        "the original owned-item read contract cannot become an ordinary sequence"
     );
 }
 

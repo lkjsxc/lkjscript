@@ -130,6 +130,7 @@ struct Writer {
     implementation_authority_extension: bool,
     owned_borrow_extension: bool,
     sequence_extension: bool,
+    generalized_sequence_extension: bool,
     parameterized_contract_extension: bool,
     borrowed_result_extension: bool,
     generic_implementation_extension: bool,
@@ -157,6 +158,7 @@ impl Writer {
             implementation_authority_extension: false,
             owned_borrow_extension: false,
             sequence_extension: false,
+            generalized_sequence_extension: false,
             parameterized_contract_extension: false,
             borrowed_result_extension: false,
             generic_implementation_extension: false,
@@ -165,7 +167,9 @@ impl Writer {
     }
 
     fn finish(mut self) -> Vec<u8> {
-        if self.share_constraint_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+        if self.generalized_sequence_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+            self.bytes[..8].copy_from_slice(b"LKJACR35");
+        } else if self.share_constraint_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR34");
         } else if self.implementation_prerequisite_extension
             && self.bytes.starts_with(&INTENT_MAGIC)
@@ -2028,6 +2032,30 @@ impl Writer {
                 self.authored_type(sequence_type, definitions, 1)?;
                 self.expression(source, definitions, next)
             }
+            AuthoredExpressionOperation::SequenceGet {
+                sequence_type,
+                source,
+                index,
+            } => {
+                self.generalized_sequence_extension = true;
+                self.tag(45)?;
+                self.authored_type(sequence_type, definitions, 1)?;
+                self.expression(index, definitions, next)?;
+                self.expression(source, definitions, next)
+            }
+            AuthoredExpressionOperation::SequenceReplace {
+                sequence_type,
+                index,
+                value,
+                source,
+            } => {
+                self.generalized_sequence_extension = true;
+                self.tag(46)?;
+                self.authored_type(sequence_type, definitions, 1)?;
+                self.expression(index, definitions, next)?;
+                self.expression(value, definitions, next)?;
+                self.expression(source, definitions, next)
+            }
             AuthoredExpressionOperation::BorrowOwnedItem {
                 sequence_type,
                 source,
@@ -2787,6 +2815,50 @@ mod tests {
             body: scalar(3),
         };
         assert_ne!(encode(borrow(0)), encode(borrow(1)));
+    }
+
+    #[test]
+    fn generalized_sequence_operations_select_generation_and_commit_each_operand() {
+        let scalar = |value| {
+            Box::new(AuthoredExpression {
+                symbol: None,
+                operation: AuthoredExpressionOperation::I64 { value },
+            })
+        };
+        let encode = |operation| {
+            let mut request = connected_request("$module", "$function", "$parameter", "$body");
+            let AuthoredChange::CreateFunction { body, .. } = &mut request.changes[1] else {
+                panic!("fixture function")
+            };
+            body.operation = operation;
+            let bytes = canonical_authored_intent_bytes(&request).unwrap();
+            assert_eq!(&bytes[..8], b"LKJACR35");
+            bytes
+        };
+        // Invalid scalar annotations isolate the operation's generation selection.
+        let get = |index, source| AuthoredExpressionOperation::SequenceGet {
+            sequence_type: AuthoredType::I64 {},
+            source: scalar(source),
+            index: scalar(index),
+        };
+        let replace = |index, value, source| AuthoredExpressionOperation::SequenceReplace {
+            sequence_type: AuthoredType::I64 {},
+            index: scalar(index),
+            value: scalar(value),
+            source: scalar(source),
+        };
+        assert_ne!(encode(get(2, 7)), encode(get(7, 2)));
+        assert_ne!(encode(get(2, 7)), encode(get(3, 7)));
+        let original = encode(replace(2, 5, 7));
+        for operation in [
+            replace(3, 5, 7),
+            replace(2, 6, 7),
+            replace(2, 5, 8),
+            replace(5, 2, 7),
+        ] {
+            assert_ne!(original, encode(operation));
+        }
+        assert_ne!(encode(get(2, 7)), original);
     }
 
     #[test]

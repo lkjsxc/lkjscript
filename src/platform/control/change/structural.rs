@@ -288,6 +288,27 @@ pub(super) fn layout(
                 node.record.fields.push(block.field(annotation[0], "type")?);
                 node.children.extend_from_slice(&args[1..]);
             }
+            "sequence-get" | "sequence-replace" => {
+                let count = if form == "sequence-get" { 3 } else { 4 };
+                arity(&block, id, args, count)?;
+                let annotation = clause(&block, args[0], "type")?;
+                arity(&block, args[0], annotation, 1)?;
+                node.record.fields.push(block.field(annotation[0], "type")?);
+                let index_clause = if form == "sequence-get" {
+                    args[2]
+                } else {
+                    args[1]
+                };
+                let index = clause(&block, index_clause, "index")?;
+                arity(&block, index_clause, index, 1)?;
+                // Allocation follows evaluation order even where native source syntax differs.
+                node.children.push(index[0]);
+                if form == "sequence-get" {
+                    node.children.push(args[1]);
+                } else {
+                    node.children.extend_from_slice(&args[2..]);
+                }
+            }
             "borrow-call" => {
                 arity(&block, id, args, 3)?;
                 if !matches!(
@@ -1240,6 +1261,22 @@ fn lower_node(
         },
         "expression.sequence-pop" => AuthoredExpressionOperation::SequencePop {
             sequence_type: decoder.decode_type(required(record, "type")?)?,
+            source: Box::new(child()?),
+        },
+        "expression.sequence-get" => {
+            let sequence_type = decoder.decode_type(required(record, "type")?)?;
+            let index = Box::new(child()?);
+            let source = Box::new(child()?);
+            AuthoredExpressionOperation::SequenceGet {
+                sequence_type,
+                source,
+                index,
+            }
+        }
+        "expression.sequence-replace" => AuthoredExpressionOperation::SequenceReplace {
+            sequence_type: decoder.decode_type(required(record, "type")?)?,
+            index: Box::new(child()?),
+            value: Box::new(child()?),
             source: Box::new(child()?),
         },
         "expression.borrow-call" => {

@@ -8,7 +8,7 @@ const ARTIFACT: &str =
     "artifact_bundle_4659d83df8f33b7eacd596328fccfdf6ab1893ad399c2e82582d1aca37ed2ea2";
 const CURRENT: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../tests/fixtures/owned-predecessor-compiler30/participation.lkja"
+    "/../../tests/fixtures/owned-predecessor-compiler31/participation.lkja"
 ));
 const NEW_GUARD_ARTIFACT: &str =
     "artifact_bundle_fa1f2ff01c98c9a72b423192010956d9b7770921eda4c7d73f7c605500e9fb11";
@@ -646,11 +646,19 @@ mod tests {
         copy_originals(root);
         fs::write(material_path(root, "current.lkja"), CURRENT).unwrap();
         current_identity(root).unwrap();
+        let historical = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/fixtures/owned-predecessor-compiler30/participation.lkja"
+        ));
+        let error = lkjscript::platform::contributor::strict_artifact_identity_probe(historical)
+            .unwrap_err();
+        assert!(error.to_string().contains("artifact_bundle_contract"));
+
         fs::write(
             material_path(root, "current.lkja"),
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
-                "/../../tests/fixtures/owned-predecessor-compiler30/transactions.lkja"
+                "/../../tests/fixtures/owned-predecessor-compiler31/transactions.lkja"
             )),
         )
         .unwrap();

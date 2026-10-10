@@ -294,6 +294,20 @@ fn remap(operation: &mut E, identities: &BTreeMap<OwnerKey, OwnerKey>) {
             expression(value);
             expression(source);
         }
+        E::SequenceGet { index, source, .. } => {
+            expression(index);
+            expression(source);
+        }
+        E::SequenceReplace {
+            index,
+            value,
+            source,
+            ..
+        } => {
+            expression(index);
+            expression(value);
+            expression(source);
+        }
         E::Unit {}
         | E::SequenceEmpty { .. }
         | E::Bool { .. }

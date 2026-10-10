@@ -513,6 +513,17 @@ pub enum AuthoredExpressionOperation {
         sequence_type: AuthoredType,
         source: Box<AuthoredExpression>,
     },
+    SequenceGet {
+        sequence_type: AuthoredType,
+        source: Box<AuthoredExpression>,
+        index: Box<AuthoredExpression>,
+    },
+    SequenceReplace {
+        sequence_type: AuthoredType,
+        index: Box<AuthoredExpression>,
+        value: Box<AuthoredExpression>,
+        source: Box<AuthoredExpression>,
+    },
     BorrowOwnedItem {
         sequence_type: AuthoredType,
         source: Box<AuthoredExpression>,
@@ -805,6 +816,20 @@ pub(super) fn collect_expression_symbols(
             AuthoredExpressionOperation::SequencePush { value, source, .. } => {
                 stack.push(Visit::Expression(source, next));
                 stack.push(Visit::Expression(value, next));
+            }
+            AuthoredExpressionOperation::SequenceGet { index, source, .. } => {
+                stack.push(Visit::Expression(source, next));
+                stack.push(Visit::Expression(index, next));
+            }
+            AuthoredExpressionOperation::SequenceReplace {
+                index,
+                value,
+                source,
+                ..
+            } => {
+                stack.push(Visit::Expression(source, next));
+                stack.push(Visit::Expression(value, next));
+                stack.push(Visit::Expression(index, next));
             }
             AuthoredExpressionOperation::BorrowOwnedItem {
                 source,
@@ -1188,29 +1213,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         &mut self,
         sequence_type: TypeObjectDigest,
     ) -> Result<TypeObjectDigest, Diagnostic> {
-        let Some(TypeObject {
-            form: TypeForm::OwnedSequence { item },
-            ..
-        }) = self.candidate_type_object(sequence_type)?
-        else {
-            return Err(request_error(
-                DiagnosticClass::Semantic,
-                "change_authored_sequence_type",
-                "sequence.pop requires an exact OwnedSequence type",
-            ));
-        };
-        let item_type = self.intern_authored_type(TypeForm::OwnedProduct {
-            fields: vec![
-                StructuralTypeField {
-                    name: Name::new("rest")?,
-                    ty: sequence_type,
-                },
-                StructuralTypeField {
-                    name: Name::new("value")?,
-                    ty: item,
-                },
-            ],
-        })?;
+        let item_type = self.sequence_replace_result_type(sequence_type)?;
         self.intern_authored_type(TypeForm::OwnedChoice {
             cases: vec![
                 StructuralTypeField {
@@ -1220,6 +1223,35 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 StructuralTypeField {
                     name: Name::new("item")?,
                     ty: item_type,
+                },
+            ],
+        })
+    }
+
+    fn sequence_replace_result_type(
+        &mut self,
+        sequence_type: TypeObjectDigest,
+    ) -> Result<TypeObjectDigest, Diagnostic> {
+        let Some(TypeObject {
+            form: TypeForm::OwnedSequence { item },
+            ..
+        }) = self.candidate_type_object(sequence_type)?
+        else {
+            return Err(request_error(
+                DiagnosticClass::Semantic,
+                "change_authored_sequence_type",
+                "sequence operation requires an exact OwnedSequence type",
+            ));
+        };
+        self.intern_authored_type(TypeForm::OwnedProduct {
+            fields: vec![
+                StructuralTypeField {
+                    name: Name::new("rest")?,
+                    ty: sequence_type,
+                },
+                StructuralTypeField {
+                    name: Name::new("value")?,
+                    ty: item,
                 },
             ],
         })
@@ -1429,6 +1461,39 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                     sequence_type,
                     result_type: self.sequence_pop_result_type(sequence_type)?,
                     source: self.lower_expression(source)?,
+                }
+            }
+            AuthoredExpressionOperation::SequenceGet {
+                sequence_type,
+                source,
+                index,
+            } => {
+                let sequence_type = self.lower_type(sequence_type)?;
+                let index = self.lower_expression(index)?;
+                let source = self.lower_expression(source)?;
+                ExpressionOperation::SequenceGet {
+                    sequence_type,
+                    source,
+                    index,
+                }
+            }
+            AuthoredExpressionOperation::SequenceReplace {
+                sequence_type,
+                index,
+                value,
+                source,
+            } => {
+                let sequence_type = self.lower_type(sequence_type)?;
+                let result_type = self.sequence_replace_result_type(sequence_type)?;
+                let index = self.lower_expression(index)?;
+                let value = self.lower_expression(value)?;
+                let source = self.lower_expression(source)?;
+                ExpressionOperation::SequenceReplace {
+                    sequence_type,
+                    result_type,
+                    index,
+                    value,
+                    source,
                 }
             }
             AuthoredExpressionOperation::BorrowOwnedItem {

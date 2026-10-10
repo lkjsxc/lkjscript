@@ -287,7 +287,7 @@ fn receiver(consumer: &Native) -> (Native, Value) {
     let checked = public.cli(&["check"], true);
     assert_eq!(
         compact_field(compact_record(&checked, "tests"), "passed"),
-        "176" // 70 local/dependency tests and 106 from the current standard.
+        "186" // 70 local/dependency tests and 116 from the current standard.
     );
     public.cli(
         &[

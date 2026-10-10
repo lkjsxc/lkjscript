@@ -153,7 +153,7 @@ fn frozen_interface16_rejects_prerequisites_and_retains_original_bytes() {
     };
     d.header.contract_version = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
     let (digest, bytes) = value.encode().unwrap();
-    assert_eq!(&bytes[..8], b"LKJPIF18");
+    assert_eq!(&bytes[..8], b"LKJPIF19");
     assert_eq!(
         PackageInterfaceOwner::decode(&bytes, value.owner(), digest).unwrap(),
         value

@@ -319,7 +319,7 @@ fn unsupported_and_future_magics_keep_the_existing_current_identity_fallback() {
     for intent in [
         b"".as_slice(),
         b"LKJACR13",
-        b"LKJACR32",
+        b"LKJACR35",
         b"LKJACR99",
         b"unknown",
     ] {
@@ -344,6 +344,13 @@ fn unsupported_and_future_magics_keep_the_existing_current_identity_fallback() {
         commitment_codec_identity(b"LKJACR31"),
         "lkjscript-authored-change-codec-31"
     );
+    // These generations used the current codec34 fallback before this increment.
+    for intent in [b"LKJACR32", b"LKJACR33", b"LKJACR34"] {
+        assert_eq!(
+            commitment_codec_identity(intent),
+            "lkjscript-authored-change-codec-34"
+        );
+    }
     assert_eq!(
         commitment_codec_identity(b"LKJACR17"),
         "lkjscript-authored-change-codec-17"

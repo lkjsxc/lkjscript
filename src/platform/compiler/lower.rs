@@ -1856,13 +1856,71 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 source,
             } => {
                 let item = self.sequence_item_type(sequence_type)?;
-                // The source graph admits exact locals. Preserve element-before-sequence order.
-                let value_local = self.borrow_source_local(value, item, depth)?;
+                // Ordinary expressions evaluate before custody moves. Owned elements remain
+                // exact consuming locals and use the existing checked load instruction.
+                self.sequence_value(value, item, depth)?;
                 let source_local = self.borrow_source_local(source, sequence_type, depth)?;
                 let sequence_type = self.unit.tables.ty(sequence_type)?;
                 self.push(CompiledInstruction::SequencePush {
                     sequence_type,
-                    value_local,
+                    source_local,
+                })?;
+            }
+            ExpressionOperation::SequenceGet {
+                sequence_type,
+                source,
+                index,
+            } => {
+                let item = self.sequence_item_type(sequence_type)?;
+                if self.unit.owned_local_type(item)? {
+                    return Err(compiler_corrupt(
+                        "compiler_sequence_get_item",
+                        "sequence get requires an ordinary element type",
+                    ));
+                }
+                self.expression(index, depth)?;
+                let source_local = self.borrow_source_local(source, sequence_type, depth)?;
+                let sequence_type = self.unit.tables.ty(sequence_type)?;
+                self.push(CompiledInstruction::SequenceGet {
+                    sequence_type,
+                    source_local,
+                })?;
+            }
+            ExpressionOperation::SequenceReplace {
+                sequence_type,
+                result_type,
+                index,
+                value,
+                source,
+            } => {
+                let item = self.sequence_item_type(sequence_type)?;
+                let expected = encode_type_object(&TypeObject::new(TypeForm::OwnedProduct {
+                    fields: vec![
+                        StructuralTypeField {
+                            name: crate::platform::kernel::Name::new("rest")?,
+                            ty: sequence_type,
+                        },
+                        StructuralTypeField {
+                            name: crate::platform::kernel::Name::new("value")?,
+                            ty: item,
+                        },
+                    ],
+                })?)?
+                .0;
+                if expected != result_type {
+                    return Err(compiler_corrupt(
+                        "compiler_sequence_result_type",
+                        "sequence replacement result differs from its exact rest/value envelope",
+                    ));
+                }
+                self.expression(index, depth)?;
+                self.sequence_value(value, item, depth)?;
+                let source_local = self.borrow_source_local(source, sequence_type, depth)?;
+                let sequence_type = self.unit.tables.ty(sequence_type)?;
+                let result_type = self.unit.tables.ty(result_type)?;
+                self.push(CompiledInstruction::SequenceReplace {
+                    sequence_type,
+                    result_type,
                     source_local,
                 })?;
             }
@@ -2854,6 +2912,24 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         };
         self.unit.tables.ty(item)?;
         Ok(item)
+    }
+
+    fn sequence_value(
+        &mut self,
+        expression: ExpressionId,
+        item: TypeObjectDigest,
+        depth: usize,
+    ) -> Result<(), Diagnostic> {
+        if self.unit.owned_local_type(item)? {
+            let local = self.borrow_source_local(expression, item, depth)?;
+            self.push(CompiledInstruction::LoadLocal {
+                local,
+                use_mode: ParameterUse::Consume,
+            })
+            .map(|_| ())
+        } else {
+            self.expression(expression, depth)
+        }
     }
 
     /// Traverse the exact canonical source child while preserving custody in its local slot.

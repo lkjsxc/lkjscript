@@ -123,11 +123,11 @@ Compiler or artifact contract changes require rebuilding this derived artifact
 through public check/build while preserving accepted HEAD and its exact standard
 supplier. After replacing it, rebuild the host and regenerate/verify the reference
 pages through public capabilities. The native program remains their content owner.
-The [current release notes](../../docs/releases/v0.1.81.md) identify the selected
+The [current release notes](../../docs/releases/v0.1.90.md) identify the selected
 compatibility boundary; [status](../../docs/status.md) owns actual acceptance.
 
-The current derived bundle uses compiler 30, bytecode 25 and artifact 37:
-`artifact_bundle_3f8a1c760aefe8c2ae625646a35f685076fa82d2b6b916b584504d66eb4e5584`,
+The current derived bundle uses compiler 31, bytecode 26 and artifact 38:
+`artifact_bundle_6d6cdaf28a96b9bae54600dc138c1f0c84a587d5762c2c7b64662bcb651ae275`,
 1,178,170 bytes. The [canonical edit](requests/20261004-structural-forms.lkjc)
 replaces a stale structural-form count with “All supported structural forms”,
 updating exactly one Text expression while preserving owner identities and the exact

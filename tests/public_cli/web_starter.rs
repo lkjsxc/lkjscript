@@ -13,8 +13,8 @@ fn find(public: &Native, class: &str, name: &str, parent: Option<&str>) -> Strin
 fn check(public: &Native) {
     let result = public.cli(&["check"], true);
     let tests = compact_record(&result, "tests");
-    // 19 unchanged shared UI tests + 13 app tests + 106 built-in standard tests.
-    assert_eq!(compact_field(tests, "passed"), "138");
+    // 19 unchanged shared UI tests + 13 app tests + 116 built-in standard tests.
+    assert_eq!(compact_field(tests, "passed"), "148");
     assert_eq!(compact_field(tests, "failed"), "0");
     assert_eq!(compact_field(tests, "differential"), "equal");
 }

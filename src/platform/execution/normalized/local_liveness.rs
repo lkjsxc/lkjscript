@@ -36,10 +36,12 @@ fn flow(instruction: &I) -> Flow<'_> {
     // be classified when an instruction is added. A derived move is still a read.
     let (read, write, edges) = match instruction {
         I::LoadLocal { local, .. } | I::MoveLocal(local) => (Some(*local), None, Edges::Next),
-        I::SequenceLength { source_local, .. } | I::BeginBorrowCall { source_local, .. } => {
-            (Some(*source_local), None, Edges::Next)
-        }
-        I::SequencePush { source_local, .. } | I::SequencePop { source_local, .. } => {
+        I::SequenceLength { source_local, .. }
+        | I::SequenceGet { source_local, .. }
+        | I::BeginBorrowCall { source_local, .. } => (Some(*source_local), None, Edges::Next),
+        I::SequencePush { source_local, .. }
+        | I::SequencePop { source_local, .. }
+        | I::SequenceReplace { source_local, .. } => {
             (Some(*source_local), Some(*source_local), Edges::Next)
         }
         I::StoreLocal(local) => (None, Some(*local), Edges::Next),
@@ -117,17 +119,13 @@ fn flow(instruction: &I) -> Flow<'_> {
     Flow {
         read,
         read_extra: match instruction {
-            I::SequencePush { value_local, .. } => Some(*value_local),
             I::BorrowOwnedField { binding_local, .. }
             | I::BorrowOwnedItem { binding_local, .. }
             | I::AdoptBorrowResult { binding_local, .. } => Some(*binding_local),
             _ => None,
         },
         write,
-        write_extra: match instruction {
-            I::SequencePush { value_local, .. } => Some(*value_local),
-            _ => None,
-        },
+        write_extra: None,
         writes,
         edges,
     }

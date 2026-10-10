@@ -10,6 +10,12 @@ mod folds;
 #[path = "public_inventory_incremental.rs"]
 mod incremental;
 
+#[path = "public_inventory_fifo.rs"]
+mod fifo;
+
+#[path = "public_inventory_sequences.rs"]
+mod sequences;
+
 const FAMILIES: [&str; 6] = [
     "native_owned_",
     "native_byte_buffer_",
@@ -129,6 +135,8 @@ pub(super) fn inventory(output: &str) -> Result<Inventory, DevError> {
     )?;
     folds::admit(&all)?;
     incremental::admit(&all)?;
+    fifo::admit(&all)?;
+    sequences::admit(&all)?;
     let selected = all
         .iter()
         .filter(|name| {
@@ -136,6 +144,8 @@ pub(super) fn inventory(output: &str) -> Result<Inventory, DevError> {
                 || name.starts_with("native_map_entries::")
                 || folds::selected(name)
                 || incremental::selected(name)
+                || fifo::selected(name)
+                || sequences::selected(name)
                 || *name == TOPOLOGY
         })
         .cloned()
@@ -204,3 +214,7 @@ mod incremental_tests;
 #[cfg(test)]
 #[path = "public_inventory_fifo_tests.rs"]
 mod fifo_tests;
+
+#[cfg(test)]
+#[path = "public_inventory_sequences_tests.rs"]
+mod sequence_tests;

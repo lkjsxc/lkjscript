@@ -326,6 +326,25 @@ impl PackageContainer {
                     != Some(crate::platform::kernel::contract::BORROW_OWNER_MAGIC.as_slice())
                 && object.get(..8)
                     != Some(crate::platform::kernel::contract::SEQUENCE_OWNER_MAGIC.as_slice())
+                && object.get(..8)
+                    != Some(
+                        crate::platform::kernel::contract::PARAMETERIZED_CONTRACT_OWNER_MAGIC
+                            .as_slice(),
+                    )
+                && object.get(..8)
+                    != Some(crate::platform::kernel::contract::BORROW_RESULT_OWNER_MAGIC.as_slice())
+                && object.get(..8)
+                    != Some(
+                        crate::platform::kernel::contract::IMPLEMENTATION_SCHEME_OWNER_MAGIC
+                            .as_slice(),
+                    )
+                && object.get(..8)
+                    != Some(
+                        crate::platform::kernel::contract::COMPOSABLE_IMPLEMENTATION_OWNER_MAGIC
+                            .as_slice(),
+                    )
+                && object.get(..8)
+                    != Some(crate::platform::kernel::contract::SHARE_OWNER_MAGIC.as_slice())
             {
                 return Err(package_error(
                     DiagnosticClass::Source,
@@ -1136,6 +1155,7 @@ mod tests {
     include!("f64_admission_tests.rs");
     include!("owned_product_admission_tests.rs");
     include!("owned_sequence_admission_tests.rs");
+    include!("generalized_sequence_admission_tests.rs");
     include!("borrowed_result_admission_tests.rs");
     include!("prerequisite_implementation_admission_tests.rs");
     include!("dependency_copy_admission_tests.rs");
@@ -1147,7 +1167,7 @@ mod tests {
         let source = crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(
             "declarations.begin\n(units (module create historical (function create value (visibility private) (returns I64) (effect pure) (body (i64 37)))))\ndeclarations.end\n",
         ).unwrap();
-        for generation in [19, 20, 21, 22, 23, 24] {
+        for generation in [19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30] {
             let mut historical = source.clone();
             for owner in historical.owners.values_mut() {
                 owner.set_encoding_for_edit(generation);

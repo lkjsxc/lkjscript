@@ -1,88 +1,100 @@
 # Current status
 
-Snapshot: 2026-10-11. Product identifiers are opaque. Source acceptance,
-delivered mainline, exact host bytes, finalized publication and application
-selection remain separate boundaries.
+Snapshot: 2026-10-10. Product identifiers are opaque. Accepted meaning, complete
+source verification, mainline delivery, finalized executable acceptance and public
+availability remain separate boundaries.
 
-## Delivered source verification correction
+## Current increment: generalized owned sequences
 
-The original full run for `862ccb89275ae946ca8ecac2925eae5bae33f8f8`, tree
-`cf14b45f7ceccee59f069980e097404e26cc94a2`, completed with exit zero and
-**26/26 fresh gates**, stable inputs, zero reuse and zero unrun gates.
-Workspace targets passed **2,312**, failed **0**, with **29 existing ignored**;
-two filtered child probes are separate, not added to those totals.
+Work is in `/home/coder/workspace/lkjscript-generalized-sequences-20261011`, branch
+`work/generalized-sequences-20261011`, based on `b9cacb40`. The combined increment
+includes the pending native FIFO work, ordinary first-order sequence elements,
+immutable indexed reads, custody-preserving replacement and dense working storage
+in the bounded native dependency planner. The [sequence specification](spec/owned-sequences.md),
+[data guide](guides/native-data-sequences.md) and [release notes](releases/v0.1.90.md)
+own the semantics and intentional format cut.
 
-PR #13 was normally merged as `574a8b5783077cb0654ecd85ede94105cb6912a1`.
-Git and the connected GitHub API independently agreed. The merge's second parent
-is the exact accepted source and its tree is identical. The change retains
-optimized verification with debug assertions and overflow checks, explicit
-unoptimized `test-debug`, and exact Cargo compiler-artifact/build-finished
-origin binding rather than accepting a pre-existing output pathname.
+The accepted standard revision is
+`rev_55fb7bfafcef4ec97b158b23e5f8d49c244e8cf64d32786fa81448f136effc59`.
+Public plan/apply, check, build and export produced 2,796 live owners, 290 compiler
+units and **116 passing graph tests**, with agreement between the production and
+reference evaluators. The maintained application, guide renderer and policy oracle
+also rebuild through public check/build: **44**, **79** and **62** tests pass,
+respectively, with their accepted HEADs and exact suppliers retained.
 
-Complete originals remain under
-`/home/coder/workspace/lkjscript-cargo-output-binding-20261010/.artifacts/`.
-The receipt owner is `lkjscript-dev/check/1791644693506512515-4012146-0/`, digest
-`verification_4e5ea52cac03550439897c8b08d63a3f5afa7cbcae06493fdf9cc70b35cef188`.
-`cargo-output-binding/full-862ccb89/final-audit-20261011.stdout` records the
-read-only corroboration of all 26 gates and 59 original log/output proofs.
-Earlier failed, partial and unavailable observations remain preserved; their
-summaries are not substituted for this exact full acceptance.
+Fresh copied-product authoring accepts the generic data-sequence library before
+its concrete consumers. Four focused public tests pass, including **3,110** finite
+operation-word comparisons, immutable snapshots, shared reads, transferred owners,
+displaced owned values, bounds, fuel refusal and recovery. The rebuilt public
+rejection test passes all 18 cases without changing accepted revisions. All three
+resident-policy cases pass with the expanded standard and joined cleanup.
 
-## Current increment: ordinary native owned FIFO
+Focused compiler/runtime testing exposed an independent source-checker omission:
+new get/replace operations and ordinary push values must trigger ownership-flow
+checking before source reuse. The correction retains the hostile tests and adds a
+push-value/source-consumption adversary. Diagnostic and obsolete rejection fixtures
+are also corrected. The updated workspace type-checks; **101 sequence tests** and
+**19 release-inventory tests** pass. The complete planner matrix passes **18,540**
+attached/detached comparisons plus refusal and recovery checks. The independent
+verifier also passes its complete attached/detached plans, claims, exhaustive
+candidate and mutation matrices, with refusal, recovery and cleanup intact. The
+matched cost study exposed repeated generic type-table searches: large stage
+cases were 16–18 times slower. Those unfavorable originals remain retained. A
+bounded, program-bound lookup now reuses composite substitutions already proved
+during preparation, while checking full bindings and current type shapes at use.
+The identical 180-execution study now passes all result and cleanup checks on the
+updated product. Large stage cases remain 2.5–2.7 times slower than the map/list
+baseline; nontrivial complete plans remain 5–17% slower. Both original and updated
+comparisons, exact identities and modeled metadata costs are retained in the
+[planner owner](../examples/dependency-plan/README.md). This is a language capability
+advance with a measured performance cost, not an immediate speedup claim.
 
-The isolated worktree is
-`/home/coder/workspace/lkjscript-native-fifo-20261011`, branch
-`work/native-fifo-20261011`, based on that delivered merge. It adds six ordinary
-pure generic FIFO operations to the accepted standard graph. Existing owned
-sequences, products, choices and source-tied borrowed results own all behavior;
-there is no FIFO-specific runtime intrinsic or encoding transition.
+A broader preflight exposed stale generation, golden-fixture and generated-document
+expectations. Current controls are added without changing historical fixtures;
+developer-tool inventories and the maintained service pin are updated too. The
+rebuilt suites now pass **1,762 core tests** and **285 developer-tool tests**, with
+zero failures and 8/19 intentional ignores. This includes eight new lookup tests
+for scope, origin, type integrity, bounded work, reservation and cancellation.
+Workspace lint passes with all targets and features enabled.
 
-The [guide](guides/native-owned-fifo.md) defines the public structural shape,
-empty behavior, custody and transfer-cost limits. Both dequeue outcomes retain
-the remaining queue. Front can be borrowed and forwarded without consuming or
-copying the payload. A pending refill can still have linear work and retain spare
-capacity; no universal runtime-speed or bounded-latency improvement is claimed.
+Evidence is retained under `.artifacts/data-sequences/` in the current worktree.
+Failed and cancelled attempts remain distinct from successful checks. Maintained
+artifacts and reference pages are regenerated through their product owners; no
+privileged graph writer or external semantic generator is used.
 
-The exact standard semantic revision is
-`rev_bd483d9d5aa4cdc6a92b3802b57fac1f9347f137ea231b74331499bf1c2e976a`.
-All **106 graph tests** pass in both evaluators, including ten new fixed cases.
-Public native plan/apply, build and export produced the new standard graph,
-transport and embedded artifact; generated projections are not a second source.
+## Predecessor verification and integration
 
-The [independent consumer](../examples/owned-fifo/README.md) exports generic
-processing before a separate package supplies cells, two-byte buffers and
-stamped owned packets. The focused source run passes **5/5**, with no failures
-or ignored selections. It includes all 781 short operation words in three
-representations, attached differential and source-free execution: **4,686
-scenario comparisons**, plus long traces, scalar extremes, malformed input,
-rejected loan violations, finite fuel refusal and joined cleanup.
+The original FIFO full run on `b9cacb40c44a20d1d090bded9581d7e29293e71f`, tree
+`27f455e1`, finished with **25/26 fresh gates**, zero reuse, zero unrun gates and
+stable inputs. Workspace results were **2,314 passed, 4 failed, 29 ignored**, apart
+from two separately filtered child probes. All five FIFO public witnesses passed.
+The failures were two stale standard counts and two test-local allocation ceilings
+below the expanded standard's complete type-metadata cost.
 
-Evidence belongs to `.artifacts/native-fifo/` in the current worktree. The initial
-focused run passed four cases and failed one incorrect diagnostic expectation:
-empty-front indexing is `semantic/normalized_sequence_index`, not the initially
-expected spelling/class. Independent attached and detached observations agreed;
-only the test expectation changed. Both runs and the complete successful
-`focused/public-v2` terminal remain. This is focused acceptance, not yet a new
-26-gate complete source receipt or mainline delivery of the FIFO increment.
+The retained receipt is
+`verification_0784e1cd3bbe8b0253cb062fdc1d29e412fd04e2532fea11bcdad74075beb183`.
+Originals remain in the FIFO worktree under
+`.artifacts/native-fifo/resume-20261010/full-b9cacb40/`.
+Corrections `a2757ebf` and `32594261` pass focused checks **2/2** and **3/3**.
+Resident fixtures derive a finite allowance from a tiny successful workload plus
+64 KiB; the heavy workload still refuses and the small request recovers under that
+same allowance. Production limits are unchanged. These corrections will enter the
+combined source acceptance; no duplicate intermediate full run is selected.
 
-The compiler's admission envelope is much larger than the bounded native
-planner's. Replacing its planner merely to claim self-hosting would regress
-supported scale. FIFO is maintained standard-library adoption and a composable
-building block, not a claim that the compiler already uses native planning.
+The last corroborated remote main is
+`574a8b5783077cb0654ecd85ede94105cb6912a1`, the normal merge of the previously
+accepted source-verification correction. PR #14 remains a draft with remote head
+`5c86cd33`. The combined sequence increment has not yet been delivered to main.
 
-## Publication and completion
+## Public binary
 
-The selected development product remains **0.1.90**. The last independently
-observed public/latest is immutable **v0.1.89**, release 407859944. The earlier
-non-publishing 0.1.90 candidate `38034392926/1` failed its workspace deadline;
-no finalized archive from it was accepted or promoted. Its original failure
-remains under the compiler-dependency-bridge worktree.
+Development remains **0.1.90**. The latest observed immutable public release is
+**v0.1.89**, release **407859944**. The v0.1.90 tag is unoccupied. Earlier candidate
+`38034392926/1` failed source verification; no finalized bytes from it were accepted
+or promoted. No successor candidate has been dispatched in this increment.
 
-The FIFO increment still requires source-matched complete fresh verification
-and normal integration before being called delivered. Finalized static bytes,
-exact native-public acceptance and unchanged-asset promotion are subsequent
-release boundaries. No new candidate dispatch, promotion, installation,
-application deployment or paid external agent has occurred in this continuation.
-Unrelated worktrees, stashes, service state and prior immutable publication remain
-unchanged. Auxiliary tool denials are retained separately from executable test
-failures and successful validation; denied inspections are not rerouted.
+Next: include the correction ancestry, freeze the complete source, complete one
+fresh 26-gate source acceptance, integrate normally and verify remote ancestry.
+Then accept finalized static bytes and promote
+those unchanged assets through the configured release workflow. Application
+selection, deployment, operational data and unrelated resources remain unchanged.

@@ -241,6 +241,40 @@ fn substitute(
                 (c.as_mut(), z.as_ref()),
             ]);
         }
+        (
+            A::SequenceGet {
+                index: a,
+                source: b,
+                ..
+            },
+            A::SequenceGet {
+                index: x,
+                source: y,
+                ..
+            },
+        ) => {
+            pairs.extend([(a.as_mut(), x.as_ref()), (b.as_mut(), y.as_ref())]);
+        }
+        (
+            A::SequenceReplace {
+                index: a,
+                value: b,
+                source: c,
+                ..
+            },
+            A::SequenceReplace {
+                index: x,
+                value: y,
+                source: z,
+                ..
+            },
+        ) => {
+            pairs.extend([
+                (a.as_mut(), x.as_ref()),
+                (b.as_mut(), y.as_ref()),
+                (c.as_mut(), z.as_ref()),
+            ]);
+        }
         (A::Parallel { left: a, right: b }, A::Parallel { left: x, right: y }) => {
             pairs.extend([(a.as_mut(), x.as_ref()), (b.as_mut(), y.as_ref())]);
         }

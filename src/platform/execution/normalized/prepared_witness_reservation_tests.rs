@@ -43,6 +43,7 @@ fn probe(
         steps,
         bytes,
         control,
+        type_lookup: type_lookup::TypeLookupBuilder::default(),
     };
     let implementations = source
         .owners

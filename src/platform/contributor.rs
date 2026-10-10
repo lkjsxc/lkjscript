@@ -2963,6 +2963,8 @@ fn oracle_expression_form(operation: &ExpressionOperation) -> &'static str {
         ExpressionOperation::SequenceLength { .. } => "sequence_length",
         ExpressionOperation::SequencePush { .. } => "sequence_push",
         ExpressionOperation::SequencePop { .. } => "sequence_pop",
+        ExpressionOperation::SequenceGet { .. } => "sequence_get",
+        ExpressionOperation::SequenceReplace { .. } => "sequence_replace",
         ExpressionOperation::BorrowOwnedItem { .. } => "borrow_owned_item",
         ExpressionOperation::BorrowCall { .. } => "borrow_call",
     }
@@ -3093,8 +3095,8 @@ mod tests {
         let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
         let before = std::fs::read(project.join("HEAD")).expect("standard HEAD before oracle");
         let inventory = semantic_inventory(&project).expect("standard semantic inventory");
-        // Five sequence wrappers, three graph helpers and seven tests add 274 owners.
-        assert_eq!(inventory.owners, 1_900);
+        // The maintained FIFO and generalized sequence graph has 2,796 live owners.
+        assert_eq!(inventory.owners, 2_796);
         assert_eq!(inventory.modules, 13);
         assert!(inventory.functions > 0);
         assert!(inventory.relations > 0);
@@ -3179,6 +3181,81 @@ declarations.end"#;
                 .code,
             "contributor_extraction_owned_borrow"
         );
+        assert_eq!(std::fs::read(project.join("HEAD")).unwrap(), before);
+    }
+
+    #[test]
+    fn ordinary_sequence_definition_oracle_retains_index_value_and_source_order() {
+        let source = r#"declarations.begin
+(units (module create ordinary-sequence-oracle
+  (function create read (visibility public) (effect pure)
+    (parameter create source (type (owned-sequence I64)) (use borrow))
+    (returns I64)
+    (body (sequence-get (type (owned-sequence I64)) (local source) (index (i64 0)))))
+  (function create replace (visibility public) (effect pure)
+    (parameter create source (type (owned-sequence I64)) (use consume))
+    (returns (owned-product (field rest (owned-sequence I64)) (field value I64)))
+    (body (sequence-replace (type (owned-sequence I64)) (index (i64 0))
+      (i64 -2) (local source))))))
+declarations.end"#;
+        let snapshot =
+            crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(source)
+                .unwrap();
+        let temporary = tempfile::tempdir().unwrap();
+        let project = temporary.path().join("meaning");
+        GraphRepository::create(&project, &snapshot, None).unwrap();
+        let before = std::fs::read(project.join("HEAD")).unwrap();
+        for (name, forms, roles) in [
+            (
+                "read",
+                vec!["sequence_get", "i64", "local"],
+                vec![
+                    "function_body",
+                    "owned_sequence_index",
+                    "owned_sequence_source",
+                ],
+            ),
+            (
+                "replace",
+                vec!["sequence_replace", "i64", "i64", "local"],
+                vec![
+                    "function_body",
+                    "owned_sequence_index",
+                    "owned_sequence_value",
+                    "owned_sequence_source",
+                ],
+            ),
+        ] {
+            let function = snapshot
+                .owners
+                .iter()
+                .find_map(|(owner, record)| match (owner, record) {
+                    (OwnerKey::Declaration(id), OwnerRecord::Declaration(record))
+                        if record.name.as_str() == name =>
+                    {
+                        Some(*id)
+                    }
+                    _ => None,
+                })
+                .unwrap();
+            let oracle = function_definition_oracle(&project, &function.to_string()).unwrap();
+            assert_eq!(
+                oracle
+                    .body_preorder
+                    .iter()
+                    .map(|owner| owner.form.as_str())
+                    .collect::<Vec<_>>(),
+                forms
+            );
+            assert_eq!(
+                oracle
+                    .body_preorder
+                    .iter()
+                    .map(|owner| owner.role.as_str())
+                    .collect::<Vec<_>>(),
+                roles
+            );
+        }
         assert_eq!(std::fs::read(project.join("HEAD")).unwrap(), before);
     }
 

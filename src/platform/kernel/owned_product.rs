@@ -15,7 +15,7 @@ pub(crate) fn require_generation(
     roots: Vec<TypeObjectDigest>,
     generation: u16,
 ) -> Result<(), Diagnostic> {
-    if generation >= 25 {
+    if generation >= 31 {
         return Ok(());
     }
     let mut pending = roots;
@@ -28,6 +28,14 @@ pub(crate) fn require_generation(
         let object = read
             .type_object(ty)?
             .ok_or_else(|| reject("missing graph-bound type"))?;
+        if generation < 31 && requires_generalized_sequence_generation(read, ty, read.package_id())?
+        {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Semantic,
+                "kernel_sequence_generation",
+                "ordinary-element owned sequence type closure requires Graph 31",
+            ));
+        }
         if generation < 25 && matches!(object.form, TypeForm::OwnedSequence { .. }) {
             return Err(Diagnostic::new(
                 DiagnosticClass::Semantic,
@@ -52,6 +60,22 @@ pub(crate) fn require_generation(
         pending.extend(object.child_types());
     }
     Ok(())
+}
+
+/// Classify the element under its defining package. Complete element admission
+/// is separate: an inadmissible ordinary candidate cannot acquire older authority.
+pub(crate) fn requires_generalized_sequence_generation(
+    read: &(impl ExpressionRead + ?Sized),
+    ty: TypeObjectDigest,
+    package: PackageId,
+) -> Result<bool, Diagnostic> {
+    let Some(object) = read.type_object(ty)? else {
+        return Err(reject("missing sequence generation type"));
+    };
+    let TypeForm::OwnedSequence { item } = object.form else {
+        return Ok(false);
+    };
+    Ok(!super::memory::direct_in(read, package, item)?)
 }
 
 pub(crate) fn validate(
@@ -135,8 +159,9 @@ pub(crate) fn validate_in_scope(
                 ));
             }
         };
-        let require_owned = sequence_item.is_some();
-        let mut owned = false;
+        // The sequence allocation owns its custody independently of element
+        // ownership and independently of its dynamic cardinality.
+        let mut owned = sequence_item.is_some();
         for child_type in sequence_item
             .into_iter()
             .chain(fields.into_iter().map(|field| field.ty))
@@ -162,9 +187,6 @@ pub(crate) fn validate_in_scope(
                 {
                     super::owned_contract::validate_owned_parameter(read, parameter, scope)?;
                     owned = true;
-                }
-                _ if require_owned => {
-                    return Err(reject("owned sequence elements require exact owned types"));
                 }
                 _ if !super::owned_contract::ordinary_with_assumptions_in(
                     read,

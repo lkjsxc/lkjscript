@@ -253,7 +253,7 @@ pub enum TypeForm {
     OwnedChoice {
         cases: Vec<StructuralTypeField>,
     },
-    /// One affine owner of a runtime-sized sequence of exact owned elements.
+    /// One affine owner of a runtime-sized sequence of admitted owned or ordinary data.
     OwnedSequence {
         item: TypeObjectDigest,
     },
