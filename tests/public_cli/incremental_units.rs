@@ -127,3 +127,7 @@ fn new_port_type_failure_preserves_authority_and_cache_then_recovers() {
     assert_eq!(content_inventory(&public.project), before);
     apply_exact(&public, "valid-port.lkjc", &source(1, false), 2);
 }
+
+#[cfg(unix)]
+#[path = "incremental_cache_files.rs"]
+mod cache_files;

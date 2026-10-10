@@ -875,7 +875,9 @@ fn open_optional_regular(directory: &File, name: &str) -> Result<Option<File>, D
     let fd = match rustix::fs::openat(
         directory,
         name,
-        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        // Admit the opened descriptor before reading. A writerless FIFO must not
+        // block this admission or semantic publication waiting for a derived cache.
+        OFlags::RDONLY | OFlags::NONBLOCK | OFlags::NOFOLLOW | OFlags::CLOEXEC,
         Mode::empty(),
     ) {
         Ok(fd) => fd,
@@ -1001,3 +1003,7 @@ fn cache_error(
 ) -> Diagnostic {
     manifest_error(class, code, message)
 }
+
+#[cfg(test)]
+#[path = "cache_file_tests.rs"]
+mod file_tests;
