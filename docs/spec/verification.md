@@ -2239,10 +2239,10 @@ Inventory selection and original bounded logs must establish that each selected
 case ran once and passed. Missing, duplicate, ignored, unexecuted, failed or
 substituted cases and forged success summaries block admission. Keep the current
 complete matrix mandatory while selecting future cases in the same Map family.
-Final-candidate contract `lkjscript-final-candidate-acceptance-5` pairs only with
+Final-candidate contract `lkjscript-final-candidate-acceptance-6` pairs only with
 workload
-`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-5`.
-Reject predecessor contracts and workloads, including generations 3 and 4, and
+`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-6`.
+Reject predecessor contracts and workloads, including generations 3, 4 and 5, and
 all mixed predecessor/current combinations even
 when other terminal counters and authenticated ZIP identities are valid. Earlier
 contracts retain their historical meaning; this acceptance change does not advance
@@ -2278,7 +2278,7 @@ standalone matrices. Check the executable, artifact, descriptors and literal
 arguments remain unchanged. Input/output equality is a value property, not proof
 of zero-copy storage, bounded RSS or affine/borrowed result support.
 
-Final-candidate acceptance generation 5 requires all five behavior witnesses and
+Final-candidate acceptance generation 6 retains all five behavior witnesses and
 selects every enumerated case in this exact family, including independent oracle
 checks and future additions. Original bounded logs must prove each selected case
 passed exactly once. Missing, ignored, failed, duplicated or substituted cases
@@ -2287,3 +2287,38 @@ byte bound, source/candidate binding or authority check is relaxed. Generation 4
 remains historical evidence for its own selected product, never proof of these
 additional obligations. A source-full pass and a host executable run are separate
 from a new finalized-archive producer, unchanged-asset promotion and public proof.
+
+## Exact incremental compiler-unit acceptance
+
+Compilation-unit membership is the union of the before and candidate enclosing
+units, not a union of every semantically checked owner. Ports retain independent
+callable admission but belong to their component's compilation unit. A missing
+before path for a new port does not make the port a unit. Moved children affect
+both parents; deleted children retain their before path. See the
+[projection decision](../decisions/exact-compiler-unit-projection.md).
+
+Source acceptance requires exact unit sets, the unchanged compiler-domain guard,
+work-bound and cycle refusal, and complete incremental manifest/artifact equality
+with clean compilation through accepted add/rebind/move/delete operations. A
+synthetic ownership-law matrix does not substitute for complete source admission.
+
+Final-candidate generation 6 additionally requires these exact public cases under
+`native_declarations::incremental_units::`:
+
+- `new_components_do_not_promote_ports_to_compiler_units`;
+- `new_command_targets_keep_exact_incremental_cache_and_detached_behavior`;
+- `new_port_type_failure_preserves_authority_and_cache_then_recovers`.
+
+Run the extracted candidate through ordinary native authoring and reviewed apply.
+Require exact planned counts, an updated derived cache and an exact-current check,
+not semantic acceptance followed by silent clean recovery. One/two-port Command
+targets must return their complete expected value before and after source removal.
+Malformed port contracts must preserve authority/cache contents and allow a later
+valid edit. Every present/future test in this exact namespace remains selected;
+case/namespace substitution or missing/ignored/failed/duplicate outcomes reject.
+
+The generation-6 contract and workload are inseparable. Reject generation 5 and
+all earlier or mixed pairs without relabelling their historical receipts. Existing
+source, Map/fold composition, target, userland, installation, candidate-binding and
+joined-cleanup requirements remain unchanged. This acceptance revision does not
+advance semantic/artifact encodings or itself publish a new executable.

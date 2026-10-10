@@ -236,22 +236,10 @@ pub(crate) fn plan_impact_and_summaries_with_admission<
         if change.executable() && kind.is_some_and(has_executable_meaning) {
             admit_affected(&mut admitted, edit.owner, admission.maximum_affected_owners)?;
             plan.semantically_checked.insert(edit.owner);
-            add_owning_units(
+            add_checked_units(
                 edit.owner,
-                overlay,
                 &mut ownership,
                 &mut plan.compiler_units,
-                &mut plan.work,
-                &mut admitted,
-                OwningUnitAdmission {
-                    maximum_affected: admission.maximum_affected_owners,
-                    maximum_ownership_steps: admission.maximum_ownership_steps,
-                },
-            )?;
-            add_owning_units(
-                edit.owner,
-                overlay,
-                &mut ownership,
                 &mut plan.semantically_checked,
                 &mut plan.work,
                 &mut admitted,
@@ -304,23 +292,11 @@ pub(crate) fn plan_impact_and_summaries_with_admission<
             // checks its exact callable type; checking only its component cannot substitute
             // for admitting that port. add_summary_paths already admitted this owner.
             plan.semantically_checked.insert(source);
-            add_owning_units(
+            add_checked_units(
                 source,
-                overlay,
-                &mut ownership,
-                &mut plan.semantically_checked,
-                &mut plan.work,
-                &mut admitted,
-                OwningUnitAdmission {
-                    maximum_affected: admission.maximum_affected_owners,
-                    maximum_ownership_steps: admission.maximum_ownership_steps,
-                },
-            )?;
-            add_owning_units(
-                source,
-                overlay,
                 &mut ownership,
                 &mut plan.compiler_units,
+                &mut plan.semantically_checked,
                 &mut plan.work,
                 &mut admitted,
                 OwningUnitAdmission {
@@ -371,7 +347,6 @@ pub(crate) fn plan_impact_and_summaries_with_admission<
             plan.semantically_checked.insert(source);
             for declaration in owning_units(
                 source,
-                overlay,
                 &mut ownership,
                 &mut plan.work,
                 admission.maximum_ownership_steps,
@@ -428,7 +403,6 @@ pub(crate) fn plan_impact_and_summaries_with_admission<
             };
             let declarations = owning_units(
                 source,
-                overlay,
                 &mut ownership,
                 &mut plan.work,
                 admission.maximum_ownership_steps,
@@ -665,24 +639,19 @@ struct OwningUnitAdmission {
     maximum_ownership_steps: u64,
 }
 
-fn add_owning_units<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+fn add_checked_units<W: WitnessBaseRead + ?Sized>(
     owner: OwnerKey,
-    overlay: &KernelOverlay<'_, B>,
     ownership: &mut CandidateOwnership<'_, W>,
     units: &mut BTreeSet<OwnerKey>,
+    semantic: &mut BTreeSet<OwnerKey>,
     work: &mut ImpactWork,
     admitted: &mut BTreeSet<OwnerKey>,
     admission: OwningUnitAdmission,
 ) -> Result<(), Diagnostic> {
-    for unit in owning_units(
-        owner,
-        overlay,
-        ownership,
-        work,
-        admission.maximum_ownership_steps,
-    )? {
+    for unit in owning_units(owner, ownership, work, admission.maximum_ownership_steps)? {
         admit_affected(admitted, unit, admission.maximum_affected)?;
         units.insert(unit);
+        semantic.insert(unit);
     }
     Ok(())
 }
@@ -767,9 +736,8 @@ fn admit_ownership_step(work: &mut ImpactWork, maximum: u64) -> Result<(), Diagn
     Ok(())
 }
 
-fn owning_units<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+fn owning_units<W: WitnessBaseRead + ?Sized>(
     owner: OwnerKey,
-    overlay: &KernelOverlay<'_, B>,
     ownership: &mut CandidateOwnership<'_, W>,
     work: &mut ImpactWork,
     maximum_ownership_steps: u64,
@@ -796,11 +764,9 @@ fn owning_units<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
                 ownership.before(current)?
             };
             let Some(entry) = entry else {
-                if overlay.owner(current)?.is_some_and(|record| {
-                    matches!(record.kind(), OwnerKind::Port | OwnerKind::Target)
-                }) {
-                    units.insert(current);
-                }
+                // Absence belongs to this snapshot only. A new child has no before
+                // path; a deleted child has no candidate path. Neither is a unit.
+                // The other snapshot still supplies its exact enclosing unit.
                 break;
             };
             let OwnershipParent::Owner(parent) = entry.parent else {
@@ -839,3 +805,7 @@ fn impact_error(code: &'static str, message: impl Into<String>) -> Diagnostic {
 fn impact_resource_error(code: &'static str, message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Resource, code, message)
 }
+
+#[cfg(test)]
+#[path = "impact_unit_tests.rs"]
+mod unit_tests;

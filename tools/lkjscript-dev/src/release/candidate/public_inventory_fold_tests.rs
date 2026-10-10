@@ -9,7 +9,7 @@ const CASES: [&str; 5] = [
     "history::native_blocked_folds_retain_every_nested_prefix_across_blocks_and_source_removal",
     "history::native_blocked_folds_admit_nested_input_and_unused_initial_history_completely",
 ];
-const BASE: &str = "native_owned_fixture: test\nnative_byte_buffer_fixture: test\nnative_byte_ranges_fixture: test\nresident_policy::fixture: test\nparallel::native_parallel_fixture: test\nnative_parallel_reads::native_parallel_reads_fixture: test\nnative_refresh::fixture: test\ncopied_binary_authors_builds_and_serves_interactive_topology_from_minimal: test\nnative_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment: test\n";
+const BASE: &str = "native_owned_fixture: test\nnative_byte_buffer_fixture: test\nnative_byte_ranges_fixture: test\nresident_policy::fixture: test\nparallel::native_parallel_fixture: test\nnative_parallel_reads::native_parallel_reads_fixture: test\nnative_refresh::fixture: test\ncopied_binary_authors_builds_and_serves_interactive_topology_from_minimal: test\nnative_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment: test\nnative_declarations::incremental_units::new_components_do_not_promote_ports_to_compiler_units: test\nnative_declarations::incremental_units::new_command_targets_keep_exact_incremental_cache_and_detached_behavior: test\nnative_declarations::incremental_units::new_port_type_failure_preserves_authority_and_cache_then_recovers: test\n";
 
 fn listing() -> String {
     let mut text = BASE.to_owned();
@@ -45,8 +45,8 @@ fn native_fold_inventory_selects_future_cases_and_checks_each_complete_terminal(
         listing()
     );
     let inventory = inventory(&listing).unwrap();
-    assert_eq!(inventory.selected.len(), 16);
-    assert_eq!(inventory.all.len(), 17);
+    assert_eq!(inventory.selected.len(), 19);
+    assert_eq!(inventory.all.len(), 20);
     assert!(!inventory.selected.contains("unrelated"));
     for suffix in CASES.into_iter().chain(["future_case", "cases::oracle"]) {
         assert!(inventory.selected.contains(&format!("{PREFIX}{suffix}")));

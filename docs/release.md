@@ -48,7 +48,8 @@ Final candidate acceptance now runs the source-matched public harness against th
 exact executable extracted from the finalized archive. It selects every enumerated
 case matching `native_owned_`, `native_byte_buffer_`, `native_byte_ranges_`,
 `resident_policy`, `native_parallel`, `native_refresh` and the complete
-`native_map_entries::` family, plus the exact
+`native_map_entries::`, `native_declarations::native_fold::` and
+`native_declarations::incremental_units::` families, plus the exact
 `copied_binary_authors_builds_and_serves_interactive_topology_from_minimal` case.
 The Map family must include the exact
 `native_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment`
@@ -80,10 +81,10 @@ substitute for final-byte acceptance. Normal promotion and anonymous acquisition
 still use the unchanged assets and existing authority; no credentials, protections,
 immutable tags or prior assets are changed.
 
-`lkjscript-final-candidate-acceptance-5` and workload
-`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-5`
-require the complete Map matrix, the exact native-fold behavior witnesses and
-native-public proof in addition to all previous
+`lkjscript-final-candidate-acceptance-6` and workload
+`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-6`
+require the complete Map matrix, the exact native-fold and incremental-compiler
+behavior witnesses and native-public proof in addition to all previous
 source, six target-owner, two userland and installation boundaries. The current
 controller rejects predecessor contracts, predecessor workloads and mixed generations
 rather than relabelling them. Their original contracts and evidence remain historical facts;

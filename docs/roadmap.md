@@ -121,6 +121,12 @@ does not establish distributed exactly-once delivery.
 
 ## Reduce repeated preparation and semantic-development work
 
+Use [exact compiler-unit projection](decisions/exact-compiler-unit-projection.md)
+to separate independently checked children from their enclosing code-generation
+units. Keep both before and candidate ownership, removed-unit evidence and direct
+port validation. Share one projection between the semantic and compiler impact
+sets without weakening bounded reads or cache admission.
+
 Use [exact callable-cycle proof selection](decisions/context-scoped-callable-proof.md)
 to admit compact acyclic prerequisite DAGs without unfolding every typed path.
 All source operands remain independently admitted. Use

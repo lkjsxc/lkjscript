@@ -3042,3 +3042,9 @@ fn artifact_rejects_nominal_parameter_bound_member_and_application_forgery() {
         println!("nominal-artifact-negative {fault} {}", failure.code);
     }
 }
+
+#[path = "incremental_owner_tests.rs"]
+mod incremental_owner_tests;
+
+#[path = "incremental_owner_lifecycle_tests.rs"]
+mod incremental_owner_lifecycle_tests;

@@ -7,6 +7,9 @@ use std::path::{Path, PathBuf};
 #[path = "public_inventory_fold.rs"]
 mod folds;
 
+#[path = "public_inventory_incremental.rs"]
+mod incremental;
+
 const FAMILIES: [&str; 6] = [
     "native_owned_",
     "native_byte_buffer_",
@@ -125,12 +128,14 @@ pub(super) fn inventory(output: &str) -> Result<Inventory, DevError> {
         "required complete detached Map execution matrix is absent",
     )?;
     folds::admit(&all)?;
+    incremental::admit(&all)?;
     let selected = all
         .iter()
         .filter(|name| {
             FAMILIES.iter().any(|family| name.contains(family))
                 || name.starts_with("native_map_entries::")
                 || folds::selected(name)
+                || incremental::selected(name)
                 || *name == TOPOLOGY
         })
         .cloned()
@@ -191,3 +196,7 @@ mod map_tests;
 #[cfg(test)]
 #[path = "public_inventory_fold_tests.rs"]
 mod fold_tests;
+
+#[cfg(test)]
+#[path = "public_inventory_incremental_tests.rs"]
+mod incremental_tests;
