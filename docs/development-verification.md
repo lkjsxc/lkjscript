@@ -241,3 +241,37 @@ After confirmed mainline delivery and terminal jobs, delete an owned temporary
 branch only after rereading its tip and preserving unique work/evidence. A client
 without a safe branch-deletion operation must report the retained branch instead
 of rewriting it, force-updating it, or treating cleanup as a reason to hide delivery.
+
+## Cargo output origin, not a pre-existing path
+
+Source-verification Cargo gates that declare executable outputs select
+`--message-format=json`. Admission checks the actual producer's bounded, unchanged
+stdout before its first successful `build-finished`: exactly one non-test binary
+artifact from the checked root `Cargo.toml` must name each declared target and
+its exact output path in both `executable` and `filenames`. A redirected target
+with a stale regular file at the default path fails `cargo_output_binding`.
+The failed process/gate observations and retained old output remain diagnostics,
+not successful output authority. Later dependent gates cannot use the failed gate.
+
+The same relation is checked by the generic verification-cache boundary and when
+the original source receipt is independently read for release. The two maintained
+Cargo executable producers do not reuse gate-result evidence: they execute Cargo
+to observe its current output selection on every invocation, including configuration
+outside the repository that the source snapshot does not enumerate. A valid
+Cargo `fresh: true` artifact remains admissible: Cargo's compilation cache reuse
+is separate from reusing a verification-gate result. No output is deleted merely
+to force a timestamp change, and no Cargo setting is silently overwritten.
+
+The source checker currently consumes the root product at its declared host path.
+A custom `CARGO_TARGET_DIR`, `build.target-dir` or explicit compilation target must
+produce that exact declared output or be refused; an unrelated old file cannot
+satisfy the boundary. The configured static-distribution target has its separate
+producer and final-byte admission. This change neither disables Cargo's build
+cache nor changes language/runtime encodings or the published product.
+
+The selected Cargo executable/toolchain remains trusted. These records establish
+the claimed output relationship within that build, not a hostile-build sandbox or
+a cryptographic proof of arbitrary compiler behavior. Test/program output after
+`build-finished` cannot supply a missing Cargo artifact; process exit and joined
+cleanup must still succeed independently. See Cargo's
+[artifact and completion protocol](https://doc.rust-lang.org/cargo/reference/external-tools.html#artifact-messages).

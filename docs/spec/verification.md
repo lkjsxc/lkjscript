@@ -2327,3 +2327,27 @@ all earlier or mixed pairs without relabelling their historical receipts. Existi
 source, Map/fold composition, target, userland, installation, candidate-binding and
 joined-cleanup requirements remain unchanged. This acceptance revision does not
 advance semantic/artifact encodings or itself publish a new executable.
+
+## Declared Cargo executable origin
+
+A source-checking Cargo build/test gate with declared executable outputs must
+request Cargo JSON before any `--` test-argument separator. A regular output at a
+known path is necessary but insufficient. Its original bounded stdout must retain
+an exact root-manifest, binary-target, non-test compiler-artifact record for each
+declared output. The artifact's executable and filenames must name that same path;
+missing, duplicate, conflicting, malformed or incomplete records refuse admission.
+A successful build-finished record must follow the complete artifact set. Later
+test output is not evidence of an additional Cargo artifact. Process success,
+output limits, regular-file identity and joined cleanup remain independently required.
+
+This origin relation is rechecked by fresh execution, verification-cache storage
+and loading, and the independent original source reader. Maintained Cargo
+executable-producing gates are not gate-result-cacheable: current Cargo selection
+is observed even when out-of-checkout Cargo configuration is not in the source
+snapshot. A consistently rehashed
+log without the artifact relation is insufficient. Cargo fresh artifacts remain
+valid selections; verification freshness and compilation reuse are different facts.
+The new command identity invalidates prior command/profile reuse without changing
+receipt encoding. Graph, artifact, application-data and publication identities are
+not changed by this source-verification correction. Cargo and its build environment
+remain trusted; no hostile-build sandbox or arbitrary compiler proof is asserted.
