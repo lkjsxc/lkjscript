@@ -112,7 +112,8 @@ carrier or borrowed-result interface is added.
 
 The final-byte public harness requires the exact scalar and history behavior
 witnesses and every enumerated case in `native_declarations::native_fold::` under
-candidate acceptance/workload generation 5. It uses the extracted candidate, not
+candidate acceptance/workload generation 6, retaining the fold obligations
+introduced in generation 5. It uses the extracted candidate, not
 a development-binary fallback, and requires unchanged identities and joined
 cleanup. Availability of a library example in source, full source acceptance,
 exact host-product proof and finalized distribution acceptance remain separate;
