@@ -1104,6 +1104,9 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     assert!(owner_section.iter().any(|record| {
         record.operation == "owner.kind" && compact_field(record, "name") == Some("module")
     }));
+    assert!(owner_section.iter().any(|record| {
+        record.operation == "owner.kind" && compact_field(record, "name") == Some("owned_record")
+    }));
     assert!(!owner_section.iter().any(|record| {
         record.operation == "owner.kind"
             && matches!(
@@ -1427,6 +1430,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "reference.owner",
             "create.module",
             "create.record",
+            "create.owned-record",
             "create.variant",
             "create.owned-contract",
             "create.owned-implementation",
@@ -1471,8 +1475,26 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .iter()
         .filter(|record| record.operation == "change.operation-field")
         .collect::<Vec<_>>();
-    // Borrowed results add an optional source to both function contract operations.
-    assert_eq!(operation_fields.len(), 166);
+    // Nominal owned records add four required declaration fields; borrowed results retain
+    // an optional source on both function contract operations.
+    assert_eq!(operation_fields.len(), 170);
+    assert_eq!(
+        operation_fields
+            .iter()
+            .filter(|record| compact_field(record, "operation") == Some("create.owned-record"))
+            .map(|record| (
+                compact_field(record, "name").expect("owned record field name"),
+                compact_field(record, "required").expect("owned record field admission"),
+                compact_field(record, "form").expect("owned record field form"),
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            ("as", "true", "request_local_symbol"),
+            ("module", "true", "module_selector"),
+            ("name", "true", "name"),
+            ("visibility", "true", "declaration_visibility"),
+        ]
+    );
     assert!(change_section.iter().any(|record| {
         record.operation == "change.edge-field"
             && compact_field(record, "edge") == Some("requirement-parameter.operation")
@@ -1594,6 +1616,10 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             && compact_field(record, "name") == Some("http_route")
     }));
     assert!(query.iter().any(|record| {
+        record.operation == "query.owner-kind"
+            && compact_field(record, "name") == Some("owned_record")
+    }));
+    assert!(query.iter().any(|record| {
         record.operation == "query.namespace-class"
             && compact_field(record, "name") == Some("parameter")
     }));
@@ -1625,7 +1651,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .iter()
             .filter(|record| record.operation == "query.owner-kind")
             .count(),
-        27
+        28
     );
     assert_eq!(
         query

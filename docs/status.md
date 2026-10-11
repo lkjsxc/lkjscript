@@ -33,8 +33,8 @@ The tested `candidate-fourth-lkjscript` SHA-256 is
 `5e190171d51618379196d7a21917c03d0a74b7a63618658c28cbc0be7d54ca06`.
 `public-fifo-first.log` passed **5/5** in **116.79s**; `focused-third.log` passed
 **79/79**, covering all **35** earlier library failures. The new `BorrowCall`
-unused-binding producer-edge regression is source-only and awaits full workspace
-execution; it was added after the 79-test focused run. Fmt-fifth and clippy-fourth
+unused-binding producer-edge regression subsequently passed in the first full
+run's library suite (**1,838 passed, 0 failed, 8 ignored**). Fmt-fifth and clippy-fourth
 passed, including the final public harness corrections. Maintained checks passed
 **116 standard / 44 journal / 79 guides / 62 policy**, with production/reference
 equality and the same exact installed artifacts, at `standard-check-eighth.log`,
@@ -75,6 +75,21 @@ Failed and cancelled originals remain retained separately: the
 [third public nominal runs](../.artifacts/owned-nominals/public-nominals-third.log),
 and [initial cost preparation](../.artifacts/owned-nominals/cost-prepare-first.log).
 The fourth build remains cancelled with exit **130**, not failed.
+
+The first frozen full run at source
+`fbe7a54378ec5c4a3957f683d2f3e9820ae52a37` completed in **28m12s** with stable
+inputs, **23/26 fresh gates**, zero reuse and zero unrun gates. Its failed receipt is
+`verification_fd60498bf7fc72bd13d0b23a805abd894fd93dff1dae172aad39783917649f30`,
+at `.artifacts/lkjscript-dev/check/1791694354031048775-938064-0/receipt.json`;
+selection, checker and aggregate outcomes are retained in
+`.artifacts/owned-nominals/full-first/`. Workspace outcomes were **2,452 passed,
+3 failed, 29 ignored**, plus two separately filtered passing child probes.
+All five nominal and all five FIFO public tests passed. The failures were stale
+service artifact/discovery inventory assertions, the distributed HTTP projection
+expectation and the service artifact hash pin. The current correction updates
+those exact expectations and aligns continuation magic/envelope/payload version 3
+with discovery, with explicit predecessor rejection. No failed proof is relabelled
+as acceptance; the correction awaits a new full run.
 
 Next: freeze all tracked inputs for fresh **26-gate full acceptance**, including full
 workspace tests, clippy and independent-loader checks. No current source

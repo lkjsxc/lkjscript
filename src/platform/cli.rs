@@ -4390,9 +4390,9 @@ fn http_topology_inspection_fields(
 const FUNCTION_DEFINITION_ORDERING: u8 = 1;
 const FUNCTION_DEFINITION_ORDERING_NAME: &str =
     "header-contract-structural-preorder-reference-fact-v1";
-const FUNCTION_DEFINITION_CONTINUATION_MAGIC: [u8; 8] = *b"LKJICT02";
-const FUNCTION_DEFINITION_CONTINUATION_VERSION: u16 = 2;
-const FUNCTION_DEFINITION_CONTINUATION_ENVELOPE_VERSION: u16 = 2;
+const FUNCTION_DEFINITION_CONTINUATION_MAGIC: [u8; 8] = *b"LKJICT03";
+const FUNCTION_DEFINITION_CONTINUATION_VERSION: u16 = 3;
+const FUNCTION_DEFINITION_CONTINUATION_ENVELOPE_VERSION: u16 = 3;
 const FUNCTION_DEFINITION_CONTINUATION_HEADER_BYTES: usize = 18;
 const FUNCTION_DEFINITION_CONTINUATION_CHECKSUM_BYTES: usize = 32;
 const MAXIMUM_FUNCTION_DEFINITION_CONTINUATION_DECODED_BYTES: usize = 224;
@@ -9990,12 +9990,55 @@ mod tests {
         let digest = DefinitionDigest([5; 32]);
         let token = encode_definition_continuation(binding, digest, 7, &record)
             .expect("definition continuation");
+        let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(
+                token
+                    .strip_prefix(FUNCTION_DEFINITION_CONTINUATION_PREFIX)
+                    .expect("definition continuation prefix"),
+            )
+            .expect("definition continuation bytes");
+        assert_eq!(
+            &bytes[..8],
+            FUNCTION_DEFINITION_CONTINUATION_MAGIC_TEXT.as_bytes()
+        );
+        assert_eq!(&bytes[..8], b"LKJICT03");
+        assert_eq!(u16::from_le_bytes([bytes[8], bytes[9]]), 3);
+        let payload_start = FUNCTION_DEFINITION_CONTINUATION_HEADER_BYTES;
+        assert_eq!(
+            u16::from_be_bytes([bytes[payload_start], bytes[payload_start + 1]]),
+            3
+        );
+        assert_eq!(
+            u16::from_be_bytes([bytes[payload_start + 2], bytes[payload_start + 3]]),
+            21
+        );
         let decoded = decode_definition_continuation(&token).expect("decode continuation");
         assert_eq!(decoded.binding, binding);
         assert_eq!(decoded.projection, digest);
         assert_eq!(decoded.index, 7);
         assert_eq!(decoded.section, DefinitionSection::Body);
         assert_eq!(decoded.resume_key, record.key);
+        let mut predecessor = bytes.clone();
+        predecessor[..8].copy_from_slice(b"LKJICT02");
+        predecessor[8..10].copy_from_slice(&2_u16.to_le_bytes());
+        predecessor[payload_start..payload_start + 2].copy_from_slice(&2_u16.to_be_bytes());
+        predecessor[payload_start + 2..payload_start + 4].copy_from_slice(&20_u16.to_be_bytes());
+        let checksum_start = predecessor.len() - FUNCTION_DEFINITION_CONTINUATION_CHECKSUM_BYTES;
+        let checksum = definition_domain_digest(
+            "lkjscript.function-definition.continuation-integrity.v2",
+            &predecessor[..checksum_start],
+        );
+        predecessor[checksum_start..].copy_from_slice(&checksum);
+        let predecessor_token = format!(
+            "{FUNCTION_DEFINITION_CONTINUATION_PREFIX}{}",
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(predecessor)
+        );
+        assert_eq!(
+            decode_definition_continuation(&predecessor_token)
+                .expect_err("predecessor definition continuation")
+                .code,
+            "definition_continuation_contract"
+        );
         let mut mutated = token.into_bytes();
         let last = mutated.last_mut().expect("token byte");
         *last = if *last == b'A' { b'B' } else { b'A' };

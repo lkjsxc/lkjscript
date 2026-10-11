@@ -227,8 +227,9 @@ visited flags and readiness indices use indexed owned working storage, with stab
 ordinary reads and explicit displaced values from replacement. Keep its complete
 independent result checker and current graph capacities. Measure preparation,
 storage growth and bounded per-update admission before deciding whether to move
-this boundary into the compiler. Nominal ownership, hidden representations,
-associated views and regions remain subsequent milestones justified by concrete
+this boundary into the compiler. [Nominal owned records](spec/owned-records.md)
+now provide module-private representations, demonstrated by the standard FIFO.
+Associated views and regions remain subsequent milestones justified by concrete
 consumers; ordinary working storage does not depend on those designs.
 The [owned metadata workload](../examples/owned-metadata-costs/README.md) separates
 ordinary list/map projection from packing, unpacking and borrowed metadata reads.
