@@ -4,17 +4,21 @@ Snapshot: 2026-10-11. Development **0.1.94** implements native package dependenc
 planning. Source `d01708a2` passed **29/29** fresh full gates with stable inputs,
 **0 reused**, **0 unrun** and terminal exit **0**. The accepted implementation
 and docs-only reporting descendants are integrated on main with the generation-10
-release controller. Finalized-byte acceptance and publication remain pending.
+release controller. Original hosted producer **38152770069/1** failed source
+acceptance at its workspace deadline. The bounded diagnostic successor awaits
+fresh source and finalized-byte acceptance; publication remains pending.
 
 ## Selected source and capability
 
 Worktree `/home/coder/workspace/lkjscript-native-package-planner-20261011`, branch
-`work/native-package-planner-20261011`, has accepted source
+`work/native-package-planner-20261011`, retains accepted source
 `d01708a2d089af33e79747c097ca61b5c90d4fd7`, tree
 `d08f9a0d64afca0a320d0d7a8b0b93a20f788036`. It contains the native planner
 implementation, normal ancestry merge from main, and reviewed fixture corrections.
-This status update is a docs-only reporting descendant; the receipt binds the
-exact accepted source above. Preserve the worktrees and ignored original evidence;
+Main contains reporting descendant `c3d27a7d451879ab7624279e9e690a54d6c65730`.
+The pending successor adds bounded IndexedData progress observations and a
+9,600-second workspace allowance; the original receipt binds only the exact
+accepted source above. Preserve the worktrees and ignored original evidence;
 [selection.json](../.artifacts/native-package-planner/selection.json) retains
 earlier executable selections and proof scopes.
 
@@ -90,19 +94,38 @@ end-to-end speed; the dominant cold cost remains unresolved.
 
 ## Remaining gates
 
-Source acceptance is complete for the exact source above. Candidate generation
-**10** additionally requires **23** release-source gates and finalized-byte
-admission with the exact expanded public compiler inventory. The generation-9
-predecessor lineage is closed. Normal mainline delivery preserves exact accepted
-ancestry; its original checks and remote readback are retained in
+The [original hosted producer 38152770069/1](https://github.com/lkjsxc/lkjscript/actions/runs/38152770069)
+on exact `c3d27a7d451879ab7624279e9e690a54d6c65730` failed source acceptance:
+**22/23** gates passed fresh with stable inputs, **0 reused** and **0 unrun**.
+Only `workspace_tests` failed by its **7,200-second timeout**. Public CLI completed
+**269 passed, 1 ignored, 0 failed** of 271 announced cases; the separate-package
+IndexedData matrix remained unfinished. Its underlying noncompletion cause is
+unknown. Finalized asset construction/admission and publication were skipped;
+the original terminal is `incomplete`, with no accepted candidate asset set.
+The [authenticated failure report](../.artifacts/native-package-planner/delivery/mainline-20261011T154018Z/candidate-dispatch-20261011T154733Z/audit-20261011T183737Z/failure-report.md)
+retains original service identities, artifact bytes, receipt and process logs.
+
+The successor keeps every required case and adds bounded matrix progress plus a
+**9,600-second** workspace diagnostic allowance. This is an experiment, not a
+proven remedy; about 20 minutes of historical outer-job margin does not guarantee
+that final acceptance fits. Next freeze the complete successor inputs, build a
+fresh immutable verifier and require stable **29/29** fresh full-source gates.
+After normal mainline delivery and occupancy refresh, a fresh generation-10
+producer must pass **23** release-source gates and complete the unchanged
+finalized-byte, expanded public inventory, target, userland, installation,
+original-reader and joined-cleanup obligations. Preserve the original `d01708a2`
+acceptance and failed `c3d27a7d` producer separately. No successor acceptance or
+`.94` publication is claimed.
+
+The generation-9 predecessor lineage is closed. Normal mainline delivery retains
+the accepted ancestry; original checks and remote readback remain in
 `.artifacts/native-package-planner/delivery/mainline-20261011T154018Z/`.
-Next select one normal non-publishing `.94` candidate from integrated main after
-refreshing source and release occupancy. No `.94` producer, tag or publication is
-claimed.
 
 The separate `/home/coder/workspace/lkjscript-associated-owned-types-20261011`
-worktree holds the **0.1.95** associated-owned-types foundation under development.
-It has no feature acceptance and is outside this .94 receipt.
+worktree holds the **0.1.95** associated-owned-types foundation. Its separate
+`01394bef` checkpoint records **2,043 passed / 8 ignored** local library tests
+and **199/199** focused passes. It has no associated feature admission and is
+outside this .94 receipt.
 
 ## Accepted predecessors and public availability
 

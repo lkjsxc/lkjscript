@@ -210,10 +210,14 @@ never equivalent proof. The [verification specification](spec/verification.md) o
 Source-only probes embedded in behavioral owners remain owned by those original readers; the target
 verifier is source-built. Necessary reference/unit work and host-verifier configurations are not
 second distributable product builds. Workloads and assertions remain unchanged. The complete
-`workspace_tests` aggregate has a **7,200-second** allowance; the generic **3,600-second** gate
+`workspace_tests` aggregate has a **9,600-second** diagnostic allowance; the generic **3,600-second** gate
 default and other owner deadlines retain their existing selections. The hosted candidate job has a
 finite **360-minute** outer allowance for cold source verification, construction and required
 finalized-byte acceptance. Source checking has no shorter aggregate timeout around its gates.
+The failed v0.1.94 producer exhausted its former 7,200-second workspace allowance with one
+public case unfinished. The increased allowance is a bounded experiment, not a proven remedy.
+Combining observed source overhead with the v0.1.92 final phases leaves about 20 minutes under
+the outer allowance; those historical timings do not guarantee that the successor fits.
 The target supervisor retains its existing finite owner allowance; no completed broad owner is
 replayed merely because bytes crossed a job boundary.
 

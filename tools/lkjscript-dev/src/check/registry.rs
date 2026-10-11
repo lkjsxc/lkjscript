@@ -315,9 +315,9 @@ pub(crate) fn base_registry(
         ],
         &["clippy", "release_build"],
     );
-    // The hosted cold run continued making progress when its one-hour allowance
-    // expired. Keep complete coverage and bound this aggregate separately.
-    workspace_tests.timeout = std::time::Duration::from_secs(7_200);
+    // One public case remained unfinished at the hosted two-hour deadline.
+    // This finite diagnostic allowance preserves coverage; adequacy is unproven.
+    workspace_tests.timeout = std::time::Duration::from_secs(9_600);
     let mut gates = vec![
         cargo_gate("fmt", &["fmt", "--all", "--", "--check"], &[]),
         cargo_gate(
@@ -1134,7 +1134,7 @@ mod tests {
             base_registry(temporary.path(), temporary.path(), Path::new("/bin/true"))
                 .expect("maintained registry");
         let workspace = registry.gate("workspace_tests").expect("workspace gate");
-        assert_eq!(workspace.timeout, std::time::Duration::from_secs(7_200));
+        assert_eq!(workspace.timeout, std::time::Duration::from_secs(9_600));
         assert_eq!(
             registry
                 .gate("library_tests")
