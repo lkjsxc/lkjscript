@@ -32,7 +32,7 @@ pub fn exercise(public: &Native, descriptor: &std::path::Path) {
     malformed[1]["value"]["owner"] = json!(false);
     let mut untaken = cases::empty_plan();
     untaken["unreachable"] = json!([false]);
-    let over_capacity = json!({"roots":[],"nodes":vec![json!({"id":1,"successors":[]});4097]});
+    let over_capacity = json!({"roots":[],"nodes":vec![json!({"id":1,"successors":[]});10001]});
     let wrong = [
         malformed,
         json!([over_capacity,{"case":"valid","value":untaken}]),

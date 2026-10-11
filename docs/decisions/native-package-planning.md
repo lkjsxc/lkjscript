@@ -83,6 +83,18 @@ compiler reports end-to-end build time; separate phase timings remain unavailabl
 Retain warmups and cases slower than the host predecessor. No speed advantage is
 presumed.
 
+## Acceptance evidence
+
+The [first full run](../../.artifacts/lkjscript-dev/check/1791722983656536426-2131509-0/receipt.json)
+on `d1488367758226e02a3c5522476b7058fd881ce2` failed after 2,866.089739 seconds:
+**28/29** fresh gates passed, **0 reused**, **0 unrun**, inputs stable. Only
+`workspace_tests` failed, on three reviewed fixtures: library **1,911/1/8 ignored**,
+native verifier **8/1**, public CLI **269/1/1 ignored**. Original evidence remains
+intact. Test-only corrections preserve standalone input accounting and the current
+capacity/negative precedence contract; corrected executable verification and a
+complete fresh acceptance are pending. The native asset and production behavior
+remain unchanged by those corrections.
+
 ## Observed public build costs
 
 The retained 2026-10-11 comparison uses release-profile 0.1.93 and 0.1.94
@@ -100,8 +112,8 @@ pass with complete expected values and joined cleanup.
 | Nine-package native planner | 9,337.967 ms | 10,336.357 ms | 1.107 |
 
 These are complete public build-process costs, not isolated planner timings.
-The candidate is slower in all three observed cases; native ownership of this
-compiler boundary is accepted without a speed claim. Owned build/test jobs were
+The candidate is slower in all three observed cases; this decision delegates the
+compiler boundary without a speed claim. Owned build/test jobs were
 idle, but unrelated Java/server/editor processes remained on the shared host.
 Five samples do not establish portable performance, asymptotics, memory costs or
 monetary savings. Preserve cold warmups, ranges and all unfavorable samples in the
@@ -109,3 +121,20 @@ monetary savings. Preserve cold warmups, ranges and all unfavorable samples in t
 The earlier failed run remains intact: its untimed baseline execution correctly
 rejected an absolute artifact path in the harness's deployment descriptor. The
 corrected run uses canonical relative paths and the same accepted source roots.
+
+## Thin consumer experiment and asset selection
+
+Keep the current production asset. The [thin-consumer experiment](../../.artifacts/native-package-planner/thin-consumer-experiment/summary.json)
+passes **156** native checks and **16** matched functional runs with complete
+results and joined cleanup. It reduces compiler units **575 → 543** and artifact
+bytes **3,371,783 → 3,272,121**, without replacing the production supplier.
+
+With owned build/test jobs idle, seven paired samples per lane show aggregate
+public preparation medians **213.824 → 206.996 ms** for empty input and
+**217.872 → 208.483 ms** for the diamond. The roughly **3–4%** lower medians have
+overlapping ranges on the shared host;
+[retain all samples](../../.artifacts/native-package-planner/thin-consumer-experiment/timing-idle-01/summary.json).
+Preparation combines deployment, strict loading, program and input work; it is
+neither a compiler phase nor a separate pure-tool loading measurement. No compiler
+end-to-end speed claim follows. The thin variant stays experimental, and the
+dominant cold preparation cost remains unresolved.

@@ -479,7 +479,7 @@ fn graph_cases() -> Vec<(String, Value, Value)> {
     let admitted_nodes: Vec<i64> = (0..4096).collect();
     cases.extend([
         (
-            "node-capacity-inclusive".into(),
+            "former-node-bound-valid".into(),
             graph(
                 &[],
                 admitted_nodes.iter().map(|id| node(*id, &[])).collect(),
@@ -487,29 +487,29 @@ fn graph_cases() -> Vec<(String, Value, Value)> {
             valid(&[], &admitted_nodes),
         ),
         (
-            "node-capacity-before-invalid-root".into(),
-            graph(&[-99], (0..4097).map(|id| node(id, &[])).collect()),
+            "public-node-capacity-before-invalid-root".into(),
+            graph(&[-99], (0..10001).map(|id| node(id, &[])).collect()),
             json!({"case":"capacity","value":"nodes"}),
         ),
         (
-            "root-capacity-inclusive".into(),
+            "former-root-bound-valid".into(),
             graph(&vec![7; 4096], vec![node(7, &[])]),
             valid(&[7], &[]),
         ),
         (
-            "root-capacity-before-invalid-successor".into(),
-            graph(&vec![7; 4097], vec![node(7, &[999])]),
+            "public-root-capacity-before-invalid-successor".into(),
+            graph(&vec![7; 10001], vec![node(7, &[999])]),
             json!({"case":"capacity","value":"roots"}),
         ),
         (
-            "edge-capacity-inclusive".into(),
+            "former-edge-bound-valid".into(),
             graph(&[7], vec![node(7, &vec![7; 16384])]),
             valid(&[7], &[]),
         ),
         (
-            "edge-capacity-before-invalid-root".into(),
+            "former-edge-overflow-does-not-mask-invalid-root".into(),
             graph(&[999], vec![node(7, &vec![7; 16385])]),
-            json!({"case":"capacity","value":"edges"}),
+            invalid("missing-root", -1, 999),
         ),
     ]);
     cases

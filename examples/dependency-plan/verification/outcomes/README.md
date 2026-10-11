@@ -70,11 +70,20 @@ secrets, runtime intrinsics, encodings or product identifiers are changed.
 ## Evidence and remaining trust
 
 The extended public suite retains all original correct-plan and malformed-plan
-coverage, then checks 8,760 complete-outcome claims with sources present and deleted.
+coverage, then checks 8,744 complete-outcome claims with sources present and deleted.
 These include all 4,635 existing canonical outcomes, 3,072 false negative claims on
-all 512 directed three-vertex graphs, signed diagnostic matrices, simultaneous
-capacity violations and the existing 41 claim mutations/recovery cases. In each
-phase, 29 verified claims are true negative outcomes, not valid graphs.
+all 512 directed three-vertex graphs, signed diagnostic matrices, three public
+capacity sources and the existing 41 claim mutations/recovery cases. The public
+capacity sources exceed 10,000 nodes, exceed 10,000 roots, or exceed both and
+require node precedence; each fits the unchanged CLI JSON envelope. In each phase,
+27 verified claims are true negative outcomes, not valid graphs.
+
+Six separate host oracle cases retain all native one-over and precedence
+obligations, including 100,001 successor entries and simultaneous edge overflows.
+Nine compiler embedding cases directly invoke the maintained native artifact at
+all three inclusive limits, one-over limits and capacity-before-structure cases.
+Those edge-limit inputs exceed ordinary CLI JSON admission and use only the
+compiler embedding's wider envelope.
 
 The standalone checker executes correct and false negative claims before the
 producer exists. Copied-executable tests also cover exact raw-type refusal, refusal

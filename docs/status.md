@@ -1,18 +1,20 @@
 # Current status
 
 Snapshot: 2026-10-11. Development **0.1.94** implements native package dependency
-planning. The final all-target/all-feature build, strict clippy, formatting,
-affected admission tests, cleanup tests, maintained consumers and generated guides
-pass. Complete fresh source acceptance, mainline integration and finalized-byte
-publication remain separate unfinished gates.
+planning. Its first full run failed `workspace_tests`: **28/29** fresh gates passed
+with stable inputs, **0 reused** and **0 unrun**. The three reviewed fixture
+corrections are applied; a corrected build and complete fresh acceptance remain
+pending. Mainline integration and finalized-byte publication are separate gates.
 
 ## Selected source and capability
 
 Worktree `/home/coder/workspace/lkjscript-native-package-planner-20261011`, branch
 `work/native-package-planner-20261011`, contains implementation `e9564f2d` and normal
 ancestry merge `77decedce1cdb188c8712fd9854996332b15cb4f`. The merge incorporates main's
-reporting descendant without changing implementation. This remains a local
-development candidate. Preserve the worktrees and their ignored original evidence;
+reporting descendant without changing implementation. First full source
+`d1488367758226e02a3c5522476b7058fd881ce2` remains distinct from the subsequent
+fixture/documentation corrections and the accepted predecessor. This remains a
+local development candidate. Preserve the worktrees and their ignored original evidence;
 [selection.json](../.artifacts/native-package-planner/selection.json) records live
 process handles and subsequent development evidence.
 
@@ -34,6 +36,15 @@ observation **46** adds invocation-bound planning records; candidate generation
 **10** requires the expanded maintained/public coverage.
 
 ## Current development evidence
+
+The [original full receipt](../.artifacts/lkjscript-dev/check/1791722983656536426-2131509-0/receipt.json)
+records terminal exit 1 after **2,866.089739 seconds** on stable source `d1488367`.
+Only `workspace_tests` failed: library **1,911 passed / 1 failed / 8 ignored**,
+native verifier **8/1**, and public CLI **269/1/1 ignored** (1,551.61 seconds).
+Original logs and receipt remain unchanged. The reviewed test-only corrections
+account for standalone container input charges and update stale capacity/negative
+precedence fixtures to the existing 10,000-node / 100,000-edge contract. They do
+not change production behavior and have not yet passed a corrected executable.
 
 [The fifth build](../.artifacts/native-package-planner/build/selected-fifth.json)
 binds immutable executables to source `77decedc`. It includes private planning
@@ -77,10 +88,19 @@ in all three observed cases. The [decision](decisions/native-package-planning.md
 retains scope and shared-host limitations; separate compiler phase timings remain
 unavailable. The failed first harness run and its unfavorable samples are preserved.
 
+Keep the production planner asset unchanged. The retained thin-consumer experiment
+passes **156** checks and **16** matched functional runs, reducing units **575 →
+543** and bytes **3,371,783 → 3,272,121**. Seven idle paired samples per lane show
+aggregate public preparation medians **213.824 → 206.996 ms** (empty) and
+**217.872 → 208.483 ms** (diamond), about **3–4%** lower with overlapping ranges;
+[original timing evidence](../.artifacts/native-package-planner/thin-consumer-experiment/timing-idle-01/summary.json).
+Thin remains an experiment. This does not establish compiler phase or end-to-end
+speed; the dominant cold cost remains unresolved.
+
 ## Remaining gates
 
-Freeze the final reviewed source for all **29** full gates freshly with stable
-inputs. Candidate generation **10**
+The corrected source needs a matched build, affected fixture reruns and all **29**
+full gates freshly with stable inputs. Candidate generation **10**
 additionally requires **23** release-source gates and the exact expanded public
 compiler inventory. Refresh source ancestry and reconcile the pending generation-9
 release before installing the generation-10 controller on main. Local commits and
@@ -101,11 +121,12 @@ That receipt binds the extraction implementation, not its reporting descendant o
 this successor.
 
 The single v0.1.92 producer [38130920573/1](https://github.com/lkjsxc/lkjscript/actions/runs/38130920573)
-selects accepted source `a7a3d778fe34df5ed9a8f0fb5595fbf2f858c1a5`. At **12:48:28 UTC**,
+selects accepted source `a7a3d778fe34df5ed9a8f0fb5595fbf2f858c1a5`. At **13:40:38 UTC**,
 source acceptance and final asset construction had passed; final candidate
-admission was live with no uploaded artifacts or acceptance terminal. Original
+admission remained live at step 10 (since 12:33:41), with no observed failures,
+uploaded artifacts or acceptance terminal. Original
 API evidence is
-`/home/coder/workspace/lkjscript-mixed-storage-20261011/.artifacts/mixed-storage/delivery/recheck-20261011T124828Z/summary.json`.
+`/home/coder/workspace/lkjscript-mixed-storage-20261011/.artifacts/mixed-storage/delivery/recheck-20261011T134038Z/summary.json`.
 Reuse that producer; require original generation-9 `candidate_accepted` and
 authenticated retained assets/verifier/handoff before unchanged-asset promotion.
 Close or explicitly supersede generation 9 before replacing its consumer with the

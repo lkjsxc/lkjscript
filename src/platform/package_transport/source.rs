@@ -1498,10 +1498,22 @@ mod tests {
             PackageContainer::decode(&bytes, admitted.container.root.transport).expect("decode");
         assert_eq!(decoded.encode().expect("canonical encode"), bytes);
         let repeated = decoded.admit().expect("repeat full admission");
-        assert_eq!(admitted.validation_visits, repeated.validation_visits);
+        // Internal export is already admitted. Standalone wire admission also
+        // charges one object-integrity visit per object and one container read.
         assert_eq!(
-            admitted.validation_read_bytes,
+            admitted.validation_visits + decoded.objects.len() as u64,
+            repeated.validation_visits
+        );
+        assert_eq!(
+            admitted.validation_read_bytes + bytes.len() as u64,
             repeated.validation_read_bytes
+        );
+        assert_eq!(
+            repeated
+                .container
+                .encode()
+                .expect("canonical repeated encode"),
+            bytes
         );
         assert!(bytes.len() < MAXIMUM_CONTAINER_BYTES);
         let mut trailing = bytes.clone();

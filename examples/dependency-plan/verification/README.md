@@ -144,7 +144,10 @@ It does not run the native finish-order SCC algorithm, producer readiness queue 
 checker traversal. Seventeen fixed native tests exercise both evaluators, including both one-way
 false merges, consumer propagation of checker failure and exact negative outcomes.
 The [complete-outcome extension](outcomes/README.md) retains its additional
-8,760 claims per source-present/deleted phase and refusal/recovery checks.
+8,744 claims per source-present/deleted phase and refusal/recovery checks. Three
+public node/root capacity sources fit the ordinary CLI JSON envelope; full native
+edge-limit and simultaneous-overflow coverage runs separately through the host
+oracle and compiler embedding.
 The public matrix uses production execution, not differential evaluator pairs.
 
 Every successful public run checks joined cleanup and no remaining owned handles,

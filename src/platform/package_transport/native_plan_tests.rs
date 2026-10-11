@@ -430,7 +430,13 @@ fn native_capacity_admission_is_complete_above_default_json_bytes_and_entries() 
                 "entry capacity is independent of bytes"
             );
         }
+        let before = invocation_count();
         let outcome = decode_outcome(&invoke(&arguments, &control).unwrap(), &control).unwrap();
+        assert_eq!(
+            invocation_count(),
+            before + 1,
+            "{label}: direct native invocation"
+        );
         match (label, outcome) {
             ("nodes-exact", NativeOutcome::Valid(plan)) => {
                 assert_eq!(plan.components.len(), MAXIMUM_PACKAGE_CLOSURE);

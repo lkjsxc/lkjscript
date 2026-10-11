@@ -61,8 +61,8 @@ pub fn suite() -> Vec<Value> {
         .collect();
     proposals.push(json!({"roots":[0,0],"nodes":star}));
     // Retain the former capacity shapes under unchanged public CLI JSON limits.
-    // The larger current inclusive bounds cross those limits and are exercised
-    // through the compiler embedding envelope in capacity_suite().
+    // Current edge boundaries cross those limits and are exercised through
+    // the compiler embedding envelope in capacity_suite().
     proposals.push(json!({"roots":[],"nodes":(0..4096).map(|id|
         json!({"id":id,"successors":[]})).collect::<Vec<_>>()}));
     proposals.push(json!({"roots":vec![-1;4096],"nodes":[{"id":-1,"successors":[]}]}));
@@ -82,8 +82,9 @@ pub fn suite() -> Vec<Value> {
     proposals
 }
 
-/// These graphs require the compiler embedding JSON envelope rather than the
-/// ordinary command's unchanged 1 MiB / 100,000-entry defaults.
+/// Complete native capacity coverage, invoked through the compiler embedding.
+/// Edge boundaries and simultaneous edge overflows exceed ordinary command
+/// defaults; the node/root-only overflow inputs also fit its JSON envelope.
 #[allow(dead_code)] // Shared with compiler embedding tests, not every CLI harness.
 pub fn capacity_suite() -> Vec<(&'static str, Value)> {
     let isolated = |count| {
