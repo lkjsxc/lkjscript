@@ -83,6 +83,9 @@ foreground planning.
 
 Public source acceptance, copied-product adoption, compiler-envelope boundaries,
 matched costs and finalized-byte verification remain separate required evidence.
+The [matched public build comparison](../../docs/decisions/native-package-planning.md#observed-public-build-costs)
+retains the measured slowdown on tiny, diamond and maintained-planner projects;
+native ownership does not imply lower compilation cost.
 See the [independent checker](../../examples/dependency-plan/verification/README.md)
 and [planner](../../examples/dependency-plan/README.md) for the native algorithm and
 complete-outcome contracts.

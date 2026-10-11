@@ -82,3 +82,30 @@ projection/admission, native production and independent checking. The public
 compiler reports end-to-end build time; separate phase timings remain unavailable.
 Retain warmups and cases slower than the host predecessor. No speed advantage is
 presumed.
+
+## Observed public build costs
+
+The retained 2026-10-11 comparison uses release-profile 0.1.93 and 0.1.94
+executables, identical accepted source clones, one cold compiler-cache warmup per
+lane and five alternating measured builds per lane. Every invocation starts a new
+process; native code preparation is therefore cold even when the project's derived
+compiler cache is warm. All complete artifacts match across lanes and repetitions;
+the planner also reproduces its maintained artifact. Ten detached result checks
+pass with complete expected values and joined cleanup.
+
+| Project | 0.1.93 median | 0.1.94 median | Candidate / predecessor |
+| --- | ---: | ---: | ---: |
+| Dependency-free identity | 16.060 ms | 231.065 ms | 14.388 |
+| Four-package diamond | 26.792 ms | 239.821 ms | 8.951 |
+| Nine-package native planner | 9,337.967 ms | 10,336.357 ms | 1.107 |
+
+These are complete public build-process costs, not isolated planner timings.
+The candidate is slower in all three observed cases; native ownership of this
+compiler boundary is accepted without a speed claim. Owned build/test jobs were
+idle, but unrelated Java/server/editor processes remained on the shared host.
+Five samples do not establish portable performance, asymptotics, memory costs or
+monetary savings. Preserve cold warmups, ranges and all unfavorable samples in the
+[original comparison](../../.artifacts/native-package-planner/costs/run-20261011T124526Z/summary.json).
+The earlier failed run remains intact: its untimed baseline execution correctly
+rejected an absolute artifact path in the harness's deployment descriptor. The
+corrected run uses canonical relative paths and the same accepted source roots.
