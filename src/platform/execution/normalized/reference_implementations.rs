@@ -10,6 +10,7 @@ use std::collections::BTreeSet;
 
 #[derive(Clone, Debug)]
 pub(super) struct AppliedReferenceImplementation {
+    pub(super) canonical: Option<Arc<CanonicalSelection>>,
     pub(super) identity: u64,
     pub(super) depth: usize,
     pub(super) implementation: DeclarationReference,
@@ -136,12 +137,75 @@ impl ReferenceState<'_> {
         self.checked_implementation_in(selected, 0, &mut 0, &mut BTreeSet::new())
     }
 
-    fn intern_implementation(
+    pub(super) fn intern_implementation(
         &mut self,
         implementation: DeclarationReference,
         types: Vec<TypeObjectDigest>,
         children: Vec<AppliedReferenceImplementation>,
     ) -> Result<AppliedReferenceImplementation, ExecutionError> {
+        self.control.check()?;
+        let canonical = if let Some(proof) = self.schema.associated_proof().cloned() {
+            // The nested borrowed index compares complete actual/prerequisite slices.
+            // Reserve a conservative comparison prefix before either lookup or reuse.
+            let comparisons = (usize::BITS - proof.selections.len().leading_zeros()) as usize + 1;
+            self.associated_step(
+                types
+                    .len()
+                    .saturating_add(children.len())
+                    .saturating_add(1)
+                    .saturating_mul(comparisons)
+                    .saturating_mul(3),
+            )?;
+            self.charge_items(children.len(), std::mem::size_of::<usize>())?;
+            let ids = children
+                .iter()
+                .map(|child| child.canonical.as_ref().map(|selected| selected.identity))
+                .collect::<Option<Vec<_>>>();
+            let selected = ids
+                .as_ref()
+                .map(|ids| proof.selection(implementation, &types, ids, self.control))
+                .transpose();
+            match selected {
+                Ok(Some(selected)) => Some(Arc::clone(selected)),
+                Err(error)
+                    if matches!(
+                        error.class,
+                        ExecutionFailureClass::Cancelled | ExecutionFailureClass::Resource
+                    ) =>
+                {
+                    return Err(error);
+                }
+                missing => {
+                    // An uncalled ordinary scheme keeps its original dynamic route.
+                    let DeclarationPayload::OwnedImplementation(scheme) =
+                        self.declaration(implementation)?.payload
+                    else {
+                        return Err(reference_type_error("ordinary witness owner is missing"));
+                    };
+                    let DeclarationPayload::OwnedContract(contract) =
+                        self.declaration(scheme.contract)?.payload
+                    else {
+                        return Err(reference_type_error("ordinary witness contract is missing"));
+                    };
+                    if !scheme.associated_types.is_empty()
+                        || !contract.associated_types.is_empty()
+                        || children.iter().any(|child| {
+                            child
+                                .canonical
+                                .as_ref()
+                                .is_some_and(|selected| !selected.members.is_empty())
+                        })
+                    {
+                        return Err(missing.err().unwrap_or_else(|| {
+                            reference_type_error("canonical prerequisite context is missing")
+                        }));
+                    }
+                    None
+                }
+            }
+        } else {
+            None
+        };
         let depth = children
             .iter()
             .map(|child| child.depth.saturating_add(1))
@@ -167,6 +231,15 @@ impl ReferenceState<'_> {
             .lock()
             .map_err(|_| reference_type_error("reference witness interner is poisoned"))?;
         if let Some(selected) = interner.values.get(&key) {
+            if !match (&selected.canonical, &canonical) {
+                (Some(left), Some(right)) => Arc::ptr_eq(left, right),
+                (None, None) => true,
+                _ => false,
+            } {
+                return Err(reference_type_error(
+                    "cached witness changed canonical proof context",
+                ));
+            }
             return Ok(selected.clone());
         }
         self.charge_allocation(
@@ -178,6 +251,7 @@ impl ReferenceState<'_> {
             .and_then(|id| id.checked_add(1))
             .ok_or_else(|| reference_type_error("reference witness identity overflow"))?;
         let selected = AppliedReferenceImplementation {
+            canonical,
             identity,
             depth,
             implementation,
@@ -197,6 +271,9 @@ impl ReferenceState<'_> {
     ) -> Result<OwnedImplementation, ExecutionError> {
         Self::witness_tree_step(depth, visits)?;
         self.charge_witness(selected, depth, &mut 0)?;
+        if selected.canonical.is_some() {
+            return self.checked_canonical_implementation(selected);
+        }
         if !active.insert(selected.clone()) {
             // Exact repeated applications close an ordinary mapped callable
             // cycle. The first visit still validates every mapping and formal.
@@ -815,6 +892,59 @@ impl ReferenceState<'_> {
         if implementation.contract != contract {
             return Err(reference_type_error("method uses another nominal contract"));
         }
+        if let Some(canonical) = &selected.canonical {
+            let proof = self
+                .schema
+                .associated_proof()
+                .cloned()
+                .ok_or_else(|| reference_type_error("canonical method proof is missing"))?;
+            let raw_target = proof.method_target(canonical, method, self.control)?;
+            let mapping = implementation
+                .methods
+                .iter()
+                .find(|mapping| mapping.method == method)
+                .ok_or_else(|| reference_type_error("canonical selected method is missing"))?;
+            self.associated_step(mapping.type_arguments.len().saturating_add(1))?;
+            self.bound_mapping_operands(&mapping.implementations, 0)?;
+            if mapping != proof.mapping_template(canonical, method, self.control)? {
+                return Err(reference_type_error(
+                    "canonical selected method template changed",
+                ));
+            }
+            self.associated_step(
+                raw_target
+                    .types
+                    .len()
+                    .saturating_add(raw_target.witnesses.len())
+                    .saturating_add(1),
+            )?;
+            self.charge_items(
+                raw_target.types.len(),
+                std::mem::size_of::<TypeObjectDigest>(),
+            )?;
+            self.charge_items(raw_target.witnesses.len(), std::mem::size_of::<usize>())?;
+            let target = raw_target.clone();
+            if !implementation
+                .methods
+                .iter()
+                .any(|mapping| mapping.method == method && mapping.function == target.function)
+            {
+                return Err(reference_type_error(
+                    "canonical selected method mapping changed",
+                ));
+            }
+            self.charge_items(target.types.len(), std::mem::size_of::<TypeObjectDigest>())?;
+            self.charge_items(
+                target.witnesses.len(),
+                std::mem::size_of::<AppliedReferenceImplementation>(),
+            )?;
+            let mut witnesses = Vec::with_capacity(target.witnesses.len());
+            let mut visits = 0;
+            for id in &target.witnesses {
+                witnesses.push(self.selected_by_canonical_id(*id, 0, &mut visits)?);
+            }
+            return Ok((target.function, target.types, witnesses));
+        }
         let scheme_bindings = implementation
             .type_parameters
             .iter()
@@ -944,7 +1074,7 @@ impl ReferenceState<'_> {
 }
 
 impl ReferenceState<'_> {
-    fn closed_method_argument(
+    pub(super) fn closed_method_argument(
         &mut self,
         ty: TypeObjectDigest,
         constraints: TypeParameterConstraints,

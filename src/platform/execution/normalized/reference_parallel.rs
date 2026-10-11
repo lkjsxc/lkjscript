@@ -15,6 +15,7 @@ struct ChildOutcome {
 }
 
 struct CanonicalTask {
+    associated: Option<CanonicalApplication>,
     declaration: DeclarationReference,
     types: Arc<[TypeObjectDigest]>,
     implementations: Vec<AppliedReferenceImplementation>,
@@ -44,6 +45,11 @@ fn physical_catalog_binding(
         && stored.contract_type_parameter_constraints
             == prepared.contract_type_parameter_constraints
         && stored.prerequisites == prepared.prerequisites
+        && stored.implementation_generation == prepared.implementation_generation
+        && stored.contract_generation == prepared.contract_generation
+        && stored.implementation_type_parameters == prepared.implementation_type_parameters
+        && stored.implementation_parameter_ids == prepared.implementation_parameter_ids
+        && stored.associated_types == prepared.associated_types
         && stored.implementations.len() == prepared.implementations.len()
         && stored
             .implementations
@@ -90,6 +96,22 @@ impl ReferenceState<'_> {
         seen: &mut std::collections::BTreeSet<(u32, u64)>,
     ) -> Result<bool, ExecutionError> {
         self.control.check()?;
+        if reference.canonical.is_some() {
+            let prefix = prepared
+                .implementation_type_arguments
+                .len()
+                .saturating_add(prepared.implementation_type_parameters.len())
+                .saturating_add(prepared.implementation_parameter_ids.len())
+                .saturating_add(prepared.type_arguments.len())
+                .saturating_add(prepared.associated_types.len())
+                .saturating_add(prepared.implementations.len())
+                .saturating_add(prepared.prerequisites.len())
+                .saturating_add(1);
+            self.associated_step(prefix)?;
+            for prerequisite in prepared.prerequisites.iter() {
+                self.associated_step(prerequisite.type_arguments.len().saturating_add(1))?;
+            }
+        }
         if depth.saturating_add(reference.depth)
             > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
             || seen.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN
@@ -106,6 +128,40 @@ impl ReferenceState<'_> {
             return Ok(true);
         }
         let canonical = self.checked_implementation(reference)?;
+        if let Some(selected) = &reference.canonical {
+            let mut matches = prepared.implementation == selected.implementation
+                && prepared.contract == selected.contract
+                && prepared.depth == selected.depth
+                && prepared.implementation_generation == selected.implementation_generation
+                && prepared.contract_generation == selected.contract_generation
+                && prepared.implementation_type_parameters.as_ref()
+                    == selected.parameters.as_slice()
+                && prepared.implementation_parameter_ids.as_ref()
+                    == selected.prerequisite_parameters.as_slice()
+                && prepared.implementation_type_arguments.as_ref() == selected.actuals.as_slice()
+                && prepared.implementation_type_parameter_constraints.as_ref()
+                    == selected.constraints.as_slice()
+                && prepared.self_type == selected.self_type
+                && prepared.type_arguments.as_ref() == selected.contract_actuals.as_slice()
+                && prepared.contract_type_parameter_constraints.as_ref()
+                    == selected.contract_constraints.as_slice()
+                && prepared.associated_types.len() == selected.members.len()
+                && prepared.implementations.len() == reference.implementations.len();
+            for (prepared, expected) in prepared.associated_types.iter().zip(&selected.members) {
+                self.control.check()?;
+                matches &= prepared.member == expected.member
+                    && prepared.template == expected.template
+                    && prepared.ty == expected.ty;
+            }
+            for (prepared, reference) in prepared
+                .implementations
+                .iter()
+                .zip(reference.implementations.iter())
+            {
+                matches &= self.checked_physical_witness(prepared, reference, depth + 1, seen)?;
+            }
+            return Ok(matches);
+        }
         let scheme_constraints =
             self.type_parameter_constraints(reference.implementation, &canonical.type_parameters)?;
         let DeclarationPayload::OwnedContract(contract) =
@@ -136,20 +192,6 @@ impl ReferenceState<'_> {
             matches &= self.checked_physical_witness(prepared, reference, depth + 1, seen)?;
         }
         Ok(matches)
-    }
-    fn resolve_parallel_types(
-        &self,
-        types: &[TypeObjectDigest],
-    ) -> Result<Vec<TypeObjectDigest>, ExecutionError> {
-        let empty = BTreeMap::new();
-        let bindings = self.type_scopes.last().unwrap_or(&empty);
-        types
-            .iter()
-            .map(|ty| {
-                self.schema
-                    .transfer_type_identity(*ty, bindings, self.control)
-            })
-            .collect()
     }
     fn parallel_transfer_type(
         &self,
@@ -242,6 +284,18 @@ impl ReferenceState<'_> {
         &mut self,
         expression: ExpressionId,
     ) -> Result<CanonicalParallelCall, ExecutionError> {
+        let previous = self
+            .type_occurrence
+            .replace((self.active_package, OwnerKey::Expression(expression)));
+        let result = self.parallel_call_at(expression);
+        self.type_occurrence = previous;
+        result
+    }
+
+    fn parallel_call_at(
+        &mut self,
+        expression: ExpressionId,
+    ) -> Result<CanonicalParallelCall, ExecutionError> {
         let (function, types, implementations, arguments) =
             match self.read_expression(expression)? {
                 ExpressionOperation::Call {
@@ -277,7 +331,7 @@ impl ReferenceState<'_> {
             ));
         };
         self.charge_allocation((types.len() * std::mem::size_of::<TypeObjectDigest>()) as u64)?;
-        let types = self.resolve_parallel_types(&types)?;
+        let types = self.resolve_type_arguments(&types)?;
         let mut signature = self.function_signature(function)?;
         if !matches!(&signature.effect, FunctionEffect::Task { requirements, effect_parameters } if requirements.is_empty() && effect_parameters.is_empty())
             || !signature.effect_parameters.is_empty()
@@ -326,13 +380,55 @@ impl ReferenceState<'_> {
         for operand in implementations {
             selected.push(self.resolve_implementation(operand)?);
         }
-        self.implementation_bindings(
+        let associated = self.canonical_application(
             function,
-            &declaration.implementation_parameters,
-            &bindings,
-            &selected,
+            ReferenceApplication {
+                types: &types,
+                implementations: &selected,
+                ..Default::default()
+            },
         )?;
-        if !bindings.is_empty() {
+        if let Some(application) = &associated {
+            self.canonical_implementation_bindings(
+                application,
+                &declaration.implementation_parameters,
+                &selected,
+            )?;
+            let proof = self
+                .schema
+                .associated_proof()
+                .cloned()
+                .ok_or_else(|| reference_type_error("canonical parallel proof is missing"))?;
+            let closed = proof.application(application, self.control)?;
+            if closed.parameters.len() != signature.parameters.len()
+                || closed.result_borrow.is_some()
+                || !closed.effect.requirements.is_empty()
+                || !closed.effect.parameters.is_empty()
+            {
+                return Err(reference_type_error(
+                    "canonical parallel signature is not an empty-row owning task",
+                ));
+            }
+            signature.result = closed.result;
+            for (parameter, (ty, use_mode)) in
+                signature.parameters.iter_mut().zip(&closed.parameters)
+            {
+                if parameter.use_mode != *use_mode {
+                    return Err(reference_type_error(
+                        "canonical parallel parameter mode changed",
+                    ));
+                }
+                parameter.ty = *ty;
+            }
+        } else {
+            self.implementation_bindings(
+                function,
+                &declaration.implementation_parameters,
+                &bindings,
+                &selected,
+            )?;
+        }
+        if associated.is_none() && !bindings.is_empty() {
             signature.result =
                 self.schema
                     .transfer_type_identity(signature.result, &bindings, self.control)?;
@@ -341,7 +437,7 @@ impl ReferenceState<'_> {
         let mut seen_owned = false;
         for parameter in &mut signature.parameters {
             self.control.check()?;
-            if !bindings.is_empty() {
+            if associated.is_none() && !bindings.is_empty() {
                 parameter.ty =
                     self.schema
                         .transfer_type_identity(parameter.ty, &bindings, self.control)?;
@@ -390,6 +486,7 @@ impl ReferenceState<'_> {
         self.charge_allocation((types.len() * std::mem::size_of::<TypeObjectDigest>()) as u64)?;
         Ok(CanonicalParallelCall {
             task: CanonicalTask {
+                associated,
                 declaration: function,
                 types: types.into(),
                 implementations: selected,
@@ -449,11 +546,20 @@ impl ReferenceState<'_> {
     ) -> Result<super::super::value::FunctionIndex, ExecutionError> {
         // Selection is by the exact canonical implementation references, never by
         // an incidental numeric instance order or by compatible Self alone.
-        let offset = self
-            .program
-            .functions
-            .iter()
-            .position(|f| {
+        let mut offset = None;
+        let program = self.program;
+        for (candidate, f) in program.functions.iter().enumerate() {
+            if task.associated.is_some() {
+                self.control.check()?;
+                self.associated_step(
+                    f.type_parameters
+                        .len()
+                        .saturating_add(f.type_arguments.len())
+                        .saturating_add(f.implementation_arguments.len())
+                        .saturating_add(1),
+                )?;
+            }
+            let compatible = {
                 f.declaration == task.declaration
                     && f.type_parameters.as_ref() == signature.type_parameters.as_slice()
                     && f.type_arguments.as_ref() == task.types.as_ref()
@@ -470,10 +576,32 @@ impl ReferenceState<'_> {
                                 &mut std::collections::BTreeSet::new(),
                             )
                         })
-            })
-            .ok_or_else(|| {
-                reference_type_error("canonical child has no exact prepared application")
-            })?;
+            };
+            if !compatible {
+                continue;
+            }
+            if task.associated.is_some() {
+                let mut matches = true;
+                for (prepared, canonical) in
+                    f.implementation_arguments.iter().zip(&task.implementations)
+                {
+                    matches &= self.checked_physical_witness(
+                        prepared,
+                        canonical,
+                        0,
+                        &mut std::collections::BTreeSet::new(),
+                    )?;
+                }
+                if !matches {
+                    continue;
+                }
+            }
+            offset = Some(candidate);
+            break;
+        }
+        let offset = offset.ok_or_else(|| {
+            reference_type_error("canonical child has no exact prepared application")
+        })?;
         let index = super::super::value::FunctionIndex(
             u32::try_from(offset)
                 .map_err(|_| reference_type_error("prepared child index overflow"))?,
@@ -491,7 +619,28 @@ impl ReferenceState<'_> {
             .copied()
             .zip(task.types.iter().copied())
             .collect();
+        let physical_context = if task.associated.is_some() {
+            Some(
+                super::super::prepare::PreparedApplicationContext::new(
+                    self.program,
+                    index,
+                    &bindings,
+                    self.control,
+                )
+                .map_err(super::super::vm::transfer::context_error)?,
+            )
+        } else {
+            None
+        };
         let substitute = |ty| {
+            if let Some(context) = &physical_context {
+                return super::super::vm::transfer::resolve_application(
+                    self.program,
+                    ty,
+                    context,
+                    self.control,
+                );
+            }
             if bindings.is_empty() {
                 Ok(ty)
             } else {
@@ -502,10 +651,25 @@ impl ReferenceState<'_> {
         let selected = &self.program.functions[offset];
         let mut matches = substitute(selected.result)? == signature.result
             && selected.parameters.len() == signature.parameters.len();
+        if let Some(application) = &task.associated {
+            let proof = self
+                .schema
+                .associated_proof()
+                .ok_or_else(|| reference_type_error("canonical physical child proof is missing"))?;
+            matches &= selected.source_generation
+                == proof.context(application, self.control)?.occurrence(
+                    (
+                        task.declaration.package,
+                        OwnerKey::Declaration(task.declaration.declaration),
+                    ),
+                    self.control,
+                )?;
+        }
         for (prepared, canonical) in selected.parameters.iter().zip(&signature.parameters) {
             matches &= substitute(prepared.ty)? == canonical.ty
                 && prepared.use_mode == canonical.use_mode
-                && prepared.resource_requirement.is_none();
+                && prepared.resource_requirement.is_none()
+                && canonical.header.owner == OwnerKey::Parameter(prepared.parameter);
         }
         let implementation_arguments = Arc::clone(&selected.implementation_arguments);
         for (prepared, reference) in implementation_arguments.iter().zip(&task.implementations) {
@@ -767,6 +931,9 @@ impl ReferenceState<'_> {
             transactions: BTreeMap::new(),
             calls_by_requirement: BTreeMap::new(),
             implementation_scopes: Vec::new(),
+            associated_applications: Vec::new(),
+            associated_work: Arc::clone(&self.associated_work),
+            type_occurrence: None,
             type_scopes: Vec::new(),
             effect_scopes: Vec::new(),
             requirement_scopes: Vec::new(),
@@ -800,7 +967,31 @@ impl ReferenceState<'_> {
                     "structured adoption names another canonical child",
                 ));
             }
-            let signature = state.function_signature(declaration)?;
+            let mut signature = state.function_signature(declaration)?;
+            if let Some(application) = &task.associated {
+                let proof = state
+                    .schema
+                    .associated_proof()
+                    .cloned()
+                    .ok_or_else(|| reference_type_error("canonical child proof is missing"))?;
+                let closed = proof.application(application, state.control)?;
+                if closed.parameters.len() != signature.parameters.len() {
+                    return Err(reference_type_error(
+                        "canonical child signature changed in transit",
+                    ));
+                }
+                signature.result = closed.result;
+                for (parameter, (ty, use_mode)) in
+                    signature.parameters.iter_mut().zip(&closed.parameters)
+                {
+                    if parameter.use_mode != *use_mode {
+                        return Err(reference_type_error(
+                            "canonical child mode changed in transit",
+                        ));
+                    }
+                    parameter.ty = *ty;
+                }
+            }
             state.charge_allocation(super::super::value::collection_storage_bytes(
                 task.types.len() as u64,
                 (std::mem::size_of::<(TypeParameterId, TypeObjectDigest)>()
@@ -848,6 +1039,11 @@ impl ReferenceState<'_> {
                     ..Default::default()
                 },
             )?;
+            if admitted.associated != task.associated {
+                return Err(reference_type_error(
+                    "structured child changed canonical application in transit",
+                ));
+            }
             let value = state.execute_witness_call(admitted)?;
             TransferResult::seal_applied(
                 self.program,

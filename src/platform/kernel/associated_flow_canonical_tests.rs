@@ -3,7 +3,7 @@
 use super::associated_flow_canonical_reference::{
     CanonicalEntry, CanonicalProgram, DefinitionIdentity,
 };
-use super::associated_flow_reference_tests as model;
+use super::associated_flow_reference as model;
 use super::*;
 use crate::platform::semantic_id::{
     AssociatedTypeMemberId, DeclarationId, ExpressionId, ImplementationParameterId, MethodId,
@@ -12,6 +12,9 @@ use crate::platform::semantic_id::{
 use std::collections::BTreeSet;
 
 const SEED: &[u8] = b"canonical-independent-associated-flow";
+
+#[path = "associated_flow_canonical_family_tests.rs"]
+mod families;
 
 pub(super) struct Fixture {
     pub source: KernelSnapshot,
@@ -772,21 +775,22 @@ fn extra_binding_atoms(fixture: &mut Fixture, count: usize) {
 }
 
 #[test]
-fn canonical_adapter_constructor_atom_capacity_never_aliases_or_truncates() {
+fn canonical_adapter_constructor_atoms_above_legacy_capacity_remain_injective() {
     let control = recurrence(false, false, false);
     let baseline = adapted(&control).atoms.len();
-    let available = usize::from(u8::MAX) + 1 - baseline;
+    let available = usize::from(u8::MAX) + 2 - baseline;
     let mut exact = recurrence(false, false, false);
     extra_binding_atoms(&mut exact, available);
-    assert_eq!(adapted(&exact).atoms.len(), usize::from(u8::MAX) + 1);
-    let mut excessive = recurrence(false, false, false);
-    extra_binding_atoms(&mut excessive, available + 1);
+    let admitted = adapted(&exact);
+    assert_eq!(admitted.atoms.len(), usize::from(u8::MAX) + 2);
     assert_eq!(
-        CanonicalProgram::read(&[&excessive.source], std::slice::from_ref(&excessive.entry))
-            .err()
-            .unwrap(),
-        model::Refusal::Capacity("canonical constructor atoms")
+        admitted.atoms.values().collect::<BTreeSet<_>>().len(),
+        admitted.atoms.len()
     );
+    assert!(admitted.atoms.keys().any(|id| *id > usize::from(u8::MAX)));
+    let mut larger = recurrence(false, false, false);
+    extra_binding_atoms(&mut larger, available + 1);
+    assert_eq!(adapted(&larger).atoms.len(), admitted.atoms.len() + 1);
     assert!(matches!(
         control.source.types[&control.formal].form,
         TypeForm::TypeParameter { .. }

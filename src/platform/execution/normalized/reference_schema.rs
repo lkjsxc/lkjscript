@@ -16,6 +16,8 @@ use crate::platform::kernel::{
 use crate::platform::semantic_id::{TargetId, TypeParameterId};
 use std::collections::{BTreeMap, BTreeSet};
 
+#[path = "reference_dependency_binding.rs"]
+mod dependency_binding;
 #[path = "reference_instantiation_scratch.rs"]
 mod instantiation_scratch;
 #[path = "reference_transfer_substitution.rs"]
@@ -32,8 +34,20 @@ fn source_error(error: Diagnostic) -> ExecutionError {
     ExecutionError::new(class, error.code, error.message)
 }
 
+// Private canonical derivations use the same independent supplier proof as reconstruction.
+pub(super) fn bind_associated_dependencies(
+    snapshots: &[&KernelSnapshot],
+    control: &crate::platform::execution::ExecutionControl,
+    work: &mut usize,
+) -> Result<(), ExecutionError> {
+    validate_dependency_closure(snapshots, control, work)?;
+    dependency_binding::validate(snapshots, control, work)
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct NormalizedReferenceSchema {
+    pub(super) associated_proof:
+        Option<std::sync::Arc<super::reference_types::associated_preparation::Proof>>,
     pub(super) source_admission_steps: u64,
     pub(super) type_derivation_steps: u64,
     pub(super) type_metadata_bytes: u64,
@@ -273,6 +287,7 @@ impl NormalizedReferenceSchema {
             }
         }
         validate_dependency_closure(&inputs, control, &mut source_work)?;
+        dependency_binding::validate(&inputs, control, &mut source_work)?;
         schema.source_admission_steps = source_work as u64;
         schema.functions = functions.into_iter().collect();
         schema.records = records.into_values().collect();
@@ -327,6 +342,12 @@ impl NormalizedReferenceSchema {
             && layout.arguments.as_ref() == arguments
             && layout.type_parameters.len() == arguments.len())
         .then_some(layout)
+    }
+
+    pub(super) fn associated_proof(
+        &self,
+    ) -> Option<&std::sync::Arc<super::reference_types::associated_preparation::Proof>> {
+        self.associated_proof.as_ref()
     }
 
     pub(super) fn is_owned_type(&self, ty: TypeObjectDigest) -> bool {

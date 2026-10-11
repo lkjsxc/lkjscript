@@ -2156,14 +2156,19 @@ impl Oracle<'_> {
                     return None;
                 }
                 let initial_loans = rights.loans.clone();
-                let mut loans = self.prepare_parallel_child(*left, rights, depth + 1)?;
-                loans.extend(self.prepare_parallel_child(*right, rights, depth + 1)?);
+                // This is tentative static proof state, never live execution
+                // state. Refusal must not publish a partial symbolic footprint
+                // or leave a failed analysis caller holding newly acquired loans.
+                let mut candidate = rights.clone();
+                let mut loans = self.prepare_parallel_child(*left, &mut candidate, depth + 1)?;
+                loans.extend(self.prepare_parallel_child(*right, &mut candidate, depth + 1)?);
                 for loan in loans.into_iter().rev() {
-                    rights.release(loan)?;
+                    candidate.release(loan)?;
                 }
-                if rights.loans != initial_loans {
+                if candidate.loans != initial_loans {
                     return None;
                 }
+                *rights = candidate;
                 left_owned || right_owned
             }
             ExpressionOperation::ImplementationCall {

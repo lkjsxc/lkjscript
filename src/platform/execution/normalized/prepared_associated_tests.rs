@@ -209,6 +209,7 @@ fn probe(
         normalized: BTreeMap::new(),
         witnesses: BTreeMap::new(),
         pending: Vec::new(),
+        pending_methods: Vec::new(),
         types: &mut fixture.program.types,
         work: &mut work,
     };
@@ -634,6 +635,7 @@ fn associated_member_closure_reserves_before_publication_and_retries_after_cance
         + 2 * std::mem::size_of::<(TypeObjectDigest, bool)>()
         + std::mem::size_of::<(WitnessIdentity, AppliedWitness)>()
         + std::mem::size_of::<AppliedWitnessNode>()
+        + std::mem::size_of::<AppliedWitness>()
         + std::mem::size_of::<(TypeParameterId, TypeObjectDigest)>()
         + 2 * std::mem::size_of::<NormalizedAssociatedTypeBinding>()
         + 2 * std::mem::size_of::<(AssociatedTypeMemberId, &AssociatedTypeBinding)>()

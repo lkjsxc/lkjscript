@@ -1040,6 +1040,19 @@ fn raw_reference_inputs_require_complete_acyclic_current_source() {
     let missing = super::NormalizedReferenceSchema::reconstruct([&left]).unwrap_err();
     assert_eq!(missing.code, "normalized_reference_inventory");
     assert!(missing.message.contains("dependency body is unavailable"));
+    let missing_interface =
+        super::NormalizedReferenceSchema::reconstruct([&left, &right]).unwrap_err();
+    assert_eq!(missing_interface.code, "normalized_reference_inventory");
+    assert!(
+        missing_interface
+            .message
+            .contains("selected interface is absent")
+    );
+    // The supplied empty dependency body has an exact empty public interface.
+    left.dependency_interfaces.insert(
+        PackageRevisionDigest::from_bytes([2; 32]),
+        std::sync::Arc::new(BTreeMap::new()),
+    );
     assert!(super::NormalizedReferenceSchema::reconstruct([&left, &right]).is_ok());
     add_dependency(&mut right, left.root.package_id);
     // Every local body graph can be valid while the prerequisite for omitting foreign SCC

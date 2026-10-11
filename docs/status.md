@@ -1,175 +1,147 @@
 # Current status
 
 Snapshot: 2026-10-11. Development **0.1.95** selects first-order associated Owned
-members on exact implementation witnesses. The committed codec, occurrence-aware
-ownership, call-signature and borrowed-result checkpoint passed the full library
-suite and strict Clippy. The preparation, runtime, reference and growth checkpoint
-also passes strict Clippy, 168 focused checks and the full library suite. Complete associated semantics
-remain explicitly unsupported and unavailable on main. Native package planning
-**0.1.94** has passed all **29**
-fresh full acceptance gates on its separate exact source.
+members on exact implementation witnesses. The canonical reference integration
+checkpoint passes strict Clippy, **199/199** focused checks and the full library
+suite: **2,043 passed, 0 failed, 8 ignored**. Complete associated semantics remain
+explicitly Unsupported and unavailable on main.
+
+Native package planning **0.1.94** is on main with its original **29/29** fresh
+local source acceptance. Its first hosted candidate failed a separate source
+acceptance timeout. Finalized candidate bytes and publication remain unaccepted.
 
 ## Selected source and implementation boundary
 
 Worktree `/home/coder/workspace/lkjscript-associated-owned-types-20261011`, branch
-`work/associated-owned-types-20261011`, starts from planner reporting source
-`d01708a2d089af33e79747c097ca61b5c90d4fd7`. Its completed acceptance does not validate
-this worktree's successor edits. Local foundation commit
-`e45d1b6d8ffc6c6e83e0077f2e01320b572119d2` and reporting merge
-`803a2cfeb21c854375b3890d094fe5f92c40caaa` preserve the accepted ancestry.
-Semantic checkpoint `2ce8d546e6445b8a08ff10ff7daec5a141d582d8` and normal mainline
-reporting merge `da96f27b3ba78b2cece1f2b66229331f00daf63e` retain that proof and the
-delivered planner ancestry. The preparation/runtime checkpoint below extends this
-ancestry; its local commit identity is retained in the selection record. Complete
-feature acceptance remains pending.
-Preserve both worktrees and
-ignored original evidence. The local
-[selection record](../.artifacts/associated-owned-types/selection.json) owns current
-implementation assignments, original design evidence and build coordination.
+`work/associated-owned-types-20261011`, retains accepted planner ancestry through
+normal reporting merges. Semantic checkpoint `2ce8d546e6445b8a08ff10ff7daec5a141d582d8`
+and preparation/runtime checkpoint `90f5574a00cf5b9f8697f34942c89424426b2bff` precede
+this reference integration checkpoint. Its local commit identity, current lane
+assignments, immutable executables and original receipts are retained in the
+[selection record](../.artifacts/associated-owned-types/selection.json). Preserve
+both development worktrees and their ignored evidence.
 
 The selected capability lets a contract declare an associated `Block: Owned` and
 each exact implementation bind it to its representation. Generic consumers refer
-to the member through their exact lexical witness, without a separate caller-
-selected Block argument. Concrete type equality never authorizes witness swapping.
-The intended maintained adoption is BlockRead traversal in native planner
-materialization, using flat storage and real private-layout nominal chunk blocks.
-The maintained planner currently reads each element through IndexedData::get.
-BlockRead is a new integration; an explicit Block argument is an expressible design
-baseline, not an existing maintained traversal. No speedup is promised.
+to that member through their exact lexical witness, without a separate
+caller-selected Block argument. Equal Self types or equal member outputs never
+authorize witness substitution. The design retains existing pure source-tied
+borrowed results; it adds no lifetime mode, witness inference, defaults,
+higher-kinded families or recursive associated binding equations. Stored bindings
+remain projection-free finite types; opaque caller actuals may retain projections.
 
-The first implementation slice owns inline inventories, exact member identities,
-frozen base codecs and explicit nonempty associated encodings. It must preserve
-feature-free canonical and compiled bytes, bind every unused member/binding in
-admission and cache identities, and independently load the genuine existing native
-planner. Scope substitution, production and independent ownership checking, finite
-recursive type flow, public authoring and maintained adoption remain required.
-Incomplete feature paths currently refuse explicitly at full admission. The
-tested semantic helpers check exact member/scope authority and finite stored
-bindings. A separate substitution environment retains exact caller witnesses and
-derived objects even with no ordinary type arguments; its production call-site
-integration passes focused and full library checks. Ordinary signature caches now invalidate on changed type
-bindings, with passing substitution, capacity and cancellation checks.
-The Rust growth oracle remains an independent test model, not the production proof.
+The current implementation carries complete member inventories through selected
+witness DAGs, concrete applications, sparse runtime type lookup and independently
+reconstructed canonical contexts. It rechecks exact owner generations, complete
+function witness-formal templates and all selected method mappings, including
+unused mappings. The private reference schema core moves its canonical type map
+into the schema, retains application metadata separately, and reuses the existing
+nominal, depth, property and concrete borrowed-custody engines. Raw associated
+leaves and their structural ancestors enter none of the seven runtime property
+sets. The final full-schema Unsupported remains unconditional.
 
-The selected design retains existing pure source-tied borrowed results. It adds no
-new lifetime mode, witness inference, defaults, higher-kinded families or recursive
-associated binding equations. Stored bindings remain projection-free finite types;
-substitution may retain caller projections. Lexical projections support function
-and owned-implementation scopes; external declarations have no witness inventory.
+Independent finite-growth classification now runs before concrete enumeration.
+Its canonical adapter retains exact ordered witness roots, shared prerequisites,
+ordinary/member cycles and distinct constructor identities. Imported interfaces
+are compared against supplied canonical bodies without producer projection;
+private representation selections require authored dependency reachability.
+Snapshots do not contain revision-core bytes, so revision-digest authentication
+and complete export-selection binding remain source-loader responsibilities.
 
-## Evidence and remaining gates
+The proposed profile preserves feature-free Graph33, Interface21, CompilerUnit33,
+Bytecode27 and Artifact40 bytes, with separate associated encodings and renewed
+Validator39 evidence. The frozen Validator39 literal now passes. Full source,
+interface, compiler and artifact admission remain closed; private preparation and
+runtime fixtures are not freshly admitted associated artifacts.
 
-The predecessor's ignored `associated-codec-contract.md` and independent
-`associated-codec-review.md` specify the wire and authority contract. A separate
-finite model passed **1,712** retained cases: **968** fully exhausted finite
-closures, **739** positive-cycle classifications, **4** invalid inputs and **1**
-explicit unsupported witness-wrapping case. Independent substitution, eager and
-demanded analyses agreed within the retained bounded grammar. These are design
-falsification results, not production language validation or a general soundness
-proof. The retained originals are linked from the selection record.
+## Evidence and next implementation
 
-The proposed encoding profile preserves Graph33, Interface21, CompilerUnit33,
-Bytecode27 and Artifact40 for feature-free meaning, with separately identified
-associated-owned-types version 1 encodings and renewed Validator39 evidence.
-Those are implementation obligations, not installed capability claims. Old readers
-must reject new forms; new readers must reject empty extensions, scope swaps,
-inventory loss and consistently rehashed disagreement. If byte preservation cannot
-be achieved without semantic exceptions, use the explicit bootstrap bridge and an
-intentional generation cut.
+Stable source inventory
+`6970a6ad520b12a37ab1db13dcc241e5d15201c31da08253d6dcb6ace83cd96c`
+passes strict workspace/all-targets/all-features Clippy, **199/199** focused tests
+and the full library suite in **195.61 seconds**. The focused inventory contains
+all 168 preparation-checkpoint controls, 30 new tests and one additional ordinary
+reference regression. Its executable was selected from Cargo JSON and preserved
+before execution; before/after inventories prove stable source. Original logs and
+terminals live under `.artifacts/associated-owned-types/` and are linked from the
+selection record. Reporting changes to this page do not relabel the tested source.
 
-The second library test compilation passed on stable source snapshot
-`b72e7c5ff99dc84db700ba8f6027f9f3100ad249a676cf8a6d2df235c0f819d8`.
-Its immutable executable passes **38/38** focused checks: seven codec tests,
-15 authority/substitution tests, six independent growth-model tests, four ordinary
-cache tests, validator/storage checks, genuine old native planner admission and
-results, and byte-identical standard regeneration. The Rust model exhausts
-**1,688** bounded programs: **958** finite closures and **730** positive-cycle
-classifications. It still has no canonical production-flow adapter.
+The new checks exercise actual preparation against independent canonical expected
+catalogues, full selected-identity coverage, private supplier borrowing and loan
+provenance, canonical reference runtime contexts, exact supplier correspondence,
+unused Owned bindings and independent growth. The retained independent model
+still exhausts **1,688** bounded programs. These are bounded development proofs,
+not a general soundness proof or public associated capability claim.
 
-The full library run passed **1,943**, failed **1** stale generated-document check,
-and ignored **8** existing tests. The copied successor CLI regenerated all eight
-documents through `capabilities --generate-docs docs/generated`; both affected
-document tests then passed. Only their generated version/capability headers changed.
-Strict workspace, all-targets, all-features Clippy also passed after four small
-corrections. The original failed Clippy, full-library and nine-error compiler
-attempts remain preserved. These are development checks, not fresh full source acceptance.
-Original producer logs, immutable selections and test receipts live under
-`.artifacts/associated-owned-types/` and are linked from the selection record.
+Earlier attempts remain separate originals: compiler and lint failures;
+**195/198** focused and **2,039 passed, 4 failed, 8 ignored** full on `a40fd356`;
+and **198/199** focused on `b99f5bc1`. Corrections made literal atom lookup
+conditional on fixture demand, made the ordinary control's concrete type reachable
+and its owner count accurate, and supplied the old raw dependency fixture's exact
+empty interface. Production admission was not weakened. No second full run was
+claimed for `b99f5bc1`.
 
-The semantic checkpoint implements occurrence-aware ownership, exact call and
-borrowed-result environments, retained derived types, and separate authored versus
-private representation reads. New canonical tests cover caller/source generations,
-source-tied borrowing, capture and transport bounds, and effect substitution before
-opaque caller arguments. Its independent canonical memory reference now covers the
-selected direct, witness and method paths; broader contextual integration remains.
-Stable source snapshot
-`9f3151e3a0e6be276e552da74343c0770a8e5cfb881c6116e96e53bd03bbcfa1`
-passes **87/87** focused checks, strict workspace/all-targets/all-features Clippy,
-and the full library suite: **1,971 passed, 0 failed, 8 ignored** in 189.62 seconds.
-The immutable executable, before/after source inventories and original terminals
-are retained under the selection record. Earlier compiler, diagnostic-order,
-depth, quota, reference and stale budget-test failures remain distinct originals.
-Occurrence admission now reuses exact invocation-local unchanged-subtree proofs;
-every child still pays traversal work and performs its contextual nominal checks.
-Quota limits were not raised, and original semantic depth diagnostics remain owned
-by their structural type validators. Next complete preparation and runtime closure,
-the remaining canonical memory reference, and finite-flow proof with independent adapters.
-The current slice carries complete closed member inventories through a
-borrowed witness DAG, exact runtime function contexts, and sparse application type
-lookup. It materializes inactive/local/parallel roots and independently rechecks
-selected binding templates on runtime hits. The new finite-flow relation separates
-constructor growth from member/path aliases and demands unused witness actuals.
-Nine raw canonical adapter fixtures compare selected growth, alias, permutation,
-reset and capacity cases with the independent model and eager production path.
-Stable source `ecf530c148bdbe88151770d7c4c9406c3cb1ea5cc8d206c2d3e2b0d5df46a227`
-passes strict Clippy, **168/168** focused checks, and the full library suite:
-**2,013 passed, 0 failed, 8 ignored** in 188.14 seconds. The focused inventory
-includes all 42 new tests, ordinary/bootstrap controls, and every regression from
-the first full run. Originals and immutable executable selections remain under
-the selection record. The earlier stable `ca353840` result (**144/146** focused;
-**1,989 passed, 24 failed, 8 ignored** full) is retained separately. Corrections
-restore raw ordinary structural admission and runtime diagnostic ordering while
-preserving exact associated contexts. Cancellation tests now exhaust every cutoff
-through first success, checking custody at each attempt; production limits are
-unchanged. The two corrected fixtures now follow actual code sharing and exact
-callable owner kinds. Canonical memory closure and preparation
-references remain separately owned, with full reference schema, multiple-root
-growth comparisons and cross-layer capacity/private-nominal evidence incomplete.
-Next integrate the independent full reference schema, extend canonical growth
-comparisons, and prove private nominal supplier borrowing before enabling admission.
-Complete public composition, maintained BlockRead adoption and dependency-complete
-fresh acceptance on stable source. Source
-acceptance, exact-source mainline delivery and finalized-byte publication remain
-separate gates.
+The next coherent schema slice has three concrete obligations:
 
-## Predecessor and publication handoff
+- Derive scoped symbolic call signatures and compare every unused generic method
+  mapping with its contract, preserving exact forwarded witness identity and
+  effect substitution before opaque caller actuals.
+- Run the existing custody traversal over every generic and executable body,
+  with explicit application/symbolic/executable contexts and exact occurrence
+  authority. A symbolic member proves its Owned bound only.
+- Discharge complete constraint and parallel permission queues after property
+  derivation, including phantom arguments, private/inactive carriers, both child
+  signatures and wrapper generations. An unresolved Owned member gains no
+  Transfer or Share promise from its Self type.
 
-The planner worktree's original full session **90080** returned exit **0** after
-**2,896.017619 seconds** on stable `d01708a2`: **29/29** fresh gates, **0** reused
-and **0** unrun. Its original root is
-`/home/coder/workspace/lkjscript-native-package-planner-20261011/.artifacts/lkjscript-dev/check/1791727236348792345-2336981-0`.
-Receipt SHA-256 is `c0912b08adfd985f487cad4461006563ffd211c5e3e11929c933a6e592c191c0`.
-The predecessor's `full-second-summary.json` records exact source, original terminal
-and joined cleanup; its inventory retains 71 evidence files. The earlier **28/29**
-failed full receipt remains separate and unchanged. Docs-only reporting descendant
-`92e4c9dc7293bae6d4590c4b0647ae5513f9d98f` remains an ancestor of the delivered
-reporting source below. Finalized-byte publication is still pending.
+The bounded implementation delta is retained in
+`.artifacts/associated-owned-types/associated-reference-schema-next-obligations.md`.
+After these checks, prove a genuinely admitted associated artifact across VM and
+reference execution, including wrapped borrowed calls and sealed parallel task
+results, traps, cancellation and joined cleanup. Keep honest Resource/Unsupported
+boundaries where cumulative accounting or semantic coverage remains incomplete.
 
-Main now contains accepted native planning **0.1.94** at reporting descendant
-`c3d27a7d451879ab7624279e9e690a54d6c65730`, delivered by a normal fast-forward
-push and independent Git/API ancestry readback. Its docs-only changes do not
-relabel the exact `d01708a2` full acceptance. The controller is generation 10.
-The original finalized-byte candidate [38152770069/1](https://github.com/lkjsxc/lkjscript/actions/runs/38152770069)
-was dispatched at 15:47:38 UTC on exact `c3d27a7d`; its own 23 release-source
-gates, finalized assets and authenticated `candidate_accepted` terminal remain
-pending. No .94 tag or promotion has been created.
+Maintained adoption is still new work: the planner currently uses
+`IndexedData::get`, not BlockRead. Add fresh public authoring/import/execution of
+BlockRead using flat sequences and real private nominal chunk blocks, then thread
+that traversal through native planner materialization. The retained adoption plan
+is `.artifacts/associated-owned-types/native-blockread-adoption-plan.md`. No
+speedup is promised. Complete consumers, dependency-complete fresh acceptance,
+normal mainline delivery and finalized-byte publication before claiming release.
 
-Latest fully verified public release is immutable **v0.1.92**, release `409737419`.
-Original producer [38130920573/1](https://github.com/lkjsxc/lkjscript/actions/runs/38130920573)
-and publisher proof remain separate from failed promotion
-[38149245391/1](https://github.com/lkjsxc/lkjscript/actions/runs/38149245391).
-Its supported resume [38150694544/1](https://github.com/lkjsxc/lkjscript/actions/runs/38150694544)
-completed with authenticated `public_recheck_passed`: exact and latest anonymous
-assets matched, installed lifecycle checks were fresh, and cleanup joined.
-The original tag/control and three accepted public assets are unchanged.
-[Release](release.md) owns source, finalized-byte acceptance and publication gates.
+## Planner publication handoff
+
+The planner worktree's original full session **90080** completed on stable
+`d01708a2d089af33e79747c097ca61b5c90d4fd7`: **29/29** fresh gates, **0** reused,
+**0** unrun, in **2,896.017619 seconds**. Its original receipt root is
+`/home/coder/workspace/lkjscript-native-package-planner-20261011/.artifacts/lkjscript-dev/check/1791727236348792345-2336981-0`;
+receipt SHA-256 is `c0912b08adfd985f487cad4461006563ffd211c5e3e11929c933a6e592c191c0`.
+Main contains docs-only reporting descendant
+`c3d27a7d451879ab7624279e9e690a54d6c65730`, delivered by normal fast-forward and
+independent ancestry readback. The earlier **28/29** failure remains preserved.
+
+Original hosted producer [38152770069/1](https://github.com/lkjsxc/lkjscript/actions/runs/38152770069)
+on exact `c3d27a7d` failed source acceptance at 18:23 UTC: **22/23** gates passed
+fresh; `workspace_tests` reached its **7,200-second** timeout. Public CLI announced
+271 cases and completed **269 passed, 1 ignored, 0 failed**. The sole unfinished
+case was the separate-package IndexedData matrix. Its underlying noncompletion
+cause is unknown. No finalized candidate assets, .94 tag or promotion were created.
+Authenticated diagnostics, original terminal and comparisons are under the
+planner delivery root's `candidate-dispatch-20261011T154733Z/audit-20261011T183737Z/`.
+
+A separate, unvalidated planner-worktree successor adds bounded visible progress
+to that same 242-invocation matrix and a **9,600-second** workspace diagnostic
+allowance. Coverage, expected results, process joins and publication gates remain
+unchanged. Historical timing leaves about 20 minutes within the six-hour job;
+that is not a guarantee or a proven remedy. The frozen proposal needs a new
+verifier, relevant checks and fresh full source acceptance before normal delivery
+and a new authenticated candidate. The failed original is not a retry success.
+
+Latest fully verified public release remains immutable **v0.1.92**, release
+`409737419`. Original producer [38130920573/1](https://github.com/lkjsxc/lkjscript/actions/runs/38130920573)
+and failed promotion [38149245391/1](https://github.com/lkjsxc/lkjscript/actions/runs/38149245391)
+remain separate from supported resume
+[38150694544/1](https://github.com/lkjsxc/lkjscript/actions/runs/38150694544), which
+completed with authenticated `public_recheck_passed`. Original tag/control and
+three accepted public assets are unchanged. [Release](release.md) owns the
+remaining source, finalized-byte acceptance and publication gates.

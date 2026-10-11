@@ -9,6 +9,9 @@ use crate::platform::semantic_id::{
 #[path = "associated_memory_closure_oracle_tests.rs"]
 mod closure_tests;
 
+#[path = "associated_memory_vertical_oracle_tests.rs"]
+mod vertical_tests;
+
 const SEED: &[u8] = b"independent-associated-memory";
 struct Fixture {
     source: KernelSnapshot,

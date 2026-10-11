@@ -35,6 +35,8 @@ use std::sync::Arc;
 #[path = "reference_checked.rs"]
 mod checked;
 use checked::{Ownership, Value as CheckedValue};
+#[path = "reference_associated_runtime.rs"]
+mod associated_runtime;
 #[cfg(test)]
 #[path = "reference_borrow_result_tests.rs"]
 mod borrowed_result_tests;
@@ -47,6 +49,10 @@ mod checked_intrinsics;
 mod prerequisite_tests;
 #[path = "reference_parallel.rs"]
 mod structured;
+use associated_runtime::{CanonicalApplication, CanonicalSelection};
+#[cfg(test)]
+#[path = "reference_associated_runtime_tests.rs"]
+mod associated_runtime_tests;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, serde::Serialize)]
 pub struct NormalizedReferenceObservation {
@@ -588,6 +594,9 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
             transactions: BTreeMap::new(),
             calls_by_requirement: BTreeMap::new(),
             implementation_scopes: Vec::new(),
+            associated_applications: Vec::new(),
+            associated_work: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            type_occurrence: None,
             type_scopes: Vec::new(),
             effect_scopes: Vec::new(),
             requirement_scopes: Vec::new(),
@@ -743,6 +752,9 @@ struct ReferenceState<'a> {
         >,
     )>,
     type_scopes: Vec<BTreeMap<TypeParameterId, TypeObjectDigest>>,
+    associated_applications: Vec<Option<CanonicalApplication>>,
+    associated_work: Arc<std::sync::atomic::AtomicU64>,
+    type_occurrence: Option<(PackageId, OwnerKey)>,
     effect_scopes: Vec<super::reference_effects::Bindings>,
     requirement_scopes: Vec<super::reference_effects::RequirementBindings>,
     allowances: Vec<Option<EffectRow>>,
@@ -772,6 +784,7 @@ impl Drop for ReferenceLoanScope<'_> {
 /// One internal transition, constructed only by canonical call admission in this state.
 /// It is neither a callable value nor a reusable proof, and carries no component grant.
 struct AdmittedGraphCall {
+    associated: Option<CanonicalApplication>,
     implementations: BTreeMap<
         crate::platform::semantic_id::ImplementationParameterId,
         AppliedReferenceImplementation,
@@ -1788,6 +1801,38 @@ impl ReferenceState<'_> {
         &mut self,
         type_arguments: &[TypeObjectDigest],
     ) -> Result<Vec<TypeObjectDigest>, ExecutionError> {
+        if let Some(occurrence) = self.type_occurrence {
+            let mut closed = None;
+            for (position, ty) in type_arguments.iter().enumerate() {
+                if let Some(ty) = self.associated_root(
+                    self.associated_applications.last().and_then(Option::as_ref),
+                    occurrence,
+                    *ty,
+                )? {
+                    if closed.is_none() {
+                        self.charge_items(
+                            type_arguments.len().saturating_mul(2),
+                            std::mem::size_of::<TypeObjectDigest>(),
+                        )?;
+                    }
+                    let values = closed.get_or_insert_with(|| type_arguments.to_vec());
+                    values[position] = ty;
+                }
+            }
+            if let Some(closed) = closed {
+                // Canonical source effects were closed before opaque actual insertion.
+                // Resolve the remaining ordinary roots through their unchanged route.
+                let mut values = Vec::with_capacity(closed.len());
+                for (raw, closed) in type_arguments.iter().zip(closed) {
+                    if *raw == closed {
+                        values.push(self.resolve_type_arguments(&[closed])?[0]);
+                    } else {
+                        values.push(closed);
+                    }
+                }
+                return Ok(values);
+            }
+        }
         let scratch = {
             let empty = BTreeMap::new();
             let substitutions = self.type_scopes.last().unwrap_or(&empty);
@@ -2074,7 +2119,7 @@ impl ReferenceState<'_> {
     fn admit_graph_call_with_implementations(
         &mut self,
         declaration: DeclarationReference,
-        function: FunctionDeclaration,
+        mut function: FunctionDeclaration,
         arguments: Vec<CheckedValue>,
         application: ReferenceApplication<'_>,
     ) -> Result<AdmittedGraphCall, ExecutionError> {
@@ -2124,7 +2169,94 @@ impl ReferenceState<'_> {
             self.admit_task_row(&row)?;
             Some(row)
         };
-        let parameters = self.parameters(declaration.package, &function.parameters)?;
+        let associated = self.canonical_application(
+            declaration,
+            ReferenceApplication {
+                types,
+                effects,
+                requirements,
+                implementations: supplied,
+            },
+        )?;
+        let mut parameters = self.parameters(declaration.package, &function.parameters)?;
+        if let Some(application) = &associated {
+            let proof =
+                self.schema.associated_proof().cloned().ok_or_else(|| {
+                    reference_type_error("canonical application proof is missing")
+                })?;
+            self.associated_step(parameters.len().saturating_add(1))?;
+            let closed = proof.application(application, self.control)?;
+            let source = function
+                .result_borrow
+                .map(|source| {
+                    function
+                        .parameters
+                        .iter()
+                        .position(|parameter| *parameter == source)
+                        .ok_or_else(|| reference_type_error("canonical borrowed source changed"))
+                })
+                .transpose()?;
+            let effect_matches = allowance.as_ref().map_or_else(
+                || closed.effect.requirements.is_empty() && closed.effect.parameters.is_empty(),
+                |row| &closed.effect == row,
+            );
+            if closed.parameters.len() != parameters.len()
+                || closed.result_borrow.map(|source| source as usize) != source
+                || !effect_matches
+            {
+                return Err(reference_type_error("canonical complete signature changed"));
+            }
+            let generation = self.declaration(declaration)?.header.contract_version;
+            if proof.context(application, self.control)?.occurrence(
+                (
+                    declaration.package,
+                    OwnerKey::Declaration(declaration.declaration),
+                ),
+                self.control,
+            )? != generation
+            {
+                return Err(reference_type_error(
+                    "canonical function generation changed",
+                ));
+            }
+            for ((id, parameter), (expected, use_mode)) in function
+                .parameters
+                .iter()
+                .zip(&mut parameters)
+                .zip(&closed.parameters)
+            {
+                if proof.context(application, self.control)?.occurrence(
+                    (declaration.package, OwnerKey::Parameter(*id)),
+                    self.control,
+                )? != parameter.header.contract_version
+                {
+                    return Err(reference_type_error(
+                        "canonical parameter generation changed",
+                    ));
+                }
+                parameter.ty = proof.closed_root(
+                    application,
+                    (declaration.package, OwnerKey::Parameter(*id)),
+                    parameter.ty,
+                    self.control,
+                )?;
+                if parameter.ty != *expected || parameter.use_mode != *use_mode {
+                    return Err(reference_type_error("canonical complete parameter changed"));
+                }
+            }
+            function.result = proof.closed_root(
+                application,
+                (
+                    declaration.package,
+                    OwnerKey::Declaration(declaration.declaration),
+                ),
+                function.result,
+                self.control,
+            )?;
+            if function.result != closed.result {
+                return Err(reference_type_error("canonical complete result changed"));
+            }
+        }
         if !matches!(function.effect, FunctionEffect::Pure)
             && parameters.iter().any(|parameter| {
                 parameter.use_mode == ParameterUse::Borrow
@@ -2181,13 +2313,22 @@ impl ReferenceState<'_> {
                 "function type parameters are not unique",
             ));
         }
-        let implementations = self.implementation_bindings(
-            declaration,
-            &function.implementation_parameters,
-            &types,
-            supplied,
-        )?;
+        let implementations = if let Some(application) = &associated {
+            self.canonical_implementation_bindings(
+                application,
+                &function.implementation_parameters,
+                supplied,
+            )?
+        } else {
+            self.implementation_bindings(
+                declaration,
+                &function.implementation_parameters,
+                &types,
+                supplied,
+            )?
+        };
         Ok(AdmittedGraphCall {
+            associated,
             implementations,
             declaration,
             function,
@@ -2223,6 +2364,7 @@ impl ReferenceState<'_> {
         self.active_package = target.declaration.package;
         self.implementation_scopes
             .push((target.declaration, target.implementations));
+        self.associated_applications.push(target.associated);
         self.type_scopes.push(target.types);
         self.effect_scopes.push(target.effects);
         self.requirement_scopes.push(target.requirements);
@@ -2307,6 +2449,7 @@ impl ReferenceState<'_> {
         self.borrow_result_sources.pop();
         self.borrow_result_demand = previous_demand;
         self.implementation_scopes.pop();
+        self.associated_applications.pop();
         self.type_scopes.pop();
         self.effect_scopes.pop();
         self.requirement_scopes.pop();
@@ -2435,12 +2578,14 @@ impl ReferenceState<'_> {
         mut expression: ExpressionId,
         locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
     ) -> Result<ReferenceStep, ExecutionError> {
+        let previous_occurrence = self.type_occurrence;
         self.control_frames += 1;
         self.observation.maximum_control_frames = self
             .observation
             .maximum_control_frames
             .max(self.control_frames);
         let result = (|| loop {
+            self.type_occurrence = Some((self.active_package, OwnerKey::Expression(expression)));
             self.observe_locals(locals);
             match self.read_expression(expression)? {
                 ExpressionOperation::If {
@@ -2641,6 +2786,7 @@ impl ReferenceState<'_> {
             }
         })();
         self.control_frames -= 1;
+        self.type_occurrence = previous_occurrence;
         result
     }
 
@@ -2741,6 +2887,9 @@ impl ReferenceState<'_> {
         demand: bool,
     ) -> Result<CheckedValue, ExecutionError> {
         let previous = std::mem::replace(&mut self.borrow_result_demand, demand);
+        let previous_occurrence = self
+            .type_occurrence
+            .replace((self.active_package, OwnerKey::Expression(expression)));
         self.control_frames += 1;
         self.observation.maximum_control_frames = self
             .observation
@@ -2753,6 +2902,7 @@ impl ReferenceState<'_> {
         self.observe_locals(locals);
         self.control_frames -= 1;
         self.borrow_result_demand = previous;
+        self.type_occurrence = previous_occurrence;
         result
     }
 
@@ -2789,7 +2939,13 @@ impl ReferenceState<'_> {
         }
         self.observation.expressions = self.observation.expressions.saturating_add(1);
         match self.owner(OwnerKey::Expression(expression))? {
-            Some(OwnerRecord::Expression(record)) => Ok(record.operation),
+            Some(OwnerRecord::Expression(record)) => {
+                self.check_associated_occurrence(
+                    (self.active_package, OwnerKey::Expression(expression)),
+                    record.contract_version,
+                )?;
+                Ok(record.operation)
+            }
             Some(_) => Err(reference_error(
                 "normalized_reference_expression_kind",
                 "exact expression identity names another owner kind",
@@ -4119,7 +4275,23 @@ impl ReferenceState<'_> {
         expected: BindingKind,
     ) -> Result<crate::platform::kernel::BindingRecord, ExecutionError> {
         match self.owner(OwnerKey::Binding(binding))? {
-            Some(OwnerRecord::Binding(record)) if record.kind == expected => Ok(record),
+            Some(OwnerRecord::Binding(mut record)) if record.kind == expected => {
+                self.check_associated_occurrence(
+                    (self.active_package, OwnerKey::Binding(binding)),
+                    record.header.contract_version,
+                )?;
+                if let Some(template) = record.declared_type {
+                    let application = self.associated_applications.last().and_then(Option::as_ref);
+                    if let Some(closed) = self.associated_root(
+                        application,
+                        (self.active_package, OwnerKey::Binding(binding)),
+                        template,
+                    )? {
+                        record.declared_type = Some(closed);
+                    }
+                }
+                Ok(record)
+            }
             Some(OwnerRecord::Binding(_)) => Err(reference_error(
                 "normalized_reference_binding_kind",
                 "canonical binding has the wrong exact lexical kind",

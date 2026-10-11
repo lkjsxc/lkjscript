@@ -360,8 +360,9 @@ impl<'a> Resolver<'a> {
     pub fn retained_entries(&self) -> usize {
         self.retained_entries
     }
-    // A deliberately independent logical metadata allowance, shared by the
-    // complete occurrence pass and its resolution cache. It is not allocator
+    // A deliberately independent cumulative logical metadata allowance, shared
+    // by the occurrence pass, its temporary queues and resolution cache. Entries
+    // are not refunded when a temporary proof finishes. It is not allocator
     // accounting and exhaustion does not establish invalid source meaning.
     fn reserve_entries(&mut self, count: usize) -> Result<()> {
         let next = self
@@ -671,6 +672,7 @@ impl<'a> Resolver<'a> {
         occurrence: Occurrence,
         projection_free: bool,
     ) -> Result<()> {
+        self.reserve_entries(roots.len())?;
         let mut pending: Vec<_> = roots.iter().map(|t| (*t, occurrence, 0)).collect();
         let mut seen = BTreeMap::new();
         let mut expanded = BTreeSet::new();
@@ -682,7 +684,13 @@ impl<'a> Resolver<'a> {
             {
                 continue;
             }
+            if !seen.contains_key(&(ty, here)) {
+                self.reserve_entries(1)?;
+            }
             seen.insert((ty, here), depth);
+            let children = self.object(ty)?.child_type_count();
+            // The cloned object and child list both carry the raw child slots.
+            self.reserve_entries(1 + children)?;
             let object = self.object(ty)?.clone();
             if projection_free && object.form.is_associated() {
                 return Err(Failure::BindingProjection);
@@ -691,6 +699,7 @@ impl<'a> Resolver<'a> {
             if let TypeForm::TypeParameter { parameter } = object.form {
                 self.parameter_authority(parameter, here)?;
             }
+            self.reserve_entries(children)?;
             pending.extend(
                 object
                     .child_types()
@@ -699,16 +708,20 @@ impl<'a> Resolver<'a> {
             );
             if let TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } =
                 object.form
-                && expanded.insert(declaration)
+                && !expanded.contains(&declaration)
             {
+                self.reserve_entries(1)?;
+                expanded.insert(declaration);
                 let oracle = Oracle(self.source, Some(declaration));
                 let fields = if let Some((_, fields)) = oracle.owned_record_inventory(declaration) {
+                    self.reserve_entries(fields.len())?;
                     fields
                         .into_iter()
                         .map(|(f, t)| (OwnerKey::Field(f.field), t))
                         .collect::<Vec<_>>()
                 } else {
                     let (_, types) = oracle.nominal(declaration).ok_or(Failure::Authority)?;
+                    self.reserve_entries(types.len())?;
                     // Ordinary nominal helper verifies owner/scope inventories.
                     types
                         .into_iter()
@@ -723,6 +736,7 @@ impl<'a> Resolver<'a> {
                     if header.owner != key {
                         return Err(Failure::Authority);
                     }
+                    self.reserve_entries(1)?;
                     pending.push((
                         ty,
                         Occurrence {
@@ -744,6 +758,9 @@ impl<'a> Resolver<'a> {
         if !contract.associated_types.is_empty() || !implementation.associated_types.is_empty() {
             self.current(self.declaration_occurrence(scope, Context::Lexical(scope)))?;
         }
+        self.reserve_entries(
+            contract.associated_types.len() + implementation.associated_types.len(),
+        )?;
         let expected: BTreeSet<_> = contract.associated_types.iter().map(|m| m.id).collect();
         let mut actual = BTreeSet::new();
         for binding in &implementation.associated_types {
@@ -905,6 +922,13 @@ impl<'a> Resolver<'a> {
         Vec<TypeObjectDigest>,
     )> {
         self.step(depth)?;
+        let entries = self.operand_entries(operand, depth)?;
+        self.reserve_entries(
+            entries
+                .checked_mul(2)
+                .and_then(|n| n.checked_add(1))
+                .ok_or(Failure::Capacity)?,
+        )?;
         let key = (operand.clone(), caller);
         if !self.active_operands.insert(key.clone()) {
             return Err(Failure::Authority);
@@ -912,6 +936,30 @@ impl<'a> Resolver<'a> {
         let result = self.operand_inner(operand, caller, depth);
         self.active_operands.remove(&key);
         result
+    }
+    // Count raw first-order tree cells without constructing a traversal stack
+    // or cloning the operand. This is independent of selected witness meaning.
+    fn operand_entries(&mut self, operand: &ImplementationOperand, depth: usize) -> Result<usize> {
+        self.step(depth)?;
+        match operand {
+            ImplementationOperand::Parameter { .. } => Ok(1),
+            ImplementationOperand::Concrete {
+                type_arguments,
+                implementations,
+                ..
+            } => {
+                let mut count = 1usize
+                    .checked_add(type_arguments.len())
+                    .and_then(|n| n.checked_add(implementations.len()))
+                    .ok_or(Failure::Capacity)?;
+                for child in implementations {
+                    count = count
+                        .checked_add(self.operand_entries(child, depth + 1)?)
+                        .ok_or(Failure::Capacity)?;
+                }
+                Ok(count)
+            }
+        }
     }
     fn operand_inner(
         &mut self,
@@ -1321,6 +1369,14 @@ impl<'a> Resolver<'a> {
             }
             Context::Forbidden => unreachable!(),
         };
+        self.reserve_entries(
+            parameters
+                .len()
+                .checked_add(environment.ordinary.len())
+                .and_then(|n| n.checked_add(witnesses.len()))
+                .and_then(|n| n.checked_add(environment.witnesses.len()))
+                .ok_or(Failure::Capacity)?,
+        )?;
         let ordinary_ids = parameters.iter().copied().collect::<BTreeSet<_>>();
         let provided_ordinary = environment
             .ordinary
@@ -1456,16 +1512,20 @@ impl<'a> Resolver<'a> {
                 self.intern(form)?
             }
         };
-        self.reserve_entries(
-            1 + environment.ordinary.len()
-                + environment.witnesses.len()
-                + environment
-                    .witnesses
-                    .values()
-                    .chain(environment.contract_operand.iter())
-                    .map(|operand| operand.walk().count())
-                    .sum::<usize>(),
-        )?;
+        let mut entries = 1usize
+            .checked_add(environment.ordinary.len())
+            .and_then(|n| n.checked_add(environment.witnesses.len()))
+            .ok_or(Failure::Capacity)?;
+        for operand in environment
+            .witnesses
+            .values()
+            .chain(environment.contract_operand.iter())
+        {
+            entries = entries
+                .checked_add(self.operand_entries(operand, 0)?)
+                .ok_or(Failure::Capacity)?;
+        }
+        self.reserve_entries(entries)?;
         self.resolutions
             .entry(ty)
             .or_default()

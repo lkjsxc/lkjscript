@@ -3,7 +3,11 @@
 use super::*;
 use crate::platform::semantic_id::{ExpressionId, FieldId, ParameterId};
 
-fn expression(source: &mut KernelSnapshot, n: u64, operation: ExpressionOperation) -> ExpressionId {
+pub(super) fn expression(
+    source: &mut KernelSnapshot,
+    n: u64,
+    operation: ExpressionOperation,
+) -> ExpressionId {
     let id = ExpressionId::migrate(SEED, n);
     source.owners.insert(
         OwnerKey::Expression(id),
@@ -11,7 +15,7 @@ fn expression(source: &mut KernelSnapshot, n: u64, operation: ExpressionOperatio
     );
     id
 }
-fn function_mut(
+pub(super) fn function_mut(
     source: &mut KernelSnapshot,
     scope: DeclarationReference,
 ) -> &mut FunctionDeclaration {
@@ -26,7 +30,7 @@ fn function_mut(
     };
     f
 }
-fn value_parameter(
+pub(super) fn value_parameter(
     source: &mut KernelSnapshot,
     scope: DeclarationReference,
     n: u64,

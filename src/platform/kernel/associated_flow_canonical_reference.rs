@@ -1,11 +1,114 @@
 //! Independent raw-canonical adapter for the first-order flow oracle. This lane
 //! neither consumes production flow edges nor calls production type substitution.
-use super::associated_flow_reference_tests as model;
+use super::associated_flow_reference as model;
 use super::*;
+use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
+use crate::platform::execution::ExecutionControl;
 use crate::platform::semantic_id::{
     AssociatedTypeMemberId, ExpressionId, ImplementationParameterId, MethodId, TypeParameterId,
 };
 use std::collections::{BTreeMap, BTreeSet};
+
+const MAXIMUM_REFERENCE_BYTES: usize = 64 * 1_048_576;
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct ReferenceFlowWork {
+    pub contexts: usize,
+    pub slots: usize,
+    pub edges: usize,
+    pub metadata_bytes: usize,
+}
+
+/// Complete symbolic source proof, before any concrete preparation queue grows.
+/// Callers independently bind the supplied snapshots to their exact closure;
+/// this adapter consumes raw canonical owners, never producer selections/edges.
+pub(crate) fn validate(
+    snapshots: &[&KernelSnapshot],
+    control: &ExecutionControl,
+    work: &mut usize,
+    maximum_work: usize,
+) -> std::result::Result<ReferenceFlowWork, Diagnostic> {
+    let checkpoint = || {
+        control
+            .check()
+            .map_err(|error| Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message))
+    };
+    let budget = model::Budget::new(&checkpoint, work, maximum_work, MAXIMUM_REFERENCE_BYTES);
+    let result = (|| {
+        budget.tick()?;
+        let mut associated = false;
+        for source in snapshots {
+            for owner in source.owners.values() {
+                budget.tick()?;
+                if let OwnerRecord::Declaration(declaration) = owner {
+                    associated |= declaration.payload.has_associated_types();
+                }
+            }
+            for object in source
+                .types
+                .values()
+                .chain(source.dependency_types.values())
+            {
+                budget.tick()?;
+                associated |= matches!(
+                    object.form,
+                    TypeForm::AssociatedContractMember { .. }
+                        | TypeForm::AssociatedWitnessProjection { .. }
+                );
+            }
+        }
+        if !associated {
+            return Ok(ReferenceFlowWork::default());
+        }
+        let canonical = CanonicalProgram::read_with_budget(snapshots, &[], &budget)?;
+        let proof = model::reference_classify_with_budget(
+            &canonical.program,
+            model::Limits {
+                contexts: maximum_work,
+                slots: maximum_work,
+                #[cfg(test)]
+                concrete_states: model::Limits::default().concrete_states,
+            },
+            &budget,
+        )?;
+        if !proof.finite || proof.positive_diagonal.is_some() {
+            return Err(model::Refusal::PositiveRecurrence);
+        }
+        Ok(ReferenceFlowWork {
+            contexts: proof.contexts,
+            slots: proof.slots.len(),
+            edges: proof.edges.len(),
+            metadata_bytes: budget.bytes(),
+        })
+    })();
+    result.map_err(refusal_diagnostic)
+}
+
+fn refusal_diagnostic(refusal: model::Refusal) -> Diagnostic {
+    match refusal {
+        model::Refusal::Control(error) => error,
+        model::Refusal::Capacity(kind) => Diagnostic::new(
+            DiagnosticClass::Resource,
+            "kernel_associated_reference_capacity",
+            format!("independent associated flow exhausted {kind}"),
+        ),
+        model::Refusal::PositiveRecurrence => Diagnostic::new(
+            DiagnosticClass::Semantic,
+            "kernel_associated_reference_growth",
+            "independent associated flow found a constructor-growing recursive cycle",
+        ),
+        model::Refusal::UnsupportedRecursiveWitnessConstruction => Diagnostic::new(
+            DiagnosticClass::Source,
+            "kernel_associated_reference_witness_construction_unsupported",
+            "recursive construction of a witness prerequisite tree is unsupported",
+        ),
+        other => Diagnostic::new(
+            DiagnosticClass::Semantic,
+            "kernel_associated_reference_source",
+            format!("independent associated flow refused canonical source: {other:?}"),
+        ),
+    }
+}
 
 type Result<T> = std::result::Result<T, model::Refusal>;
 
@@ -35,8 +138,8 @@ pub(super) struct CanonicalProgram {
     pub program: model::Program,
     pub definitions: BTreeMap<model::Definition, DefinitionIdentity>,
     pub members: BTreeMap<model::Member, (DeclarationReference, AssociatedTypeMemberId)>,
-    pub witness_parameters: BTreeMap<(model::Definition, u16), ImplementationParameterId>,
-    pub atoms: BTreeMap<u8, ConstructorAtom>,
+    pub witness_parameters: BTreeMap<(model::Definition, usize), ImplementationParameterId>,
+    pub atoms: BTreeMap<usize, ConstructorAtom>,
     /// Abstract signature members remain exact references, never ground terms.
     pub signature_members: BTreeSet<(DeclarationReference, AssociatedTypeMemberId)>,
     pub signature_types: BTreeMap<(DeclarationReference, TypeObjectDigest), SignatureTerm>,
@@ -46,7 +149,7 @@ pub(super) struct CanonicalProgram {
 pub(super) enum SignatureTerm {
     Ordinary(model::Term),
     Member(DeclarationReference, AssociatedTypeMemberId),
-    Constructor(u8, Vec<SignatureTerm>),
+    Constructor(usize, Vec<SignatureTerm>),
 }
 
 #[derive(Clone, Copy)]
@@ -66,18 +169,32 @@ struct Context {
     generation: u16,
 }
 
-struct Adapter<'a> {
+struct Adapter<'a, 'b> {
+    budget: &'a model::Budget<'b>,
     sources: BTreeMap<PackageId, &'a KernelSnapshot>,
     ids: BTreeMap<DefinitionIdentity, model::Definition>,
     member_ids: BTreeMap<(DeclarationReference, AssociatedTypeMemberId), model::Member>,
-    witness_ids: BTreeMap<(DeclarationReference, ImplementationParameterId), u16>,
-    atom_ids: BTreeMap<ConstructorAtom, u8>,
+    witness_ids: BTreeMap<(DeclarationReference, ImplementationParameterId), usize>,
+    atom_ids: BTreeMap<ConstructorAtom, usize>,
     output: CanonicalProgram,
 }
 
 impl CanonicalProgram {
+    #[cfg(test)]
     pub(super) fn read(snapshots: &[&KernelSnapshot], entries: &[CanonicalEntry]) -> Result<Self> {
+        let checkpoint = || Ok(());
+        let mut work = 0;
+        let budget = model::Budget::new(&checkpoint, &mut work, usize::MAX, usize::MAX);
+        Self::read_with_budget(snapshots, entries, &budget)
+    }
+    pub(super) fn read_with_budget(
+        snapshots: &[&KernelSnapshot],
+        entries: &[CanonicalEntry],
+        budget: &model::Budget<'_>,
+    ) -> Result<Self> {
+        budget.reserve::<(PackageId, &KernelSnapshot)>(snapshots.len())?;
         let mut adapter = Adapter {
+            budget,
             sources: BTreeMap::new(),
             ids: BTreeMap::new(),
             member_ids: BTreeMap::new(),
@@ -102,11 +219,13 @@ impl CanonicalProgram {
                 return Err(model::Refusal::Inventory);
             }
             for (key, owner) in &snapshot.owners {
+                budget.tick()?;
                 if owner.header().owner != *key {
                     return Err(model::Refusal::Inventory);
                 }
             }
             for (digest, object) in snapshot.types.iter().chain(&snapshot.dependency_types) {
+                budget.canonical_reserve(object)?;
                 if encode_type_object(object)
                     .map_err(|_| model::Refusal::Inventory)?
                     .0
@@ -117,12 +236,15 @@ impl CanonicalProgram {
             }
         }
         adapter.inventory()?;
-        let declarations = adapter.declarations();
+        let declarations = adapter.declarations()?;
         for reference in declarations {
             adapter.translate_declaration(reference)?;
         }
         adapter.translate_ports()?;
+        budget.reserve::<model::State>(entries.len())?;
         for entry in entries {
+            budget.reserve::<model::Term>(entry.arguments.len())?;
+            budget.reserve::<model::Witness>(entry.implementations.len())?;
             let context = adapter.context(entry.function, TypeMode::Closed)?;
             let arguments = entry
                 .arguments
@@ -140,10 +262,11 @@ impl CanonicalProgram {
                 implementations,
             });
         }
-        adapter.output.program.admit()?;
+        adapter.output.program.admit_with_budget(budget)?;
         Ok(adapter.output)
     }
 
+    #[cfg(test)]
     pub(super) fn definition(&self, reference: DeclarationReference) -> Result<model::Definition> {
         self.definitions
             .iter()
@@ -154,8 +277,9 @@ impl CanonicalProgram {
     }
 }
 
-impl Adapter<'_> {
+impl Adapter<'_, '_> {
     fn source(&self, package: PackageId) -> Result<&KernelSnapshot> {
+        self.budget.tick()?;
         self.sources
             .get(&package)
             .copied()
@@ -168,7 +292,7 @@ impl Adapter<'_> {
             .owners
             .get(&OwnerKey::Declaration(reference.declaration))
         {
-            Some(OwnerRecord::Declaration(record)) => Ok(record.clone()),
+            Some(OwnerRecord::Declaration(record)) => self.budget.canonical_clone(record),
             _ => Err(model::Refusal::MissingDefinition),
         }
     }
@@ -191,8 +315,15 @@ impl Adapter<'_> {
         Ok(declaration)
     }
 
-    fn declarations(&self) -> Vec<DeclarationReference> {
-        self.sources
+    fn declarations(&self) -> Result<Vec<DeclarationReference>> {
+        let count = self
+            .sources
+            .values()
+            .try_fold(0usize, |n, s| n.checked_add(s.owners.len()))
+            .ok_or(model::Refusal::Capacity("canonical owner count"))?;
+        self.budget.reserve::<DeclarationReference>(count)?;
+        Ok(self
+            .sources
             .iter()
             .flat_map(|(package, source)| {
                 source.owners.keys().filter_map(move |key| match key {
@@ -203,27 +334,32 @@ impl Adapter<'_> {
                     _ => None,
                 })
             })
-            .collect()
+            .collect())
     }
 
     fn inventory(&mut self) -> Result<()> {
+        self.budget
+            .reserve::<(PackageId, usize)>(self.sources.len())?;
+        self.budget
+            .reserve::<(PackageId, usize)>(self.sources.len())?;
         let mut package_ids = BTreeMap::new();
         for (ordinal, package) in self.sources.keys().enumerate() {
-            package_ids.insert(
-                *package,
-                u16::try_from(ordinal)
-                    .map_err(|_| model::Refusal::Capacity("canonical packages"))?,
-            );
+            package_ids.insert(*package, ordinal);
         }
         let mut next = BTreeMap::<PackageId, usize>::new();
-        for reference in self.declarations() {
+        for reference in self.declarations()? {
             let ordinal = next.entry(reference.package).or_default();
             let id = model::Definition {
                 package: package_ids[&reference.package],
-                declaration: u16::try_from(*ordinal)
-                    .map_err(|_| model::Refusal::Capacity("canonical definitions"))?,
+                declaration: *ordinal,
             };
-            *ordinal += 1;
+            *ordinal = ordinal
+                .checked_add(1)
+                .ok_or(model::Refusal::Capacity("canonical definition count"))?;
+            self.budget
+                .reserve::<(DefinitionIdentity, model::Definition)>(1)?;
+            self.budget
+                .reserve::<(model::Definition, DefinitionIdentity)>(1)?;
             self.ids
                 .insert(DefinitionIdentity::Declaration(reference), id);
             self.output
@@ -232,10 +368,15 @@ impl Adapter<'_> {
             let declaration = self.declaration(reference)?;
             self.parameters(reference)?;
             let witnesses = self.witnesses(reference)?;
+            self.budget
+                .reserve::<((DeclarationReference, ImplementationParameterId), usize)>(
+                    witnesses.len(),
+                )?;
+            self.budget.reserve::<Name>(witnesses.len())?;
             let mut seen_names = BTreeSet::new();
             for (n, witness) in witnesses.iter().enumerate() {
-                let id = u16::try_from(n)
-                    .map_err(|_| model::Refusal::Capacity("canonical witnesses"))?;
+                self.budget.reserve_bytes(witness.name.as_str().len())?;
+                let id = n;
                 if self
                     .witness_ids
                     .insert((reference, witness.id), id)
@@ -246,13 +387,28 @@ impl Adapter<'_> {
                 }
             }
             if let DeclarationPayload::OwnedContract(contract) = &declaration.payload {
+                self.budget
+                    .reserve::<usize>(contract.associated_types.len())?;
+                self.budget
+                    .reserve::<Name>(contract.associated_types.len())?;
+                self.budget.reserve::<(
+                    (DeclarationReference, AssociatedTypeMemberId),
+                    model::Member,
+                )>(contract.associated_types.len())?;
+                self.budget.reserve::<(
+                    model::Member,
+                    (DeclarationReference, AssociatedTypeMemberId),
+                )>(contract.associated_types.len())?;
+                self.budget.reserve::<MethodId>(contract.methods.len())?;
+                self.budget
+                    .reserve::<(model::Definition, BTreeSet<usize>)>(1)?;
                 let mut members = BTreeSet::new();
                 let mut names = BTreeSet::new();
                 for (n, member) in contract.associated_types.iter().enumerate() {
+                    self.budget.reserve_bytes(member.name.as_str().len())?;
                     let member_id = model::Member {
                         contract: id,
-                        id: u16::try_from(n)
-                            .map_err(|_| model::Refusal::Capacity("canonical members"))?,
+                        id: n,
                     };
                     if self
                         .member_ids
@@ -282,7 +438,7 @@ impl Adapter<'_> {
             }
         }
         // Synthetic mapping nodes never reuse the scheme's definition identity.
-        for reference in self.declarations() {
+        for reference in self.declarations()? {
             if let DeclarationPayload::OwnedImplementation(implementation) =
                 self.declaration(reference)?.payload
             {
@@ -290,11 +446,16 @@ impl Adapter<'_> {
                     let ordinal = next.entry(reference.package).or_default();
                     let id = model::Definition {
                         package: package_ids[&reference.package],
-                        declaration: u16::try_from(*ordinal)
-                            .map_err(|_| model::Refusal::Capacity("canonical mappings"))?,
+                        declaration: *ordinal,
                     };
-                    *ordinal += 1;
+                    *ordinal = ordinal
+                        .checked_add(1)
+                        .ok_or(model::Refusal::Capacity("canonical definition count"))?;
                     let identity = DefinitionIdentity::MethodMapping(reference, mapping.method);
+                    self.budget
+                        .reserve::<(DefinitionIdentity, model::Definition)>(1)?;
+                    self.budget
+                        .reserve::<(model::Definition, DefinitionIdentity)>(1)?;
                     if self.ids.insert(identity.clone(), id).is_some() {
                         return Err(model::Refusal::Inventory);
                     }
@@ -311,11 +472,16 @@ impl Adapter<'_> {
                 let ordinal = next.entry(*package).or_default();
                 let id = model::Definition {
                     package: package_ids[package],
-                    declaration: u16::try_from(*ordinal)
-                        .map_err(|_| model::Refusal::Capacity("canonical port roots"))?,
+                    declaration: *ordinal,
                 };
-                *ordinal += 1;
+                *ordinal = ordinal
+                    .checked_add(1)
+                    .ok_or(model::Refusal::Capacity("canonical definition count"))?;
                 let identity = DefinitionIdentity::ExecutableOwner(*package, *key);
+                self.budget
+                    .reserve::<(DefinitionIdentity, model::Definition)>(1)?;
+                self.budget
+                    .reserve::<(model::Definition, DefinitionIdentity)>(1)?;
                 self.ids.insert(identity.clone(), id);
                 self.output.definitions.insert(id, identity);
             }
@@ -340,7 +506,10 @@ impl Adapter<'_> {
     }
 
     fn parameters(&self, reference: DeclarationReference) -> Result<Vec<TypeParameterId>> {
-        let parameters = match self.declaration(reference)?.payload {
+        let record = self.declaration(reference)?;
+        self.budget
+            .reserve::<TypeParameterId>(record.payload.type_parameters().len())?;
+        let parameters = match record.payload {
             DeclarationPayload::Function(f) => f.type_parameters,
             DeclarationPayload::External(f) => f.type_parameters,
             DeclarationPayload::OwnedImplementation(i) => i.type_parameters,
@@ -358,6 +527,7 @@ impl Adapter<'_> {
             } => type_parameters,
             _ => vec![],
         };
+        self.budget.reserve::<TypeParameterId>(parameters.len())?;
         if parameters.iter().collect::<BTreeSet<_>>().len() != parameters.len() {
             return Err(model::Refusal::Inventory);
         }
@@ -397,13 +567,18 @@ impl Adapter<'_> {
             .ok_or(model::Refusal::ForeignMember)
     }
 
-    fn tag(&mut self, kind: &'static str, fields: Vec<String>) -> Result<u8> {
+    fn tag(&mut self, kind: &'static str, fields: Vec<String>) -> Result<usize> {
         let atom = ConstructorAtom { kind, fields };
         if let Some(id) = self.atom_ids.get(&atom) {
             return Ok(*id);
         }
-        let id = u8::try_from(self.atom_ids.len())
-            .map_err(|_| model::Refusal::Capacity("canonical constructor atoms"))?;
+        let id = self.atom_ids.len();
+        self.budget.reserve::<(ConstructorAtom, usize)>(1)?;
+        self.budget.reserve::<(usize, ConstructorAtom)>(1)?;
+        self.budget.reserve::<String>(atom.fields.len())?;
+        for field in &atom.fields {
+            self.budget.reserve_bytes(field.len())?;
+        }
         self.atom_ids.insert(atom.clone(), id);
         self.output.atoms.insert(id, atom);
         Ok(id)
@@ -415,7 +590,8 @@ impl Adapter<'_> {
             .types
             .get(&digest)
             .or_else(|| source.dependency_types.get(&digest))
-            .cloned()
+            .map(|object| self.budget.canonical_clone(object))
+            .transpose()?
             .ok_or(model::Refusal::MissingDefinition)
     }
 
@@ -428,7 +604,19 @@ impl Adapter<'_> {
         if depth > contract::MAXIMUM_TYPE_DEPTH {
             return Err(model::Refusal::Capacity("canonical type depth"));
         }
+        self.budget.tick()?;
         let object = self.object(context.source.package, digest)?;
+        self.budget
+            .reserve::<TypeObjectDigest>(object.child_type_count())?;
+        self.budget
+            .reserve::<model::Term>(object.child_type_count())?;
+        self.budget.reserve::<String>(
+            object
+                .child_type_count()
+                .checked_add(2)
+                .ok_or(model::Refusal::Capacity("canonical atom fields"))?,
+        )?;
+        self.budget.canonical_reserve(&object)?;
         let mut children = Vec::new();
         let (kind, atoms) = match object.form {
             TypeForm::TypeParameter { parameter } => {
@@ -575,6 +763,21 @@ impl Adapter<'_> {
         }
     }
 
+    fn reserve_signature(&self, term: &SignatureTerm) -> Result<()> {
+        self.budget.tick()?;
+        match term {
+            SignatureTerm::Ordinary(term) => self.budget.term(term),
+            SignatureTerm::Member(_, _) => Ok(()),
+            SignatureTerm::Constructor(_, children) => {
+                self.budget.reserve::<SignatureTerm>(children.len())?;
+                for child in children {
+                    self.reserve_signature(child)?;
+                }
+                Ok(())
+            }
+        }
+    }
+
     fn contract_type(
         &mut self,
         ty: TypeObjectDigest,
@@ -584,7 +787,15 @@ impl Adapter<'_> {
         if depth > contract::MAXIMUM_TYPE_DEPTH {
             return Err(model::Refusal::Capacity("canonical signature depth"));
         }
+        self.budget.tick()?;
         let object = self.object(context.source.package, ty)?;
+        self.budget
+            .reserve::<TypeObjectDigest>(object.child_type_count())?;
+        self.budget
+            .reserve::<SignatureTerm>(object.child_type_count())?;
+        self.budget.canonical_reserve(&object)?;
+        self.budget
+            .reserve::<((DeclarationReference, TypeObjectDigest), SignatureTerm)>(1)?;
         if let TypeForm::AssociatedContractMember { contract, member } = object.form {
             if contract != context.source
                 || !matches!(context.mode, TypeMode::Contract)
@@ -593,8 +804,11 @@ impl Adapter<'_> {
                 return Err(model::Refusal::Scope);
             }
             self.member(context.source.package, contract, member)?;
+            self.budget
+                .reserve::<(DeclarationReference, AssociatedTypeMemberId)>(1)?;
             self.output.signature_members.insert((contract, member));
             let term = SignatureTerm::Member(contract, member);
+            self.reserve_signature(&term)?;
             self.output
                 .signature_types
                 .insert((context.source, ty), term.clone());
@@ -657,6 +871,7 @@ impl Adapter<'_> {
                     .collect::<Result<_>>()?,
             )
         };
+        self.reserve_signature(&term)?;
         self.output
             .signature_types
             .insert((context.source, ty), term.clone());
@@ -685,10 +900,15 @@ impl Adapter<'_> {
         }
     }
 
-    fn witness_inventory(&mut self, context: Context) -> Result<Vec<(u16, model::Definition)>> {
+    fn witness_inventory(&mut self, context: Context) -> Result<Vec<(usize, model::Definition)>> {
+        let witnesses = self.witnesses(context.source)?;
+        self.budget
+            .reserve::<(usize, model::Definition)>(witnesses.len())?;
+        self.budget
+            .reserve::<((model::Definition, usize), ImplementationParameterId)>(witnesses.len())?;
         let mut result = Vec::new();
         let ordinary = self.parameters(context.source)?;
-        for witness in self.witnesses(context.source)? {
+        for witness in witnesses {
             let DeclarationPayload::OwnedContract(contract) = self
                 .authored(context.source.package, witness.contract)?
                 .payload
@@ -770,6 +990,9 @@ impl Adapter<'_> {
                 {
                     return Err(model::Refusal::Arity);
                 }
+                self.budget.reserve::<model::Term>(type_arguments.len())?;
+                self.budget
+                    .reserve::<model::Operand>(implementations.len())?;
                 Ok(model::Operand::Concrete {
                     scheme: self.id(*implementation)?,
                     arguments: type_arguments
@@ -799,29 +1022,34 @@ impl Adapter<'_> {
         else {
             return Err(model::Refusal::AuthoredSymbolicValue);
         };
-        fn closed(input: model::Operand) -> Result<model::Witness> {
+        fn closed(input: model::Operand, budget: &model::Budget<'_>) -> Result<model::Witness> {
+            budget.tick()?;
             match input {
                 model::Operand::Concrete {
                     scheme,
                     arguments,
                     prerequisites,
-                } => Ok(model::Witness::Selected {
-                    scheme,
-                    arguments,
-                    prerequisites: prerequisites
-                        .into_iter()
-                        .map(closed)
-                        .collect::<Result<_>>()?,
-                }),
+                } => {
+                    budget.reserve::<model::Witness>(prerequisites.len())?;
+                    Ok(model::Witness::Selected {
+                        scheme,
+                        arguments,
+                        prerequisites: prerequisites
+                            .into_iter()
+                            .map(|p| closed(p, budget))
+                            .collect::<Result<_>>()?,
+                    })
+                }
                 _ => Err(model::Refusal::AuthoredSymbolicValue),
             }
         }
+        self.budget.reserve::<model::Witness>(prerequisites.len())?;
         Ok(model::Witness::Selected {
             scheme,
             arguments,
             prerequisites: prerequisites
                 .into_iter()
-                .map(closed)
+                .map(|p| closed(p, self.budget))
                 .collect::<Result<_>>()?,
         })
     }
@@ -838,20 +1066,31 @@ impl Adapter<'_> {
     }
 
     fn translate_ports(&mut self) -> Result<()> {
+        let count = self
+            .sources
+            .values()
+            .try_fold(0usize, |n, s| n.checked_add(s.owners.len()))
+            .ok_or(model::Refusal::Capacity("canonical ports"))?;
+        self.budget.reserve::<(PackageId, OwnerKey)>(count)?;
         let ports: Vec<_> = self
             .sources
             .iter()
             .flat_map(|(package, source)| {
-                source
-                    .owners
-                    .iter()
-                    .filter_map(move |(key, record)| match record {
-                        OwnerRecord::Port(port) => Some((*package, *key, port.clone())),
-                        _ => None,
-                    })
+                source.owners.iter().filter_map(move |(key, record)| {
+                    matches!(record, OwnerRecord::Port(_)).then_some((*package, *key))
+                })
             })
             .collect();
-        for (package, key, port) in ports {
+        for (package, key) in ports {
+            let Some(OwnerRecord::Port(port)) = self
+                .source(package)?
+                .owners
+                .get(&key)
+                .map(|r| self.budget.canonical_clone(r))
+                .transpose()?
+            else {
+                return Err(model::Refusal::Inventory);
+            };
             let reference = DeclarationReference {
                 package,
                 declaration: port.declaration,
@@ -874,6 +1113,9 @@ impl Adapter<'_> {
                 generation: port.header.contract_version,
             };
             self.term(port.function_type, context, 0)?;
+            self.budget.reserve::<model::Call>(1)?;
+            self.budget
+                .reserve::<(model::Definition, model::Function)>(1)?;
             let mut calls = Vec::new();
             match port.implementation {
                 PortImplementation::Expression(expression) => {
@@ -902,6 +1144,10 @@ impl Adapter<'_> {
     }
 
     fn translate_declaration(&mut self, reference: DeclarationReference) -> Result<()> {
+        self.budget
+            .reserve::<(model::Definition, model::Function)>(1)?;
+        self.budget
+            .reserve::<(model::Definition, model::Scheme)>(1)?;
         match self.declaration(reference)?.payload {
             DeclarationPayload::OwnedContract(contract) => {
                 let context = self.context(reference, TypeMode::Contract)?;
@@ -928,6 +1174,9 @@ impl Adapter<'_> {
                 else {
                     return Err(model::Refusal::ForeignContract);
                 };
+                self.budget
+                    .reserve::<MethodId>(implementation.methods.len())?;
+                self.budget.reserve::<MethodId>(contract.methods.len())?;
                 if implementation.type_arguments.len() != contract.type_parameters.len()
                     || implementation
                         .methods
@@ -948,6 +1197,13 @@ impl Adapter<'_> {
                     ..context
                 };
                 let prerequisites = self.witness_inventory(callable)?;
+                self.budget
+                    .reserve::<(usize, model::Term)>(implementation.associated_types.len())?;
+                self.budget
+                    .reserve::<model::Definition>(prerequisites.len())?;
+                self.budget
+                    .reserve::<MethodId>(implementation.methods.len())?;
+                self.budget.reserve::<MethodId>(contract.methods.len())?;
                 let mut bindings = BTreeMap::new();
                 for binding in implementation.associated_types {
                     let member =
@@ -980,6 +1236,13 @@ impl Adapter<'_> {
                         ..context
                     };
                     let witnesses = self.witness_inventory(mapped)?;
+                    self.budget
+                        .reserve::<model::Term>(mapping.type_arguments.len())?;
+                    self.budget
+                        .reserve::<model::Operand>(mapping.implementations.len())?;
+                    self.budget.reserve::<model::Call>(1)?;
+                    self.budget
+                        .reserve::<(model::Definition, model::Function)>(1)?;
                     let call = model::Call {
                         target: self.function_target(reference.package, mapping.function)?,
                         arguments: mapping
@@ -1011,6 +1274,10 @@ impl Adapter<'_> {
                 let context = self.context(reference, TypeMode::Callable)?;
                 let witnesses = self.witness_inventory(context)?;
                 self.term(function.result, context, 0)?;
+                self.budget
+                    .reserve::<crate::platform::semantic_id::ParameterId>(
+                        function.parameters.len(),
+                    )?;
                 let mut parameter_ids = BTreeSet::new();
                 for parameter in &function.parameters {
                     if !parameter_ids.insert(*parameter) {
@@ -1020,7 +1287,8 @@ impl Adapter<'_> {
                         .source(reference.package)?
                         .owners
                         .get(&OwnerKey::Parameter(*parameter))
-                        .cloned()
+                        .map(|record| self.budget.canonical_clone(record))
+                        .transpose()?
                     {
                         Some(OwnerRecord::Parameter(record))
                             if record.parent
@@ -1058,7 +1326,8 @@ impl Adapter<'_> {
                         .source(reference.package)?
                         .owners
                         .get(&OwnerKey::Parameter(parameter))
-                        .cloned()
+                        .map(|record| self.budget.canonical_clone(record))
+                        .transpose()?
                     {
                         Some(OwnerRecord::Parameter(record))
                             if record.parent
@@ -1086,7 +1355,8 @@ impl Adapter<'_> {
                         .source(reference.package)?
                         .owners
                         .get(&OwnerKey::Field(field))
-                        .cloned()
+                        .map(|record| self.budget.canonical_clone(record))
+                        .transpose()?
                     {
                         Some(OwnerRecord::Field(record))
                             if record.declaration == reference.declaration =>
@@ -1104,7 +1374,8 @@ impl Adapter<'_> {
                         .source(reference.package)?
                         .owners
                         .get(&OwnerKey::Case(case))
-                        .cloned()
+                        .map(|record| self.budget.canonical_clone(record))
+                        .transpose()?
                     {
                         Some(OwnerRecord::Case(record))
                             if record.declaration == reference.declaration =>
@@ -1154,7 +1425,8 @@ impl Adapter<'_> {
                         .source(reference.package)?
                         .owners
                         .get(&OwnerKey::Operation(operation))
-                        .cloned()
+                        .map(|record| self.budget.canonical_clone(record))
+                        .transpose()?
                     {
                         Some(OwnerRecord::Operation(record))
                             if record.declaration == reference.declaration =>
@@ -1165,7 +1437,8 @@ impl Adapter<'_> {
                                     .source(reference.package)?
                                     .owners
                                     .get(&OwnerKey::Parameter(parameter))
-                                    .cloned()
+                                    .map(|record| self.budget.canonical_clone(record))
+                                    .transpose()?
                                 {
                                     Some(OwnerRecord::Parameter(record)) => {
                                         self.term(record.ty, context, 0)?;
@@ -1222,6 +1495,7 @@ impl Adapter<'_> {
                 if record.contract != contract {
                     return Err(model::Refusal::ForeignContract);
                 }
+                self.budget.reserve::<model::Call>(1)?;
                 calls.push(model::Call {
                     target: self
                         .ids
@@ -1249,7 +1523,7 @@ impl Adapter<'_> {
                 }
                 // Exact method alternatives use raw scheme inventories, not a
                 // producer's selected-shape relation or normalized method table.
-                for implementation in self.declarations() {
+                for implementation in self.declarations()? {
                     let DeclarationPayload::OwnedImplementation(record) =
                         self.declaration(implementation)?.payload
                     else {
@@ -1258,6 +1532,19 @@ impl Adapter<'_> {
                     if record.contract != contract {
                         continue;
                     }
+                    self.budget.reserve::<model::Call>(1)?;
+                    self.budget
+                        .reserve::<model::Term>(record.type_parameters.len())?;
+                    self.budget
+                        .reserve::<model::Operand>(record.implementation_parameters.len())?;
+                    self.budget
+                        .reserve::<usize>(record.implementation_parameters.len())?;
+                    let path_bytes = record
+                        .type_parameters
+                        .len()
+                        .checked_mul(path.prerequisites.len())
+                        .ok_or(model::Refusal::Capacity("canonical method paths"))?;
+                    self.budget.reserve::<usize>(path_bytes)?;
                     calls.push(model::Call {
                         target: self
                             .ids
@@ -1297,9 +1584,15 @@ impl Adapter<'_> {
         context: Context,
         calls: &mut Vec<model::Call>,
     ) -> Result<()> {
+        self.budget.reserve::<(ExpressionId, bool)>(1)?;
         let mut pending = vec![(root, false)];
         let mut seen = BTreeSet::new();
         while let Some((id, untaken)) = pending.pop() {
+            self.budget.tick()?;
+            if seen.contains(&id) {
+                continue;
+            }
+            self.budget.reserve::<ExpressionId>(1)?;
             if !seen.insert(id) {
                 continue;
             }
@@ -1307,10 +1600,12 @@ impl Adapter<'_> {
                 .source(context.source.package)?
                 .owners
                 .get(&OwnerKey::Expression(id))
-                .cloned()
+                .map(|record| self.budget.canonical_clone(record))
+                .transpose()?
             else {
                 return Err(model::Refusal::MissingDefinition);
             };
+            self.budget.canonical_reserve(&expression)?;
             let operation = expression.operation;
             let context = Context {
                 generation: expression.contract_version,
@@ -1327,6 +1622,8 @@ impl Adapter<'_> {
                     type_arguments,
                     ..
                 } => {
+                    self.budget.reserve::<model::Call>(1)?;
+                    self.budget.reserve::<model::Term>(type_arguments.len())?;
                     calls.push(model::Call {
                         target: self.function_target(context.source.package, *function)?,
                         arguments: type_arguments
@@ -1350,6 +1647,10 @@ impl Adapter<'_> {
                     implementations,
                     ..
                 } => {
+                    self.budget
+                        .reserve::<model::Operand>(implementations.len())?;
+                    self.budget.reserve::<model::Call>(1)?;
+                    self.budget.reserve::<model::Term>(type_arguments.len())?;
                     calls.push(model::Call {
                         target: self.function_target(context.source.package, *function)?,
                         arguments: type_arguments
@@ -1386,6 +1687,7 @@ impl Adapter<'_> {
                     when_false,
                 } => {
                     children.extend([condition, when_true]);
+                    self.budget.reserve::<(ExpressionId, bool)>(1)?;
                     pending.push((when_false, true));
                 }
                 ExpressionOperation::Let {
@@ -1618,15 +1920,20 @@ impl Adapter<'_> {
                     .source(context.source.package)?
                     .owners
                     .get(&OwnerKey::Binding(binding))
-                    .cloned()
+                    .map(|record| self.budget.canonical_clone(record))
+                    .transpose()?
                 else {
                     return Err(model::Refusal::MissingDefinition);
                 };
                 if let Some(ty) = record.declared_type {
                     self.term(ty, context, 0)?;
                 }
+                self.budget
+                    .reserve::<ExpressionId>(usize::from(record.value.is_some()))?;
                 children.extend(record.value);
             }
+            self.budget
+                .reserve::<(ExpressionId, bool)>(children.len())?;
             pending.extend(children.into_iter().map(|child| (child, untaken)));
         }
         Ok(())

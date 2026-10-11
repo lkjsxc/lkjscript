@@ -21,9 +21,14 @@ use std::sync::Arc;
 type Ordinary = BTreeMap<TypeParameterId, TypeObjectDigest>;
 type Witnesses = BTreeMap<ImplementationParameterId, Arc<Selection>>;
 type SelectionKey = (DeclarationReference, Vec<TypeObjectDigest>, Vec<usize>);
+type SelectionIndex = BTreeMap<
+    DeclarationReference,
+    BTreeMap<Vec<TypeObjectDigest>, BTreeMap<Vec<usize>, Arc<Selection>>>,
+>;
+type Assumptions = BTreeMap<TypeParameterId, TypeParameterConstraints>;
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub(super) struct Application {
+pub(in super::super) struct Application {
     pub function: DeclarationReference,
     pub types: Vec<TypeObjectDigest>,
     pub witnesses: Vec<usize>,
@@ -32,14 +37,14 @@ pub(super) struct Application {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct Member {
+pub(in super::super) struct Member {
     pub member: AssociatedTypeMemberId,
     pub template: TypeObjectDigest,
     pub ty: TypeObjectDigest,
 }
 
 #[derive(Debug)]
-pub(super) struct Selection {
+pub(in super::super) struct Selection {
     pub identity: usize,
     pub depth: usize,
     pub implementation: DeclarationReference,
@@ -51,6 +56,9 @@ pub(super) struct Selection {
     pub prerequisite_parameters: Vec<ImplementationParameterId>,
     pub constraints: Vec<TypeParameterConstraints>,
     pub self_type: TypeObjectDigest,
+    pub self_template: TypeObjectDigest,
+    pub contract_argument_templates: Vec<TypeObjectDigest>,
+    pub prerequisite_templates: Vec<ImplementationParameter>,
     pub contract_actuals: Vec<TypeObjectDigest>,
     pub contract_constraints: Vec<TypeParameterConstraints>,
     pub prerequisites: Arc<[Arc<Selection>]>,
@@ -58,27 +66,83 @@ pub(super) struct Selection {
 }
 
 #[derive(Debug)]
-pub(super) struct Function {
+pub(in super::super) struct Function {
+    pub implementation_templates: Vec<ImplementationParameter>,
     pub parameters: Vec<(TypeObjectDigest, ParameterUse)>,
     pub result: TypeObjectDigest,
     pub result_borrow: Option<u32>,
     pub effect: EffectRow,
     pub roots: BTreeMap<(OwnerKey, TypeObjectDigest), TypeObjectDigest>,
     pub targets: BTreeMap<ExpressionId, Application>,
+    pub occurrences: BTreeMap<OwnerKey, u16>,
+    pub symbolic_targets: BTreeMap<ExpressionId, SymbolicTarget>,
+}
+
+// One body traversal populates these four parts of the same canonical function
+// inventory. Group their borrows without allocating or changing source custody.
+struct BodyOutputs<'a> {
+    roots: &'a mut BTreeMap<(OwnerKey, TypeObjectDigest), TypeObjectDigest>,
+    targets: &'a mut BTreeMap<ExpressionId, Application>,
+    occurrences: &'a mut BTreeMap<OwnerKey, u16>,
+    symbolic_targets: &'a mut BTreeMap<ExpressionId, SymbolicTarget>,
 }
 
 #[derive(Debug)]
-pub(super) struct Proof {
+pub(in super::super) struct SymbolicSelection {
+    pub source: SymbolicSelectionSource,
+    pub contract: DeclarationReference,
+    pub self_type: TypeObjectDigest,
+    pub arguments: Vec<TypeObjectDigest>,
+}
+
+#[derive(Debug)]
+pub(in super::super) enum SymbolicSelectionSource {
+    Parameter(DeclarationReference, ImplementationParameterId),
+    Concrete {
+        implementation: DeclarationReference,
+        actuals: Vec<TypeObjectDigest>,
+        prerequisites: Vec<Arc<SymbolicSelection>>,
+        members: Vec<Member>,
+    },
+}
+
+#[derive(Debug)]
+pub(in super::super) struct SymbolicTarget {
+    pub function: Option<DeclarationReference>,
+    pub method: Option<(DeclarationReference, MethodId)>,
+    pub types: Vec<TypeObjectDigest>,
+    pub witnesses: Vec<Arc<SymbolicSelection>>,
+    pub effects: Vec<EffectRow>,
+    pub requirements: Vec<RequirementOperand>,
+}
+
+#[derive(Debug)]
+pub(in super::super) struct Proof {
     pub types: BTreeMap<TypeObjectDigest, TypeObject>,
     pub selections: Vec<Arc<Selection>>,
     pub applications: BTreeMap<Application, Function>,
     pub methods: BTreeMap<(usize, MethodId), Application>,
+    contract_templates: BTreeMap<DeclarationReference, crate::platform::kernel::OwnedContract>,
+    implementation_inventory: BTreeSet<DeclarationReference>,
+    mapping_templates: BTreeMap<
+        (DeclarationReference, MethodId),
+        crate::platform::kernel::OwnedMethodImplementation,
+    >,
+    pub symbolic: BTreeMap<DeclarationReference, Function>,
+    pub contract_methods: BTreeMap<(DeclarationReference, MethodId), Function>,
+    pub executables: BTreeMap<(PackageId, OwnerKey), Function>,
+    selection_index: SelectionIndex,
+    type_identities: BTreeSet<TypeObjectDigest>,
+    pub raw_templates: BTreeSet<TypeObjectDigest>,
+    symbolic_formals: BTreeSet<(DeclarationReference, ImplementationParameterId)>,
+    #[cfg(test)]
+    pub flow_work: crate::platform::kernel::associated_flow_canonical_reference::ReferenceFlowWork,
     pub steps: usize,
     pub bytes: usize,
 }
 
 #[derive(Clone, Copy)]
-pub(super) struct Limits {
+pub(in super::super) struct Limits {
     pub steps: usize,
     pub bytes: usize,
 }
@@ -158,16 +222,19 @@ impl Budget<'_> {
 #[derive(Default)]
 struct Environment {
     scope: Option<DeclarationReference>,
+    source_package: Option<PackageId>,
     generation: u16,
     lexical: bool,
+    symbolic: bool,
     ordinary: Ordinary,
     witnesses: Witnesses,
+    symbolic_witnesses: BTreeMap<ImplementationParameterId, Arc<SymbolicSelection>>,
     contract: Option<Arc<Selection>>,
     effects: reference_effects::Bindings,
     requirements: reference_effects::RequirementBindings,
 }
 
-pub(super) struct Entry<'a> {
+pub(in super::super) struct Entry<'a> {
     pub function: DeclarationReference,
     pub types: &'a [TypeObjectDigest],
     pub implementations: &'a [ImplementationOperand],
@@ -185,6 +252,18 @@ struct Derivation<'a> {
     queued: BTreeSet<Application>,
     applications: BTreeMap<Application, Function>,
     methods: BTreeMap<(usize, MethodId), Application>,
+    contract_templates: BTreeMap<DeclarationReference, crate::platform::kernel::OwnedContract>,
+    implementation_inventory: BTreeSet<DeclarationReference>,
+    mapping_templates: BTreeMap<
+        (DeclarationReference, MethodId),
+        crate::platform::kernel::OwnedMethodImplementation,
+    >,
+    symbolic: BTreeMap<DeclarationReference, Function>,
+    symbolic_formals: BTreeSet<(DeclarationReference, ImplementationParameterId)>,
+    contract_methods: BTreeMap<(DeclarationReference, MethodId), Function>,
+    executables: BTreeMap<(PackageId, OwnerKey), Function>,
+    #[cfg(test)]
+    flow_work: crate::platform::kernel::associated_flow_canonical_reference::ReferenceFlowWork,
 }
 
 fn reject() -> ExecutionError {
@@ -222,6 +301,15 @@ impl<'a> Derivation<'a> {
             queued: BTreeSet::new(),
             applications: BTreeMap::new(),
             methods: BTreeMap::new(),
+            contract_templates: BTreeMap::new(),
+            implementation_inventory: BTreeSet::new(),
+            mapping_templates: BTreeMap::new(),
+            symbolic: BTreeMap::new(),
+            symbolic_formals: BTreeSet::new(),
+            contract_methods: BTreeMap::new(),
+            executables: BTreeMap::new(),
+            #[cfg(test)]
+            flow_work: Default::default(),
         };
         for snapshot in snapshots {
             result.budget.tick()?;
@@ -300,12 +388,6 @@ impl<'a> Derivation<'a> {
                     interface,
                     crate::platform::kernel::PackageInterfaceRecord::Declaration(_)
                 )
-                || crate::platform::kernel::PackageInterfaceRecord::project_public(
-                    &OwnerRecord::Declaration(owner.clone()),
-                )
-                .map_err(|_| reject())?
-                .as_ref()
-                    != Some(interface)
             {
                 return Err(reject());
             }
@@ -409,6 +491,10 @@ impl<'a> Derivation<'a> {
                 {
                     return Err(reject());
                 }
+                if env.symbolic && env.symbolic_witnesses.contains_key(&parameter) {
+                    self.associated_bound(ty)?;
+                    return Ok(ty);
+                }
                 let selection = env.witnesses.get(&parameter).ok_or_else(reject)?;
                 return self.member(selection, contract, member);
             }
@@ -417,6 +503,10 @@ impl<'a> Derivation<'a> {
                     return Err(reject());
                 }
                 self.current(contract, env.generation)?;
+                if env.symbolic {
+                    self.associated_bound(ty)?;
+                    return Ok(ty);
+                }
                 return self.member(env.contract.as_ref().ok_or_else(reject)?, contract, member);
             }
             TypeForm::Applied {
@@ -497,6 +587,9 @@ impl<'a> Derivation<'a> {
 
     fn row(&mut self, row: &EffectRow, env: &Environment) -> Result<EffectRow, ExecutionError> {
         self.budget.tick()?;
+        if env.symbolic {
+            return self.symbolic_row(row, env);
+        }
         reference_effects::close(row, &env.effects, &env.requirements, |count| {
             self.budget.reserve::<RequirementReference>(count)
         })
@@ -594,6 +687,43 @@ impl<'a> Derivation<'a> {
             .collect()
     }
 
+    fn assumptions<'b>(
+        &mut self,
+        scope: DeclarationReference,
+        parameters: impl IntoIterator<Item = &'b TypeParameterId>,
+    ) -> Result<Assumptions, ExecutionError> {
+        let mut result = BTreeMap::new();
+        let mut names = BTreeSet::new();
+        for parameter in parameters {
+            let OwnerRecord::TypeParameter(owner) =
+                self.owner(scope.package, OwnerKey::TypeParameter(*parameter))?
+            else {
+                return Err(reject());
+            };
+            if owner.declaration != scope.declaration
+                || result.contains_key(parameter)
+                || names.contains(&owner.name)
+                || (owner.constraints.has_owned()
+                    && owner.header.contract_version
+                        < crate::platform::kernel::contract::OWNED_GRAPH_CONTRACT_VERSION)
+                || (owner.constraints.requires_transfer()
+                    && owner.header.contract_version
+                        < crate::platform::kernel::contract::TRANSFER_GRAPH_CONTRACT_VERSION)
+                || (owner.constraints.requires_share()
+                    && owner.header.contract_version
+                        < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION)
+            {
+                return Err(reject());
+            }
+            self.budget
+                .node::<(TypeParameterId, TypeParameterConstraints)>()?;
+            self.budget.node::<&crate::platform::kernel::Name>()?;
+            result.insert(*parameter, owner.constraints);
+            names.insert(&owner.name);
+        }
+        Ok(result)
+    }
+
     fn witness_bindings(
         &mut self,
         scope: DeclarationReference,
@@ -688,7 +818,13 @@ impl<'a> Derivation<'a> {
             }
             return Ok(Arc::clone(selected));
         };
-        let owner = self.declaration(*implementation, caller.scope.map(|scope| scope.package))?;
+        let owner = self.declaration(
+            *implementation,
+            caller
+                .scope
+                .map(|scope| scope.package)
+                .or(caller.source_package),
+        )?;
         let DeclarationPayload::OwnedImplementation(scheme) = &owner.payload else {
             return Err(reject());
         };
@@ -807,6 +943,16 @@ impl<'a> Derivation<'a> {
             .collect();
         let constraints = self.constraints(*implementation, &parameters)?;
         let contract_constraints = self.constraints(scheme.contract, &contract.type_parameters)?;
+        self.budget
+            .reserve::<TypeObjectDigest>(scheme.type_arguments.len())?;
+        self.budget
+            .reserve::<ImplementationParameter>(scheme.implementation_parameters.len())?;
+        for formal in &scheme.implementation_parameters {
+            self.budget.tick()?;
+            self.budget.reserve::<u8>(formal.name.as_str().len())?;
+            self.budget
+                .reserve::<TypeObjectDigest>(formal.type_arguments.len())?;
+        }
         let selected = Arc::new(Selection {
             identity: self.selections.len(),
             depth: subtree_depth,
@@ -814,6 +960,9 @@ impl<'a> Derivation<'a> {
             contract: scheme.contract,
             actuals,
             self_type,
+            self_template: scheme.self_type,
+            contract_argument_templates: scheme.type_arguments.clone(),
+            prerequisite_templates: scheme.implementation_parameters.clone(),
             implementation_generation: owner.header.contract_version,
             contract_generation: contract_owner.header.contract_version,
             parameters,
@@ -858,6 +1007,7 @@ impl<'a> Derivation<'a> {
                 return Err(reject());
             }
         }
+        let assumptions = self.assumptions(implementation, &scheme.type_parameters)?;
         let mut previous = None;
         for binding in &scheme.associated_types {
             self.budget.tick()?;
@@ -868,6 +1018,9 @@ impl<'a> Derivation<'a> {
             }
             previous = Some(binding.member);
             self.stored(binding.ty, implementation, &scheme.type_parameters, 0)?;
+            if !self.classify_scoped(binding.ty, false, 0, &mut BTreeSet::new(), &assumptions)? {
+                return Err(reject());
+            }
         }
         if !members.is_empty() {
             return Err(reject());
@@ -920,6 +1073,17 @@ impl<'a> Derivation<'a> {
         depth: usize,
         active: &mut BTreeSet<TypeObjectDigest>,
     ) -> Result<bool, ExecutionError> {
+        self.classify_scoped(ty, data, depth, active, &Assumptions::new())
+    }
+
+    fn classify_scoped(
+        &mut self,
+        ty: TypeObjectDigest,
+        data: bool,
+        depth: usize,
+        active: &mut BTreeSet<TypeObjectDigest>,
+        assumptions: &Assumptions,
+    ) -> Result<bool, ExecutionError> {
         self.budget.tick()?;
         if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
             return Err(capacity());
@@ -928,14 +1092,25 @@ impl<'a> Derivation<'a> {
         self.budget.object(object)?;
         let form = object.form.clone();
         match form {
-            TypeForm::TypeParameter { .. }
-            | TypeForm::AssociatedContractMember { .. }
+            TypeForm::TypeParameter { parameter } => assumptions
+                .get(&parameter)
+                .map(|constraints| constraints.has_owned())
+                .ok_or_else(reject),
+            TypeForm::AssociatedContractMember { .. }
+            | TypeForm::AssociatedWitnessProjection { .. }
+                if !assumptions.is_empty() =>
+            {
+                self.associated_bound(ty)?;
+                Ok(true)
+            }
+            TypeForm::AssociatedContractMember { .. }
             | TypeForm::AssociatedWitnessProjection { .. } => Err(reject()),
             TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Ok(true),
             TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {
                 let mut owned = false;
                 for field in fields {
-                    owned |= self.classify(field.ty, true, depth + 1, active)?;
+                    owned |=
+                        self.classify_scoped(field.ty, true, depth + 1, active, assumptions)?;
                 }
                 if !owned {
                     return Err(reject());
@@ -943,14 +1118,16 @@ impl<'a> Derivation<'a> {
                 Ok(true)
             }
             TypeForm::OwnedSequence { item } => {
-                self.classify(item, true, depth + 1, active)?;
+                self.classify_scoped(item, true, depth + 1, active, assumptions)?;
                 Ok(true)
             }
-            TypeForm::Named { declaration } => self.nominal(ty, declaration, &[], depth, active),
+            TypeForm::Named { declaration } => {
+                self.nominal(ty, declaration, &[], depth, active, assumptions)
+            }
             TypeForm::Applied {
                 declaration,
                 arguments,
-            } => self.nominal(ty, declaration, &arguments, depth, active),
+            } => self.nominal(ty, declaration, &arguments, depth, active, assumptions),
             TypeForm::Function { parameters, result }
             | TypeForm::TaskFunction {
                 parameters, result, ..
@@ -959,9 +1136,9 @@ impl<'a> Derivation<'a> {
                     return Err(reject());
                 }
                 for parameter in parameters {
-                    self.classify(parameter, false, depth + 1, active)?;
+                    self.classify_scoped(parameter, false, depth + 1, active, assumptions)?;
                 }
-                self.classify(result, false, depth + 1, active)?;
+                self.classify_scoped(result, false, depth + 1, active, assumptions)?;
                 Ok(false)
             }
             TypeForm::Secret | TypeForm::Stream { .. } | TypeForm::CapabilityResource { .. }
@@ -975,7 +1152,7 @@ impl<'a> Derivation<'a> {
                     .reserve::<TypeObjectDigest>(object.child_type_count())?;
                 let children = object.child_types();
                 for child in children {
-                    if self.classify(child, data, depth + 1, active)? {
+                    if self.classify_scoped(child, data, depth + 1, active, assumptions)? {
                         return Err(reject());
                     }
                 }
@@ -991,6 +1168,7 @@ impl<'a> Derivation<'a> {
         arguments: &[TypeObjectDigest],
         depth: usize,
         active: &mut BTreeSet<TypeObjectDigest>,
+        assumptions: &Assumptions,
     ) -> Result<bool, ExecutionError> {
         // Private layout evidence is read in the nominal declaration's own
         // context. It supplies no authored field access to any function.
@@ -1033,7 +1211,8 @@ impl<'a> Derivation<'a> {
             if parameter.declaration != reference.declaration || ordinary.contains_key(formal) {
                 return Err(reject());
             }
-            let actual_owned = self.classify(*actual, false, depth + 1, active)?;
+            let actual_owned =
+                self.classify_scoped(*actual, false, depth + 1, active, assumptions)?;
             if actual_owned != parameter.constraints.has_owned() {
                 return Err(reject());
             }
@@ -1044,6 +1223,7 @@ impl<'a> Derivation<'a> {
             scope: Some(reference),
             generation: owner.header.contract_version,
             ordinary,
+            symbolic: !assumptions.is_empty(),
             ..Environment::default()
         };
         for field in fields {
@@ -1057,7 +1237,7 @@ impl<'a> Derivation<'a> {
             }
             env.generation = field.header.contract_version;
             let field = self.ty(field.ty, &env, 0)?;
-            if self.classify(field, true, depth + 1, active)? && !owned {
+            if self.classify_scoped(field, true, depth + 1, active, assumptions)? && !owned {
                 return Err(reject());
             }
         }
@@ -1072,7 +1252,7 @@ impl<'a> Derivation<'a> {
             if let Some(payload) = case.payload {
                 env.generation = case.header.contract_version;
                 let payload = self.ty(payload, &env, 0)?;
-                if self.classify(payload, true, depth + 1, active)? {
+                if self.classify_scoped(payload, true, depth + 1, active, assumptions)? {
                     return Err(reject());
                 }
             }
@@ -1243,6 +1423,27 @@ impl<'a> Derivation<'a> {
         Ok(actual)
     }
 
+    pub(super) fn implementation_templates(
+        &mut self,
+        scope: DeclarationReference,
+    ) -> Result<Vec<ImplementationParameter>, ExecutionError> {
+        let owner = self.declaration(scope, None)?;
+        let formals = match &owner.payload {
+            DeclarationPayload::Function(function) => &function.implementation_parameters[..],
+            DeclarationPayload::External(_) => &[],
+            _ => return Err(reject()),
+        };
+        self.budget
+            .reserve::<ImplementationParameter>(formals.len())?;
+        for formal in formals {
+            self.budget.tick()?;
+            self.budget.reserve::<u8>(formal.name.as_str().len())?;
+            self.budget
+                .reserve::<TypeObjectDigest>(formal.type_arguments.len())?;
+        }
+        Ok(formals.to_vec())
+    }
+
     fn function(&mut self, application: &Application) -> Result<Function, ExecutionError> {
         let owner = self.declaration(application.function, None)?;
         let (parameters, result, result_borrow, effect, body) = match &owner.payload {
@@ -1265,6 +1466,12 @@ impl<'a> Derivation<'a> {
         let mut env = self.environment(application)?;
         let effect = self.row(&effect, &env)?;
         let mut roots = BTreeMap::new();
+        let mut occurrences = BTreeMap::new();
+        self.occurrence(
+            &mut occurrences,
+            application.function.package,
+            OwnerKey::Declaration(application.function.declaration),
+        )?;
         let result = self.root(
             &mut roots,
             OwnerKey::Declaration(application.function.declaration),
@@ -1275,6 +1482,11 @@ impl<'a> Derivation<'a> {
             .reserve::<(TypeObjectDigest, ParameterUse)>(parameters.len())?;
         let mut actual_parameters = Vec::new();
         for parameter in parameters {
+            self.occurrence(
+                &mut occurrences,
+                application.function.package,
+                OwnerKey::Parameter(*parameter),
+            )?;
             let OwnerRecord::Parameter(record) = self.owner(
                 application.function.package,
                 OwnerKey::Parameter(*parameter),
@@ -1288,6 +1500,13 @@ impl<'a> Derivation<'a> {
             env.generation = record.header.contract_version;
             // The same signature type has a separate parameter-owner occurrence.
             let ty = self.root(&mut roots, OwnerKey::Parameter(*parameter), record.ty, &env)?;
+            env.generation = owner.header.contract_version;
+            self.root(
+                &mut roots,
+                OwnerKey::Declaration(application.function.declaration),
+                record.ty,
+                &env,
+            )?;
             actual_parameters.push((ty, record.use_mode));
         }
         let source = result_borrow
@@ -1300,27 +1519,47 @@ impl<'a> Derivation<'a> {
             })
             .transpose()?;
         let mut targets = BTreeMap::new();
+        let mut symbolic_targets = BTreeMap::new();
         if let Some(body) = body {
-            self.body(body, &mut env, &mut roots, &mut targets)?;
+            self.body(
+                application.function.package,
+                body,
+                &mut env,
+                BodyOutputs {
+                    roots: &mut roots,
+                    targets: &mut targets,
+                    occurrences: &mut occurrences,
+                    symbolic_targets: &mut symbolic_targets,
+                },
+            )?;
         }
         Ok(Function {
+            implementation_templates: self.implementation_templates(application.function)?,
             parameters: actual_parameters,
             result,
             result_borrow: source,
             effect,
             roots,
             targets,
+            occurrences,
+            symbolic_targets,
         })
     }
 
     fn body(
         &mut self,
+        package: PackageId,
         root: ExpressionId,
         env: &mut Environment,
-        roots: &mut BTreeMap<(OwnerKey, TypeObjectDigest), TypeObjectDigest>,
-        targets: &mut BTreeMap<ExpressionId, Application>,
+        outputs: BodyOutputs<'_>,
     ) -> Result<(), ExecutionError> {
-        let scope = env.scope.ok_or_else(reject)?;
+        let BodyOutputs {
+            roots,
+            targets,
+            occurrences,
+            symbolic_targets,
+        } = outputs;
+        env.source_package = Some(package);
         self.budget.reserve::<ExpressionId>(1)?;
         let mut pending = vec![root];
         let mut visited = BTreeSet::new();
@@ -1331,8 +1570,8 @@ impl<'a> Derivation<'a> {
             }
             self.budget.node::<ExpressionId>()?;
             visited.insert(id);
-            let OwnerRecord::Expression(record) =
-                self.owner(scope.package, OwnerKey::Expression(id))?
+            self.occurrence(occurrences, package, OwnerKey::Expression(id))?;
+            let OwnerRecord::Expression(record) = self.owner(package, OwnerKey::Expression(id))?
             else {
                 return Err(reject());
             };
@@ -1391,8 +1630,10 @@ impl<'a> Derivation<'a> {
                             OwnerKey::Binding(*binding)
                         }
                     };
-                    let local = self.owner(scope.package, key)?;
+                    self.occurrence(occurrences, package, key)?;
+                    let local = self.owner(package, key)?;
                     if let LocalValueReference::FunctionParameter(parameter) = value {
+                        let scope = env.scope.ok_or_else(reject)?;
                         let OwnerRecord::Parameter(parameter_owner) = local else {
                             return Err(reject());
                         };
@@ -1425,10 +1666,11 @@ impl<'a> Derivation<'a> {
             };
             for binding in bindings {
                 let OwnerRecord::Binding(record) =
-                    self.owner(scope.package, OwnerKey::Binding(binding))?
+                    self.owner(package, OwnerKey::Binding(binding))?
                 else {
                     return Err(reject());
                 };
+                self.occurrence(occurrences, package, OwnerKey::Binding(binding))?;
                 env.generation = record.header.contract_version;
                 if let Some(ty) = record.declared_type {
                     self.root(roots, OwnerKey::Binding(binding), ty, env)?;
@@ -1439,7 +1681,17 @@ impl<'a> Derivation<'a> {
                 }
             }
             env.generation = record.contract_version;
+            let symbolic = if env.symbolic {
+                self.symbolic_target(&record.operation, env)?
+            } else {
+                None
+            };
+            if let Some(target) = symbolic {
+                self.budget.node::<(ExpressionId, SymbolicTarget)>()?;
+                symbolic_targets.insert(id, target);
+            }
             let target = match &record.operation {
+                _ if env.symbolic => None,
                 ExpressionOperation::Call {
                     function,
                     type_arguments,
@@ -1490,6 +1742,12 @@ impl<'a> Derivation<'a> {
                 _ => None,
             };
             if let Some(target) = target {
+                if self.associated_function(target.function)?
+                    && record.contract_version
+                        != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+                {
+                    return Err(reject());
+                }
                 self.budget.node::<(ExpressionId, Application)>()?;
                 self.charge_application(&target)?;
                 targets.insert(id, target);
@@ -1504,6 +1762,85 @@ impl<'a> Derivation<'a> {
         Ok(())
     }
 
+    fn occurrence(
+        &mut self,
+        occurrences: &mut BTreeMap<OwnerKey, u16>,
+        package: PackageId,
+        key: OwnerKey,
+    ) -> Result<(), ExecutionError> {
+        let version = self.owner(package, key)?.header().contract_version;
+        if let std::collections::btree_map::Entry::Vacant(entry) = occurrences.entry(key) {
+            self.budget.node::<(OwnerKey, u16)>()?;
+            entry.insert(version);
+        } else if occurrences.get(&key) != Some(&version) {
+            return Err(reject());
+        }
+        Ok(())
+    }
+
+    fn associated_function(
+        &mut self,
+        function: DeclarationReference,
+    ) -> Result<bool, ExecutionError> {
+        let reference = function;
+        let owner = self.declaration(reference, None)?;
+        let (parameters, result, implementations) = match &owner.payload {
+            DeclarationPayload::Function(function) => (
+                function.parameters.as_slice(),
+                function.result,
+                function.implementation_parameters.as_slice(),
+            ),
+            DeclarationPayload::External(function) => {
+                (function.parameters.as_slice(), function.result, &[][..])
+            }
+            _ => return Err(reject()),
+        };
+        if self.associated_type(result, 0)? {
+            return Ok(true);
+        }
+        for parameter in parameters {
+            let OwnerRecord::Parameter(parameter) =
+                self.owner(reference.package, OwnerKey::Parameter(*parameter))?
+            else {
+                return Err(reject());
+            };
+            if self.associated_type(parameter.ty, 0)? {
+                return Ok(true);
+            }
+        }
+        for parameter in implementations {
+            let contract = self.declaration(parameter.contract, Some(reference.package))?;
+            if matches!(&contract.payload, DeclarationPayload::OwnedContract(contract) if !contract.associated_types.is_empty())
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    fn associated_type(
+        &mut self,
+        ty: TypeObjectDigest,
+        depth: usize,
+    ) -> Result<bool, ExecutionError> {
+        self.budget.tick()?;
+        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+            return Err(capacity());
+        }
+        let object = self.types.get(&ty).ok_or_else(reject)?;
+        if object.form.is_associated() {
+            return Ok(true);
+        }
+        self.budget
+            .reserve::<TypeObjectDigest>(object.child_type_count())?;
+        for child in object.child_types() {
+            if self.associated_type(child, depth + 1)? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     fn call(
         &mut self,
         function: DeclarationReference,
@@ -1513,7 +1850,13 @@ impl<'a> Derivation<'a> {
         requirements: &[RequirementOperand],
         caller: &Environment,
     ) -> Result<Application, ExecutionError> {
-        self.declaration(function, caller.scope.map(|scope| scope.package))?;
+        self.declaration(
+            function,
+            caller
+                .scope
+                .map(|scope| scope.package)
+                .or(caller.source_package),
+        )?;
         self.budget.reserve::<TypeObjectDigest>(types.len())?;
         let types = types
             .iter()
@@ -1730,32 +2073,100 @@ impl<'a> Derivation<'a> {
             self.budget.node::<(Application, Function)>()?;
             self.applications.insert(application, function);
         }
-        let result = Proof {
+        self.budget.reserve::<TypeObjectDigest>(self.types.len())?;
+        let inventory = self.types.keys().copied().collect::<Vec<_>>();
+        let mut raw_templates = BTreeSet::new();
+        for ty in inventory {
+            if self.associated_type(ty, 0)? {
+                self.budget.node::<TypeObjectDigest>()?;
+                raw_templates.insert(ty);
+            }
+        }
+        let mut selection_index: SelectionIndex = BTreeMap::new();
+        for ((implementation, actuals, prerequisites), selected) in self.interned {
+            self.budget.tick()?;
+            if !selection_index.contains_key(&implementation) {
+                self.budget.node::<(
+                    DeclarationReference,
+                    BTreeMap<Vec<TypeObjectDigest>, BTreeMap<Vec<usize>, Arc<Selection>>>,
+                )>()?;
+            }
+            if !selection_index
+                .get(&implementation)
+                .is_some_and(|actuals_index| actuals_index.contains_key(&actuals))
+            {
+                self.budget
+                    .node::<(Vec<TypeObjectDigest>, BTreeMap<Vec<usize>, Arc<Selection>>)>()?;
+            }
+            self.budget.node::<(Vec<usize>, Arc<Selection>)>()?;
+            selection_index
+                .entry(implementation)
+                .or_default()
+                .entry(actuals)
+                .or_default()
+                .insert(prerequisites, selected);
+        }
+        let mut type_identities = BTreeSet::new();
+        for ty in self.types.keys() {
+            self.budget.tick()?;
+            self.budget.node::<TypeObjectDigest>()?;
+            type_identities.insert(*ty);
+        }
+        let mut result = Proof {
             types: self.types,
             selections: self.selections,
             applications: self.applications,
             methods: self.methods,
+            contract_templates: self.contract_templates,
+            implementation_inventory: self.implementation_inventory,
+            mapping_templates: self.mapping_templates,
+            symbolic: self.symbolic,
+            contract_methods: self.contract_methods,
+            executables: self.executables,
+            selection_index,
+            type_identities,
+            raw_templates,
+            symbolic_formals: self.symbolic_formals,
+            #[cfg(test)]
+            flow_work: self.flow_work,
             steps: self.budget.steps,
             bytes: self.budget.bytes,
         };
-        result.closed(self.budget.control)?;
+        result.closed(self.budget.limits, self.budget.control)?;
         Ok(result)
     }
 }
 
 impl Proof {
-    fn closed(&self, control: &ExecutionControl) -> Result<(), ExecutionError> {
-        control.check()?;
+    fn contains_type(&self, ty: &TypeObjectDigest) -> bool {
+        self.type_identities.contains(ty)
+    }
+
+    pub(super) fn take_types(&mut self) -> BTreeMap<TypeObjectDigest, TypeObject> {
+        std::mem::take(&mut self.types)
+    }
+
+    fn closed(&mut self, limits: Limits, control: &ExecutionControl) -> Result<(), ExecutionError> {
+        let mut budget = Budget {
+            steps: self.steps,
+            bytes: self.bytes,
+            limits,
+            control,
+        };
+        budget.tick()?;
         if self.steps == 0 || self.bytes == 0 {
             return Err(reject());
         }
         for selection in &self.selections {
-            control.check()?;
+            budget.tick()?;
             if selection.identity >= self.selections.len()
                 || selection.depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
                 || selection.parameters.len() != selection.actuals.len()
                 || selection.constraints.len() != selection.actuals.len()
                 || selection.prerequisite_parameters.len() != selection.prerequisites.len()
+                || selection.prerequisite_templates.len() != selection.prerequisites.len()
+                || selection.contract_argument_templates.len() != selection.contract_actuals.len()
+                || !self.contains_type(&selection.self_template)
                 || (!selection.members.is_empty()
                     && (selection.implementation_generation
                         != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
@@ -1767,10 +2178,9 @@ impl Proof {
                     .iter()
                     .chain(&selection.contract_actuals)
                     .chain([&selection.self_type])
-                    .any(|ty| !self.types.contains_key(ty))
+                    .any(|ty| !self.contains_type(ty))
                 || selection.members.iter().any(|member| {
-                    !self.types.contains_key(&member.template)
-                        || !self.types.contains_key(&member.ty)
+                    !self.contains_type(&member.template) || !self.contains_type(&member.ty)
                 })
                 || selection
                     .prerequisites
@@ -1781,24 +2191,21 @@ impl Proof {
             }
         }
         for (application, function) in &self.applications {
-            control.check()?;
+            budget.tick()?;
             if application
                 .witnesses
                 .iter()
                 .any(|id| *id >= self.selections.len())
-                || !self.types.contains_key(&function.result)
+                || !self.contains_type(&function.result)
                 || function
                     .parameters
                     .iter()
-                    .any(|(ty, _)| !self.types.contains_key(ty))
+                    .any(|(ty, _)| !self.contains_type(ty))
                 || function
                     .result_borrow
                     .is_some_and(|source| source as usize >= function.parameters.len())
                 || !function.effect.is_closed()
-                || function
-                    .roots
-                    .values()
-                    .any(|ty| !self.types.contains_key(ty))
+                || function.roots.values().any(|ty| !self.contains_type(ty))
                 || function
                     .targets
                     .values()
@@ -1808,9 +2215,140 @@ impl Proof {
             }
         }
         for ((selection, _), target) in &self.methods {
-            control.check()?;
+            budget.tick()?;
             if *selection >= self.selections.len() || !self.applications.contains_key(target) {
                 return Err(reject());
+            }
+        }
+        for function in self
+            .symbolic
+            .values()
+            .chain(self.contract_methods.values())
+            .chain(self.executables.values())
+        {
+            budget.tick()?;
+            if !self.contains_type(&function.result)
+                || function
+                    .result_borrow
+                    .is_some_and(|position| position as usize >= function.parameters.len())
+            {
+                return Err(reject());
+            }
+            for (ty, _) in &function.parameters {
+                budget.tick()?;
+                if !self.contains_type(ty) {
+                    return Err(reject());
+                }
+            }
+            for ((owner, raw), closed) in &function.roots {
+                budget.tick()?;
+                if !function.occurrences.contains_key(owner)
+                    || !self.contains_type(raw)
+                    || !self.contains_type(closed)
+                {
+                    return Err(reject());
+                }
+            }
+            for (expression, target) in &function.symbolic_targets {
+                budget.tick()?;
+                if !function
+                    .occurrences
+                    .contains_key(&OwnerKey::Expression(*expression))
+                    || target.function.is_some() == target.method.is_some()
+                {
+                    return Err(reject());
+                }
+                if let Some(function) = target.function
+                    && !self.symbolic.contains_key(&function)
+                {
+                    return Err(reject());
+                }
+                if let Some((contract, method)) = target.method
+                    && !self.contract_methods.contains_key(&(contract, method))
+                {
+                    return Err(reject());
+                }
+                for ty in &target.types {
+                    budget.tick()?;
+                    if !self.contains_type(ty) {
+                        return Err(reject());
+                    }
+                }
+                for selected in &target.witnesses {
+                    self.symbolic_selection(selected, &mut budget, 0)?;
+                }
+                for row in &target.effects {
+                    budget.tick()?;
+                    row.validate().map_err(|_| reject())?;
+                }
+                for requirement in &target.requirements {
+                    budget.tick()?;
+                    match requirement {
+                        RequirementOperand::Concrete(_) | RequirementOperand::Parameter(_) => {}
+                    }
+                }
+            }
+            for target in function.targets.values() {
+                budget.tick()?;
+                if !self.applications.contains_key(target) {
+                    return Err(reject());
+                }
+            }
+        }
+        self.steps = budget.steps;
+        Ok(())
+    }
+
+    fn symbolic_selection(
+        &self,
+        selection: &SymbolicSelection,
+        budget: &mut Budget<'_>,
+        depth: usize,
+    ) -> Result<(), ExecutionError> {
+        budget.tick()?;
+        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
+            || !self.contains_type(&selection.self_type)
+        {
+            return Err(reject());
+        }
+        for actual in &selection.arguments {
+            budget.tick()?;
+            if !self.contains_type(actual) {
+                return Err(reject());
+            }
+        }
+        match &selection.source {
+            SymbolicSelectionSource::Parameter(scope, parameter) => {
+                if !self.symbolic_formals.contains(&(*scope, *parameter)) {
+                    return Err(reject());
+                }
+            }
+            SymbolicSelectionSource::Concrete {
+                implementation,
+                actuals,
+                prerequisites,
+                members,
+            } => {
+                if !self.implementation_inventory.contains(implementation)
+                    || !self.contract_templates.contains_key(&selection.contract)
+                {
+                    return Err(reject());
+                }
+                for actual in actuals {
+                    budget.tick()?;
+                    if !self.contains_type(actual) {
+                        return Err(reject());
+                    }
+                }
+                for member in members {
+                    budget.tick()?;
+                    if !self.contains_type(&member.template) || !self.contains_type(&member.ty) {
+                        return Err(reject());
+                    }
+                }
+                for child in prerequisites {
+                    self.symbolic_selection(child, budget, depth + 1)?;
+                }
             }
         }
         Ok(())
@@ -1822,7 +2360,7 @@ impl Proof {
     /// Compare a producer selection with independently derived canonical meaning.
     /// Catalogue membership is checked before memo reuse, so a second node cannot
     /// borrow an equal numeric identity to evade complete child comparison.
-    fn compare_selection(
+    pub(in super::super) fn compare_selection(
         &self,
         expected: &Selection,
         actual: &super::super::prepare::NormalizedImplementationArgument,
@@ -1894,42 +2432,81 @@ impl Proof {
     }
 }
 
-pub(super) fn derive<'a>(
+#[path = "reference_associated_context.rs"]
+mod context;
+
+#[path = "reference_associated_inventory.rs"]
+mod inventory;
+
+pub(in super::super) fn derive<'a>(
     snapshots: &[&'a KernelSnapshot],
     entries: &[Entry<'_>],
     limits: Limits,
     control: &'a ExecutionControl,
 ) -> Result<Proof, ExecutionError> {
     let mut derivation = Derivation::new(snapshots, limits, control)?;
+    let maximum = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
+    let offset = maximum.saturating_sub(limits.steps);
+    let mut supplier_work = offset
+        .checked_add(derivation.budget.steps)
+        .ok_or_else(capacity)?;
+    super::super::reference_schema::bind_associated_dependencies(
+        snapshots,
+        control,
+        &mut supplier_work,
+    )?;
+    derivation.budget.steps = supplier_work.checked_sub(offset).ok_or_else(capacity)?;
+    if derivation.budget.steps > limits.steps {
+        return Err(capacity());
+    }
+    for snapshot in snapshots {
+        for (ty, object) in snapshot.types.iter().chain(&snapshot.dependency_types) {
+            derivation.budget.tick()?;
+            if object.form.is_associated() {
+                derivation.associated_bound(*ty)?;
+            }
+        }
+    }
     for snapshot in snapshots {
         for (key, owner) in &snapshot.owners {
             derivation.budget.tick()?;
-            let (OwnerKey::Declaration(id), OwnerRecord::Declaration(owner)) = (key, owner) else {
+            let (OwnerKey::Declaration(id), OwnerRecord::Declaration(declaration)) = (key, owner)
+            else {
+                if matches!(owner, OwnerRecord::Port(_)) {
+                    derivation.executable_inventory(snapshot.root.package_id, *key, owner)?;
+                }
                 continue;
             };
             let reference = DeclarationReference {
                 package: snapshot.root.package_id,
                 declaration: *id,
             };
-            match &owner.payload {
+            match &declaration.payload {
                 DeclarationPayload::OwnedImplementation(scheme) => {
-                    derivation.inventory(reference, scheme)?
+                    derivation.budget.node::<DeclarationReference>()?;
+                    derivation.implementation_inventory.insert(reference);
+                    derivation.inventory(reference, scheme)?;
+                    derivation.mapping_inventory(reference, scheme)?;
                 }
-                DeclarationPayload::Function(function)
+                DeclarationPayload::Function(function) => {
+                    derivation.symbolic_inventory(reference)?;
                     if function.type_parameters.is_empty()
                         && function.implementation_parameters.is_empty()
                         && function.effect_parameters.is_empty()
-                        && function.requirement_parameters.is_empty() =>
-                {
-                    derivation.enqueue(
-                        reference,
-                        Vec::new(),
-                        Vec::new(),
-                        Vec::new(),
-                        Vec::new(),
-                    )?;
+                        && function.requirement_parameters.is_empty()
+                    {
+                        derivation.enqueue(
+                            reference,
+                            Vec::new(),
+                            Vec::new(),
+                            Vec::new(),
+                            Vec::new(),
+                        )?;
+                    }
                 }
-                _ => {}
+                DeclarationPayload::External(_) => derivation.symbolic_inventory(reference)?,
+                DeclarationPayload::OwnedContract(_) => derivation.contract_inventory(reference)?,
+                _ => derivation.executable_inventory(snapshot.root.package_id, *key, owner)?,
             }
         }
     }
@@ -1969,6 +2546,34 @@ pub(super) fn derive<'a>(
             entry.requirements.to_vec(),
         )?;
     }
+    // Raw inventories and symbolic obligations precede the independent growth
+    // verdict. No concrete application/mapping body is enumerated before it.
+    let mut work = derivation.budget.steps;
+    let flow = crate::platform::kernel::associated_flow_canonical_reference::validate(
+        snapshots,
+        control,
+        &mut work,
+        limits.steps,
+    )
+    .map_err(|error| {
+        let class = match error.class {
+            crate::platform::diagnostic::DiagnosticClass::Cancelled => {
+                ExecutionFailureClass::Cancelled
+            }
+            crate::platform::diagnostic::DiagnosticClass::Resource => {
+                ExecutionFailureClass::Resource
+            }
+            crate::platform::diagnostic::DiagnosticClass::Semantic => ExecutionFailureClass::Trap,
+            _ => ExecutionFailureClass::Infrastructure,
+        };
+        ExecutionError::new(class, error.code, error.message)
+    })?;
+    derivation.budget.steps = work;
+    derivation.budget.reserve::<u8>(flow.metadata_bytes)?;
+    #[cfg(test)]
+    {
+        derivation.flow_work = flow;
+    }
     derivation.finish()
 }
 
@@ -1977,11 +2582,19 @@ pub(super) fn derive<'a>(
 /// an empty executable entry set or by a member not being requested.
 pub(super) fn check_inventory(
     snapshots: &[&KernelSnapshot],
+    limits: Limits,
     control: &ExecutionControl,
-) -> Result<(), ExecutionError> {
-    derive(snapshots, &[], Limits::default(), control)?.closed(control)
+) -> Result<Proof, ExecutionError> {
+    derive(snapshots, &[], limits, control)
 }
 
 #[cfg(test)]
 #[path = "reference_associated_preparation_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+pub(in super::super) mod test_support {
+    pub(in super::super::super) use super::tests::{
+        Fixture, base_source, make_fixture, operand, prove,
+    };
+}

@@ -35,17 +35,17 @@ declarations.begin
 declarations.end
 "#;
 
-struct Fixture {
-    source: KernelSnapshot,
-    contract: DeclarationReference,
-    consumer: DeclarationReference,
-    reader: DeclarationReference,
-    implementations: [DeclarationReference; 3],
-    member: AssociatedTypeMemberId,
-    spare: AssociatedTypeMemberId,
-    cell: TypeObjectDigest,
-    block: TypeObjectDigest,
-    projection: TypeObjectDigest,
+pub(in super::super::super) struct Fixture {
+    pub(in super::super::super) source: KernelSnapshot,
+    pub(in super::super::super) contract: DeclarationReference,
+    pub(in super::super::super) consumer: DeclarationReference,
+    pub(in super::super::super) reader: DeclarationReference,
+    pub(in super::super::super) implementations: [DeclarationReference; 3],
+    pub(in super::super::super) member: AssociatedTypeMemberId,
+    pub(in super::super::super) spare: AssociatedTypeMemberId,
+    pub(in super::super::super) cell: TypeObjectDigest,
+    pub(in super::super::super) block: TypeObjectDigest,
+    pub(in super::super::super) projection: TypeObjectDigest,
 }
 fn name(value: &str) -> Name {
     Name::new(value).unwrap()
@@ -83,10 +83,11 @@ fn add(source: &mut KernelSnapshot, form: TypeForm) -> TypeObjectDigest {
     source.types.insert(ty, object);
     ty
 }
-fn make_fixture() -> Fixture {
-    let mut source =
-        crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(SOURCE)
-            .unwrap();
+pub(in super::super::super) fn base_source() -> KernelSnapshot {
+    crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(SOURCE).unwrap()
+}
+pub(in super::super::super) fn make_fixture() -> Fixture {
+    let mut source = base_source();
     let contract = named(&source, "Read");
     let consumer = named(&source, "consumer");
     let reader = named(&source, "read");
@@ -223,14 +224,14 @@ fn make_fixture() -> Fixture {
         projection,
     }
 }
-fn operand(fixture: &Fixture, index: usize) -> ImplementationOperand {
+pub(in super::super::super) fn operand(fixture: &Fixture, index: usize) -> ImplementationOperand {
     ImplementationOperand::Concrete {
         implementation: fixture.implementations[index],
         type_arguments: vec![fixture.cell],
         implementations: vec![],
     }
 }
-fn prove(
+pub(in super::super::super) fn prove(
     fixture: &Fixture,
     indexes: &[usize],
     limits: Limits,
@@ -998,4 +999,303 @@ fn canonical_associated_preparation_closes_untaken_containers_and_both_call_lane
             vec![expected_sequence, expected_product, expected_choice]
         );
     }
+}
+
+#[test]
+fn canonical_associated_schema_private_core_moves_types_and_excludes_raw_ancestors() {
+    let mut fixture = make_fixture();
+    let unit = add(&mut fixture.source, TypeForm::Unit);
+    let raw_function = add(
+        &mut fixture.source,
+        TypeForm::Function {
+            parameters: vec![fixture.projection],
+            result: unit,
+        },
+    );
+    let raw_task = add(
+        &mut fixture.source,
+        TypeForm::TaskFunction {
+            parameters: vec![],
+            result: fixture.projection,
+            effect: EffectRow::default(),
+        },
+    );
+    let raw_list = add(&mut fixture.source, TypeForm::List { item: raw_function });
+    let OwnerRecord::Declaration(declaration) =
+        &fixture.source.owners[&OwnerKey::Declaration(fixture.consumer.declaration)]
+    else {
+        unreachable!()
+    };
+    let DeclarationPayload::Function(function) = &declaration.payload else {
+        unreachable!()
+    };
+    let ordinary_parameter = function.type_parameters[0];
+    let ordinary_formal = add(
+        &mut fixture.source,
+        TypeForm::TypeParameter {
+            parameter: ordinary_parameter,
+        },
+    );
+    let ordinary_callable = add(
+        &mut fixture.source,
+        TypeForm::Function {
+            parameters: vec![ordinary_formal],
+            result: unit,
+        },
+    );
+    let control = ExecutionControl::uncancelled();
+    let proof = prove(&fixture, &[0, 1, 2], Limits::default(), &control).unwrap();
+    let schema =
+        super::super::associated_schema_fixture(&[&fixture.source], proof, &control).unwrap();
+    assert!(schema.associated_proof().unwrap().types.is_empty());
+    assert!(schema.types.contains_key(&fixture.block));
+    for raw in [fixture.projection, raw_function, raw_task, raw_list] {
+        for property in [
+            &schema.buffer_free_types,
+            &schema.capture_safe_types,
+            &schema.transferable_types,
+            &schema.shareable_types,
+            &schema.ordinary_types,
+            &schema.comparable_types,
+            &schema.application_free_types,
+        ] {
+            assert!(!property.contains(&raw));
+        }
+    }
+    assert!(schema.capture_safe_types.contains(&ordinary_callable));
+    assert!(schema.ordinary_types.contains(&ordinary_callable));
+    assert!(schema.application_free_types.contains(&ordinary_callable));
+    assert!(schema.transferable_types.contains(&fixture.block));
+    assert!(schema.shareable_types.contains(&fixture.block));
+    assert_eq!(super::super::super::reference_schema::NormalizedReferenceSchema::independently_admit_witness_source(&fixture.source).unwrap_err().code, "owned_associated_semantics_unsupported");
+    for checks in [0, 20] {
+        let proof = prove(&fixture, &[0, 1, 2], Limits::default(), &control).unwrap();
+        assert_eq!(
+            super::super::associated_schema_fixture(
+                &[&fixture.source],
+                proof,
+                &ExecutionControl::cancel_after_checks(checks)
+            )
+            .unwrap_err()
+            .class,
+            ExecutionFailureClass::Cancelled
+        );
+    }
+    let proof = prove(&fixture, &[0, 1, 2], Limits::default(), &control).unwrap();
+    let retry =
+        super::super::associated_schema_fixture(&[&fixture.source], proof, &control).unwrap();
+    assert_eq!(
+        (retry.type_derivation_steps, retry.type_metadata_bytes),
+        (schema.type_derivation_steps, schema.type_metadata_bytes)
+    );
+}
+
+#[test]
+fn canonical_associated_schema_context_seals_owner_selection_and_source_templates() {
+    let fixture = make_fixture();
+    let control = ExecutionControl::uncancelled();
+    let proof = prove(&fixture, &[0, 1, 2], Limits::default(), &control).unwrap();
+    let selected = proof
+        .selections
+        .iter()
+        .find(|selected| selected.implementation == fixture.implementations[1])
+        .unwrap();
+    assert!(Arc::ptr_eq(
+        proof
+            .selection(selected.implementation, &selected.actuals, &[], &control)
+            .unwrap(),
+        selected
+    ));
+    let application = proof
+        .applications
+        .keys()
+        .find(|application| {
+            application.function == fixture.consumer && application.witnesses == [selected.identity]
+        })
+        .unwrap();
+    let declaration = OwnerKey::Declaration(fixture.consumer.declaration);
+    assert_eq!(
+        proof
+            .closed_root(
+                application,
+                (fixture.consumer.package, declaration),
+                fixture.projection,
+                &control
+            )
+            .unwrap(),
+        fixture.block
+    );
+    assert!(
+        proof
+            .closed_root(
+                application,
+                (
+                    fixture.consumer.package,
+                    OwnerKey::Declaration(fixture.reader.declaration)
+                ),
+                fixture.projection,
+                &control
+            )
+            .is_err()
+    );
+    let contract = proof.contract_template(fixture.contract, &control).unwrap();
+    let method = contract.methods[0].id;
+    let mapping = proof.mapping_template(selected, method, &control).unwrap();
+    assert_eq!(mapping.type_arguments, [fixture.block]);
+    let target = proof.method_target(selected, method, &control).unwrap();
+    assert_eq!(
+        proof.application(target, &control).unwrap().result,
+        fixture.block
+    );
+    let foreign = prove(&fixture, &[1], Limits::default(), &control).unwrap();
+    assert!(
+        proof
+            .method_target(&foreign.selections[0], method, &control)
+            .is_err()
+    );
+    assert!(
+        proof
+            .closed_root(
+                application,
+                (fixture.consumer.package, declaration),
+                fixture.projection,
+                &ExecutionControl::cancel_after_checks(0)
+            )
+            .is_err()
+    );
+    let source_function = &proof.symbolic[&fixture.consumer];
+    assert_eq!(source_function.result, fixture.projection);
+    assert!(source_function.occurrences.contains_key(&declaration));
+    assert!(proof.flow_work.contexts > 0);
+}
+
+#[test]
+fn canonical_associated_schema_checks_unselected_owned_bindings_and_growth_before_completion() {
+    let mut fixture = make_fixture();
+    let unit = add(&mut fixture.source, TypeForm::Unit);
+    let DeclarationPayload::OwnedImplementation(scheme) =
+        payload(&mut fixture.source, fixture.implementations[2])
+    else {
+        unreachable!()
+    };
+    scheme
+        .associated_types
+        .iter_mut()
+        .find(|binding| binding.member == fixture.spare)
+        .unwrap()
+        .ty = unit;
+    let error = derive(
+        &[&fixture.source],
+        &[],
+        Limits::default(),
+        &ExecutionControl::uncancelled(),
+    )
+    .unwrap_err();
+    assert_eq!(error.code, "reference_associated_preparation");
+    assert_eq!(super::super::super::reference_schema::NormalizedReferenceSchema::independently_admit_witness_source(&fixture.source).unwrap_err().code, error.code);
+
+    let mut fixture = make_fixture();
+    let unit = add(&mut fixture.source, TypeForm::Unit);
+    let grow = DeclarationReference {
+        package: fixture.reader.package,
+        declaration: DeclarationId::migrate(SEED, 10_000),
+    };
+    let formal = TypeParameterId::migrate(SEED, 10_000);
+    let parameter = ParameterId::migrate(SEED, 10_000);
+    let local = ExpressionId::migrate(SEED, 10_000);
+    let body = ExpressionId::migrate(SEED, 10_001);
+    let formal_type = add(
+        &mut fixture.source,
+        TypeForm::TypeParameter { parameter: formal },
+    );
+    let expanded = add(
+        &mut fixture.source,
+        TypeForm::OwnedSequence { item: formal_type },
+    );
+    let OwnerRecord::Declaration(mut declaration) =
+        fixture.source.owners[&OwnerKey::Declaration(fixture.reader.declaration)].clone()
+    else {
+        unreachable!()
+    };
+    let DeclarationPayload::Function(function) = &mut declaration.payload else {
+        unreachable!()
+    };
+    let original_parameter = function.parameters[0];
+    function.type_parameters = vec![formal];
+    function.parameters = vec![parameter];
+    function.result = unit;
+    function.result_borrow = None;
+    function.body = body;
+    declaration.header = OwnerHeader::new(
+        OwnerKey::Declaration(grow.declaration),
+        OwnerKind::PureFunction,
+    );
+    declaration.name = name("finiteGrowthControl");
+    fixture.source.owners.insert(
+        OwnerKey::Declaration(grow.declaration),
+        OwnerRecord::Declaration(declaration),
+    );
+    fixture.source.owners.insert(
+        OwnerKey::TypeParameter(formal),
+        OwnerRecord::TypeParameter(TypeParameterRecord {
+            header: OwnerHeader::new(OwnerKey::TypeParameter(formal), OwnerKind::TypeParameter),
+            declaration: grow.declaration,
+            name: name("T"),
+            constraints: TypeParameterConstraints::Owned,
+        }),
+    );
+    let OwnerRecord::Parameter(mut parameter_record) =
+        fixture.source.owners[&OwnerKey::Parameter(original_parameter)].clone()
+    else {
+        unreachable!()
+    };
+    parameter_record.header =
+        OwnerHeader::new(OwnerKey::Parameter(parameter), OwnerKind::Parameter);
+    parameter_record.parent = ParameterParent::Function(grow.declaration);
+    parameter_record.ty = unit;
+    parameter_record.use_mode = ParameterUse::Unrestricted;
+    fixture.source.owners.insert(
+        OwnerKey::Parameter(parameter),
+        OwnerRecord::Parameter(parameter_record),
+    );
+    fixture.source.owners.insert(
+        OwnerKey::Expression(local),
+        OwnerRecord::Expression(
+            crate::platform::kernel::ExpressionRecord::new(
+                local,
+                ExpressionOperation::Local {
+                    value: LocalValueReference::FunctionParameter(parameter),
+                },
+            )
+            .unwrap(),
+        ),
+    );
+    fixture.source.owners.insert(
+        OwnerKey::Expression(body),
+        OwnerRecord::Expression(
+            crate::platform::kernel::ExpressionRecord::new(
+                body,
+                ExpressionOperation::Call {
+                    function: grow,
+                    type_arguments: vec![expanded],
+                    effect_arguments: vec![],
+                    requirement_arguments: vec![],
+                    arguments: vec![local],
+                },
+            )
+            .unwrap(),
+        ),
+    );
+    let error = derive(
+        &[&fixture.source],
+        &[],
+        Limits::default(),
+        &ExecutionControl::uncancelled(),
+    )
+    .unwrap_err();
+    assert_eq!(error.class, ExecutionFailureClass::Trap);
+    assert_eq!(error.code, "kernel_associated_reference_growth");
+    let error = super::super::super::reference_schema::NormalizedReferenceSchema::independently_admit_witness_source(&fixture.source).unwrap_err();
+    assert_eq!(error.class, ExecutionFailureClass::Trap);
+    assert_eq!(error.code, "kernel_associated_reference_growth");
 }

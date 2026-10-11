@@ -400,7 +400,13 @@ pub(super) fn body(
             return Err(reject());
         };
         if let DeclarationPayload::Function(function) = &owner.payload {
-            let result = checker.closure.identity(function.result, types, 0)?;
+            let result = checker.closure.identity_at(
+                scope.package,
+                OwnerKey::Declaration(scope.declaration),
+                function.result,
+                types,
+                Some(scope),
+            )?;
             if checker.owned(result)? {
                 expected_owned_result = Some(result);
             }
@@ -417,7 +423,13 @@ pub(super) fn body(
                 {
                     return Err(reject());
                 }
-                let ty = checker.closure.identity(parameter.ty, types, 0)?;
+                let ty = checker.closure.identity_at(
+                    scope.package,
+                    OwnerKey::Parameter(*id),
+                    parameter.ty,
+                    types,
+                    Some(scope),
+                )?;
                 if checker.owned(ty)? {
                     if parameter.use_mode == ParameterUse::Unrestricted {
                         return Err(reject());
@@ -479,6 +491,14 @@ struct Checker<'a, 'b> {
 }
 
 impl Checker<'_, '_> {
+    fn type_at(
+        &mut self,
+        owner: OwnerKey,
+        ty: TypeObjectDigest,
+    ) -> Result<TypeObjectDigest, ExecutionError> {
+        self.closure
+            .identity_at(self.package, owner, ty, self.types, self.scope)
+    }
     fn mentions_read(&mut self, root: ExpressionId) -> Result<bool, ExecutionError> {
         allocate::<ExpressionId>(&mut self.closure.allocated, 1)?;
         let mut pending = vec![root];
@@ -516,7 +536,7 @@ impl Checker<'_, '_> {
                     }
                 }
                 ExpressionOperation::SequencePush { sequence_type, .. } => {
-                    let sequence = self.closure.identity(*sequence_type, self.types, 0)?;
+                    let sequence = self.type_at(OwnerKey::Expression(id), *sequence_type)?;
                     let TypeForm::OwnedSequence { item } =
                         self.closure.types.get(&sequence).ok_or_else(reject)?.form
                     else {
@@ -672,6 +692,19 @@ impl Checker<'_, '_> {
         else {
             return Err(reject());
         };
+        if let (Some(proof), Some(application)) = (
+            &self.closure.associated_proof,
+            &self.closure.associated_application,
+        ) && proof
+            .context(application, self.closure.control)?
+            .occurrence(
+                (self.package, OwnerKey::Expression(id)),
+                self.closure.control,
+            )?
+            != owner.contract_version
+        {
+            return Err(reject());
+        }
         Ok(&owner.operation)
     }
 
@@ -791,7 +824,7 @@ impl Checker<'_, '_> {
         }
         let declared = binding
             .declared_type
-            .map(|ty| self.closure.identity(ty, self.types, 0))
+            .map(|ty| self.type_at(OwnerKey::Binding(id), ty))
             .transpose()?;
         if matches!(
             expected_kind,
@@ -883,7 +916,48 @@ impl Checker<'_, '_> {
         Ok(result)
     }
 
-    fn signature(&mut self, call: &ExpressionOperation) -> Result<Signature, ExecutionError> {
+    fn signature(
+        &mut self,
+        id: ExpressionId,
+        call: &ExpressionOperation,
+    ) -> Result<Signature, ExecutionError> {
+        let generation = self
+            .closure
+            .owner(self.package, OwnerKey::Expression(id))?
+            .header()
+            .contract_version;
+        if let (Some(proof), Some(application)) = (
+            &self.closure.associated_proof,
+            &self.closure.associated_application,
+        ) {
+            let proof = std::sync::Arc::clone(proof);
+            if proof
+                .context(application, self.closure.control)?
+                .occurrence(
+                    (self.package, OwnerKey::Expression(id)),
+                    self.closure.control,
+                )?
+                != generation
+            {
+                return Err(reject());
+            }
+            if let Some(target) = proof
+                .application(application, self.closure.control)?
+                .targets
+                .get(&id)
+            {
+                let closed = proof.application(target, self.closure.control)?;
+                allocate::<(TypeObjectDigest, ParameterUse)>(
+                    &mut self.closure.allocated,
+                    closed.parameters.len(),
+                )?;
+                return Ok(Signature {
+                    parameters: closed.parameters.clone(),
+                    result: closed.result,
+                    source: closed.result_borrow.map(|source| source as usize),
+                });
+            }
+        }
         match call {
             ExpressionOperation::Call {
                 function,
@@ -927,7 +1001,7 @@ impl Checker<'_, '_> {
                 }
                 let mut substitutions = Bindings::new();
                 for (formal, actual) in formal_types.iter().zip(type_arguments) {
-                    let actual = self.closure.identity(*actual, self.types, 0)?;
+                    let actual = self.type_at(OwnerKey::Expression(id), *actual)?;
                     index_node::<(
                         crate::platform::semantic_id::TypeParameterId,
                         TypeObjectDigest,
@@ -1209,7 +1283,7 @@ impl Checker<'_, '_> {
                 body,
             } => {
                 let invocation = self.operation(call)?.clone();
-                let signature = self.signature(&invocation)?;
+                let signature = self.signature(call, &invocation)?;
                 if signature.source.is_none() || !self.owned(signature.result)? {
                     return Err(reject());
                 }
@@ -1241,7 +1315,7 @@ impl Checker<'_, '_> {
                 binding,
                 body,
             } => {
-                let product = self.closure.identity(product_type, self.types, 0)?;
+                let product = self.type_at(OwnerKey::Expression(id), product_type)?;
                 let TypeForm::OwnedProduct { fields } =
                     &self.closure.types.get(&product).ok_or_else(reject)?.form
                 else {
@@ -1275,7 +1349,7 @@ impl Checker<'_, '_> {
                 binding,
                 body,
             } => {
-                let record = self.closure.identity(record_type, self.types, 0)?;
+                let record = self.type_at(OwnerKey::Expression(id), record_type)?;
                 let fields = self.closure.owned_record_fields(record, self.scope, true)?;
                 let ty = fields
                     .iter()
@@ -1306,7 +1380,7 @@ impl Checker<'_, '_> {
                 body,
             } => {
                 self.flow(index, locals, Demand::Data, depth + 1)?;
-                let sequence = self.closure.identity(sequence_type, self.types, 0)?;
+                let sequence = self.type_at(OwnerKey::Expression(id), sequence_type)?;
                 let TypeForm::OwnedSequence { item } =
                     self.closure.types.get(&sequence).ok_or_else(reject)?.form
                 else {
@@ -1333,7 +1407,7 @@ impl Checker<'_, '_> {
                 source,
                 arms,
             } => {
-                let choice = self.closure.identity(choice_type, self.types, 0)?;
+                let choice = self.type_at(OwnerKey::Expression(id), choice_type)?;
                 let TypeForm::OwnedChoice { cases } = self
                     .closure
                     .types
@@ -1383,7 +1457,7 @@ impl Checker<'_, '_> {
                 fields,
                 body,
             } => {
-                let product = self.closure.identity(product_type, self.types, 0)?;
+                let product = self.type_at(OwnerKey::Expression(id), product_type)?;
                 if self.flow(source, locals, Demand::Owner, depth + 1)? != Some(product) {
                     return Err(reject());
                 }
@@ -1423,7 +1497,7 @@ impl Checker<'_, '_> {
                 fields,
                 body,
             } => {
-                let record = self.closure.identity(record_type, self.types, 0)?;
+                let record = self.type_at(OwnerKey::Expression(id), record_type)?;
                 let types = self.closure.owned_record_fields(record, self.scope, true)?;
                 if fields.len() != types.len()
                     || self.flow(source, locals, Demand::Owner, depth + 1)? != Some(record)
@@ -1464,7 +1538,7 @@ impl Checker<'_, '_> {
                 source,
                 arms,
             } => {
-                let choice = self.closure.identity(choice_type, self.types, 0)?;
+                let choice = self.type_at(OwnerKey::Expression(id), choice_type)?;
                 if self.flow(source, locals, Demand::Owner, depth + 1)? != Some(choice) {
                     return Err(reject());
                 }
@@ -1530,7 +1604,7 @@ impl Checker<'_, '_> {
             ref call @ (ExpressionOperation::Call { .. }
             | ExpressionOperation::ImplementationCall { .. }
             | ExpressionOperation::MethodCall { .. }) => {
-                let signature = self.signature(call)?;
+                let signature = self.signature(id, call)?;
                 if signature.source.is_some() {
                     return Err(reject());
                 }
@@ -1544,19 +1618,19 @@ impl Checker<'_, '_> {
                 self.owned(signature.result)?.then_some(signature.result)
             }
             ref call @ ExpressionOperation::FunctionValue { .. } => {
-                if self.signature(call)?.source.is_some() {
+                if self.signature(id, call)?.source.is_some() {
                     return Err(reject());
                 }
                 None
             }
             ExpressionOperation::SequenceEmpty { sequence_type } => {
-                Some(self.closure.identity(sequence_type, self.types, 0)?)
+                Some(self.type_at(OwnerKey::Expression(id), sequence_type)?)
             }
             ExpressionOperation::SequenceLength {
                 sequence_type,
                 source,
             } => {
-                let ty = self.closure.identity(sequence_type, self.types, 0)?;
+                let ty = self.type_at(OwnerKey::Expression(id), sequence_type)?;
                 self.local(source, locals, ty)?;
                 None
             }
@@ -1565,7 +1639,7 @@ impl Checker<'_, '_> {
                 value,
                 source,
             } => {
-                let sequence = self.closure.identity(sequence_type, self.types, 0)?;
+                let sequence = self.type_at(OwnerKey::Expression(id), sequence_type)?;
                 let TypeForm::OwnedSequence { item } =
                     self.closure.types.get(&sequence).ok_or_else(reject)?.form
                 else {
@@ -1593,7 +1667,7 @@ impl Checker<'_, '_> {
                 source,
                 index,
             } => {
-                let sequence = self.closure.identity(sequence_type, self.types, 0)?;
+                let sequence = self.type_at(OwnerKey::Expression(id), sequence_type)?;
                 let TypeForm::OwnedSequence { item } =
                     self.closure.types.get(&sequence).ok_or_else(reject)?.form
                 else {
@@ -1613,7 +1687,7 @@ impl Checker<'_, '_> {
                 value,
                 source,
             } => {
-                let sequence = self.closure.identity(sequence_type, self.types, 0)?;
+                let sequence = self.type_at(OwnerKey::Expression(id), sequence_type)?;
                 let TypeForm::OwnedSequence { item } =
                     self.closure.types.get(&sequence).ok_or_else(reject)?.form
                 else {
@@ -1635,18 +1709,18 @@ impl Checker<'_, '_> {
                 {
                     return Err(reject());
                 }
-                Some(self.closure.identity(result_type, self.types, 0)?)
+                Some(self.type_at(OwnerKey::Expression(id), result_type)?)
             }
             ExpressionOperation::SequencePop {
                 sequence_type,
                 result_type,
                 source,
             } => {
-                let sequence = self.closure.identity(sequence_type, self.types, 0)?;
+                let sequence = self.type_at(OwnerKey::Expression(id), sequence_type)?;
                 if self.flow(source, locals, Demand::Owner, depth + 1)? != Some(sequence) {
                     return Err(reject());
                 }
-                Some(self.closure.identity(result_type, self.types, 0)?)
+                Some(self.type_at(OwnerKey::Expression(id), result_type)?)
             }
             ExpressionOperation::PackOwned {
                 product_type,
@@ -1655,13 +1729,13 @@ impl Checker<'_, '_> {
                 for field in fields {
                     self.flow(field.value, locals, Demand::Owner, depth + 1)?;
                 }
-                Some(self.closure.identity(product_type, self.types, 0)?)
+                Some(self.type_at(OwnerKey::Expression(id), product_type)?)
             }
             ExpressionOperation::PackOwnedRecord {
                 record_type,
                 fields,
             } => {
-                let record = self.closure.identity(record_type, self.types, 0)?;
+                let record = self.type_at(OwnerKey::Expression(id), record_type)?;
                 let types = self.closure.owned_record_fields(record, self.scope, true)?;
                 if fields.len() != types.len() {
                     return Err(reject());
@@ -1696,13 +1770,13 @@ impl Checker<'_, '_> {
                 choice_type, value, ..
             } => {
                 self.flow(value, locals, Demand::Owner, depth + 1)?;
-                Some(self.closure.identity(choice_type, self.types, 0)?)
+                Some(self.type_at(OwnerKey::Expression(id), choice_type)?)
             }
             ExpressionOperation::Parallel { left, right } => {
                 let left_call = self.operation(left)?.clone();
                 let right_call = self.operation(right)?.clone();
-                let left_signature = self.signature(&left_call)?;
-                let right_signature = self.signature(&right_call)?;
+                let left_signature = self.signature(left, &left_call)?;
+                let right_signature = self.signature(right, &right_call)?;
                 if left_signature.source.is_some() || right_signature.source.is_some() {
                     return Err(reject());
                 }

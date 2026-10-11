@@ -67,11 +67,63 @@ struct Closing<'a, 'b> {
     normalized: BTreeMap<AppliedWitness, NormalizedImplementationArgument>,
     witnesses: BTreeMap<WitnessIdentity, AppliedWitness>,
     pending: Vec<(Application, FunctionIndex)>,
+    pending_methods: Vec<AppliedWitness>,
     types: &'a mut BTreeMap<TypeObjectDigest, TypeObject>,
     work: &'a mut Budget<'b>,
 }
 
 impl Closing<'_, '_> {
+    fn close_pending(&mut self) -> Result<(), Diagnostic> {
+        loop {
+            if let Some(selected) = self.pending_methods.pop() {
+                step(self.work)?;
+                let implementation = *self
+                    .implementations
+                    .get(&selected.implementation)
+                    .ok_or_else(missing)?;
+                let contract = *self
+                    .contracts
+                    .get(&implementation.contract)
+                    .ok_or_else(missing)?;
+                if contract.methods.len() != implementation.methods.len() {
+                    return Err(missing());
+                }
+                for method in &contract.methods {
+                    step(self.work)?;
+                    self.method_application(&selected, implementation.contract, method.id)?;
+                }
+                continue;
+            }
+            let Some(((template, arguments, selected), index)) = self.pending.pop() else {
+                break;
+            };
+            step(self.work)?;
+            let function = &self.templates[template.0 as usize];
+            self.work
+                .reserve::<(ImplementationParameterId, AppliedWitness)>(selected.len())?;
+            self.work
+                .reserve::<(TypeParameterId, TypeObjectDigest)>(arguments.len())?;
+            let type_bindings = function
+                .type_parameters
+                .iter()
+                .copied()
+                .zip(arguments)
+                .collect();
+            let bindings = function
+                .implementation_parameters
+                .iter()
+                .map(|p| p.id)
+                .zip(selected)
+                .collect();
+            let scope = function.declaration;
+            if let NormalizedFunctionBody::Code(mut code) = function.body.clone() {
+                self.code(&mut code, Some(scope), &bindings, &type_bindings)?;
+                self.functions[index.0 as usize].body = NormalizedFunctionBody::Code(code);
+            }
+        }
+        Ok(())
+    }
+
     fn constraints(
         &mut self,
         declaration: DeclarationReference,
@@ -307,8 +359,11 @@ impl Closing<'_, '_> {
                     type_arguments: arguments,
                     implementations: prerequisites.into(),
                 }));
+                // Reserve the complete-method worklist before publishing the node.
+                self.work.reserve::<AppliedWitness>(1)?;
                 self.normalize_witness(&selected, depth)?;
                 self.witnesses.insert(key, selected.clone());
+                self.pending_methods.push(selected.clone());
                 Ok(selected)
             }
             ImplementationOperand::Parameter {
@@ -637,6 +692,85 @@ impl Closing<'_, '_> {
         Ok(index)
     }
 
+    fn method_application(
+        &mut self,
+        selected: &AppliedWitness,
+        contract: DeclarationReference,
+        method: crate::platform::semantic_id::MethodId,
+    ) -> Result<(FunctionIndex, Vec<TypeObjectDigest>), Diagnostic> {
+        let normalized_selected = self.normalize_witness(selected, 0)?;
+        let implementation_environment = ClosedTypeEnvironment::for_selected(&normalized_selected)?;
+        let implementation = *self
+            .implementations
+            .get(&selected.implementation)
+            .ok_or_else(missing)?;
+        if implementation.contract != contract {
+            return Err(missing());
+        }
+        let mut mapping = None;
+        for candidate in &implementation.methods {
+            step(self.work)?;
+            if candidate.method == method {
+                mapping = Some(candidate);
+                break;
+            }
+        }
+        let mapping = mapping.ok_or_else(missing)?;
+        let target = *self.targets.get(&mapping.function).ok_or_else(missing)?;
+        self.work
+            .reserve::<TypeObjectDigest>(mapping.type_arguments.len())?;
+        let mapped_types = mapping.type_arguments.clone();
+        self.work
+            .reserve::<ImplementationOperand>(mapping.implementations.len())?;
+        for operand in &mapping.implementations {
+            self.reserve_operand(operand, 0)?;
+        }
+        let mapped_implementations = mapping.implementations.clone();
+        self.work
+            .reserve::<(TypeParameterId, TypeObjectDigest)>(selected.type_arguments.len())?;
+        let implementation_bindings = implementation
+            .type_parameters
+            .iter()
+            .copied()
+            .zip(selected.type_arguments.iter().copied())
+            .collect();
+        self.work
+            .reserve::<(ImplementationParameterId, AppliedWitness)>(
+                selected.implementations.len(),
+            )?;
+        for _ in selected.implementations.iter() {
+            step(self.work)?;
+            self.work.reserve::<usize>(3)?;
+        }
+        let implementation_witnesses: Bindings = implementation
+            .implementation_parameters
+            .iter()
+            .map(|p| p.id)
+            .zip(selected.implementations.iter().cloned())
+            .collect();
+        let applied = self.arguments(
+            &mapped_types,
+            &implementation_bindings,
+            Some(&implementation_environment),
+        )?;
+        self.work
+            .reserve::<AppliedWitness>(mapped_implementations.len())?;
+        let mut prerequisites = Vec::new();
+        for operand in &mapped_implementations {
+            prerequisites.push(self.operand_in(
+                operand,
+                Some(selected.implementation),
+                &implementation_witnesses,
+                &implementation_bindings,
+                Some(&implementation_environment),
+            )?);
+        }
+        self.work.reserve::<TypeObjectDigest>(applied.len())?;
+        self.work.reserve::<usize>(2)?;
+        let function = self.application(target, applied.clone(), prerequisites)?;
+        Ok((function, applied))
+    }
+
     fn code(
         &mut self,
         code: &mut NormalizedCode,
@@ -757,78 +891,8 @@ impl Closing<'_, '_> {
                 } => {
                     let selected =
                         self.operand_in(witness, scope, bindings, types, Some(&environment))?;
-                    let normalized_selected = self.normalize_witness(&selected, 0)?;
-                    let implementation_environment =
-                        ClosedTypeEnvironment::for_selected(&normalized_selected)?;
-                    let implementation = *self
-                        .implementations
-                        .get(&selected.implementation)
-                        .ok_or_else(missing)?;
-                    if implementation.contract != *contract {
-                        return Err(missing());
-                    }
-                    let mut mapping = None;
-                    for candidate in &implementation.methods {
-                        step(self.work)?;
-                        if candidate.method == *method {
-                            mapping = Some(candidate);
-                            break;
-                        }
-                    }
-                    let mapping = mapping.ok_or_else(missing)?;
-                    let target = *self.targets.get(&mapping.function).ok_or_else(missing)?;
-                    self.work
-                        .reserve::<TypeObjectDigest>(mapping.type_arguments.len())?;
-                    let mapped_types = mapping.type_arguments.clone();
-                    self.work
-                        .reserve::<ImplementationOperand>(mapping.implementations.len())?;
-                    for operand in &mapping.implementations {
-                        self.reserve_operand(operand, 0)?;
-                    }
-                    let mapped_implementations = mapping.implementations.clone();
-                    self.work.reserve::<(TypeParameterId, TypeObjectDigest)>(
-                        selected.type_arguments.len(),
-                    )?;
-                    let implementation_bindings = implementation
-                        .type_parameters
-                        .iter()
-                        .copied()
-                        .zip(selected.type_arguments.iter().copied())
-                        .collect();
-                    self.work
-                        .reserve::<(ImplementationParameterId, AppliedWitness)>(
-                            selected.implementations.len(),
-                        )?;
-                    for _ in selected.implementations.iter() {
-                        step(self.work)?;
-                        self.work.reserve::<usize>(3)?;
-                    }
-                    let implementation_witnesses: Bindings = implementation
-                        .implementation_parameters
-                        .iter()
-                        .map(|p| p.id)
-                        .zip(selected.implementations.iter().cloned())
-                        .collect();
-                    let applied = self.arguments(
-                        &mapped_types,
-                        &implementation_bindings,
-                        Some(&implementation_environment),
-                    )?;
-                    self.work
-                        .reserve::<AppliedWitness>(mapped_implementations.len())?;
-                    let mut prerequisites = Vec::new();
-                    for operand in &mapped_implementations {
-                        prerequisites.push(self.operand_in(
-                            operand,
-                            Some(selected.implementation),
-                            &implementation_witnesses,
-                            &implementation_bindings,
-                            Some(&implementation_environment),
-                        )?);
-                    }
-                    self.work.reserve::<TypeObjectDigest>(applied.len())?;
-                    self.work.reserve::<usize>(2)?;
-                    let function = self.application(target, applied.clone(), prerequisites)?;
+                    let (function, applied) =
+                        self.method_application(&selected, *contract, *method)?;
                     *instruction = NormalizedInstruction::Call {
                         function,
                         type_arguments: Arc::from(applied),
@@ -1021,6 +1085,7 @@ pub(super) fn close(
         normalized: BTreeMap::new(),
         witnesses: BTreeMap::new(),
         pending: Vec::new(),
+        pending_methods: Vec::new(),
         types: &mut program.types,
         work,
     };
@@ -1054,33 +1119,7 @@ pub(super) fn close(
             closing.code(code, None, &Bindings::new(), &BTreeMap::new())?;
         }
     }
-    while let Some(((template, arguments, selected), index)) = closing.pending.pop() {
-        step(closing.work)?;
-        let function = &closing.templates[template.0 as usize];
-        closing
-            .work
-            .reserve::<(ImplementationParameterId, AppliedWitness)>(selected.len())?;
-        closing
-            .work
-            .reserve::<(TypeParameterId, TypeObjectDigest)>(arguments.len())?;
-        let type_bindings = function
-            .type_parameters
-            .iter()
-            .copied()
-            .zip(arguments)
-            .collect();
-        let bindings = function
-            .implementation_parameters
-            .iter()
-            .map(|p| p.id)
-            .zip(selected)
-            .collect();
-        let scope = function.declaration;
-        if let NormalizedFunctionBody::Code(mut code) = function.body.clone() {
-            closing.code(&mut code, Some(scope), &bindings, &type_bindings)?;
-            closing.functions[index.0 as usize].body = NormalizedFunctionBody::Code(code);
-        }
-    }
+    closing.close_pending()?;
     closing
         .work
         .reserve::<NormalizedImplementationArgument>(closing.normalized.len())?;
@@ -1388,6 +1427,7 @@ mod tests {
             normalized: BTreeMap::new(),
             witnesses: BTreeMap::new(),
             pending: Vec::new(),
+            pending_methods: Vec::new(),
             types: &mut program.types,
             work: &mut work,
         };
@@ -1496,3 +1536,7 @@ mod reservation_tests;
 #[cfg(test)]
 #[path = "prepared_associated_tests.rs"]
 pub(super) mod associated_tests;
+
+#[cfg(test)]
+#[path = "prepared_associated_comparison_tests.rs"]
+mod comparison_tests;

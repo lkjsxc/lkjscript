@@ -104,6 +104,7 @@ fn probe(
         normalized: BTreeMap::new(),
         witnesses: BTreeMap::new(),
         pending: Vec::new(),
+        pending_methods: Vec::new(),
         types: &mut types,
         work: &mut work,
     };

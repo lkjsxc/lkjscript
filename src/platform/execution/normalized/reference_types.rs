@@ -86,7 +86,25 @@ mod borrowed_admission;
 #[path = "reference_associated_preparation.rs"]
 pub(super) mod associated_preparation;
 
+#[path = "reference_associated_schema.rs"]
+mod associated_schema;
+
+// A private consumer fixture exercises the real reference readers and the schema
+// core without manufacturing a successful public associated admission token.
+#[cfg(test)]
+pub(super) fn associated_schema_fixture(
+    snapshots: &[&KernelSnapshot],
+    proof: associated_preparation::Proof,
+    control: &crate::platform::execution::ExecutionControl,
+) -> Result<NormalizedReferenceSchema, ExecutionError> {
+    let mut schema = NormalizedReferenceSchema::default();
+    associated_schema::core(&mut schema, snapshots, proof, control)?;
+    Ok(schema)
+}
+
 struct Closure<'a> {
+    associated_proof: Option<Arc<associated_preparation::Proof>>,
+    associated_application: Option<associated_preparation::Application>,
     parallel_targets: BTreeSet<(
         DeclarationReference,
         Vec<TypeObjectDigest>,
@@ -903,8 +921,15 @@ impl<'a> Closure<'a> {
     fn sequence_elements(&mut self) -> Result<(), ExecutionError> {
         allocate::<TypeObjectDigest>(&mut self.allocated, self.types.len())?;
         let mut items = Vec::with_capacity(self.types.len());
-        for object in self.types.values() {
+        for (ty, object) in self.types.iter() {
             self.control.check()?;
+            if self
+                .associated_proof
+                .as_ref()
+                .is_some_and(|proof| proof.raw_templates.contains(ty))
+            {
+                continue;
+            }
             if let TypeForm::OwnedSequence { item } = object.form {
                 items.push(item);
             }
@@ -1858,6 +1883,59 @@ impl<'a> Closure<'a> {
         Ok(owner)
     }
 
+    // Each associated type read is tied to an actual canonical owner occurrence.
+    // Concrete outputs are opaque: this lookup never reapplies caller bindings.
+    fn identity_at(
+        &mut self,
+        package: PackageId,
+        owner: OwnerKey,
+        ty: TypeObjectDigest,
+        bindings: &Bindings,
+        scope: Option<DeclarationReference>,
+    ) -> Result<TypeObjectDigest, ExecutionError> {
+        self.tick()?;
+        let Some(proof) = self.associated_proof.clone() else {
+            return self.identity(ty, bindings, 0);
+        };
+        let generation = self.owner(package, owner)?.header().contract_version;
+        if let Some(application) = &self.associated_application {
+            let context = proof.context(application, self.control)?;
+            if context.occurrence((package, owner), self.control)? != generation {
+                return Err(failure());
+            }
+            return context.root((package, owner), ty, self.control);
+        }
+        if let Some(scope) = scope {
+            if scope.package != package {
+                return Err(failure());
+            }
+            let function = proof.symbolic.get(&scope).ok_or_else(failure)?;
+            if function.occurrences.get(&owner) != Some(&generation) {
+                return Err(failure());
+            }
+            return function
+                .roots
+                .get(&(owner, ty))
+                .copied()
+                .ok_or_else(failure);
+        }
+        // Functionless executable roots have their own canonical inventory.
+        let mut answer = None;
+        for ((source_package, _), function) in &proof.executables {
+            self.tick()?;
+            if *source_package != package || function.occurrences.get(&owner) != Some(&generation) {
+                continue;
+            }
+            if let Some(closed) = function.roots.get(&(owner, ty)) {
+                if answer.is_some_and(|previous| previous != *closed) {
+                    return Err(failure());
+                }
+                answer = Some(*closed);
+            }
+        }
+        answer.ok_or_else(failure)
+    }
+
     fn identity(
         &mut self,
         ty: TypeObjectDigest,
@@ -2628,6 +2706,8 @@ fn check_duplicate_witness_dag_in(
     let control = crate::platform::execution::ExecutionControl::uncancelled();
     let mut types = source.types.clone();
     let mut closure = Closure {
+        associated_proof: None,
+        associated_application: None,
         parallel_targets: BTreeSet::new(),
         constrained_applications: BTreeSet::new(),
         symbolic: false,
@@ -2673,6 +2753,8 @@ pub(super) fn check_product_substitution(
 ) -> Result<(), ExecutionError> {
     let control = crate::platform::execution::ExecutionControl::uncancelled();
     let mut closure = Closure {
+        associated_proof: None,
+        associated_application: None,
         parallel_targets: BTreeSet::new(),
         constrained_applications: BTreeSet::new(),
         symbolic: false,
@@ -2705,7 +2787,13 @@ pub(super) fn complete(
     }) {
         // The canonical preparation proof runs independently before this unfinished
         // full-schema path refuses. Its private tests do not grant execution admission.
-        associated_preparation::check_inventory(snapshots, control)?;
+        let maximum = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
+        let admitted = usize::try_from(schema.source_admission_steps).map_err(|_| failure())?;
+        let proof = associated_preparation::check_inventory(snapshots, associated_preparation::Limits {
+            steps: maximum.checked_sub(admitted).ok_or_else(failure)?,
+            bytes: MAXIMUM_METADATA_BYTES,
+        }, control)?;
+        associated_schema::core(schema, snapshots, proof, control)?;
         return Err(ExecutionError::new(
             crate::platform::execution::ExecutionFailureClass::Infrastructure,
             "owned_associated_semantics_unsupported",
@@ -2796,6 +2884,8 @@ pub(super) fn complete(
         }
     }
     let mut closure = Closure {
+        associated_proof: None,
+        associated_application: None,
         parallel_targets: BTreeSet::new(),
         constrained_applications: BTreeSet::new(),
         symbolic: false,
@@ -3750,7 +3840,8 @@ impl Closure<'_> {
         }
         self.clone_type(ty)?;
         let object = self.types.get(&ty).cloned().ok_or_else(failure)?;
-        let mut unresolved = matches!(object.form, TypeForm::TypeParameter { .. })
+        let mut unresolved = object.form.is_associated()
+            || matches!(object.form, TypeForm::TypeParameter { .. })
             || matches!(&object.form, TypeForm::TaskFunction { effect, .. } if !effect.parameters.is_empty());
         allocate::<TypeObjectDigest>(&mut self.allocated, object.child_type_count())?;
         for child in object.child_types() {
@@ -4032,6 +4123,15 @@ fn property_types(
     for (ty, object) in &schema.types {
         control.check()?;
         tick(visits)?;
+        // Associated templates and every syntactic ancestor remain source metadata.
+        // Function signature children count here, unlike ordinary generic callables.
+        if schema
+            .associated_proof
+            .as_ref()
+            .is_some_and(|proof| proof.raw_templates.contains(ty))
+        {
+            continue;
+        }
         if (retention == Retention::BufferFree && !schema.is_owned_type(*ty))
             || retention == Retention::NoApplication
             || retention != Retention::BufferFree

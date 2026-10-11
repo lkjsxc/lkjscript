@@ -22,7 +22,7 @@ impl Scopes {
         for (key, owner) in &resolver.source.owners {
             resolver.step(0)?;
             for root in owner.expression_roots() {
-                resolver.reserve_entries(1)?;
+                resolver.reserve_entries(1 + usize::from(!scopes.parents.contains_key(&root)))?;
                 scopes
                     .parents
                     .entry(root)
@@ -31,14 +31,35 @@ impl Scopes {
             }
             if let OwnerRecord::Expression(expression) = owner {
                 for child in expression.children() {
-                    resolver.reserve_entries(1)?;
+                    resolver.reserve_entries(
+                        1 + usize::from(!scopes.parents.contains_key(&child.expression)),
+                    )?;
                     scopes
                         .parents
                         .entry(child.expression)
                         .or_default()
                         .push(Parent::Expression(expression.id));
                 }
-                let mut bindings = Vec::new();
+                let count = match &expression.operation {
+                    ExpressionOperation::Let { bindings, .. } => bindings.len(),
+                    ExpressionOperation::BorrowOwnedField { .. }
+                    | ExpressionOperation::BorrowOwnedRecordField { .. }
+                    | ExpressionOperation::BorrowOwnedItem { .. }
+                    | ExpressionOperation::BorrowCall { .. }
+                    | ExpressionOperation::Transaction { .. }
+                    | ExpressionOperation::TransactionOutcome { .. } => 1,
+                    ExpressionOperation::UnpackOwned { fields, .. } => fields.len(),
+                    ExpressionOperation::UnpackOwnedRecord { fields, .. } => fields.len(),
+                    ExpressionOperation::MatchOwned { arms, .. }
+                    | ExpressionOperation::MatchBorrowedOwned { arms, .. } => arms.len(),
+                    ExpressionOperation::Match { arms, .. } => arms
+                        .iter()
+                        .filter(|arm| arm.payload_binding.is_some())
+                        .count(),
+                    _ => 0,
+                };
+                resolver.reserve_entries(count)?;
+                let mut bindings = Vec::with_capacity(count);
                 match &expression.operation {
                     ExpressionOperation::Let { bindings: ids, .. } => bindings.extend(ids),
                     ExpressionOperation::BorrowOwnedField { binding, .. }
@@ -65,7 +86,8 @@ impl Scopes {
                     _ => {}
                 }
                 for binding in bindings {
-                    resolver.reserve_entries(1)?;
+                    resolver
+                        .reserve_entries(1 + usize::from(!scopes.bindings.contains_key(binding)))?;
                     scopes
                         .bindings
                         .entry(*binding)
@@ -79,32 +101,35 @@ impl Scopes {
 
     fn expression(
         &self,
-        source: &KernelSnapshot,
+        resolver: &mut Resolver<'_>,
         id: ExpressionId,
         depth: usize,
     ) -> Result<Option<DeclarationReference>> {
         if depth > contract::MAXIMUM_EXPRESSION_DEPTH {
             return Err(Failure::Capacity);
         }
+        resolver.step(0)?;
         let [parent] = self.parents.get(&id).ok_or(Failure::Authority)?.as_slice() else {
             return Err(Failure::Authority);
         };
         match parent {
-            Parent::Expression(parent) => self.expression(source, *parent, depth + 1),
-            Parent::Owner(OwnerKey::Binding(binding)) => self.binding(source, *binding, depth + 1),
+            Parent::Expression(parent) => self.expression(resolver, *parent, depth + 1),
+            Parent::Owner(OwnerKey::Binding(binding)) => {
+                self.binding(resolver, *binding, depth + 1)
+            }
             Parent::Owner(OwnerKey::Declaration(id)) => {
-                match source.owners.get(&OwnerKey::Declaration(*id)) {
+                match resolver.source.owners.get(&OwnerKey::Declaration(*id)) {
                     Some(OwnerRecord::Declaration(_)) => Ok(Some(DeclarationReference {
-                        package: source.root.package_id,
+                        package: resolver.source.root.package_id,
                         declaration: *id,
                     })),
                     _ => Err(Failure::Authority),
                 }
             }
             Parent::Owner(OwnerKey::Port(port)) => {
-                match source.owners.get(&OwnerKey::Port(*port)) {
+                match resolver.source.owners.get(&OwnerKey::Port(*port)) {
                     Some(OwnerRecord::Port(p)) => Ok(Some(DeclarationReference {
-                        package: source.root.package_id,
+                        package: resolver.source.root.package_id,
                         declaration: p.declaration,
                     })),
                     _ => Err(Failure::Authority),
@@ -116,14 +141,18 @@ impl Scopes {
 
     fn binding(
         &self,
-        source: &KernelSnapshot,
+        resolver: &mut Resolver<'_>,
         id: BindingId,
         depth: usize,
     ) -> Result<Option<DeclarationReference>> {
+        if depth > contract::MAXIMUM_EXPRESSION_DEPTH {
+            return Err(Failure::Capacity);
+        }
+        resolver.step(0)?;
         let [container] = self.bindings.get(&id).ok_or(Failure::Authority)?.as_slice() else {
             return Err(Failure::Authority);
         };
-        self.expression(source, *container, depth + 1)
+        self.expression(resolver, *container, depth + 1)
     }
 }
 
@@ -160,7 +189,7 @@ impl Resolver<'_> {
     }
 
     fn local_scope(
-        &self,
+        &mut self,
         scopes: &Scopes,
         key: OwnerKey,
         owner: &OwnerRecord,
@@ -193,12 +222,12 @@ impl Resolver<'_> {
                 ParameterParent::Operation(_) => None,
             },
             OwnerRecord::Port(p) => Some(p.declaration),
-            OwnerRecord::Expression(e) => return scopes.expression(self.source, e.id, 0),
+            OwnerRecord::Expression(e) => return scopes.expression(self, e.id, 0),
             OwnerRecord::Binding(_) => {
                 let OwnerKey::Binding(id) = key else {
                     return Err(Failure::Authority);
                 };
-                return scopes.binding(self.source, id, 0);
+                return scopes.binding(self, id, 0);
             }
             _ => None,
         };
@@ -275,6 +304,10 @@ impl Resolver<'_> {
                     return Err(Failure::Arity);
                 }
                 self.reserve_entries(f.type_parameters.len() + f.implementation_parameters.len())?;
+                for operand in &mapping.implementations {
+                    let entries = self.operand_entries(operand, 0)?;
+                    self.reserve_entries(entries)?;
+                }
                 let environment = Environment {
                     ordinary: f
                         .type_parameters
@@ -350,6 +383,10 @@ impl Resolver<'_> {
                     return Err(Failure::Arity);
                 }
                 self.reserve_entries(f.type_parameters.len() + f.implementation_parameters.len())?;
+                for operand in operands {
+                    let entries = self.operand_entries(operand, 0)?;
+                    self.reserve_entries(entries)?;
+                }
                 let environment = Environment {
                     ordinary: f
                         .type_parameters
@@ -410,7 +447,8 @@ impl Resolver<'_> {
                     .iter()
                     .find(|m| m.id == *method)
                     .ok_or(Failure::Authority)?;
-                self.reserve_entries(1 + c.type_parameters.len() + witness.walk().count())?;
+                let entries = self.operand_entries(witness, 0)?;
+                self.reserve_entries(1 + c.type_parameters.len() + entries)?;
                 let environment = Environment {
                     ordinary: std::iter::once((c.self_parameter, self_type))
                         .chain(c.type_parameters.iter().copied().zip(actuals))
@@ -500,6 +538,7 @@ impl Resolver<'_> {
                 && let Some(result) = results.get(&call)
             {
                 let scope = self.local_scope(&scopes, *key, owner)?;
+                let binding_scope = scopes.binding(self, binding, 0)?;
                 self.admit_roots(
                     &[*result],
                     self.occurrence_for(package, *key, scope, false),
@@ -507,18 +546,21 @@ impl Resolver<'_> {
                 )?;
                 self.admit_roots(
                     &[*result],
-                    self.occurrence_for(
-                        package,
-                        OwnerKey::Binding(binding),
-                        scopes.binding(self.source, binding, 0)?,
-                        false,
-                    ),
+                    self.occurrence_for(package, OwnerKey::Binding(binding), binding_scope, false),
                     false,
                 )?;
             }
         }
         // Authored and representation selections are separate. A property-only
         // selection never changes a declaration into a member-authority source.
+        // Reserve the upper bound before constructing the deduplicated set.
+        self.reserve_entries(
+            self.source
+                .dependencies
+                .len()
+                .checked_add(self.source.representation_dependencies.len())
+                .ok_or(Failure::Capacity)?,
+        )?;
         let selections: BTreeSet<_> = self
             .source
             .dependencies
@@ -526,7 +568,6 @@ impl Resolver<'_> {
             .chain(&self.source.representation_dependencies)
             .map(|(p, d)| (*p, d.package_revision))
             .collect();
-        self.reserve_entries(selections.len())?;
         for (package, revision) in selections {
             let interface = self
                 .source

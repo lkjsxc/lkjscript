@@ -202,6 +202,23 @@ fn witness_contract_domains_are_closed_and_unique() {
 }
 
 #[test]
+fn validator_39_contract_digest_matches_frozen_identity() {
+    // Independently reconstructed from the literal Graph 33, Witness 9 and
+    // Summary 11 identities, 28 owner tags, 12 namespace tags, 38 ordered
+    // relation/propagation pairs and 43 ordered feature names/versions.
+    // The 1,858-byte material has SHA-256
+    // 2d0b71c9bce30883aae3374da27d30dd867c5a64882172f56da820765c7c76f8.
+    // Text lengths are u64 little-endian and versions are u16 little-endian;
+    // the derived-key BLAKE3 input prefixes its material length as u64 big-endian.
+    // The same independent reconstruction reproduces the frozen Validator 38
+    // predecessor above. The expected identity never comes from the producer.
+    assert_eq!(
+        contract::validator_contract_digest().to_string(),
+        "validator_contract_c3c9a4a3504b3d2f6a54d6d0b352b4e9c2fc620c62fa6172c5b30f4219d48034"
+    );
+}
+
+#[test]
 fn full_witness_rebuilds_the_normalized_kernel_fixture() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let witness = rebuild_full_witness(&snapshot).expect("full witness must rebuild");

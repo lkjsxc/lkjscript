@@ -9,6 +9,21 @@ impl ReferenceState<'_> {
         body: ExpressionId,
         locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
     ) -> Result<CheckedValue, ExecutionError> {
+        let previous = self
+            .type_occurrence
+            .replace((self.active_package, OwnerKey::Expression(call)));
+        let result = self.evaluate_borrow_call_at(call, binding, body, locals);
+        self.type_occurrence = previous;
+        result
+    }
+
+    fn evaluate_borrow_call_at(
+        &mut self,
+        call: ExpressionId,
+        binding: BindingId,
+        body: ExpressionId,
+        locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
+    ) -> Result<CheckedValue, ExecutionError> {
         let (function, types, effects, requirements, implementations, arguments) =
             match self.read_expression(call)? {
                 ExpressionOperation::Call {
@@ -88,7 +103,10 @@ impl ReferenceState<'_> {
         let declared = record.declared_type.ok_or_else(|| {
             reference_type_error("borrow-call binding lacks an exact result type")
         })?;
-        let binding_type = self.resolve_type_arguments(&[declared])?[0];
+        let binding_type = self.resolve_occurrence_types(
+            (self.active_package, OwnerKey::Binding(binding)),
+            &[declared],
+        )?[0];
         let uses: Vec<_> = signature.parameters.iter().map(|p| p.use_mode).collect();
         // Invocation arguments are evaluated once in canonical authored order.
         // Their sealed loans protect earlier arguments while later ones execute.
