@@ -215,6 +215,7 @@ impl CompilationManifest {
                     | (30, 30, 25)
                     | (31, 31, 26)
                     | (32, 32, 27)
+                    | (33, 33, 27)
             )
         {
             return Err(manifest_error(
@@ -295,8 +296,13 @@ mod tests {
             optimization: OptimizationPolicy::DeterministicBaseline,
             units,
         };
-        for (graph, compiler, bytecode) in [(29, 29, 24), (30, 30, 25), (31, 31, 26), (32, 32, 27)]
-        {
+        for (graph, compiler, bytecode) in [
+            (29, 29, 24),
+            (30, 30, 25),
+            (31, 31, 26),
+            (32, 32, 27),
+            (33, 33, 27),
+        ] {
             manifest.graph_contract_version = graph;
             manifest.compiler_contract_version = compiler;
             manifest.bytecode_contract_version = bytecode;
@@ -318,6 +324,9 @@ mod tests {
             (31, 32, 27),
             (32, 31, 26),
             (32, 32, 26),
+            (32, 33, 27),
+            (33, 32, 27),
+            (33, 33, 26),
         ] {
             manifest.graph_contract_version = graph;
             manifest.compiler_contract_version = compiler;

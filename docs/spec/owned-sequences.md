@@ -219,7 +219,9 @@ The exact `native_data_sequences` family additionally checks a generic ordinary
 library exported before its consumers, stable scalar and nested immutable reads,
 owned displacement, complete type admission, active loans, bounds and joined
 resource-failure cleanup. Its source-deleted executions and independent finite
-model must agree on complete results. The native dependency planner uses ordinary
-sequences for remaining counts, levels, visited flags and readiness indices while
-retaining its independent checker and established output contract. Passing source
+model must agree on complete results. The native dependency planner defaults to
+ordinary sequences for remaining counts, levels, visited flags and readiness
+indices. Exact indexed-storage witnesses also admit private chunked representations
+with independent integer/Boolean selection, retaining the separate result checker
+and established output contract. Passing source
 acceptance and publication remain distinct obligations.

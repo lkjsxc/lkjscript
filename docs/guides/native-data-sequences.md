@@ -88,10 +88,14 @@ sequence. Ordinary get cannot produce an owner or a source-tied borrowed view.
 
 ## Working storage and limits
 
-The native planner holds remaining dependency counts and levels in I64 sequences,
-visited flags in a Bool sequence, and ready component indices in an append-only
-I64 sequence. A scalar head consumes queue entries logically; each component is
-appended at most once. Signed endpoints are checked before indexing. The planner
+The native planner holds remaining dependency counts, levels and ready indices in
+one generic integer storage type, with a separate Boolean storage type for visited
+flags. Exact `IndexedData` witnesses independently select flat sequences or private
+nominal chunked storage in all four combinations; original commands default to
+flat storage. The [storage library](../../examples/indexed-data-storage/README.md)
+defines the shared operations and stable ordinary results. A scalar head consumes
+append-only queue entries logically; each component is appended at most once.
+Signed endpoints are checked before indexing. The planner
 materializes the output map once and preserves its established complete/refusal
 results. This is maintained native-tool adoption; compiler integration remains a
 separate boundary with its own capacity and authority requirements.

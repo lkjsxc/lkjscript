@@ -346,7 +346,10 @@ declarations.end
             "signature promotion preserves the result, body and parameter identities"
         );
         assert_eq!(previous.header.contract_version, 31);
-        assert_eq!(current.header.contract_version, 32);
+        assert_eq!(
+            current.header.contract_version,
+            crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+        );
     }
 }
 

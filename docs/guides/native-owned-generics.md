@@ -6,6 +6,8 @@ for the current grammar and `change draft` for exact editable projections. The
 [normative contract](../spec/owned-generics.md) defines supported combinations.
 [Parameterized worklists](native-owned-worklists.md) extend this workflow with
 ordered Owned contract arguments and structural method results.
+For ordinary transferable contract arguments and owned storage, use the
+[indexed-data example](../../examples/indexed-data-storage/README.md).
 
 The maintained literal [generic library](../../tests/fixtures/owned-witness-library.lkjc)
 declares `Storage` with create, update and read methods and implements generic
@@ -90,7 +92,7 @@ ByteBuffer, cell and product tokens cannot be JSON command inputs, persisted val
 callback captures or ordinary returned raw values. Expose ordinary results at
 application boundaries.
 
-## Task methods in development 0.1.66
+## Task methods
 
 A contract method may declare its task kind and the exact requirements it needs:
 
@@ -102,8 +104,9 @@ A contract method may declare its task kind and the exact requirements it needs:
 
 Omitting `effect`, or writing `(effect pure)`, preserves the existing pure method.
 `(effect (task))` is an empty-row task, not a pure method. The selected graph
-function must match the method's kind and row exactly. A task Self argument must
-consume; use a separate pure method for synchronous scoped reading. The caller
+function must match the method's kind and row exactly. Task methods may borrow or
+consume owned Self; synchronous borrowing protects the owner through authorized
+effects and does not permit a borrowed task result. The caller
 must independently declare the method's required effects, and deployment must
 independently grant the actual operation. Selection alone authorizes nothing.
 

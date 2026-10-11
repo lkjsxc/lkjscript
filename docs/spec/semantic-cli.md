@@ -1220,8 +1220,11 @@ Both lower to typed changes with the same closed constraint set as canonical/JSO
 `CONSTRAINT` accepts `none`, `capture-safe`, `owned`, `transferable`,
 `"capture-safe transferable"`, `"owned transferable"`, `"owned shareable"` or
 `"owned transferable shareable"`. Combined values are quoted.
-Transfer and sharing bounds belong to graph functions and supported owned generic
-implementation schemes; owned-contract Self and additional parameters remain Owned.
+Transfer and sharing bounds belong to graph functions, owned records and supported
+generic implementation schemes. Owned-contract Self remains exactly Owned;
+additional contract parameters admit Owned, Transferable or CaptureSafeTransferable.
+Ordinary contract/scheme formals retain their complete category and exact-scope
+obligations under the [mixed storage contract](owned-contract-parameters.md).
 See [transfer and sharing obligations](transferable-types.md)
 for the exact scope and structural obligations.
 The setter requires an exact type-parameter owner, preserves its identity and declaration order,
@@ -1232,8 +1235,9 @@ malformed constraints, cancellation and exhausted validation cannot partially ad
 Owner queries, full function definitions and built-in/staged interfaces expose the
 exact canonical constraint set; definition continuations remain revision-pinned and reject after edits.
 
-The declaration selector accepts pure and task functions, records, variants and
-owned implementation schemes under their exact constraint rules. Nominal applications use
+The declaration selector accepts pure and task functions, records, variants,
+owned records, owned contracts and owned implementation schemes under their exact
+constraint rules. Nominal applications use
 `type.application as=@Applied declaration=DECLARATION` followed by ordered
 `type.argument parent=@Applied index=INDEX type=TYPE` records. Positive arity is mandatory; use
 `type.named` for zero-arity declarations. Record and variant constructors accept the same ordered

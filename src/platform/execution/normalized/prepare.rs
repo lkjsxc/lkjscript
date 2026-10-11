@@ -359,9 +359,15 @@ pub struct NormalizedImplementationApplication {
     pub contract: DeclarationReference,
     /// Exact ordered arguments of the selected implementation scheme.
     pub implementation_type_arguments: Arc<[TypeObjectDigest]>,
+    /// Exact formal obligations retained from the admitted implementation owner.
+    pub implementation_type_parameter_constraints:
+        Arc<[crate::platform::kernel::TypeParameterConstraints]>,
     pub self_type: TypeObjectDigest,
     /// Instantiated arguments of the nominal owned contract.
     pub type_arguments: Arc<[TypeObjectDigest]>,
+    /// Exact formal obligations retained from the admitted contract owner.
+    pub contract_type_parameter_constraints:
+        Arc<[crate::platform::kernel::TypeParameterConstraints]>,
     /// Exact ordered prerequisite applications. Immutable edges may share storage;
     /// application identity is admitted through this program's canonical catalogue.
     pub implementations: Arc<[NormalizedImplementationArgument]>,
@@ -713,7 +719,12 @@ impl NormalizedProgram {
             tests,
             types,
         };
-        super::prepared_types::complete_with_implementations(&mut program, &units, control)?;
+        super::prepared_types::complete_with_implementations(
+            &mut program,
+            &units,
+            &runtime_owners,
+            control,
+        )?;
         validate_borrowed_result_calls(&program)?;
         super::session::validate_program_interactive_targets(&program)?;
         super::prepared_types::share_code(&mut program, control)?;

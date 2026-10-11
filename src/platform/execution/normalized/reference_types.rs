@@ -126,6 +126,25 @@ fn index_node<T>(allocated: &mut usize) -> Result<(), ExecutionError> {
     allocate::<usize>(allocated, 3)
 }
 
+// Derive historical bound admission here, independently of canonical owner
+// validation. Every source type reader must establish the generation of a
+// promise before using it, including unused callable and nominal formals.
+fn admit_parameter_generation(owner: &OwnerRecord) -> Result<(), ExecutionError> {
+    if let OwnerRecord::TypeParameter(record) = owner {
+        let version = record.header.contract_version;
+        if (record.constraints.has_owned()
+            && version < crate::platform::kernel::contract::OWNED_GRAPH_CONTRACT_VERSION)
+            || (record.constraints.requires_transfer()
+                && version < crate::platform::kernel::contract::TRANSFER_GRAPH_CONTRACT_VERSION)
+            || (record.constraints.requires_share()
+                && version < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION)
+        {
+            return Err(failure());
+        }
+    }
+    Ok(())
+}
+
 fn reserve_witness(
     allocated: &mut usize,
     witness: &Witness,
@@ -485,6 +504,8 @@ impl<'a> Closure<'a> {
                     if parameter_owner.header.owner != OwnerKey::TypeParameter(*parameter)
                         || parameter_owner.declaration != reference.declaration
                         || parameter_owner.constraints.has_owned()
+                        || parameter_owner.constraints.requires_transfer()
+                        || parameter_owner.constraints.requires_share()
                         || !nominal_assumptions.insert(*parameter)
                     {
                         return Ok(false);
@@ -537,22 +558,54 @@ impl<'a> Closure<'a> {
         }
         let mut bindings = Bindings::new();
         let mut names = BTreeSet::new();
+        let OwnerRecord::Declaration(declaration) = self.owner(
+            reference.package,
+            OwnerKey::Declaration(reference.declaration),
+        )?
+        else {
+            return Err(failure());
+        };
+        if declaration.header.owner != OwnerKey::Declaration(reference.declaration) {
+            return Err(failure());
+        }
         for parameter in parameters {
             let OwnerRecord::TypeParameter(owner) =
                 self.owner(reference.package, OwnerKey::TypeParameter(*parameter))?
             else {
                 return Err(failure());
             };
+            let ordinary = matches!(
+                owner.constraints,
+                crate::platform::kernel::TypeParameterConstraints::Transferable
+                    | crate::platform::kernel::TypeParameterConstraints::CaptureSafeTransferable
+            );
+            let allowed = match &declaration.payload {
+                DeclarationPayload::OwnedContract(contract) => {
+                    if *parameter == contract.self_parameter {
+                        owner.constraints
+                            == crate::platform::kernel::TypeParameterConstraints::Owned
+                    } else {
+                        owner.constraints
+                            == crate::platform::kernel::TypeParameterConstraints::Owned
+                            || ordinary
+                    }
+                }
+                DeclarationPayload::Function(_) | DeclarationPayload::OwnedImplementation(_) => {
+                    owner.constraints.has_owned() || ordinary
+                }
+                _ => false,
+            };
             if owner.header.owner != OwnerKey::TypeParameter(*parameter)
                 || owner.declaration != reference.declaration
-                || !owner.constraints.has_owned()
-                || (owner.constraints != crate::platform::kernel::TypeParameterConstraints::Owned
-                    && !matches!(
-                        self.owner(reference.package, OwnerKey::Declaration(reference.declaration))?,
-                        OwnerRecord::Declaration(declaration)
-                            if matches!(declaration.payload, DeclarationPayload::Function(_)
-                                | DeclarationPayload::OwnedImplementation(_))
-                    ))
+                || !allowed
+                || (ordinary
+                    && !matches!(declaration.payload, DeclarationPayload::Function(_))
+                    && (owner.header.contract_version
+                        < crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+                        || declaration.header.contract_version
+                            < crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+                        || self.snapshots[&reference.package].root.graph_contract_version
+                            < crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION))
                 || !names.insert(&owner.name)
             {
                 return Err(failure());
@@ -571,6 +624,238 @@ impl<'a> Closure<'a> {
             }
         }
         Ok(bindings)
+    }
+
+    fn witness_type_arguments(
+        &mut self,
+        reference: DeclarationReference,
+        parameters: &[TypeParameterId],
+        arguments: &[TypeObjectDigest],
+        scope: Option<DeclarationReference>,
+    ) -> Result<(), ExecutionError> {
+        if parameters.len() != arguments.len() {
+            return Err(failure());
+        }
+        for (parameter, actual) in parameters.iter().zip(arguments) {
+            let OwnerRecord::TypeParameter(record) =
+                self.owner(reference.package, OwnerKey::TypeParameter(*parameter))?
+            else {
+                return Err(failure());
+            };
+            if record.header.owner != OwnerKey::TypeParameter(*parameter)
+                || record.declaration != reference.declaration
+                || self.owned_witness_type(*actual, scope, 0)? != record.constraints.has_owned()
+            {
+                return Err(failure());
+            }
+            if !record.constraints.has_owned()
+                && let Some(scope) = scope
+            {
+                let OwnerRecord::Declaration(caller) =
+                    self.owner(scope.package, OwnerKey::Declaration(scope.declaration))?
+                else {
+                    return Err(failure());
+                };
+                let requires_generation = match &caller.payload {
+                    DeclarationPayload::OwnedImplementation(_)
+                    | DeclarationPayload::OwnedContract(_) => true,
+                    DeclarationPayload::Function(function) => {
+                        let mut mixed = false;
+                        for formal in &function.implementation_parameters {
+                            self.tick()?;
+                            mixed |= self.mixed_contract(formal.contract)?;
+                        }
+                        mixed
+                    }
+                    _ => false,
+                };
+                if requires_generation && (
+                    caller.header.contract_version
+                        < crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+                    || self.snapshots[&scope.package].root.graph_contract_version
+                        < crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+                ) {
+                    return Err(failure());
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn contract_application(
+        &mut self,
+        reference: DeclarationReference,
+        self_type: TypeObjectDigest,
+        arguments: &[TypeObjectDigest],
+        scope: Option<DeclarationReference>,
+    ) -> Result<(), ExecutionError> {
+        let OwnerRecord::Declaration(owner) = self.owner(
+            reference.package,
+            OwnerKey::Declaration(reference.declaration),
+        )?
+        else {
+            return Err(failure());
+        };
+        let DeclarationPayload::OwnedContract(contract) = &owner.payload else {
+            return Err(failure());
+        };
+        allocate::<TypeParameterId>(&mut self.allocated, contract.type_parameters.len() + 1)?;
+        let parameters: Vec<_> = std::iter::once(contract.self_parameter)
+            .chain(contract.type_parameters.iter().copied())
+            .collect();
+        self.owned_scheme_parameters(reference, &parameters)?;
+        allocate::<TypeObjectDigest>(&mut self.allocated, arguments.len() + 1)?;
+        let arguments: Vec<_> = std::iter::once(self_type)
+            .chain(arguments.iter().copied())
+            .collect();
+        self.witness_type_arguments(reference, &parameters, &arguments, scope)?;
+        index_node::<(
+            DeclarationReference,
+            Vec<TypeObjectDigest>,
+            Option<DeclarationReference>,
+        )>(&mut self.allocated)?;
+        self.constrained_applications
+            .insert((reference, arguments, scope));
+        Ok(())
+    }
+
+    fn mixed_contract(&mut self, reference: DeclarationReference) -> Result<bool, ExecutionError> {
+        let OwnerRecord::Declaration(owner) = self.owner(
+            reference.package,
+            OwnerKey::Declaration(reference.declaration),
+        )?
+        else {
+            return Err(failure());
+        };
+        let DeclarationPayload::OwnedContract(contract) = &owner.payload else {
+            return Err(failure());
+        };
+        self.mixed_parameters(reference, &contract.type_parameters)
+    }
+
+    fn mixed_parameters(
+        &mut self,
+        reference: DeclarationReference,
+        parameters: &[TypeParameterId],
+    ) -> Result<bool, ExecutionError> {
+        let mut mixed = false;
+        for parameter in parameters {
+            let OwnerRecord::TypeParameter(owner) =
+                self.owner(reference.package, OwnerKey::TypeParameter(*parameter))?
+            else {
+                return Err(failure());
+            };
+            if owner.header.owner != OwnerKey::TypeParameter(*parameter)
+                || owner.declaration != reference.declaration
+            {
+                return Err(failure());
+            }
+            mixed |= matches!(
+                owner.constraints,
+                crate::platform::kernel::TypeParameterConstraints::Transferable
+                    | crate::platform::kernel::TypeParameterConstraints::CaptureSafeTransferable
+            );
+        }
+        Ok(mixed)
+    }
+
+    fn mixed_operand(
+        &mut self,
+        operand: &crate::platform::kernel::ImplementationOperand,
+    ) -> Result<bool, ExecutionError> {
+        use crate::platform::kernel::ImplementationOperand;
+        allocate::<(&ImplementationOperand, usize)>(&mut self.allocated, 1)?;
+        let mut pending = vec![(operand, 0usize)];
+        let mut nodes = 0usize;
+        let mut mixed = false;
+        while let Some((operand, depth)) = pending.pop() {
+            self.tick()?;
+            nodes = nodes.checked_add(1).ok_or_else(failure)?;
+            if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
+                || nodes > crate::platform::kernel::contract::MAXIMUM_CHILDREN
+            {
+                return Err(failure());
+            }
+            match operand {
+                ImplementationOperand::Concrete {
+                    implementation,
+                    implementations,
+                    ..
+                } => {
+                    let OwnerRecord::Declaration(owner) = self.owner(
+                        implementation.package,
+                        OwnerKey::Declaration(implementation.declaration),
+                    )?
+                    else {
+                        return Err(failure());
+                    };
+                    let DeclarationPayload::OwnedImplementation(scheme) = &owner.payload else {
+                        return Err(failure());
+                    };
+                    mixed |= self.mixed_parameters(*implementation, &scheme.type_parameters)?;
+                    mixed |= self.mixed_contract(scheme.contract)?;
+                    allocate::<(&ImplementationOperand, usize)>(
+                        &mut self.allocated,
+                        implementations.len(),
+                    )?;
+                    pending.extend(implementations.iter().map(|operand| (operand, depth + 1)));
+                }
+                ImplementationOperand::Parameter { scope, parameter } => {
+                    let formal = self
+                        .witness_parameters(*scope)?
+                        .iter()
+                        .find(|formal| formal.id == *parameter)
+                        .ok_or_else(failure)?;
+                    mixed |= self.mixed_contract(formal.contract)?;
+                }
+            }
+        }
+        Ok(mixed)
+    }
+
+    fn mixed_expression_generation(
+        &mut self,
+        record: &crate::platform::kernel::ExpressionRecord,
+    ) -> Result<(), ExecutionError> {
+        if record.contract_version
+            >= crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+        {
+            return Ok(());
+        }
+        let mixed = match &record.operation {
+            ExpressionOperation::MethodCall {
+                witness, contract, ..
+            } => self.mixed_contract(*contract)? || self.mixed_operand(witness)?,
+            ExpressionOperation::ImplementationCall {
+                function,
+                implementations,
+                ..
+            } => {
+                let OwnerRecord::Declaration(owner) = self.owner(
+                    function.package,
+                    OwnerKey::Declaration(function.declaration),
+                )?
+                else {
+                    return Err(failure());
+                };
+                let DeclarationPayload::Function(function) = &owner.payload else {
+                    return Err(failure());
+                };
+                let mut mixed = false;
+                for parameter in &function.implementation_parameters {
+                    mixed |= self.mixed_contract(parameter.contract)?;
+                }
+                for operand in implementations {
+                    mixed |= self.mixed_operand(operand)?;
+                }
+                mixed
+            }
+            _ => false,
+        };
+        if mixed {
+            return Err(failure());
+        }
+        Ok(())
     }
 
     fn scoped_type_parameters(
@@ -779,16 +1064,20 @@ impl<'a> Closure<'a> {
                 {
                     return Err(failure());
                 }
+                self.owned_scheme_parameters(*implementation, &scheme.type_parameters)?;
                 allocate::<TypeObjectDigest>(&mut self.allocated, type_arguments.len())?;
                 let mut arguments = Vec::new();
                 for ty in type_arguments {
                     self.scoped_type_parameters(*ty, bindings, 0)?;
                     let actual = self.identity(*ty, bindings, 0)?;
-                    if !self.owned_witness_type(actual, scope, 0)? {
-                        return Err(failure());
-                    }
                     arguments.push(actual);
                 }
+                self.witness_type_arguments(
+                    *implementation,
+                    &scheme.type_parameters,
+                    &arguments,
+                    scope,
+                )?;
                 allocate::<Witness>(&mut self.allocated, implementations.len())?;
                 let mut selected = Vec::with_capacity(implementations.len());
                 for operand in implementations {
@@ -882,11 +1171,14 @@ impl<'a> Closure<'a> {
         let mut type_arguments = Vec::with_capacity(formal.type_arguments.len());
         for argument in &formal.type_arguments {
             self.scoped_type_parameters(*argument, bindings, 0)?;
-            if !self.owned_witness_type(*argument, Some(scope), 0)? {
-                return Err(failure());
-            }
             type_arguments.push(self.identity(*argument, bindings, 0)?);
         }
+        self.contract_application(
+            formal.contract,
+            formal.self_type,
+            &formal.type_arguments,
+            Some(scope),
+        )?;
         self.intern_witness(WitnessForm::Parameter {
             scope,
             parameter,
@@ -994,12 +1286,16 @@ impl<'a> Closure<'a> {
             }
             for (expected, actual) in formal.type_arguments.iter().zip(arguments) {
                 self.scoped_type_parameters(*expected, types, 0)?;
-                if !self.owned_witness_type(*expected, Some(scope), 0)?
-                    || self.identity(*expected, types, 0)? != actual
-                {
+                if self.identity(*expected, types, 0)? != actual {
                     return Err(failure());
                 }
             }
+            self.contract_application(
+                formal.contract,
+                formal.self_type,
+                &formal.type_arguments,
+                Some(scope),
+            )?;
             index_node::<(ImplementationParameterId, Witness)>(&mut self.allocated)?;
             reserve_witness(&mut self.allocated, selected, depth, &mut 0)?;
             if values.insert(formal.id, selected.clone()).is_some() {
@@ -1167,11 +1463,14 @@ impl<'a> Closure<'a> {
                 let mut arguments = Vec::with_capacity(scheme.type_arguments.len());
                 for argument in &scheme.type_arguments {
                     self.scoped_type_parameters(*argument, &templates, 0)?;
-                    if !self.owned_witness_type(*argument, Some(implementation), 0)? {
-                        return Err(failure());
-                    }
                     arguments.push(self.identity(*argument, &substitutions, 0)?);
                 }
+                self.contract_application(
+                    scheme.contract,
+                    scheme.self_type,
+                    &scheme.type_arguments,
+                    Some(implementation),
+                )?;
                 (scheme.contract, self_type, arguments)
             }
         };
@@ -1551,7 +1850,9 @@ impl<'a> Closure<'a> {
         // Snapshot owners outlive this derivation. Borrow their canonical metadata
         // directly so temporary declaration clones cannot escape allocation accounting.
         let snapshot = *self.snapshots.get(&package).ok_or_else(failure)?;
-        snapshot.owners.get(&key).ok_or_else(failure)
+        let owner = snapshot.owners.get(&key).ok_or_else(failure)?;
+        admit_parameter_generation(owner)?;
+        Ok(owner)
     }
 
     fn identity(
@@ -1686,6 +1987,7 @@ impl<'a> Closure<'a> {
             else {
                 return Err(failure());
             };
+            self.mixed_expression_generation(&record)?;
             let children = record.children();
             let nominal: Option<(_, &[TypeObjectDigest])> = match &record.operation {
                 ExpressionOperation::Record {
@@ -2852,7 +3154,9 @@ pub(super) fn complete(
             else {
                 return Err(failure());
             };
-            if record.declaration != target.declaration {
+            if record.header.owner != OwnerKey::TypeParameter(*parameter)
+                || record.declaration != target.declaration
+            {
                 return Err(failure());
             }
             if scoped_owned(schema, snapshots, actual, scope)? != record.constraints.has_owned() {
@@ -3055,11 +3359,13 @@ fn canonical_owner<'a>(
     declaration: DeclarationReference,
     key: OwnerKey,
 ) -> Result<&'a OwnerRecord, ExecutionError> {
-    snapshots
+    let owner = snapshots
         .iter()
         .find(|snapshot| snapshot.root.package_id == declaration.package)
         .and_then(|snapshot| snapshot.owners.get(&key))
-        .ok_or_else(failure)
+        .ok_or_else(failure)?;
+    admit_parameter_generation(owner)?;
+    Ok(owner)
 }
 
 fn scoped_owned(
@@ -3085,7 +3391,18 @@ fn scoped_owned(
             else {
                 return Err(failure());
             };
-            if record.declaration != declaration.declaration {
+            let OwnerRecord::Declaration(owner) = canonical_owner(
+                snapshots,
+                declaration,
+                OwnerKey::Declaration(declaration.declaration),
+            )?
+            else {
+                return Err(failure());
+            };
+            if record.header.owner != OwnerKey::TypeParameter(*parameter)
+                || record.declaration != declaration.declaration
+                || !owner.payload.type_parameters().contains(parameter)
+            {
                 return Err(failure());
             }
             Ok(record.constraints.has_owned())
@@ -3247,6 +3564,7 @@ fn parallel_carrier_type(
                         }) || !matches!(
                             owner.payload,
                             DeclarationPayload::Function(_)
+                                | DeclarationPayload::OwnedContract(_)
                                 | DeclarationPayload::OwnedImplementation(_)
                                 | DeclarationPayload::OwnedRecord { .. }
                         )

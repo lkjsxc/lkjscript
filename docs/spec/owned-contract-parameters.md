@@ -1,16 +1,19 @@
 # Parameterized owned contracts and structural method signatures
 
-Graph 26 extends [explicit owned implementations](owned-generics.md) with ordered
-contract arguments and structural owned method types. The accepted meaning graph
-remains authoritative. [Status](../status.md) owns exact source acceptance and
-public executable availability; this specification does not confer either.
+Graph 26 introduced ordered contract arguments and structural owned method types;
+Graph 33 extends them with ordinary transferable data parameters. The accepted
+meaning graph remains authoritative. [Status](../status.md) owns exact source
+acceptance and public executable availability; this specification does not confer either.
 
 ## Contract scope and signatures
 
 An `OwnedContract` retains one distinguished `Self` parameter and declares a
-bounded ordered list of additional type parameters. Every parameter has the exact
-`Owned` constraint, a distinct identity and the contract as its declaring scope.
-The additional list excludes Self. Names do not determine application order.
+bounded ordered list of additional type parameters. Self has exactly the `Owned`
+constraint. Each additional parameter declares `Owned`, `Transferable` or
+`CaptureSafeTransferable`; stronger Owned bounds, unconstrained parameters and
+CaptureSafe-only parameters are excluded from contracts. Every parameter has a
+distinct identity and the contract as its declaring scope. The additional list
+excludes Self. Names do not determine application order.
 
 Native declarations select Self with `(self NAME)` and declare parameters as
 children in authored order. Additional argument order is that child order with
@@ -34,26 +37,32 @@ Self removed. A minimal worklist contract is:
       (case item (owned-product (field rest Self) (field value Item)))))))
 ```
 
-Method parameters and results may contain any of these exact contract parameters
+Method parameters and results may contain exact contract parameters
 inside finite [owned products](owned-products.md), [choices](owned-choices.md) and
 [sequences](owned-sequences.md). Closed owned carriers and closed owned structural
-types are also permitted. Ordinary signature types remain closed first-order data;
-an ordinary nominal or container cannot hide an owned parameter or owner. Every
-type child and actual nominal argument is checked, including unused arguments,
-phantom arguments and unselected cases.
+types are also permitted. Ordinary signature types are first-order data, either
+closed or containing eligible ordinary parameters from this exact contract scope.
+Ordinary nominal types, lists, maps, optional values and results retain complete
+recursive admission; they cannot hide an owned parameter or owner. Every type
+child and actual nominal argument is checked, including unused arguments, phantom
+arguments and unselected cases. A transferable owner cannot satisfy an ordinary
+formal: ownership category and transfer/capture obligations are independent.
 
 Ordinary unrestricted parameters precede the owned suffix. Pure and named task
 methods may borrow or consume owned parameters, including Self. Synchronous
 borrowing needs only Owned and retains its read protection across authorized task
-effects. A result is owned or closed ordinary data; only a pure method may declare
-a [source-tied borrowed result](owned-read-results.md). Methods retain
+effects. An ordinary parameter has unrestricted mode; ordinary borrow/consume and
+mode polymorphism are unsupported. An ordinary result is an immutable standalone
+value, including when it uses an ordinary contract parameter. Only a pure method
+with an owned result may declare a [source-tied borrowed result](owned-read-results.md),
+retaining its exact borrowed input source. Methods retain
 their exact callable kind and closed effect row and have no method-local generic,
 effect or requirement scheme. An empty-row task remains a task.
 
 ## Exact implementations and function witnesses
 
 An `OwnedImplementation` names an exact contract, a concrete closed owned Self and
-one explicitly ordered owned type argument per additional contract parameter:
+one explicitly ordered type argument satisfying each additional contract formal:
 
 ```lisp
 (owned-implementation create FlatCells (visibility public)
@@ -75,12 +84,13 @@ type application under the extension below. All mappings are checked even when
 unused. No inferred implementation search or subtyping participates in selection.
 
 [Generic implementation schemes](generic-owned-implementations.md) extend this
-form with implementation-scoped Owned parameters and explicit mapped-function
-type arguments. They retain complete symbolic admission and exact selection.
+form with implementation-scoped owned and ordinary transferable parameters and
+explicit mapped-function type arguments. They retain complete symbolic admission
+and exact selection.
 
 A function witness retains its in-scope Owned Self parameter and declares an
-ordered argument vector. Arguments may contain exact in-scope Owned parameters
-inside supported finite owned structural types:
+ordered argument vector. Arguments may contain exact eligible in-scope parameters
+inside supported finite owned or ordinary types, according to each contract formal:
 
 ```lisp
 (implementation-parameter implparam_77000000000000000000000000000001
@@ -120,11 +130,36 @@ worklist's pop outcomes return its storage owner explicitly. The `item` outcome
 also returns the element owner; neither a second owner nor an escaping read view
 is created.
 
+## Indexed ordinary storage
+
+The [native storage library](../../examples/indexed-data-storage/README.md) declares
+`IndexedData<Self: Owned, Item: Transferable>` before concrete consumers exist.
+Its six pure methods use the existing declaration syntax and exact modes:
+
+| Method | Ordered parameters | Result |
+| --- | --- | --- |
+| `empty` | none | Self |
+| `length` | Self borrow | I64 |
+| `push` | Item unrestricted, Self consume | Self |
+| `get` | I64 unrestricted, Self borrow | Item |
+| `replace` | I64 unrestricted, Item unrestricted, Self consume | owned-product { rest: Self, value: Item } |
+| `discard` | Self consume | Unit |
+
+`get` returns a stable ordinary value rather than a source-tied view. `replace`
+returns renewed storage custody and the displaced ordinary value. Bounds,
+reservation, authored evaluation order and joined cleanup retain the existing
+data-sequence contracts. `Flat<T>` uses `owned-sequence T`; `Chunked<T>` uses the
+module-private nominal `Chunk32<T>` representation with chunks of 32 elements.
+Both satisfy the same exact contract without a new borrowing mode or runtime
+primitive. The native dependency planner selects separate integer and Boolean
+storage witnesses and checks complete outcomes for all four flat/chunked choices.
+
 ## Encodings and boundaries
 
-This increment selects graph/owner 26, package interface 14, compiler unit 26,
-bytecode 21 and artifact 33. Authored request 30 applies when additional contract
-parameters or application arguments are nonempty; empty applications retain their
+The original parameterized-contract increment selected graph/owner 26, package
+interface 14, compiler unit 26, bytecode 21 and artifact 33. Authored request 30
+applies when additional contract parameters or application arguments are nonempty;
+empty applications retain their
 predecessor intent bytes and historical commitments. New parameterized-contract
 intent tags encode every method effect explicitly. Contracts, implementations and
 function witnesses carry their full ordered application data through canonical
@@ -132,6 +167,23 @@ drafts, inspection, interfaces, transports, preparation and detached artifacts.
 The derived format cut requires rebuilding maintained bundles through their
 supported product owners. Historical acceptance and immutable published bytes
 retain their original meaning and evidence.
+
+The ordinary-parameter extension requires Graph 33 at each mixed declaring scope,
+ordinary contract/scheme formal and invocation expression. This includes mixed
+contracts, implementations, mapped applications and function witness declarations; referring
+to a newer declaration cannot upgrade an older owner. Supported
+Graph 32 meaning remains readable under its original bounds. New exports and
+derived programs select package interface 21, compiler unit 33 and artifact 40;
+bytecode remains 27. Exported package revision/transport identities change with
+the wrapper generation even when accepted semantic revision is unchanged.
+Retained consumers preserve their exact historical selections. Authored requests
+carrying the extension select codec 37.
+Semantic validator 38 binds the new category and scope obligations; predecessor
+proofs do not establish current admission.
+These are explicit admission boundaries, not a reinterpretation of predecessor
+bytes. Regenerate maintained derived assets through supported owners; no migration
+shim is provided. [Verification](verification.md#mixed-storage-contract-obligations)
+owns independent admission and public behavior obligations.
 
 Associated projections, general escaping references,
 mutable borrows and method-local generics remain future work.

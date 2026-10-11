@@ -39,10 +39,13 @@ concrete carriers satisfy both predicates. Borrowing during an ordinary synchron
 task call needs only Owned. Neither obligation changes callable kind, effects or
 capability grants.
 
-The bounds belong to graph-function type parameters and the supported Owned
-parameters of generic implementation schemes, with exact declaration membership
-and existing restrictions on owned generic effects and requirements.
-Nominal declarations and owned-contract Self retain their prior constraint forms.
+The bounds belong to graph-function type parameters, owned records and supported
+owned or ordinary parameters of generic implementation schemes, with exact
+declaration membership and existing restrictions on effects and requirements.
+Owned-contract Self remains exactly Owned. Additional contract parameters admit
+Owned, Transferable or CaptureSafeTransferable under the
+[mixed storage contract](owned-contract-parameters.md). Category remains independent
+of transfer/capture obligations, including unused and phantom actuals.
 A stronger owned parameter can satisfy an owned contract's Self or additional
 Owned requirement without granting effects or changing the contract identity.
 Method maps must still prove every stronger obligation required by their selected
@@ -60,6 +63,10 @@ products and choices must satisfy their existing shape rules and prove every
 child transferable, including inactive cases. Ordinary aggregate metadata may
 contain exact in-scope ordinary transferable parameters. At least one statically
 owned field or case remains required, independent of runtime selection.
+
+[Nominal owned records](owned-records.md) are intrinsically owned even when empty
+or containing only ordinary data. Transfer and sharing independently admit their
+complete private layout and every actual argument; neither follows from ownership.
 
 [Owned sequences](owned-sequences.md) are transferable when their exact element
 type is transferable, including when empty. Every actual child crosses independent

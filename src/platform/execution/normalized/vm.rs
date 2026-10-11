@@ -5272,19 +5272,67 @@ fn validate_runtime_implementation(
     }
     reserve((std::mem::size_of::<u32>() + 3 * std::mem::size_of::<usize>()) as u64)?;
     visited.insert(application.identity);
-    for ty in std::iter::once(&application.self_type)
-        .chain(application.implementation_type_arguments.iter())
-        .chain(application.type_arguments.iter())
-    {
-        resolve_runtime_type(
-            program,
-            *ty,
-            &BTreeMap::new(),
-            control,
-            "implementation witness type is unresolved",
-        )?;
-        if !program.is_owned_type(*ty) {
-            return Err(type_error("implementation witness type is not owned"));
+    resolve_runtime_type(
+        program,
+        application.self_type,
+        &BTreeMap::new(),
+        control,
+        "implementation witness Self is unresolved",
+    )?;
+    if !program.is_owned_type(application.self_type) {
+        return Err(type_error("implementation witness Self is not owned"));
+    }
+    for (arguments, constraints, contract) in [
+        (
+            &application.implementation_type_arguments,
+            &application.implementation_type_parameter_constraints,
+            false,
+        ),
+        (
+            &application.type_arguments,
+            &application.contract_type_parameter_constraints,
+            true,
+        ),
+    ] {
+        if arguments.len() != constraints.len() {
+            return Err(type_error(
+                "implementation witness formal inventory is incomplete",
+            ));
+        }
+        for (ty, constraint) in arguments.iter().zip(constraints.iter()) {
+            resolve_runtime_type(
+                program,
+                *ty,
+                &BTreeMap::new(),
+                control,
+                "implementation witness type is unresolved",
+            )?;
+            let owned = program.is_owned_type(*ty);
+            if (contract
+                && !matches!(constraint,
+            crate::platform::kernel::TypeParameterConstraints::Owned
+            | crate::platform::kernel::TypeParameterConstraints::Transferable
+            | crate::platform::kernel::TypeParameterConstraints::CaptureSafeTransferable))
+                || (!constraint.has_owned()
+                    && !matches!(constraint,
+                crate::platform::kernel::TypeParameterConstraints::Transferable
+                | crate::platform::kernel::TypeParameterConstraints::CaptureSafeTransferable))
+                || owned != constraint.has_owned()
+                || (!owned
+                    && (!program.buffer_free_types.contains(ty)
+                        || !program.comparable_types.contains(ty)))
+                || (constraint.requires_capture_safe() && !program.capture_safe_types.contains(ty))
+            {
+                return Err(type_error(
+                    "implementation witness argument violates its exact formal constraints",
+                ));
+            }
+            if constraint.requires_transfer() {
+                transfer::admit_type(program, *ty, control)?;
+            }
+            if constraint.requires_share() {
+                transfer::admit_shareable_type(program, *ty, control)?;
+            }
         }
     }
     if application.implementations.len() != application.prerequisites.len() {

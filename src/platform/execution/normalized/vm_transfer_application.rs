@@ -101,11 +101,6 @@ impl TaskApplication {
                 &mut witness_visited,
                 reserve,
             )?;
-            for ty in application.implementation_type_arguments.iter() {
-                if !closed_owned_type(program, *ty)? {
-                    return Err(reject());
-                }
-            }
             if parameter.contract != application.contract
                 || resolve_type(program, parameter.self_type, &bindings, control)?
                     != application.self_type
@@ -119,9 +114,7 @@ impl TaskApplication {
                 .zip(application.type_arguments.iter())
             {
                 work.visit(0)?;
-                if resolve_type(program, *expected, &bindings, control)? != *actual
-                    || !closed_owned_type(program, *actual)?
-                {
+                if resolve_type(program, *expected, &bindings, control)? != *actual {
                     return Err(reject());
                 }
             }
@@ -239,13 +232,50 @@ fn validate_implementation(
     }
     reserve((std::mem::size_of::<u32>() + 3 * std::mem::size_of::<usize>()) as u64)?;
     visited.insert(application.identity);
-    for ty in std::iter::once(&application.self_type)
-        .chain(application.implementation_type_arguments.iter())
-        .chain(application.type_arguments.iter())
-    {
-        work.visit(0)?;
-        if !closed_owned_type(program, *ty)? {
+    if !closed_owned_type(program, application.self_type)? {
+        return Err(reject());
+    }
+    for (arguments, constraints, contract) in [
+        (
+            &application.implementation_type_arguments,
+            &application.implementation_type_parameter_constraints,
+            false,
+        ),
+        (
+            &application.type_arguments,
+            &application.contract_type_parameter_constraints,
+            true,
+        ),
+    ] {
+        if arguments.len() != constraints.len() {
             return Err(reject());
+        }
+        for (ty, constraint) in arguments.iter().zip(constraints.iter()) {
+            work.visit(0)?;
+            let owned = closed_owned_type(program, *ty)?;
+            if (contract
+                && !matches!(constraint,
+                crate::platform::kernel::TypeParameterConstraints::Owned
+                | crate::platform::kernel::TypeParameterConstraints::Transferable
+                | crate::platform::kernel::TypeParameterConstraints::CaptureSafeTransferable))
+                || (!constraint.has_owned()
+                    && !matches!(constraint,
+                    crate::platform::kernel::TypeParameterConstraints::Transferable
+                    | crate::platform::kernel::TypeParameterConstraints::CaptureSafeTransferable))
+                || owned != constraint.has_owned()
+                || (!owned
+                    && (!program.buffer_free_types.contains(ty)
+                        || !program.comparable_types.contains(ty)))
+                || (constraint.requires_capture_safe() && !program.capture_safe_types.contains(ty))
+            {
+                return Err(reject());
+            }
+            if constraint.requires_transfer() {
+                validate_type(program, *ty, 0, work)?;
+            }
+            if constraint.requires_share() && !validate_shareable_type(program, *ty, 0, work)? {
+                return Err(reject());
+            }
         }
     }
     if application.implementations.len() != application.prerequisites.len() {
@@ -271,6 +301,43 @@ fn validate_implementation(
 mod tests {
     use super::*;
     use crate::platform::execution::normalized::tests::owned_implementation_scheme_tests::prepared_duplicate_dag;
+
+    #[test]
+    fn parallel_mixed_witness_admission_requires_complete_exact_formal_categories() {
+        use crate::platform::execution::normalized::tests::mixed_storage_contract_tests::prepared_mixed;
+        use crate::platform::kernel::TypeParameterConstraints as C;
+        let base = prepared_mixed();
+        let control = ExecutionControl::uncancelled();
+        for fault in 0..5 {
+            let mut program = base.clone();
+            let node = &mut Arc::make_mut(&mut program.implementation_applications)[0];
+            match fault {
+                1 => Arc::make_mut(node).implementation_type_parameter_constraints = Arc::from([]),
+                2 => {
+                    Arc::make_mut(node).implementation_type_parameter_constraints =
+                        Arc::from([C::Owned])
+                }
+                3 => Arc::make_mut(node).contract_type_parameter_constraints = Arc::from([]),
+                4 => {
+                    Arc::make_mut(node).contract_type_parameter_constraints = Arc::from([C::Owned])
+                }
+                _ => {}
+            }
+            let node = &program.implementation_applications[0];
+            let result = validate_implementation(
+                &program,
+                node,
+                0,
+                &mut Work {
+                    control: &control,
+                    nodes: 0,
+                },
+                &mut BTreeSet::new(),
+                &mut |_| Ok(()),
+            );
+            assert_eq!(result.is_ok(), fault == 0, "fault {fault}");
+        }
+    }
 
     #[test]
     fn parallel_admission_visits_a_depth_24_binary_dag_linearly() {

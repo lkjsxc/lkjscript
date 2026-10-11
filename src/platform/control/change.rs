@@ -62,8 +62,8 @@ use std::str::FromStr;
 
 pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-40";
 pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 40;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-36";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 36;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-37";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 37;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -6364,6 +6364,8 @@ fn commitment_codec_identity(intent: &[u8]) -> &'static str {
         "lkjscript-authored-change-codec-34"
     } else if intent.starts_with(b"LKJACR35") {
         "lkjscript-authored-change-codec-35"
+    } else if intent.starts_with(b"LKJACR36") {
+        "lkjscript-authored-change-codec-36"
     } else {
         // Retain the existing fallback; do not infer identities from unknown/future magics.
         AUTHORED_CHANGE_CODEC_IDENTITY

@@ -3200,9 +3200,15 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 })?;
             }
             if owner.constraints.requires_transfer() {
-                self.owned_read(|read| {
+                let owned = self.owned_read(|read| {
                     super::transfer::admit(read, *supplied, context.declaration)
                 })?;
+                if owned != owner.constraints.has_owned() {
+                    return Err(type_error(
+                        "kernel_transfer_constraint",
+                        "transferable actual must preserve its formal's ownership category",
+                    ));
+                }
             }
             if owner.constraints.requires_share() {
                 self.owned_read(|read| super::share::admit(read, *supplied, context.declaration))?;

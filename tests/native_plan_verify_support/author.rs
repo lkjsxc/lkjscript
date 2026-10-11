@@ -4,6 +4,7 @@ use serde_json::json;
 
 pub fn author(public: &Native) {
     let standard = public.export(None, "standard");
+    let storage = crate::plan::author_storage(public, &standard);
     let library = public.project("library");
     public.stage(&library, &standard);
     public.author(
@@ -83,6 +84,9 @@ pub fn author(public: &Native) {
         ("owned-worklists", &library_export),
         ("worklist-carriers", &carriers_export),
         ("dependency-verifier", &verifier_export),
+        ("indexed-data", &storage[0]),
+        ("indexed-flat", &storage[1]),
+        ("indexed-chunked", &storage[2]),
     ];
     for (_, dependency) in &dependencies {
         public.stage(&application, dependency);

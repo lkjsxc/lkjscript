@@ -798,9 +798,10 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: PredecessorPolicy::ReadHistorical,
             magic_values: &[
-                "LKJOWN30", "LKJOWN29", "LKJOWN28", "LKJOWN27", "LKJOWN26", "LKJOWN25", "LKJOWN24",
-                "LKJOWN23", "LKJOWN22", "LKJOWN21", "LKJOWN20", "LKJOWN19", "LKJOWN18", "LKJOWN17",
-                "LKJOWN16", "LKJOWN15", "LKJOWN14", "LKJSMR01", "LKJDEP14", "LKJRET14",
+                "LKJOWN33", "LKJOWN32", "LKJOWN31", "LKJOWN30", "LKJOWN29", "LKJOWN28", "LKJOWN27",
+                "LKJOWN26", "LKJOWN25", "LKJOWN24", "LKJOWN23", "LKJOWN22", "LKJOWN21", "LKJOWN20",
+                "LKJOWN19", "LKJOWN18", "LKJOWN17", "LKJOWN16", "LKJOWN15", "LKJOWN14", "LKJSMR01",
+                "LKJDEP14", "LKJRET14",
             ],
             digest_domains: &[
                 super::super::kernel::contract::OWNER_ENVELOPE_DOMAIN,
@@ -1024,7 +1025,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
                 "LKJACR14", "LKJACR15", "LKJACR16", "LKJACR17", "LKJACR18", "LKJACR19", "LKJACR20",
                 "LKJACR21", "LKJACR22", "LKJACR23", "LKJACR24", "LKJACR25", "LKJACR26", "LKJACR27",
                 "LKJACR28", "LKJACR29", "LKJACR30", "LKJACR31", "LKJACR32", "LKJACR33", "LKJACR34",
-                "LKJABG01",
+                "LKJACR35", "LKJACR36", "LKJACR37", "LKJABG01",
             ],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
@@ -1105,8 +1106,8 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: PredecessorPolicy::ReadHistorical,
             magic_values: &[
-                "LKJPIF18", "LKJPIF17", "LKJPIF16", "LKJPIF15", "LKJPIF14", "LKJPIF13", "LKJPIF12",
-                "LKJPIF11", "LKJPIF10",
+                "LKJPIF21", "LKJPIF20", "LKJPIF19", "LKJPIF18", "LKJPIF17", "LKJPIF16", "LKJPIF15",
+                "LKJPIF14", "LKJPIF13", "LKJPIF12", "LKJPIF11", "LKJPIF10",
             ],
             digest_domains: &[
                 PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
@@ -1172,7 +1173,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: REJECT,
-            magic_values: &["LKJCUN30"],
+            magic_values: &["LKJCUN33"],
             digest_domains: &[
                 COMPILER_UNIT_ENVELOPE_DOMAIN,
                 COMPILER_UNIT_KEY_DOMAIN,
@@ -1194,7 +1195,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJAMF37"],
+            magic_values: &["LKJAMF40"],
             digest_domains: &[
                 ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
                 storage_contract::ARTIFACT_MANIFEST_DIGEST_DOMAIN,
@@ -1208,7 +1209,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJART37", "LKJAEN37"],
+            magic_values: &["LKJART40", "LKJAEN40"],
             digest_domains: &[
                 ARTIFACT_BUNDLE_DIGEST_DOMAIN,
                 ARTIFACT_BUNDLE_CHECKSUM_DOMAIN,
@@ -4737,7 +4738,13 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "kernel_owned_parameter_owner",
             DiagnosticClass::Semantic,
             "An Owned constraint belongs to an unsupported declaration or foreign scope.",
-            "Use owned bounds on an exact graph function or implementation scheme and exact Owned on owned-contract Self and ordered additional parameters; memory inputs declare borrow or consume and implementation applications supply exact type, effect and requirement operands.",
+            "Use owned bounds on an exact graph function or implementation scheme and exact Owned on owned-contract Self; additional contract and scheme parameters may use ordinary transferable bounds. Memory inputs declare borrow or consume and implementation applications supply exact type, effect and requirement operands.",
+        ),
+        diagnostic(
+            "kernel_mixed_storage_generation",
+            DiagnosticClass::Semantic,
+            "An ordinary storage contract or implementation parameter was assigned predecessor declaration or parameter authority.",
+            "Author mixed declarations and all ordinary parameter owners with Graph 33; export interface 21 and rebuild compiler 33/artifact 40 through their supported owners.",
         ),
         diagnostic(
             "normalized_cell_token",
@@ -8782,18 +8789,18 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         ),
         (
             "owned-contract",
-            "(owned-contract MODE BINDING (visibility public|private) (self SELF) (type-parameter MODE SELF (constraint owned)) (type-parameter MODE ITEM (constraint owned))... (method method_HEX NAME (parameters (TYPE unrestricted|borrow|consume)...) (returns TYPE [(borrow-from ZERO_BASED_PARAMETER_POSITION)]) [(effect pure|(task (requirement REQUIREMENT)...))])...)",
-            "Nominal pure or closed-effect task methods with distinguished owned Self and ordered additional owned parameters. Pure methods may tie a borrowed result to an exact zero-based borrowed parameter position. Method types compose these parameters in owned products, choices and sequences; pure and task memory arguments explicitly borrow or consume. Ordinary types remain closed and first order.",
+            "(owned-contract MODE BINDING (visibility public|private) (self SELF) (type-parameter MODE SELF (constraint owned)) (type-parameter MODE ITEM (constraint owned|transferable|capture-safe transferable))... (method method_HEX NAME (parameters (TYPE unrestricted|borrow|consume)...) (returns TYPE [(borrow-from ZERO_BASED_PARAMETER_POSITION)]) [(effect pure|(task (requirement REQUIREMENT)...))])...)",
+            "Nominal pure or closed-effect task methods with exact Owned Self and ordered additional Owned or ordinary Transferable parameters. Every ordinary actual, including phantom arguments, must be complete first-order data and satisfy its exact bounds; a transferable owner is not ordinary data. Ordinary arguments are unrestricted and precede owned borrow/consume arguments. Ordinary results are immutable values; borrowed results require an owned result tied to an exact borrowed source. Mixed declarations require Graph 33.",
         ),
         (
             "owned-implementation",
-            "(owned-implementation MODE BINDING (visibility public|private) (type-parameter MODE PARAMETER (constraint owned|owned transferable|owned shareable|owned transferable shareable))... (implementation-parameter implparam_HEX NAME CONTRACT SELF_TYPE [(types TYPE...)])... (contract DECLARATION) (self TYPE) [(types TYPE...)] (method method_HEX FUNCTION [(types TYPE...)] [(implementations OPERAND...)])...)",
-            "Ordered owned type and prerequisite parameters apply explicitly with exact declared bounds. Every method maps to an exact visible graph function with identical substituted signature, use modes, borrowed provenance, callable kind and closed effect row. Mappings forward direct same-scheme prerequisites or select parameter-free concrete witness trees. Complete applications retain every nested witness identity and grant no effects.",
+            "(owned-implementation MODE BINDING (visibility public|private) (type-parameter MODE PARAMETER (constraint owned|owned transferable|owned shareable|owned transferable shareable|transferable|capture-safe transferable))... (implementation-parameter implparam_HEX NAME CONTRACT SELF_TYPE [(types TYPE...)])... (contract DECLARATION) (self TYPE) [(types TYPE...)] (method method_HEX FUNCTION [(types TYPE...)] [(implementations OPERAND...)])...)",
+            "Ordered owned and ordinary transferable type parameters and prerequisites apply explicitly with exact declared category and bounds, including unused arguments. Every method maps to an exact visible graph function with identical substituted signature, use modes, borrowed provenance, callable kind and closed effect row. Mappings forward direct same-scheme prerequisites or select parameter-free concrete witness trees. Complete applications retain every nested witness identity and grant no effects; mixed declarations require Graph 33.",
         ),
         (
             "implementation-parameter",
             "(implementation-parameter implparam_HEX NAME CONTRACT SELF_TYPE [(types TYPE...)])",
-            "A function- or implementation-scoped static witness with exact ordered owned type arguments. Concrete operand syntax is IMPLEMENTATION or (implementation IMPLEMENTATION [(types TYPE...)] [(implementations OPERAND...)]); lexical forwarding uses parameter@SCOPE@implparam_HEX. Clauses occur once in types/implementations order. Every type and prerequisite argument, including unused arguments and nested selections, participates in identity and admission. Forwarding matches the complete contract application in the exact lexical scope; selection confers no effects or grants.",
+            "A function- or implementation-scoped static witness with exact Owned Self and ordered owned or ordinary type arguments. Concrete operand syntax is IMPLEMENTATION or (implementation IMPLEMENTATION [(types TYPE...)] [(implementations OPERAND...)]); lexical forwarding uses parameter@SCOPE@implparam_HEX. Clauses occur once in types/implementations order. Every type and prerequisite argument, including unused arguments and nested selections, participates in identity and admission. Forwarding matches the complete contract application in the exact lexical scope; selection confers no effects or grants.",
         ),
         (
             "type-parameter",

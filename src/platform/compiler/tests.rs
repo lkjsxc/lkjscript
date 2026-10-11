@@ -17,8 +17,11 @@ mod composed_implementation_admission_tests;
 mod effect_tests;
 #[path = "generic_implementation_admission_tests.rs"]
 mod generic_implementation_admission_tests;
+
 #[path = "generic_resource_tests.rs"]
 mod generic_resource_tests;
+#[path = "mixed_storage_admission_tests.rs"]
+mod mixed_storage_admission_tests;
 #[path = "nominal_owned_record_admission_tests.rs"]
 mod nominal_owned_record_admission_tests;
 #[path = "owned_borrow_admission_tests.rs"]

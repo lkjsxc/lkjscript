@@ -41,6 +41,8 @@ pub(crate) mod byte_buffer_tests;
 mod bytes_reuse_tests;
 #[path = "bytes_tests.rs"]
 mod bytes_tests;
+#[path = "mixed_storage_contract_tests.rs"]
+pub(crate) mod mixed_storage_contract_tests;
 #[path = "owned_borrow_effect_tests.rs"]
 mod owned_borrow_effect_tests;
 #[path = "owned_borrow_tests.rs"]
@@ -127,7 +129,7 @@ fn graph14_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
     );
     assert_eq!(
         crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-        32
+        33
     );
     assert_eq!(
         crate::platform::kernel::contract::TYPE_OBJECT_CONTRACT_VERSION,

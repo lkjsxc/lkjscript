@@ -179,12 +179,14 @@ impl Runner<'_> {
         ];
         command.extend(inventory.selected.iter().cloned());
         self.receipt.inventory = Some(inventory);
+        // The hosted predecessor completed 42 of 96 cases before its 30-minute
+        // aggregate expired. Keep every case and bound execution separately.
         let observed = self.run(
             "execute",
             command,
             work,
             environment,
-            Duration::from_secs(30 * 60),
+            Duration::from_secs(120 * 60),
         )?;
         let inventory = self
             .receipt

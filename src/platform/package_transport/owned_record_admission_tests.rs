@@ -90,7 +90,7 @@ fn owned_record_transport_reconstructs_private_representation_without_exporting_
 }
 
 #[test]
-fn owned_record_transport_preserves_supported_graph31_owner_bytes_in_graph32_source() {
+fn owned_record_transport_preserves_supported_graph31_owner_bytes_in_current_source() {
     let original = owned_record_transport();
     let package = &original.packages[&original.container.root.package_revision];
     let mut historical = package
@@ -121,7 +121,7 @@ fn owned_record_transport_preserves_supported_graph31_owner_bytes_in_graph32_sou
             .any(|owner| owner.header().contract_version == 31)
     );
     assert!(snapshot.owners.values().any(|owner| matches!(owner,
-        OwnerRecord::Declaration(record) if record.header.contract_version == 32
+        OwnerRecord::Declaration(record) if record.header.contract_version == crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
             && matches!(record.payload, DeclarationPayload::OwnedRecord { .. }))));
     crate::platform::package_transport::oracle::reconstruct(&decoded).unwrap();
 }

@@ -68,6 +68,13 @@ length; joined generic children exercise distinct cell/buffer applications.
 Borrowed results remain pure synchronous scopes, and transferability must still
 be justified independently.
 
+For ordinary items, the [indexed-data example](../../examples/indexed-data-storage/README.md)
+uses `T: Transferable` or `T: CaptureSafeTransferable` with an owned storage Self.
+Ordinary method arguments are unrestricted and precede owned arguments; reads
+return standalone immutable values. A transferable owner is not an ordinary item.
+The same exact-scope applications and prerequisite forwarding apply to these
+schemes, including unused parameters and nominal phantom arguments.
+
 ## Compose adapters with explicit prerequisites
 
 The [composition example](../../examples/composable-owned-implementations/README.md)

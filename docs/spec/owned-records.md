@@ -83,10 +83,13 @@ applications, structural owned composites and sequences. Substitution preserves
 the nominal declaration and every ordered argument. Transferable and Shareable
 proofs independently inspect the complete representation and all actual arguments;
 neither follows merely from an Owned declaration.
-Contract type parameters, including non-Self parameters, and generic implementation
-parameters retain their existing Owned bounds. Ordinary Transferable parameters on
-an owned record do not widen those contracts or implementation schemes; a concrete
-application can still supply its exact owned record type.
+An owned record can remain Self while its ordinary element parameters participate
+in [mixed storage contracts](owned-contract-parameters.md). Self retains exactly
+the contract's Owned constraint; additional contract parameters and generic
+implementation schemes independently admit eligible ordinary transferable data.
+This does not convert an ordinary argument into an owner or weaken its complete
+first-order admission. The native `Chunk32<T>` indexed storage keeps its chunks and
+size private while satisfying the same `IndexedData` contract as a flat sequence.
 
 Interfaces retain the layout evidence needed for independent admission, including
 private representation dependencies. Representation-only records do not become
@@ -123,11 +126,15 @@ discard functions retain their behavior. Pop returns the queue in both outcomes;
 front returns the original element view tied to the queue. The representation
 operations stay in the defining module.
 
-Nominal owned meaning requires Graph 32. Current exports select interface 20,
-compiler 32, bytecode 27 and artifact 39. Authored requests select codec 36;
+The nominal-owned increment requires Graph 32 and selected interface 20,
+compiler 32, bytecode 27 and artifact 39. Its authored requests select codec 36;
 discovery exposes the complete declaration and expression forms. Named/applied
 type-object envelopes retain their existing shape. Rebuild experimental derived
 assets; this increment adds no predecessor migration layer.
+The mixed-contract extension selects Graph 33, interface 21, compiler 33,
+artifact 40 and authored request 37 while retaining bytecode 27. Graph 32 meaning
+remains readable; mixed contract/implementation scopes, their ordinary formals and
+mixed invocation expressions require 33.
 
 Public acceptance authors a generic supplier before consumers, imports exact
 transports, and executes detached artifacts after source deletion. It includes

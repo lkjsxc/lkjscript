@@ -350,6 +350,8 @@ impl PackageContainer {
                         crate::platform::kernel::contract::GENERALIZED_SEQUENCE_OWNER_MAGIC
                             .as_slice(),
                     )
+                && object.get(..8)
+                    != Some(crate::platform::kernel::contract::OWNED_RECORD_OWNER_MAGIC.as_slice())
             {
                 return Err(package_error(
                     DiagnosticClass::Source,
@@ -1177,9 +1179,9 @@ mod tests {
     #[test]
     fn source_transport_preserves_supported_composite_and_task_owner_envelopes() {
         let source = crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(
-            "declarations.begin\n(units (module create historical (function create value (visibility private) (returns I64) (effect pure) (body (i64 37)))))\ndeclarations.end\n",
+            "declarations.begin\n(units (module create historical (function create value (visibility public) (returns I64) (effect pure) (body (i64 37)))))\ndeclarations.end\n",
         ).unwrap();
-        for generation in [19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30] {
+        for generation in [19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33] {
             let mut historical = source.clone();
             for owner in historical.owners.values_mut() {
                 owner.set_encoding_for_edit(generation);

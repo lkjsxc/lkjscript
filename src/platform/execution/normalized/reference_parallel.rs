@@ -36,9 +36,13 @@ fn physical_catalog_binding(
         && stored.depth == prepared.depth
         && stored.implementation == prepared.implementation
         && stored.implementation_type_arguments == prepared.implementation_type_arguments
+        && stored.implementation_type_parameter_constraints
+            == prepared.implementation_type_parameter_constraints
         && stored.contract == prepared.contract
         && stored.self_type == prepared.self_type
         && stored.type_arguments == prepared.type_arguments
+        && stored.contract_type_parameter_constraints
+            == prepared.contract_type_parameter_constraints
         && stored.prerequisites == prepared.prerequisites
         && stored.implementations.len() == prepared.implementations.len()
         && stored
@@ -102,12 +106,27 @@ impl ReferenceState<'_> {
             return Ok(true);
         }
         let canonical = self.checked_implementation(reference)?;
+        let scheme_constraints =
+            self.type_parameter_constraints(reference.implementation, &canonical.type_parameters)?;
+        let DeclarationPayload::OwnedContract(contract) =
+            self.declaration(canonical.contract)?.payload
+        else {
+            return Err(reference_type_error(
+                "physical witness selects a foreign contract kind",
+            ));
+        };
+        let contract_constraints =
+            self.type_parameter_constraints(canonical.contract, &contract.type_parameters)?;
         let mut matches = prepared.implementation == reference.implementation
             && prepared.depth == reference.depth
             && prepared.implementation_type_arguments.as_ref() == reference.type_arguments.as_ref()
+            && prepared.implementation_type_parameter_constraints.as_ref()
+                == scheme_constraints.as_slice()
             && prepared.contract == canonical.contract
             && prepared.self_type == canonical.self_type
             && prepared.type_arguments.as_ref() == canonical.type_arguments.as_slice()
+            && prepared.contract_type_parameter_constraints.as_ref()
+                == contract_constraints.as_slice()
             && prepared.implementations.len() == reference.implementations.len();
         for (prepared, reference) in prepared
             .implementations

@@ -97,10 +97,10 @@ belong to the [byte campaign](../../docs/campaigns/202609240603.md); the
 Compiler or artifact contract changes require rebuilding this retained artifact
 through public check/build while preserving accepted HEAD and its exact standard
 supplier. Rebuild the contributor test executable after replacing the artifact.
-The [current release notes](../../docs/releases/v0.1.91.md) identify the selected
+The [current release notes](../../docs/releases/v0.1.92.md) identify the selected
 compatibility boundary; [status](../../docs/status.md) owns actual acceptance.
 
-The current derived bundle uses compiler 32, bytecode 27 and artifact 39:
-`artifact_bundle_0d62af1a38d4e105c0f5a60493d5e8549472da405c50c754ced62992eab0fc37`,
+The current derived bundle uses compiler 33, bytecode 27 and artifact 40:
+`artifact_bundle_6efb7a414dc41054c09602618b9b7d2754ce78d53590ddc0846fc0e9eef2b7cf`,
 758,094 bytes. Public check/build preserves the accepted native HEAD and its exact
 supplier; all 62 native and supplier tests agree between the two evaluators.

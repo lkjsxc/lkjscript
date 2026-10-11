@@ -73,6 +73,56 @@ pub const DESCRIPTORS: [(&str, &str); 6] = [
         include_str!("../../examples/dependency-plan/verification/verify-batch.deployment.json"),
     ),
 ];
+pub const STORAGE_DESCRIPTORS: [(&str, &str); 8] = [
+    (
+        "storage-flat-flat",
+        include_str!(
+            "../../examples/dependency-plan/verification/storage-flat-flat.deployment.json"
+        ),
+    ),
+    (
+        "storage-flat-chunked",
+        include_str!(
+            "../../examples/dependency-plan/verification/storage-flat-chunked.deployment.json"
+        ),
+    ),
+    (
+        "storage-chunked-flat",
+        include_str!(
+            "../../examples/dependency-plan/verification/storage-chunked-flat.deployment.json"
+        ),
+    ),
+    (
+        "storage-chunked-chunked",
+        include_str!(
+            "../../examples/dependency-plan/verification/storage-chunked-chunked.deployment.json"
+        ),
+    ),
+    (
+        "batch-storage-flat-flat",
+        include_str!(
+            "../../examples/dependency-plan/verification/batch-storage-flat-flat.deployment.json"
+        ),
+    ),
+    (
+        "batch-storage-flat-chunked",
+        include_str!(
+            "../../examples/dependency-plan/verification/batch-storage-flat-chunked.deployment.json"
+        ),
+    ),
+    (
+        "batch-storage-chunked-flat",
+        include_str!(
+            "../../examples/dependency-plan/verification/batch-storage-chunked-flat.deployment.json"
+        ),
+    ),
+    (
+        "batch-storage-chunked-chunked",
+        include_str!(
+            "../../examples/dependency-plan/verification/batch-storage-chunked-chunked.deployment.json"
+        ),
+    ),
+];
 
 pub fn refusals(public: &Native, descriptor: &std::path::Path) {
     let empty_plan = cases::empty_plan();

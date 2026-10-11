@@ -103,6 +103,8 @@ mod generic_implementation_tests;
 mod implementation_effect_tests;
 #[path = "imported_memory_oracle_tests.rs"]
 mod imported_tests;
+#[path = "mixed_contract_memory_oracle_tests.rs"]
+mod mixed_contract_tests;
 #[path = "nominal_owned_record_memory_oracle_tests.rs"]
 mod nominal_owned_record_tests;
 #[path = "memory_owned_record_reference.rs"]
@@ -361,6 +363,8 @@ impl Oracle<'_> {
         let mut remaining = contract::MAXIMUM_VALIDATION_WORK;
         (if bounds.has_owned() {
             self.buffer(ty) && self.owned_type_in_scope(ty)
+        } else if bounds.requires_transfer() {
+            self.ordinary(ty)
         } else {
             !self.contains(ty)
         }) && (!bounds.requires_capture_safe() || self.capture_safe(ty))
@@ -2274,7 +2278,7 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                 && match &declaration.payload {
                     PackageInterfaceDeclarationPayload::OwnedRecord { .. } => generation < 32,
                     PackageInterfaceDeclarationPayload::OwnedContract(c) => {
-                        !oracle.contract_generation(c, generation)
+                        !oracle.contract_generation(c, generation, *package)
                     }
                     PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
                         (generation < 26 && !i.type_arguments.is_empty())
@@ -2333,20 +2337,21 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                     };
                     match &d.payload {
                         PackageInterfaceDeclarationPayload::OwnedContract(c)
-                            if p.constraints == TypeParameterConstraints::Owned
-                                && matches!(key, OwnerKey::TypeParameter(id)
-                                    if *id == c.self_parameter || c.type_parameters.contains(id)) =>
-                            {}
+                            if matches!(key, OwnerKey::TypeParameter(id)
+                                if (*id == c.self_parameter || c.type_parameters.contains(id))
+                                    && Oracle(snapshot, Some(DeclarationReference {
+                                        package: *package, declaration: p.declaration,
+                                    })).scoped_parameter(*id).is_some()) => {}
                         PackageInterfaceDeclarationPayload::Function(f)
                             if matches!(key, OwnerKey::TypeParameter(id) if f.type_parameters.contains(id))
                                 && (!p.constraints.requires_transfer()
                                     || p.header.contract_version >= 22) => {}
                         PackageInterfaceDeclarationPayload::OwnedImplementation(i)
-                            if p.constraints.has_owned()
-                                && (p.constraints == TypeParameterConstraints::Owned
-                                    || generation >= 30)
-                                && matches!(key, OwnerKey::TypeParameter(id) if i.type_parameters.contains(id)) =>
-                            {}
+                            if matches!(key, OwnerKey::TypeParameter(id)
+                                if i.type_parameters.contains(id)
+                                    && Oracle(snapshot, Some(DeclarationReference {
+                                        package: *package, declaration: p.declaration,
+                                    })).scoped_parameter(*id).is_some()) => {}
                         PackageInterfaceDeclarationPayload::OwnedRecord {
                             type_parameters, ..
                         } if oracle
@@ -2484,7 +2489,9 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
         if let OwnerRecord::Declaration(declaration) = owner
             && match &declaration.payload {
                 DeclarationPayload::OwnedRecord { .. } => generation < 32,
-                DeclarationPayload::OwnedContract(c) => !oracle.contract_generation(c, generation),
+                DeclarationPayload::OwnedContract(c) => {
+                    !oracle.contract_generation(c, generation, snapshot.root.package_id)
+                }
                 DeclarationPayload::OwnedImplementation(i) => {
                     (generation < 26 && !i.type_arguments.is_empty())
                         || (generation < 28
@@ -2506,16 +2513,28 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
         {
             return false;
         }
-        if generation < 29
+        if generation < 33
             && let OwnerRecord::Expression(expression) = owner
             && match &expression.operation {
                 ExpressionOperation::ImplementationCall {
-                    implementations, ..
-                } => implementations
-                    .iter()
-                    .any(|operand| !oracle.operand_generation(operand, generation)),
-                ExpressionOperation::MethodCall { witness, .. } => {
-                    !oracle.operand_generation(witness, generation)
+                    function,
+                    implementations,
+                    ..
+                } => {
+                    implementations
+                        .iter()
+                        .any(|operand| !oracle.operand_generation(operand, generation))
+                        || oracle.function(*function).is_some_and(|f| {
+                            f.implementation_parameters
+                                .iter()
+                                .any(|p| oracle.mixed_contract(p.contract))
+                        })
+                }
+                ExpressionOperation::MethodCall {
+                    witness, contract, ..
+                } => {
+                    oracle.mixed_contract(*contract)
+                        || !oracle.operand_generation(witness, generation)
                 }
                 _ => false,
             }
@@ -2628,21 +2647,19 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                 };
                 match &d.payload {
                     DeclarationPayload::OwnedContract(c)
-                        if p.constraints == TypeParameterConstraints::Owned
-                            && matches!(key, OwnerKey::TypeParameter(id)
-                                if *id == c.self_parameter || c.type_parameters.contains(id)) => {}
+                        if matches!(key, OwnerKey::TypeParameter(id)
+                            if (*id == c.self_parameter || c.type_parameters.contains(id))
+                                && Oracle(snapshot, Some(DeclarationReference {
+                                    package: snapshot.root.package_id, declaration: p.declaration,
+                                })).scoped_parameter(*id).is_some()) => {}
                     DeclarationPayload::Function(f) if matches!(key, OwnerKey::TypeParameter(id) if f.type_parameters.contains(id)) =>
                         {}
                     DeclarationPayload::OwnedImplementation(i)
-                        if p.constraints.has_owned()
-                            && (p.constraints == TypeParameterConstraints::Owned
-                                || snapshot
-                                    .root
-                                    .graph_contract_version
-                                    .min(p.header.contract_version)
-                                    >= 30)
-                            && matches!(key, OwnerKey::TypeParameter(id) if i.type_parameters.contains(id)) =>
-                        {}
+                        if matches!(key, OwnerKey::TypeParameter(id)
+                            if i.type_parameters.contains(id)
+                                && Oracle(snapshot, Some(DeclarationReference {
+                                    package: snapshot.root.package_id, declaration: p.declaration,
+                                })).scoped_parameter(*id).is_some()) => {}
                     DeclarationPayload::OwnedRecord {
                         type_parameters, ..
                     } if oracle

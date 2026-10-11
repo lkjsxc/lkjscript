@@ -274,8 +274,12 @@ fn instantiate(
         } else if contains(read, *ty)? {
             return Err(reject("ordinary generic argument contains owned memory"));
         }
-        if p.constraints.requires_transfer() {
-            super::transfer::admit(read, *ty, scope)?;
+        if p.constraints.requires_transfer()
+            && super::transfer::admit(read, *ty, scope)? != p.constraints.has_owned()
+        {
+            return Err(reject(
+                "transfer substitution changes the formal's ownership category",
+            ));
         }
         if p.constraints.requires_share() {
             super::share::admit(read, *ty, scope)?;
@@ -436,6 +440,7 @@ pub(crate) fn borrow_invocation(
     let Some(OwnerRecord::Expression(expression)) = read.owner(OwnerKey::Expression(call))? else {
         return Err(reject("missing borrowed invocation"));
     };
+    super::owned_contract::require_expression_generation(read, &expression)?;
     let (arguments, parameters, result, source_position, types) = match expression.operation {
         ExpressionOperation::Call {
             function,
@@ -748,6 +753,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
         let Some(OwnerRecord::Expression(e)) = self.read.owner(OwnerKey::Expression(id))? else {
             return Err(reject("missing memory expression"));
         };
+        super::owned_contract::require_expression_generation(self.read, &e)?;
         if matches!(mode, Mode::ReturnBorrow(_))
             && !matches!(
                 e.operation,
@@ -1815,6 +1821,9 @@ pub(crate) fn validate_owner(
     }
     super::owned_product::require_generation(read, roots, record.header().contract_version)?;
     match record {
+        OwnerRecord::Expression(expression) => {
+            super::owned_contract::require_expression_generation(read, expression)?;
+        }
         OwnerRecord::TypeParameter(p) if p.constraints.has_owned() => {
             let allowed = match read.owner(OwnerKey::Declaration(p.declaration))? {
                 Some(OwnerRecord::Declaration(d)) => match d.payload {

@@ -23,7 +23,7 @@ fn current_nominal_owner_uses_graph32_and_rehashed_graph31_cannot_admit_it() {
         },
     });
     let (digest, bytes) = encode_owner(&record).unwrap();
-    assert_eq!(&bytes[..8], b"LKJOWN32");
+    assert_eq!(&bytes[..8], b"LKJOWN33");
     assert_eq!(
         decode_owner(&bytes, record.owner(), record.kind(), digest).unwrap(),
         record

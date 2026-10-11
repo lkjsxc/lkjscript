@@ -3,6 +3,39 @@ use super::*;
 use crate::platform::execution::normalized::tests::owned_implementation_scheme_tests::prepared_duplicate_dag;
 
 #[test]
+fn runtime_mixed_witness_admission_requires_complete_exact_formal_categories() {
+    use crate::platform::execution::normalized::tests::mixed_storage_contract_tests::prepared_mixed;
+    use crate::platform::kernel::TypeParameterConstraints as C;
+    let base = prepared_mixed();
+    let control = ExecutionControl::uncancelled();
+    for fault in 0..5 {
+        let mut program = base.clone();
+        let node = &mut Arc::make_mut(&mut program.implementation_applications)[0];
+        match fault {
+            1 => Arc::make_mut(node).implementation_type_parameter_constraints = Arc::from([]),
+            2 => {
+                Arc::make_mut(node).implementation_type_parameter_constraints =
+                    Arc::from([C::Owned])
+            }
+            3 => Arc::make_mut(node).contract_type_parameter_constraints = Arc::from([]),
+            4 => Arc::make_mut(node).contract_type_parameter_constraints = Arc::from([C::Owned]),
+            _ => {}
+        }
+        let node = &program.implementation_applications[0];
+        let result = validate_runtime_implementation(
+            &program,
+            node,
+            &control,
+            0,
+            &mut 0,
+            &mut BTreeSet::new(),
+            &mut |_| Ok(()),
+        );
+        assert_eq!(result.is_ok(), fault == 0, "fault {fault}");
+    }
+}
+
+#[test]
 fn runtime_admission_visits_a_depth_24_binary_dag_linearly() {
     let program = prepared_duplicate_dag(24);
     let root = program.implementation_applications.last().unwrap();

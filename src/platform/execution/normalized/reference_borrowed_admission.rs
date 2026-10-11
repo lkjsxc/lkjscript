@@ -104,7 +104,7 @@ pub(super) fn inventory(closure: &mut Closure<'_>) -> Result<(), ExecutionError>
                     let formals: Vec<_> = std::iter::once(contract.self_parameter)
                         .chain(contract.type_parameters.iter().copied())
                         .collect();
-                    closure.owned_scheme_parameters(reference, &formals)?;
+                    let parameters = closure.owned_scheme_parameters(reference, &formals)?;
                     let mut methods = BTreeSet::new();
                     let mut names = BTreeSet::new();
                     if contract.methods.is_empty() {
@@ -125,6 +125,7 @@ pub(super) fn inventory(closure: &mut Closure<'_>) -> Result<(), ExecutionError>
                         }
                         let mut owned_suffix = false;
                         for parameter in &method.parameters {
+                            closure.scoped_type_parameters(parameter.ty, &parameters, 0)?;
                             if closure.owned_witness_type(parameter.ty, Some(reference), 0)? {
                                 owned_suffix = true;
                                 if parameter.use_mode == ParameterUse::Unrestricted
@@ -141,6 +142,7 @@ pub(super) fn inventory(closure: &mut Closure<'_>) -> Result<(), ExecutionError>
                                 return Err(reject());
                             }
                         }
+                        closure.scoped_type_parameters(method.result, &parameters, 0)?;
                         closure.owned_witness_type(method.result, Some(reference), 0)?;
                         if let Some(position) = method.result_borrow {
                             let parameter = method
@@ -166,10 +168,13 @@ pub(super) fn inventory(closure: &mut Closure<'_>) -> Result<(), ExecutionError>
                     }
                     for argument in &implementation.type_arguments {
                         closure.scoped_type_parameters(*argument, &scheme, 0)?;
-                        if !closure.owned_witness_type(*argument, Some(reference), 0)? {
-                            return Err(reject());
-                        }
                     }
+                    closure.contract_application(
+                        implementation.contract,
+                        implementation.self_type,
+                        &implementation.type_arguments,
+                        Some(reference),
+                    )?;
                     allocate::<super::Witness>(
                         &mut closure.allocated,
                         implementation.implementation_parameters.len(),
@@ -249,9 +254,6 @@ pub(super) fn inventory(closure: &mut Closure<'_>) -> Result<(), ExecutionError>
                             function.type_parameters.iter().zip(&mapping.type_arguments)
                         {
                             closure.scoped_type_parameters(*actual, &scheme, 0)?;
-                            if !closure.owned_witness_type(*actual, Some(reference), 0)? {
-                                return Err(reject());
-                            }
                             index_node::<(
                                 crate::platform::semantic_id::TypeParameterId,
                                 TypeObjectDigest,
@@ -263,6 +265,12 @@ pub(super) fn inventory(closure: &mut Closure<'_>) -> Result<(), ExecutionError>
                                 return Err(reject());
                             }
                         }
+                        closure.witness_type_arguments(
+                            target,
+                            &function.type_parameters,
+                            &mapping.type_arguments,
+                            Some(reference),
+                        )?;
                         index_node::<(
                             DeclarationReference,
                             Vec<TypeObjectDigest>,
@@ -1977,6 +1985,469 @@ declarations.end
             ..super::super::NormalizedReferenceSchema::default()
         };
         super::super::complete(&mut schema, &[snapshot], &ExecutionControl::uncancelled())
+    }
+
+    const MIXED_SOURCE: &str = r#"declarations.begin
+(units (module create independent-mixed-storage
+  (record create Marker (visibility public)
+    (type-parameter create Tag) (field create number (type I64)))
+  (owned-contract create DataPipe (visibility public)
+    (self Self) (type-parameter create Self (constraint owned))
+    (type-parameter create Item (constraint transferable))
+    (type-parameter create Phantom (constraint capture-safe transferable))
+    (method method_c4000000000000000000000000000001 pair
+      (parameters (Item unrestricted) (Self consume))
+      (returns (owned-product (field rest Self) (field value Item))))
+    (method method_c4000000000000000000000000000002 echo
+      (parameters (Item unrestricted) (Self borrow)) (returns Item)))
+  (function create pair (visibility public) (effect pure)
+    (type-parameter create O (constraint owned))
+    (type-parameter create T (constraint transferable))
+    (type-parameter create P (constraint capture-safe transferable))
+    (parameter create value (type T))
+    (parameter create owner (type O) (use consume))
+    (returns (owned-product (field rest O) (field value T)))
+    (body (pack-owned (type (owned-product (field rest O) (field value T)))
+      (field rest (local owner)) (field value (local value)))))
+  (function create echo (visibility public) (effect pure)
+    (type-parameter create O (constraint owned))
+    (type-parameter create T (constraint transferable))
+    (parameter create value (type T))
+    (parameter create owner (type O) (use borrow))
+    (returns T) (body (local value)))
+  (owned-implementation create Pair (visibility public)
+    (type-parameter create O (constraint owned))
+    (type-parameter create T (constraint transferable))
+    (type-parameter create P (constraint capture-safe transferable))
+    (contract DataPipe) (self O) (types T P)
+    (method method_c4000000000000000000000000000001 pair (types O T P))
+    (method method_c4000000000000000000000000000002 echo (types O T)))
+  (owned-implementation create Concrete (visibility public)
+    (contract DataPipe) (self OwnedI64Cell) (types I64 (Marker Bool))
+    (method method_c4000000000000000000000000000001 pair
+      (types OwnedI64Cell I64 (Marker Bool)))
+    (method method_c4000000000000000000000000000002 echo (types OwnedI64Cell I64)))
+  (function create forward (visibility public) (effect pure)
+    (type-parameter create O (constraint owned))
+    (type-parameter create T (constraint transferable))
+    (type-parameter create P (constraint capture-safe transferable))
+    (implementation-parameter implparam_c4000000000000000000000000000001 ops DataPipe O (types T P))
+    (parameter create value (type T))
+    (parameter create owner (type O) (use consume))
+    (returns (owned-product (field rest O) (field value T)))
+    (body (method-call parameter@forward@implparam_c4000000000000000000000000000001
+      DataPipe method_c4000000000000000000000000000001 (local value) (local owner))))
+  (owned-implementation create Delegating (visibility public)
+    (type-parameter create O (constraint owned))
+    (type-parameter create T (constraint transferable))
+    (type-parameter create P (constraint capture-safe transferable))
+    (implementation-parameter implparam_c4000000000000000000000000000002 base DataPipe O (types T P))
+    (contract DataPipe) (self O) (types T P)
+    (method method_c4000000000000000000000000000001 forward (types O T P)
+      (implementations parameter@Delegating@implparam_c4000000000000000000000000000002))
+    (method method_c4000000000000000000000000000002 echo (types O T)))
+  (function create apply (visibility public) (effect pure)
+    (parameter create value (type I64))
+    (parameter create owner (type OwnedI64Cell) (use consume))
+    (returns (owned-product (field rest OwnedI64Cell) (field value I64)))
+    (body (implementation-call forward (types OwnedI64Cell I64 Bool)
+      (implementations (implementation Delegating (types OwnedI64Cell I64 Bool)
+        (implementations (implementation Pair (types OwnedI64Cell I64 Bool)))))
+      (local value) (local owner))))))
+declarations.end
+"#;
+
+    fn mixed_source() -> KernelSnapshot {
+        super::super::super::tests::byte_buffer_tests::author_only(MIXED_SOURCE).unwrap()
+    }
+
+    fn mixed_formal(
+        snapshot: &KernelSnapshot,
+        declaration_name: &str,
+        parameter_name: &str,
+    ) -> crate::platform::semantic_id::TypeParameterId {
+        let scope = reference(snapshot, declaration_name);
+        snapshot
+            .owners
+            .iter()
+            .find_map(|(key, owner)| match (key, owner) {
+                (OwnerKey::TypeParameter(id), OwnerRecord::TypeParameter(parameter))
+                    if parameter.declaration == scope.declaration
+                        && parameter.name.as_str() == parameter_name =>
+                {
+                    Some(*id)
+                }
+                _ => None,
+            })
+            .unwrap()
+    }
+
+    fn mixed_payload<'a>(
+        snapshot: &'a mut KernelSnapshot,
+        name: &str,
+    ) -> &'a mut DeclarationPayload {
+        let scope = reference(snapshot, name);
+        let OwnerRecord::Declaration(owner) = snapshot
+            .owners
+            .get_mut(&OwnerKey::Declaration(scope.declaration))
+            .unwrap()
+        else {
+            unreachable!()
+        };
+        &mut owner.payload
+    }
+
+    fn mixed_type(snapshot: &mut KernelSnapshot, form: TypeForm) -> TypeObjectDigest {
+        let object = crate::platform::kernel::TypeObject::new(form).unwrap();
+        let digest = crate::platform::kernel::encode_type_object(&object)
+            .unwrap()
+            .0;
+        snapshot.types.insert(digest, object);
+        digest
+    }
+
+    #[test]
+    fn independent_mixed_contract_admits_data_results_and_forwarded_phantom_witnesses() {
+        let snapshot = mixed_source();
+        admit(&snapshot).unwrap();
+        for data in ["Bool", "(list (option I64))", "(Marker Bool)"] {
+            let input = MIXED_SOURCE
+                .replace(
+                    "(types I64 (Marker Bool))",
+                    &format!("(types {data} (Marker Bool))"),
+                )
+                .replace(
+                    "(types OwnedI64Cell I64 (Marker Bool))",
+                    &format!("(types OwnedI64Cell {data} (Marker Bool))"),
+                )
+                .replace(
+                    "(types OwnedI64Cell I64)))",
+                    &format!("(types OwnedI64Cell {data})))"),
+                );
+            let snapshot =
+                super::super::super::tests::byte_buffer_tests::author_only(&input).unwrap();
+            admit(&snapshot).unwrap();
+        }
+    }
+
+    #[test]
+    fn independent_mixed_contract_maps_existing_ordinary_generic_function_generations() {
+        let mut snapshot = mixed_source();
+        for name in ["pair", "echo"] {
+            let scope = reference(&snapshot, name);
+            let function = function(&snapshot, name);
+            let OwnerRecord::Declaration(owner) = snapshot
+                .owners
+                .get_mut(&OwnerKey::Declaration(scope.declaration))
+                .unwrap()
+            else {
+                unreachable!()
+            };
+            owner.header.contract_version = 31;
+            for id in function.type_parameters {
+                let OwnerRecord::TypeParameter(parameter) = snapshot
+                    .owners
+                    .get_mut(&OwnerKey::TypeParameter(id))
+                    .unwrap()
+                else {
+                    unreachable!()
+                };
+                parameter.header.contract_version = 31;
+            }
+        }
+        admit(&snapshot).unwrap();
+    }
+
+    #[test]
+    fn independent_mixed_contract_rejects_pretransfer_mapped_function_phantoms() {
+        let baseline = mixed_source();
+        for (function, formal) in [("pair", "P"), ("echo", "T")] {
+            let mut snapshot = baseline.clone();
+            let id = mixed_formal(&snapshot, function, formal);
+            let OwnerRecord::TypeParameter(parameter) = snapshot
+                .owners
+                .get_mut(&OwnerKey::TypeParameter(id))
+                .unwrap()
+            else {
+                unreachable!()
+            };
+            parameter.header.contract_version = 21;
+            assert!(
+                admit(&snapshot).is_err(),
+                "{function} phantom requires its historical transfer generation"
+            );
+        }
+    }
+
+    #[test]
+    fn independent_mixed_contract_accepts_existing_function_owner_with_new_application_expression()
+    {
+        let mut snapshot = mixed_source();
+        let scope = reference(&snapshot, "apply");
+        let function = function(&snapshot, "apply");
+        assert!(function.implementation_parameters.is_empty());
+        let OwnerRecord::Expression(expression) = snapshot
+            .owners
+            .get(&OwnerKey::Expression(function.body))
+            .unwrap()
+        else {
+            unreachable!()
+        };
+        assert_eq!(expression.contract_version, 33);
+        let OwnerRecord::Declaration(owner) = snapshot
+            .owners
+            .get_mut(&OwnerKey::Declaration(scope.declaration))
+            .unwrap()
+        else {
+            unreachable!()
+        };
+        owner.header.contract_version = 32;
+        crate::platform::kernel::validate_full(&snapshot).unwrap();
+        assert!(crate::platform::kernel::memory_reference::accepts(
+            &snapshot
+        ));
+        admit(&snapshot).unwrap();
+    }
+
+    #[test]
+    fn independent_mixed_contract_rejects_unused_argument_categories_and_nominal_phantoms() {
+        let baseline = mixed_source();
+        for position in [0, 1] {
+            let mut snapshot = baseline.clone();
+            let owner = mixed_type(&mut snapshot, TypeForm::OwnedI64Cell);
+            let DeclarationPayload::OwnedImplementation(implementation) =
+                mixed_payload(&mut snapshot, "Concrete")
+            else {
+                unreachable!()
+            };
+            implementation.type_arguments[position] = owner;
+            assert!(admit(&snapshot).is_err(), "ordinary actual {position}");
+        }
+        let mut snapshot = baseline.clone();
+        let owner = mixed_type(&mut snapshot, TypeForm::OwnedI64Cell);
+        let marker = reference(&snapshot, "Marker");
+        let phantom = mixed_type(
+            &mut snapshot,
+            TypeForm::Applied {
+                declaration: marker,
+                arguments: vec![owner],
+            },
+        );
+        let DeclarationPayload::OwnedImplementation(implementation) =
+            mixed_payload(&mut snapshot, "Concrete")
+        else {
+            unreachable!()
+        };
+        implementation.type_arguments[1] = phantom;
+        assert!(
+            admit(&snapshot).is_err(),
+            "hidden owner in unused ordinary argument"
+        );
+
+        let mut snapshot = baseline;
+        let scalar = mixed_type(&mut snapshot, TypeForm::I64);
+        let callable = mixed_type(
+            &mut snapshot,
+            TypeForm::Function {
+                parameters: vec![],
+                result: scalar,
+            },
+        );
+        let DeclarationPayload::OwnedImplementation(implementation) =
+            mixed_payload(&mut snapshot, "Concrete")
+        else {
+            unreachable!()
+        };
+        implementation.type_arguments[1] = callable;
+        assert!(
+            admit(&snapshot).is_err(),
+            "hidden callable in unused ordinary argument"
+        );
+    }
+
+    #[test]
+    fn independent_mixed_contract_rejects_lexical_mapping_and_formal_bound_forgery() {
+        use crate::platform::kernel::TypeParameterConstraints;
+        let baseline = mixed_source();
+        for target in ["Pair", "Delegating"] {
+            let mut snapshot = baseline.clone();
+            let owner = mixed_type(&mut snapshot, TypeForm::OwnedI64Cell);
+            let DeclarationPayload::OwnedImplementation(implementation) =
+                mixed_payload(&mut snapshot, target)
+            else {
+                unreachable!()
+            };
+            implementation.methods[0].type_arguments[2] = owner;
+            assert!(
+                admit(&snapshot).is_err(),
+                "unused mapped argument in {target}"
+            );
+        }
+        let mut snapshot = baseline.clone();
+        let owner = mixed_type(&mut snapshot, TypeForm::OwnedI64Cell);
+        let DeclarationPayload::OwnedImplementation(implementation) =
+            mixed_payload(&mut snapshot, "Delegating")
+        else {
+            unreachable!()
+        };
+        implementation.implementation_parameters[0].type_arguments[1] = owner;
+        assert!(admit(&snapshot).is_err(), "unused prerequisite argument");
+        for (name, formal_name, constraints) in [
+            (
+                "DataPipe",
+                "Self",
+                TypeParameterConstraints::OwnedTransferable,
+            ),
+            (
+                "DataPipe",
+                "Phantom",
+                TypeParameterConstraints::OwnedTransferable,
+            ),
+            ("Pair", "P", TypeParameterConstraints::CaptureSafe),
+            ("pair", "P", TypeParameterConstraints::CaptureSafe),
+        ] {
+            let mut snapshot = baseline.clone();
+            let id = mixed_formal(&snapshot, name, formal_name);
+            let OwnerRecord::TypeParameter(parameter) = snapshot
+                .owners
+                .get_mut(&OwnerKey::TypeParameter(id))
+                .unwrap()
+            else {
+                unreachable!()
+            };
+            parameter.constraints = constraints;
+            assert!(admit(&snapshot).is_err(), "{name}::{formal_name} bounds");
+        }
+        let mut snapshot = baseline;
+        let id = mixed_formal(&snapshot, "Pair", "P");
+        let foreign = reference(&snapshot, "pair");
+        let OwnerRecord::TypeParameter(parameter) = snapshot
+            .owners
+            .get_mut(&OwnerKey::TypeParameter(id))
+            .unwrap()
+        else {
+            unreachable!()
+        };
+        parameter.declaration = foreign.declaration;
+        assert!(admit(&snapshot).is_err(), "exact phantom declaration scope");
+    }
+
+    #[test]
+    fn independent_mixed_contract_rejects_ordinary_modes_and_borrowed_data_forgery() {
+        let baseline = mixed_source();
+        for attack in 0..3 {
+            let mut snapshot = baseline.clone();
+            let DeclarationPayload::OwnedContract(contract) =
+                mixed_payload(&mut snapshot, "DataPipe")
+            else {
+                unreachable!()
+            };
+            match attack {
+                0 => contract.methods[1].parameters[0].use_mode = ParameterUse::Consume,
+                1 => contract.methods[1].parameters.swap(0, 1),
+                _ => contract.methods[1].result_borrow = Some(1),
+            }
+            assert!(
+                admit(&snapshot).is_err(),
+                "ordinary method forgery {attack}"
+            );
+        }
+    }
+
+    #[test]
+    fn independent_mixed_contract_rejects_predecessor_declaring_generations() {
+        let baseline = mixed_source();
+        let mut snapshot = baseline.clone();
+        snapshot.root.graph_contract_version = 32;
+        assert!(admit(&snapshot).is_err(), "package Graph32");
+        for name in ["DataPipe", "Pair", "Concrete", "Delegating", "forward"] {
+            let mut snapshot = baseline.clone();
+            let scope = reference(&snapshot, name);
+            let OwnerRecord::Declaration(owner) = snapshot
+                .owners
+                .get_mut(&OwnerKey::Declaration(scope.declaration))
+                .unwrap()
+            else {
+                unreachable!()
+            };
+            owner.header.contract_version = 32;
+            assert!(admit(&snapshot).is_err(), "{name} Graph32");
+        }
+    }
+
+    #[test]
+    fn independent_mixed_contract_rejects_predecessor_expression_generations() {
+        let baseline = mixed_source();
+        for name in ["forward", "apply"] {
+            let mut snapshot = baseline.clone();
+            let body = function(&snapshot, name).body;
+            let OwnerRecord::Expression(expression) = snapshot
+                .owners
+                .get_mut(&OwnerKey::Expression(body))
+                .unwrap()
+            else {
+                unreachable!()
+            };
+            expression.contract_version = 32;
+            assert!(admit(&snapshot).is_err(), "{name} expression Graph32");
+        }
+    }
+
+    #[test]
+    fn independent_mixed_contract_expression_generation_includes_nested_unused_scheme_data() {
+        let input = r#"declarations.begin
+(units (module create independent-nested-mixed-generation
+  (owned-contract create Keep (visibility public)
+    (self Self) (type-parameter create Self (constraint owned))
+    (method method_c5000000000000000000000000000001 keep
+      (parameters (Self consume)) (returns Self)))
+  (function create keep (visibility public) (effect pure)
+    (type-parameter create O (constraint owned))
+    (type-parameter create Unused (constraint transferable))
+    (parameter create owner (type O) (use consume))
+    (returns O) (body (local owner)))
+  (owned-implementation create OrdinaryUnused (visibility public)
+    (type-parameter create O (constraint owned))
+    (type-parameter create Unused (constraint transferable))
+    (contract Keep) (self O)
+    (method method_c5000000000000000000000000000001 keep (types O Unused)))
+  (function create forward (visibility public) (effect pure)
+    (type-parameter create O (constraint owned))
+    (implementation-parameter implparam_c5000000000000000000000000000001 ops Keep O)
+    (parameter create owner (type O) (use consume)) (returns O)
+    (body (method-call parameter@forward@implparam_c5000000000000000000000000000001
+      Keep method_c5000000000000000000000000000001 (local owner))))
+  (owned-implementation create Outer (visibility public)
+    (type-parameter create O (constraint owned))
+    (implementation-parameter implparam_c5000000000000000000000000000002 base Keep O)
+    (contract Keep) (self O)
+    (method method_c5000000000000000000000000000001 forward (types O)
+      (implementations parameter@Outer@implparam_c5000000000000000000000000000002)))
+  (function create apply (visibility public) (effect pure)
+    (parameter create owner (type OwnedI64Cell) (use consume))
+    (returns OwnedI64Cell)
+    (body (implementation-call forward (types OwnedI64Cell)
+      (implementations (implementation Outer (types OwnedI64Cell)
+        (implementations (implementation OrdinaryUnused (types OwnedI64Cell I64)))))
+      (local owner))))))
+declarations.end
+"#;
+        let mut snapshot =
+            super::super::super::tests::byte_buffer_tests::author_only(input).unwrap();
+        admit(&snapshot).unwrap();
+        let body = function(&snapshot, "apply").body;
+        let OwnerRecord::Expression(expression) = snapshot
+            .owners
+            .get_mut(&OwnerKey::Expression(body))
+            .unwrap()
+        else {
+            unreachable!()
+        };
+        expression.contract_version = 32;
+        assert!(
+            admit(&snapshot).is_err(),
+            "nested unused scheme argument Graph32"
+        );
     }
 
     const DATA_SEQUENCES: &str = r#"declarations.begin

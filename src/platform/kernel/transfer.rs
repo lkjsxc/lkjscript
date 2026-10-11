@@ -50,18 +50,33 @@ pub(super) fn ordinary_assumptions_in(
     };
     read.validation_work()?;
     let key = OwnerKey::Declaration(scope.declaration);
+    let mut mixed_scope = false;
+    let scope_generation;
     let parameters = if scope.package == read.package_id() {
         match read.owner(key)? {
-            Some(OwnerRecord::Declaration(declaration)) => match declaration.payload {
-                DeclarationPayload::Function(function) => function.type_parameters,
-                DeclarationPayload::OwnedRecord {
-                    type_parameters, ..
-                } => type_parameters,
-                DeclarationPayload::OwnedImplementation(implementation) => {
-                    implementation.type_parameters
+            Some(OwnerRecord::Declaration(declaration)) => {
+                if declaration.header.owner != key {
+                    return Err(reject(
+                        "transfer assumptions have a foreign declaration identity",
+                    ));
                 }
-                _ => return Ok(assumptions),
-            },
+                scope_generation = declaration.header.contract_version;
+                match declaration.payload {
+                    DeclarationPayload::Function(function) => function.type_parameters,
+                    DeclarationPayload::OwnedContract(contract) => {
+                        mixed_scope = true;
+                        contract.type_parameters
+                    }
+                    DeclarationPayload::OwnedRecord {
+                        type_parameters, ..
+                    } => type_parameters,
+                    DeclarationPayload::OwnedImplementation(implementation) => {
+                        mixed_scope = true;
+                        implementation.type_parameters
+                    }
+                    _ => return Ok(assumptions),
+                }
+            }
             _ => {
                 return Err(reject(
                     "transfer assumptions require an exact declaration scope",
@@ -73,16 +88,31 @@ pub(super) fn ordinary_assumptions_in(
             Some(
                 PackageInterfaceRecord::Declaration(declaration)
                 | PackageInterfaceRecord::RepresentationDeclaration(declaration),
-            ) => match declaration.payload {
-                PackageInterfaceDeclarationPayload::Function(function) => function.type_parameters,
-                PackageInterfaceDeclarationPayload::OwnedRecord {
-                    type_parameters, ..
-                } => type_parameters,
-                PackageInterfaceDeclarationPayload::OwnedImplementation(implementation) => {
-                    implementation.type_parameters
+            ) => {
+                if declaration.header.owner != key {
+                    return Err(reject(
+                        "imported transfer assumptions have a foreign declaration identity",
+                    ));
                 }
-                _ => return Ok(assumptions),
-            },
+                scope_generation = declaration.header.contract_version;
+                match declaration.payload {
+                    PackageInterfaceDeclarationPayload::Function(function) => {
+                        function.type_parameters
+                    }
+                    PackageInterfaceDeclarationPayload::OwnedContract(contract) => {
+                        mixed_scope = true;
+                        contract.type_parameters
+                    }
+                    PackageInterfaceDeclarationPayload::OwnedRecord {
+                        type_parameters, ..
+                    } => type_parameters,
+                    PackageInterfaceDeclarationPayload::OwnedImplementation(implementation) => {
+                        mixed_scope = true;
+                        implementation.type_parameters
+                    }
+                    _ => return Ok(assumptions),
+                }
+            }
             _ => {
                 return Err(reject(
                     "transfer assumptions require an exact imported scope",
@@ -112,6 +142,15 @@ pub(super) fn ordinary_assumptions_in(
             ));
         }
         if record.constraints.requires_transfer() && !record.constraints.has_owned() {
+            if mixed_scope
+                && (scope_generation < contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+                    || record.header.contract_version
+                        < contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION)
+            {
+                return Err(reject(
+                    "ordinary contract and scheme assumptions require exact Graph 33 authority",
+                ));
+            }
             read.validation_work()?;
             assumptions.insert(parameter);
         }

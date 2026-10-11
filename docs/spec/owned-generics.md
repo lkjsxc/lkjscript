@@ -8,7 +8,8 @@ are checked projections of that graph.
 
 `Owned`, `CaptureSafe` and `None` are distinct constraints. An Owned argument must
 be exactly ByteBuffer, OwnedI64Cell, an explicit [owned product](owned-products.md)
-or [owned choice](owned-choices.md), an [owned sequence](owned-sequences.md)
+or [owned choice](owned-choices.md), a [nominal owned record](owned-records.md),
+an [owned sequence](owned-sequences.md)
 whose exact element type is admitted Owned or ordinary first-order data,
 or an in-scope Owned parameter while checking
 a generic body. Sequence custody remains Owned even when its element is ordinary,
@@ -16,12 +17,12 @@ including for `(owned-sequence I64)` and empty sequences. Ordinary and CaptureSa
 parameters cannot receive an owned type,
 even when the parameter is unused, its container is empty, or the call is in an
 untaken branch. Owned constraints belong to exact graph functions and to Self and
-the ordered additional parameters of an
+eligible additional parameters of an
 [owned contract](owned-contract-parameters.md). Graph functions may compose them
 with explicit effect and requirement schemes under
 [owned effect applications](owned-effects.md). Named tasks may use them under
 [synchronous owned task calls](owned-task-transfers.md).
-Nominal records, variants and externals cannot advertise Owned parameters.
+Ordinary nominal records, variants and externals cannot advertise Owned parameters.
 
 Graph-function type parameters may add independent [transfer and sharing
 obligations](transferable-types.md). `owned transferable` permits custody transfer
@@ -62,16 +63,18 @@ additionally requires Shareable and protects the complete combined argument
 footprint until every started child joins.
 
 Owned sequences provide dynamic homogeneous collections under their separate
-contract. General nominal owned containers, mutable borrows, escaping captures, memory-bearing indirect
-function descriptors, cross-task memory transfer and generic implementation schemes
-are outside this increment. Ordinary generic and CaptureSafe contracts retain
-their previous meaning. Graph 19 adds fixed structural owned products with complete
+contract. The initial increment excluded nominal owned containers, mutable borrows,
+escaping captures, memory-bearing indirect function descriptors, cross-task memory
+transfer and generic implementation schemes; later contracts own the admitted
+extensions. Ordinary generic and CaptureSafe contracts retain their meaning.
+Graph 19 adds fixed structural owned products with complete
 consuming decomposition. Ordinary raw-entry structural substitutions remain supported.
 Current artifacts retain all lexical annotation roots; an annotation is never an
 ownership certificate.
 
 [Explicit generic implementation schemes](generic-owned-implementations.md)
-extend the baseline with implementation-scoped Owned parameters and mapped
+extend the baseline with implementation-scoped owned or ordinary transferable
+parameters and mapped
 generic-function applications. Structured parallel transfer has its own
 [contract](structured-parallel.md); neither extension adds mutable or escaping loans.
 
@@ -100,30 +103,37 @@ cannot manufacture or retain these tokens.
 ## Nominal contracts and exact static operands
 
 An `OwnedContract` declaration embeds distinct method identities and names, one
-distinguished Self type-parameter identity, an ordered list of additional Owned
-parameters, and each method's ordered parameter types/use modes, result, callable
-kind and exact effect row. A method is
+distinguished Self type-parameter identity with exactly Owned, an ordered list of
+additional parameters, and each method's ordered parameter types/use modes,
+result, callable kind and exact effect row. A method is
 pure or a named task with a closed row of concrete requirement identities. An empty
 task row remains a task. Methods have no own generic, effect or requirement scheme.
-Ordinary signature types must be closed and first order; this
+Additional contract parameters declare Owned, Transferable or
+CaptureSafeTransferable. Ordinary signature types must be first order and may
+contain eligible exact-scope ordinary parameters; this
 restriction follows nominal fields and cases as well as structural type children.
 A nominal wrapper cannot hide a function, resource, secret, stream or owned value.
 Closed recursive, mutual and nested nominal data remain first order. The structural
 property is proved under each nominal declaration's ordinary parameter assumptions,
 with every actual argument independently checked in its enclosing scope. Even a
-phantom argument must be closed and ordinary; recursive binding reuse cannot erase it.
+phantom argument must be ordinary and admitted in its exact scope; recursive
+binding reuse cannot erase it. Ownership category is independent of transfer or
+capture obligations, so even a transferable owner cannot satisfy an ordinary formal.
 Owned method parameters form the final affine suffix after ordinary data. Pure
 and task methods may borrow or consume them, including Self. Task methods retain
 their exact closed effect rows; their borrowed results remain unsupported.
 [Parameterized contracts](owned-contract-parameters.md) permit finite owned
 products, choices and sequences containing exact contract parameters in method
-arguments and results. A result may also be ordinary closed data. A method need
+arguments and results. Ordinary parameters remain unrestricted, and ordinary
+results are standalone immutable values. Ordinary borrow/consume modes are excluded.
+A method need
 not mention Self or an additional parameter, but their exact owners, constraints
 and ordered application remain mandatory.
 
-The baseline concrete `OwnedImplementation` declaration names one exact contract, concrete owned
-Self and ordered additional owned arguments, and supplies a complete, unique,
-canonically ordered method map. Every entry selects an exact visible monomorphic
+The baseline concrete `OwnedImplementation` declaration names one exact contract,
+concrete owned Self and ordered additional arguments satisfying their exact
+formals, and supplies a complete, unique, canonically ordered method map. Every
+entry selects an exact visible monomorphic
 graph function with matching ordered
 parameter types, modes, result, callable kind and effect row after simultaneous
 structural substitution of Self and every contract argument.
@@ -135,7 +145,7 @@ Imported contracts, types and methods must belong to the declared exact visible
 package closure.
 
 A function may embed named implementation parameters with distinct identities,
-an exact contract, an in-scope Owned type parameter as Self and ordered owned
+an exact contract, an in-scope Owned type parameter as Self and ordered
 arguments in its exact function scope. An implementation call supplies one
 explicit operand per parameter. An operand either selects an
 exact implementation declaration or forwards an exact witness parameter from its
@@ -191,9 +201,11 @@ Regeneration of maintained artifacts preserves accepted meaning HEADs.
 The [child-borrow contract](owned-borrows.md#encodings-and-evidence) owns subsequent
 scope-operation, borrowed-binding and derived-layout cuts.
 The [parameterized contract](owned-contract-parameters.md#encodings-and-boundaries)
-owns the graph 26 and interface 14 application-layout cut and structural method
-substitution. The earlier generation paragraphs describe their historical
-increments, not current derived-artifact execution permission.
+owns the graph 26/interface 14 application-layout cut, structural method
+substitution and Graph 33 mixed-contract extension. The latter selects interface
+21, compiler 33, artifact 40 and authored request 37, retaining bytecode 27 and
+supported Graph 32 read semantics. The earlier generation paragraphs describe
+their historical increments, not current derived-artifact execution permission.
 
 Complete admission includes unused arguments, methods and unreachable expressions.
 Canonical source, code and runtime metadata must agree, and independent affine

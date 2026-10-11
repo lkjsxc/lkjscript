@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-32";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 32;
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-33";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 33;
 pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-27";
 pub const BYTECODE_CONTRACT_VERSION: u16 = 27;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN32";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v32";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v32";
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN33";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v33";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v33";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -567,7 +567,7 @@ impl CompilationUnit {
                 "compiler-unit bytes disagree with their exact object-domain digest",
             ));
         }
-        // Derived generations 10–31 require a rebuild from supported canonical owners.
+        // Derived generations 10–32 require a rebuild from supported canonical owners.
         // Refuse before decoding; old bytes never acquire current instruction meaning.
         if [
             b"LKJCUN10",
@@ -592,6 +592,7 @@ impl CompilationUnit {
             b"LKJCUN29",
             b"LKJCUN30",
             b"LKJCUN31",
+            b"LKJCUN32",
         ]
         .iter()
         .any(|magic| bytes.starts_with(*magic))

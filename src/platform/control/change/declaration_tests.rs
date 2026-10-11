@@ -59,6 +59,62 @@ declarations.end
 }
 
 #[test]
+fn mixed_storage_native_intent_matches_independent_compact_phantom_edges() {
+    let header = format!("request base=rev_{}\n", "82".repeat(32));
+    let flat = r#"create.module as=$module name=mixed
+type.parameter as=@self parameter=$self
+create.owned-contract as=$contract module=$module name=Marker visibility=public self=@self
+owned.contract-parameter parent=$contract index=0 parameter=$item
+owned.method parent=$contract index=0 as=%method id=method_37000000000000000000000000000002 name=seven result=i64
+add.type-parameter as=$self declaration=$contract name=Self constraint=owned
+add.type-parameter as=$item declaration=$contract name=Item constraint=transferable
+"#;
+    let native = r#"declarations.begin
+(units (module create mixed (as $module)
+  (owned-contract create Marker (as $contract) (visibility public)
+    (self Self)
+    (type-parameter create Self (as $self) (constraint owned))
+    (type-parameter create Item (as $item) (constraint transferable))
+    (method method_37000000000000000000000000000002 seven (parameters) (returns I64)))))
+declarations.end
+"#;
+    for capture in [false, true] {
+        let flat = if capture {
+            flat.replace(
+                "constraint=transferable",
+                "constraint=\"capture-safe transferable\"",
+            )
+        } else {
+            flat.to_owned()
+        };
+        let native = if capture {
+            native.replace(
+                "(constraint transferable)",
+                "(constraint capture-safe transferable)",
+            )
+        } else {
+            native.to_owned()
+        };
+        let flat =
+            decode_compact_change("mixed-flat.lkjc", format!("{header}{flat}").as_bytes()).unwrap();
+        let native =
+            decode_compact_change("mixed-native.lkjc", format!("{header}{native}").as_bytes())
+                .unwrap();
+        let bytes = canonical_authored_intent_bytes(&native.semantic).unwrap();
+        assert_eq!(&bytes[..8], b"LKJACR37");
+        assert_eq!(
+            bytes,
+            canonical_authored_intent_bytes(&flat.semantic).unwrap()
+        );
+        assert_eq!(native.request_commitment, flat.request_commitment);
+        assert_eq!(
+            commitment_codec_identity(&bytes),
+            "lkjscript-authored-change-codec-37"
+        );
+    }
+}
+
+#[test]
 fn parameterized_owned_witness_edges_bind_order_and_reject_malformed_children() {
     let declaration = format!("decl_{}", "44".repeat(16));
     let input = format!(

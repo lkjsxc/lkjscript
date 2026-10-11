@@ -22,9 +22,9 @@ Current normalized identity:
 - package: `pkg_20000000000000000000000000000001`;
 - semantic revision: `rev_a1d97c5d7deda1ece8e2e3383bd7a58ae1e267838368ec5b42678e40c9eb1640`;
 - semantic state: `semantic_state_3832cd12c3fee672d0bdfb975cb363cbc457f6ef45f15cb44a62d40ab47f2dee`;
-- package revision: `package_revision_8de95dabbeda139a7bee02fe38808f3aaa91bbf2b205ae06a2d7fddd99c2fc71`;
-- artifact manifest: `artifact_manifest_8d67648751bc1b97b87faafe9e56e784962448e9ede4b692421dc2fcd3a4780c`;
-- artifact bundle: `artifact_bundle_2a3f196a83eaa0963783be82bdc304dd4182e88611363577a72f49d327073315`;
+- package revision: `package_revision_ea6eadedd5ab831a94a875c9b309b7b35a91bbda918d14639cfe72436b287df7`;
+- artifact manifest: `artifact_manifest_5bc2b36e3f2b6f5aa7c7feaad88c9309584f902706b3a453cbf57f12ffab01f1`;
+- artifact bundle: `artifact_bundle_ada895500133e3710df2d4088b8f7be1b2c7a137423ff8934d78d10a1c3018e3`;
 - 2,044 live root semantic owners and one exact built-in standard dependency.
 
 The original Graph 13 materialization preserved all existing application owner identities and behavior.
@@ -95,7 +95,7 @@ empty 404 and invokes none of them.
 
 All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,375,561-byte
 artifact bundle above (SHA-256
-`6dc80b2164647b5903ef993810f2d53813a89d1ba1d9bef58cec8ccd53eda369`). The service descriptor
+`5f24a98db8f37a269eb94c3203c09678af537ae471c1992621d4df976a6c0b71`). The service descriptor
 resolves `serve`, the worker descriptor resolves `work`, and `live.deployment.json` resolves
 `lkjournal-live-1`. Preparation strictly loads the standalone bundle,
 validates the runner, route-indexed handler and component requirement closure, grants, secrets, and adapters, and emits
@@ -222,10 +222,10 @@ compiler 30, bytecode 25 and artifact 37 through public check/build. All 44 test
 agree between production and reference execution. Accepted HEAD, exact historical
 standard supplier, application behavior and operational data remain unchanged.
 
-The current derived bundle uses compiler 32, bytecode 27 and artifact 39 through
+The current derived bundle uses compiler 33, bytecode 27 and artifact 40 through
 ordinary public check/build. All 44 application and exact-supplier tests pass
 with zero failures and agreement between both evaluators. Accepted HEAD and its
 pinned standard supplier remain unchanged; this application does not yet adopt
 nominal owned records. Running deployments and operational data retain their
-separate authority. The [release notes](../../docs/releases/v0.1.91.md)
+separate authority. The [release notes](../../docs/releases/v0.1.92.md)
 identify the format cut; [status](../../docs/status.md) owns delivery and publication.

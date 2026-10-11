@@ -24,10 +24,22 @@ implementation search or a new runtime ownership mode.
 
 Type parameters have distinct semantic identities, the implementation
 as their declaring scope, and an Owned constraint optionally strengthened with
-Transferable, Shareable or both. Their authored order
+Transferable, Shareable or both, or an ordinary Transferable or
+CaptureSafeTransferable constraint. Unconstrained and CaptureSafe-only scheme
+parameters are excluded. Their authored order
 determines application order. Self, ordered contract arguments and mapped function
-arguments can contain these exact parameters inside supported finite owned
-structural types. An empty scheme remains a concrete implementation.
+arguments can contain these exact parameters inside supported finite owned and
+ordinary types, subject to the receiving formal's category and bounds. Self
+remains owned. An empty scheme remains a concrete implementation.
+
+An ordinary actual must admit complete first-order ordinary data independently of
+its transfer or capture safety. A transferable owner cannot satisfy an ordinary
+formal. Symbolic admission uses the exact parameter identity and declaring scope,
+not its name or a same-shaped foreign declaration; complete actual arguments,
+including phantom and unused arguments, retain these checks after substitution.
+Ordinary method parameters are unrestricted and precede the owned suffix, and
+ordinary results are standalone immutable values. Borrowed results retain their
+owned category and exact source contract; this extension adds no mode polymorphism.
 
 The complete scheme is admitted before any caller or concrete item exists. Every
 mapped function has an explicit ordered type application satisfying its declared
@@ -56,7 +68,8 @@ crossing an invocation boundary prove their complete carrier obligation separate
 An implementation prerequisite has its own stable identity and name, one nominal
 owned contract, a Self type and every ordered additional contract argument. Its
 declaring scope is the implementation, independently of the contract and mapped
-function scopes. Its types can mention the implementation's owned type parameters.
+function scopes. Its types can mention the implementation's eligible owned or
+ordinary type parameters according to the complete prerequisite contract.
 Prerequisites do not imply implementation search, effects or deployment grants.
 
 ```lisp
@@ -128,7 +141,8 @@ method invocation applies the stored mapped-function type vector and maps its
 prerequisite operands through that same exact application environment. These
 stages retain their separate declaration scopes. A
 function may apply a scheme to its own eligible symbolic parameters, as well as
-closed owned types. It does not gain stronger bounds or execution grants from
+closed owned or ordinary types where their formals permit them. It does not gain
+stronger bounds or execution grants from
 the selection. Wrong arity, scope, constraints or complete contract application
 reject before publication or execution.
 
@@ -217,11 +231,15 @@ ownership oracle, reference reader and strict loader admit these relationships
 independently. Recomputed hashes cannot make omitted bounds, substituted witnesses,
 wrong mapped types or forged borrowed-result relationships valid.
 
-The new semantic and derived encodings advance at their maintained owners.
-Unsupported experimental predecessors reject clearly; maintained bundles are
-rebuilt through ordinary public check/build. No compatibility migration is
-required. Original historical and immutable publication bytes retain their own
-meaning and evidence.
+Ordinary scheme declarations, their ordinary formals, mixed mapped applications,
+prerequisite scopes and invocation expressions require Graph 33. Supported Graph
+32 declarations remain readable with their original bounds. Current derived
+exports/programs select interface 21, compiler 33, artifact 40 and unchanged
+bytecode 27; authored
+ordinary-parameter requests select codec 37. Unsupported derived predecessors
+reject clearly. Maintained bundles are rebuilt through ordinary public
+check/build, without a migration shim. Original historical and immutable
+publication bytes retain their own meaning and evidence.
 
 ## Reusable storage witness
 
@@ -247,6 +265,19 @@ and reuses the same owner. Different observers and first ties distinguish comple
 prerequisite selections. Joined children exercise exact consuming task applications.
 This remains a language witness; it makes no compiler self-hosting or performance
 claim.
+
+The [indexed-data witness](../../examples/indexed-data-storage/README.md) exports
+`IndexedData<Self: Owned, Item: Transferable>` and its `Flat` and `Chunked` schemes
+before integer, Boolean and nested immutable consumers exist. Flat storage uses
+an owned sequence; chunked storage uses a private nominal `Chunk32<T>` containing
+an owned sequence of owned sequences and an I64 size. All chunks except the last
+are full, with 32 elements each. Existing child borrowing supports reads; consuming
+replacement exchanges the selected chunk with an empty owner, updates the displaced
+chunk, restores it and disposes of the placeholder. No mutable borrowing is added.
+Stable ordinary reads and displaced values remain valid after storage replacement
+and destruction. The [dependency planner](../../examples/dependency-plan/README.md)
+uses separate exact integer and Boolean witnesses across all four representation
+combinations, retaining its separately imported complete-result checker.
 
 Associated projections, method-local generics, implementation search, general
 lifetime inference and representation-dependent composite views remain future

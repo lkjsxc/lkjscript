@@ -336,7 +336,11 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
                         record,
                         PackageInterfaceRecord::RepresentationDeclaration(_)
                     ) {
-                        crate::platform::package_interface::PACKAGE_INTERFACE_CONTRACT_VERSION
+                        if record.header().contract_version < 33 {
+                            20
+                        } else {
+                            crate::platform::package_interface::PACKAGE_INTERFACE_CONTRACT_VERSION
+                        }
                     } else if record.header().contract_version == 14 {
                         10
                     } else if record.header().contract_version <= 17 {
@@ -357,6 +361,8 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
                         18
                     } else if record.header().contract_version < 32 {
                         19
+                    } else if record.header().contract_version < 33 {
+                        20
                     } else {
                         crate::platform::package_interface::PACKAGE_INTERFACE_CONTRACT_VERSION
                     },

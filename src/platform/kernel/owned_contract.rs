@@ -12,6 +12,10 @@ use std::collections::{BTreeMap, BTreeSet};
 #[path = "owned_prerequisite_tests.rs"]
 mod prerequisite_tests;
 
+#[cfg(test)]
+#[path = "mixed_contract_tests.rs"]
+mod mixed_tests;
+
 fn reject(message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Semantic, "kernel_owned_contract", message)
 }
@@ -468,6 +472,15 @@ fn require_share_generation_at(
     scope: DeclarationReference,
     subject: &str,
 ) -> Result<(), Diagnostic> {
+    require_generation_at(read, scope, contract::SHARE_GRAPH_CONTRACT_VERSION, subject)
+}
+
+fn require_generation_at(
+    read: &(impl ExpressionRead + ?Sized),
+    scope: DeclarationReference,
+    generation: u16,
+    subject: &str,
+) -> Result<(), Diagnostic> {
     read.validation_work()?;
     admit_dependency(read, scope.package)?;
     let key = OwnerKey::Declaration(scope.declaration);
@@ -486,9 +499,9 @@ fn require_share_generation_at(
             }
         }
     };
-    if header.owner != key || header.contract_version < contract::SHARE_GRAPH_CONTRACT_VERSION {
+    if header.owner != key || header.contract_version < generation {
         return Err(reject(format!(
-            "{subject} requires exact Graph 30 authority"
+            "{subject} requires exact Graph {generation} authority"
         )));
     }
     Ok(())
@@ -505,6 +518,11 @@ pub(crate) fn contract_record(
             read.owner(OwnerKey::Declaration(reference.declaration))?
             && let DeclarationPayload::OwnedContract(c) = d.payload
         {
+            if d.header.contract_version < contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+                && requires_mixed_generation(read, reference, &c.type_parameters)?
+            {
+                return Err(reject("ordinary contract parameters require Graph 33"));
+            }
             if d.header.contract_version < contract::SHARE_GRAPH_CONTRACT_VERSION
                 && requires_task_borrow_generation(read, &c)?
             {
@@ -522,6 +540,13 @@ pub(crate) fn contract_record(
         OwnerKey::Declaration(reference.declaration),
     )? && let PackageInterfaceDeclarationPayload::OwnedContract(c) = d.payload
     {
+        if d.header.contract_version < contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+            && requires_mixed_generation(read, reference, &c.type_parameters)?
+        {
+            return Err(reject(
+                "imported ordinary contract parameters require Graph 33",
+            ));
+        }
         if d.header.contract_version < contract::SHARE_GRAPH_CONTRACT_VERSION
             && requires_task_borrow_generation(read, &c)?
         {
@@ -550,6 +575,11 @@ pub(crate) fn implementation_record(
             read.owner(OwnerKey::Declaration(reference.declaration))?
             && let DeclarationPayload::OwnedImplementation(i) = d.payload
         {
+            if d.header.contract_version < contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+                && requires_mixed_generation(read, reference, &i.type_parameters)?
+            {
+                return Err(reject("ordinary implementation schemes require Graph 33"));
+            }
             if d.header.contract_version < 29 && i.requires_prerequisite_generation() {
                 return Err(reject("implementation prerequisites require Graph 29"));
             }
@@ -560,6 +590,13 @@ pub(crate) fn implementation_record(
         OwnerKey::Declaration(reference.declaration),
     )? && let PackageInterfaceDeclarationPayload::OwnedImplementation(i) = d.payload
     {
+        if d.header.contract_version < contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+            && requires_mixed_generation(read, reference, &i.type_parameters)?
+        {
+            return Err(reject(
+                "imported ordinary implementation schemes require Graph 33",
+            ));
+        }
         if d.header.contract_version < 29 && i.requires_prerequisite_generation() {
             return Err(reject(
                 "imported implementation prerequisites require Graph 29",
@@ -817,7 +854,12 @@ fn validate_type_argument_constraints(
         validate_owned_type(read, ty, scope)?;
     }
     if constraints.requires_transfer() {
-        super::transfer::admit_in(read, ty, scope)?;
+        let owned = super::transfer::admit_in(read, ty, scope)?;
+        if owned != constraints.has_owned() {
+            return Err(reject(
+                "transferable actual must preserve its formal's ordinary or owned category",
+            ));
+        }
     }
     if constraints.requires_share() {
         super::share::admit_in(read, ty, scope)?;
@@ -827,6 +869,7 @@ fn validate_type_argument_constraints(
 
 fn validate_contract_arguments(
     read: &(impl ExpressionRead + ?Sized),
+    reference: DeclarationReference,
     contract: &OwnedContract,
     arguments: &[TypeObjectDigest],
     scope: Option<DeclarationReference>,
@@ -835,8 +878,118 @@ fn validate_contract_arguments(
         return Err(reject("owned contract type argument arity mismatch"));
     }
     // Every argument is an obligation, even when no method mentions its formal.
-    for argument in arguments {
-        validate_owned_type(read, *argument, scope)?;
+    for (id, argument) in contract.type_parameters.iter().zip(arguments) {
+        let parameter = type_parameter_at(read, reference, *id)?;
+        validate_type_argument_constraints(read, parameter.constraints, *argument, scope)?;
+    }
+    Ok(())
+}
+
+fn ordinary_constraint(constraints: TypeParameterConstraints) -> bool {
+    matches!(
+        constraints,
+        TypeParameterConstraints::Transferable | TypeParameterConstraints::CaptureSafeTransferable
+    )
+}
+
+fn requires_mixed_generation(
+    read: &(impl ExpressionRead + ?Sized),
+    reference: DeclarationReference,
+    parameters: &[TypeParameterId],
+) -> Result<bool, Diagnostic> {
+    for id in parameters {
+        if ordinary_constraint(type_parameter_at(read, reference, *id)?.constraints) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn require_mixed_generation_at(
+    read: &(impl ExpressionRead + ?Sized),
+    scope: DeclarationReference,
+    subject: &str,
+) -> Result<(), Diagnostic> {
+    require_generation_at(
+        read,
+        scope,
+        contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
+        subject,
+    )
+}
+
+fn mixed_contract_at(
+    read: &(impl ExpressionRead + ?Sized),
+    reference: DeclarationReference,
+) -> Result<bool, Diagnostic> {
+    let contract = contract_record(read, reference)?;
+    requires_mixed_generation(read, reference, &contract.type_parameters)
+}
+
+fn mixed_operand(
+    read: &(impl ExpressionRead + ?Sized),
+    operand: &ImplementationOperand,
+) -> Result<bool, Diagnostic> {
+    operand.validate_local()?;
+    for operand in operand.walk() {
+        read.validation_work()?;
+        match operand {
+            ImplementationOperand::Concrete { implementation, .. } => {
+                let record = implementation_record(read, *implementation)?;
+                if requires_mixed_generation(read, *implementation, &record.type_parameters)?
+                    || mixed_contract_at(read, record.contract)?
+                {
+                    return Ok(true);
+                }
+            }
+            ImplementationOperand::Parameter { scope, parameter } => {
+                for declared in implementation_parameters_at(read, *scope)? {
+                    read.validation_work()?;
+                    if declared.id == *parameter && mixed_contract_at(read, declared.contract)? {
+                        return Ok(true);
+                    }
+                }
+            }
+        }
+    }
+    Ok(false)
+}
+
+/// A preceding owner generation cannot borrow newer application meaning from
+/// the exact declarations it references, including unused ordinary scheme arguments.
+pub(crate) fn require_expression_generation(
+    read: &(impl ExpressionRead + ?Sized),
+    expression: &ExpressionRecord,
+) -> Result<(), Diagnostic> {
+    if expression.contract_version >= contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION {
+        return Ok(());
+    }
+    let mixed = match &expression.operation {
+        ExpressionOperation::MethodCall {
+            witness, contract, ..
+        } => mixed_contract_at(read, *contract)? || mixed_operand(read, witness)?,
+        ExpressionOperation::ImplementationCall {
+            function,
+            implementations,
+            ..
+        } => {
+            let function = function_contract(read, *function)?;
+            let mut mixed = false;
+            for parameter in &function.implementation_parameters {
+                read.validation_work()?;
+                mixed |= mixed_contract_at(read, parameter.contract)?;
+            }
+            for operand in implementations {
+                mixed |= mixed_operand(read, operand)?;
+            }
+            mixed
+        }
+        _ => false,
+    };
+    if mixed {
+        return Err(reject(
+            "mixed contract and scheme applications require Graph 33",
+        ));
     }
     Ok(())
 }
@@ -1007,24 +1160,26 @@ fn validate_implementation_definition(
     for id in &implementation.type_parameters {
         let scope =
             scope.ok_or_else(|| reject("generic implementation requires an exact scope"))?;
-        validate_owned_parameter(read, *id, Some(scope))?;
-        let p = if scope.package == read.package_id() {
-            match read.owner(OwnerKey::TypeParameter(*id))? {
-                Some(OwnerRecord::TypeParameter(p)) => p,
-                _ => return Err(reject("missing implementation parameter")),
-            }
-        } else {
-            match read.package_interface_owner(scope.package, OwnerKey::TypeParameter(*id))? {
-                Some(PackageInterfaceRecord::TypeParameter(p)) => p,
-                _ => return Err(reject("missing imported implementation parameter")),
-            }
-        };
-        if !p.constraints.has_owned() || p.header.contract_version < 28 || !names.insert(p.name) {
+        let p = type_parameter_at(read, scope, *id)?;
+        if (!p.constraints.has_owned() && !ordinary_constraint(p.constraints))
+            || p.header.contract_version < 28
+            || !names.insert(p.name)
+        {
             return Err(reject(
-                "implementation schemes require distinct exact owned-constrained parameters",
+                "implementation schemes require distinct exact owned or ordinary-transferable parameters",
             ));
         }
-        if p.constraints != TypeParameterConstraints::Owned {
+        if p.constraints.has_owned() {
+            validate_owned_parameter(read, *id, Some(scope))?;
+        }
+        if ordinary_constraint(p.constraints) {
+            if p.header.contract_version < contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION {
+                return Err(reject(
+                    "ordinary implementation parameters require Graph 33",
+                ));
+            }
+            require_mixed_generation_at(read, scope, "ordinary implementation schemes")?;
+        } else if p.constraints != TypeParameterConstraints::Owned {
             require_share_generation_at(read, scope, "stronger implementation schemes")?;
         }
     }
@@ -1038,7 +1193,20 @@ fn validate_implementation_definition(
             "borrowed task method maps",
         )?;
     }
-    validate_contract_arguments(read, &contract, &implementation.type_arguments, scope)?;
+    if requires_mixed_generation(read, implementation.contract, &contract.type_parameters)? {
+        require_mixed_generation_at(
+            read,
+            scope.ok_or_else(|| reject("mixed contract implementations require an exact scope"))?,
+            "mixed contract implementations",
+        )?;
+    }
+    validate_contract_arguments(
+        read,
+        implementation.contract,
+        &contract,
+        &implementation.type_arguments,
+        scope,
+    )?;
     if implementation.methods.len() != contract.methods.len() {
         return Err(reject("missing implementation method"));
     }
@@ -1074,12 +1242,22 @@ fn validate_implementation_definition(
         for (id, ty) in f.type_parameters.iter().zip(&target.type_arguments) {
             read.validation_work()?;
             let p = type_parameter_at(read, target.function, *id)?;
-            if !p.constraints.has_owned() || target_bindings.insert(*id, *ty).is_some() {
+            if (!p.constraints.has_owned() && !ordinary_constraint(p.constraints))
+                || target_bindings.insert(*id, *ty).is_some()
+            {
                 return Err(reject(
-                    "mapped function applications require distinct exact owned-constrained parameters",
+                    "mapped function applications require distinct exact owned or ordinary-transferable parameters",
                 ));
             }
-            if p.constraints != TypeParameterConstraints::Owned {
+            if ordinary_constraint(p.constraints) {
+                require_mixed_generation_at(
+                    read,
+                    scope.ok_or_else(|| {
+                        reject("ordinary mapped applications require an exact scope")
+                    })?,
+                    "ordinary mapped function applications",
+                )?;
+            } else if p.constraints != TypeParameterConstraints::Owned {
                 require_share_generation_at(
                     read,
                     scope.ok_or_else(|| {
@@ -1220,7 +1398,16 @@ fn validate_witness_parameter(
         ));
     }
     validate_owned_type(read, parameter.self_type, Some(scope))?;
-    validate_contract_arguments(read, &contract, &parameter.type_arguments, Some(scope))
+    if requires_mixed_generation(read, parameter.contract, &contract.type_parameters)? {
+        require_mixed_generation_at(read, scope, "mixed contract prerequisites")?;
+    }
+    validate_contract_arguments(
+        read,
+        parameter.contract,
+        &contract,
+        &parameter.type_arguments,
+        Some(scope),
+    )
 }
 
 fn validate_witness_parameters(
@@ -1347,7 +1534,7 @@ fn witness_contract_inner(
             }
             validate_owned_type(&derived, self_type, scope)?;
             let contract = contract_record(read, i.contract)?;
-            validate_contract_arguments(&derived, &contract, &arguments, scope)?;
+            validate_contract_arguments(&derived, i.contract, &contract, &arguments, scope)?;
             let mut types = validate_witness_arguments(
                 &derived,
                 &i.implementation_parameters,
@@ -1547,15 +1734,27 @@ fn validate_contract_at(
         };
         if p.header.owner != OwnerKey::TypeParameter(id)
             || p.declaration != reference.declaration
-            || p.constraints != TypeParameterConstraints::Owned
+            || if id == c.self_parameter {
+                p.constraints != TypeParameterConstraints::Owned
+            } else {
+                p.constraints != TypeParameterConstraints::Owned
+                    && !ordinary_constraint(p.constraints)
+            }
             || (id != c.self_parameter && p.header.contract_version < 26)
             || !names.insert(p.name)
         {
             return Err(reject(
-                "contract requires distinct exact Owned parameter owners",
+                "contract requires exact Owned Self and distinct Owned or ordinary-transferable parameters",
             ));
         }
+        if ordinary_constraint(p.constraints) {
+            if p.header.contract_version < contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION {
+                return Err(reject("ordinary contract parameters require Graph 33"));
+            }
+            require_mixed_generation_at(read, reference, "mixed storage contracts")?;
+        }
     }
+    let ordinary_assumptions = super::transfer::ordinary_assumptions_in(read, Some(reference))?;
     for method in &c.methods {
         let mut suffix = false;
         for parameter in &method.parameters {
@@ -1568,18 +1767,28 @@ fn validate_contract_at(
                 }
             } else if suffix
                 || parameter.use_mode != ParameterUse::Unrestricted
-                || !ordinary_closed(read, parameter.ty)?
+                || !ordinary_with_assumptions_in(
+                    read,
+                    parameter.ty,
+                    Some(reference),
+                    &ordinary_assumptions,
+                )?
             {
                 return Err(reject(
-                    "method parameters require ordinary closed values followed by scoped owned types",
+                    "method parameters require scoped ordinary data followed by scoped owned types",
                 ));
             }
         }
         if super::memory::direct_in(read, reference.package, method.result)? {
             validate_owned_type(read, method.result, Some(reference))?;
-        } else if !ordinary_closed(read, method.result)? {
+        } else if !ordinary_with_assumptions_in(
+            read,
+            method.result,
+            Some(reference),
+            &ordinary_assumptions,
+        )? {
             return Err(reject(
-                "method result requires scoped owned or closed ordinary type",
+                "method result requires scoped owned or ordinary data type",
             ));
         }
         if let Some(position) = method.result_borrow {
@@ -1946,6 +2155,7 @@ pub(crate) fn validate_parameters(
         )?;
         validate_contract_arguments(
             read,
+            p.contract,
             &contract,
             &p.type_arguments,
             Some(DeclarationReference {
@@ -1953,6 +2163,16 @@ pub(crate) fn validate_parameters(
                 declaration,
             }),
         )?;
+        if requires_mixed_generation(read, p.contract, &contract.type_parameters)? {
+            require_mixed_generation_at(
+                read,
+                DeclarationReference {
+                    package: read.package_id(),
+                    declaration,
+                },
+                "mixed contract prerequisites",
+            )?;
+        }
     }
     Ok(())
 }

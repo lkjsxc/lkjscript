@@ -41,7 +41,7 @@ fn artifact_manifest_generations_admit_current_and_preserve_historical_boundarie
             current.compiler_contract_version,
             current.bytecode_contract_version
         ),
-        (39, 32, 32, 27)
+        (40, 33, 33, 27)
     );
     let (digest, bytes) = current.encode().unwrap();
     assert_eq!(ArtifactManifest::decode(&bytes, digest).unwrap(), current);
@@ -72,11 +72,11 @@ fn artifact_manifest_generations_admit_current_and_preserve_historical_boundarie
         assert_eq!(ArtifactManifest::decode(&bytes, digest).unwrap(), supported);
     }
     for (artifact, graph, compiler, bytecode) in [
-        (39, 31, 32, 27),
-        (39, 32, 31, 26),
-        (39, 32, 32, 26),
-        (38, 32, 32, 27),
-        (29, 32, 32, 27),
+        (40, 32, 33, 27),
+        (40, 33, 32, 27),
+        (40, 33, 33, 26),
+        (39, 32, 32, 27),
+        (29, 33, 33, 27),
         (18, 15, 11, 7),
         (19, 16, 12, 8),
         (20, 17, 13, 9),

@@ -97,10 +97,10 @@ Current identity:
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
 - semantic revision: `rev_6818785d8919028a69659b24df495b2d7a42f2676a95fd1aa0ae143a32623013`;
-- package revision: `package_revision_eb44350b1cc4a9d33bfacf0258613ff5b6bda222724ff662df94fc6d39b57769`;
-- package transport: `package_transport_bdf3f20ab74e23842996bc2b58e12784400ea9c950ae04b0afbbcd55620b0621`;
-- artifact manifest: `artifact_manifest_a59c847293012323f5881b97cf2a45e01c034d716679efc194ca1259de3d3783`;
-- artifact bundle: `artifact_bundle_5a681f920ad1ab98c1a1aa75be16dbda3a12568d54877cc5bbb73b36a196afb0`;
+- package revision: `package_revision_3a0f78fdb296b222dc03b1ef01219534c049ae0081362a0004654c78fd88ac73`;
+- package transport: `package_transport_47b5ebc559df9de48f3a858f2184de93d00c2de44e36bd18a9ed5058b1a748d4`;
+- artifact manifest: `artifact_manifest_d90abfc30dd70ef9f00e89c099d885a4a91d3891daae43b67e4f802cc8007b8c`;
+- artifact bundle: `artifact_bundle_5d3e7bf359c3867ebf86fa7d9f29ef7acc4c00c93a6d5026f5ddc0b6218e2d80`;
 - artifact bundle size: 1,275,854 bytes;
 - 2,800 live semantic owners, 291 compiler units, and 116 graph tests.
 
@@ -305,7 +305,7 @@ through public export and the compiler 30 / bytecode 25 / artifact 37 bundle
 through public check/build. All 96 tests agree between production and reference
 execution. The package revision and transport pins at that checkpoint selected those
 wrappers; that refresh retained accepted HEAD and existing standard meaning.
-The [current release notes](../../docs/releases/v0.1.91.md) identify the selected
+The [current release notes](../../docs/releases/v0.1.92.md) identify the selected
 compatibility boundary; [status](../../docs/status.md) owns actual acceptance.
 
 The generalized sequence increment used Graph 31 and interface 19, with compiler
@@ -313,12 +313,20 @@ The generalized sequence increment used Graph 31 and interface 19, with compiler
 owners from the accepted standard, including the ordinary-data wrappers and
 replacement operation. All 116 graph tests agreed between both evaluators.
 
-The current nominal owned-record refresh uses Graph 32 and interface 20, with
+The nominal owned-record refresh used Graph 32 and interface 20, with
 compiler 32, bytecode 27 and artifact 39. The native FIFO migration updates the
 accepted standard to public `Fifo<T: Owned>`. Public check/build/export derives
-the transport and bundle identified above; all 116 graph tests pass with zero
+that increment's transport and bundle; all 116 graph tests passed with zero
 failures and agreement between production and reference execution. Exact retained
 older suppliers remain separate source inputs and require current derived artifacts.
+
+The mixed-contract refresh exports Graph 33/interface 21 wrappers and rebuilds
+the derived bundle for compiler 33, bytecode 27 and artifact 40. Accepted semantic
+revision and all native standard graphs remain unchanged, while exported package
+revision, transport and artifact identities change at their explicit format
+boundaries. Retained consumers preserve their exact historical supplier selections.
+The current public check passes all 116 tests with agreement between production
+and reference execution; source-full and finalized-byte acceptance remain separate.
 
 ## Native owned FIFO
 

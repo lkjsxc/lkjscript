@@ -16,6 +16,26 @@ fn native_plan_condenses_complete_graphs_and_emits_dependency_first_stages() {
     let artifact_hash = digest(&artifact);
     let descriptors = plan::DESCRIPTORS
         .map(|(name, text)| public.input(&format!("{name}.deployment.json"), text));
+    let storage_descriptors = plan::STORAGE_DESCRIPTORS
+        .map(|(name, text)| public.input(&format!("{name}.deployment.json"), text));
+    let single_modes: Vec<_> = ["flat", "chunked"]
+        .into_iter()
+        .zip(&descriptors[..2])
+        .chain(
+            plan::STORAGE_MODES
+                .into_iter()
+                .zip(&storage_descriptors[..4]),
+        )
+        .collect();
+    let batch_modes: Vec<_> = ["flat", "chunked"]
+        .into_iter()
+        .zip(&descriptors[2..])
+        .chain(
+            plan::STORAGE_MODES
+                .into_iter()
+                .zip(&storage_descriptors[4..]),
+        )
+        .collect();
     let proposals = plan::cases::suite();
     let expected: Vec<Value> = proposals.iter().map(plan::oracle::expected).collect();
     public.input("expected-suite.json", &json!(expected).to_string());
@@ -43,9 +63,9 @@ fn native_plan_condenses_complete_graphs_and_emits_dependency_first_stages() {
     let mut observations = Vec::new();
     for phase in ["attached", "source-deleted"] {
         if phase == "source-deleted" {
-            public.detach();
+            plan::detach(&public);
         }
-        for (mode, descriptor) in ["flat", "chunked"].into_iter().zip(&descriptors[2..]) {
+        for &(mode, descriptor) in &batch_modes {
             for (index, (arguments, expected)) in batches.iter().enumerate() {
                 let output = public.compare(
                     &format!("{phase}-{mode}-{index:02}"),
@@ -62,7 +82,7 @@ fn native_plan_condenses_complete_graphs_and_emits_dependency_first_stages() {
     let example = components::cases::example();
     let example_arguments = public.input("example.json", &json!([example]).to_string());
     let empty_arguments = public.input("empty-batch.json", "[[]]");
-    for (mode, descriptor) in ["flat", "chunked"].into_iter().zip(&descriptors[..2]) {
+    for &(mode, descriptor) in &single_modes {
         public.compare(
             &format!("single-{mode}"),
             descriptor,
@@ -70,7 +90,7 @@ fn native_plan_condenses_complete_graphs_and_emits_dependency_first_stages() {
             &plan::oracle::expected(&example),
         );
     }
-    for (mode, descriptor) in ["flat", "chunked"].into_iter().zip(&descriptors[2..]) {
+    for &(mode, descriptor) in &batch_modes {
         public.compare(
             &format!("empty-{mode}"),
             descriptor,
@@ -78,7 +98,7 @@ fn native_plan_condenses_complete_graphs_and_emits_dependency_first_stages() {
             &json!([]),
         );
     }
-    plan::refusals(&public, &descriptors);
+    plan::refusals(&public, &single_modes);
     assert_eq!(artifact_hash, digest(&artifact));
     assert_eq!(executable_hash, digest(&public.root.join("lkjscript")));
     public.input(
@@ -87,10 +107,12 @@ fn native_plan_condenses_complete_graphs_and_emits_dependency_first_stages() {
             "purpose":"Native dependency-plan evidence, not source or release acceptance",
             "graphs":proposals.len(), "exhaustive_three_vertex_graphs":512,
             "exhaustive_loop_free_four_vertex_graphs":4096,
-            "matched_batch_executions":batches.len()*4, "proposal_comparisons":proposals.len()*4,
+            "matched_batch_executions":batches.len()*batch_modes.len()*2,
+            "proposal_comparisons":proposals.len()*batch_modes.len()*2,
+            "storage_combinations":plan::STORAGE_MODES,
             "maximum_argument_bytes":maximum_argument_bytes,
-            "single_executions":2,"empty_batch_executions":2,
-            "refusal_executions":4,"post_refusal_recovery_executions":4,
+            "single_executions":single_modes.len(),"empty_batch_executions":batch_modes.len(),
+            "refusal_executions":single_modes.len()*2,"post_refusal_recovery_executions":single_modes.len()*2,
             "binary_sha256":executable_hash,"artifact_sha256":artifact_hash,
             "source_projects_and_transports_deleted":true,"status":"passed",
             "observations":observations,

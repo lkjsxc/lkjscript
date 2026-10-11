@@ -66,10 +66,38 @@ fn probe(
             ))
         })
         .collect();
+    let contracts = source
+        .owners
+        .iter()
+        .filter_map(|(key, record)| {
+            let (OwnerKey::Declaration(declaration), OwnerRecord::Declaration(record)) =
+                (key, record)
+            else {
+                return None;
+            };
+            let DeclarationPayload::OwnedContract(contract) = &record.payload else {
+                return None;
+            };
+            Some((
+                DeclarationReference {
+                    package: source.root.package_id,
+                    declaration: *declaration,
+                },
+                contract,
+            ))
+        })
+        .collect();
+    let runtime_owners = source
+        .owners
+        .iter()
+        .map(|(key, record)| ((source.root.package_id, *key), record.clone()))
+        .collect();
     let mut closing = Closing {
         templates: Arc::from([]),
         functions: Vec::new(),
         implementations,
+        contracts,
+        runtime_owners: &runtime_owners,
         owned_records: program.owned_record_declarations.clone(),
         targets: BTreeMap::new(),
         instances: BTreeMap::new(),

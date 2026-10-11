@@ -180,11 +180,18 @@ pub(super) fn complete_with_implementations(
         ),
         crate::platform::compiler::CompilationUnit,
     >,
+    runtime_owners: &BTreeMap<
+        (
+            crate::platform::kernel::PackageId,
+            crate::platform::kernel::OwnerKey,
+        ),
+        crate::platform::kernel::OwnerRecord,
+    >,
     control: &crate::platform::execution::ExecutionControl,
 ) -> Result<(), Diagnostic> {
     let mut work = Budget::new(control);
     close_effect_applications(program, &mut work)?;
-    implementations::close(program, units, &mut work)?;
+    implementations::close(program, units, runtime_owners, &mut work)?;
     complete_budgeted(program, &mut work)
 }
 

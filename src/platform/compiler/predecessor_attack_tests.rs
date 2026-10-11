@@ -369,6 +369,26 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
             "{name}: {error:?}"
         );
         assert_eq!(error.code, rejection, "{name}: {error:?}");
+        let compiler32 = match name {
+            "requirements" => include_bytes!(
+                "../../../tests/fixtures/owned-predecessor-compiler32/requirements.lkja"
+            )
+            .as_slice(),
+            "transactions" => include_bytes!(
+                "../../../tests/fixtures/owned-predecessor-compiler32/transactions.lkja"
+            )
+            .as_slice(),
+            "participation" => include_bytes!(
+                "../../../tests/fixtures/owned-predecessor-compiler32/participation.lkja"
+            )
+            .as_slice(),
+            _ => unreachable!(),
+        };
+        assert_eq!(
+            load_artifact(compiler32).unwrap_err().code,
+            "artifact_bundle_contract",
+            "{name}: original compiler32 derived fixture remains frozen"
+        );
         let container = crate::platform::package_transport::source::PackageContainer::decode(
             transport,
             transport_id.parse().unwrap(),
@@ -413,7 +433,7 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
                 )
                 .as_slice(),
                 include_bytes!(
-                    "../../../tests/fixtures/owned-predecessor-compiler32/requirements.lkja"
+                    "../../../tests/fixtures/owned-predecessor-compiler33/requirements.lkja"
                 )
                 .as_slice(),
             ),
@@ -435,7 +455,7 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
                 )
                 .as_slice(),
                 include_bytes!(
-                    "../../../tests/fixtures/owned-predecessor-compiler32/transactions.lkja"
+                    "../../../tests/fixtures/owned-predecessor-compiler33/transactions.lkja"
                 )
                 .as_slice(),
             ),
@@ -457,7 +477,7 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
                 )
                 .as_slice(),
                 include_bytes!(
-                    "../../../tests/fixtures/owned-predecessor-compiler32/participation.lkja"
+                    "../../../tests/fixtures/owned-predecessor-compiler33/participation.lkja"
                 )
                 .as_slice(),
             ),

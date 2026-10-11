@@ -50,16 +50,16 @@ mod code_admission;
 #[path = "artifact_flow.rs"]
 mod flow_admission;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-39";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-39";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 39;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF39";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART39";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN39";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-40";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-40";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 40;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF40";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART40";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN40";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v39";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v39";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v39";
+    "lkjscript.artifact-manifest-envelope.v40";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v40";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v40";
 pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v18";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
@@ -82,7 +82,7 @@ struct ArtifactWire {
 }
 fn artifact_wire(version: u16) -> Result<ArtifactWire, Diagnostic> {
     match version {
-        30..=38 => Err(artifact_error(
+        30..=39 => Err(artifact_error(
             DiagnosticClass::Source,
             "artifact_bundle_contract",
             "predecessor artifacts require rebuilding from canonical meaning",
@@ -531,6 +531,7 @@ impl ArtifactManifest {
                     | (30, 30, 25)
                     | (31, 31, 26)
                     | (32, 32, 27)
+                    | (33, 33, 27)
             )
             || self.compilation_manifest_contract_version != COMPILATION_MANIFEST_CONTRACT_VERSION
         {
@@ -1344,6 +1345,9 @@ pub(crate) enum RuntimeOwnerExpectation {
         declaration: DeclarationId,
         constraints: crate::platform::kernel::TypeParameterConstraints,
     },
+    OwnedContractTypeParameter {
+        declaration: DeclarationId,
+    },
     // Implementation schemes retain their exact constraints in canonical owners.
     // Independent body admission checks the stronger bounds and mapped applications.
     OwnedImplementationTypeParameter {
@@ -1427,9 +1431,9 @@ impl RuntimeOwnerExpectation {
                     OwnerKind::TaskFunction
                 }
             }
-            Self::TypeParameter { .. } | Self::OwnedImplementationTypeParameter { .. } => {
-                OwnerKind::TypeParameter
-            }
+            Self::TypeParameter { .. }
+            | Self::OwnedContractTypeParameter { .. }
+            | Self::OwnedImplementationTypeParameter { .. } => OwnerKind::TypeParameter,
             Self::EffectParameter { .. } => OwnerKind::EffectParameter,
             Self::RequirementParameter { .. } => OwnerKind::RequirementParameter,
             Self::Field { .. } => OwnerKind::Field,
@@ -1543,9 +1547,19 @@ impl RuntimeOwnerExpectation {
                 OwnerRecord::TypeParameter(record),
             ) => record.declaration == *declaration && record.constraints == *constraints,
             (
+                Self::OwnedContractTypeParameter { declaration },
+                OwnerRecord::TypeParameter(record),
+            ) => record.declaration == *declaration && matches!(record.constraints,
+                crate::platform::kernel::TypeParameterConstraints::Owned
+                    | crate::platform::kernel::TypeParameterConstraints::Transferable
+                    | crate::platform::kernel::TypeParameterConstraints::CaptureSafeTransferable),
+            (
                 Self::OwnedImplementationTypeParameter { declaration },
                 OwnerRecord::TypeParameter(record),
-            ) => record.declaration == *declaration && record.constraints.has_owned(),
+            ) => record.declaration == *declaration
+                && (record.constraints.has_owned() || matches!(record.constraints,
+                    crate::platform::kernel::TypeParameterConstraints::Transferable
+                        | crate::platform::kernel::TypeParameterConstraints::CaptureSafeTransferable)),
             (
                 Self::RequirementParameter { declaration },
                 OwnerRecord::RequirementParameter(record),
@@ -1728,9 +1742,16 @@ pub(crate) fn runtime_owner_expectations(
                     insert_runtime_expectation(
                         &mut expected,
                         (*package, OwnerKey::TypeParameter(parameter)),
-                        RuntimeOwnerExpectation::TypeParameter {
-                            declaration: declaration_owner(*owner, "owned contract")?,
-                            constraints: crate::platform::kernel::TypeParameterConstraints::Owned,
+                        if parameter == c.self_parameter {
+                            RuntimeOwnerExpectation::TypeParameter {
+                                declaration: declaration_owner(*owner, "owned contract")?,
+                                constraints:
+                                    crate::platform::kernel::TypeParameterConstraints::Owned,
+                            }
+                        } else {
+                            RuntimeOwnerExpectation::OwnedContractTypeParameter {
+                                declaration: declaration_owner(*owner, "owned contract")?,
+                            }
                         },
                     )?;
                 }
@@ -4494,6 +4515,41 @@ fn validate_runtime_owners(
             "artifact_runtime_owner_incomplete",
             "artifact runtime metadata omitted one exact compiler-unit boundary owner",
         ));
+    }
+    // The canonical owner headers are independently admitted here. New parameter
+    // categories cannot acquire mixed-storage meaning through rehashed old owners,
+    // including formals unused by every method and mapped application.
+    for ((package, owner), unit) in units {
+        let parameters = match &unit.payload {
+            CompilationPayload::OwnedContract(contract) => &contract.type_parameters,
+            CompilationPayload::OwnedImplementation(implementation) => {
+                &implementation.type_parameters
+            }
+            _ => continue,
+        };
+        for parameter in parameters {
+            let Some(OwnerRecord::TypeParameter(record)) =
+                records.get(&(*package, OwnerKey::TypeParameter(*parameter)))
+            else {
+                return Err(artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_runtime_owner_incomplete",
+                    "mixed-storage declaration parameter owner is absent",
+                ));
+            };
+            if !record.constraints.has_owned()
+                && (record.header.contract_version < 33
+                    || records
+                        .get(&(*package, *owner))
+                        .is_none_or(|declaration| declaration.header().contract_version < 33))
+            {
+                return Err(artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "kernel_mixed_storage_generation",
+                    "ordinary storage contract and scheme parameters require Graph 33 on the declaration and parameter owners",
+                ));
+            }
+        }
     }
     Ok(records)
 }

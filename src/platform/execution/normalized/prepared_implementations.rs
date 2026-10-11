@@ -7,7 +7,8 @@ use super::super::prepare::{
 use super::*;
 use crate::platform::compiler::{CompilationPayload, CompilationUnit};
 use crate::platform::kernel::{
-    DeclarationReference, ImplementationOperand, OwnedImplementation, OwnerKey, PackageId,
+    DeclarationReference, ImplementationOperand, OwnedContract, OwnedImplementation, OwnerKey,
+    OwnerRecord, PackageId, TypeParameterConstraints,
 };
 use crate::platform::semantic_id::ImplementationParameterId;
 use std::sync::Arc;
@@ -57,6 +58,8 @@ struct Closing<'a, 'b> {
     templates: Arc<[NormalizedFunction]>,
     functions: Vec<NormalizedFunction>,
     implementations: BTreeMap<DeclarationReference, &'a OwnedImplementation>,
+    contracts: BTreeMap<DeclarationReference, &'a OwnedContract>,
+    runtime_owners: &'a BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
     owned_records: BTreeSet<DeclarationReference>,
     targets: BTreeMap<DeclarationReference, FunctionIndex>,
     instances: BTreeMap<Application, FunctionIndex>,
@@ -68,6 +71,33 @@ struct Closing<'a, 'b> {
 }
 
 impl Closing<'_, '_> {
+    fn constraints(
+        &mut self,
+        declaration: DeclarationReference,
+        parameters: &[TypeParameterId],
+    ) -> Result<Vec<TypeParameterConstraints>, Diagnostic> {
+        self.work
+            .reserve::<TypeParameterConstraints>(parameters.len())?;
+        parameters
+            .iter()
+            .map(|parameter| {
+                step(self.work)?;
+                match self
+                    .runtime_owners
+                    .get(&(declaration.package, OwnerKey::TypeParameter(*parameter)))
+                {
+                    Some(OwnerRecord::TypeParameter(owner))
+                        if owner.declaration == declaration.declaration
+                            && owner.header.owner == OwnerKey::TypeParameter(*parameter) =>
+                    {
+                        Ok(owner.constraints)
+                    }
+                    _ => Err(missing()),
+                }
+            })
+            .collect()
+    }
+
     fn arguments(
         &mut self,
         arguments: &[TypeObjectDigest],
@@ -134,7 +164,7 @@ impl Closing<'_, '_> {
                 type_arguments,
                 implementations,
             } => {
-                let scheme = self
+                let scheme = *self
                     .implementations
                     .get(implementation)
                     .ok_or_else(missing)?;
@@ -144,8 +174,9 @@ impl Closing<'_, '_> {
                     return Err(missing());
                 }
                 let arguments = self.arguments(type_arguments, types)?;
+                let constraints = self.constraints(*implementation, &scheme.type_parameters)?;
                 let mut closed = BTreeMap::new();
-                for ty in &arguments {
+                for (ty, constraint) in arguments.iter().zip(&constraints) {
                     let owned = matches!(
                         self.types.get(ty).map(|t| &t.form),
                         Some(
@@ -158,7 +189,9 @@ impl Closing<'_, '_> {
                     ) || matches!(self.types.get(ty).map(|t| &t.form),
                         Some(TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. })
                             if self.owned_records.contains(declaration));
-                    if !owned || !instantiated_type(self.types, *ty, &mut closed, 0, self.work)? {
+                    if owned != constraint.has_owned()
+                        || !instantiated_type(self.types, *ty, &mut closed, 0, self.work)?
+                    {
                         return Err(missing());
                     }
                 }
@@ -256,6 +289,17 @@ impl Closing<'_, '_> {
             .collect();
         let self_type = substitute(self.types, implementation.self_type, &types, 0, self.work)?;
         let type_arguments = self.arguments(&implementation.type_arguments, &types)?;
+        let implementation_constraints =
+            self.constraints(witness.implementation, &implementation.type_parameters)?;
+        let contract = *self
+            .contracts
+            .get(&implementation.contract)
+            .ok_or_else(missing)?;
+        if type_arguments.len() != contract.type_parameters.len() {
+            return Err(missing());
+        }
+        let contract_constraints =
+            self.constraints(implementation.contract, &contract.type_parameters)?;
         self.work
             .reserve::<NormalizedImplementationArgument>(witness.implementations.len())?;
         self.work
@@ -291,8 +335,10 @@ impl Closing<'_, '_> {
             implementation: witness.implementation,
             contract: implementation.contract,
             implementation_type_arguments: witness.type_arguments.clone().into(),
+            implementation_type_parameter_constraints: implementation_constraints.into(),
             self_type,
             type_arguments: type_arguments.into(),
+            contract_type_parameter_constraints: contract_constraints.into(),
             implementations: prerequisites.into(),
             prerequisites: obligations.into(),
         });
@@ -647,6 +693,7 @@ fn requires_specialization(
 pub(super) fn close(
     program: &mut NormalizedProgram,
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    runtime_owners: &BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
     work: &mut Budget<'_>,
 ) -> Result<(), Diagnostic> {
     // Whole-artifact type, affine and implementation admission already happened.
@@ -657,9 +704,23 @@ pub(super) fn close(
         return Ok(());
     }
     let mut implementations = BTreeMap::new();
+    let mut contracts = BTreeMap::new();
     let mut owned_records = BTreeSet::new();
     for ((package, owner), unit) in units {
         step(work)?;
+        if let CompilationPayload::OwnedContract(contract) = &unit.payload {
+            let OwnerKey::Declaration(declaration) = owner else {
+                return Err(missing());
+            };
+            work.node::<(DeclarationReference, &OwnedContract)>()?;
+            contracts.insert(
+                DeclarationReference {
+                    package: *package,
+                    declaration: *declaration,
+                },
+                contract,
+            );
+        }
         if matches!(unit.payload, CompilationPayload::OwnedRecord { .. }) {
             let OwnerKey::Declaration(declaration) = owner else {
                 return Err(missing());
@@ -708,6 +769,8 @@ pub(super) fn close(
         templates: Arc::clone(&program.functions),
         functions: program.functions.to_vec(),
         implementations,
+        contracts,
+        runtime_owners,
         owned_records,
         targets,
         instances: BTreeMap::new(),
@@ -819,7 +882,8 @@ mod tests {
                 control: &control,
                 type_lookup: type_lookup::TypeLookupBuilder::default(),
             };
-            let error = close(&mut program, &BTreeMap::new(), &mut work).unwrap_err();
+            let error =
+                close(&mut program, &BTreeMap::new(), &BTreeMap::new(), &mut work).unwrap_err();
             if cancelled {
                 assert_eq!(error.class, DiagnosticClass::Cancelled);
                 assert_eq!(work.steps, MAXIMUM_WORK - 1);
@@ -918,8 +982,10 @@ mod tests {
                         implementation: reference,
                         contract: reference,
                         implementation_type_arguments: Arc::from([]),
+                        implementation_type_parameter_constraints: Arc::from([]),
                         self_type: f.result,
                         type_arguments: Arc::from([]),
+                        contract_type_parameter_constraints: Arc::from([]),
                         implementations: Arc::from([]),
                         prerequisites: Arc::from([]),
                     })]);
@@ -943,7 +1009,7 @@ mod tests {
         let before = program.clone();
         let control = crate::platform::execution::ExecutionControl::uncancelled();
         let mut work = Budget::new(&control);
-        close(&mut program, &BTreeMap::new(), &mut work).unwrap();
+        close(&mut program, &BTreeMap::new(), &BTreeMap::new(), &mut work).unwrap();
         assert_eq!(
             work.bytes, 0,
             "absence must not allocate specialization state"
@@ -1035,10 +1101,38 @@ mod tests {
             .collect();
         let control = crate::platform::execution::ExecutionControl::uncancelled();
         let mut work = Budget::new(&control);
+        let contracts = source
+            .owners
+            .iter()
+            .filter_map(|(owner, record)| {
+                let (OwnerKey::Declaration(declaration), OwnerRecord::Declaration(record)) =
+                    (owner, record)
+                else {
+                    return None;
+                };
+                let DeclarationPayload::OwnedContract(contract) = &record.payload else {
+                    return None;
+                };
+                Some((
+                    DeclarationReference {
+                        package: source.root.package_id,
+                        declaration: *declaration,
+                    },
+                    contract,
+                ))
+            })
+            .collect();
+        let runtime_owners = source
+            .owners
+            .iter()
+            .map(|(owner, record)| ((source.root.package_id, *owner), record.clone()))
+            .collect();
         let mut closing = Closing {
             templates: Arc::from([]),
             functions: Vec::new(),
             implementations,
+            contracts,
+            runtime_owners: &runtime_owners,
             owned_records: BTreeSet::new(),
             targets: BTreeMap::new(),
             instances: BTreeMap::new(),

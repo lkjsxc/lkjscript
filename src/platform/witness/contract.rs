@@ -7,8 +7,8 @@ pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-9";
 pub const WITNESS_CONTRACT_VERSION: u16 = 9;
 pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-11";
 pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 11;
-pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-37";
-pub const VALIDATOR_CONTRACT_VERSION: u16 = 37;
+pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-38";
+pub const VALIDATOR_CONTRACT_VERSION: u16 = 38;
 
 pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT09";
 pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM16";
@@ -60,7 +60,7 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 42] = [
     },
     ValidatorFeatureDescriptor {
         name: "parameterized_owned_contracts",
-        version: 1,
+        version: 2,
     },
     ValidatorFeatureDescriptor {
         name: "structural_owned_sequences",
@@ -72,7 +72,7 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 42] = [
     },
     ValidatorFeatureDescriptor {
         name: "explicit_transferable_type_parameters",
-        version: 1,
+        version: 2,
     },
     ValidatorFeatureDescriptor {
         name: "structured_parallel_owned_tasks",
@@ -93,7 +93,7 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 42] = [
     ValidatorFeatureDescriptor {
         name: "explicit_owned_implementation_witnesses",
         // Explicit application schemes preserve consumption, allowances and grants independently.
-        version: 8,
+        version: 9,
     },
     ValidatorFeatureDescriptor {
         name: "sealed_owned_i64_cells",

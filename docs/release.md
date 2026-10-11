@@ -52,7 +52,8 @@ case matching `native_owned_`, `native_byte_buffer_`, `native_byte_ranges_`,
 `native_declarations::incremental_units::`,
 `native_declarations::native_owned_fifo::` and
 `native_declarations::native_data_sequences::` and
-`native_declarations::native_owned_nominals::` families, plus the exact
+`native_declarations::native_owned_nominals::` and
+`native_declarations::native_indexed_data::` families, plus the exact
 `copied_binary_authors_builds_and_serves_interactive_topology_from_minimal` case.
 The Map family must include the exact
 `native_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment`
@@ -84,16 +85,22 @@ substitute for final-byte acceptance. Normal promotion and anonymous acquisition
 still use the unchanged assets and existing authority; no credentials, protections,
 immutable tags or prior assets are changed.
 
-`lkjscript-final-candidate-acceptance-8` and workload
-`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-8`
+`lkjscript-final-candidate-acceptance-9` and workload
+`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-9`
 require the complete Map matrix, the exact native-fold, incremental-compiler,
-FIFO, generalized-sequence and nominal-owned-record behavior witnesses and native-public proof in addition
+FIFO, generalized-sequence, nominal-owned-record and mixed indexed-storage behavior witnesses and native-public proof in addition
 to all previous source, six target-owner, two userland and installation boundaries. The current
 controller rejects predecessor contracts, predecessor workloads and mixed generations
 rather than relabelling them. Their original contracts and evidence remain historical facts;
 a corrected successor requires a fresh producer. In particular, producer 37046478616
 accepted the earlier 0.1.68 source without the joined-deadline repair and is superseded,
 not a candidate to promote after the repair.
+
+The serial native-public aggregate has a 120-minute execution allowance; its
+separate harness build allowance remains 30 minutes. The authenticated v0.1.91
+producer completed 42 of 96 cases successfully before its former 30-minute
+execution allowance expired. The successor retains every case, exact outcome
+admission and joined-cleanup requirement. That failed producer is not promotable.
 
 [Current status](status.md) owns the exact public/latest selection. A pending
 successor producer is release-only waiting; accepted source can proceed to main.

@@ -21,12 +21,16 @@ private layout admission and source-tied element reads must survive generic
 implementation witnesses, transports and detached artifacts. Empty and data-only
 records remain owned; representation changes do not silently retarget dependencies.
 
-Next, extend additional owned-contract parameters and implementation schemes to
-ordinary Transferable data while retaining an Owned Self. This will let the
-planner's integer and Boolean working storage use generic storage interfaces.
-Keep ordinary and owned parameter categories explicit, including phantom actuals;
-removing Owned-only checks without replacing their proof obligations is unsound.
-This generic-contract extension is separate from nominal representation custody.
+Use [mixed storage contracts](spec/owned-contract-parameters.md#indexed-ordinary-storage)
+to combine an exactly Owned Self with ordinary Transferable or
+CaptureSafeTransferable arguments. The
+[indexed-data library](../examples/indexed-data-storage/README.md) provides flat and
+private nominal chunked implementations of the same six-method
+interface. Admit ordinary category independently from transfer/capture obligations,
+including unused and phantom actuals. Stable reads and displaced ordinary values
+must survive storage destruction. The planner's integer and Boolean storage
+witnesses exercise all four combinations without a new borrowing mode. Exact
+availability and validation remain status-owned.
 
 Use [scoped reads of owned children](spec/owned-borrows.md) to inspect products and
 choices through exact implementation witnesses, then consume the preserved owner.
@@ -224,7 +228,9 @@ an independently admitted boundary; exact availability remains status-owned.
 Use [ordinary data in owned sequences](guides/native-data-sequences.md) to separate
 container custody from element ownership. The planner's remaining counts, levels,
 visited flags and readiness indices use indexed owned working storage, with stable
-ordinary reads and explicit displaced values from replacement. Keep its complete
+ordinary reads and explicit displaced values from replacement. Parameterize its
+working state over separate `IndexedData` integer and Boolean owners and retain the
+append-only readiness queue. Keep its complete
 independent result checker and current graph capacities. Measure preparation,
 storage growth and bounded per-update admission before deciding whether to move
 this boundary into the compiler. [Nominal owned records](spec/owned-records.md)
@@ -267,6 +273,14 @@ A report is ordinary data, not
 publication or execution authority; shared source admission and runtime machinery
 remain explicit trust boundaries. Prefer binding this checked interface to a real
 compiler consumer over adding another disconnected graph-analysis example.
+
+Select package dependency planning as the next compiler replacement when the
+native boundary owns complete inputs, outcomes and failures. Before takeover,
+cover the existing 10,000-package/100,000-edge closure limit and resolve the JSON
+ingress ceiling with an independently admitted input boundary. Reordering
+independent compiler units does not establish useful adoption. Keep resumable
+execution before a scheduler rewrite, measured custody needs before a region
+runtime, and a stable typed lowering boundary before a native backend.
 
 ## Evidence and development cost
 

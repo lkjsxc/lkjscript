@@ -437,23 +437,39 @@ impl Oracle<'_> {
     pub(super) fn scoped_parameter(&self, id: TypeParameterId) -> Option<&TypeParameterRecord> {
         let declaration = self.1?;
         let p = self.type_parameter(declaration.package, id)?;
-        if p.header.owner != OwnerKey::TypeParameter(id) || p.declaration != declaration.declaration
+        if p.header.owner != OwnerKey::TypeParameter(id)
+            || p.header.kind != OwnerKind::TypeParameter
+            || p.declaration != declaration.declaration
         {
             return None;
         }
         let listed = if let Some(function) = self.function(declaration) {
             function.type_parameters.contains(&id)
         } else if let Some(contract) = self.contract(declaration) {
-            (contract.self_parameter == id || contract.type_parameters.contains(&id))
-                && p.constraints == TypeParameterConstraints::Owned
+            if contract.self_parameter == id {
+                p.constraints == TypeParameterConstraints::Owned
+            } else {
+                contract.type_parameters.contains(&id)
+                    && (p.constraints == TypeParameterConstraints::Owned
+                        || (Self::ordinary_witness_bounds(p.constraints)
+                            && p.header.contract_version >= 33
+                            && self
+                                .declaration_generation(declaration)
+                                .is_some_and(|v| v >= 33)))
+            }
         } else if let Some(implementation) = self.implementation(declaration) {
             implementation.type_parameters.contains(&id)
-                && p.constraints.has_owned()
-                && (p.constraints == TypeParameterConstraints::Owned
-                    || (p.header.contract_version >= 30
+                && ((p.constraints.has_owned()
+                    && (p.constraints == TypeParameterConstraints::Owned
+                        || (p.header.contract_version >= 30
+                            && self
+                                .declaration_generation(declaration)
+                                .is_some_and(|v| v >= 30))))
+                    || (Self::ordinary_witness_bounds(p.constraints)
+                        && p.header.contract_version >= 33
                         && self
                             .declaration_generation(declaration)
-                            .is_some_and(|v| v >= 30)))
+                            .is_some_and(|v| v >= 33)))
         } else if let Some((parameters, _)) = self.owned_record_inventory(declaration) {
             parameters.contains(&id)
                 && (p.constraints.has_owned() || p.constraints.requires_transfer())
@@ -461,6 +477,48 @@ impl Oracle<'_> {
             false
         };
         listed.then_some(p)
+    }
+    fn ordinary_witness_bounds(bounds: TypeParameterConstraints) -> bool {
+        matches!(
+            bounds,
+            TypeParameterConstraints::Transferable
+                | TypeParameterConstraints::CaptureSafeTransferable
+        )
+    }
+    fn witness_bounds(bounds: TypeParameterConstraints) -> bool {
+        bounds.has_owned() || Self::ordinary_witness_bounds(bounds)
+    }
+    pub(super) fn mixed_contract(&self, d: DeclarationReference) -> bool {
+        self.contract(d).is_some_and(|c| {
+            c.type_parameters.iter().any(|id| {
+                self.type_parameter(d.package, *id)
+                    .is_some_and(|p| Self::ordinary_witness_bounds(p.constraints))
+            })
+        })
+    }
+    // Admit every actual against its exact formal, including arguments absent
+    // from all method signatures. Transfer and ownership are distinct proofs.
+    fn contract_application(
+        &self,
+        declaration: DeclarationReference,
+        self_type: TypeObjectDigest,
+        arguments: &[TypeObjectDigest],
+    ) -> bool {
+        let Some(c) = self.contract(declaration) else {
+            return false;
+        };
+        c.type_parameters.len() == arguments.len()
+            && self.satisfies_constraints(self_type, TypeParameterConstraints::Owned)
+            && c.type_parameters
+                .iter()
+                .zip(arguments)
+                .all(|(formal, actual)| {
+                    self.type_parameter(declaration.package, *formal)
+                        .is_some_and(|p| {
+                            p.declaration == declaration.declaration
+                                && self.satisfies_constraints(*actual, p.constraints)
+                        })
+                })
     }
     pub(super) fn function(&self, d: DeclarationReference) -> Option<PackageFunctionSignature> {
         if d.package == self.0.root.package_id {
@@ -740,7 +798,6 @@ impl Oracle<'_> {
         let Some(c) = self.contract(d) else {
             return false;
         };
-        let closed = Oracle(self.0, None);
         let scoped = Oracle(self.0, Some(d));
         let mut parameters = BTreeSet::new();
         let mut parameter_names = BTreeSet::new();
@@ -750,8 +807,7 @@ impl Oracle<'_> {
                 .all(|id| {
                     parameters.insert(id)
                         && scoped.scoped_parameter(id).is_some_and(|p| {
-                            p.constraints == TypeParameterConstraints::Owned
-                                && (id == c.self_parameter || p.header.contract_version >= 26)
+                            (id == c.self_parameter || p.header.contract_version >= 26)
                                 && parameter_names.insert(&p.name)
                         })
                 })
@@ -780,12 +836,12 @@ impl Oracle<'_> {
                     }
                 } else if suffix
                     || p.use_mode != ParameterUse::Unrestricted
-                    || !closed.ordinary(p.ty)
+                    || !scoped.ordinary(p.ty)
                 {
                     return false;
                 }
             }
-            if !scoped.owned_type_in_scope(m.result) && !closed.ordinary(m.result) {
+            if !scoped.owned_type_in_scope(m.result) && !scoped.ordinary(m.result) {
                 return false;
             }
             if let Some(source) = m.result_borrow
@@ -800,7 +856,20 @@ impl Oracle<'_> {
         }
         true
     }
-    pub(super) fn contract_generation(&self, c: &OwnedContract, generation: u16) -> bool {
+    pub(super) fn contract_generation(
+        &self,
+        c: &OwnedContract,
+        generation: u16,
+        package: PackageId,
+    ) -> bool {
+        if generation < 33
+            && c.type_parameters.iter().any(|id| {
+                self.type_parameter(package, *id)
+                    .is_some_and(|p| Self::ordinary_witness_bounds(p.constraints))
+            })
+        {
+            return false;
+        }
         if generation < 30
             && c.methods.iter().any(|m| {
                 !matches!(m.effect, FunctionEffect::Pure)
@@ -863,19 +932,42 @@ impl Oracle<'_> {
             remaining -= 1;
             match operand {
                 ImplementationOperand::Concrete {
+                    implementation,
                     type_arguments,
                     implementations,
-                    ..
                 } => {
                     if (generation < 28 && !type_arguments.is_empty())
                         || (generation < 29 && !implementations.is_empty())
+                        || (generation < 33
+                            && self.implementation(*implementation).is_some_and(|i| {
+                                self.mixed_contract(i.contract)
+                                    || i.type_parameters.iter().any(|id| {
+                                        self.type_parameter(implementation.package, *id)
+                                            .is_some_and(|p| {
+                                                Self::ordinary_witness_bounds(p.constraints)
+                                            })
+                                    })
+                            }))
                     {
                         return false;
                     }
                     pending.extend(implementations.iter().map(|operand| (operand, depth + 1)));
                 }
-                ImplementationOperand::Parameter { scope, .. } => {
+                ImplementationOperand::Parameter { scope, parameter } => {
                     if generation < 29 && self.function(*scope).is_none() {
+                        return false;
+                    }
+                    if generation < 33
+                        && (self.function(*scope).is_some_and(|f| {
+                            f.implementation_parameters
+                                .iter()
+                                .any(|p| p.id == *parameter && self.mixed_contract(p.contract))
+                        }) || self.implementation(*scope).is_some_and(|i| {
+                            i.implementation_parameters
+                                .iter()
+                                .any(|p| p.id == *parameter && self.mixed_contract(p.contract))
+                        }))
+                    {
                         return false;
                     }
                 }
@@ -927,14 +1019,12 @@ impl Oracle<'_> {
             || i.type_parameters.iter().any(|id| {
                 !parameter_ids.insert(*id)
                     || scoped.scoped_parameter(*id).is_none_or(|p| {
-                        !p.constraints.has_owned() || !parameter_names.insert(&p.name)
+                        !Self::witness_bounds(p.constraints) || !parameter_names.insert(&p.name)
                     })
             })
             || !scoped.owned_type_in_scope(i.self_type)
             || i.type_arguments.len() >= contract::MAXIMUM_CHILDREN
-            || i.type_arguments
-                .iter()
-                .any(|ty| !scoped.owned_type_in_scope(*ty))
+            || !scoped.contract_application(i.contract, i.self_type, &i.type_arguments)
             || !scoped.valid_prerequisites(
                 reference,
                 &i.type_parameters,
@@ -948,6 +1038,13 @@ impl Oracle<'_> {
         let Some(c) = self.contract(i.contract) else {
             return false;
         };
+        if scoped.mixed_contract(i.contract)
+            && self
+                .declaration_generation(reference)
+                .is_none_or(|v| v < 33)
+        {
+            return false;
+        }
         if self
             .declaration_generation(reference)
             .is_none_or(|v| v < 30)
@@ -1009,11 +1106,14 @@ impl Oracle<'_> {
             for (parameter, actual) in f.type_parameters.iter().zip(&mapping.type_arguments) {
                 if !target_ids.insert(*parameter)
                     || target_scope.scoped_parameter(*parameter).is_none_or(|p| {
-                        !p.constraints.has_owned()
+                        !Self::witness_bounds(p.constraints)
                             || !target_names.insert(&p.name)
                             || !scoped.satisfies_constraints(*actual, p.constraints)
+                            || (Self::ordinary_witness_bounds(p.constraints)
+                                && self
+                                    .declaration_generation(reference)
+                                    .is_none_or(|v| v < 33))
                     })
-                    || !scoped.owned_type_in_scope(*actual)
                     || target_bindings.insert(*parameter, *actual).is_some()
                 {
                     return false;
@@ -1040,8 +1140,7 @@ impl Oracle<'_> {
                 if p.parent != ParameterParent::Function(mapping.function.declaration)
                     || p.resource_requirement.is_some()
                     || p.use_mode != expected.use_mode
-                    || (!target_scope.owned_type_in_scope(p.ty)
-                        && !Oracle(self.0, None).ordinary(p.ty))
+                    || (!target_scope.owned_type_in_scope(p.ty) && !target_scope.ordinary(p.ty))
                     || derived
                         .apply(expected.ty, &bindings, 0)
                         .is_none_or(|expected| {
@@ -1051,8 +1150,7 @@ impl Oracle<'_> {
                     return false;
                 }
             }
-            if (!target_scope.owned_type_in_scope(f.result)
-                && !Oracle(self.0, None).ordinary(f.result))
+            if (!target_scope.owned_type_in_scope(f.result) && !target_scope.ordinary(f.result))
                 || derived
                     .apply(m.result, &bindings, 0)
                     .is_none_or(|expected| {
@@ -1128,12 +1226,9 @@ impl Oracle<'_> {
                     .scoped_parameter(*parameter)
                     .is_some_and(|t| t.constraints.has_owned())
                 && self.valid_contract(p.contract)
-                && self
-                    .contract(p.contract)
-                    .is_some_and(|c| c.type_parameters.len() == p.type_arguments.len())
-                && p.type_arguments
-                    .iter()
-                    .all(|ty| scoped.owned_type_in_scope(*ty))
+                && (!self.mixed_contract(p.contract)
+                    || self.declaration_generation(d).is_some_and(|v| v >= 33))
+                && scoped.contract_application(p.contract, p.self_type, &p.type_arguments)
         })
     }
 
@@ -1238,7 +1333,8 @@ impl Oracle<'_> {
                     .map(|ty| derived.apply(*ty, &bindings, 0))
                     .collect::<Option<Vec<_>>>()?;
                 admission.remaining = derived.remaining;
-                Some((i.contract, self_type, arguments))
+                self.contract_application(i.contract, self_type, &arguments)
+                    .then_some((i.contract, self_type, arguments))
             }
             ImplementationOperand::Parameter { scope, parameter } => {
                 if Some(*scope) != self.1 {

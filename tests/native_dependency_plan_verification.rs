@@ -24,6 +24,26 @@ fn native_checker_rejects_false_plans_and_guards_an_independent_producer() {
     let verifier_transport_hash = digest(&public.root.join("verifier.lkjp"));
     let descriptors = verification::DESCRIPTORS
         .map(|(name, source)| public.input(&format!("{name}.deployment.json"), source));
+    let storage_descriptors = verification::STORAGE_DESCRIPTORS
+        .map(|(name, source)| public.input(&format!("{name}.deployment.json"), source));
+    let single_modes: Vec<_> = ["flat", "chunked"]
+        .into_iter()
+        .zip(&descriptors[..2])
+        .chain(
+            plan::STORAGE_MODES
+                .into_iter()
+                .zip(&storage_descriptors[..4]),
+        )
+        .collect();
+    let batch_modes: Vec<_> = ["flat", "chunked"]
+        .into_iter()
+        .zip(&descriptors[2..4])
+        .chain(
+            plan::STORAGE_MODES
+                .into_iter()
+                .zip(&storage_descriptors[4..]),
+        )
+        .collect();
     let proposals = plan::cases::suite();
     let expected: Vec<_> = proposals
         .iter()
@@ -56,9 +76,9 @@ fn native_checker_rejects_false_plans_and_guards_an_independent_producer() {
         if phase == "source-deleted" {
             fs::remove_dir_all(public.root.join("verifier")).unwrap();
             fs::remove_file(public.root.join("verifier.lkjp")).unwrap();
-            public.detach();
+            plan::detach(&public);
         }
-        for (mode, descriptor) in ["flat", "chunked"].into_iter().zip(&descriptors[2..4]) {
+        for &(mode, descriptor) in &batch_modes {
             for (index, batch) in plans.iter().enumerate() {
                 let output = public.compare(
                     &format!("{phase}-{mode}-{index:03}"),
@@ -100,7 +120,7 @@ fn native_checker_rejects_false_plans_and_guards_an_independent_producer() {
     }
     let example = components::cases::example();
     let arguments = public.input("single-example.json", &json!([example]).to_string());
-    for (mode, descriptor) in ["flat", "chunked"].into_iter().zip(&descriptors[..2]) {
+    for &(mode, descriptor) in &single_modes {
         public.compare(
             &format!("single-{mode}"),
             descriptor,
@@ -126,6 +146,9 @@ fn native_checker_rejects_false_plans_and_guards_an_independent_producer() {
     ] {
         public.compare(&format!("empty-{mode}"), descriptor, &empty, &json!([]));
     }
+    for &(mode, descriptor) in &batch_modes[2..] {
+        public.compare(&format!("empty-{mode}"), descriptor, &empty, &json!([]));
+    }
     verification::refusals(&public, &descriptors[4]);
     outcome_suite.finish(&public);
     assert_eq!(executable_hash, digest(&public.root.join("lkjscript")));
@@ -149,15 +172,19 @@ fn native_checker_rejects_false_plans_and_guards_an_independent_producer() {
         .max()
         .unwrap()
         .max(outcome_suite.maximum_items());
-    let conditions =
-        proposals.len() * 6 + exhaustive.len() + mutations.len() + 2 * outcome_suite.count();
+    let conditions = proposals.len() * (2 * batch_modes.len() + 2)
+        + exhaustive.len()
+        + mutations.len()
+        + 2 * outcome_suite.count();
     public.input("witness-summary.json", &json!({
         "purpose":"Native result-checker evidence; not a source or distribution acceptance receipt",
-        "status":"passed", "source_graphs":proposals.len(), "checked_plan_comparisons":proposals.len()*4,
+        "status":"passed", "source_graphs":proposals.len(), "checked_plan_comparisons":proposals.len()*batch_modes.len()*2,
+        "storage_combinations":plan::STORAGE_MODES,
         "ordinary_claim_comparisons":proposals.len()*2, "exhaustive_candidate_claims":exhaustive.len(),
         "valid_exhaustive_claims":512,"rejected_exhaustive_claims":11264,"targeted_mutations_and_recovery":mutations.len(),
         "batch_conditions":conditions,"batch_executions":observations.len(),"maximum_argument_bytes":maximum_input,"maximum_argument_items":maximum_items,
-        "single_executions":5,"empty_batches":4,"raw_and_resource_refusals":6,"subsequent_recoveries":6,
+        "single_executions":single_modes.len()+3,"empty_batches":batch_modes.len()+2,
+        "raw_and_resource_refusals":6,"subsequent_recoveries":6,
         "outcome_verification":outcome_suite.summary(),"standalone_before_producer_executions":3,
         "source_projects_and_transports_deleted":true,"binary_sha256":executable_hash,
         "verifier_artifact_sha256":verifier_hash,"producer_artifact_sha256":producer_hash,

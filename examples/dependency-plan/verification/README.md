@@ -33,7 +33,8 @@ plan-edges, plan-stages, plan-presentation or dependency-plan modules. Checking
 strong connectivity and stage equations does not call those producer algorithms.
 
 In a separate fresh producer project, stage the standard, worklist and carrier
-packages and this checker transport. Bind its exact observed identity under alias
+packages, the separately exported indexed-data contract and flat/chunked storage
+packages, and this checker transport. Bind its exact observed identity under alias
 `dependency-verifier`. Follow the [planner's authoring sequence](../README.md),
 then author this directory's `application.lkjc` and `batch.lkjc`. The consumer
 selects `dependency-verifier::verify-dependency-outcome`,
@@ -59,6 +60,11 @@ Use absent result paths. `verify.deployment.json` selects the standalone verifie
 `flat.deployment.json` and `chunked.deployment.json` select checked planning. Their
 valid-plan output is unchanged from the original planner. A valid result cannot
 escape those checked entrypoints after a failed result check.
+The four `storage-INTS-FLAGS.deployment.json` descriptors select checked planning
+with independent flat/chunked integer and Boolean storage; the corresponding
+`batch-storage-INTS-FLAGS` descriptors retain the same independent checker for
+every outcome. The checker uses its own algorithms and has no storage-provider
+dependency.
 
 A standalone input is `[PROPOSAL, PLAN]`. For example:
 
@@ -119,7 +125,8 @@ Source invalidity and malformed claims are distinct from runtime resource refusa
 ## Independent acceptance evidence
 
 The maintained regression first builds and runs the standalone checker before
-creating any producer project, then imports its exact transport into both planners.
+creating any producer project, then imports its exact transport into both original
+carrier commands and all four independent stage-storage combinations.
 It compares complete checked plans and standalone reports for 4,635 source cases,
 including all three-vertex directed graphs and all loop-free four-vertex graphs,
 before and after deleting authoring projects and transports.

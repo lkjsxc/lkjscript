@@ -132,6 +132,8 @@ struct Writer {
     sequence_extension: bool,
     generalized_sequence_extension: bool,
     owned_record_extension: bool,
+    storage_contract_extension: bool,
+    ordinary_constraint_extension: bool,
     parameterized_contract_extension: bool,
     borrowed_result_extension: bool,
     generic_implementation_extension: bool,
@@ -161,6 +163,8 @@ impl Writer {
             sequence_extension: false,
             generalized_sequence_extension: false,
             owned_record_extension: false,
+            storage_contract_extension: false,
+            ordinary_constraint_extension: false,
             parameterized_contract_extension: false,
             borrowed_result_extension: false,
             generic_implementation_extension: false,
@@ -169,7 +173,12 @@ impl Writer {
     }
 
     fn finish(mut self) -> Vec<u8> {
-        if self.owned_record_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+        if self.storage_contract_extension
+            && self.ordinary_constraint_extension
+            && self.bytes.starts_with(&INTENT_MAGIC)
+        {
+            self.bytes[..8].copy_from_slice(b"LKJACR37");
+        } else if self.owned_record_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR36");
         } else if self.generalized_sequence_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR35");
@@ -581,6 +590,7 @@ impl Writer {
                 methods,
             } => {
                 self.owned_extension = true;
+                self.storage_contract_extension = true;
                 self.parameterized_contract_extension |= !type_parameters.is_empty();
                 let task_methods = methods
                     .iter()
@@ -638,6 +648,7 @@ impl Writer {
                 methods,
             } => {
                 self.owned_extension = true;
+                self.storage_contract_extension = true;
                 self.parameterized_contract_extension |= !type_arguments.is_empty();
                 let prerequisites = !implementation_parameters.is_empty()
                     || methods.iter().any(|m| !m.implementations.is_empty());
@@ -695,6 +706,7 @@ impl Writer {
                 methods,
             } => {
                 self.owned_extension = true;
+                self.storage_contract_extension = true;
                 self.parameterized_contract_extension |= !type_parameters.is_empty();
                 let task_methods = methods
                     .iter()
@@ -746,6 +758,7 @@ impl Writer {
                 methods,
             } => {
                 self.owned_extension = true;
+                self.storage_contract_extension = true;
                 self.parameterized_contract_extension |= !type_arguments.is_empty();
                 let prerequisites = !implementation_parameters.is_empty()
                     || methods.iter().any(|m| !m.implementations.is_empty());
@@ -1104,6 +1117,8 @@ impl Writer {
                 self.tag(39)?;
                 self.owner_selector(parameter, definitions)?;
                 self.owned_extension |= constraints.has_owned();
+                self.ordinary_constraint_extension |=
+                    !constraints.has_owned() && constraints.requires_transfer();
                 self.transfer_constraint_extension |= constraints.requires_transfer();
                 self.share_constraint_extension |= constraints.requires_share();
                 self.tag(constraints.tag())
@@ -1541,6 +1556,8 @@ impl Writer {
         self.symbol(&value.symbol, definitions)?;
         self.name(&value.name)?;
         self.owned_extension |= value.constraints.has_owned();
+        self.ordinary_constraint_extension |=
+            !value.constraints.has_owned() && value.constraints.requires_transfer();
         self.transfer_constraint_extension |= value.constraints.requires_transfer();
         self.share_constraint_extension |= value.constraints.requires_share();
         self.tag(value.constraints.tag())
@@ -2924,6 +2941,73 @@ mod tests {
             assert_ne!(original, encode(operation));
         }
         assert_ne!(encode(get(2, 7)), original);
+    }
+
+    #[test]
+    fn mixed_storage_codec_commits_ordinary_phantom_bounds_in_generation37() {
+        use crate::platform::kernel::TypeParameterConstraints as C;
+        let parameter = |symbol: &str| AuthoredTypeParameterReference::Symbol {
+            symbol: symbol.to_owned(),
+        };
+        let request = |bound| AuthoredChangeSet {
+            base: revision(),
+            preconditions: vec![],
+            changes: vec![
+                AuthoredChange::CreateModule {
+                    symbol: "$module".to_owned(),
+                    name: Name::new("mixed").unwrap(),
+                },
+                AuthoredChange::CreateOwnedContract {
+                    symbol: "$contract".to_owned(),
+                    module: ModuleSelector::Symbol {
+                        symbol: "$module".to_owned(),
+                    },
+                    name: Name::new("Marker").unwrap(),
+                    visibility: DeclarationVisibility::Public,
+                    self_type: AuthoredType::TypeParameter {
+                        parameter: parameter("$self"),
+                    },
+                    type_parameters: vec![parameter("$phantom")],
+                    methods: vec![AuthoredOwnedMethod {
+                        id: crate::platform::semantic_id::MethodId::migrate(b"mixed-codec", 0),
+                        name: Name::new("seven").unwrap(),
+                        parameters: vec![],
+                        result: AuthoredType::I64 {},
+                        result_borrow: None,
+                        effect: AuthoredFunctionEffect::Pure {},
+                    }],
+                },
+                AuthoredChange::AddTypeParameter {
+                    declaration: DeclarationSelector::Symbol {
+                        symbol: "$contract".to_owned(),
+                    },
+                    parameter: AuthoredTypeParameter {
+                        symbol: "$self".to_owned(),
+                        name: Name::new("Self").unwrap(),
+                        constraints: C::Owned,
+                    },
+                },
+                AuthoredChange::AddTypeParameter {
+                    declaration: DeclarationSelector::Symbol {
+                        symbol: "$contract".to_owned(),
+                    },
+                    parameter: AuthoredTypeParameter {
+                        symbol: "$phantom".to_owned(),
+                        name: Name::new("Phantom").unwrap(),
+                        constraints: bound,
+                    },
+                },
+            ],
+            budget: ChangeBudget::default(),
+        };
+        let ordinary = canonical_authored_intent_bytes(&request(C::Transferable)).unwrap();
+        let capture =
+            canonical_authored_intent_bytes(&request(C::CaptureSafeTransferable)).unwrap();
+        let owned = canonical_authored_intent_bytes(&request(C::Owned)).unwrap();
+        assert_eq!(&ordinary[..8], b"LKJACR37");
+        assert_eq!(&capture[..8], b"LKJACR37");
+        assert_eq!(&owned[..8], b"LKJACR30");
+        assert_ne!(ordinary, capture);
     }
 
     #[test]

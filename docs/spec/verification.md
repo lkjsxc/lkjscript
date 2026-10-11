@@ -1945,6 +1945,87 @@ where promised, no remaining owned handles and a healthy subsequent invocation.
 Scheme selection never supplies effect allowances or deployment grants. Extend
 existing source/public/finalized-harness owners rather than a parallel verifier.
 
+## Mixed storage-contract obligations
+
+The [ordinary-parameter extension](owned-contract-parameters.md) requires exact
+Owned Self and complete category/bound admission for every additional contract,
+scheme, mapped-function and witness argument. Symbolically check ordinary
+Transferable and CaptureSafeTransferable parameters before concrete consumers
+exist. Preserve existing stronger Owned scheme bounds. An ordinary formal cannot
+receive a transferable owner; an ordinary signature cannot hide one in nominal
+arguments, immutable aggregates or phantom parameters. Wrong declaration scope,
+insufficient bounds, unused arguments and inactive syntax reject independently.
+
+Reject ordinary borrow/consume modes, an ordinary parameter after the owned suffix,
+ordinary source-tied results and forged borrowed-result source relationships.
+Simultaneous substitution retains exact implementation identities, parameter
+order, prerequisite trees, callable kind and effects. Canonical admission,
+package/transport readers, compiler/artifact loaders, independent ownership and
+source-reference checking must each admit complete applications. Consistently
+rehashed malformed interfaces or artifacts cannot erase a category, scope, bound
+or mapping obligation. Neutral reconstruction remains admissible.
+
+Freshly author and export `IndexedData<Self: Owned, Item: Transferable>` and its
+generic library before independent Flat and Chunked implementations and consumers.
+Use the copied public executable outside the checkout, retaining literal requests
+and exact dependencies. Cover integers, booleans, nested immutable aggregates,
+nominal ordinary data, mixed ordinary/owned scheme parameters and forwarded
+prerequisites. Distinct witnesses for identical Self must remain distinguishable.
+Re-enter canonical drafts and build deterministically; remove owned source
+projects and transports before complete detached result comparisons.
+
+Compare independently expected empty, length, push, get, replacement and discard
+behavior at 0/1, 31/32/33 and multiple-chunk boundaries. Retain earlier ordinary
+reads and displaced values through later replacement and storage destruction.
+Observe exact index/value/source evaluation order, negative/out-of-range indices,
+modeled allocation refusal, traps, cancellation and joined owner/loan cleanup,
+followed by a healthy invocation. Chunk32 representation operations stay in their
+exact defining module, and inactive foreign field access rejects.
+
+Run the native dependency planner with all four independent integer/Boolean
+flat/chunked combinations. Compare complete outcomes against the separately
+imported result checker and independent expected results, preserving all existing
+4,635 planner cases, capacities, authored ordering and append-only readiness
+behavior. Cover empty graphs, cycles, duplicate edges, unreachable invalid input,
+signed endpoints and exact-fit/one-over capacity boundaries. No successful partial
+result or leaked working owner is permitted after a refusal.
+
+Measure preparation, indexed updates, growth and cleanup separately on matched
+workloads. Require no new collection-prefix admission scan or element-copy loop
+for indexed operations; account ordinary-value admission and result construction
+separately. Retain slower measurements. Modeled storage work, elapsed time and API
+billing remain different evidence.
+
+Every mixed declaring scope, ordinary contract/scheme formal and invocation
+expression independently requires Graph 33; a newer referenced declaration cannot
+upgrade a predecessor owner. Reject downgrade attacks on each such boundary.
+Supported Graph 32 meaning remains readable with its original bounds. Verify interface 21,
+compiler 33, artifact 40, request 37 and unchanged bytecode 27 at their owners,
+including explicit refusal of unsupported derived predecessors. Regenerate
+maintained assets through supported product operations without a migration shim.
+After source inputs stabilize, require dependency-complete fresh full acceptance
+with checker and Cargo concurrency set independently. Source acceptance, mainline
+integration, exact finalized-byte acceptance and publication remain separate;
+earlier nominal-record receipts cannot establish these additional obligations.
+
+Final-candidate acceptance generation 9 requires every enumerated case in the exact
+`native_declarations::native_indexed_data::` namespace, including these three
+mandatory identities:
+
+- `native_indexed_data_separate_packages_snapshots_forwarded_witnesses_and_detached_execution`;
+- `native_indexed_data_rejects_wrong_categories_modes_scopes_and_phantom_actuals`;
+- `native_indexed_data_traps_refusals_cleanup_and_recovery`.
+
+Missing families, substituted identities and ignored, unrun, failed or duplicated
+outcomes reject. Original bounded logs must prove each selected case passed once.
+The contract `lkjscript-final-candidate-acceptance-9` pairs only with
+`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-9`.
+Reject predecessor and mixed pairs, including generation 8, for this selection;
+historical generation-8 receipts retain their own meaning. All earlier required
+families and independent publication terminals remain mandatory. Semantic validator
+38 separately binds current source admission; final-byte inventory identity does
+not itself determine graph or artifact encodings or publish an executable.
+
 ## Dynamic owned-sequence obligations
 
 The [owned sequence contract](owned-sequences.md) extends the existing source,
@@ -2475,7 +2556,7 @@ Final-candidate acceptance generation 8 adds the exact namespace
 
 Select every present and future test in that namespace. Reject missing families,
 substituted identities, duplicated results and ignored, failed or unrun cases.
-The current `lkjscript-final-candidate-acceptance-8` pairs only with
+The nominal-record increment's `lkjscript-final-candidate-acceptance-8` pairs only with
 `release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-8`.
 Reject generation 7 and mixed generation pairs without relabeling their historical
 evidence. All previous mandatory final-byte families and independent publication

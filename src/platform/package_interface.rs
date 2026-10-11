@@ -31,11 +31,11 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-20";
-pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 20;
-pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF20";
+pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-21";
+pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 21;
+pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF21";
 pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str =
-    "lkjscript.package-interface-owner-envelope.v20";
+    "lkjscript.package-interface-owner-envelope.v21";
 const PACKAGE_INTERFACE_IDENTITY_MAGIC: [u8; 8] = *b"LKJPIFI1";
 const PACKAGE_INTERFACE_IDENTITY_DOMAIN: &str = "lkjscript.package-interface-identity.v1";
 pub const MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES: usize = 1024 * 1024;
@@ -107,6 +107,10 @@ mod owned_scheme_tests;
 #[cfg(test)]
 #[path = "package_interface_owned_record_tests.rs"]
 mod owned_record_tests;
+
+#[cfg(test)]
+#[path = "package_interface_mixed_storage_tests.rs"]
+mod mixed_storage_tests;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PackageInterfaceOwnerDigest([u8; 32]);
@@ -328,7 +332,13 @@ impl PackageInterfaceOwner {
                 record,
                 PackageInterfaceRecord::RepresentationDeclaration(_)
             ) {
-                PACKAGE_INTERFACE_CONTRACT_VERSION
+                // Representation evidence itself first exists in interface 20. It
+                // can describe older private ordinary layouts inside an owned record.
+                if canonical.header().contract_version < 33 {
+                    20
+                } else {
+                    PACKAGE_INTERFACE_CONTRACT_VERSION
+                }
             } else if canonical.header().contract_version == 14 {
                 10
             } else if canonical.header().contract_version < 18 {
@@ -349,6 +359,8 @@ impl PackageInterfaceOwner {
                 18
             } else if canonical.header().contract_version < 32 {
                 19
+            } else if canonical.header().contract_version < 33 {
+                20
             } else {
                 PACKAGE_INTERFACE_CONTRACT_VERSION
             },
@@ -490,6 +502,15 @@ impl PackageInterfaceOwner {
             )?;
             return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
         }
+        if self.contract_version == 20 {
+            let bytes = crate::platform::packed::encode(
+                *b"LKJPIF20",
+                "lkjscript.package-interface-owner-envelope.v20",
+                self,
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
+        }
         let bytes = crate::platform::packed::encode(
             PACKAGE_INTERFACE_MAGIC,
             PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
@@ -511,7 +532,20 @@ impl PackageInterfaceOwner {
                 "package-interface owner bytes disagree with their exact digest",
             ));
         }
-        let value: Self = if bytes.starts_with(b"LKJPIF19") {
+        let value: Self = if bytes.starts_with(b"LKJPIF20") {
+            let value: Self = crate::platform::packed::decode(
+                bytes,
+                *b"LKJPIF20",
+                "lkjscript.package-interface-owner-envelope.v20",
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            if value.contract_version != 20 {
+                return Err(interface_corrupt(
+                    "predecessor interface envelope has a foreign generation",
+                ));
+            }
+            value
+        } else if bytes.starts_with(b"LKJPIF19") {
             let value: Self = crate::platform::packed::decode(
                 bytes,
                 *b"LKJPIF19",
@@ -701,11 +735,17 @@ impl PackageInterfaceOwner {
             && self.contract_version != 17
             && self.contract_version != 18
             && self.contract_version != 19
+            && self.contract_version != 20
         {
             return Err(interface_error(
                 DiagnosticClass::Source,
                 "package_interface_contract",
                 "package-interface owner uses a predecessor or foreign contract",
+            ));
+        }
+        if self.contract_version < 21 && self.record.header().contract_version >= 33 {
+            return Err(interface_corrupt(
+                "Graph 33 owners require interface generation 21",
             ));
         }
         if self.contract_version < 19 && self.record.header().contract_version >= 31 {
@@ -1627,11 +1667,31 @@ fn validate_owner_closure_metered(
                     else {
                         return Err(interface_corrupt("owned contract parameter is absent"));
                     };
-                    if p.constraints != crate::platform::kernel::TypeParameterConstraints::Owned
-                        || !parameter_names.insert(&p.name)
-                    {
+                    let self_parameter = *parameter == c.self_parameter;
+                    let constraints_valid = if self_parameter {
+                        p.constraints == crate::platform::kernel::TypeParameterConstraints::Owned
+                    } else {
+                        matches!(p.constraints,
+                            crate::platform::kernel::TypeParameterConstraints::Owned
+                                | crate::platform::kernel::TypeParameterConstraints::Transferable
+                                | crate::platform::kernel::TypeParameterConstraints::CaptureSafeTransferable)
+                    };
+                    if !constraints_valid || !parameter_names.insert(&p.name) {
                         return Err(interface_corrupt(
-                            "owned contract parameters require distinct names and the exact Owned constraint",
+                            "owned contract parameters require distinct names, exact Owned Self, and Owned or ordinary Transferable additional bounds",
+                        ));
+                    }
+                    if !self_parameter
+                        && !p.constraints.has_owned()
+                        && (p.header.contract_version < 33
+                            || declaration.header.contract_version < 33
+                            || value.contract_version < 21
+                            || owners[&OwnerKey::TypeParameter(*parameter)].contract_version < 21)
+                    {
+                        return Err(interface_error(
+                            DiagnosticClass::Semantic,
+                            "kernel_mixed_storage_generation",
+                            "ordinary owned-contract parameters require Graph 33 and interface 21 on the declaration and each parameter",
                         ));
                     }
                     if *parameter != c.self_parameter && p.header.contract_version < 26 {
@@ -1718,12 +1778,34 @@ fn validate_owner_closure_metered(
                         OwnerKind::TypeParameter,
                         Some(*declaration_id),
                     )?;
-                    if !matches!(owners.get(&OwnerKey::TypeParameter(*parameter))
-                        .map(|v| &v.record), Some(PackageInterfaceRecord::TypeParameter(p))
-                        if p.constraints.has_owned())
-                    {
+                    let Some(parameter_owner) = owners.get(&OwnerKey::TypeParameter(*parameter))
+                    else {
                         return Err(interface_corrupt(
-                            "owned implementation type parameter lacks an Owned constraint",
+                            "owned implementation type parameter is absent",
+                        ));
+                    };
+                    let PackageInterfaceRecord::TypeParameter(p) = &parameter_owner.record else {
+                        return Err(interface_corrupt(
+                            "owned implementation type parameter has a foreign kind",
+                        ));
+                    };
+                    if !(p.constraints.has_owned() || matches!(p.constraints,
+                        crate::platform::kernel::TypeParameterConstraints::Transferable
+                            | crate::platform::kernel::TypeParameterConstraints::CaptureSafeTransferable)) {
+                        return Err(interface_corrupt(
+                            "owned implementation type parameter requires Owned or ordinary Transferable bounds",
+                        ));
+                    }
+                    if !p.constraints.has_owned()
+                        && (p.header.contract_version < 33
+                            || declaration.header.contract_version < 33
+                            || value.contract_version < 21
+                            || parameter_owner.contract_version < 21)
+                    {
+                        return Err(interface_error(
+                            DiagnosticClass::Semantic,
+                            "kernel_mixed_storage_generation",
+                            "ordinary implementation scheme parameters require Graph 33 and interface 21 on the declaration and each parameter",
                         ));
                     }
                 }
@@ -3073,7 +3155,7 @@ mod tests {
             }),
         };
         let (digest, bytes) = original.encode().unwrap();
-        assert_eq!(&bytes[..8], b"LKJPIF20");
+        assert_eq!(&bytes[..8], b"LKJPIF21");
         assert_eq!(
             PackageInterfaceOwner::decode(&bytes, owner, digest).unwrap(),
             original

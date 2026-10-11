@@ -76,15 +76,15 @@ fn witness_contract_domains_are_closed_and_unique() {
         ("opaque_nominal_owned_records", 1),
         ("scoped_shareable_owned_inputs", 1),
         ("source_tied_owned_read_results", 1),
-        ("parameterized_owned_contracts", 1),
+        ("parameterized_owned_contracts", 2),
         ("structural_owned_sequences", 2),
         ("lexical_owned_child_borrows", 1),
-        ("explicit_transferable_type_parameters", 1),
+        ("explicit_transferable_type_parameters", 2),
         ("structured_parallel_owned_tasks", 5),
         ("structural_owned_choices", 2),
         ("structural_owned_products", 3),
         ("symbolic_owned_parameters", 6),
-        ("explicit_owned_implementation_witnesses", 8),
+        ("explicit_owned_implementation_witnesses", 9),
         ("finite_generic_callable_instantiation", 3),
         ("single_relation_extractor", 6),
         ("owner_summary_dimensions", 4),
@@ -186,9 +186,14 @@ fn witness_contract_domains_are_closed_and_unique() {
         digest,
         "validator_contract_1f129f2c5bc9303a54e548ac1fddfc5763ca5418944165cb17e46dfad1eff00e"
     );
-    assert_eq!(
+    // Mixed owned/ordinary declarations and complete category admission need fresh proof.
+    assert_ne!(
         digest,
         "validator_contract_36232afacf81a91ea3830ef2c7a0442254440e0978662beb4c682b291e6e7fe8"
+    );
+    assert_eq!(
+        digest,
+        "validator_contract_e62113a5ebb94b6911c2cbef5e97c37bacd2fc102c72fcdb281f3bce3ad2f9a1"
     );
 }
 

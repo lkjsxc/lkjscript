@@ -26,7 +26,7 @@ The input is one proposal record inside the command's argument list:
 ]}]
 ```
 
-Both maintained storage selections return:
+Every maintained carrier and storage selection returns:
 
 ```json
 {"case":"valid","value":{
@@ -59,9 +59,19 @@ Root changes affect reachability, not the all-component plan. To plan only the
 root-required closure, a later consumer can select the returned reachable units;
 that does not permit skipping complete proposal validation.
 
-Remaining dependency counts and levels use owned I64 sequences, and visited flags
-use an owned Bool sequence. Ready component positions use an append-only I64
-sequence with a scalar head; each component is queued at most once, bounding its
+Remaining dependency counts, levels and ready positions use one generic owned
+storage type; visited flags use a separately selected owned storage type.
+`plan-stages::assign-with-storage<Ints, Flags>` requires exact
+`indexed-data::IndexedData<Ints, I64>` and
+`indexed-data::IndexedData<Flags, Bool>` witnesses. The generic traversal calls
+only those declared operations. The original `assign` and component-carrier
+commands select flat storage by default.
+
+The four `storage-INTS-FLAGS` commands independently choose flat owned sequences or
+the nominal `indexed-chunked::Chunk32` representation with 32-element chunks.
+They use the same flat carrier for component discovery, isolating the stage
+storage choice. Ready positions remain append-only with a scalar head; each
+component is queued at most once, bounding its
 logical retained entries by the component count. Indexed reads return ordinary
 immutable values; replacement explicitly returns the displaced scalar alongside
 the sequence owner. The final sparse levels map is materialized after traversal,
@@ -75,8 +85,10 @@ They do not make a cyclic component's member execution order valid.
 ## Author, check, build and detach
 
 Follow the component guide to export the separately authored `owned-worklists`
-and `worklist-carriers` packages against the exact builtin standard. In a fresh
-minimal application, stage all three transports and bind the exact package IDs,
+and `worklist-carriers` packages against the exact builtin standard. Separately
+author and export `../indexed-data-storage/library.lkjc` first, then
+`flat.lkjc` and `chunked.lkjc` in distinct projects importing the exact library.
+In a fresh minimal application, stage all six transports and bind the exact package IDs,
 semantic revisions and package revisions in ordinary change requests.
 
 Author `../owned-worklists/reachability.lkjc`, then the existing component modules
@@ -96,6 +108,8 @@ unchanged. Build the application beside the deployment descriptors:
   --arguments-file arguments.json --result-file flat-result.json
 ./lkjscript run --deployment chunked.deployment.json \
   --arguments-file arguments.json --result-file chunked-result.json
+./lkjscript run --deployment storage-chunked-flat.deployment.json \
+  --arguments-file arguments.json --result-file storage-result.json
 ```
 
 Result paths must be absent. The descriptors select ordinary trusted foreground
@@ -109,6 +123,9 @@ Empty batches return `[]`. A runtime interruption does not become successful par
 batch output. Every proposal has its own complete validation and planning state.
 The artifact remains executable after deleting its disposable authoring projects
 and all staged/exported package transports.
+The four independent choices have both single and batch descriptors:
+`storage-flat-flat`, `storage-flat-chunked`, `storage-chunked-flat` and
+`storage-chunked-chunked`, with a `batch-` prefix for batching.
 
 ## Refusals
 
@@ -147,12 +164,14 @@ capacities and one-past-bound/structural refusals followed by valid proposals.
 The oracle uses pairwise reachability for components and synchronous longest-path
 relaxation for stages. The product uses two-pass component discovery followed by
 remaining-dependency counts and a readiness queue. Complete results are compared
-for both carriers before and after source deletion: 18,540 proposal comparisons.
-The suite uses 19 batches of at most 256 proposals, making 76 batch executions.
+for both original component carriers and all four storage combinations before and
+after source deletion: 55,620 proposal comparisons. The suite uses 19 batches of
+at most 256 proposals, making 228 batch executions.
 Each argument file stays within the ordinary 1 MiB input-byte limit; that limit
 is independent of graph capacities and is not increased for this workload.
 Separate native fixed-result tests use both evaluators; the public matrix executes
-production only. Do not describe it as 18,540 differential evaluator executions.
+production only. These are complete-result comparisons, not differential
+evaluator executions.
 
 Public checks additionally cover single commands, empty batches, malformed final
 unreachable data, resource refusals and recovery. They require unchanged copied
@@ -174,7 +193,8 @@ A later production consumer needs its own checked admission and authority bounda
 ## Matched storage measurements
 
 The retained Host08 study compared the former map/list `plan-stages` from
-`b9cacb40` with the owned-sequence implementation above. The former literal changed
+`b9cacb40` with the preceding concrete owned-sequence implementation. These
+historical measurements do not attest the new generic or chunked storage. The former literal changed
 only its module name. Both algorithms were authored through public requests into
 one artifact, selected by one Boolean argument; component discovery, condensation,
 presentation and dependencies were shared. The final executable admitted the

@@ -1,4 +1,4 @@
-use crate::components::{Native, field, path};
+use crate::components::{Dependency, Native, field, path};
 use serde_json::{Value, json};
 
 pub mod cases;
@@ -65,8 +65,98 @@ pub const DESCRIPTORS: [(&str, &str); 4] = [
     ),
 ];
 
+pub const STORAGE_MODES: [&str; 4] = [
+    "storage-flat-flat",
+    "storage-flat-chunked",
+    "storage-chunked-flat",
+    "storage-chunked-chunked",
+];
+pub const STORAGE_DESCRIPTORS: [(&str, &str); 8] = [
+    (
+        "storage-flat-flat",
+        include_str!("../../examples/dependency-plan/storage-flat-flat.deployment.json"),
+    ),
+    (
+        "storage-flat-chunked",
+        include_str!("../../examples/dependency-plan/storage-flat-chunked.deployment.json"),
+    ),
+    (
+        "storage-chunked-flat",
+        include_str!("../../examples/dependency-plan/storage-chunked-flat.deployment.json"),
+    ),
+    (
+        "storage-chunked-chunked",
+        include_str!("../../examples/dependency-plan/storage-chunked-chunked.deployment.json"),
+    ),
+    (
+        "batch-storage-flat-flat",
+        include_str!("../../examples/dependency-plan/batch-storage-flat-flat.deployment.json"),
+    ),
+    (
+        "batch-storage-flat-chunked",
+        include_str!("../../examples/dependency-plan/batch-storage-flat-chunked.deployment.json"),
+    ),
+    (
+        "batch-storage-chunked-flat",
+        include_str!("../../examples/dependency-plan/batch-storage-chunked-flat.deployment.json"),
+    ),
+    (
+        "batch-storage-chunked-chunked",
+        include_str!(
+            "../../examples/dependency-plan/batch-storage-chunked-chunked.deployment.json"
+        ),
+    ),
+];
+
+pub fn author_storage(public: &Native, standard: &Dependency) -> [Dependency; 3] {
+    let library = public.project("storage-library");
+    public.stage(&library, standard);
+    public.author(
+        &library,
+        include_str!("../../examples/indexed-data-storage/library.lkjc"),
+        &[("builtin", standard)],
+        true,
+    );
+    public.check(&library);
+    public.unchanged(&library, "indexed-data");
+    let library_export = public.export(Some(&library), "storage-library");
+    let mut exports = Vec::new();
+    for (name, module, source) in [
+        (
+            "storage-flat",
+            "indexed-flat",
+            include_str!("../../examples/indexed-data-storage/flat.lkjc"),
+        ),
+        (
+            "storage-chunked",
+            "indexed-chunked",
+            include_str!("../../examples/indexed-data-storage/chunked.lkjc"),
+        ),
+    ] {
+        let project = public.project(name);
+        let dependencies = [("builtin", standard), ("indexed-data", &library_export)];
+        for (_, dependency) in &dependencies {
+            public.stage(&project, dependency);
+        }
+        public.author(&project, source, &dependencies, true);
+        public.check(&project);
+        public.unchanged(&project, module);
+        exports.push(public.export(Some(&project), name));
+    }
+    [library_export, exports.remove(0), exports.remove(0)]
+}
+
+pub fn detach(public: &Native) {
+    for name in ["storage-library", "storage-flat", "storage-chunked"] {
+        std::fs::remove_dir_all(public.root.join(name)).unwrap();
+        std::fs::remove_file(public.root.join(format!("{name}.lkjp"))).unwrap();
+    }
+    public.detach();
+}
+
 pub fn author(public: &Native) {
     let standard = public.export(None, "standard");
+    let storage = author_storage(public, &standard);
     let library = public.project("library");
     public.stage(&library, &standard);
     public.author(
@@ -95,6 +185,9 @@ pub fn author(public: &Native) {
         ("builtin", &standard),
         ("owned-worklists", &library_export),
         ("worklist-carriers", &carriers_export),
+        ("indexed-data", &storage[0]),
+        ("indexed-flat", &storage[1]),
+        ("indexed-chunked", &storage[2]),
     ];
     for (_, dependency) in &dependencies {
         public.stage(&application, dependency);
@@ -123,13 +216,13 @@ pub fn author(public: &Native) {
     );
 }
 
-pub fn refusals(public: &Native, descriptors: &[std::path::PathBuf; 4]) {
+pub fn refusals(public: &Native, descriptors: &[(&str, &std::path::PathBuf)]) {
     let wrong = public.input("wrong-type.json",
         "[{\"roots\":[],\"nodes\":[{\"id\":1,\"successors\":[]},{\"id\":2,\"successors\":[false]}]}]");
     let proposal = crate::components::cases::example();
     let valid = public.input("recovery.json", &json!([proposal]).to_string());
     let expected = oracle::expected(&proposal);
-    for (mode, descriptor) in ["flat", "chunked"].into_iter().zip(&descriptors[..2]) {
+    for &(mode, descriptor) in descriptors {
         let absent = public.root.join(format!("wrong-{mode}-result.json"));
         public.cli(
             &public.root,

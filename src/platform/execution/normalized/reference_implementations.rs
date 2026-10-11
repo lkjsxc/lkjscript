@@ -1,5 +1,6 @@
 //! Static witness dispatch derived from canonical source, independently of prepared instances.
 use super::*;
+use crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION;
 use crate::platform::kernel::{
     ImplementationOperand, ImplementationParameter, OwnedImplementation, TypeParameterConstraints,
 };
@@ -40,6 +41,25 @@ pub(super) struct ReferenceWitnessInterner {
 }
 
 type Implementations = BTreeMap<ImplementationParameterId, AppliedReferenceImplementation>;
+type MethodScope = BTreeMap<TypeParameterId, TypeParameterConstraints>;
+
+fn valid_scheme_constraint(constraints: TypeParameterConstraints) -> bool {
+    constraints.has_owned()
+        || matches!(
+            constraints,
+            TypeParameterConstraints::Transferable
+                | TypeParameterConstraints::CaptureSafeTransferable
+        )
+}
+
+fn valid_contract_constraint(constraints: TypeParameterConstraints) -> bool {
+    matches!(
+        constraints,
+        TypeParameterConstraints::Owned
+            | TypeParameterConstraints::Transferable
+            | TypeParameterConstraints::CaptureSafeTransferable
+    )
+}
 
 impl ReferenceState<'_> {
     pub(super) fn resolve_implementation(
@@ -215,8 +235,14 @@ impl ReferenceState<'_> {
         active: &mut BTreeSet<AppliedReferenceImplementation>,
     ) -> Result<OwnedImplementation, ExecutionError> {
         let reference = selected.implementation;
-        let DeclarationPayload::OwnedImplementation(implementation) =
-            self.declaration(reference)?.payload
+        let implementation_owner = self.declaration(reference)?;
+        if implementation_owner.header.owner != OwnerKey::Declaration(reference.declaration) {
+            return Err(reference_type_error(
+                "implementation declaration has a foreign owner identity",
+            ));
+        }
+        let implementation_version = implementation_owner.header.contract_version;
+        let DeclarationPayload::OwnedImplementation(implementation) = implementation_owner.payload
         else {
             return Err(reference_type_error(
                 "witness does not select an implementation owner",
@@ -235,7 +261,7 @@ impl ReferenceState<'_> {
                 * (std::mem::size_of::<(TypeParameterId, TypeObjectDigest)>()
                     + 6 * std::mem::size_of::<usize>())) as u64,
         )?;
-        let mut scheme_parameters = BTreeSet::new();
+        let mut scheme_parameters = MethodScope::new();
         let mut scheme_names = BTreeSet::new();
         let mut scheme_bindings = BTreeMap::new();
         for (parameter, actual) in implementation
@@ -253,17 +279,18 @@ impl ReferenceState<'_> {
             };
             if owner.header.owner != OwnerKey::TypeParameter(*parameter)
                 || owner.declaration != reference.declaration
-                || !owner.constraints.has_owned()
-                || (owner.constraints.requires_transfer()
-                    && !self.schema.transferable_types.contains(actual))
-                || (owner.constraints.requires_share()
-                    && !self.schema.shareable_types.contains(actual))
-                || !scheme_parameters.insert(*parameter)
+                || !valid_scheme_constraint(owner.constraints)
+                || (!owner.constraints.has_owned()
+                    && (owner.header.contract_version < MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+                        || implementation_version < MIXED_STORAGE_GRAPH_CONTRACT_VERSION))
+                || !self.closed_method_argument(*actual, owner.constraints)?
+                || scheme_parameters
+                    .insert(*parameter, owner.constraints)
+                    .is_some()
                 || !scheme_names.insert(owner.name)
-                || !self.owned_method_type(*actual, &BTreeSet::new())?
             {
                 return Err(reference_type_error(
-                    "implementation requires distinct scoped Owned formals and closed Owned arguments",
+                    "implementation requires exact scoped formals and closed arguments satisfying their constraints",
                 ));
             }
             scheme_bindings.insert(*parameter, *actual);
@@ -276,11 +303,7 @@ impl ReferenceState<'_> {
             ));
         }
         for argument in &implementation.type_arguments {
-            if !self.owned_method_type(*argument, &scheme_parameters)? {
-                return Err(reference_type_error(
-                    "implementation template has an invalid Owned scope",
-                ));
-            }
+            self.owned_method_type(*argument, &scheme_parameters)?;
         }
         let prerequisite_bindings = self.implementation_bindings_in(
             reference,
@@ -298,20 +321,22 @@ impl ReferenceState<'_> {
         }
         for mapping in &mut implementation.methods {
             for actual in &mut mapping.type_arguments {
-                if !self.owned_method_type(*actual, &scheme_parameters)? {
-                    return Err(reference_type_error(
-                        "method mapping requires scoped Owned type arguments",
-                    ));
-                }
+                self.owned_method_type(*actual, &scheme_parameters)?;
                 *actual = self.method_type(*actual, &scheme_bindings)?;
             }
         }
-        if !self.owned_method_type(implementation.self_type, &BTreeSet::new())? {
+        if !self.owned_method_type(implementation.self_type, &MethodScope::new())? {
             return Err(reference_type_error("implementation has a non-owned Self"));
         }
-        let DeclarationPayload::OwnedContract(contract) =
-            self.declaration(implementation.contract)?.payload
-        else {
+        let contract_owner = self.declaration(implementation.contract)?;
+        if contract_owner.header.owner != OwnerKey::Declaration(implementation.contract.declaration)
+        {
+            return Err(reference_type_error(
+                "contract declaration has a foreign owner identity",
+            ));
+        }
+        let contract_version = contract_owner.header.contract_version;
+        let DeclarationPayload::OwnedContract(contract) = contract_owner.payload else {
             return Err(reference_type_error(
                 "implementation names a foreign contract kind",
             ));
@@ -335,7 +360,7 @@ impl ReferenceState<'_> {
                     + std::mem::size_of::<crate::platform::kernel::Name>()
                     + 9 * std::mem::size_of::<usize>())) as u64,
         )?;
-        let mut declared = BTreeSet::new();
+        let mut declared = MethodScope::new();
         let mut parameter_names = BTreeSet::new();
         let mut substitutions = BTreeMap::new();
         for (parameter, actual) in
@@ -359,14 +384,22 @@ impl ReferenceState<'_> {
             };
             if owner.header.owner != OwnerKey::TypeParameter(parameter)
                 || owner.declaration != implementation.contract.declaration
-                || owner.constraints != TypeParameterConstraints::Owned
+                || (if parameter == contract.self_parameter {
+                    owner.constraints != TypeParameterConstraints::Owned
+                } else {
+                    !valid_contract_constraint(owner.constraints)
+                })
                 || (parameter != contract.self_parameter && owner.header.contract_version < 26)
-                || !declared.insert(parameter)
+                || (!owner.constraints.has_owned()
+                    && (owner.header.contract_version < MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+                        || contract_version < MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+                        || implementation_version < MIXED_STORAGE_GRAPH_CONTRACT_VERSION))
+                || declared.insert(parameter, owner.constraints).is_some()
                 || !parameter_names.insert(owner.name)
-                || !self.owned_method_type(actual, &BTreeSet::new())?
+                || !self.closed_method_argument(actual, owner.constraints)?
             {
                 return Err(reference_type_error(
-                    "contract application requires distinct exact Owned parameters and closed owned arguments",
+                    "contract application requires exact scoped parameters and arguments satisfying their constraints",
                 ));
             }
             substitutions.insert(parameter, actual);
@@ -461,6 +494,11 @@ impl ReferenceState<'_> {
                 mapping.ok_or_else(|| reference_type_error("missing method implementation"))?;
             let target = mapping.function;
             let target_owner = self.declaration(target)?;
+            if target_owner.header.owner != OwnerKey::Declaration(target.declaration) {
+                return Err(reference_type_error(
+                    "method target declaration has a foreign owner identity",
+                ));
+            }
             if target.package != reference.package
                 && target_owner.visibility != crate::platform::kernel::DeclarationVisibility::Public
             {
@@ -486,7 +524,7 @@ impl ReferenceState<'_> {
                     "method implementation must have exact applied type, callable kind and effects",
                 ));
             }
-            let mut target_parameters = BTreeSet::new();
+            let mut target_parameters = MethodScope::new();
             let mut target_names = BTreeSet::new();
             let mut target_bindings = BTreeMap::new();
             self.charge_allocation(
@@ -506,17 +544,17 @@ impl ReferenceState<'_> {
                 };
                 if owner.header.owner != OwnerKey::TypeParameter(*parameter)
                     || owner.declaration != target.declaration
-                    || !owner.constraints.has_owned()
-                    || (owner.constraints.requires_transfer()
-                        && !self.schema.transferable_types.contains(actual))
-                    || (owner.constraints.requires_share()
-                        && !self.schema.shareable_types.contains(actual))
-                    || !target_parameters.insert(*parameter)
+                    || !valid_scheme_constraint(owner.constraints)
+                    || (!owner.constraints.has_owned()
+                        && implementation_version < MIXED_STORAGE_GRAPH_CONTRACT_VERSION)
+                    || !self.closed_method_argument(*actual, owner.constraints)?
+                    || target_parameters
+                        .insert(*parameter, owner.constraints)
+                        .is_some()
                     || !target_names.insert(owner.name)
-                    || !self.owned_method_type(*actual, &BTreeSet::new())?
                 {
                     return Err(reference_type_error(
-                        "method targets require distinct exact Owned type parameters",
+                        "method targets require exact scoped formals and arguments satisfying their constraints",
                     ));
                 }
                 target_bindings.insert(*parameter, *actual);
@@ -620,9 +658,43 @@ impl ReferenceState<'_> {
                 * std::mem::size_of::<(ImplementationParameterId, AppliedReferenceImplementation)>(
                 )) as u64,
         )?;
+        // The caller has admitted the declaration and its type arguments. An
+        // empty witness inventory has no additional formal scope to inspect.
+        if parameters.is_empty() {
+            return Ok(BTreeMap::new());
+        }
         let mut bindings = BTreeMap::new();
         let mut names = BTreeSet::new();
-        let declared = types.keys().copied().collect::<BTreeSet<_>>();
+        let mut declared = MethodScope::new();
+        let scope_owner = self.declaration(scope)?;
+        if scope_owner.header.owner != OwnerKey::Declaration(scope.declaration) {
+            return Err(reference_type_error(
+                "witness scope declaration has a foreign owner identity",
+            ));
+        }
+        for parameter in types.keys() {
+            self.witness_metadata_step()?;
+            let Some(OwnerRecord::TypeParameter(owner)) =
+                self.owner_in_package(scope.package, OwnerKey::TypeParameter(*parameter))?
+            else {
+                return Err(reference_type_error(
+                    "missing witness scope parameter owner",
+                ));
+            };
+            if owner.header.owner != OwnerKey::TypeParameter(*parameter)
+                || owner.declaration != scope.declaration
+                || !scope_owner.payload.type_parameters().contains(parameter)
+            {
+                return Err(reference_type_error(
+                    "witness has a foreign type parameter scope",
+                ));
+            }
+            self.charge_allocation(
+                (std::mem::size_of::<(TypeParameterId, TypeParameterConstraints)>()
+                    + 3 * std::mem::size_of::<usize>()) as u64,
+            )?;
+            declared.insert(*parameter, owner.constraints);
+        }
         for (parameter, selected) in parameters.iter().zip(supplied) {
             self.witness_metadata_step()?;
             let implementation = self.checked_implementation_in(selected, depth, visits, active)?;
@@ -643,17 +715,59 @@ impl ReferenceState<'_> {
             if owner.header.owner != OwnerKey::TypeParameter(type_parameter)
                 || owner.declaration != scope.declaration
                 || !owner.constraints.has_owned()
-                || !declared.contains(&type_parameter)
+                || !declared.contains_key(&type_parameter)
                 || !names.insert(&parameter.name)
             {
                 return Err(reference_type_error(
                     "witness formal has a foreign Owned scope",
                 ));
             }
-            for expected in &parameter.type_arguments {
-                if !self.owned_method_type(*expected, &declared)? {
+            let contract_owner = self.declaration(parameter.contract)?;
+            if contract_owner.header.owner != OwnerKey::Declaration(parameter.contract.declaration)
+            {
+                return Err(reference_type_error(
+                    "witness contract has a foreign owner identity",
+                ));
+            }
+            let contract_version = contract_owner.header.contract_version;
+            let DeclarationPayload::OwnedContract(contract) = contract_owner.payload else {
+                return Err(reference_type_error(
+                    "witness formal selects a foreign contract kind",
+                ));
+            };
+            if parameter.type_arguments.len() != contract.type_parameters.len() {
+                return Err(reference_type_error(
+                    "witness formal has an incomplete contract argument inventory",
+                ));
+            }
+            for (expected, formal) in parameter
+                .type_arguments
+                .iter()
+                .zip(&contract.type_parameters)
+            {
+                self.witness_metadata_step()?;
+                let Some(OwnerRecord::TypeParameter(owner)) = self.owner_in_package(
+                    parameter.contract.package,
+                    OwnerKey::TypeParameter(*formal),
+                )?
+                else {
                     return Err(reference_type_error(
-                        "witness argument has a foreign Owned scope",
+                        "witness contract argument lacks its exact formal owner",
+                    ));
+                };
+                if owner.header.owner != OwnerKey::TypeParameter(*formal)
+                    || owner.declaration != parameter.contract.declaration
+                    || !valid_contract_constraint(owner.constraints)
+                    || self.owned_method_type(*expected, &declared)?
+                        != owner.constraints.has_owned()
+                    || (!owner.constraints.has_owned()
+                        && (owner.header.contract_version < MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+                            || contract_version < MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+                            || scope_owner.header.contract_version
+                                < MIXED_STORAGE_GRAPH_CONTRACT_VERSION))
+                {
+                    return Err(reference_type_error(
+                        "witness template arguments violate their exact contract formal categories",
                     ));
                 }
             }
@@ -830,6 +944,20 @@ impl ReferenceState<'_> {
 }
 
 impl ReferenceState<'_> {
+    fn closed_method_argument(
+        &mut self,
+        ty: TypeObjectDigest,
+        constraints: TypeParameterConstraints,
+    ) -> Result<bool, ExecutionError> {
+        let owned = self.owned_method_type(ty, &MethodScope::new())?;
+        Ok(owned == constraints.has_owned()
+            && (owned || self.schema.buffer_free_types.contains(&ty))
+            && (!constraints.requires_transfer() || self.schema.transferable_types.contains(&ty))
+            && (!constraints.requires_share() || self.schema.shareable_types.contains(&ty))
+            && (!constraints.requires_capture_safe()
+                || self.schema.capture_safe_types.contains(&ty)))
+    }
+
     fn witness_tree_step(depth: usize, visits: &mut usize) -> Result<(), ExecutionError> {
         *visits = visits
             .checked_add(1)
@@ -861,7 +989,7 @@ impl ReferenceState<'_> {
     fn validate_mapping_operand(
         &mut self,
         operand: &ImplementationOperand,
-        declared: &BTreeSet<TypeParameterId>,
+        declared: &MethodScope,
         parameter_allowed: bool,
         depth: usize,
         visits: &mut usize,
@@ -875,11 +1003,7 @@ impl ReferenceState<'_> {
                 ..
             } => {
                 for ty in type_arguments {
-                    if !self.owned_method_type(*ty, declared)? {
-                        return Err(reference_type_error(
-                            "mapping witness has a foreign Owned argument",
-                        ));
-                    }
+                    self.owned_method_type(*ty, declared)?;
                 }
                 for child in implementations {
                     self.validate_mapping_operand(child, declared, false, depth + 1, visits)?;
@@ -900,7 +1024,7 @@ impl ReferenceState<'_> {
     fn owned_method_type(
         &mut self,
         ty: TypeObjectDigest,
-        declared: &BTreeSet<TypeParameterId>,
+        declared: &MethodScope,
     ) -> Result<bool, ExecutionError> {
         self.method_shape(ty, declared, 0, &mut 0)
     }
@@ -908,7 +1032,7 @@ impl ReferenceState<'_> {
     fn method_shape(
         &mut self,
         ty: TypeObjectDigest,
-        declared: &BTreeSet<TypeParameterId>,
+        declared: &MethodScope,
         depth: usize,
         visits: &mut usize,
     ) -> Result<bool, ExecutionError> {
@@ -1014,8 +1138,14 @@ impl ReferenceState<'_> {
         let (sequence, count) = match form {
             TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => return Ok(true),
             TypeForm::TypeParameter { parameter } => {
-                return if declared.contains(parameter) {
-                    Ok(true)
+                return if let Some(constraints) = declared.get(parameter) {
+                    if valid_scheme_constraint(*constraints) {
+                        Ok(constraints.has_owned())
+                    } else {
+                        Err(reference_type_error(
+                            "method parameter lacks a first-order data constraint",
+                        ))
+                    }
                 } else {
                     Err(reference_type_error(
                         "method type parameter has a foreign scope",
@@ -1027,7 +1157,7 @@ impl ReferenceState<'_> {
                 (false, fields.len())
             }
             _ => {
-                return if self.ordinary_method_type(ty)? {
+                return if self.ordinary_method_type(ty, declared)? {
                     Ok(false)
                 } else {
                     Err(reference_type_error(
@@ -1072,12 +1202,27 @@ impl ReferenceState<'_> {
 
     // Walk source nominal contents as well as structural types. Callable fields cannot hide
     // inside a closed named wrapper and make an owned method higher order.
-    fn ordinary_method_type(&mut self, ty: TypeObjectDigest) -> Result<bool, ExecutionError> {
+    fn ordinary_method_type(
+        &mut self,
+        ty: TypeObjectDigest,
+        declared: &MethodScope,
+    ) -> Result<bool, ExecutionError> {
         // Independently establish the structural property under nominal formal
         // assumptions. Actual arguments remain children in the enclosing scope.
         type Context = BTreeSet<TypeParameterId>;
         self.charge_allocation(std::mem::size_of::<(TypeObjectDigest, Context)>() as u64)?;
-        let mut pending = vec![(ty, Context::new())];
+        self.charge_allocation(
+            (declared.len()
+                * (std::mem::size_of::<TypeParameterId>() + 3 * std::mem::size_of::<usize>()))
+                as u64,
+        )?;
+        let assumptions: Context = declared
+            .iter()
+            .filter_map(|(parameter, constraints)| {
+                (!constraints.has_owned() && constraints.requires_transfer()).then_some(*parameter)
+            })
+            .collect();
+        let mut pending = vec![(ty, assumptions)];
         let mut seen = BTreeSet::new();
         while let Some(key) = pending.pop() {
             self.witness_metadata_step()?;
@@ -1195,11 +1340,14 @@ impl ReferenceState<'_> {
                             return Ok(false);
                         };
                         if record.declaration != declaration.declaration
+                            || record.header.owner != OwnerKey::TypeParameter(p)
                             || record.constraints.has_owned()
+                            || record.constraints.requires_transfer()
+                            || record.constraints.requires_share()
+                            || !nested.insert(p)
                         {
                             return Ok(false);
                         }
-                        nested.insert(p);
                     }
                     let mut members = vec![];
                     self.charge_allocation(

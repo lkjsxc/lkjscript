@@ -3,115 +3,81 @@
 Snapshot: 2026-10-11. Accepted meaning, source verification, mainline delivery,
 finalized executable acceptance and public availability are separate boundaries.
 
-## Nominal owned records on main
+## Mixed storage contracts under verification
 
-Development **0.1.91** adds exact nominal owned records with module-private
-representations and adopts public `Fifo<T>` in the native standard FIFO. Queue
-order, returned custody, source-tied front reads and one-envelope runtime storage
-are preserved. The [record specification](spec/owned-records.md),
-[FIFO guide](guides/native-owned-fifo.md) and [release notes](releases/v0.1.91.md)
-own semantics, limitations and the intentional format cut. Rebuild experimental
-derived artifacts for Graph 32, interface 20, compiler 32 and artifact 39.
+Development **0.1.92** adds ordinary transferable data parameters to owned
+contracts and generic implementation schemes. Self remains exactly Owned;
+ordinary category, transferability and capture safety are checked independently,
+including unused parameters and nested phantom arguments. The native
+`IndexedData` library has Flat and private nominal Chunk32 implementations.
+The dependency planner selects integer and Boolean storage independently in all
+four combinations. See the [release notes](releases/v0.1.92.md),
+[contract specification](spec/owned-contract-parameters.md) and
+[native storage example](../examples/indexed-data-storage/README.md).
 
-Accepted source is **`ccbed8cf132a633a81182d62192031d38b03b9ca`**, tree
-`af7d52353bcc7019fed0e52915dd83ffbadaec28`. It reached remote main by an ordinary
-fast-forward from `7285431327104ea539e74858064ec735d71216be`; independent Git and
-GitHub reads confirmed the exact commit, tree and ancestry. Original integration
-evidence is [.artifacts/owned-nominals/delivery/integration.json](../.artifacts/owned-nominals/delivery/integration.json).
-This status update is a reporting descendant, not a replacement tested source.
+The selected implementation worktree is
+`/home/coder/workspace/lkjscript-mixed-storage-20261011`, branch
+`work/mixed-storage-contracts-20261011`, based on remote-main reporting commit
+`0eaae23d2cd76f2b78b982170fd357fa08c8f8f5`.
+Implementation and maintained native assets are complete. The current copied
+library test executable passes all 45 focused mixed-contract checks, both witness
+reservation checks and the ten repaired library checks from the preceding full
+development run. All three copied-product storage tests pass, including 104
+differential invocations and 98 production invocations after source deletion.
+The planner and independent checker suites pass 3/3 and 9/9 tests respectively;
+each covers 55,620 complete plans across both prior component carriers and all
+four storage combinations, attached and detached. The checker also rejects
+exhaustive false claims and targeted mutations, with joined cleanup and recovery.
+No fresh full-source acceptance or mainline delivery of these changes is claimed yet.
+Original build, test, native-asset and copied-product evidence is retained under
+`.artifacts/mixed-storage/` in that worktree. Initial failed build and regeneration
+attempts remain separate from corrected runs.
 
-The selected worktree remains
-`/home/coder/workspace/lkjscript-generalized-sequences-20261011`, branch
-`work/nominal-owned-records-20261011`. Keep it and its ignored evidence through
-release closure. No local build or acceptance process remains active.
+Matched storage measurements pass all 480 serial executions across 20 workloads,
+with 60 warmups and 420 measured samples. Complete results, joined cleanup and
+asset identities hold. On this shared host, indexed Flat/direct invocation ratios
+were 1.111–1.241 and Chunk32/Flat ratios were 1.364–3.392. Preparation and invocation
+remain separate observations; no portable speedup or API-cost saving is claimed.
+The native example records the measured table, exact executable/artifact identities
+and original evidence at `.artifacts/mixed-storage/costs/measurement-first/`.
 
-The accepted standard meaning is
-`rev_6818785d8919028a69659b24df495b2d7a42f2676a95fd1aa0ae143a32623013`,
-with **2,800 live owners, 291 compiler units and 116 tests**. Required native packs,
-transport, artifact, embedded pins and maintained consumer artifacts are tracked.
-The journal retains its accepted meaning and exact historical standard selection.
+The intentional cut selects Graph 33, interface 21, compiler 33, artifact 40,
+authored request 37 and semantic validator 38. Bytecode remains 27. Supported
+older meaning retains its original owner generations and interface projection;
+new mixed declarations and invocation expressions require their applicable
+Graph 33 boundaries. Maintained derived artifacts are regenerated through their
+native owners. Finalized-candidate contract and workload generation 9 require
+the complete new indexed-storage public witness family.
 
-## Fresh source acceptance
+Next: freeze this source and run the complete fresh verification owner
+(`lkjscript-dev check full --fresh --machine --jobs 2`, with Cargo jobs 2).
+Integrate the exact
+accepted source through ordinary mainline delivery before selecting a new
+publication producer. Do not reuse predecessor acceptance for these changes.
 
-The corrected source passed **26/26 fresh full gates** in **28m23.5s**, with stable
-tracked inputs, **zero reused gates and zero unrun gates**. Workspace results were
-**2,455 passed, 0 failed, 29 ignored**, plus two separately filtered passing child
-probes. All five nominal public witnesses and all five FIFO behavior witnesses
-passed, including detached execution, private representations, complete layout and
-phantom-argument admission, borrowed reads, transfer, traps, budgets and joined
-cleanup. The continuation codec now matches discovery and explicitly rejects its
-predecessor. Formatting, clippy, complete source/reference tests, release lifecycle,
-all six external behavioral owners, generated documentation and maintained
-package/artifact comparisons passed.
+## Existing accepted source and publication
 
-Receipt:
-`verification_e49147fb91bb8fb98bda8f0b2593be5fc47ad3f665cb77e707a35ebea5caaa28`,
-at [.artifacts/lkjscript-dev/check/1791696537485078079-1099956-0/receipt.json](../.artifacts/lkjscript-dev/check/1791696537485078079-1099956-0/receipt.json).
-The immutable checker SHA-256 is
-`74646bdf8013f9148dc9bb4db381d52e5b5df41f712a774e6626eeb271d5a260`.
-Selection, executable, output, exit status and counted outcomes remain in
-[full-second](../.artifacts/owned-nominals/full-second/accepted-summary.json).
+Nominal-record source **`ccbed8cf132a633a81182d62192031d38b03b9ca`** is already on
+remote main. Its original 26/26 fresh source gates, 2,455 passing workspace tests,
+FIFO measurements and integration evidence retain their original bindings in
+[the previous status](https://github.com/lkjsxc/lkjscript/blob/0eaae23d2cd76f2b78b982170fd357fa08c8f8f5/docs/status.md).
+The old worktree `/home/coder/workspace/lkjscript-generalized-sequences-20261011`
+and its ignored evidence remain retained through release closure.
 
-The first full run of `fbe7a54378ec5c4a3957f683d2f3e9820ae52a37` remains a genuine
-failure: **23/26 gates**, stable inputs, **2,452 passed, 3 failed, 29 ignored**.
-Stale discovery/artifact assertions, the HTTP projection expectation and service
-artifact hash pin were corrected before the new run. Its original receipt is
-`verification_fd60498bf7fc72bd13d0b23a805abd894fd93dff1dae172aad39783917649f30`,
-at [.artifacts/lkjscript-dev/check/1791694354031048775-938064-0/receipt.json](../.artifacts/lkjscript-dev/check/1791694354031048775-938064-0/receipt.json).
-[Earlier development evidence](https://github.com/lkjsxc/lkjscript/blob/ccbed8cf132a633a81182d62192031d38b03b9ca/docs/status.md)
-retains the focused checks, failed originals and cancelled fourth build separately.
+The v0.1.91 candidate
+[38116583723/1](https://github.com/lkjsxc/lkjscript/actions/runs/38116583723)
+selected that exact accepted source and workflow 343592338. It failed at
+08:18:38 UTC when the native-public aggregate reached its 1,800-second execution
+deadline. Source verification and asset construction passed; 42 of 96 public
+cases completed successfully, with no assertion failures observed, and 54 remained
+uncompleted. Finalized-byte acceptance and publication were not reached. No tag,
+scoped-control change, retry or promotion occurred.
 
-## FIFO cost evidence
-
-The [matched-profile report](../examples/owned-fifo/costs/README.md#observed-results-2026-10-11)
-retains **432 executions across 18 workloads**, seven measured samples per lane
-and one warmup. Every result, joined-cleanup and unchanged-hash check passed.
-Nominal/current-structural median invocation ratios were **0.8596–0.9893**;
-current-structural/predecessor ratios were **0.9123–1.0638**, including unfavorable
-results. Modeled value work and allocation charges were unchanged; the nominal
-lane saved **9,488 modeled metadata bytes and 362 derivation steps** per preparation.
-These are exact-host observations, not allocator traffic, portable speedups or API
-billing evidence.
-
-Originals are [cost-sixth/measurement-1791693814286](../.artifacts/owned-nominals/cost-sixth/measurement-1791693814286/summary.json).
-Both copied executables used matched workspace release profiles and features:
-current SHA-256 `1d95cb7a214b9228be1832a5e86b428cd024b0c5d0a97b40515d78c4566c1657`,
-predecessor `daf81df9850ad7db14c71fb61f9b113d13ad3eafcd2c944b4adaf9a7bcf8190b`.
-Those cost measurements remain bound to their original bytes; the later
-continuation correction receives separate source acceptance. The retained
-[fifth run](../.artifacts/owned-nominals/cost-fifth/measurement-1791692906183/summary.json)
-has a cross-generation build-profile confound and is not a generation timing proof.
-
-## Finalized candidate pending
-
-Candidate [38116583723/1](https://github.com/lkjsxc/lkjscript/actions/runs/38116583723)
-was dispatched once at **2026-10-11 05:59:37 UTC**. Product and controller source
-both select accepted commit `ccbed8cf132a633a81182d62192031d38b03b9ca` on main,
-workflow **343592338**, event `workflow_dispatch`, repository and head repository
-`lkjsxc/lkjscript`. Its initial observed state is **in progress**, with the
-`Accept final candidate` job running. No finalized-byte acceptance or publication
-is claimed. Raw service responses, exact selection and dispatch evidence are in
-[delivery](../.artifacts/owned-nominals/delivery/candidate-selection.json).
-
-Next: inspect that exact run and attempt. Require generation-8 **candidate_accepted**,
-its authenticated original assets/verifier/acceptance inventory and complete
-finalized-byte nominal public witnesses. Then follow the [release owner](release.md):
-refresh occupancy, select the candidate's exact product commit with an annotated
-`v0.1.91` tag, compare/set/read back the existing scoped tag-object control, and
-promote the same producer/attempt with unchanged assets. Closure requires
-**immutable_published_and_public_verified**. Do not dispatch a duplicate candidate
-or treat a green child job as publication. Source is mainline-ready; the remaining
-gate is hosted release acceptance and subsequent authorized promotion.
-
-At **05:56:03 UTC**, v0.1.91 tag/release occupancy was empty, including drafts,
-and no other Release run was active. Latest observed immutable public release is
-**v0.1.89**, release **407859944**. No v0.1.91 tag, scoped-control change or promotion
-has occurred. The intermediate v0.1.90 milestone remains deliberately superseded.
-Its original failed producer [38103217658/1](https://github.com/lkjsxc/lkjscript/actions/runs/38103217658)
-passed **19/20 source gates** before a **3,600-second workspace timeout**; it was
-already failed when checked, not cancelled. The nominal correction gives only
-that aggregate **7,200 seconds** and the candidate job **360 minutes**, retaining
-all coverage and other deadlines. The failed diagnostic artifact **11691130148**
-and terminal artifact **11689664511** had observed expiry **2026-10-25**; originals
-remain in `.artifacts/data-sequences/delivery/candidate-dispatch/supersession-20261011032814/`.
-Their evidence does not attest the nominal source or finalized bytes.
+Authenticated original diagnostic and terminal archives, receipt, harness logs
+and compact diagnosis are retained in the old worktree's
+`.artifacts/owned-nominals/delivery/failure-38116583723-1/`. The successor grants
+only that serial execution aggregate 120 minutes; its separate build allowance
+stays 30 minutes, and all coverage and outcome/cleanup admission remain required.
+The failed producer is ineligible for promotion. It is superseded when 0.1.92
+reaches independent fresh source acceptance and exact mainline integration; only
+then dispatch one new producer from that accepted source.
