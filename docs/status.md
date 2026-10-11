@@ -1,24 +1,24 @@
 # Current status
 
 Snapshot: 2026-10-11. Development **0.1.94** implements native package dependency
-planning. Source `d01708a2` passed **29/29** fresh full gates with stable inputs,
+planning. Diagnostic successor `dbef3042` passed **29/29** fresh full gates with stable inputs,
 **0 reused**, **0 unrun** and terminal exit **0**. The accepted implementation
-and docs-only reporting descendants are integrated on main with the generation-10
+and earlier reporting descendants are integrated on main with the generation-10
 release controller. Original hosted producer **38152770069/1** failed source
-acceptance at its workspace deadline. The bounded diagnostic successor awaits
-fresh source and finalized-byte acceptance; publication remains pending.
+acceptance at its workspace deadline. The bounded diagnostic successor has local
+source acceptance. A fresh finalized candidate and publication remain pending.
 
 ## Selected source and capability
 
 Worktree `/home/coder/workspace/lkjscript-native-package-planner-20261011`, branch
-`work/native-package-planner-20261011`, retains accepted source
-`d01708a2d089af33e79747c097ca61b5c90d4fd7`, tree
-`d08f9a0d64afca0a320d0d7a8b0b93a20f788036`. It contains the native planner
-implementation, normal ancestry merge from main, and reviewed fixture corrections.
+`work/native-package-planner-20261011`, retains accepted diagnostic source
+`dbef3042457ea9678c20ef4ccb10999082c6a89f`, tree
+`cc7381d47f24ea0522b30dac7d60f19b801bb1fb`. It contains the native planner
+implementation, normal ancestry merge from main, reviewed fixture corrections,
+bounded IndexedData progress observations and a 9,600-second workspace allowance.
 Main contains reporting descendant `c3d27a7d451879ab7624279e9e690a54d6c65730`.
-The pending successor adds bounded IndexedData progress observations and a
-9,600-second workspace allowance; the original receipt binds only the exact
-accepted source above. Preserve the worktrees and ignored original evidence;
+The fresh successor receipt binds the exact source above; this status update is
+a reporting descendant. Preserve the worktrees and ignored original evidence;
 [selection.json](../.artifacts/native-package-planner/selection.json) retains
 earlier executable selections and proof scopes.
 
@@ -41,8 +41,20 @@ observation **46** adds invocation-bound planning records; candidate generation
 
 ## Source acceptance and retained evidence
 
+The [diagnostic successor full receipt](../.artifacts/lkjscript-dev/check/1791746533387196262-2779742-0/receipt.json)
+records **29/29** fresh gates, stable inputs and original session **45425** exit
+**0** after **4,751.478972979 seconds**. Receipt SHA-256 is
+`836962af2fe2c773d161ea1ced8957ca12ba14a683cd5d818ee06846d9d83236`.
+The [authenticated inventory](../.artifacts/native-package-planner/diagnostic-successor/full-first-authenticated.json)
+binds the original terminal, exact copied verifier and 67 retained logs/outputs.
+The independent [IndexedData transcript check](../.artifacts/native-package-planner/indexed-progress-accepted-first-20261011T2042/summary.json)
+passes **510 records / 242 runs**, comprising **124 attached / 118 detached**
+runs and **12 stage pairs**, with no missing or mismatched records. Workspace
+tests passed in **2,804.632151307 seconds**. This local completion does not
+establish why the original hosted run timed out or prove a hosted remedy.
+
 The [successful original full receipt](../.artifacts/lkjscript-dev/check/1791727236348792345-2336981-0/receipt.json)
-records **29/29** fresh gates, **0 reused**, **0 unrun**, stable inputs and terminal
+for predecessor `d01708a2` records **29/29** fresh gates, **0 reused**, **0 unrun**, stable inputs and terminal
 exit **0** after **2,896.017618526 seconds**. Receipt SHA-256 is
 `c0912b08adfd985f487cad4461006563ffd211c5e3e11929c933a6e592c191c0`.
 The [verified summary](../.artifacts/native-package-planner/full-second-summary.json)
@@ -106,16 +118,14 @@ The [authenticated failure report](../.artifacts/native-package-planner/delivery
 retains original service identities, artifact bytes, receipt and process logs.
 
 The successor keeps every required case and adds bounded matrix progress plus a
-**9,600-second** workspace diagnostic allowance. This is an experiment, not a
-proven remedy; about 20 minutes of historical outer-job margin does not guarantee
-that final acceptance fits. Next freeze the complete successor inputs, build a
-fresh immutable verifier and require stable **29/29** fresh full-source gates.
+**9,600-second** workspace diagnostic allowance. Local fresh acceptance and the
+complete independent transcript check passed; this is not a proven hosted remedy.
 After normal mainline delivery and occupancy refresh, a fresh generation-10
 producer must pass **23** release-source gates and complete the unchanged
 finalized-byte, expanded public inventory, target, userland, installation,
 original-reader and joined-cleanup obligations. Preserve the original `d01708a2`
-acceptance and failed `c3d27a7d` producer separately. No successor acceptance or
-`.94` publication is claimed.
+acceptance and failed `c3d27a7d` producer separately. No finalized successor
+candidate acceptance or `.94` publication is claimed.
 
 The generation-9 predecessor lineage is closed. Normal mainline delivery retains
 the accepted ancestry; original checks and remote readback remain in
