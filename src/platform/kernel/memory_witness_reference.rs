@@ -801,6 +801,38 @@ impl Oracle<'_> {
             return false;
         };
         let scoped = Oracle(self.0, Some(d));
+        if !c.associated_types.is_empty()
+            && (self.declaration_generation(d) != Some(contract::GRAPH_CONTRACT_VERSION)
+                || c.associated_types.len() > contract::MAXIMUM_CHILDREN
+                || {
+                    let mut ids = BTreeSet::new();
+                    let mut names = BTreeSet::new();
+                    c.associated_types.iter().any(|member| {
+                        !ids.insert(member.id)
+                            || !names.insert(&member.name)
+                            || member.bound != AssociatedTypeBound::Owned
+                    })
+                })
+        {
+            return false;
+        }
+        let Some(occurrence) = scoped.declaration_occurrence() else {
+            return false;
+        };
+        let mut associated = associated::Resolver::new(self.0);
+        if associated
+            .admit_roots(
+                &c.methods
+                    .iter()
+                    .flat_map(|m| m.parameters.iter().map(|p| p.ty).chain([m.result]))
+                    .collect::<Vec<_>>(),
+                occurrence,
+                false,
+            )
+            .is_err()
+        {
+            return false;
+        }
         let mut parameters = BTreeSet::new();
         let mut parameter_names = BTreeSet::new();
         if c.type_parameters.len() >= contract::MAXIMUM_CHILDREN
@@ -864,6 +896,9 @@ impl Oracle<'_> {
         generation: u16,
         package: PackageId,
     ) -> bool {
+        if generation != contract::GRAPH_CONTRACT_VERSION && !c.associated_types.is_empty() {
+            return false;
+        }
         if generation < 33
             && c.type_parameters.iter().any(|id| {
                 self.type_parameter(package, *id)
@@ -1014,6 +1049,16 @@ impl Oracle<'_> {
             return false;
         }
         let scoped = Oracle(self.0, Some(reference));
+        if (!i.associated_types.is_empty()
+            || self
+                .contract(i.contract)
+                .is_some_and(|c| !c.associated_types.is_empty()))
+            && associated::Resolver::new(self.0)
+                .admit_bindings(reference)
+                .is_err()
+        {
+            return false;
+        }
         let mut parameter_ids = BTreeSet::new();
         let mut parameter_names = BTreeSet::new();
         if !self.valid_contract(i.contract)
@@ -1071,6 +1116,7 @@ impl Oracle<'_> {
             )
             .collect();
         let mut derived = WitnessTypes::new(self.0);
+        let mut associated = associated::Resolver::new(self.0);
         for m in &c.methods {
             let Some(mapping) = i.methods.iter().find(|v| v.method == m.id) else {
                 return false;
@@ -1135,6 +1181,35 @@ impl Oracle<'_> {
             {
                 return false;
             }
+            let associated_mapping = !c.associated_types.is_empty()
+                || std::iter::once(f.result)
+                    .chain(f.parameters.iter().filter_map(|id| {
+                        self.parameter(mapping.function.package, *id).map(|p| p.ty)
+                    }))
+                    .any(|ty| self.associated_closure(ty))
+                || mapping
+                    .type_arguments
+                    .iter()
+                    .any(|ty| self.associated_closure(*ty))
+                || mapping
+                    .implementations
+                    .iter()
+                    .any(|operand| self.associated_operand(operand));
+            let environment = associated::Environment {
+                ordinary: target_bindings.clone(),
+                source: associated::Context::Lexical(mapping.function),
+                caller: scoped.declaration_occurrence().unwrap(),
+                contract_operand: None,
+                witnesses: f
+                    .implementation_parameters
+                    .iter()
+                    .map(|p| p.id)
+                    .zip(mapping.implementations.iter().cloned())
+                    .collect(),
+            };
+            if associated_mapping && associated.admit_application(&environment).is_err() {
+                return false;
+            }
             for (id, expected) in f.parameters.iter().zip(&m.parameters) {
                 let Some(p) = self.parameter(mapping.function.package, *id) else {
                     return false;
@@ -1143,21 +1218,39 @@ impl Oracle<'_> {
                     || p.resource_requirement.is_some()
                     || p.use_mode != expected.use_mode
                     || (!target_scope.owned_type_in_scope(p.ty) && !target_scope.ordinary(p.ty))
-                    || derived
-                        .apply(expected.ty, &bindings, 0)
-                        .is_none_or(|expected| {
-                            derived.apply(p.ty, &target_bindings, 0) != Some(expected)
-                        })
+                    || if associated_mapping {
+                        associated
+                            .definition_type(expected.ty, reference, 0)
+                            .ok()
+                            .is_none_or(|expected| {
+                                associated.substitute(p.ty, &environment, 0).ok() != Some(expected)
+                            })
+                    } else {
+                        derived
+                            .apply(expected.ty, &bindings, 0)
+                            .is_none_or(|expected| {
+                                derived.apply(p.ty, &target_bindings, 0) != Some(expected)
+                            })
+                    }
                 {
                     return false;
                 }
             }
             if (!target_scope.owned_type_in_scope(f.result) && !target_scope.ordinary(f.result))
-                || derived
-                    .apply(m.result, &bindings, 0)
-                    .is_none_or(|expected| {
-                        derived.apply(f.result, &target_bindings, 0) != Some(expected)
-                    })
+                || if associated_mapping {
+                    associated
+                        .definition_type(m.result, reference, 0)
+                        .ok()
+                        .is_none_or(|expected| {
+                            associated.substitute(f.result, &environment, 0).ok() != Some(expected)
+                        })
+                } else {
+                    derived
+                        .apply(m.result, &bindings, 0)
+                        .is_none_or(|expected| {
+                            derived.apply(f.result, &target_bindings, 0) != Some(expected)
+                        })
+                }
             {
                 return false;
             }
@@ -1173,6 +1266,36 @@ impl Oracle<'_> {
         // versioned memory signature even when no expression invokes them.
         if self.signature(d).is_none() {
             return false;
+        }
+        let scoped = Oracle(self.0, Some(d));
+        let mut associated = associated::Resolver::new(self.0);
+        let Some(occurrence) = scoped.declaration_occurrence() else {
+            return false;
+        };
+        if scoped.associated_closure(f.result)
+            && associated
+                .admit_roots(&[f.result], occurrence, false)
+                .is_err()
+        {
+            return false;
+        }
+        for id in &f.parameters {
+            let Some(p) = self.parameter(d.package, *id) else {
+                return false;
+            };
+            if scoped.associated_closure(p.ty)
+                && (p.header.owner != OwnerKey::Parameter(*id)
+                    || p.parent != ParameterParent::Function(d.declaration)
+                    || associated
+                        .admit_roots(
+                            &[p.ty],
+                            scoped.occurrence((d.package, p.header.owner)),
+                            false,
+                        )
+                        .is_err())
+            {
+                return false;
+            }
         }
         if let Some(source) = f.result_borrow {
             let scoped = Oracle(self.0, Some(d));

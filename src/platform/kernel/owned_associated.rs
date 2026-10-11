@@ -30,6 +30,77 @@ impl AssociatedTypeContext {
     }
 }
 
+/// Authored parameters and raw representation formals have different authority.
+/// Representation evidence proves layout properties and supplies no lexical
+/// contract or witness scope.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) enum TypeParameterContext {
+    Closed,
+    Authored(DeclarationReference),
+    NominalRepresentation(DeclarationReference),
+}
+
+impl TypeParameterContext {
+    pub(crate) fn scope(self) -> Option<DeclarationReference> {
+        match self {
+            Self::Closed => None,
+            Self::Authored(scope) | Self::NominalRepresentation(scope) => Some(scope),
+        }
+    }
+}
+
+/// The generation is that of the actual consuming owner. A containing signature
+/// and each parameter owner are independent occurrences, even for equal digests.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) struct OwnedTypeOccurrence {
+    pub parameters: TypeParameterContext,
+    pub associated: AssociatedTypeContext,
+    pub consumer_generation: u16,
+}
+
+impl OwnedTypeOccurrence {
+    pub(crate) fn authored(scope: Option<DeclarationReference>, generation: u16) -> Self {
+        Self {
+            parameters: scope.map_or(TypeParameterContext::Closed, TypeParameterContext::Authored),
+            associated: scope.map_or(
+                AssociatedTypeContext::Forbidden,
+                AssociatedTypeContext::Lexical,
+            ),
+            consumer_generation: generation,
+        }
+    }
+
+    pub(crate) fn contract(scope: DeclarationReference, generation: u16) -> Self {
+        Self {
+            parameters: TypeParameterContext::Authored(scope),
+            associated: AssociatedTypeContext::ContractSignature(scope),
+            consumer_generation: generation,
+        }
+    }
+
+    pub(crate) fn representation(scope: DeclarationReference, generation: u16) -> Self {
+        Self {
+            parameters: TypeParameterContext::NominalRepresentation(scope),
+            associated: AssociatedTypeContext::Forbidden,
+            consumer_generation: generation,
+        }
+    }
+
+    pub(crate) fn validate_context(self) -> Result<(), Diagnostic> {
+        match (self.parameters, self.associated) {
+            (_, AssociatedTypeContext::Forbidden) => {}
+            (TypeParameterContext::Authored(scope), associated)
+                if associated.scope() == Some(scope) => {}
+            _ => {
+                return Err(reject(
+                    "ordinary and associated occurrence authority must name the same authored scope",
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct AssociatedAdmissionLimits {
     pub maximum_steps: usize,
@@ -57,6 +128,12 @@ pub(crate) enum AssociatedResolution {
         template: TypeObjectDigest,
         bindings: BTreeMap<TypeParameterId, TypeObjectDigest>,
     },
+    /// An own-definition RHS already belongs to the implementation's lexical
+    /// context. Contract Self/ordinary substitutions must not capture its formals.
+    DefinitionTemplate {
+        implementation: DeclarationReference,
+        template: TypeObjectDigest,
+    },
     Lexical(TypeForm),
 }
 
@@ -69,6 +146,74 @@ pub(crate) struct OwnedAssociatedAdmission {
 struct AssociatedRead<'a, R: ?Sized> {
     read: &'a R,
     admission: &'a OwnedAssociatedAdmission,
+}
+
+type WalkContext = (AssociatedTypeContext, Option<DeclarationReference>, u16);
+type WalkPending = (TypeObjectDigest, usize, usize);
+
+/// Coordinates are local to one immutable traversal. They retain every authority
+/// component while avoiding its repetition in each queue and memo entry.
+struct WalkQueue<'a> {
+    admission: &'a OwnedAssociatedAdmission,
+    contexts: Vec<WalkContext>,
+    context_ids: BTreeMap<WalkContext, usize>,
+    pending: Vec<WalkPending>,
+}
+
+impl<'a> WalkQueue<'a> {
+    fn new(admission: &'a OwnedAssociatedAdmission) -> Self {
+        Self {
+            admission,
+            contexts: Vec::new(),
+            context_ids: BTreeMap::new(),
+            pending: Vec::new(),
+        }
+    }
+
+    fn push(
+        &mut self,
+        ty: TypeObjectDigest,
+        depth: usize,
+        context: WalkContext,
+    ) -> Result<(), Diagnostic> {
+        let context_id = if let Some(id) = self.context_ids.get(&context) {
+            *id
+        } else {
+            self.admission.reserve::<(WalkContext, usize)>(1)?;
+            if self.contexts.len() == self.contexts.capacity() {
+                let growth = self.contexts.capacity().max(1);
+                self.contexts
+                    .capacity()
+                    .checked_add(growth)
+                    .ok_or_else(|| exhausted("associated context capacity overflow"))?;
+                self.admission.reserve::<WalkContext>(growth)?;
+                self.contexts
+                    .try_reserve_exact(growth)
+                    .map_err(|_| exhausted("associated context allocation exhausted"))?;
+            }
+            let id = self.contexts.len();
+            self.contexts.push(context);
+            self.context_ids.insert(context, id);
+            id
+        };
+        if self.pending.len() == self.pending.capacity() {
+            let growth = self.pending.capacity().max(1);
+            self.pending
+                .capacity()
+                .checked_add(growth)
+                .ok_or_else(|| exhausted("associated pending capacity overflow"))?;
+            self.admission.reserve::<WalkPending>(growth)?;
+            self.pending
+                .try_reserve_exact(growth)
+                .map_err(|_| exhausted("associated pending allocation exhausted"))?;
+        }
+        self.pending.push((ty, depth, context_id));
+        Ok(())
+    }
+
+    fn pop(&mut self) -> Option<WalkPending> {
+        self.pending.pop()
+    }
 }
 
 fn reject(message: impl Into<String>) -> Diagnostic {
@@ -104,14 +249,14 @@ impl OwnedAssociatedAdmission {
         (self.steps.get(), self.metadata_bytes.get())
     }
 
-    fn reserve<T>(&self, count: usize) -> Result<(), Diagnostic> {
+    pub(crate) fn reserve<T>(&self, count: usize) -> Result<(), Diagnostic> {
         let bytes = count
             .checked_mul(std::mem::size_of::<T>() + 4 * std::mem::size_of::<usize>())
             .ok_or_else(|| exhausted("associated type metadata size overflow"))?;
         self.reserve_bytes(bytes)
     }
 
-    fn reserve_bytes(&self, bytes: usize) -> Result<(), Diagnostic> {
+    pub(crate) fn reserve_bytes(&self, bytes: usize) -> Result<(), Diagnostic> {
         let bytes = self
             .metadata_bytes
             .get()
@@ -161,6 +306,100 @@ impl OwnedAssociatedAdmission {
             admission: self,
         }
         .validate_bindings(scope, implementation)
+    }
+
+    pub(crate) fn validate_occurrence_at(
+        &self,
+        read: &(impl ExpressionRead + ?Sized),
+        roots: &[TypeObjectDigest],
+        occurrence: OwnedTypeOccurrence,
+    ) -> Result<(), Diagnostic> {
+        occurrence.validate_context()?;
+        self.validate_occurrences(
+            read,
+            roots,
+            occurrence.associated,
+            occurrence.consumer_generation,
+        )
+    }
+
+    pub(crate) fn validate_owned_parameter_at(
+        &self,
+        read: &(impl ExpressionRead + ?Sized),
+        parameter: TypeParameterId,
+        context: TypeParameterContext,
+    ) -> Result<(), Diagnostic> {
+        let session = AssociatedRead {
+            read,
+            admission: self,
+        };
+        match context {
+            TypeParameterContext::Authored(scope) => {
+                session.declaration(scope)?;
+                owned_contract::validate_owned_parameter(&session, parameter, Some(scope))
+            }
+            TypeParameterContext::NominalRepresentation(scope) => {
+                let declaration = session.representation_declaration(scope)?;
+                let listed = match declaration.payload {
+                    PackageInterfaceDeclarationPayload::OwnedRecord {
+                        type_parameters, ..
+                    }
+                    | PackageInterfaceDeclarationPayload::Record {
+                        type_parameters, ..
+                    }
+                    | PackageInterfaceDeclarationPayload::Variant {
+                        type_parameters, ..
+                    } => type_parameters.contains(&parameter),
+                    _ => false,
+                };
+                let record = owned_record::parameter(&session, scope, parameter)?;
+                if !listed || !record.constraints.has_owned() {
+                    return Err(reject(
+                        "owned representation parameter is outside its exact nominal inventory",
+                    ));
+                }
+                Ok(())
+            }
+            TypeParameterContext::Closed => Err(reject(
+                "owned parameter requires its exact declaration context",
+            )),
+        }
+    }
+
+    pub(crate) fn resolve_definition_form(
+        &self,
+        read: &(impl ExpressionRead + ?Sized),
+        form: &TypeForm,
+        source_context: AssociatedTypeContext,
+        implementation_scope: DeclarationReference,
+        implementation: &OwnedImplementation,
+        consumer_generation: u16,
+    ) -> Result<AssociatedResolution, Diagnostic> {
+        let session = AssociatedRead {
+            read,
+            admission: self,
+        };
+        session.validate_form(form, source_context, consumer_generation)?;
+        let TypeForm::AssociatedContractMember { contract, member } = form else {
+            return Err(reject(
+                "own-definition selection requires a contract-local member",
+            ));
+        };
+        if *contract != implementation.contract {
+            return Err(reject(
+                "own-definition selection names a different exact contract",
+            ));
+        }
+        session.validate_bindings(implementation_scope, implementation)?;
+        let binding = implementation
+            .associated_types
+            .iter()
+            .find(|binding| binding.member == *member)
+            .ok_or_else(|| reject("own-definition selection has no exact member binding"))?;
+        Ok(AssociatedResolution::DefinitionTemplate {
+            implementation: implementation_scope,
+            template: binding.ty,
+        })
     }
 
     pub(crate) fn resolve_form(
@@ -439,39 +678,27 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
         consumer_generation: u16,
         projection_free: bool,
     ) -> Result<(), Diagnostic> {
-        type Pending = (
-            TypeObjectDigest,
-            usize,
-            AssociatedTypeContext,
-            Option<DeclarationReference>,
-            u16,
-        );
-        self.reserve::<Pending>(roots.len())?;
-        let mut pending = roots
-            .iter()
-            .map(|ty| (*ty, 0, context, context.scope(), consumer_generation))
-            .collect::<Vec<_>>();
+        let mut pending = WalkQueue::new(self.admission);
+        for ty in roots {
+            self.validation_work()?;
+            pending.push(*ty, 0, (context, context.scope(), consumer_generation))?;
+        }
         let mut depths = BTreeMap::new();
         let mut expanded_nominals = BTreeSet::new();
-        while let Some((ty, depth, context, parameter_scope, generation)) = pending.pop() {
+        while let Some((ty, depth, context_id)) = pending.pop() {
             self.validation_work()?;
+            let (context, parameter_scope, generation) = pending.contexts[context_id];
             if depth > self.admission.limits.maximum_depth {
                 return Err(exhausted(
                     "associated type traversal exceeds its depth admission",
                 ));
             }
-            let key = (ty, context, parameter_scope, generation);
+            let key = (ty, context_id);
             if depths.get(&key).is_some_and(|previous| *previous >= depth) {
                 continue;
             }
             if !depths.contains_key(&key) {
-                self.reserve::<(
-                    TypeObjectDigest,
-                    AssociatedTypeContext,
-                    Option<DeclarationReference>,
-                    u16,
-                    usize,
-                )>(1)?;
+                self.reserve::<(TypeObjectDigest, usize, usize)>(1)?;
             }
             depths.insert(key, depth);
             let object = self
@@ -514,16 +741,24 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
                     _ => false,
                 };
                 if !listed
-                    || !(record.constraints.has_owned() || record.constraints.requires_transfer())
+                    || (!property_only
+                        && !(record.constraints.has_owned()
+                            || record.constraints.requires_transfer()))
                 {
                     return Err(reject(
                         "binding parameter is outside its exact admitted scheme inventory",
                     ));
                 }
             }
-            self.reserve::<Pending>(object.child_type_count())?;
+            let child_depth = depth
+                .checked_add(1)
+                .ok_or_else(|| exhausted("associated occurrence depth overflow"))?;
+            // child_types creates an independent short-lived digest vector;
+            // queue capacity is retained and reused separately above.
+            self.reserve::<TypeObjectDigest>(object.child_type_count())?;
             for child in object.child_types() {
-                pending.push((child, depth + 1, context, parameter_scope, generation));
+                self.validation_work()?;
+                pending.push(child, child_depth, (context, parameter_scope, generation))?;
             }
             if let TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } =
                 object.form
@@ -535,7 +770,7 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
                 if !expanded_nominals.contains(&declaration) {
                     self.reserve::<DeclarationReference>(1)?;
                     expanded_nominals.insert(declaration);
-                    self.nominal_children(declaration, depth + 1, &mut pending)?;
+                    self.nominal_children(declaration, child_depth, &mut pending)?;
                 }
             }
         }
@@ -548,13 +783,7 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
         &self,
         reference: DeclarationReference,
         depth: usize,
-        pending: &mut Vec<(
-            TypeObjectDigest,
-            usize,
-            AssociatedTypeContext,
-            Option<DeclarationReference>,
-            u16,
-        )>,
+        pending: &mut WalkQueue<'_>,
     ) -> Result<(), Diagnostic> {
         self.validation_work()?;
         let payload = self.representation_declaration(reference)?.payload;
@@ -568,18 +797,11 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
                 ));
             }
         };
-        let count = fields
+        fields
             .len()
             .checked_add(cases.len())
             .filter(|count| *count <= contract::MAXIMUM_CHILDREN)
             .ok_or_else(|| reject("binding nominal inventory exceeds its bound"))?;
-        self.reserve::<(
-            TypeObjectDigest,
-            usize,
-            AssociatedTypeContext,
-            Option<DeclarationReference>,
-            u16,
-        )>(count)?;
         for id in fields {
             let field = owned_record::field(
                 self,
@@ -595,13 +817,15 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
                     "binding nominal field belongs to a foreign declaration",
                 ));
             }
-            pending.push((
+            pending.push(
                 field.ty,
                 depth,
-                AssociatedTypeContext::Forbidden,
-                Some(reference),
-                field.header.contract_version,
-            ));
+                (
+                    AssociatedTypeContext::Forbidden,
+                    Some(reference),
+                    field.header.contract_version,
+                ),
+            )?;
         }
         for id in cases {
             self.validation_work()?;
@@ -623,13 +847,15 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
                 ));
             }
             if let Some(ty) = case.payload {
-                pending.push((
+                pending.push(
                     ty,
                     depth,
-                    AssociatedTypeContext::Forbidden,
-                    Some(reference),
-                    case.header.contract_version,
-                ));
+                    (
+                        AssociatedTypeContext::Forbidden,
+                        Some(reference),
+                        case.header.contract_version,
+                    ),
+                )?;
             }
         }
         Ok(())
@@ -721,7 +947,12 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
                 record.header.contract_version,
                 true,
             )?;
-            owned_contract::validate_owned_type(self, binding.ty, Some(scope))?;
+            owned_contract::validate_owned_type_at(
+                self.read,
+                binding.ty,
+                OwnedTypeOccurrence::authored(Some(scope), record.header.contract_version),
+                self.admission,
+            )?;
         }
         Ok(())
     }
@@ -803,11 +1034,19 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
                 for (parameter, ty) in value.type_parameters.iter().zip(type_arguments) {
                     let formal =
                         owned_contract::type_parameter_at(self, *implementation, *parameter)?;
-                    owned_contract::validate_type_argument_constraints(
-                        self,
+                    owned_contract::validate_type_argument_constraints_at(
+                        self.read,
                         formal.constraints,
                         *ty,
-                        caller_context.scope(),
+                        OwnedTypeOccurrence {
+                            parameters: caller_context.scope().map_or(
+                                TypeParameterContext::Closed,
+                                TypeParameterContext::Authored,
+                            ),
+                            associated: caller_context,
+                            consumer_generation,
+                        },
+                        self.admission,
                     )?;
                     bindings.insert(*parameter, *ty);
                 }

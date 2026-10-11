@@ -183,3 +183,132 @@ fn cached_substitution_remains_cancellable_and_recovers_without_changing_context
     );
     assert_eq!(applied.metadata_bytes_for_test(), used);
 }
+
+#[test]
+fn source_effects_are_rewritten_before_opaque_caller_type_actuals() {
+    use crate::platform::semantic_id::{EffectParameterId, RequirementId};
+    use owned_associated::AssociatedTypeContext;
+    let mut read = Read::default();
+    let parameter = TypeParameterId::migrate(SEED, 10);
+    let effect_parameter = EffectParameterReference {
+        package: read.package_id(),
+        parameter: EffectParameterId::migrate(SEED, 10),
+    };
+    let requirement: RequirementOperand = RequirementReference {
+        package: read.package_id(),
+        requirement: RequirementId::migrate(SEED, 10),
+    }
+    .into();
+    let unit = read.ty(TypeForm::Unit);
+    let generic = read.ty(TypeForm::TypeParameter { parameter });
+    let symbolic = EffectRow {
+        requirements: vec![],
+        parameters: vec![effect_parameter],
+    };
+    let concrete = EffectRow {
+        requirements: vec![requirement],
+        parameters: vec![],
+    };
+    let caller_actual = read.ty(TypeForm::TaskFunction {
+        parameters: vec![],
+        result: unit,
+        effect: symbolic.clone(),
+    });
+    let template = read.ty(TypeForm::TaskFunction {
+        parameters: vec![generic],
+        result: unit,
+        effect: symbolic,
+    });
+    let expected = read.ty(TypeForm::TaskFunction {
+        parameters: vec![caller_actual],
+        result: unit,
+        effect: concrete.clone(),
+    });
+    read.types.remove(&expected);
+    let effects = BTreeMap::from([(effect_parameter, concrete)]);
+    let requirements = RequirementSubstitution::new();
+    let ordinary = BTreeMap::from([(parameter, caller_actual)]);
+    let implementations = BTreeMap::new();
+    let mut effect_types = parallel_types::EffectAppliedTypes::new(&read, &effects, &requirements);
+    let prepared = effect_types.substitute(template, 0).unwrap();
+    let mut applied = parallel_types::WitnessAppliedTypes::new(
+        &effect_types,
+        parallel_types::AssociatedTypeEnvironment {
+            ordinary: &ordinary,
+            source: AssociatedTypeContext::Forbidden,
+            caller: AssociatedTypeContext::Forbidden,
+            consumer_generation: contract::GRAPH_CONTRACT_VERSION,
+            contract_selection: None,
+            implementations: &implementations,
+        },
+    );
+    assert_eq!(applied.substitute(prepared, 0).unwrap(), expected);
+    let derived = applied.into_types();
+    assert!(
+        derived.contains_key(&expected),
+        "derived signature must remain available"
+    );
+    let overlay = owned_contract::AppliedTypeRead {
+        read: &read,
+        types: &derived,
+    };
+    let mut wrong_order =
+        parallel_types::EffectAppliedTypes::new(&overlay, &effects, &requirements);
+    assert_ne!(
+        wrong_order.substitute(expected, 0).unwrap(),
+        expected,
+        "rewriting after type insertion would capture the caller's effect parameter"
+    );
+}
+
+#[test]
+fn effect_substitution_cache_retains_exact_environment_and_cancellation() {
+    use crate::platform::semantic_id::{EffectParameterId, RequirementId};
+    let mut read = Read::default();
+    let parameter = EffectParameterReference {
+        package: read.package_id(),
+        parameter: EffectParameterId::migrate(SEED, 11),
+    };
+    let unit = read.ty(TypeForm::Unit);
+    let template = read.ty(TypeForm::TaskFunction {
+        parameters: vec![],
+        result: unit,
+        effect: EffectRow {
+            requirements: vec![],
+            parameters: vec![parameter],
+        },
+    });
+    let requirements = RequirementSubstitution::new();
+    let empty = BTreeMap::from([(
+        parameter,
+        EffectRow {
+            requirements: vec![],
+            parameters: vec![],
+        },
+    )]);
+    let nonempty = BTreeMap::from([(
+        parameter,
+        EffectRow {
+            requirements: vec![
+                RequirementReference {
+                    package: read.package_id(),
+                    requirement: RequirementId::migrate(SEED, 11),
+                }
+                .into(),
+            ],
+            parameters: vec![],
+        },
+    )]);
+    let mut first = parallel_types::EffectAppliedTypes::new(&read, &empty, &requirements);
+    let expected = first.substitute(template, 0).unwrap();
+    let mut second = parallel_types::EffectAppliedTypes::new(&read, &nonempty, &requirements);
+    assert_ne!(second.substitute(template, 0).unwrap(), expected);
+    read.cancelled.set(true);
+    assert_eq!(
+        first.substitute(template, 0).unwrap_err().class,
+        DiagnosticClass::Cancelled
+    );
+    read.cancelled.set(false);
+    assert_eq!(first.substitute(template, 0).unwrap(), expected);
+    assert!(first.into_types().contains_key(&expected));
+}

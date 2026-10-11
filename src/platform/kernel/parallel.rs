@@ -10,6 +10,7 @@ pub(crate) struct ParallelCall {
     pub arguments: Vec<ExpressionId>,
     pub result: TypeObjectDigest,
     pub result_owned: bool,
+    pub types: std::collections::BTreeMap<TypeObjectDigest, TypeObject>,
 }
 
 pub(super) fn reject(message: impl Into<String>) -> Diagnostic {
@@ -23,11 +24,32 @@ pub(crate) fn admit_call(
     expression: ExpressionId,
     scope: Option<DeclarationId>,
 ) -> Result<ParallelCall, Diagnostic> {
+    admit_call_at(
+        read,
+        expression,
+        scope,
+        &super::owned_associated::OwnedAssociatedAdmission::new(),
+    )
+}
+
+pub(crate) fn admit_call_at(
+    read: &(impl ExpressionRead + ?Sized),
+    expression: ExpressionId,
+    scope: Option<DeclarationId>,
+    admission: &super::owned_associated::OwnedAssociatedAdmission,
+) -> Result<ParallelCall, Diagnostic> {
     read.validation_work()?;
     let Some(OwnerRecord::Expression(record)) = read.owner(OwnerKey::Expression(expression))?
     else {
         return Err(reject("parallel child expression is absent"));
     };
+    let occurrence = super::owned_associated::OwnedTypeOccurrence::authored(
+        scope.map(|declaration| DeclarationReference {
+            package: read.package_id(),
+            declaration,
+        }),
+        record.contract_version,
+    );
     let (function, arguments, type_arguments, implementations) = match record.operation {
         ExpressionOperation::Call {
             function,
@@ -95,7 +117,7 @@ pub(crate) fn admit_call(
         };
         // Type operands describe the exact application. Only its declared
         // constraints are obligations; transport modes belong to value carriers.
-        let owned = super::memory::direct(read, *ty)?;
+        let owned = super::memory::direct_at(read, *ty, occurrence, admission)?;
         if parameter.declaration != function.declaration
             || owned != parameter.constraints.has_owned()
             || substitutions.insert(*id, *ty).is_some()
@@ -105,15 +127,24 @@ pub(crate) fn admit_call(
             ));
         }
     }
-    super::owned_contract::validate_application(
+    let application = super::owned_contract::admit_function_application(
         read,
         function,
         &type_arguments,
         &implementations,
-        scope,
+        occurrence,
+        admission,
     )?;
-    let mut applied = super::parallel_types::AppliedTypes::new(read);
-    let result = applied.substitute(signature.result, &substitutions, 0)?;
+    let overlay = super::owned_contract::AppliedTypeRead {
+        read,
+        types: &application.types,
+    };
+    let mut applied = super::parallel_types::WitnessAppliedTypes::with_admission(
+        &overlay,
+        application.environment(),
+        admission,
+    );
+    let result = applied.substitute(signature.result, 0)?;
     if signature.parameters.len() != arguments.len() {
         return Err(reject(
             "parallel child argument count differs from its exact signature",
@@ -145,8 +176,8 @@ pub(crate) fn admit_call(
                 "parallel child parameter has a foreign owner or capability requirement",
             ));
         }
-        parameter.ty = applied.substitute(parameter.ty, &substitutions, 0)?;
-        match super::memory::direct(&applied, parameter.ty)? {
+        parameter.ty = applied.substitute(parameter.ty, 0)?;
+        match super::memory::direct_at(&applied, parameter.ty, occurrence, admission)? {
             true => {
                 match parameter.use_mode {
                     ParameterUse::Borrow => {
@@ -179,12 +210,17 @@ pub(crate) fn admit_call(
         }
         parameters.push(parameter);
     }
+    let mut types = std::collections::BTreeMap::new();
+    let mut metadata = super::owned_record::LayoutBudget::default();
+    metadata.extend_types(&mut types, applied.into_types())?;
+    metadata.extend_types(&mut types, application.types)?;
     Ok(ParallelCall {
         function,
         parameters,
         arguments,
         result,
         result_owned,
+        types,
     })
 }
 

@@ -7,6 +7,91 @@ use std::collections::BTreeMap;
 
 const MAXIMUM_METADATA_BYTES: usize = 64 * 1_048_576;
 
+/// Effect substitution visits only source templates. Caller type arguments are
+/// inserted by a later simultaneous type substitution and remain opaque here.
+pub(crate) struct EffectAppliedTypes<'a, 'e, R: ?Sized> {
+    derived: AppliedTypes<'a, R>,
+    effects: &'e BTreeMap<EffectParameterReference, EffectRow>,
+    requirements: &'e RequirementSubstitution,
+    resolved: BTreeMap<TypeObjectDigest, TypeObjectDigest>,
+}
+
+impl<'a, 'e, R: ExpressionRead + ?Sized> EffectAppliedTypes<'a, 'e, R> {
+    pub(crate) fn new(
+        read: &'a R,
+        effects: &'e BTreeMap<EffectParameterReference, EffectRow>,
+        requirements: &'e RequirementSubstitution,
+    ) -> Self {
+        Self {
+            derived: AppliedTypes::new(read),
+            effects,
+            requirements,
+            resolved: BTreeMap::new(),
+        }
+    }
+
+    pub(crate) fn into_types(self) -> BTreeMap<TypeObjectDigest, TypeObject> {
+        self.derived.into_types()
+    }
+
+    pub(crate) fn substitute(
+        &mut self,
+        ty: TypeObjectDigest,
+        depth: usize,
+    ) -> Result<TypeObjectDigest, Diagnostic> {
+        self.derived.read.validation_work()?;
+        if depth > contract::MAXIMUM_TYPE_DEPTH
+            || self.resolved.len() >= contract::MAXIMUM_VALIDATION_WORK
+        {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Resource,
+                "kernel_effect_type_capacity",
+                "effect type substitution exceeds finite preparation",
+            ));
+        }
+        if self.effects.is_empty() && self.requirements.is_empty() {
+            return Ok(ty);
+        }
+        if let Some(result) = self.resolved.get(&ty) {
+            return Ok(*result);
+        }
+        let mut object = self
+            .derived
+            .type_object(ty)?
+            .ok_or_else(|| super::parallel::reject("missing effect signature type"))?;
+        // These are symbolic leaves, never effect templates or substituted actuals.
+        if matches!(object.form, TypeForm::TypeParameter { .. }) || object.form.is_associated() {
+            return Ok(ty);
+        }
+        self.derived.reserve_type(&object)?;
+        if let TypeForm::TaskFunction { effect, .. } = &mut object.form {
+            let mut reserve = |count: usize| {
+                let bytes = count
+                    .checked_mul(
+                        std::mem::size_of::<RequirementOperand>()
+                            + std::mem::size_of::<EffectParameterReference>()
+                            + 4 * std::mem::size_of::<usize>(),
+                    )
+                    .ok_or_else(storage_exhausted)?;
+                self.derived.reserve_metadata(bytes)?;
+                for _ in 0..count {
+                    self.derived.read.validation_work()?;
+                }
+                Ok(())
+            };
+            *effect = effect
+                .substitute_requirements(self.requirements, &mut reserve)?
+                .substitute(self.effects, &mut reserve)?;
+        }
+        let form = map_children(object.form, &mut |child| self.substitute(child, depth + 1))?;
+        let object = TypeObject::new(form)?;
+        let digest = encode_type_object(&object)?.0;
+        self.derived.types.borrow_mut().insert(digest, object);
+        self.resolved.insert(ty, digest);
+        Ok(digest)
+    }
+}
+
 /// All selections belong to this one immutable application. Operands have already
 /// been rebound into caller context, and their derived actual objects must be in
 /// `read`. This is substitution input, not a certificate of callable admission.
@@ -15,11 +100,36 @@ pub(crate) struct AssociatedTypeEnvironment<'a> {
     pub source: owned_associated::AssociatedTypeContext,
     pub caller: owned_associated::AssociatedTypeContext,
     pub consumer_generation: u16,
-    pub contract_operand: Option<&'a ImplementationOperand>,
+    pub contract_selection: Option<AssociatedContractSelection<'a>>,
     pub implementations: &'a BTreeMap<
         crate::platform::semantic_id::ImplementationParameterId,
         ImplementationOperand,
     >,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum AssociatedContractSelection<'a> {
+    Witness(&'a ImplementationOperand),
+    /// Compare a contract method against this implementation's own templates.
+    /// This is identity instantiation, not construction of a concrete witness.
+    Definition {
+        scope: DeclarationReference,
+        implementation: &'a OwnedImplementation,
+    },
+}
+
+enum AssociatedBudget<'a> {
+    Owned(owned_associated::OwnedAssociatedAdmission),
+    Borrowed(&'a owned_associated::OwnedAssociatedAdmission),
+}
+
+impl AssociatedBudget<'_> {
+    fn get(&self) -> &owned_associated::OwnedAssociatedAdmission {
+        match self {
+            Self::Owned(admission) => admission,
+            Self::Borrowed(admission) => admission,
+        }
+    }
 }
 
 /// Witness-sensitive resolution is scoped by construction to a complete borrowed
@@ -27,7 +137,7 @@ pub(crate) struct AssociatedTypeEnvironment<'a> {
 pub(crate) struct WitnessAppliedTypes<'a, 'e, R: ?Sized> {
     derived: AppliedTypes<'a, R>,
     environment: AssociatedTypeEnvironment<'e>,
-    admission: owned_associated::OwnedAssociatedAdmission,
+    admission: AssociatedBudget<'e>,
     resolved: BTreeMap<TypeObjectDigest, TypeObjectDigest>,
 }
 
@@ -36,7 +146,20 @@ impl<'a, 'e, R: ExpressionRead + ?Sized> WitnessAppliedTypes<'a, 'e, R> {
         Self {
             derived: AppliedTypes::new(read),
             environment,
-            admission: owned_associated::OwnedAssociatedAdmission::new(),
+            admission: AssociatedBudget::Owned(owned_associated::OwnedAssociatedAdmission::new()),
+            resolved: BTreeMap::new(),
+        }
+    }
+
+    pub(crate) fn with_admission(
+        read: &'a R,
+        environment: AssociatedTypeEnvironment<'e>,
+        admission: &'e owned_associated::OwnedAssociatedAdmission,
+    ) -> Self {
+        Self {
+            derived: AppliedTypes::new(read),
+            environment,
+            admission: AssociatedBudget::Borrowed(admission),
             resolved: BTreeMap::new(),
         }
     }
@@ -102,24 +225,41 @@ impl<'a, 'e, R: ExpressionRead + ?Sized> WitnessAppliedTypes<'a, 'e, R> {
         // an existing digest and creates no new type object at this level.
         self.derived.reserve_type(&object)?;
         let result = if object.form.is_associated() {
-            let operand = match &object.form {
-                TypeForm::AssociatedContractMember { .. } => self.environment.contract_operand,
-                TypeForm::AssociatedWitnessProjection { parameter, .. } => {
-                    self.environment.implementations.get(parameter)
-                }
+            let selection = match &object.form {
+                TypeForm::AssociatedContractMember { .. } => self.environment.contract_selection,
+                TypeForm::AssociatedWitnessProjection { parameter, .. } => self
+                    .environment
+                    .implementations
+                    .get(parameter)
+                    .map(AssociatedContractSelection::Witness),
                 _ => unreachable!("associated forms were checked"),
             }
             .ok_or_else(|| {
                 super::parallel::reject("associated member has no exact selected witness")
             })?;
-            let resolution = self.admission.resolve_form(
-                &self.derived,
-                &object.form,
-                self.environment.source,
-                operand,
-                self.environment.caller,
-                self.environment.consumer_generation,
-            )?;
+            let resolution = match selection {
+                AssociatedContractSelection::Witness(operand) => {
+                    self.admission.get().resolve_form(
+                        &self.derived,
+                        &object.form,
+                        self.environment.source,
+                        operand,
+                        self.environment.caller,
+                        self.environment.consumer_generation,
+                    )?
+                }
+                AssociatedContractSelection::Definition {
+                    scope,
+                    implementation,
+                } => self.admission.get().resolve_definition_form(
+                    &self.derived,
+                    &object.form,
+                    self.environment.source,
+                    scope,
+                    implementation,
+                    self.environment.consumer_generation,
+                )?,
+            };
             match resolution {
                 owned_associated::AssociatedResolution::Binding {
                     template, bindings, ..
@@ -130,6 +270,11 @@ impl<'a, 'e, R: ExpressionRead + ?Sized> WitnessAppliedTypes<'a, 'e, R> {
                     self.derived.substitute(template, &bindings, depth + 1)?
                 }
                 owned_associated::AssociatedResolution::Lexical(form) => self.intern(form)?,
+                owned_associated::AssociatedResolution::DefinitionTemplate { template, .. } => {
+                    // The binding already belongs to the defining implementation.
+                    // Contract Self/argument substitutions must not capture it.
+                    template
+                }
             }
         } else {
             let mut child = |ty| self.substitute(ty, depth + 1);
@@ -195,6 +340,26 @@ impl<'a, R: ExpressionRead + ?Sized> AppliedTypes<'a, R> {
                 fields.iter().try_fold(0usize, |bytes, field| {
                     bytes.checked_add(field.name.as_str().len())
                 }),
+            ),
+            TypeForm::TaskFunction { effect, .. } => (
+                object
+                    .child_type_count()
+                    .checked_mul(std::mem::size_of::<TypeObjectDigest>())
+                    .and_then(|bytes| {
+                        effect
+                            .requirements
+                            .len()
+                            .checked_mul(std::mem::size_of::<RequirementOperand>())
+                            .and_then(|extra| bytes.checked_add(extra))
+                    })
+                    .and_then(|bytes| {
+                        effect
+                            .parameters
+                            .len()
+                            .checked_mul(std::mem::size_of::<EffectParameterReference>())
+                            .and_then(|extra| bytes.checked_add(extra))
+                    }),
+                Some(0),
             ),
             _ => (
                 object
@@ -338,6 +503,83 @@ fn storage_exhausted() -> Diagnostic {
         "substituted signature metadata exceeds its storage admission",
     )
 }
+
+impl<R: ExpressionRead + ?Sized> ExpressionRead for EffectAppliedTypes<'_, '_, R> {
+    fn package_id(&self) -> PackageId {
+        self.derived.package_id()
+    }
+    fn owner(&self, owner: OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic> {
+        self.derived.owner(owner)
+    }
+    fn type_object(&self, ty: TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic> {
+        self.derived.type_object(ty)
+    }
+    fn package_interface_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        self.derived.package_interface_owner(package, owner)
+    }
+    fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        self.derived.has_dependency(package)
+    }
+    fn package_representation_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        self.derived.package_representation_owner(package, owner)
+    }
+    fn has_representation_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        self.derived.has_representation_dependency(package)
+    }
+    fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
+        self.derived.validation_checkpoint()
+    }
+    fn validation_work(&self) -> Result<(), Diagnostic> {
+        self.derived.validation_work()
+    }
+}
+
+impl<R: ExpressionRead + ?Sized> ExpressionRead for WitnessAppliedTypes<'_, '_, R> {
+    fn package_id(&self) -> PackageId {
+        self.derived.package_id()
+    }
+    fn owner(&self, owner: OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic> {
+        self.derived.owner(owner)
+    }
+    fn type_object(&self, ty: TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic> {
+        self.derived.type_object(ty)
+    }
+    fn package_interface_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        self.derived.package_interface_owner(package, owner)
+    }
+    fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        self.derived.has_dependency(package)
+    }
+    fn package_representation_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        self.derived.package_representation_owner(package, owner)
+    }
+    fn has_representation_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        self.derived.has_representation_dependency(package)
+    }
+    fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
+        self.derived.validation_checkpoint()
+    }
+    fn validation_work(&self) -> Result<(), Diagnostic> {
+        self.derived.validation_work()
+    }
+}
+
 impl<R: ExpressionRead + ?Sized> ExpressionRead for AppliedTypes<'_, R> {
     fn package_id(&self) -> PackageId {
         self.read.package_id()

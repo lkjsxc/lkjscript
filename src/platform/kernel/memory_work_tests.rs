@@ -85,6 +85,8 @@ declarations.end"#).unwrap();
         }
         let result = Check {
             read: &read,
+            associated: &OwnedAssociatedAdmission::new(),
+            types: std::cell::RefCell::new(BTreeMap::new()),
             scope: None,
         }
         .eval(expression, &mut state, ParameterUse::Unrestricted, 0);
@@ -179,6 +181,8 @@ declarations.end"#,
         let mut state = retained_ancestry(input, ancestors);
         let result = Check {
             read: &read,
+            associated: &OwnedAssociatedAdmission::new(),
+            types: std::cell::RefCell::new(BTreeMap::new()),
             scope: None,
         }
         .eval(expression, &mut state, ParameterUse::Unrestricted, 0);
@@ -241,6 +245,8 @@ declarations.end"#,
         let mut state = retained_ancestry(input, ancestors);
         let result = Check {
             read: &read,
+            associated: &OwnedAssociatedAdmission::new(),
+            types: std::cell::RefCell::new(BTreeMap::new()),
             scope: None,
         }
         .eval(expression, &mut state, ParameterUse::Unrestricted, 0);

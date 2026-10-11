@@ -158,6 +158,8 @@ fn provenance_uses_parameter_identity_even_when_both_sources_have_equal_types() 
         .unwrap();
     let check = Check {
         read: &source,
+        associated: &OwnedAssociatedAdmission::new(),
+        types: std::cell::RefCell::new(BTreeMap::new()),
         scope: None,
     };
     assert!(
@@ -254,6 +256,8 @@ fn borrowed_result_cannot_be_claimed_by_a_non_view_expression() {
     // A low-level oracle cannot admit an ordinary result merely because it carries no owner.
     let check = Check {
         read: &source,
+        associated: &OwnedAssociatedAdmission::new(),
+        types: std::cell::RefCell::new(BTreeMap::new()),
         scope: None,
     };
     let nominated = LocalValueReference::FunctionParameter(

@@ -1,5 +1,8 @@
 //! Direct owned-memory flow, independent of capability-resource provenance.
 #[cfg(test)]
+#[path = "memory_associated_tests.rs"]
+pub(crate) mod associated_tests;
+#[cfg(test)]
 #[path = "memory_borrow_result_tests.rs"]
 mod borrow_result_tests;
 #[cfg(test)]
@@ -15,6 +18,10 @@ mod sequence_tests;
 #[path = "memory_work_tests.rs"]
 mod work_tests;
 use super::infer::ExpressionRead;
+use super::owned_associated::{
+    OwnedAssociatedAdmission, OwnedTypeOccurrence, TypeParameterContext,
+};
+use super::owned_contract::FunctionArguments;
 use super::*;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::ExpressionId;
@@ -67,16 +74,61 @@ pub(crate) fn direct_in(
         },
     )
 }
-fn owned_annotation(
+
+/// Category admission retains the exact occurrence and authored reader.
+pub(crate) fn direct_at(
+    read: &(impl ExpressionRead + ?Sized),
+    ty: TypeObjectDigest,
+    occurrence: OwnedTypeOccurrence,
+    associated: &OwnedAssociatedAdmission,
+) -> Result<bool, Diagnostic> {
+    super::owned_product::validate_owning_type_depth(read, ty)?;
+    associated.validate_occurrence_at(read, &[ty], occurrence)?;
+    let object = read
+        .type_object(ty)?
+        .ok_or_else(|| reject("missing memory type"))?;
+    match object.form {
+        TypeForm::AssociatedContractMember { .. }
+        | TypeForm::AssociatedWitnessProjection { .. } => Ok(true),
+        TypeForm::TypeParameter { parameter } => {
+            let record = match occurrence.parameters {
+                TypeParameterContext::Authored(scope) => {
+                    super::owned_contract::type_parameter_at(read, scope, parameter)?
+                }
+                TypeParameterContext::NominalRepresentation(scope) => {
+                    super::owned_record::parameter(read, scope, parameter)?
+                }
+                TypeParameterContext::Closed => {
+                    return Err(reject(
+                        "memory parameter requires an exact occurrence scope",
+                    ));
+                }
+            };
+            if record.constraints.has_owned() {
+                associated.validate_owned_parameter_at(read, parameter, occurrence.parameters)?;
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        }
+        _ => direct_in(
+            read,
+            occurrence
+                .parameters
+                .scope()
+                .map_or(read.package_id(), |scope| scope.package),
+            ty,
+        ),
+    }
+}
+fn owned_annotation_at(
     read: &(impl ExpressionRead + ?Sized),
     annotation: Option<TypeObjectDigest>,
+    occurrence: OwnedTypeOccurrence,
+    associated: &OwnedAssociatedAdmission,
 ) -> Result<bool, Diagnostic> {
-    let Some(annotation) = annotation else {
-        return Ok(false);
-    };
-    // Current derived code retains every annotation root. Missing type metadata
-    // cannot turn an explicit product annotation into ordinary data.
-    direct(read, annotation)
+    // Missing metadata cannot erase the category of an explicit annotation.
+    annotation.map_or(Ok(false), |ty| direct_at(read, ty, occurrence, associated))
 }
 fn owner(
     read: &(impl ExpressionRead + ?Sized),
@@ -103,23 +155,46 @@ pub(crate) fn contains(
     read: &(impl ExpressionRead + ?Sized),
     ty: TypeObjectDigest,
 ) -> Result<bool, Diagnostic> {
-    let representation = super::owned_record::RepresentationRead { read };
-    let read: &dyn ExpressionRead = &representation;
-    let mut pending = vec![ty];
+    contains_inner(read, ty, None, &OwnedAssociatedAdmission::new())
+}
+
+pub(crate) fn contains_at(
+    read: &(impl ExpressionRead + ?Sized),
+    ty: TypeObjectDigest,
+    occurrence: OwnedTypeOccurrence,
+    associated: &OwnedAssociatedAdmission,
+) -> Result<bool, Diagnostic> {
+    super::owned_product::validate_owning_type_depth(read, ty)?;
+    associated.validate_occurrence_at(read, &[ty], occurrence)?;
+    contains_inner(read, ty, Some(occurrence), associated)
+}
+
+fn contains_inner(
+    read: &(impl ExpressionRead + ?Sized),
+    ty: TypeObjectDigest,
+    occurrence: Option<OwnedTypeOccurrence>,
+    associated: &OwnedAssociatedAdmission,
+) -> Result<bool, Diagnostic> {
+    let mut pending = vec![(ty, occurrence)];
     let mut seen = BTreeSet::new();
     let mut declarations = BTreeSet::new();
-    while let Some(ty) = pending.pop() {
+    while let Some((ty, occurrence)) = pending.pop() {
         read.validation_work()?;
-        if !seen.insert(ty) {
+        if !seen.insert((ty, occurrence)) {
             continue;
         }
         let object = read
             .type_object(ty)?
             .ok_or_else(|| reject("missing memory containment type"))?;
-        if direct(read, ty)? {
+        let owned = if let Some(occurrence) = occurrence {
+            direct_at(read, ty, occurrence, associated)?
+        } else {
+            direct(read, ty)?
+        };
+        if owned {
             return Ok(true);
         }
-        pending.extend(object.child_types());
+        pending.extend(object.child_types().into_iter().map(|ty| (ty, occurrence)));
         let declaration = match object.form {
             TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
                 Some(declaration)
@@ -127,42 +202,49 @@ pub(crate) fn contains(
             _ => None,
         };
         if let Some(d) = declaration.filter(|d| declarations.insert(*d)) {
-            let (fields, cases) = if d.package == read.package_id() {
-                match read.owner(OwnerKey::Declaration(d.declaration))? {
-                    Some(OwnerRecord::Declaration(p)) => match p.payload {
-                        DeclarationPayload::Record { fields, .. } => (fields, vec![]),
-                        DeclarationPayload::Variant { cases, .. } => (vec![], cases),
-                        _ => (vec![], vec![]),
+            let property = super::owned_record::property_definition(read, d)?;
+            for id in property.fields {
+                let field = super::owned_record::field(
+                    read,
+                    FieldReference {
+                        package: d.package,
+                        field: id,
                     },
-                    _ => (vec![], vec![]),
+                )?;
+                if field.declaration != d.declaration {
+                    return Err(reject(
+                        "memory property field belongs to another declaration",
+                    ));
                 }
-            } else {
-                match read
-                    .package_interface_owner(d.package, OwnerKey::Declaration(d.declaration))?
-                {
-                    Some(
-                        PackageInterfaceRecord::Declaration(p)
-                        | PackageInterfaceRecord::RepresentationDeclaration(p),
-                    ) => match p.payload {
-                        PackageInterfaceDeclarationPayload::Record { fields, .. } => {
-                            (fields, vec![])
-                        }
-                        PackageInterfaceDeclarationPayload::Variant { cases, .. } => {
-                            (vec![], cases)
-                        }
-                        _ => (vec![], vec![]),
-                    },
-                    _ => (vec![], vec![]),
-                }
-            };
-            for f in fields {
-                if let OwnerRecord::Field(f) = owner(read, d.package, OwnerKey::Field(f))? {
-                    pending.push(f.ty);
-                }
+                pending.push((
+                    field.ty,
+                    Some(OwnedTypeOccurrence::representation(
+                        d,
+                        field.header.contract_version,
+                    )),
+                ));
             }
-            for c in cases {
-                if let OwnerRecord::Case(c) = owner(read, d.package, OwnerKey::Case(c))? {
-                    pending.extend(c.payload);
+            for id in property.cases {
+                let case = super::owned_record::case(
+                    read,
+                    CaseReference {
+                        package: d.package,
+                        case: id,
+                    },
+                )?;
+                if case.declaration != d.declaration {
+                    return Err(reject(
+                        "memory property case belongs to another declaration",
+                    ));
+                }
+                if let Some(ty) = case.payload {
+                    pending.push((
+                        ty,
+                        Some(OwnedTypeOccurrence::representation(
+                            d,
+                            case.header.contract_version,
+                        )),
+                    ));
                 }
             }
         }
@@ -176,12 +258,15 @@ struct Signature {
     result_borrow: Option<crate::platform::semantic_id::ParameterId>,
     pure: bool,
     generation: u16,
+    occurrence: OwnedTypeOccurrence,
+    external: bool,
+    materialized: bool,
 }
 fn signature(
     read: &(impl ExpressionRead + ?Sized),
     d: DeclarationReference,
 ) -> Result<Option<Signature>, Diagnostic> {
-    let (type_parameters, parameters, result, result_borrow, pure, generation) =
+    let (type_parameters, parameters, result, result_borrow, pure, generation, external) =
         if d.package == read.package_id() {
             match read.owner(OwnerKey::Declaration(d.declaration))? {
                 Some(OwnerRecord::Declaration(r)) => match r.payload {
@@ -192,6 +277,7 @@ fn signature(
                         f.result_borrow,
                         matches!(f.effect, FunctionEffect::Pure),
                         r.header.contract_version,
+                        false,
                     ),
                     DeclarationPayload::External(f) => (
                         f.type_parameters,
@@ -200,6 +286,7 @@ fn signature(
                         None,
                         true,
                         r.header.contract_version,
+                        true,
                     ),
                     _ => return Ok(None),
                 },
@@ -215,6 +302,7 @@ fn signature(
                         f.result_borrow,
                         matches!(f.effect, FunctionEffect::Pure),
                         r.header.contract_version,
+                        false,
                     ),
                     PackageInterfaceDeclarationPayload::External(f) => (
                         f.type_parameters,
@@ -223,6 +311,7 @@ fn signature(
                         None,
                         true,
                         r.header.contract_version,
+                        true,
                     ),
                     _ => return Ok(None),
                 },
@@ -245,16 +334,137 @@ fn signature(
         result_borrow,
         pure,
         generation,
+        occurrence: OwnedTypeOccurrence {
+            parameters: TypeParameterContext::Authored(d),
+            associated: if external {
+                super::owned_associated::AssociatedTypeContext::Forbidden
+            } else {
+                super::owned_associated::AssociatedTypeContext::Lexical(d)
+            },
+            consumer_generation: generation,
+        },
+        external,
+        materialized: false,
     }))
 }
 
 fn instantiate(
     read: &(impl ExpressionRead + ?Sized),
     d: DeclarationReference,
-    arguments: &[TypeObjectDigest],
+    application_arguments: FunctionArguments<'_>,
     s: &mut Signature,
-    scope: Option<crate::platform::semantic_id::DeclarationId>,
-) -> Result<(), Diagnostic> {
+    occurrence: OwnedTypeOccurrence,
+    associated: &OwnedAssociatedAdmission,
+) -> Result<BTreeMap<TypeObjectDigest, TypeObject>, Diagnostic> {
+    let FunctionArguments {
+        types: arguments,
+        implementations,
+        effects: effect_arguments,
+        requirements: requirement_arguments,
+    } = application_arguments;
+    // Definitions and their parameter owners retain independent generations.
+    admit_signature(read, s, associated)?;
+    if !s.external {
+        let mut application = super::owned_contract::admit_function_application(
+            read,
+            d,
+            arguments,
+            implementations,
+            occurrence,
+            associated,
+        )?;
+        s.parameters = std::mem::take(&mut application.parameters);
+        let overlay = super::owned_contract::AppliedTypeRead {
+            read,
+            types: &application.types,
+        };
+        if application.signature.effect_parameters.len() != effect_arguments.len()
+            || application.signature.requirement_parameters.len() != requirement_arguments.len()
+        {
+            return Err(reject(
+                "memory call requires exact effect and requirement argument arities",
+            ));
+        }
+        associated.reserve::<(EffectParameterReference, EffectRow)>(effect_arguments.len())?;
+        for row in effect_arguments {
+            associated.reserve::<RequirementOperand>(row.requirements.len())?;
+            associated.reserve::<EffectParameterReference>(row.parameters.len())?;
+        }
+        associated.reserve::<(RequirementParameterReference, RequirementOperand)>(
+            requirement_arguments.len(),
+        )?;
+        let effects = application
+            .signature
+            .effect_parameters
+            .iter()
+            .zip(effect_arguments)
+            .map(|(parameter, row)| {
+                (
+                    EffectParameterReference {
+                        package: d.package,
+                        parameter: *parameter,
+                    },
+                    row.clone(),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        let requirements = application
+            .signature
+            .requirement_parameters
+            .iter()
+            .zip(requirement_arguments)
+            .map(|(parameter, operand)| {
+                (
+                    RequirementParameterReference {
+                        package: d.package,
+                        parameter: *parameter,
+                    },
+                    *operand,
+                )
+            })
+            .collect::<RequirementSubstitution>();
+        // Rewrite source templates before inserting caller actuals. Rewriting
+        // afterwards would capture identically numbered caller effect formals.
+        let mut effect_applied =
+            super::parallel_types::EffectAppliedTypes::new(&overlay, &effects, &requirements);
+        for parameter in &mut s.parameters {
+            parameter.ty = effect_applied.substitute(parameter.ty, 0)?;
+        }
+        let result_template = effect_applied.substitute(application.signature.result, 0)?;
+        let mut applied = super::parallel_types::WitnessAppliedTypes::with_admission(
+            &effect_applied,
+            application.environment(),
+            associated,
+        );
+        for parameter in &mut s.parameters {
+            parameter.ty = applied.substitute(parameter.ty, 0)?;
+        }
+        s.result = applied.substitute(result_template, 0)?;
+        let witness_types = applied.into_types();
+        let effect_types = effect_applied.into_types();
+        let mut types = BTreeMap::new();
+        let mut storage = super::owned_record::LayoutBudget::default();
+        for source in [witness_types, effect_types, application.types] {
+            merge_types(read, &mut storage, &mut types, source)?;
+        }
+        s.occurrence = occurrence;
+        s.materialized = true;
+        let overlay = super::owned_contract::AppliedTypeRead {
+            read,
+            types: &types,
+        };
+        admit_signature(&overlay, s, associated)?;
+        return Ok(types);
+    }
+    // External declarations have ordinary formals but no lexical witness scope.
+    if !implementations.is_empty()
+        || !effect_arguments.is_empty()
+        || !requirement_arguments.is_empty()
+    {
+        return Err(reject(
+            "external memory calls cannot carry implementation witnesses",
+        ));
+    }
     if s.type_parameters.len() != arguments.len() {
         return Err(reject("memory type argument arity"));
     }
@@ -267,48 +477,76 @@ fn instantiate(
         if p.declaration != d.declaration {
             return Err(reject("foreign generic memory parameter"));
         }
-        if p.constraints.has_owned() {
-            if !direct(read, *ty)? {
-                return Err(reject("owned substitution must be direct memory"));
-            }
-        } else if contains(read, *ty)? {
-            return Err(reject("ordinary generic argument contains owned memory"));
-        }
-        if p.constraints.requires_transfer()
-            && super::transfer::admit(read, *ty, scope)? != p.constraints.has_owned()
-        {
-            return Err(reject(
-                "transfer substitution changes the formal's ownership category",
-            ));
-        }
-        if p.constraints.requires_share() {
-            super::share::admit(read, *ty, scope)?;
-        }
+        super::owned_contract::validate_type_argument_constraints_at(
+            read,
+            p.constraints,
+            *ty,
+            occurrence,
+            associated,
+        )?;
         substitutions.insert(*id, *ty);
     }
-    let substitute = |ty: TypeObjectDigest| -> Result<TypeObjectDigest, Diagnostic> {
-        match read
-            .type_object(ty)?
-            .ok_or_else(|| reject("missing memory signature type"))?
-            .form
-        {
-            TypeForm::TypeParameter { parameter } => {
-                Ok(substitutions.get(&parameter).copied().unwrap_or(ty))
-            }
-            _ => Ok(ty),
-        }
-    };
+    let mut applied = super::parallel_types::AppliedTypes::new(read);
     for p in &mut s.parameters {
-        p.ty = substitute(p.ty)?;
+        p.ty = applied.substitute(p.ty, &substitutions, 0)?;
     }
-    s.result = substitute(s.result)?;
-    Ok(())
+    s.result = applied.substitute(s.result, &substitutions, 0)?;
+    s.occurrence = occurrence;
+    s.materialized = true;
+    let types = applied.into_types();
+    let overlay = super::owned_contract::AppliedTypeRead {
+        read,
+        types: &types,
+    };
+    admit_signature(&overlay, s, associated)?;
+    Ok(types)
 }
-fn admit_signature(read: &(impl ExpressionRead + ?Sized), s: &Signature) -> Result<(), Diagnostic> {
+
+fn merge_types(
+    read: &(impl ExpressionRead + ?Sized),
+    storage: &mut super::owned_record::LayoutBudget,
+    target: &mut BTreeMap<TypeObjectDigest, TypeObject>,
+    source: BTreeMap<TypeObjectDigest, TypeObject>,
+) -> Result<(), Diagnostic> {
+    // Admission precedes each merged map node, and duplicate digests retain one
+    // exact canonical object rather than overriding another derivation phase.
+    for (digest, object) in &source {
+        read.validation_work()?;
+        if target
+            .get(digest)
+            .is_some_and(|existing| existing != object)
+            || read
+                .type_object(*digest)?
+                .is_some_and(|existing| existing != *object)
+        {
+            return Err(reject(
+                "derived memory type digest disagrees across application overlays",
+            ));
+        }
+    }
+    storage.extend_types(target, source)
+}
+
+fn admit_signature(
+    read: &(impl ExpressionRead + ?Sized),
+    s: &Signature,
+    associated: &OwnedAssociatedAdmission,
+) -> Result<(), Diagnostic> {
     let mut memory = false;
     let mut capability = false;
     for p in &s.parameters {
-        if direct(read, p.ty)? {
+        let occurrence = s.occurrence;
+        if !s.materialized {
+            associated.validate_occurrence_at(
+                read,
+                &[p.ty],
+                OwnedTypeOccurrence {
+                    consumer_generation: p.header.contract_version,
+                    ..occurrence
+                },
+            )?;
+        }
+        if direct_at(read, p.ty, occurrence, associated)? {
             if capability {
                 return Err(reject("owned memory must precede the resource suffix"));
             }
@@ -333,7 +571,7 @@ fn admit_signature(read: &(impl ExpressionRead + ?Sized), s: &Signature) -> Resu
             // affine admission; a memory owner never supplies resource authority.
             capability = true;
         } else {
-            if contains(read, p.ty)? {
+            if contains_at(read, p.ty, occurrence, associated)? {
                 return Err(reject(
                     "owned memory cannot occur in a parameter container or descriptor",
                 ));
@@ -347,7 +585,7 @@ fn admit_signature(read: &(impl ExpressionRead + ?Sized), s: &Signature) -> Resu
             }
         }
     }
-    let result = direct(read, s.result)?;
+    let result = direct_at(read, s.result, s.occurrence, associated)?;
     if let Some(source) = s.result_borrow {
         let parameter = s
             .parameters
@@ -358,7 +596,7 @@ fn admit_signature(read: &(impl ExpressionRead + ?Sized), s: &Signature) -> Resu
             })?;
         if !s.pure
             || !result
-            || !direct(read, parameter.ty)?
+            || !direct_at(read, parameter.ty, s.occurrence, associated)?
             || parameter.use_mode != ParameterUse::Borrow
         {
             return Err(reject(
@@ -366,7 +604,7 @@ fn admit_signature(read: &(impl ExpressionRead + ?Sized), s: &Signature) -> Resu
             ));
         }
     }
-    if !result && contains(read, s.result)? {
+    if !result && contains_at(read, s.result, s.occurrence, associated)? {
         return Err(reject("only a direct owned result can transfer memory"));
     }
     if s.pure && capability && (memory || result) {
@@ -437,66 +675,75 @@ pub(crate) fn borrow_invocation(
     call: ExpressionId,
     scope: Option<crate::platform::semantic_id::DeclarationId>,
 ) -> Result<BorrowInvocation, Diagnostic> {
+    borrow_invocation_at(read, call, scope, &OwnedAssociatedAdmission::new())
+}
+
+pub(crate) fn borrow_invocation_at(
+    read: &(impl ExpressionRead + ?Sized),
+    call: ExpressionId,
+    scope: Option<crate::platform::semantic_id::DeclarationId>,
+    associated: &OwnedAssociatedAdmission,
+) -> Result<BorrowInvocation, Diagnostic> {
     let Some(OwnerRecord::Expression(expression)) = read.owner(OwnerKey::Expression(call))? else {
         return Err(reject("missing borrowed invocation"));
     };
     super::owned_contract::require_expression_generation(read, &expression)?;
+    let occurrence = OwnedTypeOccurrence::authored(
+        scope.map(|declaration| DeclarationReference {
+            package: read.package_id(),
+            declaration,
+        }),
+        expression.contract_version,
+    );
     let (arguments, parameters, result, source_position, types) = match expression.operation {
         ExpressionOperation::Call {
             function,
             type_arguments,
             arguments,
-            ..
-        }
-        | ExpressionOperation::ImplementationCall {
+            effect_arguments,
+            requirement_arguments,
+        } => borrowed_function_application(
+            read,
+            function,
+            FunctionArguments {
+                types: &type_arguments,
+                implementations: &[],
+                effects: &effect_arguments,
+                requirements: &requirement_arguments,
+            },
+            arguments,
+            occurrence,
+            associated,
+        )?,
+        ExpressionOperation::ImplementationCall {
             function,
             type_arguments,
             arguments,
-            ..
-        } => {
-            let mut signature = signature(read, function)?
-                .ok_or_else(|| reject("borrow-call requires a named graph function"))?;
-            let source = signature
-                .result_borrow
-                .ok_or_else(|| reject("borrow-call requires a declared borrowed result"))?;
-            let position = signature
-                .parameters
-                .iter()
-                .position(|p| p.header.owner == OwnerKey::Parameter(source))
-                .ok_or_else(|| reject("borrowed invocation source is not a parameter"))?;
-            let original_parameters = signature.parameters.clone();
-            let original_result = signature.result;
-            instantiate(read, function, &type_arguments, &mut signature, scope)?;
-            admit_signature(read, &signature)?;
-            let substitutions = signature
-                .type_parameters
-                .iter()
-                .copied()
-                .zip(type_arguments.iter().copied())
-                .collect::<BTreeMap<_, _>>();
-            let mut derived = super::parallel_types::AppliedTypes::new(read);
-            let mut parameters = Vec::new();
-            for parameter in &original_parameters {
-                let ty = derived.substitute(parameter.ty, &substitutions, 0)?;
-                parameters.push((ty, parameter.use_mode, direct(&derived, ty)?));
-            }
-            let result = derived.substitute(original_result, &substitutions, 0)?;
-            (
-                arguments,
-                parameters,
-                result,
-                position,
-                derived.into_types(),
-            )
-        }
+            effect_arguments,
+            requirement_arguments,
+            implementations,
+        } => borrowed_function_application(
+            read,
+            function,
+            FunctionArguments {
+                types: &type_arguments,
+                implementations: &implementations,
+                effects: &effect_arguments,
+                requirements: &requirement_arguments,
+            },
+            arguments,
+            occurrence,
+            associated,
+        )?,
         ExpressionOperation::MethodCall {
             witness,
             contract,
             method,
             arguments,
         } => {
-            let application =
-                super::owned_contract::method_signature(read, &witness, contract, method, scope)?;
+            let application = super::owned_contract::admit_method_application(
+                read, &witness, contract, method, occurrence, associated,
+            )?;
             let signature = application.method;
             let position = signature
                 .result_borrow
@@ -511,7 +758,7 @@ pub(crate) fn borrow_invocation(
                 parameters.push((
                     parameter.ty,
                     parameter.use_mode,
-                    direct(&overlay, parameter.ty)?,
+                    direct_at(&overlay, parameter.ty, occurrence, associated)?,
                 ));
             }
             (
@@ -549,6 +796,58 @@ pub(crate) fn borrow_invocation(
         parameters,
     })
 }
+
+type BorrowedApplication = (
+    Vec<ExpressionId>,
+    Vec<(TypeObjectDigest, ParameterUse, bool)>,
+    TypeObjectDigest,
+    usize,
+    BTreeMap<TypeObjectDigest, TypeObject>,
+);
+
+fn borrowed_function_application(
+    read: &(impl ExpressionRead + ?Sized),
+    function: DeclarationReference,
+    application_arguments: FunctionArguments<'_>,
+    arguments: Vec<ExpressionId>,
+    occurrence: OwnedTypeOccurrence,
+    associated: &OwnedAssociatedAdmission,
+) -> Result<BorrowedApplication, Diagnostic> {
+    let mut signature = signature(read, function)?
+        .ok_or_else(|| reject("borrow-call requires a named graph function"))?;
+    let source = signature
+        .result_borrow
+        .ok_or_else(|| reject("borrow-call requires a declared borrowed result"))?;
+    let position = signature
+        .parameters
+        .iter()
+        .position(|parameter| parameter.header.owner == OwnerKey::Parameter(source))
+        .ok_or_else(|| reject("borrowed invocation source is not a parameter"))?;
+    let types = instantiate(
+        read,
+        function,
+        application_arguments,
+        &mut signature,
+        occurrence,
+        associated,
+    )?;
+    let overlay = super::owned_contract::AppliedTypeRead {
+        read,
+        types: &types,
+    };
+    let parameters = signature
+        .parameters
+        .iter()
+        .map(|parameter| {
+            Ok((
+                parameter.ty,
+                parameter.use_mode,
+                direct_at(&overlay, parameter.ty, occurrence, associated)?,
+            ))
+        })
+        .collect::<Result<Vec<_>, Diagnostic>>()?;
+    Ok((arguments, parameters, signature.result, position, types))
+}
 fn fork(read: &(impl ExpressionRead + ?Sized), state: &State) -> Result<State, Diagnostic> {
     // Admit the complete fixed-size slot inventory before cloning its map nodes.
     for _ in 0..state.len() {
@@ -578,24 +877,130 @@ fn join(read: &(impl ExpressionRead + ?Sized), a: &mut State, b: &State) -> Resu
 struct Check<'a, R: ?Sized> {
     read: &'a R,
     scope: Option<crate::platform::semantic_id::DeclarationId>,
+    associated: &'a OwnedAssociatedAdmission,
+    types: std::cell::RefCell<BTreeMap<TypeObjectDigest, TypeObject>>,
+}
+impl<R: ExpressionRead + ?Sized> ExpressionRead for Check<'_, R> {
+    fn package_id(&self) -> PackageId {
+        self.read.package_id()
+    }
+    fn owner(&self, key: OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic> {
+        self.read.owner(key)
+    }
+    fn type_object(&self, ty: TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic> {
+        if let Some(object) = self.types.borrow().get(&ty) {
+            return Ok(Some(object.clone()));
+        }
+        self.read.type_object(ty)
+    }
+    fn package_interface_owner(
+        &self,
+        package: PackageId,
+        key: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        self.read.package_interface_owner(package, key)
+    }
+    fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        self.read.has_dependency(package)
+    }
+    fn package_representation_owner(
+        &self,
+        package: PackageId,
+        key: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        self.read.package_representation_owner(package, key)
+    }
+    fn has_representation_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        self.read.has_representation_dependency(package)
+    }
+    fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
+        self.read.validation_checkpoint()
+    }
+    fn validation_work(&self) -> Result<(), Diagnostic> {
+        self.read.validation_work()
+    }
 }
 impl<R: ExpressionRead + ?Sized> Check<'_, R> {
+    fn occurrence(&self, generation: u16) -> OwnedTypeOccurrence {
+        OwnedTypeOccurrence::authored(
+            self.scope.map(|declaration| DeclarationReference {
+                package: self.package_id(),
+                declaration,
+            }),
+            generation,
+        )
+    }
+
+    fn retain_types(
+        &self,
+        types: BTreeMap<TypeObjectDigest, TypeObject>,
+    ) -> Result<(), Diagnostic> {
+        for (digest, object) in types {
+            self.validation_work()?;
+            if let Some(existing) = self.type_object(digest)? {
+                if existing != object {
+                    return Err(reject(
+                        "derived memory type digest disagrees with retained object",
+                    ));
+                }
+                continue;
+            }
+            if self.types.borrow().len() >= contract::MAXIMUM_VALIDATION_WORK {
+                return Err(Diagnostic::new(
+                    DiagnosticClass::Resource,
+                    "kernel_memory_types",
+                    "derived memory type inventory exceeds finite preparation",
+                ));
+            }
+            self.associated
+                .reserve::<(TypeObjectDigest, TypeObject)>(1)?;
+            self.associated
+                .reserve::<TypeObjectDigest>(object.child_type_count())?;
+            match &object.form {
+                TypeForm::StructuralRecord { fields }
+                | TypeForm::OwnedProduct { fields }
+                | TypeForm::OwnedChoice { cases: fields } => {
+                    self.associated
+                        .reserve::<StructuralTypeField>(fields.len())?;
+                    for field in fields {
+                        self.associated.reserve_bytes(field.name.as_str().len())?;
+                    }
+                }
+                TypeForm::TaskFunction { effect, .. } => {
+                    self.associated
+                        .reserve::<RequirementOperand>(effect.requirements.len())?;
+                    self.associated
+                        .reserve::<EffectParameterReference>(effect.parameters.len())?;
+                }
+                _ => {}
+            }
+            self.types.borrow_mut().insert(digest, object);
+        }
+        Ok(())
+    }
+
     fn record_layout(
         &self,
         ty: TypeObjectDigest,
+        occurrence: OwnedTypeOccurrence,
     ) -> Result<super::owned_record::AppliedOwnedRecord, Diagnostic> {
         let scope = self.scope.map(|declaration| DeclarationReference {
-            package: self.read.package_id(),
+            package: self.package_id(),
             declaration,
         });
-        super::owned_record::require_access(self.read, ty, scope)?;
-        super::owned_record::validate_application(self.read, ty, scope)?;
-        super::owned_record::layout(self.read, ty)
+        super::owned_record::require_access(self, ty, scope)?;
+        super::owned_record::validate_application_at(self, ty, occurrence, self.associated)?;
+        let mut layout = super::owned_record::layout(self, ty)?;
+        self.retain_types(std::mem::take(&mut layout.types))?;
+        Ok(layout)
     }
-    fn sequence_item(&self, ty: TypeObjectDigest) -> Result<TypeObjectDigest, Diagnostic> {
-        super::owned_product::validate(self.read, ty, self.scope)?;
+    fn sequence_item(
+        &self,
+        ty: TypeObjectDigest,
+        occurrence: OwnedTypeOccurrence,
+    ) -> Result<TypeObjectDigest, Diagnostic> {
+        super::owned_product::validate_at(self, ty, occurrence, self.associated)?;
         let TypeForm::OwnedSequence { item } = self
-            .read
             .type_object(ty)?
             .ok_or_else(|| reject("missing owned sequence type"))?
             .form
@@ -630,25 +1035,11 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
         let Some(OwnerRecord::Expression(ExpressionRecord {
             operation: ExpressionOperation::Local { value },
             ..
-        })) = self.read.owner(OwnerKey::Expression(expression))?
+        })) = self.owner(OwnerKey::Expression(expression))?
         else {
             return Err(reject("child reads require an exact local source"));
         };
-        let actual = match value {
-            LocalValueReference::FunctionParameter(parameter) => {
-                match self.read.owner(OwnerKey::Parameter(parameter))? {
-                    Some(OwnerRecord::Parameter(record)) => Some(record.ty),
-                    _ => None,
-                }
-            }
-            LocalValueReference::LexicalBinding(binding) => {
-                match self.read.owner(OwnerKey::Binding(binding))? {
-                    Some(OwnerRecord::Binding(record)) => record.declared_type,
-                    _ => None,
-                }
-            }
-            _ => None,
-        };
+        let actual = self.local_type(value)?;
         if actual != Some(ty) || !state.contains_key(&value) {
             return Err(reject(
                 "child read source requires an exact typed live owner or view",
@@ -656,6 +1047,36 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
         }
         self.eval(expression, state, ParameterUse::Borrow, depth)?;
         Ok(value)
+    }
+
+    fn local_type(
+        &self,
+        value: LocalValueReference,
+    ) -> Result<Option<TypeObjectDigest>, Diagnostic> {
+        let (ty, generation) = match value {
+            LocalValueReference::FunctionParameter(parameter) => {
+                match self.owner(OwnerKey::Parameter(parameter))? {
+                    Some(OwnerRecord::Parameter(record)) => {
+                        (Some(record.ty), record.header.contract_version)
+                    }
+                    _ => return Err(reject("missing exact memory parameter")),
+                }
+            }
+            LocalValueReference::LexicalBinding(binding) => {
+                match self.owner(OwnerKey::Binding(binding))? {
+                    Some(OwnerRecord::Binding(record)) => {
+                        (record.declared_type, record.header.contract_version)
+                    }
+                    _ => return Err(reject("missing exact memory binding")),
+                }
+            }
+            _ => return Ok(None),
+        };
+        if let Some(ty) = ty {
+            self.associated
+                .validate_occurrence_at(self, &[ty], self.occurrence(generation))?;
+        }
+        Ok(ty)
     }
 
     fn loan(
@@ -667,7 +1088,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
         let mut current = Some(source);
         let mut remaining = state.len();
         while let Some(local) = current {
-            self.read.validation_work()?;
+            self.validation_work()?;
             if remaining == 0 {
                 return Err(reject("cyclic child read provenance"));
             }
@@ -697,8 +1118,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
         binding: crate::platform::semantic_id::BindingId,
         ty: TypeObjectDigest,
     ) -> Result<(), Diagnostic> {
-        let Some(OwnerRecord::Binding(record)) = self.read.owner(OwnerKey::Binding(binding))?
-        else {
+        let Some(OwnerRecord::Binding(record)) = self.owner(OwnerKey::Binding(binding))? else {
             return Err(reject("missing child read binding"));
         };
         if record.kind != BindingKind::OwnedBorrow
@@ -707,6 +1127,11 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
         {
             return Err(reject("child read binding contract mismatch"));
         }
+        self.associated.validate_occurrence_at(
+            self,
+            &[ty],
+            self.occurrence(record.header.contract_version),
+        )?;
         Ok(())
     }
 
@@ -718,7 +1143,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
         depth: usize,
     ) -> Result<(), Diagnostic> {
         for (parameter, argument) in call.parameters.iter().zip(&call.arguments) {
-            self.read.validation_work()?;
+            self.validation_work()?;
             match parameter.use_mode {
                 ParameterUse::Borrow => {
                     let source = self.source_local(*argument, parameter.ty, state, depth + 1)?;
@@ -738,6 +1163,64 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
         Ok(())
     }
 
+    fn function_call(
+        &self,
+        function: DeclarationReference,
+        application_arguments: FunctionArguments<'_>,
+        arguments: Vec<ExpressionId>,
+        occurrence: OwnedTypeOccurrence,
+        state: &mut State,
+        depth: usize,
+    ) -> Result<bool, Diagnostic> {
+        let Some(mut signature) = signature(self, function)? else {
+            for argument in arguments {
+                self.eval(argument, state, ParameterUse::Unrestricted, depth)?;
+            }
+            return Ok(false);
+        };
+        let types = instantiate(
+            self,
+            function,
+            application_arguments,
+            &mut signature,
+            occurrence,
+            self.associated,
+        )?;
+        self.retain_types(types)?;
+        if signature.result_borrow.is_some() {
+            return Err(reject(
+                "borrowed result calls require a lexical borrow-call",
+            ));
+        }
+        if signature.parameters.len() != arguments.len() {
+            return Err(reject("memory call arity mismatch"));
+        }
+        let mut uses = BTreeMap::new();
+        let mut loans = Vec::new();
+        for (parameter, argument) in signature.parameters.iter().zip(arguments) {
+            if direct_at(self, parameter.ty, occurrence, self.associated)? {
+                let local = self.source_local(argument, parameter.ty, state, depth)?;
+                if let Some(prior) = uses.insert(local, parameter.use_mode)
+                    && (prior == ParameterUse::Consume
+                        || parameter.use_mode == ParameterUse::Consume)
+                {
+                    return Err(reject("consuming memory argument aliases another argument"));
+                }
+                self.eval(argument, state, parameter.use_mode, depth)?;
+                if parameter.use_mode == ParameterUse::Borrow {
+                    self.loan(local, state, true)?;
+                    loans.push(local);
+                }
+            } else {
+                self.eval(argument, state, ParameterUse::Unrestricted, depth)?;
+            }
+        }
+        for source in loans.into_iter().rev() {
+            self.loan(source, state, false)?;
+        }
+        direct_at(self, signature.result, occurrence, self.associated)
+    }
+
     fn eval(
         &self,
         id: ExpressionId,
@@ -749,11 +1232,17 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
         if depth > contract::MAXIMUM_EXPRESSION_DEPTH {
             return Err(reject("memory expression depth exceeded"));
         }
-        self.read.validation_work()?;
-        let Some(OwnerRecord::Expression(e)) = self.read.owner(OwnerKey::Expression(id))? else {
+        self.validation_work()?;
+        let Some(OwnerRecord::Expression(e)) = self.owner(OwnerKey::Expression(id))? else {
             return Err(reject("missing memory expression"));
         };
-        super::owned_contract::require_expression_generation(self.read, &e)?;
+        super::owned_contract::require_expression_generation(self, &e)?;
+        let occurrence = self.occurrence(e.contract_version);
+        self.associated.validate_occurrence_at(
+            self,
+            &OwnerRecord::Expression(e.clone()).type_roots(),
+            occurrence,
+        )?;
         if matches!(mode, Mode::ReturnBorrow(_))
             && !matches!(
                 e.operation,
@@ -787,9 +1276,16 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 binding,
                 body,
             } => {
-                let invocation = borrow_invocation(self.read, call, self.scope)?;
+                let mut invocation = borrow_invocation_at(self, call, self.scope, self.associated)?;
+                self.retain_types(std::mem::take(&mut invocation.types))?;
+                self.associated.validate_occurrence_at(
+                    self,
+                    &[invocation.result, invocation.source_type],
+                    occurrence,
+                )?;
                 self.borrow_binding(binding, invocation.result)?;
                 let mut uses = BTreeMap::new();
+                let mut loans = Vec::new();
                 for ((ty, use_mode, owned), argument) in
                     invocation.parameters.iter().zip(&invocation.arguments)
                 {
@@ -804,6 +1300,10 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                             ));
                         }
                         self.eval(*argument, state, *use_mode, next)?;
+                        if *use_mode == ParameterUse::Borrow {
+                            self.loan(local, state, true)?;
+                            loans.push(local);
+                        }
                     } else {
                         plain(*argument, state)?;
                     }
@@ -811,6 +1311,9 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 let source =
                     self.source_local(invocation.source, invocation.source_type, state, next)?;
                 self.loan(source, state, true)?;
+                for source in loans.into_iter().rev() {
+                    self.loan(source, state, false)?;
+                }
                 let local = LocalValueReference::LexicalBinding(binding);
                 if state.insert(local, Slot::view(source)).is_some() {
                     return Err(reject("duplicate borrowed invocation binding"));
@@ -821,14 +1324,14 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 result
             }
             ExpressionOperation::SequenceEmpty { sequence_type } => {
-                self.sequence_item(sequence_type)?;
+                self.sequence_item(sequence_type, occurrence)?;
                 true
             }
             ExpressionOperation::SequenceLength {
                 sequence_type,
                 source,
             } => {
-                self.sequence_item(sequence_type)?;
+                self.sequence_item(sequence_type, occurrence)?;
                 self.source_local(source, sequence_type, state, next)?;
                 false
             }
@@ -837,9 +1340,9 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 value,
                 source,
             } => {
-                let item = self.sequence_item(sequence_type)?;
+                let item = self.sequence_item(sequence_type, occurrence)?;
                 // Authored evaluation order consumes the element before the sequence.
-                if direct(self.read, item)? {
+                if direct_at(self, item, occurrence, self.associated)? {
                     self.consume_local(value, item, state, next)?;
                 } else {
                     plain(value, state)?;
@@ -852,8 +1355,8 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 source,
                 index,
             } => {
-                let item = self.sequence_item(sequence_type)?;
-                if direct(self.read, item)? {
+                let item = self.sequence_item(sequence_type, occurrence)?;
+                if direct_at(self, item, occurrence, self.associated)? {
                     return Err(reject("sequence get requires an ordinary element type"));
                 }
                 plain(index, state)?;
@@ -867,10 +1370,10 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 value,
                 source,
             } => {
-                let item = self.sequence_item(sequence_type)?;
-                super::owned_product::validate(self.read, result_type, self.scope)?;
+                let item = self.sequence_item(sequence_type, occurrence)?;
+                super::owned_product::validate_at(self, result_type, occurrence, self.associated)?;
                 plain(index, state)?;
-                if direct(self.read, item)? {
+                if direct_at(self, item, occurrence, self.associated)? {
                     self.consume_local(value, item, state, next)?;
                 } else {
                     plain(value, state)?;
@@ -883,8 +1386,8 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 result_type,
                 source,
             } => {
-                self.sequence_item(sequence_type)?;
-                super::owned_product::validate(self.read, result_type, self.scope)?;
+                self.sequence_item(sequence_type, occurrence)?;
+                super::owned_product::validate_at(self, result_type, occurrence, self.associated)?;
                 self.consume_local(source, sequence_type, state, next)?;
                 true
             }
@@ -895,8 +1398,8 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 binding,
                 body,
             } => {
-                let item = self.sequence_item(sequence_type)?;
-                if !direct(self.read, item)? {
+                let item = self.sequence_item(sequence_type, occurrence)?;
+                if !direct_at(self, item, occurrence, self.associated)? {
                     return Err(reject(
                         "owned item borrowing requires an owned element type",
                     ));
@@ -922,17 +1425,17 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 binding,
                 body,
             } => {
-                let layout = self.record_layout(record_type)?;
+                let layout = self.record_layout(record_type, occurrence)?;
                 let (_, selected) = layout
                     .fields
                     .iter()
                     .find(|(reference, _)| *reference == field)
                     .ok_or_else(|| reject("unknown nominal owned child field"))?;
                 let overlay = super::owned_contract::AppliedTypeRead {
-                    read: self.read,
+                    read: self,
                     types: &layout.types,
                 };
-                if !direct(&overlay, *selected)? {
+                if !direct_at(&overlay, *selected, occurrence, self.associated)? {
                     return Err(reject("nominal child read requires an Owned field"));
                 }
                 self.borrow_binding(binding, *selected)?;
@@ -954,9 +1457,8 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 binding,
                 body,
             } => {
-                super::owned_product::validate(self.read, product_type, self.scope)?;
+                super::owned_product::validate_at(self, product_type, occurrence, self.associated)?;
                 let TypeForm::OwnedProduct { fields } = self
-                    .read
                     .type_object(product_type)?
                     .ok_or_else(|| reject("missing child read product type"))?
                     .form
@@ -965,13 +1467,13 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 };
                 let mut selected = None;
                 for candidate in fields {
-                    self.read.validation_work()?;
+                    self.validation_work()?;
                     if candidate.name == field {
                         selected = Some(candidate.ty);
                     }
                 }
                 let selected = selected.ok_or_else(|| reject("unknown child read field"))?;
-                if !direct(self.read, selected)? {
+                if !direct_at(self, selected, occurrence, self.associated)? {
                     return Err(reject("field read binding requires a direct owned child"));
                 }
                 self.borrow_binding(binding, selected)?;
@@ -991,9 +1493,8 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 source,
                 arms,
             } => {
-                super::owned_product::validate(self.read, choice_type, self.scope)?;
+                super::owned_product::validate_at(self, choice_type, occurrence, self.associated)?;
                 let TypeForm::OwnedChoice { cases } = self
-                    .read
                     .type_object(choice_type)?
                     .ok_or_else(|| reject("missing child read choice type"))?
                     .form
@@ -1007,14 +1508,14 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 self.loan(source, state, true)?;
                 let mut joined: Option<(State, bool)> = None;
                 for (arm, case) in arms.into_iter().zip(cases) {
-                    self.read.validation_work()?;
+                    self.validation_work()?;
                     if arm.name != case.name {
                         return Err(reject("borrowed match case mismatch"));
                     }
                     self.borrow_binding(arm.binding, case.ty)?;
-                    let mut branch = fork(self.read, state)?;
+                    let mut branch = fork(self, state)?;
                     let local = LocalValueReference::LexicalBinding(arm.binding);
-                    if direct(self.read, case.ty)?
+                    if direct_at(self, case.ty, occurrence, self.associated)?
                         && branch.insert(local, Slot::view(source)).is_some()
                     {
                         return Err(reject("duplicate borrowed match binding"));
@@ -1025,7 +1526,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                         if *prior_result != result {
                             return Err(reject("borrowed match result ownership disagreement"));
                         }
-                        join(self.read, prior, &branch)?;
+                        join(self, prior, &branch)?;
                     } else {
                         joined = Some((branch, result));
                     }
@@ -1040,9 +1541,8 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 case,
                 value,
             } => {
-                super::owned_product::validate(self.read, choice_type, self.scope)?;
+                super::owned_product::validate_at(self, choice_type, occurrence, self.associated)?;
                 let TypeForm::OwnedChoice { cases } = self
-                    .read
                     .type_object(choice_type)?
                     .ok_or_else(|| reject("missing owned choice type"))?
                     .form
@@ -1051,17 +1551,17 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 };
                 let mut payload = None;
                 for candidate in cases {
-                    self.read.validation_work()?;
+                    self.validation_work()?;
                     if candidate.name == case {
                         payload = Some(candidate.ty);
                     }
                 }
                 let payload = payload.ok_or_else(|| reject("unknown owned choice case"))?;
-                if direct(self.read, payload)? {
+                if direct_at(self, payload, occurrence, self.associated)? {
                     let Some(OwnerRecord::Expression(ExpressionRecord {
                         operation: ExpressionOperation::Local { value: local },
                         ..
-                    })) = self.read.owner(OwnerKey::Expression(value))?
+                    })) = self.owner(OwnerKey::Expression(value))?
                     else {
                         return Err(reject(
                             "owned choice payload requires an exact local operand",
@@ -1082,11 +1582,11 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 source,
                 arms,
             } => {
-                super::owned_product::validate(self.read, choice_type, self.scope)?;
+                super::owned_product::validate_at(self, choice_type, occurrence, self.associated)?;
                 let Some(OwnerRecord::Expression(ExpressionRecord {
                     operation: ExpressionOperation::Local { value },
                     ..
-                })) = self.read.owner(OwnerKey::Expression(source))?
+                })) = self.owner(OwnerKey::Expression(source))?
                 else {
                     return Err(reject("owned match requires an exact local operand"));
                 };
@@ -1096,7 +1596,6 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                     return Err(reject("owned match requires a live owner"));
                 }
                 let TypeForm::OwnedChoice { cases } = self
-                    .read
                     .type_object(choice_type)?
                     .ok_or_else(|| reject("missing owned choice type"))?
                     .form
@@ -1108,9 +1607,9 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 }
                 let mut joined: Option<(State, bool)> = None;
                 for (arm, case) in arms.into_iter().zip(cases) {
-                    self.read.validation_work()?;
+                    self.validation_work()?;
                     let Some(OwnerRecord::Binding(b)) =
-                        self.read.owner(OwnerKey::Binding(arm.binding))?
+                        self.owner(OwnerKey::Binding(arm.binding))?
                     else {
                         return Err(reject("missing owned choice binding"));
                     };
@@ -1121,9 +1620,14 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                     {
                         return Err(reject("owned choice binding contract mismatch"));
                     }
-                    let mut branch = fork(self.read, state)?;
+                    self.associated.validate_occurrence_at(
+                        self,
+                        &[case.ty],
+                        self.occurrence(b.header.contract_version),
+                    )?;
+                    let mut branch = fork(self, state)?;
                     let local = LocalValueReference::LexicalBinding(arm.binding);
-                    if direct(self.read, case.ty)?
+                    if direct_at(self, case.ty, occurrence, self.associated)?
                         && branch.insert(local, Slot::owner(false)).is_some()
                     {
                         return Err(reject("duplicate owned choice local"));
@@ -1136,7 +1640,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                                 "owned match result ownership disagrees between cases",
                             ));
                         }
-                        join(self.read, prior, &branch)?;
+                        join(self, prior, &branch)?;
                     } else {
                         joined = Some((branch, result));
                     }
@@ -1149,12 +1653,12 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 record_type,
                 fields,
             } => {
-                let layout = self.record_layout(record_type)?;
+                let layout = self.record_layout(record_type, occurrence)?;
                 if fields.len() != layout.fields.len() {
                     return Err(reject("incomplete nominal owned construction"));
                 }
                 let overlay = super::owned_contract::AppliedTypeRead {
-                    read: self.read,
+                    read: self,
                     types: &layout.types,
                 };
                 let mut seen = BTreeSet::new();
@@ -1167,7 +1671,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                     if !seen.insert(field.field) {
                         return Err(reject("duplicate nominal owned construction field"));
                     }
-                    if direct(&overlay, *ty)? {
+                    if direct_at(&overlay, *ty, occurrence, self.associated)? {
                         self.consume_local(field.value, *ty, state, next)?;
                     } else {
                         plain(field.value, state)?;
@@ -1181,19 +1685,19 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 fields,
                 body,
             } => {
-                let layout = self.record_layout(record_type)?;
+                let layout = self.record_layout(record_type, occurrence)?;
                 self.consume_local(source, record_type, state, next)?;
                 if fields.len() != layout.fields.len() {
                     return Err(reject("incomplete nominal owned decomposition"));
                 }
                 let overlay = super::owned_contract::AppliedTypeRead {
-                    read: self.read,
+                    read: self,
                     types: &layout.types,
                 };
                 let mut scoped = Vec::new();
                 for (field, (reference, ty)) in fields.iter().zip(layout.fields.iter()) {
                     let Some(OwnerRecord::Binding(binding)) =
-                        self.read.owner(OwnerKey::Binding(field.binding))?
+                        self.owner(OwnerKey::Binding(field.binding))?
                     else {
                         return Err(reject("missing nominal decomposition binding"));
                     };
@@ -1204,7 +1708,12 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                     {
                         return Err(reject("nominal decomposition binding contract mismatch"));
                     }
-                    if direct(&overlay, *ty)? {
+                    self.associated.validate_occurrence_at(
+                        self,
+                        &[*ty],
+                        self.occurrence(binding.header.contract_version),
+                    )?;
+                    if direct_at(&overlay, *ty, occurrence, self.associated)? {
                         let local = LocalValueReference::LexicalBinding(field.binding);
                         if state.insert(local, Slot::owner(false)).is_some() {
                             return Err(reject("duplicate nominal decomposition local"));
@@ -1222,9 +1731,8 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 product_type,
                 fields,
             } => {
-                super::owned_product::validate(self.read, product_type, self.scope)?;
+                super::owned_product::validate_at(self, product_type, occurrence, self.associated)?;
                 let TypeForm::OwnedProduct { fields: contract } = self
-                    .read
                     .type_object(product_type)?
                     .ok_or_else(|| reject("missing product type"))?
                     .form
@@ -1243,11 +1751,11 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                     if !names.insert(field.name) {
                         return Err(reject("duplicate product field"));
                     }
-                    if direct(self.read, expected.ty)? {
+                    if direct_at(self, expected.ty, occurrence, self.associated)? {
                         let Some(OwnerRecord::Expression(ExpressionRecord {
                             operation: ExpressionOperation::Local { value },
                             ..
-                        })) = self.read.owner(OwnerKey::Expression(field.value))?
+                        })) = self.owner(OwnerKey::Expression(field.value))?
                         else {
                             return Err(reject(
                                 "owned product fields require exact local operands",
@@ -1270,11 +1778,11 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 fields,
                 body,
             } => {
-                super::owned_product::validate(self.read, product_type, self.scope)?;
+                super::owned_product::validate_at(self, product_type, occurrence, self.associated)?;
                 let Some(OwnerRecord::Expression(ExpressionRecord {
                     operation: ExpressionOperation::Local { value },
                     ..
-                })) = self.read.owner(OwnerKey::Expression(source))?
+                })) = self.owner(OwnerKey::Expression(source))?
                 else {
                     return Err(reject("unpack requires an exact local operand"));
                 };
@@ -1284,7 +1792,6 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                     return Err(reject("unpack requires a live owner"));
                 }
                 let TypeForm::OwnedProduct { fields: expected } = self
-                    .read
                     .type_object(product_type)?
                     .ok_or_else(|| reject("missing product type"))?
                     .form
@@ -1297,7 +1804,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 let mut scoped = Vec::new();
                 for (field, expected) in fields.iter().zip(expected) {
                     let Some(OwnerRecord::Binding(b)) =
-                        self.read.owner(OwnerKey::Binding(field.binding))?
+                        self.owner(OwnerKey::Binding(field.binding))?
                     else {
                         return Err(reject("missing unpack binding"));
                     };
@@ -1308,7 +1815,12 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                     {
                         return Err(reject("unpack binding contract mismatch"));
                     }
-                    if direct(self.read, expected.ty)? {
+                    self.associated.validate_occurrence_at(
+                        self,
+                        &[expected.ty],
+                        self.occurrence(b.header.contract_version),
+                    )?;
+                    if direct_at(self, expected.ty, occurrence, self.associated)? {
                         let local = LocalValueReference::LexicalBinding(field.binding);
                         if state.insert(local, Slot::owner(false)).is_some() {
                             return Err(reject("duplicate unpack local"));
@@ -1323,6 +1835,10 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 result
             }
             ExpressionOperation::Local { value } => {
+                if let Some(ty) = self.local_type(value)? {
+                    // A Local has no explicit roots, yet consumes its owner's type.
+                    direct_at(self, ty, occurrence, self.associated)?;
+                }
                 if let Mode::ReturnBorrow(expected) = mode {
                     let slot = state.get(&value).ok_or_else(|| {
                         reject("borrowed result requires a live owned local view")
@@ -1333,7 +1849,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                     let mut root = value;
                     let mut remaining = state.len();
                     loop {
-                        self.read.validation_work()?;
+                        self.validation_work()?;
                         if remaining == 0 {
                             return Err(reject("cyclic borrowed result provenance"));
                         }
@@ -1377,15 +1893,23 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
             ExpressionOperation::Let { bindings, body } => {
                 let mut scoped = vec![];
                 for b in bindings {
-                    let Some(OwnerRecord::Binding(b)) = self.read.owner(OwnerKey::Binding(b))?
-                    else {
+                    let Some(OwnerRecord::Binding(b)) = self.owner(OwnerKey::Binding(b))? else {
                         return Err(reject("missing memory binding"));
                     };
                     let value = b
                         .value
                         .ok_or_else(|| reject("missing memory binding initializer"))?;
+                    if let Some(ty) = b.declared_type {
+                        self.associated
+                            .validate_occurrence_at(self, &[ty], occurrence)?;
+                    }
                     // Annotations are semantic contracts, not ownership certificates.
-                    let is_buffer = owned_annotation(self.read, b.declared_type)?;
+                    let is_buffer = owned_annotation_at(
+                        self,
+                        b.declared_type,
+                        self.occurrence(b.header.contract_version),
+                        self.associated,
+                    )?;
                     let acquired = self.eval(
                         value,
                         state,
@@ -1419,14 +1943,14 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 when_false,
             } => {
                 plain(condition, state)?;
-                let mut a = fork(self.read, state)?;
-                let mut b = fork(self.read, state)?;
+                let mut a = fork(self, state)?;
+                let mut b = fork(self, state)?;
                 let av = self.eval(when_true, &mut a, mode, next)?;
                 let bv = self.eval(when_false, &mut b, mode, next)?;
                 if av != bv {
                     return Err(reject("buffer result ownership must agree at branch join"));
                 }
-                join(self.read, &mut a, &b)?;
+                join(self, &mut a, &b)?;
                 *state = a;
                 av
             }
@@ -1446,66 +1970,61 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 }
                 result
             }
+            ExpressionOperation::Call {
+                function,
+                type_arguments,
+                arguments,
+                effect_arguments,
+                requirement_arguments,
+            } => self.function_call(
+                function,
+                FunctionArguments {
+                    types: &type_arguments,
+                    implementations: &[],
+                    effects: &effect_arguments,
+                    requirements: &requirement_arguments,
+                },
+                arguments,
+                occurrence,
+                state,
+                next,
+            )?,
             ExpressionOperation::ImplementationCall {
                 function,
                 type_arguments,
                 arguments,
-                ..
-            }
-            | ExpressionOperation::Call {
+                effect_arguments,
+                requirement_arguments,
+                implementations,
+            } => self.function_call(
                 function,
-                type_arguments,
+                FunctionArguments {
+                    types: &type_arguments,
+                    implementations: &implementations,
+                    effects: &effect_arguments,
+                    requirements: &requirement_arguments,
+                },
                 arguments,
-                ..
-            } => {
-                let Some(mut s) = signature(self.read, function)? else {
-                    for a in arguments {
-                        plain(a, state)?;
-                    }
-                    return Ok(false);
-                };
-                instantiate(self.read, function, &type_arguments, &mut s, self.scope)?;
-                admit_signature(self.read, &s)?;
-                if s.result_borrow.is_some() {
-                    return Err(reject(
-                        "borrowed result calls require a lexical borrow-call",
-                    ));
-                }
-                if s.parameters.len() != arguments.len() {
-                    return Err(reject("memory call arity mismatch"));
-                }
-                let mut uses = BTreeMap::new();
-                for (p, a) in s.parameters.iter().zip(arguments) {
-                    if direct(self.read, p.ty)? {
-                        let Some(OwnerRecord::Expression(e)) =
-                            self.read.owner(OwnerKey::Expression(a))?
-                        else {
-                            return Err(reject("missing memory argument"));
-                        };
-                        let ExpressionOperation::Local { value } = e.operation else {
-                            return Err(reject("memory call suffix requires exact locals"));
-                        };
-                        if let Some(prior) = uses.insert(value, p.use_mode)
-                            && (prior == ParameterUse::Consume
-                                || p.use_mode == ParameterUse::Consume)
-                        {
-                            return Err(reject(
-                                "consuming memory argument aliases another argument",
-                            ));
-                        }
-                        if !state.contains_key(&value) {
-                            return Err(reject("fabricated buffer argument"));
-                        }
-                        self.eval(a, state, p.use_mode, next)?;
-                    } else {
-                        plain(a, state)?;
-                    }
-                }
-                direct(self.read, s.result)?
-            }
+                occurrence,
+                state,
+                next,
+            )?,
             ExpressionOperation::Parallel { left, right } => {
-                let left = super::parallel::admit_call(self.read, left, self.scope)?;
-                let right = super::parallel::admit_call(self.read, right, self.scope)?;
+                let mut left =
+                    super::parallel::admit_call_at(self, left, self.scope, self.associated)?;
+                self.retain_types(std::mem::take(&mut left.types))?;
+                let mut right =
+                    super::parallel::admit_call_at(self, right, self.scope, self.associated)?;
+                self.retain_types(std::mem::take(&mut right.types))?;
+                let consumed = left
+                    .parameters
+                    .iter()
+                    .chain(&right.parameters)
+                    .map(|parameter| parameter.ty)
+                    .chain([left.result, right.result])
+                    .collect::<Vec<_>>();
+                self.associated
+                    .validate_occurrence_at(self, &consumed, occurrence)?;
                 if left
                     .parameters
                     .iter()
@@ -1531,12 +2050,18 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 method,
                 arguments,
             } => {
-                let application = super::owned_contract::method_signature(
-                    self.read, &witness, contract, method, self.scope,
+                let mut application = super::owned_contract::admit_method_application(
+                    self,
+                    &witness,
+                    contract,
+                    method,
+                    occurrence,
+                    self.associated,
                 )?;
+                self.retain_types(std::mem::take(&mut application.types))?;
                 let signature = application.method;
                 let overlay = super::owned_contract::AppliedTypeRead {
-                    read: self.read,
+                    read: self,
                     types: &application.types,
                 };
                 if signature.result_borrow.is_some() {
@@ -1548,18 +2073,10 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                     return Err(reject("owned method arity mismatch"));
                 }
                 let mut uses = BTreeMap::new();
+                let mut loans = Vec::new();
                 for (p, a) in signature.parameters.iter().zip(arguments) {
-                    if direct(&overlay, p.ty)? {
-                        let Some(OwnerRecord::Expression(e)) =
-                            self.read.owner(OwnerKey::Expression(a))?
-                        else {
-                            return Err(reject("missing owned method argument"));
-                        };
-                        let ExpressionOperation::Local { value } = e.operation else {
-                            return Err(reject(
-                                "owned methods require exact local memory arguments",
-                            ));
-                        };
+                    if direct_at(&overlay, p.ty, occurrence, self.associated)? {
+                        let value = self.source_local(a, p.ty, state, next)?;
                         if let Some(prior) = uses.insert(value, p.use_mode)
                             && (prior == ParameterUse::Consume
                                 || p.use_mode == ParameterUse::Consume)
@@ -1570,11 +2087,18 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                             return Err(reject("fabricated owned method argument"));
                         }
                         self.eval(a, state, p.use_mode, next)?;
+                        if p.use_mode == ParameterUse::Borrow {
+                            self.loan(value, state, true)?;
+                            loans.push(value);
+                        }
                     } else {
                         plain(a, state)?;
                     }
                 }
-                direct(&overlay, signature.result)?
+                for source in loans.into_iter().rev() {
+                    self.loan(source, state, false)?;
+                }
+                direct_at(&overlay, signature.result, occurrence, self.associated)?
             }
             ExpressionOperation::FunctionValue {
                 function,
@@ -1582,14 +2106,15 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 ..
             } => {
                 for t in type_arguments {
-                    if contains(self.read, t)? {
+                    if contains_at(self, t, occurrence, self.associated)? {
                         return Err(reject("buffer generic descriptor argument"));
                     }
                 }
-                if let Some(s) = signature(self.read, function)? {
-                    let mut memory = contains(self.read, s.result)?;
+                if let Some(s) = signature(self, function)? {
+                    admit_signature(self, &s, self.associated)?;
+                    let mut memory = contains_at(self, s.result, s.occurrence, self.associated)?;
                     for p in s.parameters {
-                        memory |= contains(self.read, p.ty)?;
+                        memory |= contains_at(self, p.ty, s.occurrence, self.associated)?;
                     }
                     if memory {
                         return Err(reject(
@@ -1623,27 +2148,15 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 if let Some(OwnerRecord::Expression(ExpressionRecord {
                     operation: ExpressionOperation::Local { value: local },
                     ..
-                })) = self.read.owner(OwnerKey::Expression(value))?
+                })) = self.owner(OwnerKey::Expression(value))?
                     && state.contains_key(&local)
                 {
-                    let ty = match local {
-                        LocalValueReference::FunctionParameter(p) => {
-                            match self.read.owner(OwnerKey::Parameter(p))? {
-                                Some(OwnerRecord::Parameter(p)) => Some(p.ty),
-                                _ => None,
-                            }
-                        }
-                        LocalValueReference::LexicalBinding(b) => {
-                            match self.read.owner(OwnerKey::Binding(b))? {
-                                Some(OwnerRecord::Binding(b)) => b.declared_type,
-                                _ => None,
-                            }
-                        }
-                        _ => None,
-                    }
-                    .ok_or_else(|| reject("product metadata requires an exact typed local"))?;
+                    let ty = self
+                        .local_type(local)?
+                        .ok_or_else(|| reject("product metadata requires an exact typed local"))?;
+                    self.associated
+                        .validate_occurrence_at(self, &[ty], occurrence)?;
                     let object = self
-                        .read
                         .type_object(ty)?
                         .ok_or_else(|| reject("missing product metadata source type"))?;
                     let selected = match (object.form, selector) {
@@ -1653,7 +2166,9 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                                 .find(|field| field.name == name)
                                 .map(|field| field.ty)
                                 .ok_or_else(|| reject("unknown product metadata field"))?;
-                            if !super::transfer::ordinary(self.read, ty, self.scope)? {
+                            if direct_at(self, ty, occurrence, self.associated)?
+                                || !super::transfer::ordinary(self, ty, self.scope)?
+                            {
                                 return Err(reject(
                                     "product field reads cannot expose owned children",
                                 ));
@@ -1664,17 +2179,19 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                             TypeForm::Named { .. } | TypeForm::Applied { .. },
                             FieldSelector::Nominal(reference),
                         ) => {
-                            let layout = self.record_layout(ty)?;
+                            let layout = self.record_layout(ty, occurrence)?;
                             let (_, selected) = layout
                                 .fields
                                 .iter()
                                 .find(|(field, _)| *field == reference)
                                 .ok_or_else(|| reject("unknown nominal metadata field"))?;
                             let overlay = super::owned_contract::AppliedTypeRead {
-                                read: self.read,
+                                read: self,
                                 types: &layout.types,
                             };
-                            if !super::transfer::ordinary(&overlay, *selected, self.scope)? {
+                            if direct_at(&overlay, *selected, occurrence, self.associated)?
+                                || !super::transfer::ordinary(&overlay, *selected, self.scope)?
+                            {
                                 return Err(reject(
                                     "nominal field reads cannot expose owned children",
                                 ));
@@ -1710,16 +2227,16 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
             }
             ExpressionOperation::Match { value, arms } => {
                 plain(value, state)?;
-                let before = fork(self.read, state)?;
+                let before = fork(self, state)?;
                 let mut joined = None;
                 for arm in arms {
-                    let mut branch = fork(self.read, &before)?;
+                    let mut branch = fork(self, &before)?;
                     let result = self.eval(arm.body, &mut branch, mode, next)?;
                     if let Some((prior, v)) = &mut joined {
                         if *v != result {
                             return Err(reject("buffer match result ownership join"));
                         }
-                        join(self.read, prior, &branch)?;
+                        join(self, prior, &branch)?;
                     } else {
                         joined = Some((branch, result));
                     }
@@ -1756,10 +2273,103 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
         Ok(owned)
     }
 }
+fn declaration_occurrence(
+    reference: DeclarationReference,
+    payload: &DeclarationPayload,
+    generation: u16,
+) -> OwnedTypeOccurrence {
+    match payload {
+        DeclarationPayload::Function(_) | DeclarationPayload::OwnedImplementation(_) => {
+            OwnedTypeOccurrence::authored(Some(reference), generation)
+        }
+        DeclarationPayload::OwnedContract(_) => {
+            OwnedTypeOccurrence::contract(reference, generation)
+        }
+        DeclarationPayload::Record { .. }
+        | DeclarationPayload::Variant { .. }
+        | DeclarationPayload::OwnedRecord { .. } => {
+            OwnedTypeOccurrence::representation(reference, generation)
+        }
+        DeclarationPayload::External(_) => OwnedTypeOccurrence {
+            parameters: TypeParameterContext::Authored(reference),
+            associated: super::owned_associated::AssociatedTypeContext::Forbidden,
+            consumer_generation: generation,
+        },
+        _ => OwnedTypeOccurrence::authored(None, generation),
+    }
+}
+
+fn owner_occurrence(
+    read: &(impl ExpressionRead + ?Sized),
+    key: OwnerKey,
+    record: &OwnerRecord,
+) -> Result<Option<OwnedTypeOccurrence>, Diagnostic> {
+    let generation = record.header().contract_version;
+    let reference = |declaration| DeclarationReference {
+        package: read.package_id(),
+        declaration,
+    };
+    let declaration = match record {
+        OwnerRecord::Declaration(declaration) => {
+            let OwnerKey::Declaration(id) = key else {
+                return Err(reject("wrong memory declaration identity"));
+            };
+            return Ok(Some(declaration_occurrence(
+                reference(id),
+                &declaration.payload,
+                generation,
+            )));
+        }
+        OwnerRecord::TypeParameter(parameter) => Some(parameter.declaration),
+        OwnerRecord::Parameter(parameter) => match parameter.parent {
+            ParameterParent::Function(id) => Some(id),
+            ParameterParent::Operation(_) => None,
+        },
+        OwnerRecord::Field(field) => {
+            return Ok(Some(OwnedTypeOccurrence::representation(
+                reference(field.declaration),
+                generation,
+            )));
+        }
+        OwnerRecord::Case(case) => {
+            return Ok(Some(OwnedTypeOccurrence::representation(
+                reference(case.declaration),
+                generation,
+            )));
+        }
+        // These records acquire their lexical context only through the exact
+        // containing declaration walk; neither carries a parent declaration.
+        OwnerRecord::Expression(_) | OwnerRecord::Binding(_) => return Ok(None),
+        _ => None,
+    };
+    if let Some(id) = declaration {
+        let Some(OwnerRecord::Declaration(declaration)) = read.owner(OwnerKey::Declaration(id))?
+        else {
+            return Err(reject("missing exact memory occurrence declaration"));
+        };
+        Ok(Some(declaration_occurrence(
+            reference(id),
+            &declaration.payload,
+            generation,
+        )))
+    } else {
+        Ok(Some(OwnedTypeOccurrence::authored(None, generation)))
+    }
+}
+
 pub(crate) fn validate_owner(
     read: &(impl ExpressionRead + ?Sized),
     key: OwnerKey,
     record: &OwnerRecord,
+) -> Result<(), Diagnostic> {
+    validate_owner_at(read, key, record, &OwnedAssociatedAdmission::new())
+}
+
+pub(crate) fn validate_owner_at(
+    read: &(impl ExpressionRead + ?Sized),
+    key: OwnerKey,
+    record: &OwnerRecord,
+    associated: &OwnedAssociatedAdmission,
 ) -> Result<(), Diagnostic> {
     if record.header().contract_version < 26 {
         let extended = match record {
@@ -1799,9 +2409,7 @@ pub(crate) fn validate_owner(
         }
     }
     let mut roots = record.type_roots();
-    if record.header().contract_version < 32
-        && let OwnerRecord::Declaration(declaration) = record
-    {
+    if let OwnerRecord::Declaration(declaration) = record {
         let parameters = match &declaration.payload {
             DeclarationPayload::Function(function) => function.parameters.as_slice(),
             DeclarationPayload::External(external) => external.parameters.as_slice(),
@@ -1819,7 +2427,16 @@ pub(crate) fn validate_owner(
             roots.push(parameter.ty);
         }
     }
-    super::owned_product::require_generation(read, roots, record.header().contract_version)?;
+    let generation = record.header().contract_version;
+    let occurrence = owner_occurrence(read, key, record)?;
+    if let Some(occurrence) = occurrence {
+        for ty in &roots {
+            super::owned_product::validate_owning_type_depth(read, *ty)?;
+        }
+        associated.validate_occurrence_at(read, &roots, occurrence)?;
+    }
+    super::owned_product::require_generation(read, roots, generation)?;
+    let occurrence = occurrence.unwrap_or_else(|| OwnedTypeOccurrence::authored(None, generation));
     match record {
         OwnerRecord::Expression(expression) => {
             super::owned_contract::require_expression_generation(read, expression)?;
@@ -1856,7 +2473,7 @@ pub(crate) fn validate_owner(
                 ));
             }
         }
-        OwnerRecord::Parameter(p) if direct(read, p.ty)? => {
+        OwnerRecord::Parameter(p) if direct_at(read, p.ty, occurrence, associated)? => {
             let ParameterParent::Function(d) = p.parent else {
                 return Err(reject("capability operations cannot carry ByteBuffer"));
             };
@@ -1868,21 +2485,23 @@ pub(crate) fn validate_owner(
                 },
             )?
             .ok_or_else(|| reject("missing buffer signature"))?;
-            admit_signature(read, &s)?;
+            admit_signature(read, &s, associated)?;
         }
         OwnerRecord::Port(p) => {
-            if contains(read, p.function_type)? {
+            if contains_at(read, p.function_type, occurrence, associated)? {
                 return Err(reject("buffer adapter port is forbidden"));
             }
             if let PortImplementation::Expression(e) = p.implementation {
                 Check {
                     read,
+                    associated,
+                    types: std::cell::RefCell::new(BTreeMap::new()),
                     scope: Some(p.declaration),
                 }
                 .eval(e, &mut State::new(), ParameterUse::Unrestricted, 0)?;
             }
         }
-        OwnerRecord::Field(f) if contains(read, f.ty)? => {
+        OwnerRecord::Field(f) if contains_at(read, f.ty, occurrence, associated)? => {
             let allowed = matches!(read.owner(OwnerKey::Declaration(f.declaration))?,
                 Some(OwnerRecord::Declaration(record)) if matches!(record.payload,
                     DeclarationPayload::OwnedRecord { ref fields, .. } if matches!(key, OwnerKey::Field(id) if fields.contains(&id))));
@@ -1894,13 +2513,13 @@ pub(crate) fn validate_owner(
         }
         OwnerRecord::Case(c)
             if c.payload
-                .map(|t| contains(read, t))
+                .map(|t| contains_at(read, t, occurrence, associated))
                 .transpose()?
                 .unwrap_or(false) =>
         {
             return Err(reject("buffer variant payload is forbidden"));
         }
-        OwnerRecord::Operation(o) if contains(read, o.result)? => {
+        OwnerRecord::Operation(o) if contains_at(read, o.result, occurrence, associated)? => {
             return Err(reject("buffer adapter result is forbidden"));
         }
         OwnerRecord::Declaration(d) => match &d.payload {
@@ -1933,11 +2552,13 @@ pub(crate) fn validate_owner(
                 )?;
             }
             DeclarationPayload::Constant { ty, value } => {
-                if contains(read, *ty)? {
+                if contains_at(read, *ty, occurrence, associated)? {
                     return Err(reject("buffer constants are forbidden"));
                 }
                 Check {
                     read,
+                    associated,
+                    types: std::cell::RefCell::new(BTreeMap::new()),
                     scope: Some(match key {
                         OwnerKey::Declaration(id) => id,
                         _ => return Err(reject("constant requires an exact declaration")),
@@ -1950,6 +2571,8 @@ pub(crate) fn validate_owner(
             } => {
                 Check {
                     read,
+                    associated,
+                    types: std::cell::RefCell::new(BTreeMap::new()),
                     scope: Some(match key {
                         OwnerKey::Declaration(id) => id,
                         _ => return Err(reject("test requires an exact declaration")),
@@ -1958,6 +2581,8 @@ pub(crate) fn validate_owner(
                 .eval(*actual, &mut State::new(), ParameterUse::Unrestricted, 0)?;
                 Check {
                     read,
+                    associated,
+                    types: std::cell::RefCell::new(BTreeMap::new()),
                     scope: Some(match key {
                         OwnerKey::Declaration(id) => id,
                         _ => return Err(reject("test requires an exact declaration")),
@@ -1983,10 +2608,10 @@ pub(crate) fn validate_owner(
                     },
                 )?
                 .ok_or_else(|| reject("missing function signature"))?;
-                admit_signature(read, &s)?;
+                admit_signature(read, &s, associated)?;
                 let mut state = State::new();
                 for p in &s.parameters {
-                    if direct(read, p.ty)? {
+                    if direct_at(read, p.ty, occurrence, associated)? {
                         let OwnerKey::Parameter(id) = p.header.owner else {
                             return Err(reject("wrong parameter identity"));
                         };
@@ -1998,6 +2623,8 @@ pub(crate) fn validate_owner(
                 }
                 let result = Check {
                     read,
+                    associated,
+                    types: std::cell::RefCell::new(BTreeMap::new()),
                     scope: Some(id),
                 }
                 .eval(
@@ -2005,14 +2632,17 @@ pub(crate) fn validate_owner(
                     &mut state,
                     if let Some(source) = f.result_borrow {
                         Mode::ReturnBorrow(LocalValueReference::FunctionParameter(source))
-                    } else if direct(read, f.result)? {
+                    } else if direct_at(read, f.result, occurrence, associated)? {
                         Mode::Consume
                     } else {
                         Mode::Unrestricted
                     },
                     0,
                 )?;
-                if result != (direct(read, f.result)? && f.result_borrow.is_none()) {
+                if result
+                    != (direct_at(read, f.result, occurrence, associated)?
+                        && f.result_borrow.is_none())
+                {
                     return Err(reject("memory result ownership disagrees with declaration"));
                 }
             }
@@ -2028,10 +2658,10 @@ pub(crate) fn validate_owner(
                     },
                 )?
                 .ok_or_else(|| reject("missing external signature"))?;
-                admit_signature(read, &s)?;
-                let mut memory = direct(read, f.result)?;
+                admit_signature(read, &s, associated)?;
+                let mut memory = direct_at(read, f.result, occurrence, associated)?;
                 for p in &s.parameters {
-                    memory |= direct(read, p.ty)?;
+                    memory |= direct_at(read, p.ty, occurrence, associated)?;
                 }
                 if memory
                     && !f.implementation.as_str().starts_with("core.buffer.")

@@ -1,6 +1,8 @@
 //! Point-reader adversaries for associated authority; no normalized producer input.
 use super::*;
-use crate::platform::semantic_id::{DeclarationId, ExpressionId, FieldId, MethodId, ModuleId};
+use crate::platform::semantic_id::{
+    DeclarationId, ExpressionId, FieldId, MethodId, ModuleId, ParameterId,
+};
 
 const SEED: &[u8] = b"owned-associated-admission-tests";
 const GENERATION: u16 = 33;
@@ -151,14 +153,18 @@ fn fixture() -> Fixture {
         DeclarationPayload::OwnedContract(contract_value.clone()),
     );
     parameter(&mut source, contract, self_parameter);
+    let mut other_contract_value = contract_value;
+    other_contract_value.self_parameter = TypeParameterId::migrate(SEED, 40);
+    let other_self_parameter = other_contract_value.self_parameter;
     let other_contract = declaration(
         &mut source,
         module,
         1,
         "OtherContract",
         OwnerKind::OwnedContract,
-        DeclarationPayload::OwnedContract(contract_value),
+        DeclarationPayload::OwnedContract(other_contract_value),
     );
+    parameter(&mut source, other_contract, other_self_parameter);
     let scheme_parameter = TypeParameterId::migrate(SEED, 1);
     let mut bindings = vec![
         AssociatedTypeBinding { member, ty: cell },
@@ -305,6 +311,36 @@ fn fixture() -> Fixture {
             declaration: nominal.declaration,
             name: name("value"),
             ty: cell,
+        }),
+    );
+    let method_parameter = ParameterId::migrate(SEED, 0);
+    let method_function = declaration(
+        &mut source,
+        module,
+        20,
+        "Inspect",
+        OwnerKind::PureFunction,
+        DeclarationPayload::Function(FunctionDeclaration {
+            type_parameters: vec![],
+            implementation_parameters: vec![],
+            requirement_parameters: vec![],
+            effect_parameters: vec![],
+            parameters: vec![method_parameter],
+            result: scalar,
+            result_borrow: None,
+            effect: FunctionEffect::Pure,
+            body: ExpressionId::migrate(SEED, 0),
+        }),
+    );
+    source.owners.insert(
+        OwnerKey::Parameter(method_parameter),
+        OwnerRecord::Parameter(ParameterRecord {
+            header: OwnerHeader::new(OwnerKey::Parameter(method_parameter), OwnerKind::Parameter),
+            parent: ParameterParent::Function(method_function.declaration),
+            name: name("value"),
+            ty: scalar,
+            use_mode: ParameterUse::Unrestricted,
+            resource_requirement: None,
         }),
     );
     Fixture {
@@ -973,7 +1009,8 @@ fn environment<'a>(
         source,
         caller,
         consumer_generation: GENERATION,
-        contract_operand,
+        contract_selection: contract_operand
+            .map(parallel_types::AssociatedContractSelection::Witness),
         implementations,
     }
 }
@@ -1195,4 +1232,589 @@ fn owned_associated_engine_metadata_exact_fit_and_refused_retry_never_memoizes()
         );
     }
     assert!(!refused.into_types().contains_key(&expected));
+}
+
+#[test]
+fn owned_associated_binding_accepts_unrestricted_ordinary_nominal_formals() {
+    let mut f = fixture();
+    let module = match f
+        .source
+        .owners
+        .get(&OwnerKey::Declaration(f.nominal.declaration))
+        .expect("nominal declaration")
+    {
+        OwnerRecord::Declaration(record) => record.module,
+        _ => panic!("nominal declaration kind"),
+    };
+    let formal = TypeParameterId::migrate(SEED, 50);
+    let field = FieldId::migrate(SEED, 50);
+    let generic = declaration(
+        &mut f.source,
+        module,
+        50,
+        "Ordinary",
+        OwnerKind::Record,
+        DeclarationPayload::Record {
+            type_parameters: vec![formal],
+            fields: vec![field],
+        },
+    );
+    let variable = parameter(&mut f.source, generic, formal);
+    let Some(OwnerRecord::TypeParameter(record)) =
+        f.source.owners.get_mut(&OwnerKey::TypeParameter(formal))
+    else {
+        panic!("ordinary formal")
+    };
+    record.constraints = TypeParameterConstraints::None;
+    f.source.owners.insert(
+        OwnerKey::Field(field),
+        OwnerRecord::Field(FieldRecord {
+            header: OwnerHeader::new(OwnerKey::Field(field), OwnerKind::Field),
+            declaration: generic.declaration,
+            name: name("data"),
+            ty: variable,
+        }),
+    );
+    let scalar = ty(&mut f.source, TypeForm::I64);
+    let data = ty(
+        &mut f.source,
+        TypeForm::Applied {
+            declaration: generic,
+            arguments: vec![scalar],
+        },
+    );
+    let Some(OwnerRecord::Field(field)) = f
+        .source
+        .owners
+        .get_mut(&OwnerKey::Field(FieldId::migrate(SEED, 0)))
+    else {
+        panic!("owned record field")
+    };
+    field.ty = data;
+    let nominal = ty(
+        &mut f.source,
+        TypeForm::Applied {
+            declaration: f.nominal,
+            arguments: vec![f.cell],
+        },
+    );
+    let mut value = implementation(&f, f.scheme);
+    value
+        .associated_types
+        .iter_mut()
+        .find(|binding| binding.member == f.spare)
+        .expect("unused binding")
+        .ty = nominal;
+    replace_implementation(&mut f, value.clone());
+    OwnedAssociatedAdmission::new()
+        .validate_bindings(&f.source, f.scheme, &value)
+        .expect("raw ordinary nominal formals have their own category proof");
+    let form = projection(&f, f.lexical);
+    let projected = ty(&mut f.source, form);
+    let Some(OwnerRecord::Field(field)) = f
+        .source
+        .owners
+        .get_mut(&OwnerKey::Field(FieldId::migrate(SEED, 50)))
+    else {
+        panic!("ordinary field")
+    };
+    field.ty = projected;
+    semantic(OwnedAssociatedAdmission::new().validate_bindings(&f.source, f.scheme, &value));
+}
+
+#[test]
+fn owned_associated_own_definition_binding_is_opaque_to_contract_ordinary_map() {
+    let mut f = fixture();
+    let form = abstract_member(&f);
+    let root = ty(&mut f.source, form);
+    let value = implementation(&f, f.scheme);
+    let expected = value
+        .associated_types
+        .iter()
+        .find(|binding| binding.member == f.member)
+        .expect("binding")
+        .ty;
+    // An unrelated source substitution with the same key cannot reinterpret an
+    // implementation-context RHS. The engine environment is not an application
+    // certificate; this adversary deliberately makes capture easy to observe.
+    let ordinary = BTreeMap::from([(f.scheme_parameter, f.buffer)]);
+    let implementations = BTreeMap::new();
+    let associated = OwnedAssociatedAdmission::new();
+    let mut derived = parallel_types::WitnessAppliedTypes::with_admission(
+        &f.source,
+        parallel_types::AssociatedTypeEnvironment {
+            ordinary: &ordinary,
+            source: AssociatedTypeContext::ContractSignature(f.contract),
+            caller: AssociatedTypeContext::Lexical(f.scheme),
+            consumer_generation: GENERATION,
+            contract_selection: Some(parallel_types::AssociatedContractSelection::Definition {
+                scope: f.scheme,
+                implementation: &value,
+            }),
+            implementations: &implementations,
+        },
+        &associated,
+    );
+    assert_eq!(
+        derived
+            .substitute(root, 0)
+            .expect("own-definition template retains its lexical formals"),
+        expected
+    );
+    assert_ne!(expected, f.buffer);
+}
+
+#[test]
+fn owned_associated_representation_evidence_cannot_name_contract_or_witness_authority() {
+    let mut f = fixture();
+    let hidden = PackageId::migrate(SEED, 60);
+    let foreign = DeclarationReference {
+        package: hidden,
+        declaration: DeclarationId::migrate(SEED, 60),
+    };
+    let value = owned_contract::contract_record(&f.source, f.contract).expect("source contract");
+    let foreign_record = PackageInterfaceRecord::Declaration(PackageInterfaceDeclaration {
+        header: OwnerHeader::new(
+            OwnerKey::Declaration(foreign.declaration),
+            OwnerKind::OwnedContract,
+        ),
+        name: name("HiddenContract"),
+        payload: PackageInterfaceDeclarationPayload::OwnedContract(value),
+    });
+    let Some(OwnerRecord::Declaration(record)) = f
+        .source
+        .owners
+        .get_mut(&OwnerKey::Declaration(f.lexical.declaration))
+    else {
+        panic!("lexical function")
+    };
+    let DeclarationPayload::Function(value) = &mut record.payload else {
+        panic!("function payload")
+    };
+    value.implementation_parameters[0].contract = foreign;
+    let mut read = RepresentationRead {
+        source: &f.source,
+        imports: BTreeMap::new(),
+        representations: BTreeMap::from([(
+            (hidden, OwnerKey::Declaration(foreign.declaration)),
+            foreign_record.clone(),
+        )]),
+    };
+    let member = TypeForm::AssociatedContractMember {
+        contract: foreign,
+        member: f.member,
+    };
+    let lexical = TypeForm::AssociatedWitnessProjection {
+        scope: f.lexical,
+        parameter: f.witness,
+        contract: foreign,
+        member: f.member,
+    };
+    semantic(OwnedAssociatedAdmission::new().validate_form(
+        &read,
+        &member,
+        AssociatedTypeContext::ContractSignature(foreign),
+        GENERATION,
+    ));
+    semantic(OwnedAssociatedAdmission::new().validate_form(
+        &read,
+        &lexical,
+        AssociatedTypeContext::Lexical(f.lexical),
+        GENERATION,
+    ));
+    read.imports.insert(
+        (hidden, OwnerKey::Declaration(foreign.declaration)),
+        foreign_record,
+    );
+    OwnedAssociatedAdmission::new()
+        .validate_form(
+            &read,
+            &member,
+            AssociatedTypeContext::ContractSignature(foreign),
+            GENERATION,
+        )
+        .expect("direct authored contract authority is distinct from representation evidence");
+    OwnedAssociatedAdmission::new()
+        .validate_form(
+            &read,
+            &lexical,
+            AssociatedTypeContext::Lexical(f.lexical),
+            GENERATION,
+        )
+        .expect("exact lexical witness can name a declared direct contract");
+}
+
+#[test]
+fn owned_associated_function_carrier_retains_exact_witness_environment_and_source_generations() {
+    let mut f = fixture();
+    let form = projection(&f, f.lexical);
+    let root = ty(&mut f.source, form);
+    let Some(OwnerRecord::Declaration(record)) = f
+        .source
+        .owners
+        .get_mut(&OwnerKey::Declaration(f.lexical.declaration))
+    else {
+        panic!("callee function")
+    };
+    let DeclarationPayload::Function(value) = &mut record.payload else {
+        panic!("callee payload")
+    };
+    value.result = root;
+    let operands = [ImplementationOperand::Concrete {
+        implementation: f.scheme,
+        type_arguments: vec![f.buffer],
+        implementations: vec![],
+    }];
+    let occurrence = OwnedTypeOccurrence::authored(Some(f.other_lexical), GENERATION);
+    let associated = OwnedAssociatedAdmission::new();
+    let application = owned_contract::admit_function_application(
+        &f.source,
+        f.lexical,
+        &[f.cell],
+        &operands,
+        occurrence,
+        &associated,
+    )
+    .expect("complete selected function application");
+    assert_eq!(application.signature.result, root);
+    {
+        let overlay = owned_contract::AppliedTypeRead {
+            read: &f.source,
+            types: &application.types,
+        };
+        let mut derived = parallel_types::WitnessAppliedTypes::with_admission(
+            &overlay,
+            application.environment(),
+            &associated,
+        );
+        assert_eq!(
+            derived
+                .substitute(root, 0)
+                .expect("carrier preserves witness selection"),
+            f.buffer
+        );
+    }
+    let Some(OwnerRecord::Declaration(record)) = f
+        .source
+        .owners
+        .get_mut(&OwnerKey::Declaration(f.lexical.declaration))
+    else {
+        panic!("callee function")
+    };
+    record.header.contract_version = 32;
+    assert_eq!(
+        owned_contract::admit_function_application(
+            &f.source,
+            f.lexical,
+            &[f.cell],
+            &operands,
+            occurrence,
+            &OwnedAssociatedAdmission::new()
+        )
+        .err()
+        .expect("old source result owner must refuse before a concrete selection erases projection")
+        .class,
+        DiagnosticClass::Semantic
+    );
+}
+
+#[test]
+fn owned_associated_full_application_budget_is_cumulative_across_calls() {
+    let f = fixture();
+    let operands = [ImplementationOperand::Concrete {
+        implementation: f.scheme,
+        type_arguments: vec![f.buffer],
+        implementations: vec![],
+    }];
+    let occurrence = OwnedTypeOccurrence::authored(Some(f.other_lexical), GENERATION);
+    let measured = OwnedAssociatedAdmission::new();
+    owned_contract::admit_function_application(
+        &f.source,
+        f.lexical,
+        &[f.cell],
+        &operands,
+        occurrence,
+        &measured,
+    )
+    .expect("measure complete application");
+    let (steps, bytes) = measured.work();
+    let limits = AssociatedAdmissionLimits {
+        maximum_steps: steps,
+        maximum_metadata_bytes: bytes,
+        maximum_depth: 256,
+    };
+    let associated = OwnedAssociatedAdmission::with_limits(limits);
+    owned_contract::admit_function_application(
+        &f.source,
+        f.lexical,
+        &[f.cell],
+        &operands,
+        occurrence,
+        &associated,
+    )
+    .expect("exact complete application fit");
+    assert_eq!(
+        owned_contract::admit_function_application(
+            &f.source,
+            f.lexical,
+            &[f.cell],
+            &operands,
+            occurrence,
+            &associated
+        )
+        .err()
+        .expect("a second application cannot reset shared proof or storage budget")
+        .class,
+        DiagnosticClass::Resource
+    );
+}
+
+#[test]
+fn owned_associated_occurrence_rejects_mixed_authority_scopes() {
+    let f = fixture();
+    OwnedTypeOccurrence::authored(Some(f.lexical), GENERATION)
+        .validate_context()
+        .expect("matching authored scope");
+    OwnedTypeOccurrence::contract(f.contract, GENERATION)
+        .validate_context()
+        .expect("matching contract signature scope");
+    OwnedTypeOccurrence::representation(f.nominal, GENERATION)
+        .validate_context()
+        .expect("representation authority has no associated scope");
+    for parameters in [
+        TypeParameterContext::Closed,
+        TypeParameterContext::Authored(f.other_lexical),
+        TypeParameterContext::NominalRepresentation(f.nominal),
+    ] {
+        semantic(
+            OwnedTypeOccurrence {
+                parameters,
+                associated: AssociatedTypeContext::Lexical(f.lexical),
+                consumer_generation: GENERATION,
+            }
+            .validate_context(),
+        );
+    }
+}
+
+#[test]
+fn owned_associated_function_parameter_requires_its_own_generation() {
+    let mut f = fixture();
+    let form = projection(&f, f.lexical);
+    let projected = ty(&mut f.source, form);
+    let id = ParameterId::migrate(SEED, 60);
+    let Some(OwnerRecord::Declaration(record)) = f
+        .source
+        .owners
+        .get_mut(&OwnerKey::Declaration(f.lexical.declaration))
+    else {
+        panic!("callee source declaration")
+    };
+    let DeclarationPayload::Function(value) = &mut record.payload else {
+        panic!("callee source function")
+    };
+    value.parameters = vec![id];
+    f.source.owners.insert(
+        OwnerKey::Parameter(id),
+        OwnerRecord::Parameter(ParameterRecord {
+            header: OwnerHeader::new(OwnerKey::Parameter(id), OwnerKind::Parameter),
+            parent: ParameterParent::Function(f.lexical.declaration),
+            name: name("projected"),
+            ty: projected,
+            use_mode: ParameterUse::Consume,
+            resource_requirement: None,
+        }),
+    );
+    let operands = [ImplementationOperand::Concrete {
+        implementation: f.scheme,
+        type_arguments: vec![f.buffer],
+        implementations: vec![],
+    }];
+    let occurrence = OwnedTypeOccurrence::authored(Some(f.other_lexical), GENERATION);
+    let application = owned_contract::admit_function_application(
+        &f.source,
+        f.lexical,
+        &[f.cell],
+        &operands,
+        occurrence,
+        &OwnedAssociatedAdmission::new(),
+    )
+    .expect("current parent and parameter independently consume the projected template");
+    assert_eq!(application.parameters[0].ty, projected);
+    let Some(OwnerRecord::Parameter(record)) = f.source.owners.get_mut(&OwnerKey::Parameter(id))
+    else {
+        panic!("callee source parameter")
+    };
+    record.header.contract_version = 32;
+    assert_eq!(
+        owned_contract::admit_function_application(
+            &f.source,
+            f.lexical,
+            &[f.cell],
+            &operands,
+            occurrence,
+            &OwnedAssociatedAdmission::new()
+        )
+        .err()
+        .expect("a current parent cannot authorize an old parameter projection")
+        .class,
+        DiagnosticClass::Semantic
+    );
+}
+
+#[test]
+fn owned_associated_function_actual_projection_is_owned_without_extra_properties() {
+    let mut f = fixture();
+    let module = match f
+        .source
+        .owners
+        .get(&OwnerKey::Declaration(f.lexical.declaration))
+        .expect("lexical source")
+    {
+        OwnerRecord::Declaration(record) => record.module,
+        _ => panic!("lexical declaration kind"),
+    };
+    let formal = TypeParameterId::migrate(SEED, 61);
+    let callee = DeclarationReference {
+        package: f.source.root.package_id,
+        declaration: DeclarationId::migrate(SEED, 61),
+    };
+    let raw_result = parameter(&mut f.source, callee, formal);
+    declaration(
+        &mut f.source,
+        module,
+        61,
+        "ProjectedActual",
+        OwnerKind::PureFunction,
+        DeclarationPayload::Function(function(formal, raw_result, vec![])),
+    );
+    let form = projection(&f, f.other_lexical);
+    let actual = ty(&mut f.source, form);
+    let occurrence = OwnedTypeOccurrence::authored(Some(f.other_lexical), GENERATION);
+    let associated = OwnedAssociatedAdmission::new();
+    let application = owned_contract::admit_function_application(
+        &f.source,
+        callee,
+        &[actual],
+        &[],
+        occurrence,
+        &associated,
+    )
+    .expect("an exact caller projection satisfies an Owned-only ordinary formal");
+    {
+        let overlay = owned_contract::AppliedTypeRead {
+            read: &f.source,
+            types: &application.types,
+        };
+        let mut derived = parallel_types::WitnessAppliedTypes::with_admission(
+            &overlay,
+            application.environment(),
+            &associated,
+        );
+        assert_eq!(
+            derived
+                .substitute(raw_result, 0)
+                .expect("inserted caller projection stays opaque"),
+            actual
+        );
+    }
+    for constraints in [
+        TypeParameterConstraints::None,
+        TypeParameterConstraints::OwnedTransferable,
+        TypeParameterConstraints::OwnedShareable,
+    ] {
+        let Some(OwnerRecord::TypeParameter(record)) =
+            f.source.owners.get_mut(&OwnerKey::TypeParameter(formal))
+        else {
+            panic!("callee formal")
+        };
+        record.constraints = constraints;
+        assert_eq!(
+            owned_contract::admit_function_application(
+                &f.source,
+                callee,
+                &[actual],
+                &[],
+                occurrence,
+                &OwnedAssociatedAdmission::new()
+            )
+            .err()
+            .expect("Owned alone grants neither ordinary category nor Transfer/Share")
+            .class,
+            DiagnosticClass::Semantic
+        );
+    }
+    let Some(OwnerRecord::TypeParameter(record)) =
+        f.source.owners.get_mut(&OwnerKey::TypeParameter(formal))
+    else {
+        panic!("callee formal")
+    };
+    record.constraints = TypeParameterConstraints::Owned;
+    assert_eq!(
+        owned_contract::admit_function_application(
+            &f.source,
+            callee,
+            &[actual],
+            &[],
+            OwnedTypeOccurrence {
+                consumer_generation: 32,
+                ..occurrence
+            },
+            &OwnedAssociatedAdmission::new()
+        )
+        .err()
+        .expect("old consuming application owner cannot use a projected phantom actual")
+        .class,
+        DiagnosticClass::Semantic
+    );
+}
+
+#[test]
+fn owned_associated_repeated_deep_walks_reuse_queue_storage_with_exact_contexts() {
+    let mut f = fixture();
+    let mut root = f.cell;
+    for _ in 0..contract::MAXIMUM_TYPE_DEPTH - 1 {
+        root = ty(
+            &mut f.source,
+            TypeForm::OwnedProduct {
+                fields: vec![StructuralTypeField {
+                    name: name("owner"),
+                    ty: root,
+                }],
+            },
+        );
+    }
+    let associated = OwnedAssociatedAdmission::new();
+    // A shared owning operation may classify many overlapping deep signatures.
+    // Each call rereads its authority; compact per-walk coordinates and actual
+    // queue capacity keep the unchanged cumulative storage bound meaningful.
+    for _ in 0..1_000 {
+        associated
+            .validate_occurrences(
+                &f.source,
+                &[root],
+                AssociatedTypeContext::Lexical(f.lexical),
+                GENERATION,
+            )
+            .expect("valid repeated near-boundary traversal fits the existing budget");
+    }
+    let (steps, bytes) = associated.work();
+    assert!(steps > 1_000 && bytes < AssociatedAdmissionLimits::default().maximum_metadata_bytes);
+    // A different read is not a cache hit even when semantic coordinates match.
+    let form = projection(&f, f.lexical);
+    let projected = ty(&mut f.source, form);
+    let Some(OwnerRecord::Declaration(record)) = f
+        .source
+        .owners
+        .get_mut(&OwnerKey::Declaration(f.lexical.declaration))
+    else {
+        panic!("lexical source")
+    };
+    record.header.contract_version = 32;
+    semantic(associated.validate_occurrences(
+        &f.source,
+        &[projected],
+        AssociatedTypeContext::Lexical(f.lexical),
+        GENERATION,
+    ));
 }

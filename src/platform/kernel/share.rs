@@ -1,5 +1,8 @@
 //! Bounded structural immutable-sharing proof under exact declaration scopes.
 //! Sharing grants no transfer authority and never changes a backing owner's origin.
+use super::owned_associated::{
+    OwnedAssociatedAdmission, OwnedTypeOccurrence, TypeParameterContext,
+};
 use super::*;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::{DeclarationId, TypeParameterId};
@@ -127,17 +130,59 @@ pub(crate) fn admit_in(
     ty: TypeObjectDigest,
     scope: Option<DeclarationReference>,
 ) -> Result<bool, Diagnostic> {
-    let representation = super::owned_record::RepresentationRead { read };
-    let read: &dyn ExpressionRead = &representation;
+    admit_inner(read, ty, scope, None)
+}
+
+pub(crate) fn admit_at(
+    read: &(impl ExpressionRead + ?Sized),
+    ty: TypeObjectDigest,
+    occurrence: OwnedTypeOccurrence,
+    associated: &OwnedAssociatedAdmission,
+) -> Result<bool, Diagnostic> {
+    associated.validate_occurrence_at(read, &[ty], occurrence)?;
+    admit_inner(
+        read,
+        ty,
+        occurrence.parameters.scope(),
+        Some((occurrence, associated)),
+    )
+}
+
+fn admit_inner(
+    read: &(impl ExpressionRead + ?Sized),
+    ty: TypeObjectDigest,
+    scope: Option<DeclarationReference>,
+    occurrence: Option<(OwnedTypeOccurrence, &OwnedAssociatedAdmission)>,
+) -> Result<bool, Diagnostic> {
     read.validation_work()?;
     let package = scope.map_or(read.package_id(), |scope| scope.package);
-    let root_owned = super::memory::direct_in(read, package, ty)?;
+    let root_owned = if let Some((occurrence, associated)) = occurrence {
+        super::memory::direct_at(read, ty, occurrence, associated)?
+    } else {
+        super::memory::direct_in(read, package, ty)?
+    };
     if !root_owned {
         return Err(reject("shareable admission requires an owned root"));
     }
     // Ordinary structural metadata retains the existing first-order-data proof.
     // Its transfer assumptions do not confer shareability on any owned member.
-    let ordinary_assumptions = super::transfer::ordinary_assumptions_in(read, scope)?;
+    let parameters = occurrence.map_or(
+        scope.map_or(TypeParameterContext::Closed, TypeParameterContext::Authored),
+        |(occurrence, _)| occurrence.parameters,
+    );
+    let ordinary_assumptions = super::transfer::ordinary_assumptions_at(read, parameters)?;
+    if let Some((occurrence, associated)) = occurrence
+        && matches!(
+            read.type_object(ty)?.map(|t| t.form),
+            Some(
+                TypeForm::OwnedProduct { .. }
+                    | TypeForm::OwnedChoice { .. }
+                    | TypeForm::OwnedSequence { .. }
+            )
+        )
+    {
+        super::owned_product::validate_at(read, ty, occurrence, associated)?;
+    }
     read.validation_work()?;
     let mut derived_types = BTreeMap::new();
     let mut layout_budget = super::owned_record::LayoutBudget::default();
@@ -170,7 +215,13 @@ pub(crate) fn admit_in(
             TypeForm::Named { .. } | TypeForm::Applied { .. }
                 if super::owned_record::is_owned(read, package, current)? =>
             {
-                super::owned_record::validate_application(read, current, scope)?;
+                if let Some((occurrence, associated)) = occurrence {
+                    super::owned_record::validate_application_at(
+                        read, current, occurrence, associated,
+                    )?;
+                } else {
+                    super::owned_record::validate_application(read, current, scope)?;
+                }
                 let layout = super::owned_record::layout(read, current)?;
                 for field_type in object
                     .child_types()
@@ -184,15 +235,42 @@ pub(crate) fn admit_in(
             }
             TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => {}
             TypeForm::TypeParameter { parameter }
-                if super::memory::direct_in(read, package, current)? =>
+                if if let Some((occurrence, associated)) = occurrence {
+                    super::memory::direct_at(read, current, occurrence, associated)?
+                } else {
+                    super::memory::direct_in(read, package, current)?
+                } =>
             {
-                owned_parameter(read, parameter, scope)?;
+                if let Some((occurrence, associated)) = occurrence
+                    && let TypeParameterContext::NominalRepresentation(scope) =
+                        occurrence.parameters
+                {
+                    associated.validate_owned_parameter_at(
+                        read,
+                        parameter,
+                        occurrence.parameters,
+                    )?;
+                    if !super::owned_record::parameter(read, scope, parameter)?
+                        .constraints
+                        .requires_share()
+                    {
+                        return Err(reject(
+                            "representation owner requires its exact Shareable bound",
+                        ));
+                    }
+                } else {
+                    owned_parameter(read, parameter, scope)?;
+                }
             }
             TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {
                 let mut owned = false;
                 for field in fields {
                     read.validation_work()?;
-                    owned |= super::memory::direct_in(read, package, field.ty)?;
+                    owned |= if let Some((occurrence, associated)) = occurrence {
+                        super::memory::direct_at(read, field.ty, occurrence, associated)?
+                    } else {
+                        super::memory::direct_in(read, package, field.ty)?
+                    };
                     pending.push((field.ty, depth + 1));
                 }
                 if !owned {
@@ -205,10 +283,16 @@ pub(crate) fn admit_in(
                 read.validation_work()?;
                 pending.push((item, depth + 1));
             }
-            _ if super::owned_contract::ordinary_with_assumptions_in(
+            TypeForm::AssociatedContractMember { .. }
+            | TypeForm::AssociatedWitnessProjection { .. } => {
+                return Err(reject(
+                    "an abstract Owned member supplies no Shareable proof",
+                ));
+            }
+            _ if super::owned_contract::ordinary_with_assumptions_at(
                 read,
                 current,
-                scope,
+                parameters,
                 &ordinary_assumptions,
             )? =>
             {

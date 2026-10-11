@@ -113,6 +113,8 @@ fn lexical_loan_provenance_freezes_every_ancestor_and_balances_nested_scopes() {
     let source = author(SOURCE).unwrap();
     let read = Check {
         read: &source,
+        associated: &OwnedAssociatedAdmission::new(),
+        types: std::cell::RefCell::new(BTreeMap::new()),
         scope: None,
     };
     let root = LocalValueReference::LexicalBinding(

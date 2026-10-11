@@ -337,6 +337,8 @@ pub(crate) fn validate_expression_roots_with_limits<R: ExpressionRead>(
         admitted_nominals: BTreeSet::new(),
         type_metadata_bytes: 0,
         selected_expression: None,
+        associated_admission: super::owned_associated::OwnedAssociatedAdmission::new(),
+        admitted_occurrences: BTreeSet::new(),
     };
     validator.validate_roots(roots);
     validator.exhaustion.map_or(Ok(()), Err)
@@ -414,6 +416,8 @@ fn infer_function_expression<R: ExpressionRead, T>(
         admitted_nominals: BTreeSet::new(),
         type_metadata_bytes: 0,
         selected_expression: Some((expression, None)),
+        associated_admission: super::owned_associated::OwnedAssociatedAdmission::new(),
+        admitted_occurrences: BTreeSet::new(),
     };
     validator.consume_work()?;
     let body = match read.owner(OwnerKey::Declaration(declaration))? {
@@ -466,6 +470,11 @@ struct ExpressionValidator<'a, 'b, R> {
     admitted_nominals: BTreeSet<DeclarationReference>,
     type_metadata_bytes: usize,
     selected_expression: Option<(ExpressionId, Option<TypeObjectDigest>)>,
+    associated_admission: super::owned_associated::OwnedAssociatedAdmission,
+    admitted_occurrences: BTreeSet<(
+        TypeObjectDigest,
+        super::owned_associated::OwnedTypeOccurrence,
+    )>,
 }
 
 impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
@@ -659,7 +668,17 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             "port expression",
                         ),
                         PortImplementation::Function(function) => {
-                            match self.function_signature(function, &[], &[], &[], &[], &context) {
+                            match self.function_signature(
+                                function,
+                                super::owned_contract::FunctionArguments {
+                                    types: &[],
+                                    effects: &[],
+                                    requirements: &[],
+                                    implementations: &[],
+                                },
+                                &context,
+                                port.header.contract_version,
+                            ) {
                                 Ok(signature) => {
                                     if let Err(diagnostic) =
                                         self.validate_call_effect(&signature, &context)
@@ -987,10 +1006,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             }
         };
         let next = depth.saturating_add(1);
+        let consumer_generation = record.contract_version;
+        let occurrence = self.type_occurrence(context, consumer_generation);
         for ty in record.type_roots() {
-            self.validate_nominal_type(ty, context, 0)?;
+            self.validate_type_occurrence(ty, context, consumer_generation)?;
+            self.validate_nominal_type(ty, context, occurrence, 0)?;
         }
-        match record.operation {
+        let inferred = match record.operation {
             ExpressionOperation::SequenceEmpty { sequence_type } => {
                 self.sequence_item_type(sequence_type)?;
                 Ok(sequence_type)
@@ -1162,8 +1184,8 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 binding,
                 body,
             } => {
-                let invocation = self.owned_read(|read| {
-                    super::memory::borrow_invocation(read, call, context.declaration)
+                let invocation = self.owned_read_with_associated(|read, admission| {
+                    super::memory::borrow_invocation_at(read, call, context.declaration, admission)
                 })?;
                 self.adopt_applied_types(invocation.types)?;
                 // The wrapped invocation retains its complete ordinary type/effect checks.
@@ -1181,7 +1203,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     "kernel_owned_borrow",
                     "borrowed invocation source",
                 )?;
-                self.require_borrow_binding(binding, invocation.result)?;
+                self.require_borrow_binding(binding, invocation.result, context)?;
                 let mut scoped = self.scoped_context(context)?;
                 self.consume_work()?;
                 scoped
@@ -1197,7 +1219,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 body,
             } => {
                 let item = self.sequence_item_type(sequence_type)?;
-                if !self.owned_read(|read| super::memory::direct(read, item))? {
+                if !self.owned_read_with_associated(|read, admission| {
+                    super::memory::direct_at(read, item, occurrence, admission)
+                })? {
                     return Err(type_error(
                         "kernel_owned_borrow",
                         "owned item borrowing requires an owned element type",
@@ -1218,7 +1242,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     "kernel_owned_borrow",
                     "borrowed sequence source",
                 )?;
-                self.require_borrow_binding(binding, item)?;
+                self.require_borrow_binding(binding, item, context)?;
                 let mut scoped = self.scoped_context(context)?;
                 self.consume_work()?;
                 scoped
@@ -1256,13 +1280,15 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 let ty = selected.ok_or_else(|| {
                     type_error("kernel_owned_borrow", "unknown borrowed product field")
                 })?;
-                if !self.owned_read(|read| super::memory::direct(read, ty))? {
+                if !self.owned_read_with_associated(|read, admission| {
+                    super::memory::direct_at(read, ty, occurrence, admission)
+                })? {
                     return Err(type_error(
                         "kernel_owned_borrow",
                         "borrowed product field must have a direct owned type",
                     ));
                 }
-                self.require_borrow_binding(binding, ty)?;
+                self.require_borrow_binding(binding, ty, context)?;
                 let mut scoped = self.scoped_context(context)?;
                 self.consume_work()?;
                 scoped
@@ -1303,7 +1329,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             "borrowed match cases must match the exact choice cases",
                         ));
                     }
-                    self.require_borrow_binding(arm.binding, case.ty)?;
+                    self.require_borrow_binding(arm.binding, case.ty, context)?;
                     let mut scoped = self.scoped_context(context)?;
                     self.consume_work()?;
                     scoped
@@ -1392,6 +1418,11 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     }
                     let mut scoped = self.scoped_context(context)?;
                     self.consume_work()?;
+                    self.validate_type_occurrence(
+                        case.ty,
+                        context,
+                        binding.header.contract_version,
+                    )?;
                     scoped.bindings.insert(arm.binding, (binding.kind, case.ty));
                     let actual = self.infer(arm.body, &scoped, next)?;
                     if let Some(expected) = result {
@@ -1411,7 +1442,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 record_type,
                 fields,
             } => {
-                let expected = self.owned_record_fields(record_type, context)?;
+                let expected = self.owned_record_fields(record_type, context, occurrence)?;
                 if fields.len() != expected.len() {
                     return Err(super::owned_record::reject(
                         "pack must supply every nominal field exactly once",
@@ -1438,7 +1469,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 fields,
                 body,
             } => {
-                let expected = self.owned_record_fields(record_type, context)?;
+                let expected = self.owned_record_fields(record_type, context, occurrence)?;
                 let actual = self.infer(source, context, next)?;
                 require_same(
                     record_type,
@@ -1470,6 +1501,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             "nominal unpack field identity, binding or type mismatch",
                         ));
                     }
+                    self.validate_type_occurrence(ty, context, binding.header.contract_version)?;
                     scoped.bindings.insert(field.binding, (binding.kind, ty));
                 }
                 self.infer(body, &scoped, next)
@@ -1481,7 +1513,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 binding,
                 body,
             } => {
-                let expected = self.owned_record_fields(record_type, context)?;
+                let expected = self.owned_record_fields(record_type, context, occurrence)?;
                 let actual = self.borrow_source_type(source, context, next)?;
                 require_same(
                     record_type,
@@ -1493,12 +1525,14 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     .into_iter()
                     .find(|(reference, _)| *reference == field)
                     .ok_or_else(|| super::owned_record::reject("unknown nominal borrowed field"))?;
-                if !self.owned_read(|read| super::memory::direct(read, ty))? {
+                if !self.owned_read_with_associated(|read, admission| {
+                    super::memory::direct_at(read, ty, occurrence, admission)
+                })? {
                     return Err(super::owned_record::reject(
                         "nominal child read requires an Owned field",
                     ));
                 }
-                self.require_borrow_binding(binding, ty)?;
+                self.require_borrow_binding(binding, ty, context)?;
                 let mut scoped = self.scoped_context(context)?;
                 scoped
                     .bindings
@@ -1574,6 +1608,11 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             "unpack field, binding kind or type mismatch",
                         ));
                     }
+                    self.validate_type_occurrence(
+                        contract.ty,
+                        context,
+                        binding.header.contract_version,
+                    )?;
                     scoped
                         .bindings
                         .insert(field.binding, (binding.kind, contract.ty));
@@ -1634,6 +1673,11 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         type_error("kernel_type_binding_value", "let binding has no value")
                     })?;
                     let actual = self.infer(value, &scoped, next)?;
+                    self.validate_type_occurrence(
+                        actual,
+                        &scoped,
+                        binding_record.header.contract_version,
+                    )?;
                     if let Some(expected) = binding_record.declared_type {
                         require_same(expected, actual, "kernel_type_binding", "let binding value")?;
                     }
@@ -1661,12 +1705,14 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         "parallel requires a task context even when both effect rows are empty",
                     ));
                 }
-                let left_call = self.owned_read(|read| {
-                    super::parallel::admit_call(read, left, context.declaration)
+                let mut left_call = self.owned_read_with_associated(|read, admission| {
+                    super::parallel::admit_call_at(read, left, context.declaration, admission)
                 })?;
-                let right_call = self.owned_read(|read| {
-                    super::parallel::admit_call(read, right, context.declaration)
+                self.adopt_applied_types(std::mem::take(&mut left_call.types))?;
+                let mut right_call = self.owned_read_with_associated(|read, admission| {
+                    super::parallel::admit_call_at(read, right, context.declaration, admission)
                 })?;
+                self.adopt_applied_types(std::mem::take(&mut right_call.types))?;
                 // Both complete argument trees remain part of ordinary exact type,
                 // scope and effect validation, including unreachable expressions.
                 let left_type = self.infer(left, context, next)?;
@@ -1695,8 +1741,8 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 ];
                 if left_call.result_owned || right_call.result_owned {
                     let result = self.canonical_type(TypeForm::OwnedProduct { fields })?;
-                    self.owned_read(|read| {
-                        super::owned_product::validate(read, result, context.declaration)
+                    self.owned_read_with_associated(|read, admission| {
+                        super::owned_product::validate_at(read, result, occurrence, admission)
                     })?;
                     Ok(result)
                 } else {
@@ -1713,11 +1759,14 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             } => {
                 let signature = self.function_signature(
                     function,
-                    &type_arguments,
-                    &effect_arguments,
-                    &requirement_arguments,
-                    &implementations,
+                    super::owned_contract::FunctionArguments {
+                        types: &type_arguments,
+                        effects: &effect_arguments,
+                        requirements: &requirement_arguments,
+                        implementations: &implementations,
+                    },
                     context,
+                    record.contract_version,
                 )?;
                 self.validate_call_effect(&signature, context)?;
                 self.validate_arguments(&arguments, &signature.parameters, context, next)?;
@@ -1729,13 +1778,16 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 method,
                 arguments,
             } => {
-                let application = self.owned_read(|read| {
-                    super::owned_contract::method_signature(
-                        read,
-                        &witness,
-                        contract,
-                        method,
-                        context.declaration,
+                let occurrence = super::owned_associated::OwnedTypeOccurrence::authored(
+                    context.declaration.map(|declaration| DeclarationReference {
+                        package: self.read.package_id(),
+                        declaration,
+                    }),
+                    record.contract_version,
+                );
+                let application = self.owned_read_with_associated(|read, admission| {
+                    super::owned_contract::admit_method_application(
+                        read, &witness, contract, method, occurrence, admission,
                     )
                 })?;
                 self.adopt_applied_types(application.types)?;
@@ -1758,7 +1810,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     .map(|p| p.ty)
                     .collect::<Vec<_>>();
                 for ty in parameters.iter().chain([&signature.result]) {
-                    self.validate_nominal_type(*ty, context, 0)?;
+                    self.validate_nominal_type(*ty, context, occurrence, 0)?;
                 }
                 self.validate_arguments(&arguments, &parameters, context, next)?;
                 Ok(signature.result)
@@ -1772,11 +1824,14 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             } => {
                 let signature = self.function_signature(
                     function,
-                    &type_arguments,
-                    &effect_arguments,
-                    &requirement_arguments,
-                    &[],
+                    super::owned_contract::FunctionArguments {
+                        types: &type_arguments,
+                        effects: &effect_arguments,
+                        requirements: &requirement_arguments,
+                        implementations: &[],
+                    },
                     context,
+                    record.contract_version,
                 )?;
                 self.validate_call_effect(&signature, context)?;
                 self.validate_arguments(&arguments, &signature.parameters, context, next)?;
@@ -1790,11 +1845,14 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             } => {
                 let signature = self.function_signature(
                     function,
-                    &type_arguments,
-                    &effect_arguments,
-                    &requirement_arguments,
-                    &[],
+                    super::owned_contract::FunctionArguments {
+                        types: &type_arguments,
+                        effects: &effect_arguments,
+                        requirements: &requirement_arguments,
+                        implementations: &[],
+                    },
                     context,
+                    record.contract_version,
                 )?;
                 self.function_type(&signature)
             }
@@ -1830,7 +1888,14 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 nominal_type,
                 type_arguments,
                 fields,
-            } => self.infer_record(nominal_type, &type_arguments, &fields, context, next),
+            } => self.infer_record(
+                nominal_type,
+                &type_arguments,
+                &fields,
+                context,
+                occurrence,
+                next,
+            ),
             ExpressionOperation::Variant {
                 case,
                 type_arguments,
@@ -1843,7 +1908,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 };
                 let bindings = self.nominal_bindings(declaration, &type_arguments)?;
                 let ty = self.nominal_type(declaration, &type_arguments)?;
-                self.validate_nominal_type(ty, context, 0)?;
+                self.validate_nominal_type(ty, context, occurrence, 0)?;
                 let expected = case_record
                     .payload
                     .map(|ty| self.substitute(ty, &bindings, 0))
@@ -1853,7 +1918,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             }
             ExpressionOperation::Field { value, selector } => {
                 let value_type = self.infer(value, context, next)?;
-                self.infer_field(value_type, selector, context)
+                self.infer_field(value_type, selector, context, occurrence)
             }
             ExpressionOperation::List { item_type, items } => {
                 for item in items {
@@ -2003,9 +2068,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     "kernel_type_transaction_outcome_payload",
                     "transaction-outcome body",
                 )?;
-                self.transaction_outcome_type(outcome, type_argument, context)
+                self.transaction_outcome_type(outcome, type_argument, context, occurrence)
             }
-        }
+        }?;
+        // Locals and read projections often have no explicit type roots. Their
+        // derived result still consumes associated meaning at this exact owner.
+        self.validate_type_occurrence(inferred, context, consumer_generation)?;
+        Ok(inferred)
     }
 
     fn transaction_outcome_type(
@@ -2013,6 +2082,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         contract: super::TransactionOutcomeContract,
         body: TypeObjectDigest,
         context: &ExecutionContext,
+        occurrence: super::owned_associated::OwnedTypeOccurrence,
     ) -> Result<TypeObjectDigest, Diagnostic> {
         let invalid = || {
             type_error(
@@ -2092,7 +2162,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             "transaction outcome substitution",
         )?;
         let result = self.nominal_type(contract.outcome, &[body])?;
-        self.validate_nominal_type(result, context, 0)?;
+        self.validate_nominal_type(result, context, occurrence, 0)?;
         Ok(result)
     }
 
@@ -2153,6 +2223,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         &mut self,
         binding: BindingId,
         ty: TypeObjectDigest,
+        context: &ExecutionContext,
     ) -> Result<(), Diagnostic> {
         self.consume_work()?;
         let Some(OwnerRecord::Binding(record)) = self.read.owner(OwnerKey::Binding(binding))?
@@ -2162,6 +2233,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 "missing borrowed child binding",
             ));
         };
+        self.validate_type_occurrence(ty, context, record.header.contract_version)?;
         if record.kind != BindingKind::OwnedBorrow
             || record.value.is_some()
             || record.declared_type != Some(ty)
@@ -2203,6 +2275,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         "function parameter belongs to another declaration",
                     ));
                 }
+                self.validate_type_occurrence(record.ty, context, record.header.contract_version)?;
                 Ok(record.ty)
             }
             LocalValueReference::OperationParameter(parameter) => {
@@ -2260,6 +2333,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         "local reference uses the wrong binding domain",
                     ));
                 }
+                self.validate_type_occurrence(ty, context, record.header.contract_version)?;
                 Ok(ty)
             }
             LocalValueReference::TransactionBinding(binding) => {
@@ -2311,12 +2385,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         type_arguments: &[TypeObjectDigest],
         fields: &[super::expression::RecordExpressionField],
         context: &ExecutionContext,
+        occurrence: super::owned_associated::OwnedTypeOccurrence,
         depth: usize,
     ) -> Result<TypeObjectDigest, Diagnostic> {
         if let Some(declaration) = nominal_type {
             let bindings = self.nominal_bindings(declaration, type_arguments)?;
             let ty = self.nominal_type(declaration, type_arguments)?;
-            self.validate_nominal_type(ty, context, 0)?;
+            self.validate_nominal_type(ty, context, occurrence, 0)?;
             let expected = self.record_fields(declaration)?;
             if expected.len() != fields.len() {
                 return Err(type_error(
@@ -2380,14 +2455,15 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         &mut self,
         ty: TypeObjectDigest,
         context: &ExecutionContext,
+        occurrence: super::owned_associated::OwnedTypeOccurrence,
     ) -> Result<Vec<(FieldReference, TypeObjectDigest)>, Diagnostic> {
-        let layout = self.owned_read(|read| {
+        let layout = self.owned_read_with_associated(|read, admission| {
             let scope = context.declaration.map(|declaration| DeclarationReference {
                 package: read.package_id(),
                 declaration,
             });
             super::owned_record::require_access(read, ty, scope)?;
-            super::owned_record::validate_application(read, ty, scope)?;
+            super::owned_record::validate_application_at(read, ty, occurrence, admission)?;
             super::owned_record::layout(read, ty)
         })?;
         self.adopt_applied_types(layout.types)?;
@@ -2399,6 +2475,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         value_type: TypeObjectDigest,
         selector: FieldSelector,
         context: &ExecutionContext,
+        occurrence: super::owned_associated::OwnedTypeOccurrence,
     ) -> Result<TypeObjectDigest, Diagnostic> {
         match selector {
             FieldSelector::Nominal(reference) => {
@@ -2406,7 +2483,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     super::owned_record::is_owned(read, read.package_id(), value_type)
                 })? {
                     return self
-                        .owned_record_fields(value_type, context)?
+                        .owned_record_fields(value_type, context, occurrence)?
                         .into_iter()
                         .find(|(field, _)| *field == reference)
                         .map(|(_, ty)| ty)
@@ -2663,7 +2740,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             let children = match self.type_object(ty)?.form {
                 TypeForm::AssociatedContractMember { .. }
                 | TypeForm::AssociatedWitnessProjection { .. } => {
-                    return Err(super::owned_associated_wire::unsupported_semantics());
+                    return Err(type_error(
+                        "kernel_type_bind_capture",
+                        "an associated Owned bound does not establish capture safety",
+                    ));
                 }
                 TypeForm::Unit
                 | TypeForm::Bool
@@ -2927,34 +3007,26 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
     fn function_signature(
         &mut self,
         reference: DeclarationReference,
-        type_arguments: &[TypeObjectDigest],
-        effect_arguments: &[super::EffectRow],
-        requirement_arguments: &[super::RequirementOperand],
-        implementations: &[super::ImplementationOperand],
+        arguments: super::owned_contract::FunctionArguments<'_>,
         context: &ExecutionContext,
+        consumer_generation: u16,
     ) -> Result<FunctionSignature, Diagnostic> {
-        if let Some(f) = self
-            .owned_read(|read| super::owned_contract::optional_function_contract(read, reference))?
-        {
-            if !f.implementation_parameters.is_empty() || !implementations.is_empty() {
-                self.owned_read(|read| {
-                    super::owned_contract::validate_application(
-                        read,
-                        reference,
-                        type_arguments,
-                        implementations,
-                        context.declaration,
-                    )
-                })?;
-            }
-        } else if !implementations.is_empty() {
-            return Err(type_error(
-                "kernel_owned_contract",
-                "external cannot accept implementation witnesses",
-            ));
-        }
+        let super::owned_contract::FunctionArguments {
+            types: type_arguments,
+            effects: effect_arguments,
+            requirements: requirement_arguments,
+            implementations,
+        } = arguments;
+        let occurrence = super::owned_associated::OwnedTypeOccurrence::authored(
+            context.declaration.map(|declaration| DeclarationReference {
+                package: self.read.package_id(),
+                declaration,
+            }),
+            consumer_generation,
+        );
         let foreign = reference.package != self.read.package_id();
         let (
+            graph_function,
             type_parameters,
             requirement_parameters,
             effect_parameters,
@@ -2972,6 +3044,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             match record {
                 PackageInterfaceRecord::Declaration(record) => match record.payload {
                     PackageInterfaceDeclarationPayload::External(function) => (
+                        false,
                         function.type_parameters,
                         Vec::new(),
                         Vec::new(),
@@ -2996,6 +3069,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             }
                         };
                         (
+                            true,
                             function.type_parameters,
                             function.requirement_parameters,
                             function.effect_parameters,
@@ -3035,6 +3109,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             };
             match record.payload {
                 DeclarationPayload::External(function) => (
+                    false,
                     function.type_parameters,
                     Vec::new(),
                     Vec::new(),
@@ -3059,6 +3134,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         }
                     };
                     (
+                        true,
                         function.type_parameters,
                         function.requirement_parameters,
                         function.effect_parameters,
@@ -3185,13 +3261,17 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     )
                 })?;
             if owner.constraints.has_owned() {
-                if !super::memory::direct(self.read, *supplied)? {
+                if !self.owned_read_with_associated(|read, admission| {
+                    super::memory::direct_at(read, *supplied, occurrence, admission)
+                })? {
                     return Err(type_error(
                         "kernel_owned_constraint",
                         "owned parameter requires a direct owned type or exact owned parameter",
                     ));
                 }
-            } else if self.type_contains_buffer(*supplied)? {
+            } else if self.owned_read_with_associated(|read, admission| {
+                super::memory::contains_at(read, *supplied, occurrence, admission)
+            })? {
                 return Err(type_error(
                     "kernel_buffer_generic",
                     "owned memory cannot substitute an ordinary generic parameter",
@@ -3222,18 +3302,77 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             .into_iter()
             .zip(type_arguments.iter().copied())
             .collect::<BTreeMap<_, _>>();
-        let mut parameter_types = self.parameter_types(reference.package, &parameters)?;
-        for parameter in &mut parameter_types {
-            *parameter =
-                self.substitute_effects(*parameter, &effects, &requirements_substitution, 0)?;
-            *parameter = self.substitute(*parameter, &substitutions, 0)?;
-            self.validate_nominal_type(*parameter, context, 0)?;
+        // Preserve the public arity and category diagnostics above. Complete raw
+        // source/witness admission still precedes every signature substitution.
+        let mut application = if graph_function {
+            Some(self.owned_read_with_associated(|read, admission| {
+                super::owned_contract::admit_function_application(
+                    read,
+                    reference,
+                    type_arguments,
+                    implementations,
+                    occurrence,
+                    admission,
+                )
+            })?)
+        } else {
+            if !implementations.is_empty() {
+                return Err(type_error(
+                    "kernel_owned_contract",
+                    "external cannot accept implementation witnesses",
+                ));
+            }
+            None
+        };
+        if let Some(application) = &mut application {
+            self.adopt_applied_types(std::mem::take(&mut application.types))?;
         }
-        let result = self.substitute_effects(result, &effects, &requirements_substitution, 0)?;
-        let result = self.substitute(result, &substitutions, 0)?;
+        let mut parameter_types = match &application {
+            Some(application) => application.parameters.iter().map(|p| p.ty).collect(),
+            None => self.parameter_types(reference.package, &parameters)?,
+        };
+        // Rewrite only the callee's raw effect templates. Type and witness actuals
+        // are then inserted opaquely, preserving any caller effect parameters.
+        let mut result = result;
+        let types = self.owned_read(|read| {
+            let mut derived = super::parallel_types::EffectAppliedTypes::new(
+                read,
+                &effects,
+                &requirements_substitution,
+            );
+            for parameter in &mut parameter_types {
+                *parameter = derived.substitute(*parameter, 0)?;
+            }
+            result = derived.substitute(result, 0)?;
+            Ok(derived.into_types())
+        })?;
+        self.adopt_applied_types(types)?;
+        if let Some(application) = &application {
+            let types = self.owned_read_with_associated(|read, admission| {
+                let mut derived = super::parallel_types::WitnessAppliedTypes::with_admission(
+                    read,
+                    application.environment(),
+                    admission,
+                );
+                for parameter in &mut parameter_types {
+                    *parameter = derived.substitute(*parameter, 0)?;
+                }
+                result = derived.substitute(result, 0)?;
+                Ok(derived.into_types())
+            })?;
+            self.adopt_applied_types(types)?;
+        } else {
+            for parameter in &mut parameter_types {
+                *parameter = self.substitute(*parameter, &substitutions, 0)?;
+            }
+            result = self.substitute(result, &substitutions, 0)?;
+        }
+        for parameter in &parameter_types {
+            self.validate_nominal_type(*parameter, context, occurrence, 0)?;
+        }
         // Substitution can form an application that has no persisted TypeObject,
         // including a discarded phantom result or a function-value signature.
-        self.validate_nominal_type(result, context, 0)?;
+        self.validate_nominal_type(result, context, occurrence, 0)?;
         Ok(FunctionSignature {
             target: Some(reference),
             parameters: parameter_types,
@@ -3762,6 +3901,49 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             _ => None,
         };
         let context = pure_context(declaration);
+        let mut occurrence = self.type_occurrence(&context, owner.header().contract_version);
+        if let Some(declaration) = declaration {
+            let scope = DeclarationReference {
+                package: self.read.package_id(),
+                declaration,
+            };
+            match owner {
+                OwnerRecord::Declaration(record)
+                    if matches!(record.payload, DeclarationPayload::OwnedContract(_)) =>
+                {
+                    occurrence = super::owned_associated::OwnedTypeOccurrence::contract(
+                        scope,
+                        owner.header().contract_version,
+                    );
+                }
+                OwnerRecord::Declaration(record)
+                    if matches!(
+                        record.payload,
+                        DeclarationPayload::Record { .. }
+                            | DeclarationPayload::Variant { .. }
+                            | DeclarationPayload::OwnedRecord { .. }
+                    ) =>
+                {
+                    occurrence = super::owned_associated::OwnedTypeOccurrence::representation(
+                        scope,
+                        owner.header().contract_version,
+                    );
+                }
+                OwnerRecord::Field(_) | OwnerRecord::Case(_) => {
+                    occurrence = super::owned_associated::OwnedTypeOccurrence::representation(
+                        scope,
+                        owner.header().contract_version,
+                    );
+                }
+                OwnerRecord::Declaration(record)
+                    if matches!(record.payload, DeclarationPayload::External(_)) =>
+                {
+                    occurrence.associated =
+                        super::owned_associated::AssociatedTypeContext::Forbidden;
+                }
+                _ => {}
+            }
+        }
         let mut roots = owner
             .type_roots()
             .into_iter()
@@ -3789,6 +3971,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 if let Some(OwnerRecord::Parameter(record)) =
                     self.read.owner(OwnerKey::Parameter(*parameter))?
                 {
+                    self.validate_type_occurrence_at(
+                        record.ty,
+                        super::owned_associated::OwnedTypeOccurrence {
+                            consumer_generation: record.header.contract_version,
+                            ..occurrence
+                        },
+                    )?;
                     roots.push((record.ty, record.header.owner));
                 }
             }
@@ -3813,7 +4002,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             }
         }
         for (ty, source) in roots {
-            self.validate_nominal_type(ty, &context, 0)
+            self.validate_nominal_type(ty, &context, occurrence, 0)
                 .map_err(|mut diagnostic| {
                     diagnostic.notes.push(format!("semantic owner: {source}"));
                     diagnostic
@@ -3863,7 +4052,20 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         &mut self,
         ty: TypeObjectDigest,
         context: &ExecutionContext,
+        occurrence: super::owned_associated::OwnedTypeOccurrence,
         depth: usize,
+    ) -> Result<(), Diagnostic> {
+        self.validate_nominal_type_inner(ty, context, occurrence, depth, false, false)
+    }
+
+    fn validate_nominal_type_inner(
+        &mut self,
+        ty: TypeObjectDigest,
+        context: &ExecutionContext,
+        occurrence: super::owned_associated::OwnedTypeOccurrence,
+        depth: usize,
+        occurrence_admitted: bool,
+        composites_admitted: bool,
     ) -> Result<(), Diagnostic> {
         self.consume_work()?;
         if depth > MAXIMUM_TYPE_DEPTH {
@@ -3871,6 +4073,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 "kernel_type_nominal_depth",
                 "nominal type exceeds the existing type-depth limit",
             ));
+        }
+        if !occurrence_admitted {
+            self.validate_type_occurrence_at(ty, occurrence)?;
         }
         let object = self.type_object(ty)?;
         let nominal_owned = matches!(
@@ -3895,13 +4100,16 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 ));
             }
         }
-        if matches!(
+        let structural_owned = matches!(
             object.form,
             TypeForm::OwnedProduct { .. }
                 | TypeForm::OwnedChoice { .. }
                 | TypeForm::OwnedSequence { .. }
-        ) {
-            self.owned_read(|read| super::owned_product::validate(read, ty, context.declaration))?;
+        );
+        if structural_owned && !composites_admitted {
+            self.owned_read_with_associated(|read, admission| {
+                super::owned_product::validate_at(read, ty, occurrence, admission)
+            })?;
         }
         for child in object.child_types() {
             if !matches!(
@@ -3921,19 +4129,23 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         // Admit every syntactic argument before following substituted members. A closed or
         // phantom outer declaration can carry an expanding schema in one of its arguments.
         for child in object.child_types() {
-            self.validate_nominal_type(child, context, depth + 1)?;
+            // Both proofs cover this unchanged syntactic subtree under this exact
+            // reader and occurrence. Keep the independent ordinary parameter,
+            // nominal schema/arity, capture and depth checks for every child.
+            // Substituted or representation roots enter through the wrapper again.
+            self.validate_nominal_type_inner(
+                child,
+                context,
+                occurrence,
+                depth + 1,
+                true,
+                composites_admitted || structural_owned,
+            )?;
         }
         if let Some((declaration, arguments)) = nominal_parts(&object.form) {
             if nominal_owned {
-                self.owned_read(|read| {
-                    super::owned_record::validate_application(
-                        read,
-                        ty,
-                        context.declaration.map(|declaration| DeclarationReference {
-                            package: read.package_id(),
-                            declaration,
-                        }),
-                    )
+                self.owned_read_with_associated(|read, admission| {
+                    super::owned_record::validate_application_at(read, ty, occurrence, admission)
                 })?;
                 return Ok(());
             }
@@ -4013,6 +4225,8 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     | TypeForm::OwnedProduct { .. }
                     | TypeForm::OwnedChoice { .. }
                     | TypeForm::OwnedSequence { .. }
+                    | TypeForm::AssociatedContractMember { .. }
+                    | TypeForm::AssociatedWitnessProjection { .. }
             ) || matches!(object.form, TypeForm::TypeParameter { parameter } if matches!(self.read.owner(OwnerKey::TypeParameter(parameter))?, Some(OwnerRecord::TypeParameter(p)) if p.constraints.has_owned()))
             {
                 return Ok(true);
@@ -4047,6 +4261,8 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 | TypeForm::OwnedProduct { .. }
                 | TypeForm::OwnedChoice { .. }
                 | TypeForm::OwnedSequence { .. }
+                | TypeForm::AssociatedContractMember { .. }
+                | TypeForm::AssociatedWitnessProjection { .. }
                 | TypeForm::CapabilityResource { .. }
                 | TypeForm::Stream { .. } => {
                     return Err(type_error(
@@ -4190,82 +4406,6 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             other => other,
         };
         self.canonical_type(form)
-    }
-
-    fn substitute_effects(
-        &mut self,
-        digest: TypeObjectDigest,
-        bindings: &BTreeMap<super::EffectParameterReference, super::EffectRow>,
-        requirements: &super::RequirementSubstitution,
-        depth: usize,
-    ) -> Result<TypeObjectDigest, Diagnostic> {
-        if bindings.is_empty() && requirements.is_empty() {
-            return Ok(digest);
-        }
-        self.consume_work()?;
-        if depth > MAXIMUM_TYPE_DEPTH {
-            return Err(type_error(
-                "kernel_type_substitution_depth",
-                "effect substitution exceeded its structural depth bound",
-            ));
-        }
-        let mut object = self.type_object(digest)?;
-        if let TypeForm::TaskFunction { effect, .. } = &mut object.form {
-            *effect = effect
-                .substitute_requirements(requirements, |n| {
-                    for _ in 0..n {
-                        self.consume_work()?;
-                    }
-                    Ok(())
-                })?
-                .substitute(bindings, |n| {
-                    for _ in 0..n {
-                        self.consume_work()?;
-                    }
-                    Ok(())
-                })?;
-        }
-        let mut replace = |ty: &mut TypeObjectDigest| -> Result<(), Diagnostic> {
-            *ty = self.substitute_effects(*ty, bindings, requirements, depth + 1)?;
-            Ok(())
-        };
-        match &mut object.form {
-            TypeForm::StructuralRecord { fields }
-            | TypeForm::OwnedProduct { fields }
-            | TypeForm::OwnedChoice { cases: fields } => {
-                for field in fields {
-                    replace(&mut field.ty)?;
-                }
-            }
-            TypeForm::Applied { arguments, .. } => {
-                for ty in arguments {
-                    replace(ty)?;
-                }
-            }
-            TypeForm::List { item }
-            | TypeForm::Option { item }
-            | TypeForm::Stream { item }
-            | TypeForm::OwnedSequence { item } => replace(item)?,
-            TypeForm::Map { key, value }
-            | TypeForm::Result {
-                ok: key,
-                error: value,
-            } => {
-                replace(key)?;
-                replace(value)?;
-            }
-            TypeForm::Function { parameters, result }
-            | TypeForm::TaskFunction {
-                parameters, result, ..
-            } => {
-                for ty in parameters {
-                    replace(ty)?;
-                }
-                replace(result)?;
-            }
-            _ => {}
-        }
-        self.canonical_type(object.form)
     }
 
     fn adopt_applied_types(
@@ -4529,9 +4669,75 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             })
     }
 
+    fn validate_type_occurrence(
+        &mut self,
+        ty: TypeObjectDigest,
+        context: &ExecutionContext,
+        generation: u16,
+    ) -> Result<(), Diagnostic> {
+        let occurrence = self.type_occurrence(context, generation);
+        self.validate_type_occurrence_at(ty, occurrence)
+    }
+
+    fn type_occurrence(
+        &self,
+        context: &ExecutionContext,
+        generation: u16,
+    ) -> super::owned_associated::OwnedTypeOccurrence {
+        super::owned_associated::OwnedTypeOccurrence::authored(
+            context.declaration.map(|declaration| DeclarationReference {
+                package: self.read.package_id(),
+                declaration,
+            }),
+            generation,
+        )
+    }
+
+    fn validate_type_occurrence_at(
+        &mut self,
+        ty: TypeObjectDigest,
+        occurrence: super::owned_associated::OwnedTypeOccurrence,
+    ) -> Result<(), Diagnostic> {
+        self.consume_work()?;
+        let key = (ty, occurrence);
+        // This validator has one immutable owner reader and only appends
+        // canonical derived types. Scope and actual consumer generation are part
+        // of the cache key; successful admission grants no transfer or sharing.
+        if self.admitted_occurrences.contains(&key) {
+            return Ok(());
+        }
+        self.owned_read_with_associated(|read, admission| {
+            super::owned_product::validate_owning_type_depth(read, ty)?;
+            admission.validate_occurrence_at(read, &[ty], occurrence)
+        })?;
+        self.type_metadata_bytes = self
+            .type_metadata_bytes
+            .checked_add(std::mem::size_of_val(&key) + 4 * std::mem::size_of::<usize>())
+            .filter(|bytes| *bytes <= 64 * 1_048_576)
+            .ok_or_else(|| {
+                Diagnostic::new(
+                    DiagnosticClass::Resource,
+                    "kernel_type_occurrence_storage",
+                    "type occurrence metadata exceeds its storage admission",
+                )
+            })?;
+        self.admitted_occurrences.insert(key);
+        Ok(())
+    }
+
     fn owned_read<T>(
         &mut self,
         action: impl FnOnce(&dyn ExpressionRead) -> Result<T, Diagnostic>,
+    ) -> Result<T, Diagnostic> {
+        self.owned_read_with_associated(|read, _| action(read))
+    }
+
+    fn owned_read_with_associated<T>(
+        &mut self,
+        action: impl FnOnce(
+            &dyn ExpressionRead,
+            &super::owned_associated::OwnedAssociatedAdmission,
+        ) -> Result<T, Diagnostic>,
     ) -> Result<T, Diagnostic> {
         let used = std::cell::Cell::from_mut(self.work);
         let maximum = self.limits.maximum_steps;
@@ -4554,7 +4760,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             read: &inferred,
             checkpoint: &checkpoint,
         };
-        let result = action(&read);
+        let result = action(&read, &self.associated_admission);
         if result.as_ref().is_err_and(|e| e.code == "kernel_type_work") {
             self.exhaustion = Some(ExpressionValidationExhaustion::Steps);
         }
@@ -4642,7 +4848,7 @@ mod tests {
     use crate::platform::semantic_id::ModuleId;
 
     #[test]
-    fn expression_and_declared_type_steps_stop_before_zero_and_exact_limits() {
+    fn expression_and_type_occurrence_steps_stop_before_zero_one_and_measured_limits() {
         let snapshot = super::super::tests::witness_snapshot();
         let constant = snapshot
             .owners
@@ -4657,38 +4863,10 @@ mod tests {
             })
             .expect("unit constant declaration");
 
+        // A complete fresh admission includes occurrence traversal and its
+        // positive cache. Calibrate from that receipt rather than assuming only
+        // one declared-type step and one expression step.
         let mut diagnostics = Vec::new();
-        let mut work = 0;
-        let exhausted = validate_expression_roots_with_limits(
-            &snapshot,
-            [constant],
-            &mut diagnostics,
-            &mut work,
-            ExpressionValidationLimits {
-                maximum_steps: 0,
-                maximum_diagnostics: 1,
-            },
-        );
-        assert_eq!(exhausted, Err(ExpressionValidationExhaustion::Steps));
-        assert_eq!(work, 0);
-        assert!(diagnostics.is_empty());
-
-        let mut diagnostics = Vec::new();
-        let mut work = 0;
-        let exhausted = validate_expression_roots_with_limits(
-            &snapshot,
-            [constant],
-            &mut diagnostics,
-            &mut work,
-            ExpressionValidationLimits {
-                maximum_steps: 1,
-                maximum_diagnostics: 1,
-            },
-        );
-        assert_eq!(exhausted, Err(ExpressionValidationExhaustion::Steps));
-        assert_eq!(work, 1);
-        assert!(diagnostics.is_empty());
-
         let mut work = 0;
         validate_expression_roots_with_limits(
             &snapshot,
@@ -4696,13 +4874,131 @@ mod tests {
             &mut diagnostics,
             &mut work,
             ExpressionValidationLimits {
-                maximum_steps: 2,
+                maximum_steps: super::super::contract::MAXIMUM_VALIDATION_WORK,
                 maximum_diagnostics: 1,
             },
         )
-        .expect("one declared type and one expression fit exactly two steps");
-        assert_eq!(work, 2);
+        .expect("healthy complete fresh admission");
         assert!(diagnostics.is_empty());
+        let required = work;
+        assert!(required > 1);
+
+        for (label, maximum_steps) in [
+            ("zero", 0),
+            ("one", 1),
+            ("one below", required - 1),
+            ("exact", required),
+        ] {
+            let mut diagnostics = Vec::new();
+            let mut work = 0;
+            let outcome = validate_expression_roots_with_limits(
+                &snapshot,
+                [constant],
+                &mut diagnostics,
+                &mut work,
+                ExpressionValidationLimits {
+                    maximum_steps,
+                    maximum_diagnostics: 1,
+                },
+            );
+            assert_eq!(
+                outcome,
+                if maximum_steps == required {
+                    Ok(())
+                } else {
+                    Err(ExpressionValidationExhaustion::Steps)
+                },
+                "{label}"
+            );
+            assert_eq!(work, maximum_steps, "{label}");
+            assert!(diagnostics.is_empty(), "{label}: {diagnostics:?}");
+        }
+    }
+
+    fn associated_flow_diagnostics(
+        fixture: &super::super::memory::associated_tests::Fixture,
+    ) -> Vec<Diagnostic> {
+        let mut diagnostics = Vec::new();
+        let mut work = 0;
+        validate_expression_roots(
+            &fixture.source,
+            [OwnerKey::Declaration(fixture.caller.declaration)],
+            &mut diagnostics,
+            &mut work,
+        );
+        diagnostics
+    }
+
+    #[test]
+    fn associated_direct_witness_and_method_signatures_keep_caller_occurrences() {
+        use super::super::memory::associated_tests::{FlowKind, fixture};
+        for kind in [FlowKind::Direct, FlowKind::Witness, FlowKind::Method] {
+            let fixture = fixture(kind);
+            assert!(
+                associated_flow_diagnostics(&fixture).is_empty(),
+                "{:?}",
+                associated_flow_diagnostics(&fixture)
+            );
+        }
+    }
+
+    #[test]
+    fn associated_inference_checks_parent_child_and_raw_callee_generations() {
+        use super::super::memory::associated_tests::{FlowKind, fixture};
+        for kind in [FlowKind::Direct, FlowKind::Witness, FlowKind::Method] {
+            for target in 0..6 {
+                let mut fixture = fixture(kind);
+                let key = match target {
+                    0 => OwnerKey::Declaration(fixture.caller.declaration),
+                    1 => OwnerKey::Parameter(fixture.first),
+                    2 => OwnerKey::Binding(fixture.binding),
+                    3 => OwnerKey::Expression(fixture.local),
+                    4 => OwnerKey::Expression(fixture.call),
+                    _ => OwnerKey::Expression(fixture.borrow),
+                };
+                fixture
+                    .source
+                    .owners
+                    .get_mut(&key)
+                    .unwrap()
+                    .set_encoding_for_edit(32);
+                assert!(
+                    !associated_flow_diagnostics(&fixture).is_empty(),
+                    "consumer {target}"
+                );
+            }
+        }
+        for parent in [false, true] {
+            let mut fixture = fixture(FlowKind::Witness);
+            let key = if parent {
+                OwnerKey::Declaration(fixture.callee.declaration)
+            } else {
+                fixture
+                    .source
+                    .owners
+                    .iter()
+                    .find_map(|(key, owner)| match owner {
+                        OwnerRecord::Parameter(parameter)
+                            if parameter.parent
+                                == ParameterParent::Function(fixture.callee.declaration) =>
+                        {
+                            Some(*key)
+                        }
+                        _ => None,
+                    })
+                    .unwrap()
+            };
+            fixture
+                .source
+                .owners
+                .get_mut(&key)
+                .unwrap()
+                .set_encoding_for_edit(32);
+            assert!(
+                !associated_flow_diagnostics(&fixture).is_empty(),
+                "callee source generation"
+            );
+        }
     }
 
     #[test]

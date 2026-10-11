@@ -4,6 +4,11 @@ use super::*;
 use crate::platform::semantic_id::ExpressionId;
 use std::collections::{BTreeMap, BTreeSet};
 
+#[path = "memory_associated_reference.rs"]
+mod associated;
+#[path = "associated_memory_oracle_tests.rs"]
+mod associated_tests;
+
 #[derive(Clone, Default, Eq, PartialEq)]
 struct Rights {
     // Identity survives consumption until lexical exit: a moved owner is not ordinary data.
@@ -130,6 +135,53 @@ enum Demand {
     },
 }
 impl Oracle<'_> {
+    fn occurrence(&self, consumer: (PackageId, OwnerKey)) -> associated::Occurrence {
+        let context = self.1.map_or(associated::Context::Forbidden, |scope| {
+            if self.contract(scope).is_some() {
+                associated::Context::Contract(scope)
+            } else if self.function(scope).is_some() || self.implementation(scope).is_some() {
+                associated::Context::Lexical(scope)
+            } else {
+                associated::Context::Forbidden
+            }
+        });
+        associated::Occurrence {
+            parameter_scope: self.1,
+            context,
+            consumer,
+        }
+    }
+    fn declaration_occurrence(&self) -> Option<associated::Occurrence> {
+        let scope = self.1?;
+        Some(self.occurrence((scope.package, OwnerKey::Declaration(scope.declaration))))
+    }
+    fn associated_closure(&self, ty: TypeObjectDigest) -> bool {
+        let mut pending = vec![ty];
+        let mut seen = BTreeSet::new();
+        while let Some(ty) = pending.pop() {
+            if !seen.insert(ty) {
+                continue;
+            }
+            let Some(object) = self
+                .0
+                .types
+                .get(&ty)
+                .or_else(|| self.0.dependency_types.get(&ty))
+            else {
+                return false;
+            };
+            if object.form.is_associated() {
+                return true;
+            }
+            pending.extend(object.child_types());
+        }
+        false
+    }
+    fn associated_owned(&self, ty: TypeObjectDigest) -> bool {
+        self.declaration_occurrence().is_some_and(|occurrence| {
+            associated::Resolver::new(self.0).owned_type(ty, occurrence, 0) == Ok(true)
+        })
+    }
     fn type_generation(
         &self,
         roots: Vec<TypeObjectDigest>,
@@ -251,6 +303,7 @@ impl Oracle<'_> {
             )
         ) || self.nominal_owner(t).is_some()
             || matches!(self.form(t), Some(TypeForm::TypeParameter { parameter }) if self.type_parameter(self.1.map_or(self.0.root.package_id, |f| f.package), *parameter).is_some_and(|p| p.constraints.has_owned()))
+            || self.form(t).is_some_and(TypeForm::is_associated) && self.associated_owned(t)
     }
     fn contains(&self, t: TypeObjectDigest) -> bool {
         let mut todo = vec![t];
@@ -270,7 +323,9 @@ impl Oracle<'_> {
             else {
                 return true;
             };
-            if matches!(t.form, TypeForm::ByteBuffer | TypeForm::OwnedI64Cell) {
+            if matches!(t.form, TypeForm::ByteBuffer | TypeForm::OwnedI64Cell)
+                || t.form.is_associated()
+            {
                 return true;
             }
             if let TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } = &t.form
@@ -377,6 +432,10 @@ impl Oracle<'_> {
     fn owned_type_in_scope(&self, ty: TypeObjectDigest) -> bool {
         match self.form(ty) {
             Some(
+                TypeForm::AssociatedContractMember { .. }
+                | TypeForm::AssociatedWitnessProjection { .. },
+            ) => self.associated_owned(ty),
+            Some(
                 TypeForm::OwnedProduct { .. }
                 | TypeForm::OwnedChoice { .. }
                 | TypeForm::OwnedSequence { .. },
@@ -394,6 +453,9 @@ impl Oracle<'_> {
         }
     }
     fn product_shape(&self, ty: TypeObjectDigest) -> bool {
+        if self.associated_closure(ty) {
+            return self.associated_owned(ty);
+        }
         let mut remaining = contract::MAXIMUM_VALIDATION_WORK;
         self.layout_shape(ty, &mut BTreeSet::new(), 0, &mut remaining) == Some(true)
     }
@@ -595,6 +657,30 @@ impl Oracle<'_> {
         let OwnerRecord::Expression(e) = self.0.owners.get(&OwnerKey::Expression(id))? else {
             return None;
         };
+        if let ExpressionOperation::Local { value } = e.operation
+            && let Some(ty) = self.local_type(value)
+            && self.associated_closure(ty)
+        {
+            // Owning/borrowed argument and projected-field paths read a Local
+            // directly rather than evaluate flow(Local). Validate the exact
+            // read record and its parameter/binding consumer on every such path.
+            let key = match value {
+                LocalValueReference::FunctionParameter(p) => OwnerKey::Parameter(p),
+                LocalValueReference::LexicalBinding(b) => OwnerKey::Binding(b),
+                _ => return None,
+            };
+            let mut resolver = associated::Resolver::new(self.0);
+            resolver
+                .admit_roots(
+                    &[ty],
+                    self.occurrence((self.0.root.package_id, OwnerKey::Expression(id))),
+                    false,
+                )
+                .ok()?;
+            resolver
+                .admit_roots(&[ty], self.occurrence((self.0.root.package_id, key)), false)
+                .ok()?;
+        }
         Some(&e.operation)
     }
     fn exact_application_type(
@@ -1002,6 +1088,30 @@ impl Oracle<'_> {
         rights: &mut Rights,
         depth: usize,
     ) -> Option<(LocalValueReference, Vec<LocalValueReference>)> {
+        if self.associated_invocation_required(call) {
+            let invocation = self.associated_invocation(call)?;
+            let source = invocation.result_borrow?;
+            if invocation.parameters.get(source)?.2 != ParameterUse::Borrow
+                || invocation.result != ty
+            {
+                return None;
+            }
+            let ExpressionOperation::Local { value: local } =
+                self.expression(*invocation.arguments.get(source)?)?
+            else {
+                return None;
+            };
+            let mut overlay = self.0.clone();
+            overlay.types.extend(invocation.derived);
+            Oracle(&overlay, self.1).arguments(
+                &invocation.parameters,
+                &invocation.arguments,
+                rights,
+                depth,
+                &BTreeMap::new(),
+            )?;
+            return Some((*local, rights.loan(*local)?));
+        }
         let (parameters, arguments, source, result, substitutions) = match self.expression(call)? {
             ExpressionOperation::Call {
                 function,
@@ -1130,6 +1240,56 @@ impl Oracle<'_> {
         if depth > contract::MAXIMUM_EXPRESSION_DEPTH {
             return None;
         }
+        let OwnerRecord::Expression(expression) = self.0.owners.get(&OwnerKey::Expression(id))?
+        else {
+            return None;
+        };
+        let mut roots = expression.type_roots();
+        let mut extra_consumer = None;
+        match self.expression(id)? {
+            ExpressionOperation::Local { value } => {
+                if let Some(ty) = self.local_type(*value) {
+                    roots.push(ty);
+                    extra_consumer = Some(match value {
+                        LocalValueReference::FunctionParameter(p) => OwnerKey::Parameter(*p),
+                        LocalValueReference::LexicalBinding(b) => OwnerKey::Binding(*b),
+                        _ => return None,
+                    });
+                }
+            }
+            ExpressionOperation::BorrowCall { binding, .. } => {
+                let OwnerRecord::Binding(record) =
+                    self.0.owners.get(&OwnerKey::Binding(*binding))?
+                else {
+                    return None;
+                };
+                roots.extend(record.declared_type);
+                extra_consumer = Some(OwnerKey::Binding(*binding));
+            }
+            _ => {}
+        }
+        if let Demand::Borrow { ty, .. } = demand {
+            roots.push(ty);
+        }
+        if roots.iter().any(|ty| self.associated_closure(*ty)) {
+            let mut resolver = associated::Resolver::new(self.0);
+            resolver
+                .admit_roots(
+                    &roots,
+                    self.occurrence((self.0.root.package_id, OwnerKey::Expression(id))),
+                    false,
+                )
+                .ok()?;
+            if let Some(key) = extra_consumer {
+                resolver
+                    .admit_roots(
+                        &roots,
+                        self.occurrence((self.0.root.package_id, key)),
+                        false,
+                    )
+                    .ok()?;
+            }
+        }
         let take = matches!(demand, Demand::Owner);
         if matches!(demand, Demand::Borrow { .. })
             && !matches!(
@@ -1150,6 +1310,24 @@ impl Oracle<'_> {
             )
         {
             return None;
+        }
+        if self.associated_invocation_required(id) {
+            let invocation = self.associated_invocation(id)?;
+            if invocation.result_borrow.is_some() {
+                return None;
+            }
+            let mut overlay = self.0.clone();
+            overlay.types.extend(invocation.derived);
+            let oracle = Oracle(&overlay, self.1);
+            oracle.arguments(
+                &invocation.parameters,
+                &invocation.arguments,
+                rights,
+                depth,
+                &BTreeMap::new(),
+            )?;
+            let output = oracle.buffer(invocation.result);
+            return if output && !take { None } else { Some(output) };
         }
         let plain = |id, rights: &mut Rights| {
             self.run(id, rights, false, depth + 1)

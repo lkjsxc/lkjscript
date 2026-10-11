@@ -1,7 +1,10 @@
 //! Exact nominal custody and module-owned representation. Layout is derived, never structural identity.
+use super::owned_associated::{
+    OwnedAssociatedAdmission, OwnedTypeOccurrence, TypeParameterContext,
+};
 use super::*;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
-use crate::platform::semantic_id::{FieldId, TypeParameterId};
+use crate::platform::semantic_id::{CaseId, FieldId, TypeParameterId};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[cfg(test)]
@@ -10,49 +13,94 @@ mod depth_tests;
 
 const MAXIMUM_LAYOUT_METADATA_BYTES: usize = 64 * 1_048_576;
 
-/// An internal property proof may inspect the exact transitive evidence retained
-/// by admitted imports. The caller's package and lexical parameter scope stay
-/// unchanged; this reader is never used for authored-name/reference validation.
-pub(crate) struct RepresentationRead<'a, R: ?Sized> {
-    pub(crate) read: &'a R,
+/// Data-only evidence for a property proof, never an authored reference reader.
+pub(crate) struct NominalProperty {
+    pub(crate) header: OwnerHeader,
+    pub(crate) parameters: Vec<TypeParameterId>,
+    pub(crate) fields: Vec<FieldId>,
+    pub(crate) cases: Vec<CaseId>,
 }
 
-impl<R: ExpressionRead + ?Sized> ExpressionRead for RepresentationRead<'_, R> {
-    fn package_id(&self) -> PackageId {
-        self.read.package_id()
+pub(crate) fn property_definition(
+    read: &(impl ExpressionRead + ?Sized),
+    reference: DeclarationReference,
+) -> Result<NominalProperty, Diagnostic> {
+    read.validation_work()?;
+    let key = OwnerKey::Declaration(reference.declaration);
+    let (header, kind, parameters, fields, cases) = if reference.package == read.package_id() {
+        let Some(OwnerRecord::Declaration(record)) = read.owner(key)? else {
+            return Err(reject("missing exact nominal property declaration"));
+        };
+        let (kind, parameters, fields, cases) = match record.payload {
+            DeclarationPayload::Record {
+                type_parameters,
+                fields,
+            } => (OwnerKind::Record, type_parameters, fields, Vec::new()),
+            DeclarationPayload::OwnedRecord {
+                type_parameters,
+                fields,
+            } => (OwnerKind::OwnedRecord, type_parameters, fields, Vec::new()),
+            DeclarationPayload::Variant {
+                type_parameters,
+                cases,
+            } => (OwnerKind::Variant, type_parameters, Vec::new(), cases),
+            _ => {
+                return Err(reject(
+                    "representation properties require a data declaration",
+                ));
+            }
+        };
+        (record.header, kind, parameters, fields, cases)
+    } else {
+        if !read.has_representation_dependency(reference.package)? {
+            return Err(reject(
+                "nominal property is outside the exact representation closure",
+            ));
+        }
+        let Some(
+            PackageInterfaceRecord::Declaration(record)
+            | PackageInterfaceRecord::RepresentationDeclaration(record),
+        ) = read.package_representation_owner(reference.package, key)?
+        else {
+            return Err(reject("missing imported nominal property declaration"));
+        };
+        let (kind, parameters, fields, cases) = match record.payload {
+            PackageInterfaceDeclarationPayload::Record {
+                type_parameters,
+                fields,
+            } => (OwnerKind::Record, type_parameters, fields, Vec::new()),
+            PackageInterfaceDeclarationPayload::OwnedRecord {
+                type_parameters,
+                fields,
+            } => (OwnerKind::OwnedRecord, type_parameters, fields, Vec::new()),
+            PackageInterfaceDeclarationPayload::Variant {
+                type_parameters,
+                cases,
+            } => (OwnerKind::Variant, type_parameters, Vec::new(), cases),
+            _ => {
+                return Err(reject(
+                    "representation properties require a data declaration",
+                ));
+            }
+        };
+        (record.header, kind, parameters, fields, cases)
+    };
+    if header.owner != key
+        || header.kind != kind
+        || parameters.len() > contract::MAXIMUM_CHILDREN
+        || fields.len() > contract::MAXIMUM_CHILDREN
+        || cases.len() > contract::MAXIMUM_CHILDREN
+    {
+        return Err(reject(
+            "nominal property inventory has a foreign identity or kind",
+        ));
     }
-    fn owner(&self, owner: OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic> {
-        self.read.owner(owner)
-    }
-    fn type_object(&self, ty: TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic> {
-        self.read.type_object(ty)
-    }
-    fn package_interface_owner(
-        &self,
-        package: PackageId,
-        owner: OwnerKey,
-    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
-        self.read.package_representation_owner(package, owner)
-    }
-    fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
-        self.read.has_representation_dependency(package)
-    }
-    fn package_representation_owner(
-        &self,
-        package: PackageId,
-        owner: OwnerKey,
-    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
-        self.read.package_representation_owner(package, owner)
-    }
-    fn has_representation_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
-        self.read.has_representation_dependency(package)
-    }
-    fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
-        self.read.validation_checkpoint()
-    }
-    fn validation_work(&self) -> Result<(), Diagnostic> {
-        self.read.validation_work()
-    }
+    Ok(NominalProperty {
+        header,
+        parameters,
+        fields,
+        cases,
+    })
 }
 
 /// Cumulative admission for derived traversal storage, separate from proof work.
@@ -127,6 +175,27 @@ impl LayoutBudget {
                         self.reserve_bytes(field.name.as_str().len())?;
                     }
                 }
+                TypeForm::TaskFunction { effect, .. } => {
+                    let bytes = effect
+                        .requirements
+                        .len()
+                        .checked_mul(std::mem::size_of::<RequirementOperand>())
+                        .and_then(|bytes| {
+                            effect
+                                .parameters
+                                .len()
+                                .checked_mul(std::mem::size_of::<EffectParameterReference>())
+                                .and_then(|extra| bytes.checked_add(extra))
+                        })
+                        .ok_or_else(|| {
+                            Diagnostic::new(
+                                DiagnosticClass::Resource,
+                                "kernel_owned_record_storage",
+                                "owned representation effect metadata size overflow",
+                            )
+                        })?;
+                    self.reserve_bytes(bytes)?;
+                }
                 _ => {}
             }
             target.insert(digest, object);
@@ -169,33 +238,9 @@ pub(crate) fn definition(
     read: &(impl ExpressionRead + ?Sized),
     reference: DeclarationReference,
 ) -> Result<(Vec<TypeParameterId>, Vec<FieldId>), Diagnostic> {
-    read.validation_work()?;
-    if reference.package == read.package_id() {
-        if let Some(OwnerRecord::Declaration(record)) =
-            read.owner(OwnerKey::Declaration(reference.declaration))?
-            && record.header.contract_version >= 32
-            && let DeclarationPayload::OwnedRecord {
-                type_parameters,
-                fields,
-            } = record.payload
-        {
-            return Ok((type_parameters, fields));
-        }
-    } else if read.has_representation_dependency(reference.package)?
-        && let Some(
-            PackageInterfaceRecord::Declaration(record)
-            | PackageInterfaceRecord::RepresentationDeclaration(record),
-        ) = read.package_representation_owner(
-            reference.package,
-            OwnerKey::Declaration(reference.declaration),
-        )?
-        && record.header.contract_version >= 32
-        && let PackageInterfaceDeclarationPayload::OwnedRecord {
-            type_parameters,
-            fields,
-        } = record.payload
-    {
-        return Ok((type_parameters, fields));
+    let property = property_definition(read, reference)?;
+    if property.header.kind == OwnerKind::OwnedRecord && property.header.contract_version >= 32 {
+        return Ok((property.parameters, property.fields));
     }
     Err(reject("missing admitted nominal owned record declaration"))
 }
@@ -213,19 +258,49 @@ pub(crate) fn is_owned(
         TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => declaration,
         _ => return Ok(false),
     };
+    let key = OwnerKey::Declaration(declaration.declaration);
     if declaration.package == read.package_id() {
-        Ok(
-            matches!(read.owner(OwnerKey::Declaration(declaration.declaration))?,
-            Some(OwnerRecord::Declaration(record)) if matches!(record.payload, DeclarationPayload::OwnedRecord { .. })),
-        )
+        let Some(OwnerRecord::Declaration(record)) = read.owner(key)? else {
+            return Ok(false);
+        };
+        if record.header.owner != key {
+            return Err(reject(
+                "nominal ownership property has a foreign declaration identity",
+            ));
+        }
+        let owned = matches!(record.payload, DeclarationPayload::OwnedRecord { .. });
+        if owned && record.header.kind != OwnerKind::OwnedRecord {
+            return Err(reject(
+                "nominal ownership property has a foreign declaration kind",
+            ));
+        }
+        Ok(owned)
     } else {
         if !read.has_representation_dependency(declaration.package)? {
             return Err(reject("owned type is outside the exact package closure"));
         }
-        Ok(
-            matches!(read.package_representation_owner(declaration.package, OwnerKey::Declaration(declaration.declaration))?,
-            Some(PackageInterfaceRecord::Declaration(record) | PackageInterfaceRecord::RepresentationDeclaration(record)) if matches!(record.payload, PackageInterfaceDeclarationPayload::OwnedRecord { .. })),
-        )
+        let Some(
+            PackageInterfaceRecord::Declaration(record)
+            | PackageInterfaceRecord::RepresentationDeclaration(record),
+        ) = read.package_representation_owner(declaration.package, key)?
+        else {
+            return Ok(false);
+        };
+        if record.header.owner != key {
+            return Err(reject(
+                "imported ownership property has a foreign declaration identity",
+            ));
+        }
+        let owned = matches!(
+            record.payload,
+            PackageInterfaceDeclarationPayload::OwnedRecord { .. }
+        );
+        if owned && record.header.kind != OwnerKind::OwnedRecord {
+            return Err(reject(
+                "imported ownership property has a foreign declaration kind",
+            ));
+        }
+        Ok(owned)
     }
 }
 
@@ -234,17 +309,29 @@ pub(crate) fn field(
     reference: FieldReference,
 ) -> Result<FieldRecord, Diagnostic> {
     read.validation_work()?;
-    if reference.package == read.package_id() {
-        if let Some(OwnerRecord::Field(field)) = read.owner(OwnerKey::Field(reference.field))? {
-            return Ok(field);
+    let key = OwnerKey::Field(reference.field);
+    let field = if reference.package == read.package_id() {
+        match read.owner(key)? {
+            Some(OwnerRecord::Field(field)) => field,
+            _ => return Err(reject("missing exact owned record field")),
         }
-    } else if read.has_representation_dependency(reference.package)?
-        && let Some(PackageInterfaceRecord::Field(field)) =
-            read.package_representation_owner(reference.package, OwnerKey::Field(reference.field))?
-    {
-        return Ok(field);
+    } else {
+        if !read.has_representation_dependency(reference.package)? {
+            return Err(reject(
+                "nominal field is outside the exact representation closure",
+            ));
+        }
+        match read.package_representation_owner(reference.package, key)? {
+            Some(PackageInterfaceRecord::Field(field)) => field,
+            _ => return Err(reject("missing imported nominal property field")),
+        }
+    };
+    if field.header.owner != key || field.header.kind != OwnerKind::Field {
+        return Err(reject(
+            "nominal property field has a foreign owner identity",
+        ));
     }
-    Err(reject("missing exact owned record field"))
+    Ok(field)
 }
 
 pub(crate) fn parameter(
@@ -253,6 +340,12 @@ pub(crate) fn parameter(
     id: TypeParameterId,
 ) -> Result<TypeParameterRecord, Diagnostic> {
     read.validation_work()?;
+    let property = property_definition(read, scope)?;
+    if !super::transfer::function_parameter_listed(read, &property.parameters, id)? {
+        return Err(reject(
+            "representation parameter is absent from its exact nominal inventory",
+        ));
+    }
     let record = if scope.package == read.package_id() {
         match read.owner(OwnerKey::TypeParameter(id))? {
             Some(OwnerRecord::TypeParameter(record)) => record,
@@ -264,11 +357,41 @@ pub(crate) fn parameter(
             _ => return Err(reject("missing imported owned record type parameter")),
         }
     };
-    if record.declaration != scope.declaration || record.header.owner != OwnerKey::TypeParameter(id)
+    if record.declaration != scope.declaration
+        || record.header.owner != OwnerKey::TypeParameter(id)
+        || record.header.kind != OwnerKind::TypeParameter
     {
         return Err(reject(
             "owned record parameter escapes its exact declaration",
         ));
+    }
+    Ok(record)
+}
+
+pub(crate) fn case(
+    read: &(impl ExpressionRead + ?Sized),
+    reference: CaseReference,
+) -> Result<CaseRecord, Diagnostic> {
+    read.validation_work()?;
+    let key = OwnerKey::Case(reference.case);
+    let record = if reference.package == read.package_id() {
+        match read.owner(key)? {
+            Some(OwnerRecord::Case(record)) => record,
+            _ => return Err(reject("missing exact nominal property case")),
+        }
+    } else {
+        if !read.has_representation_dependency(reference.package)? {
+            return Err(reject(
+                "nominal case is outside the exact representation closure",
+            ));
+        }
+        match read.package_representation_owner(reference.package, key)? {
+            Some(PackageInterfaceRecord::Case(record)) => record,
+            _ => return Err(reject("missing imported nominal property case")),
+        }
+    };
+    if record.header.owner != key || record.header.kind != OwnerKind::Case {
+        return Err(reject("nominal property case has a foreign owner identity"));
     }
     Ok(record)
 }
@@ -401,37 +524,78 @@ pub(crate) fn validate_application(
     ty: TypeObjectDigest,
     scope: Option<DeclarationReference>,
 ) -> Result<(), Diagnostic> {
-    let representation = RepresentationRead { read };
-    let read: &dyn ExpressionRead = &representation;
+    validate_application_inner(read, ty, scope, None, &OwnedAssociatedAdmission::new())
+}
+
+pub(crate) fn validate_application_at(
+    read: &(impl ExpressionRead + ?Sized),
+    ty: TypeObjectDigest,
+    occurrence: OwnedTypeOccurrence,
+    associated: &OwnedAssociatedAdmission,
+) -> Result<(), Diagnostic> {
+    validate_application_inner(
+        read,
+        ty,
+        occurrence.parameters.scope(),
+        Some(occurrence),
+        associated,
+    )
+}
+
+fn validate_application_inner(
+    read: &(impl ExpressionRead + ?Sized),
+    ty: TypeObjectDigest,
+    scope: Option<DeclarationReference>,
+    occurrence: Option<OwnedTypeOccurrence>,
+    associated: &OwnedAssociatedAdmission,
+) -> Result<(), Diagnostic> {
     let (declaration, arguments) = nominal(read, ty)?;
-    validate_definition(read, declaration)?;
+    validate_definition_at(read, declaration, associated)?;
     validate_type_depth(read, ty, 0)?;
+    if let Some(occurrence) = occurrence {
+        associated.validate_occurrence_at(read, &[ty], occurrence)?;
+    }
     let (parameters, _) = definition(read, declaration)?;
     if parameters.len() != arguments.len() {
         return Err(reject(
             "owned record application requires all ordered arguments",
         ));
     }
-    let assumptions = super::transfer::ordinary_assumptions_in(read, scope)?;
+    let parameters_context = occurrence.map_or(
+        scope.map_or(TypeParameterContext::Closed, TypeParameterContext::Authored),
+        |occurrence| occurrence.parameters,
+    );
+    let assumptions = super::transfer::ordinary_assumptions_at(read, parameters_context)?;
     for (id, ty) in parameters.into_iter().zip(arguments) {
         read.validation_work()?;
         let formal = parameter(read, declaration, id)?;
-        if formal.constraints.has_owned() {
+        if let Some(occurrence) = occurrence {
+            super::owned_contract::validate_type_argument_constraints_at(
+                read,
+                formal.constraints,
+                ty,
+                occurrence,
+                associated,
+            )?;
+        } else if formal.constraints.has_owned() {
             super::owned_contract::validate_owned_type(read, ty, scope)?;
-        } else if !super::owned_contract::ordinary_with_assumptions_in(
-            read,
-            ty,
-            scope,
-            &assumptions,
-        )? {
+        }
+        if !formal.constraints.has_owned()
+            && !super::owned_contract::ordinary_with_assumptions_at(
+                read,
+                ty,
+                parameters_context,
+                &assumptions,
+            )?
+        {
             return Err(reject(
                 "ordinary owned-record arguments require first-order Transferable data",
             ));
         }
-        if formal.constraints.requires_transfer() {
+        if occurrence.is_none() && formal.constraints.requires_transfer() {
             super::transfer::admit_in(read, ty, scope)?;
         }
-        if formal.constraints.requires_share() {
+        if occurrence.is_none() && formal.constraints.requires_share() {
             super::share::admit_in(read, ty, scope)?;
         }
     }
@@ -442,8 +606,14 @@ pub(crate) fn validate_definition(
     read: &(impl ExpressionRead + ?Sized),
     reference: DeclarationReference,
 ) -> Result<(), Diagnostic> {
-    let representation = RepresentationRead { read };
-    let read: &dyn ExpressionRead = &representation;
+    validate_definition_at(read, reference, &OwnedAssociatedAdmission::new())
+}
+
+fn validate_definition_at(
+    read: &(impl ExpressionRead + ?Sized),
+    reference: DeclarationReference,
+    associated: &OwnedAssociatedAdmission,
+) -> Result<(), Diagnostic> {
     let (parameters, fields) = definition(read, reference)?;
     let mut budget = LayoutBudget::default();
     let mut names = BTreeSet::new();
@@ -460,7 +630,8 @@ pub(crate) fn validate_definition(
         }
     }
     validate_representation_cycles(read, reference, &mut budget)?;
-    let assumptions = super::transfer::ordinary_assumptions_in(read, Some(reference))?;
+    let parameters_context = TypeParameterContext::NominalRepresentation(reference);
+    let assumptions = super::transfer::ordinary_assumptions_at(read, parameters_context)?;
     for id in fields {
         let field = field(
             read,
@@ -472,13 +643,16 @@ pub(crate) fn validate_definition(
         if field.declaration != reference.declaration {
             return Err(reject("owned record field belongs to another declaration"));
         }
+        let occurrence =
+            OwnedTypeOccurrence::representation(reference, field.header.contract_version);
         validate_type_depth(read, field.ty, 1)?;
-        if super::memory::direct_in(read, reference.package, field.ty)? {
-            super::owned_contract::validate_owned_type(read, field.ty, Some(reference))?;
-        } else if !super::owned_contract::ordinary_with_assumptions_in(
+        associated.validate_occurrence_at(read, &[field.ty], occurrence)?;
+        if super::memory::direct_at(read, field.ty, occurrence, associated)? {
+            super::owned_contract::validate_owned_type_at(read, field.ty, occurrence, associated)?;
+        } else if !super::owned_contract::ordinary_with_assumptions_at(
             read,
             field.ty,
-            Some(reference),
+            parameters_context,
             &assumptions,
         )? {
             return Err(reject(

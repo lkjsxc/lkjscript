@@ -1,8 +1,9 @@
 # Current status
 
 Snapshot: 2026-10-11. Development **0.1.95** selects first-order associated Owned
-members on exact implementation witnesses. The isolated codec and semantic-helper
-foundation compiles and passes its focused checks. Complete associated semantics
+members on exact implementation witnesses. The codec, occurrence-aware ownership,
+call-signature and borrowed-result integration passes the full library suite and
+strict Clippy. Complete associated semantics
 remain explicitly unsupported and unavailable on main. Native package planning
 **0.1.94** has passed all **29**
 fresh full acceptance gates on its separate exact source.
@@ -12,7 +13,11 @@ fresh full acceptance gates on its separate exact source.
 Worktree `/home/coder/workspace/lkjscript-associated-owned-types-20261011`, branch
 `work/associated-owned-types-20261011`, starts from planner reporting source
 `d01708a2d089af33e79747c097ca61b5c90d4fd7`. Its completed acceptance does not validate
-this worktree's successor edits. Preserve both worktrees and
+this worktree's successor edits. Local foundation commit
+`e45d1b6d8ffc6c6e83e0077f2e01320b572119d2` and reporting merge
+`803a2cfeb21c854375b3890d094fe5f92c40caaa` preserve the accepted ancestry.
+The semantic integration is a validated local development checkpoint, not complete
+feature acceptance. Preserve both worktrees and
 ignored original evidence. The local
 [selection record](../.artifacts/associated-owned-types/selection.json) owns current
 implementation assignments, original design evidence and build coordination.
@@ -34,8 +39,8 @@ recursive type flow, public authoring and maintained adoption remain required.
 Incomplete feature paths currently refuse explicitly at full admission. The
 tested semantic helpers check exact member/scope authority and finite stored
 bindings. A separate substitution environment retains exact caller witnesses and
-derived objects even with no ordinary type arguments; its production callers are
-not yet integrated. Ordinary signature caches now invalidate on changed type
+derived objects even with no ordinary type arguments; its production call-site
+integration passes focused and full library checks. Ordinary signature caches now invalidate on changed type
 bindings, with passing substitution, capacity and cancellation checks.
 The Rust growth oracle remains an independent test model, not the production proof.
 
@@ -84,10 +89,24 @@ attempts remain preserved. These are development checks, not fresh full source a
 Original producer logs, immutable selections and test receipts live under
 `.artifacts/associated-owned-types/` and are linked from the selection record.
 
-Next integrate occurrence-aware ownership and independent memory checks, preserving
-authored authority separately from private representation reads. Then carry exact
-witness environments and retained types through calls, borrowed results and
-preparation; implement complete finite-flow proof and its independent adapter.
+The semantic checkpoint implements occurrence-aware ownership, exact call and
+borrowed-result environments, retained derived types, and separate authored versus
+private representation reads. New canonical tests cover caller/source generations,
+source-tied borrowing, capture and transport bounds, and effect substitution before
+opaque caller arguments. Its independent canonical memory reference now covers the
+selected direct, witness and method paths; broader contextual integration remains.
+Stable source snapshot
+`9f3151e3a0e6be276e552da74343c0770a8e5cfb881c6116e96e53bd03bbcfa1`
+passes **87/87** focused checks, strict workspace/all-targets/all-features Clippy,
+and the full library suite: **1,971 passed, 0 failed, 8 ignored** in 189.62 seconds.
+The immutable executable, before/after source inventories and original terminals
+are retained under the selection record. Earlier compiler, diagnostic-order,
+depth, quota, reference and stale budget-test failures remain distinct originals.
+Occurrence admission now reuses exact invocation-local unchanged-subtree proofs;
+every child still pays traversal work and performs its contextual nominal checks.
+Quota limits were not raised, and original semantic depth diagnostics remain owned
+by their structural type validators. Next complete preparation and runtime closure,
+the remaining canonical memory reference, and finite-flow proof with independent adapters.
 Complete public composition, maintained BlockRead adoption and dependency-complete
 fresh acceptance on stable source. Source
 acceptance, exact-source mainline delivery and finalized-byte publication remain
@@ -103,22 +122,24 @@ Receipt SHA-256 is `c0912b08adfd985f487cad4461006563ffd211c5e3e11929c933a6e592c1
 The predecessor's `full-second-summary.json` records exact source, original terminal
 and joined cleanup; its inventory retains 71 evidence files. The earlier **28/29**
 failed full receipt remains separate and unchanged. Docs-only reporting descendant
-`92e4c9dc7293bae6d4590c4b0647ae5513f9d98f` is committed locally. Source acceptance has not yet
-become mainline delivery or finalized-byte publication.
+`92e4c9dc7293bae6d4590c4b0647ae5513f9d98f` remains an ancestor of the delivered
+reporting source below. Finalized-byte publication is still pending.
 
-Main remains reporting descendant `8fb6230aa92a43d82c5e45a093acdf58b7a5f7e4` of
-accepted extraction source `2396e69cc3eccd8971bdee092ccc47e7978cbd52` (**26/26** fresh
-full gates). The generation-9 v0.1.92 producer
-[38130920573/1](https://github.com/lkjsxc/lkjscript/actions/runs/38130920573) completed
-successfully; its original acceptance terminal, assets and verifier have been
-authenticated. Exact annotated tag/control readback passed, and one normal
-unchanged-asset promotion [38149245391/1](https://github.com/lkjsxc/lkjscript/actions/runs/38149245391)
-published immutable **v0.1.92** (release `409737419`), but the overall promotion
-failed during public metadata acquisition before anonymous download and smoke
-verification. The original tag and public asset sizes/digests match the accepted
-producer. A maintained `resume-public` is being prepared against the unchanged
-generation-9 controller and original producer; retain the failed original.
-Reconcile the resumed public verification terminal before replacing main's
-controller with generation 10. The last fully verified public release remains
-immutable **v0.1.89**. [Release](release.md) owns the authenticated producer,
-exact-asset promotion and `immutable_published_and_public_verified` requirements.
+Main now contains accepted native planning **0.1.94** at reporting descendant
+`c3d27a7d451879ab7624279e9e690a54d6c65730`, delivered by a normal fast-forward
+push and independent Git/API ancestry readback. Its docs-only changes do not
+relabel the exact `d01708a2` full acceptance. The controller is generation 10.
+The original finalized-byte candidate [38152770069/1](https://github.com/lkjsxc/lkjscript/actions/runs/38152770069)
+was dispatched at 15:47:38 UTC on exact `c3d27a7d`; its own 23 release-source
+gates, finalized assets and authenticated `candidate_accepted` terminal remain
+pending. No .94 tag or promotion has been created.
+
+Latest fully verified public release is immutable **v0.1.92**, release `409737419`.
+Original producer [38130920573/1](https://github.com/lkjsxc/lkjscript/actions/runs/38130920573)
+and publisher proof remain separate from failed promotion
+[38149245391/1](https://github.com/lkjsxc/lkjscript/actions/runs/38149245391).
+Its supported resume [38150694544/1](https://github.com/lkjsxc/lkjscript/actions/runs/38150694544)
+completed with authenticated `public_recheck_passed`: exact and latest anonymous
+assets matched, installed lifecycle checks were fresh, and cleanup joined.
+The original tag/control and three accepted public assets are unchanged.
+[Release](release.md) owns source, finalized-byte acceptance and publication gates.

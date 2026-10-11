@@ -1,4 +1,5 @@
 //! Structural affine products. Ordinary metadata uses the existing closed-data proof.
+use super::owned_associated::{OwnedAssociatedAdmission, OwnedTypeOccurrence};
 use super::*;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::DeclarationId;
@@ -8,6 +9,45 @@ pub(crate) fn reject(message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Semantic, "kernel_owned_product", message)
 }
 
+/// The language bound belongs to the enclosing owned structure, independently
+/// of an associated-type traversal's configurable resource admission. Callers
+/// with a derived overlay must supply that same overlay for this proof.
+pub(crate) fn validate_owning_type_depth(
+    read: &(impl ExpressionRead + ?Sized),
+    ty: TypeObjectDigest,
+) -> Result<(), Diagnostic> {
+    let object = read
+        .type_object(ty)?
+        .ok_or_else(|| reject("missing owned depth type"))?;
+    let code = match object.form {
+        TypeForm::OwnedProduct { .. } => "kernel_owned_product",
+        TypeForm::OwnedChoice { .. } => "kernel_owned_choice",
+        TypeForm::OwnedSequence { .. } => "kernel_owned_sequence",
+        TypeForm::Named { .. } | TypeForm::Applied { .. }
+            if super::owned_record::is_owned(read, read.package_id(), ty)? =>
+        {
+            return super::owned_record::validate_type_depth(read, ty, 0);
+        }
+        _ => return Ok(()),
+    };
+    validate_composite_depth(read, ty, code)
+}
+
+fn validate_composite_depth(
+    read: &(impl ExpressionRead + ?Sized),
+    ty: TypeObjectDigest,
+    code: &str,
+) -> Result<(), Diagnostic> {
+    // One path can cross both structural syntax and private nominal layouts.
+    // Keep the enclosing composite diagnostic while using the shared depth proof.
+    super::owned_record::validate_type_depth(read, ty, 0).map_err(|mut diagnostic| {
+        if diagnostic.code == "kernel_owned_record_depth" {
+            diagnostic.code = code.to_owned();
+        }
+        diagnostic
+    })
+}
+
 /// An extension type cannot acquire older graph authority merely by using old
 /// expression tags (for example a product-only relay consisting of Local).
 pub(crate) fn require_generation(
@@ -15,7 +55,7 @@ pub(crate) fn require_generation(
     roots: Vec<TypeObjectDigest>,
     generation: u16,
 ) -> Result<(), Diagnostic> {
-    if generation >= 32 {
+    if generation >= contract::GRAPH_CONTRACT_VERSION {
         return Ok(());
     }
     let mut pending = roots;
@@ -28,6 +68,13 @@ pub(crate) fn require_generation(
         let object = read
             .type_object(ty)?
             .ok_or_else(|| reject("missing graph-bound type"))?;
+        if generation < contract::GRAPH_CONTRACT_VERSION && object.form.is_associated() {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Semantic,
+                "kernel_owned_associated_generation",
+                "associated type closure requires Graph 33",
+            ));
+        }
         if generation < 32 && super::owned_record::is_owned(read, read.package_id(), ty)? {
             return Err(super::owned_record::reject(
                 "nominal owned record type closure requires Graph 32",
@@ -112,14 +159,7 @@ pub(crate) fn validate_in_scope(
         _ => "kernel_owned_product",
     };
     let reject = |message| Diagnostic::new(DiagnosticClass::Semantic, code, message);
-    // One path can cross both structural syntax and private nominal layouts.
-    // Keep the enclosing composite diagnostic while using the shared depth proof.
-    super::owned_record::validate_type_depth(read, ty, 0).map_err(|mut diagnostic| {
-        if diagnostic.code == "kernel_owned_record_depth" {
-            diagnostic.code = code.to_owned();
-        }
-        diagnostic
-    })?;
+    validate_composite_depth(read, ty, code)?;
     let mut pending = vec![(ty, 0)];
     let mut seen = BTreeSet::new();
     while let Some((ty, depth)) = pending.pop() {
@@ -190,6 +230,103 @@ pub(crate) fn validate_in_scope(
                     child_type,
                     scope,
                     &ordinary_assumptions,
+                )? =>
+                {
+                    return Err(reject(
+                        "ordinary composite children require closed data or exact in-scope transferable data",
+                    ));
+                }
+                _ => {}
+            }
+        }
+        if !owned {
+            return Err(reject(
+                "owned structure requires at least one direct owned field or case",
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Complete composite admission retains caller authority for actuals. Raw
+/// nominal templates use their explicit representation context in record proof.
+pub(crate) fn validate_at(
+    read: &(impl ExpressionRead + ?Sized),
+    ty: TypeObjectDigest,
+    occurrence: OwnedTypeOccurrence,
+    associated: &OwnedAssociatedAdmission,
+) -> Result<(), Diagnostic> {
+    let code = match read.type_object(ty)?.map(|object| object.form) {
+        Some(TypeForm::OwnedSequence { .. }) => "kernel_owned_sequence",
+        Some(TypeForm::OwnedChoice { .. }) => "kernel_owned_choice",
+        _ => "kernel_owned_product",
+    };
+    let reject = |message| Diagnostic::new(DiagnosticClass::Semantic, code, message);
+    validate_composite_depth(read, ty, code)?;
+    associated.validate_occurrence_at(read, &[ty], occurrence)?;
+    associated.reserve::<TypeObjectDigest>(1)?;
+    require_generation(read, vec![ty], occurrence.consumer_generation)?;
+    let assumptions = super::transfer::ordinary_assumptions_at(read, occurrence.parameters)?;
+    associated.reserve::<(TypeObjectDigest, usize)>(1)?;
+    let mut pending = vec![(ty, 0usize)];
+    let mut depths = BTreeMap::new();
+    while let Some((ty, depth)) = pending.pop() {
+        read.validation_work()?;
+        if depth > contract::MAXIMUM_TYPE_DEPTH {
+            return Err(reject(
+                "owned composite exceeds the structural type depth bound",
+            ));
+        }
+        if depths.get(&ty).is_some_and(|previous| *previous >= depth) {
+            continue;
+        }
+        if !depths.contains_key(&ty) {
+            associated.reserve::<(TypeObjectDigest, usize)>(1)?;
+        }
+        depths.insert(ty, depth);
+        let object = read
+            .type_object(ty)?
+            .ok_or_else(|| reject("missing owned composite type"))?;
+        let (sequence_item, fields) = match object.form {
+            TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {
+                (None, fields)
+            }
+            TypeForm::OwnedSequence { item } => (Some(item), Vec::new()),
+            _ => {
+                return Err(reject(
+                    "explicit composite operand requires an owned product, choice or sequence type",
+                ));
+            }
+        };
+        let mut owned = sequence_item.is_some();
+        for child in sequence_item
+            .into_iter()
+            .chain(fields.into_iter().map(|field| field.ty))
+        {
+            read.validation_work()?;
+            let form = read
+                .type_object(child)?
+                .ok_or_else(|| reject("missing owned composite child"))?
+                .form;
+            match form {
+                TypeForm::OwnedProduct { .. }
+                | TypeForm::OwnedChoice { .. }
+                | TypeForm::OwnedSequence { .. } => {
+                    owned = true;
+                    associated.reserve::<(TypeObjectDigest, usize)>(1)?;
+                    pending.push((child, depth + 1));
+                }
+                _ if super::memory::direct_at(read, child, occurrence, associated)? => {
+                    super::owned_contract::validate_owned_type_at(
+                        read, child, occurrence, associated,
+                    )?;
+                    owned = true;
+                }
+                _ if !super::owned_contract::ordinary_with_assumptions_at(
+                    read,
+                    child,
+                    occurrence.parameters,
+                    &assumptions,
                 )? =>
                 {
                     return Err(reject(

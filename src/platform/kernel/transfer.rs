@@ -1,5 +1,8 @@
 //! Bounded structural transfer obligations under exact lexical type assumptions.
 //! This proves language meaning; it neither grants capabilities nor moves tokens.
+use super::owned_associated::{
+    OwnedAssociatedAdmission, OwnedTypeOccurrence, TypeParameterContext,
+};
 use super::*;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::{DeclarationId, TypeParameterId};
@@ -158,6 +161,28 @@ pub(super) fn ordinary_assumptions_in(
     Ok(assumptions)
 }
 
+pub(super) fn ordinary_assumptions_at(
+    read: &(impl ExpressionRead + ?Sized),
+    context: TypeParameterContext,
+) -> Result<BTreeSet<TypeParameterId>, Diagnostic> {
+    let TypeParameterContext::NominalRepresentation(scope) = context else {
+        return ordinary_assumptions_in(read, context.scope());
+    };
+    let property = super::owned_record::property_definition(read, scope)?;
+    let mut assumptions = BTreeSet::new();
+    for id in property.parameters {
+        read.validation_work()?;
+        let parameter = super::owned_record::parameter(read, scope, id)?;
+        if !parameter.constraints.has_owned()
+            && (property.header.kind != OwnerKind::OwnedRecord
+                || parameter.constraints.requires_transfer())
+        {
+            assumptions.insert(id);
+        }
+    }
+    Ok(assumptions)
+}
+
 fn owned_parameter_in(
     read: &(impl ExpressionRead + ?Sized),
     parameter: TypeParameterId,
@@ -269,12 +294,42 @@ pub(crate) fn admit_in(
     ty: TypeObjectDigest,
     scope: Option<DeclarationReference>,
 ) -> Result<bool, Diagnostic> {
-    let representation = super::owned_record::RepresentationRead { read };
-    let read: &dyn ExpressionRead = &representation;
+    admit_inner(read, ty, scope, None)
+}
+
+pub(crate) fn admit_at(
+    read: &(impl ExpressionRead + ?Sized),
+    ty: TypeObjectDigest,
+    occurrence: OwnedTypeOccurrence,
+    associated: &OwnedAssociatedAdmission,
+) -> Result<bool, Diagnostic> {
+    associated.validate_occurrence_at(read, &[ty], occurrence)?;
+    admit_inner(
+        read,
+        ty,
+        occurrence.parameters.scope(),
+        Some((occurrence, associated)),
+    )
+}
+
+fn admit_inner(
+    read: &(impl ExpressionRead + ?Sized),
+    ty: TypeObjectDigest,
+    scope: Option<DeclarationReference>,
+    occurrence: Option<(OwnedTypeOccurrence, &OwnedAssociatedAdmission)>,
+) -> Result<bool, Diagnostic> {
     read.validation_work()?;
     let package = scope.map_or(read.package_id(), |scope| scope.package);
-    let root_owned = super::memory::direct_in(read, package, ty)?;
-    let assumptions = ordinary_assumptions_in(read, scope)?;
+    let root_owned = if let Some((occurrence, associated)) = occurrence {
+        super::memory::direct_at(read, ty, occurrence, associated)?
+    } else {
+        super::memory::direct_in(read, package, ty)?
+    };
+    let parameters = occurrence.map_or(
+        scope.map_or(TypeParameterContext::Closed, TypeParameterContext::Authored),
+        |(occurrence, _)| occurrence.parameters,
+    );
+    let assumptions = ordinary_assumptions_at(read, parameters)?;
     if matches!(
         read.type_object(ty)?.map(|t| t.form),
         Some(
@@ -283,7 +338,11 @@ pub(crate) fn admit_in(
                 | TypeForm::OwnedSequence { .. }
         )
     ) {
-        super::owned_product::validate_in_scope(read, ty, scope)?;
+        if let Some((occurrence, associated)) = occurrence {
+            super::owned_product::validate_at(read, ty, occurrence, associated)?;
+        } else {
+            super::owned_product::validate_in_scope(read, ty, scope)?;
+        }
     }
     read.validation_work()?;
     let mut derived_types = BTreeMap::new();
@@ -317,7 +376,13 @@ pub(crate) fn admit_in(
             TypeForm::Named { .. } | TypeForm::Applied { .. }
                 if super::owned_record::is_owned(read, package, current)? =>
             {
-                super::owned_record::validate_application(read, current, scope)?;
+                if let Some((occurrence, associated)) = occurrence {
+                    super::owned_record::validate_application_at(
+                        read, current, occurrence, associated,
+                    )?;
+                } else {
+                    super::owned_record::validate_application(read, current, scope)?;
+                }
                 let layout = super::owned_record::layout(read, current)?;
                 for field_type in object
                     .child_types()
@@ -331,9 +396,32 @@ pub(crate) fn admit_in(
             }
             TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => {}
             TypeForm::TypeParameter { parameter }
-                if super::memory::direct_in(read, package, current)? =>
+                if if let Some((occurrence, associated)) = occurrence {
+                    super::memory::direct_at(read, current, occurrence, associated)?
+                } else {
+                    super::memory::direct_in(read, package, current)?
+                } =>
             {
-                owned_parameter_in(read, parameter, scope)?;
+                if let Some((occurrence, associated)) = occurrence
+                    && let TypeParameterContext::NominalRepresentation(scope) =
+                        occurrence.parameters
+                {
+                    associated.validate_owned_parameter_at(
+                        read,
+                        parameter,
+                        occurrence.parameters,
+                    )?;
+                    if !super::owned_record::parameter(read, scope, parameter)?
+                        .constraints
+                        .requires_transfer()
+                    {
+                        return Err(reject(
+                            "representation owner requires its exact Transferable bound",
+                        ));
+                    }
+                } else {
+                    owned_parameter_in(read, parameter, scope)?;
+                }
             }
             TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {
                 for field in fields {
@@ -345,10 +433,16 @@ pub(crate) fn admit_in(
                 read.validation_work()?;
                 pending.push((item, depth + 1));
             }
-            _ if super::owned_contract::ordinary_with_assumptions_in(
+            TypeForm::AssociatedContractMember { .. }
+            | TypeForm::AssociatedWitnessProjection { .. } => {
+                return Err(reject(
+                    "an abstract Owned member supplies no Transferable proof",
+                ));
+            }
+            _ if super::owned_contract::ordinary_with_assumptions_at(
                 read,
                 current,
-                scope,
+                parameters,
                 &assumptions,
             )? => {}
             _ => {

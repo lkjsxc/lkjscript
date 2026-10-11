@@ -741,7 +741,26 @@ fn normalized_prototype_passes_full_oracle() {
     assert_eq!(report.type_objects_checked, 3);
     assert_eq!(report.expression_records_checked, 20);
     assert_eq!(report.relation_edges, 64);
-    assert!(report.work_consumed < 1_000);
+    let required = usize::try_from(report.work_consumed).unwrap();
+    assert!(required > 0);
+    for limit in [0, 1, required - 1] {
+        let mut consumed = 0;
+        let diagnostics = super::validate::validate_full_observed(&snapshot, limit, &mut consumed)
+            .expect_err("a smaller proof budget cannot complete the same candidate");
+        assert!(
+            diagnostics
+                .iter()
+                .any(|d| d.class == crate::platform::diagnostic::DiagnosticClass::Resource)
+        );
+        // Full validation records its first refused work unit; bounded child
+        // validators may instead stop exactly at their remaining allowance.
+        assert!(consumed <= u64::try_from(limit + 1).unwrap());
+    }
+    assert_eq!(
+        validate_full_with_limit(&snapshot, required).unwrap(),
+        report,
+        "fresh exact-capacity retry retains complete meaning and work"
+    );
 }
 
 #[test]

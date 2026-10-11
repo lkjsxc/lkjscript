@@ -309,6 +309,7 @@ fn mixed_contracts_admit_only_exact_scope_and_independent_graph33_headers() {
                     &snapshot,
                     &signature.implementation_parameters,
                     reference,
+                    &OwnedAssociatedAdmission::new(),
                 )
                 .is_err()
             }
