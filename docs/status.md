@@ -2,9 +2,9 @@
 
 Snapshot: 2026-10-11. Development **0.1.94** implements native package dependency
 planning. Source `d01708a2` passed **29/29** fresh full gates with stable inputs,
-**0 reused**, **0 unrun** and terminal exit **0**. Mainline integration and
-finalized-byte publication remain separate gates. Main remains `8fb6230a` with the
-generation-9 release controller.
+**0 reused**, **0 unrun** and terminal exit **0**. The accepted implementation
+and docs-only reporting descendants are integrated on main with the generation-10
+release controller. Finalized-byte acceptance and publication remain pending.
 
 ## Selected source and capability
 
@@ -92,38 +92,41 @@ end-to-end speed; the dominant cold cost remains unresolved.
 
 Source acceptance is complete for the exact source above. Candidate generation
 **10** additionally requires **23** release-source gates and finalized-byte
-admission with the exact expanded public compiler inventory. Reconcile the
-generation-9 release, refresh source ancestry, then integrate the accepted .94
-source/reporting descendant normally, installing its generation-10 controller
-on main. No .94 mainline delivery or publication is claimed.
+admission with the exact expanded public compiler inventory. The generation-9
+predecessor lineage is closed. Normal mainline delivery preserves exact accepted
+ancestry; its original checks and remote readback are retained in
+`.artifacts/native-package-planner/delivery/mainline-20261011T154018Z/`.
+Next select one normal non-publishing `.94` candidate from integrated main after
+refreshing source and release occupancy. No `.94` producer, tag or publication is
+claimed.
 
 The separate `/home/coder/workspace/lkjscript-associated-owned-types-20261011`
-worktree holds the uncompiled **0.1.95** associated-owned-types foundation. It has
-no feature acceptance and is outside this .94 receipt.
+worktree holds the **0.1.95** associated-owned-types foundation under development.
+It has no feature acceptance and is outside this .94 receipt.
 
-## Accepted predecessor and pending release
+## Accepted predecessors and public availability
 
 Extraction source `2396e69cc3eccd8971bdee092ccc47e7978cbd52` passed **26/26** fresh
 full gates, **0 reused**, with stable inputs and exit 0. Its receipt is
 `/home/coder/workspace/lkjscript-checked-extraction-20261011/.artifacts/lkjscript-dev/check/1791716965778033360-1879238-0/receipt.json`.
 Its normal delivery and retained public proofs remain in that worktree's
-`.artifacts/checked-extraction/delivery/` and `proofs/` directories. Main reporting descendant
+`.artifacts/checked-extraction/delivery/` and `proofs/` directories. Predecessor
+reporting descendant
 `8fb6230aa92a43d82c5e45a093acdf58b7a5f7e4` changes only `docs/status.md`; its normal
 push is independently verified in `delivery/reporting-20261011T115837243Z/`.
 That receipt binds the extraction implementation, not its reporting descendant or
 this successor.
 
-The single v0.1.92 producer [38130920573/1](https://github.com/lkjsxc/lkjscript/actions/runs/38130920573)
-selects accepted source `a7a3d778fe34df5ed9a8f0fb5595fbf2f858c1a5`.
-The authenticated **14:50:10 UTC** snapshot records the original producer completed
-successfully and five retained artifacts, with no competing active release run.
-Original API evidence is
-`/home/coder/workspace/lkjscript-mixed-storage-20261011/.artifacts/mixed-storage/delivery/recheck-20261011T145010Z/summary.json`.
-The original generation-9 `candidate_accepted` terminal and exact
-assets/verifier/handoff have since been authenticated; authorized unchanged-asset
-promotion is in progress.
-No publication terminal is yet verified. Reconcile this lineage before replacing
-the main generation-9 consumer with generation 10.
-Latest verified public release remains **v0.1.89**, immutable release 407859944.
-[Release](release.md) owns the required `immutable_published_and_public_verified`
-terminal; reconcile actual occupancy and source at the next delivery boundary.
+Public/latest is **v0.1.92**, immutable release **409737419**, selecting accepted
+source `a7a3d778fe34df5ed9a8f0fb5595fbf2f858c1a5` and original generation-9 producer
+[38130920573/1](https://github.com/lkjsxc/lkjscript/actions/runs/38130920573).
+Original promotion [38149245391/1](https://github.com/lkjsxc/lkjscript/actions/runs/38149245391)
+published unchanged assets, then failed its public boundary. The maintained
+read-only resume [38150694544/1](https://github.com/lkjsxc/lkjscript/actions/runs/38150694544)
+completed with authenticated `public_recheck_passed`, latest selected, and fresh
+anonymous exact/latest installed lifecycles with joined cleanup. Original publisher
+proof plus the successful resume and unchanged release/tag/control/assets close
+this lineage under [the maintained resume procedure](release.md#select-promote-and-resume).
+The failed promotion terminal remains unchanged; no proof is relabelled.
+The authenticated closure and original evidence are retained at
+`/home/coder/workspace/lkjscript-mixed-storage-20261011/.artifacts/mixed-storage/delivery/promotion-preflight-20261011T145407Z/resume-public-preflight-20261011T151709Z/status-20261011T153330Z/closure-summary.json`.
