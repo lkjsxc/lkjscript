@@ -1321,19 +1321,22 @@ impl Machine<'_> {
                     locals,
                 } => {
                     let ty = self.resolve_type_arguments(&[product_type])?[0];
-                    let types = self.product_field_types(ty)?;
-                    if types.len() != locals.len() {
+                    let count = CheckedValue::owned_product_field_count(self.program, ty)?;
+                    if count != locals.len() {
                         return Err(type_error("incomplete product unpack"));
                     }
-                    let NormalizedValue::OwnedProduct(token) = self.pop()?.into_raw() else {
-                        return Err(type_error("unpack requires product token"));
-                    };
-                    let values = token.unpack(self.memory_domain, ty, self.control)?;
-                    if values.len() != types.len() {
-                        return Err(type_error("product storage shape mismatch"));
-                    }
-                    for ((local, ty), value) in locals.iter().zip(types).zip(values) {
-                        let value = self.product_child(value, ty)?;
+                    let mut extraction = self.pop()?.unpack_owned(
+                        self.program,
+                        self.memory_domain,
+                        ty,
+                        self.control,
+                    )?;
+                    let program = self.program;
+                    let control = self.control;
+                    for local in locals.iter() {
+                        let value = extraction
+                            .next(program, control, &mut |raw, ty| self.product_child(raw, ty))?
+                            .ok_or_else(|| type_error("product extraction lost a field"))?;
                         self.set_local(*local, Some(value))?;
                     }
                 }

@@ -42,8 +42,9 @@ The projection adds no global cache, persistent certificate, pointer map, per-fi
 sidecar or universal reference-counting requirement.
 
 This is not an unchecked constructor for arbitrary raw values. Raw invocation
-inputs, adapter results, captures, consuming ownership transfer, pack and unpack
-remain independently admitted at their existing boundaries. The producer's whole
+inputs, adapter results, captures, consuming ownership transfer and packing
+remain independently admitted at their existing boundaries. Consuming unpack now
+has its own [checked extraction contract](checked-owned-extraction.md). The producer's whole
 product certificate is established only after its complete type and child checks;
 this consumer does not mint, repair or change that certificate. Public malformed
 input must still reject even when no field read is requested.

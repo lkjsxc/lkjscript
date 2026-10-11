@@ -2561,3 +2561,35 @@ The nominal-record increment's `lkjscript-final-candidate-acceptance-8` pairs on
 Reject generation 7 and mixed generation pairs without relabeling their historical
 evidence. All previous mandatory final-byte families and independent publication
 terminals remain required.
+
+## Checked consuming extraction
+
+Production consuming extraction requires the live parent allocation's exact
+prepared-program admission, selected closed product or nominal type, current
+owner domain, zero loans and complete field layout. Direct adversaries must reject
+raw storage, stale checked slots, foreign origins/types, same-shaped foreign
+nominals, inert or borrowed placements, active loans, restored shape after raw
+mutation and interrupted transfer adoption. Retained borrowed-result packets and
+ancestor guards cannot cross the consuming boundary. Frame provenance markers on
+ordinary consumed arguments do not themselves grant read rights.
+
+Ordinary immutable fields must survive destruction of the parent without retaining
+its loan or custody and without a recursive descendant admission walk. Owned
+children retain exact-form, custody and allocation-admission checks. Exercise
+cancellation and failures before extraction and after partial field delivery;
+release undelivered children and previously installed locals on every exit.
+The reference evaluator keeps its independent recursive admission.
+
+The detached metadata matrix requires exact complete input admission and a
+`K*(N+2)` ceiling for mode-2 raw-result admission. Its independent predicate must
+reject the predecessor's `2*K*(N+2)` work without allowing underchecked input.
+Keep pack-and-drop and borrowed projection as separate controls. The copied public
+`native_owned_extraction_preserves_metadata_admission_after_detachment` witness
+enforces this mechanism in the source-matched final-candidate native-owned family.
+
+The indexed-data consumer checks full displaced nested list/record/map values
+after Flat and Chunk32 storage destruction, exact witness forwarding, chunk
+boundaries, multi-field nominal extraction and execution after deleting source
+projects/transports. Malformed nested and unused input, traps, finite resource
+refusal and recovery remain required. Finalized executable acceptance and public
+publication remain separate from these source and development-host observations.

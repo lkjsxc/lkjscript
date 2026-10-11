@@ -15,6 +15,97 @@ mod owned_tasks;
 mod parallel;
 
 #[test]
+fn native_owned_extraction_preserves_metadata_admission_after_detachment() {
+    let mut public = Native::template("command");
+    if std::env::var_os("LKJSCRIPT_RETAIN_PRODUCT_EVIDENCE").is_some() {
+        public.root.disable_cleanup(true);
+        println!(
+            "retained consuming-extraction public evidence: {}",
+            public.root.path().display()
+        );
+    }
+    author(
+        &public,
+        include_str!("../../examples/owned-metadata-costs/workload.lkjc"),
+    );
+    unchanged(&public, "collection-cost");
+    let artifact = public.root.path().join("collection-cost.lkja");
+    public.cli(&["build", "--output", path(&artifact)], true);
+    let deployment = super::native_owned_worklists::deployment(
+        &public,
+        "collection-cost.lkja",
+        "collection-cost",
+    );
+    let identities: Vec<_> = [&public.executable, &artifact, &deployment]
+        .into_iter()
+        .map(|file| (file, blake3::hash(&std::fs::read(file).unwrap())))
+        .collect();
+    std::fs::remove_dir_all(&public.project).unwrap();
+    for entry in std::fs::read_dir(public.root.path()).unwrap() {
+        let file = entry.unwrap().path();
+        if file.extension().is_some_and(|suffix| suffix == "lkjc") {
+            std::fs::remove_file(file).unwrap();
+        }
+    }
+    for mode in [2_u64, 3] {
+        for n in [0_u64, 8, 1024] {
+            for k in [0_u64, 1, 32] {
+                let label = format!("extract-mode-{mode}-n-{n}-k-{k}");
+                let arguments = public.input(
+                    &format!("{label}.json"),
+                    &json!([mode, (0..n).collect::<Vec<_>>(), k]).to_string(),
+                );
+                let expected = json!(n * k);
+                public.input(&format!("{label}-expected.json"), &expected.to_string());
+                let result = public.root.path().join(format!("{label}-result.json"));
+                let records = public.cli(
+                    &[
+                        "run",
+                        "--deployment",
+                        path(&deployment),
+                        "--arguments-file",
+                        path(&arguments),
+                        "--result-file",
+                        path(&result),
+                    ],
+                    true,
+                );
+                std::fs::write(
+                    public.root.path().join(format!("{label}-execution.log")),
+                    format!("{records:#?}"),
+                )
+                .unwrap();
+                assert_eq!(
+                    serde_json::from_slice::<Value>(&std::fs::read(&result).unwrap()).unwrap(),
+                    expected,
+                    "{label}"
+                );
+                let execution = compact_record(&records, "execution");
+                super::native_indexed_data::joined(execution);
+                let observation: Value =
+                    serde_json::from_str(compact_field(execution, "production-observation"))
+                        .unwrap();
+                let work = &observation["value_work"];
+                // Full ordinary ingress stays linear. Both modes pack once per
+                // iteration; consuming extraction adds no descendant admission.
+                assert_eq!(work["input_admission_nodes"], json!(n + 3), "{label}");
+                assert!(
+                    work["raw_result_admission_nodes"]
+                        .as_u64()
+                        .is_some_and(|nodes| nodes <= k * (n + 2)),
+                    "{label}: {work}"
+                );
+                assert_eq!(work["internal_guard_descendant_visits"], 0, "{label}");
+                assert_eq!(work["capture_admission_nodes"], 0, "{label}");
+            }
+        }
+    }
+    for (file, expected) in identities {
+        assert_eq!(blake3::hash(&std::fs::read(file).unwrap()), expected);
+    }
+}
+
+#[test]
 fn native_owned_metadata_cross_package_draft_and_detached_execution() {
     let producer = Native::new();
     author(

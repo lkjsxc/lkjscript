@@ -1,13 +1,165 @@
-//! Reuse only a live borrowed product's exact, allocation-bound admission.
+//! Reuse only a live product's exact, allocation-bound admission.
 //! No raw value, caller-supplied result type, address cache or ambient authority
-//! can mint this projection. Raw input and consuming boundaries remain separate.
+//! can mint a checked child. Raw input, packing and raw unpack stay independent.
 use super::super::super::prepare::NormalizedProgram;
-use super::super::super::value::{NormalizedValue, ValueOrigin};
+use super::super::super::value::{NormalizedValue, RawArguments, RawValue, ValueOrigin};
 use super::{Class, Value, admission_error};
 use crate::platform::execution::{ExecutionControl, ExecutionError};
-use crate::platform::kernel::{Name, TypeForm};
+use crate::platform::kernel::{Name, TypeForm, TypeObjectDigest};
+
+/// The original field vector owns every unreturned child. Its iterative cleanup
+/// also covers cancellation or failure after earlier fields reached local slots.
+/// This object has no constructor accepting raw children or asserted field types.
+pub(in super::super) struct ProductExtraction {
+    children: RawArguments,
+    program: ValueOrigin,
+    ty: TypeObjectDigest,
+    index: usize,
+}
+
+fn product_field_count(
+    program: &NormalizedProgram,
+    ty: TypeObjectDigest,
+) -> Result<usize, ExecutionError> {
+    if let Some(layout) = program.owned_record_layout(ty) {
+        return Ok(layout.fields.len());
+    }
+    match program.types.get(&ty).map(|object| &object.form) {
+        Some(TypeForm::OwnedProduct { fields }) => Ok(fields.len()),
+        _ => Err(admission_error(
+            "extraction requires an exact closed product layout",
+        )),
+    }
+}
+
+fn product_field_type(
+    program: &NormalizedProgram,
+    ty: TypeObjectDigest,
+    index: usize,
+) -> Result<TypeObjectDigest, ExecutionError> {
+    if let Some(layout) = program.owned_record_layout(ty) {
+        return layout
+            .fields
+            .get(index)
+            .map(|field| field.ty)
+            .ok_or_else(|| admission_error("extraction selects an absent nominal field"));
+    }
+    match program.types.get(&ty).map(|object| &object.form) {
+        Some(TypeForm::OwnedProduct { fields }) => fields
+            .get(index)
+            .map(|field| field.ty)
+            .ok_or_else(|| admission_error("extraction selects an absent product field")),
+        _ => Err(admission_error("extraction lost its exact product layout")),
+    }
+}
+
+impl ProductExtraction {
+    pub(in super::super) fn next(
+        &mut self,
+        program: &NormalizedProgram,
+        control: &ExecutionControl,
+        admit_other: &mut impl FnMut(NormalizedValue, TypeObjectDigest) -> Result<Value, ExecutionError>,
+    ) -> Result<Option<Value>, ExecutionError> {
+        control.check()?;
+        if self.program != program.value_origin {
+            return Err(admission_error(
+                "extracted fields belong to another prepared program",
+            ));
+        }
+        if self.children.is_empty() {
+            return Ok(None);
+        }
+        // Resolve the index through the sealed parent's exact layout. Neither a
+        // raw child nor a caller's asserted ordinary type can establish this proof.
+        let ty = product_field_type(program, self.ty, self.index)?;
+        let raw = RawValue::new(
+            self.children
+                .next()
+                .ok_or_else(|| admission_error("extraction lost its next field"))?,
+        );
+        self.index += 1;
+        let value = if program.ordinary_types.contains(&ty) {
+            Value {
+                raw: raw.into_raw(),
+                origin: self.program,
+                class: Class::Free,
+                borrow: None,
+            }
+        } else {
+            // An ordinary-field proof cannot confer child ownership. Preserve
+            // the evaluator's exact representation, custody and admission checks.
+            admit_other(raw.into_raw(), ty)?
+        };
+        control.check()?;
+        Ok(Some(value))
+    }
+}
 
 impl Value {
+    pub(in super::super) fn owned_product_field_count(
+        program: &NormalizedProgram,
+        ty: TypeObjectDigest,
+    ) -> Result<usize, ExecutionError> {
+        product_field_count(program, ty)
+    }
+
+    pub(in super::super) fn unpack_owned(
+        self,
+        program: &NormalizedProgram,
+        domain: ValueOrigin,
+        selected: TypeObjectDigest,
+        control: &ExecutionControl,
+    ) -> Result<ProductExtraction, ExecutionError> {
+        control.check()?;
+        if self.origin != program.value_origin || self.class != Class::Memory {
+            return Err(admission_error(
+                "extraction requires this program's checked owner",
+            ));
+        }
+        // Frame source/placement markers also occur on ordinary consumed owner
+        // arguments. They grant no loan. A retained result packet or ancestor
+        // guard cannot cross this consuming boundary, even in release builds.
+        if self
+            .borrow
+            .as_ref()
+            .is_some_and(|borrow| borrow.packet.is_some() || !borrow.guards.is_empty())
+        {
+            return Err(admission_error(
+                "extraction cannot consume borrowed result custody",
+            ));
+        }
+        let NormalizedValue::OwnedProduct(token) = &self.raw else {
+            return Err(admission_error(
+                "extraction requires an owned product token",
+            ));
+        };
+        if token.ty() != selected {
+            return Err(admission_error("extraction selects another product type"));
+        }
+        token.validate_admission(program.value_origin)?;
+        // Exact admission is independent of the current invocation's custody.
+        // Owner placement and zero loans exclude mutation during extraction.
+        token.validate(domain, true)?;
+        let count = product_field_count(program, token.ty())?;
+        control.check()?;
+        let NormalizedValue::OwnedProduct(token) = self.into_raw() else {
+            unreachable!("validated product token")
+        };
+        let children = RawArguments::new(token.unpack(domain, selected, control)?);
+        if children.len() != count {
+            return Err(admission_error(
+                "extracted product has a foreign field count",
+            ));
+        }
+        control.check()?;
+        Ok(ProductExtraction {
+            children,
+            program: program.value_origin,
+            ty: selected,
+            index: 0,
+        })
+    }
+
     pub(in super::super) fn owned_record_metadata(
         &self,
         program: &NormalizedProgram,
@@ -160,3 +312,7 @@ impl Value {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "vm_owned_extraction_tests.rs"]
+mod extraction_tests;

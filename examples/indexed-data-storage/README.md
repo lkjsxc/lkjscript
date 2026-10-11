@@ -56,6 +56,15 @@ available after all disposable source projects, literal requests and transports
 are deleted. Rejections preserve accepted meaning; traps and finite execution
 refusals expose no successful partial result and permit a following healthy run.
 
+`indexed-item-flat` and `indexed-item-chunked` retain a complete displaced `Item`
+containing nested lists, records and maps, explicitly discard storage, then return
+that item and observations of its children. `indexed-item-nominal` consumes a
+data-only nominal owner with several ordinary fields and reconstructs the complete
+item after consuming the parent. Authored pack/unpack field order differs from
+layout order. These are maintained consumers of
+[checked extraction](../../docs/decisions/checked-owned-extraction.md), with
+independent full-result expectations and malformed nested input coverage.
+
 The reference runner has a fixed cumulative 256 MiB allocation budget. The tests
 compare all six witness results differentially through 65 items, then compare
 complete Flat and Chunk32 results separately at 257 and 1024 items. Detached

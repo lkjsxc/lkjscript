@@ -11,13 +11,16 @@ const CHUNKED: &str = include_str!("../../examples/indexed-data-storage/chunked.
 const FORWARD: &str = include_str!("../../examples/indexed-data-storage/forward.lkjc");
 const APPLICATION: &str = include_str!("../../examples/indexed-data-storage/application.lkjc");
 const COSTS: &str = include_str!("../../examples/indexed-data-storage/costs.lkjc");
-const TARGETS: [&str; 10] = [
+const TARGETS: [&str; 13] = [
     "indexed-integers",
     "indexed-scalar-flat",
     "indexed-scalar-chunked",
     "indexed-booleans",
     "indexed-payloads",
     "indexed-packets",
+    "indexed-item-flat",
+    "indexed-item-chunked",
+    "indexed-item-nominal",
     "indexed-captured",
     "indexed-cost-direct",
     "indexed-cost-flat",
@@ -235,6 +238,17 @@ impl Packages {
     }
 
     fn run(&self, target: &str, arguments: &Value, detached: bool, success: bool) -> Option<Value> {
+        self.run_with_records(target, arguments, detached, success)
+            .1
+    }
+
+    fn run_with_records(
+        &self,
+        target: &str,
+        arguments: &Value,
+        detached: bool,
+        success: bool,
+    ) -> (Vec<CompactRecord>, Option<Value>) {
         let serial = self.serial.get();
         self.serial.set(serial + 1);
         let input = self
@@ -281,15 +295,24 @@ impl Packages {
             } else {
                 assert_eq!(compact_field(execution, "differential"), "equal");
             }
-            Some(serde_json::from_slice(&std::fs::read(result).unwrap()).unwrap())
+            let value = serde_json::from_slice(&std::fs::read(result).unwrap()).unwrap();
+            (records, Some(value))
         } else {
             assert!(!result.exists());
             let diagnostic = compact_record(&records, "diagnostic");
             if detached && compact_field(diagnostic, "class") != "source" {
                 failed_join(diagnostic);
             }
-            None
+            (records, None)
         }
+    }
+
+    fn rejected_input(&self, target: &str, input: &Value, detached: bool) {
+        let (records, result) = self.run_with_records(target, input, detached, false);
+        assert!(result.is_none());
+        let diagnostic = compact_record(&records, "diagnostic");
+        assert_eq!(compact_field(diagnostic, "class"), "source");
+        assert_eq!(compact_field(diagnostic, "code"), "normalized_json_type");
     }
 
     fn expected(&self, target: &str, input: &Value, expected: &Value, detached: bool) {
@@ -305,7 +328,7 @@ impl Packages {
     }
 }
 
-fn joined(execution: &CompactRecord) {
+pub(super) fn joined(execution: &CompactRecord) {
     let observation: Value =
         serde_json::from_str(compact_field(execution, "production-observation")).unwrap();
     for field in [
@@ -362,6 +385,32 @@ fn cost_expected(values: &[i64], count: i64) -> Value {
     json!({"checksum":checksum,"length":values.len()})
 }
 
+fn item(seed: i64) -> Value {
+    json!({
+        "rows":[
+            {"label":format!("row-{seed}-α"),"values":[i64::MIN,seed,i64::MAX]},
+            {"label":"","values":[]}
+        ],
+        "lookup":[
+            [i64::MIN,{"label":"empty","values":[]}],
+            [7,{"label":format!("entry-{seed}"),"values":[seed,seed+1]}],
+            [i64::MAX,{"label":"boundary","values":[i64::MIN,i64::MAX]}]
+        ],
+        "meta":{"name":format!("item-{seed}-β"),"flags":[true,false,true]}
+    })
+}
+
+fn item_expected(value: &Value) -> Value {
+    let entry = value["lookup"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|pair| pair[0] == json!(7))
+        .map(|pair| pair[1].clone())
+        .unwrap_or_else(|| json!({"label":"missing","values":[]}));
+    json!({"displaced":value,"first":value["rows"][0],"entry":entry,"name":value["meta"]["name"]})
+}
+
 #[test]
 fn native_indexed_data_separate_packages_snapshots_forwarded_witnesses_and_detached_execution() {
     let packages = Packages::stage();
@@ -411,6 +460,35 @@ fn native_indexed_data_separate_packages_snapshots_forwarded_witnesses_and_detac
             &json!({"flat":expected,"chunked":expected}),
             detached,
         );
+        for length in [1, 32, 33, 65] {
+            let values: Vec<_> = (0..length).map(|seed| item(seed as i64)).collect();
+            for index in [0, length - 1] {
+                let expected = item_expected(&values[index]);
+                let input = json!([values, index, item(-100)]);
+                for target in ["indexed-item-flat", "indexed-item-chunked"] {
+                    // The authored function discards every remaining storage owner
+                    // before projecting nested fields or returning this complete Item.
+                    packages.expected(target, &input, &expected, detached);
+                }
+            }
+        }
+        for mut value in [item(-7), item(42)] {
+            packages.expected(
+                "indexed-item-nominal",
+                &json!([value]),
+                &item_expected(&value),
+                detached,
+            );
+            // Empty maps exercise the post-destruction fallback without replacing
+            // the nested map/list/record result with a scalar-only witness.
+            value["lookup"] = json!([]);
+            packages.expected(
+                "indexed-item-nominal",
+                &json!([value]),
+                &item_expected(&value),
+                detached,
+            );
+        }
         let packets: Vec<_> = (0..33)
             .map(|n| json!({"label":format!("packet-{n}"),"values":[n,n+1]}))
             .collect();
@@ -602,6 +680,61 @@ fn native_indexed_data_traps_refusals_cleanup_and_recovery() {
                     false
                 )
                 .is_none()
+        );
+        let nested: Vec<_> = (0..33).map(item).collect();
+        for target in ["indexed-item-flat", "indexed-item-chunked"] {
+            for index in [-1, 33] {
+                assert!(
+                    packages
+                        .run(target, &json!([nested, index, item(-9)]), detached, false)
+                        .is_none()
+                );
+            }
+            for path in ["/rows/0/values/2", "/lookup/2/1/values/1", "/meta/flags/2"] {
+                let mut invalid = nested.clone();
+                let replacement = if path.ends_with("flags/2") {
+                    json!(0)
+                } else {
+                    json!(false)
+                };
+                *invalid[32].pointer_mut(path).unwrap() = replacement;
+                // Invalid unused final input must be rejected before index -1 traps.
+                packages.rejected_input(target, &json!([invalid, -1, item(-9)]), detached);
+                let mut invalid_replacement = item(-9);
+                *invalid_replacement.pointer_mut(path).unwrap() = json!("wrong");
+                packages.rejected_input(
+                    target,
+                    &json!([nested, -1, invalid_replacement]),
+                    detached,
+                );
+            }
+            packages.expected(
+                target,
+                &json!([nested, 32, item(-9)]),
+                &item_expected(&nested[32]),
+                detached,
+            );
+        }
+        let mut invalid_nominal = item(9);
+        invalid_nominal["lookup"][2][1]["values"][1] = json!(false);
+        packages.rejected_input("indexed-item-nominal", &json!([invalid_nominal]), detached);
+        let mut empty_rows = item(9);
+        empty_rows["rows"] = json!([]);
+        assert!(
+            packages
+                .run(
+                    "indexed-item-nominal",
+                    &json!([empty_rows]),
+                    detached,
+                    false
+                )
+                .is_none()
+        );
+        packages.expected(
+            "indexed-item-nominal",
+            &json!([item(9)]),
+            &item_expected(&item(9)),
+            detached,
         );
         packages.verify_identity();
     }

@@ -242,10 +242,13 @@ ordinary list/map projection from packing, unpacking and borrowed metadata reads
 Use its complete ingress checks and non-regressing cost ceilings.
 The [borrowed immutable metadata projection](decisions/borrowed-immutable-metadata.md)
 retains a live owned product's exact allocation-bound admission when selecting an
-ordinary immutable field. Raw input, packing, consuming unpack and transfer still
-own independent admission; extend those boundaries only with an exact checked
-construction/extraction contract. Neither shape equality nor a type annotation
-authorizes skipped raw admission.
+ordinary immutable field. Raw input, packing and transfer still own independent
+admission. Use [checked consuming extraction](decisions/checked-owned-extraction.md)
+to retain ordinary field evidence while consuming an exactly admitted product or
+nominal record. Owned children keep their custody checks; undelivered fields
+retain a cleanup owner. Neither shape equality nor a type annotation authorizes
+skipped raw admission. Measure construction and extraction separately before
+extending reuse to another boundary.
 
 Use [checked map-entry projection](decisions/checked-map-entry-projection.md)
 to enumerate actual admitted immutable children without searching from the root
@@ -276,8 +279,11 @@ compiler consumer over adding another disconnected graph-analysis example.
 
 Select package dependency planning as the next compiler replacement when the
 native boundary owns complete inputs, outcomes and failures. Before takeover,
-cover the existing 10,000-package/100,000-edge closure limit and resolve the JSON
-ingress ceiling with an independently admitted input boundary. Reordering
+cover the existing 10,000-package/100,000-edge closure limit with a compiler-owned
+bounded input envelope. The existing pure-tool embedding accepts explicit JSON
+limits independently of CLI defaults; retain strict complete decoding and typed
+admission. Replace both cycle refusal and ordering, while keeping artifact loading
+independent so loading the native planner cannot recursively invoke itself. Reordering
 independent compiler units does not establish useful adoption. Keep resumable
 execution before a scheduler rewrite, measured custody needs before a region
 runtime, and a stable typed lowering boundary before a native backend.

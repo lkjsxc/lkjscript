@@ -15,8 +15,9 @@ fn within_ceiling(mode: u64, n: u64, k: u64, work: &Value) -> bool {
     };
     let repetitions = match mode {
         0 | 1 => Some(0),
-        2 => k.checked_mul(2),
-        3 => Some(k),
+        // Packing still admits N+2 nodes per iteration; consuming the exact
+        // admitted parent must retain its child's proof without another walk.
+        2 | 3 => Some(k),
         4 => Some(1),
         _ => None,
     };
@@ -33,7 +34,7 @@ fn within_ceiling(mode: u64, n: u64, k: u64, work: &Value) -> bool {
 
 #[test]
 fn metadata_cost_oracle_rejects_underchecked_input_and_worsened_work() {
-    for (mode, ceiling) in [(0, 0), (1, 0), (2, 262656), (3, 131328), (4, 1026)] {
+    for (mode, ceiling) in [(0, 0), (1, 0), (2, 131328), (3, 131328), (4, 1026)] {
         let work = json!({"input_admission_nodes":1027, "raw_result_admission_nodes":ceiling,
             "internal_guard_descendant_visits":0,"capture_admission_nodes":0});
         assert!(within_ceiling(mode, 1024, 128, &work));
@@ -53,6 +54,18 @@ fn metadata_cost_oracle_rejects_underchecked_input_and_worsened_work() {
     }
     assert!(!within_ceiling(5, 0, 0, &json!({})));
     assert!(!within_ceiling(2, u64::MAX, u64::MAX, &json!({})));
+    assert!(
+        !within_ceiling(
+            2,
+            1024,
+            128,
+            &json!({
+                "input_admission_nodes":1027, "raw_result_admission_nodes":262656,
+                "internal_guard_descendant_visits":0,"capture_admission_nodes":0
+            })
+        ),
+        "the previous consuming-extraction rescan exceeds the new ceiling"
+    );
 }
 
 #[test]
