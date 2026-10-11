@@ -207,6 +207,15 @@ complete unreachable validation and the separate scope of derived consistency
 checks. A stage is graph precedence, not parallel-execution or publication
 authority. Integrate this witness into a maintained compiler consumer only through
 an independently admitted boundary; exact availability remains status-owned.
+Use [ordinary data in owned sequences](guides/native-data-sequences.md) to separate
+container custody from element ownership. The planner's remaining counts, levels,
+visited flags and readiness indices use indexed owned working storage, with stable
+ordinary reads and explicit displaced values from replacement. Keep its complete
+independent result checker and current graph capacities. Measure preparation,
+storage growth and bounded per-update admission before deciding whether to move
+this boundary into the compiler. Nominal ownership, hidden representations,
+associated views and regions remain subsequent milestones justified by concrete
+consumers; ordinary working storage does not depend on those designs.
 The [owned metadata workload](../examples/owned-metadata-costs/README.md) separates
 ordinary list/map projection from packing, unpacking and borrowed metadata reads.
 Use its complete ingress checks and non-regressing cost ceilings.

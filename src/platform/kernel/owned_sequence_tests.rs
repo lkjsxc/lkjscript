@@ -251,7 +251,14 @@ fn sequence_element_eligibility_and_nesting_are_checked_even_when_empty() {
     let mut snapshot = tests::witness_snapshot();
     let unit = intern(&mut snapshot, TypeForm::Unit);
     let cell = intern(&mut snapshot, TypeForm::OwnedI64Cell);
-    let bad = intern(&mut snapshot, TypeForm::OwnedSequence { item: unit });
+    let ordinary = intern(&mut snapshot, TypeForm::OwnedSequence { item: unit });
+    owned_product::validate(&snapshot, ordinary, None).unwrap();
+    assert!(memory::direct(&snapshot, ordinary).unwrap());
+    assert!(!owned_contract::ordinary_closed(&snapshot, ordinary).unwrap());
+    assert!(transfer::admit(&snapshot, ordinary, None).unwrap());
+    assert!(share::admit(&snapshot, ordinary, None).unwrap());
+    let secret = intern(&mut snapshot, TypeForm::Secret);
+    let bad = intern(&mut snapshot, TypeForm::OwnedSequence { item: secret });
     assert_eq!(
         owned_product::validate(&snapshot, bad, None)
             .unwrap_err()
@@ -262,6 +269,22 @@ fn sequence_element_eligibility_and_nesting_are_checked_even_when_empty() {
     owned_product::validate(&snapshot, good, None).unwrap();
     assert!(memory::direct(&snapshot, good).unwrap());
     assert!(!owned_contract::ordinary_closed(&snapshot, good).unwrap());
+
+    let hidden_owner = intern(&mut snapshot, TypeForm::List { item: cell });
+    let hidden_secret = intern(&mut snapshot, TypeForm::Option { item: secret });
+    let callable = intern(
+        &mut snapshot,
+        TypeForm::Function {
+            parameters: vec![],
+            result: unit,
+        },
+    );
+    for item in [hidden_owner, hidden_secret, callable] {
+        let sequence = intern(&mut snapshot, TypeForm::OwnedSequence { item });
+        assert!(owned_product::validate(&snapshot, sequence, None).is_err());
+        assert!(transfer::admit(&snapshot, sequence, None).is_err());
+        assert!(share::admit(&snapshot, sequence, None).is_err());
+    }
 
     let mut nested = cell;
     for _ in 0..contract::MAXIMUM_TYPE_DEPTH {
@@ -274,6 +297,114 @@ fn sequence_element_eligibility_and_nesting_are_checked_even_when_empty() {
             .unwrap_err()
             .code,
         "kernel_owned_sequence"
+    );
+}
+
+#[test]
+fn generalized_sequence_operations_bind_exact_roots_and_authored_child_order() {
+    let source = ExpressionId::migrate(b"generalized-sequence-child-order", 0);
+    let value = ExpressionId::migrate(b"generalized-sequence-child-order", 1);
+    let index = ExpressionId::migrate(b"generalized-sequence-child-order", 2);
+    let sequence_type = TypeObjectDigest::from_bytes([3; 32]);
+    let result_type = TypeObjectDigest::from_bytes([4; 32]);
+    for (operation, roots, children) in [
+        (
+            ExpressionOperation::SequenceGet {
+                sequence_type,
+                source,
+                index,
+            },
+            vec![sequence_type],
+            vec![index, source],
+        ),
+        (
+            ExpressionOperation::SequenceReplace {
+                sequence_type,
+                result_type,
+                index,
+                value,
+                source,
+            },
+            vec![sequence_type, result_type],
+            vec![index, value, source],
+        ),
+    ] {
+        let expression = ExpressionRecord::new(source, operation).unwrap();
+        assert_eq!(expression.type_roots(), roots);
+        assert_eq!(
+            expression
+                .children()
+                .iter()
+                .map(|child| child.expression)
+                .collect::<Vec<_>>(),
+            children
+        );
+        for generation in [25, 30] {
+            let mut predecessor = expression.clone();
+            predecessor.contract_version = generation;
+            assert_eq!(
+                predecessor.validate_local().unwrap_err().code,
+                "kernel_sequence_generation"
+            );
+        }
+        let owner = OwnerRecord::Expression(expression);
+        let (digest, bytes) = encode_owner(&owner).unwrap();
+        assert_eq!(
+            decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
+            owner
+        );
+    }
+}
+
+#[test]
+fn ordinary_sequence_closures_require_graph_31_even_without_operations() {
+    let source = r#"declarations.begin
+(units (module create generalized-sequence-generation
+  (function create relay (visibility public) (effect pure)
+    (type-parameter create T (constraint transferable))
+    (parameter create values (type (owned-sequence T)) (use consume))
+    (returns (owned-sequence T)) (body (local values)))
+  (function create dispose (visibility public) (effect pure)
+    (parameter create values (type (owned-sequence I64)) (use consume))
+    (returns Unit) (body (unit)))))
+declarations.end"#;
+    let snapshot =
+        crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(source)
+            .unwrap();
+    validate_full(&snapshot).unwrap();
+    assert!(memory_reference::accepts(&snapshot));
+    let mut older = snapshot.clone();
+    older.root.graph_contract_version = 30;
+    assert!(!memory_reference::accepts(&older));
+    assert!(
+        validate_full(&older)
+            .unwrap_err()
+            .iter()
+            .any(|d| d.code == "kernel_sequence_generation")
+    );
+    for (key, owner) in &snapshot.owners {
+        if !matches!(owner, OwnerRecord::Declaration(declaration) if matches!(declaration.payload, DeclarationPayload::Function(_)))
+        {
+            continue;
+        }
+        let mut older = snapshot.clone();
+        older.owners.get_mut(key).unwrap().set_encoding_for_edit(30);
+        assert!(memory::validate_owner(&older, *key, &older.owners[key]).is_err());
+        assert!(
+            !memory_reference::accepts(&older),
+            "older declaration cannot inherit a newer parameter's ordinary sequence authority"
+        );
+    }
+    let mut unused = tests::witness_snapshot();
+    unused.root.graph_contract_version = 30;
+    let i64_type = intern(&mut unused, TypeForm::I64);
+    intern(&mut unused, TypeForm::OwnedSequence { item: i64_type });
+    assert!(!memory_reference::accepts(&unused));
+    assert!(
+        validate_full(&unused)
+            .unwrap_err()
+            .iter()
+            .any(|d| d.code == "kernel_sequence_generation")
     );
 }
 

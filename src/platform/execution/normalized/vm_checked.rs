@@ -1773,3 +1773,7 @@ mod metadata_reservation_tests;
 #[cfg(test)]
 #[path = "vm_owned_metadata_tests.rs"]
 mod metadata_tests;
+
+#[cfg(test)]
+#[path = "vm_sequence_projection_tests.rs"]
+mod sequence_projection_tests;

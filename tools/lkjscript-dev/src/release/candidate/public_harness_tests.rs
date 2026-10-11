@@ -1,8 +1,47 @@
 use super::*;
 use std::os::unix::fs::PermissionsExt;
 
+const SEQUENCE_CASES: [&str; 10] = [
+    "native_declarations::native_owned_fifo::native_owned_fifo_exact_generic_library_exhaustive_interleavings_and_source_free_results",
+    "native_declarations::native_owned_fifo::native_owned_fifo_traps_preserve_complete_input_admission_cleanup_and_following_invocations",
+    "native_declarations::native_owned_fifo::native_owned_fifo_finite_fuel_refusal_joins_detached_custody_without_partial_results",
+    "native_declarations::native_owned_fifo::negative::native_owned_fifo_rejects_read_escape_and_protected_consumption_without_publication",
+    "native_declarations::native_owned_fifo::oracle::native_owned_fifo_oracle_distinguishes_lifo_and_nonconsuming_peek",
+    "native_declarations::native_data_sequences::native_data_sequences_generic_export_finite_model_and_detached_execution",
+    "native_declarations::native_data_sequences::native_data_sequences_immutable_reads_survive_replacement_removal_disposal_and_transfer",
+    "native_declarations::native_data_sequences::native_data_sequences_owned_replacement_preserves_displaced_custody",
+    "native_declarations::native_data_sequences::negative::native_data_sequences_reject_hidden_types_active_loans_and_unsafe_substitutions",
+    "native_declarations::native_data_sequences::native_data_sequences_bounds_and_fuel_refusals_join_cleanup_and_recover",
+];
+
+fn listing() -> String {
+    let mut listing = LIST.to_owned();
+    for name in SEQUENCE_CASES {
+        listing.push_str(&format!("{name}: test\n"));
+    }
+    listing
+}
+
+fn success() -> String {
+    let listing = listing();
+    let names = listing
+        .lines()
+        .map(|line| line.strip_suffix(": test").unwrap())
+        .filter(|name| *name != "unrelated")
+        .collect::<Vec<_>>();
+    assert_eq!(names.len(), 27);
+    let mut output = format!("\nrunning {} tests\n", names.len());
+    for name in &names {
+        output.push_str(&format!("test {name} ... ok\n"));
+    }
+    output.push_str(&format!(
+        "\ntest result: ok. {} passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s\n",
+        names.len()
+    ));
+    output
+}
+
 const LIST: &str = "native_owned_fixture: test\nnative_byte_buffer_fixture: test\nnative_byte_ranges_fixture: test\nresident_policy::fixture: test\nnative_declarations::native_owned_products::parallel::native_parallel_fixture: test\nnative_declarations::native_parallel_reads::native_parallel_reads_fixture: test\nnative_refresh::fixture: test\ncopied_binary_authors_builds_and_serves_interactive_topology_from_minimal: test\nnative_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment: test\nnative_declarations::native_fold::native_blocked_folds_import_exactly_and_preserve_complete_results_after_source_removal: test\nnative_declarations::native_fold::native_blocked_folds_reject_wrong_contract_without_changing_accepted_consumer: test\nnative_declarations::native_fold::native_blocked_folds_admit_the_complete_argument_before_invoking_a_callback: test\nnative_declarations::native_fold::history::native_blocked_folds_retain_every_nested_prefix_across_blocks_and_source_removal: test\nnative_declarations::native_fold::history::native_blocked_folds_admit_nested_input_and_unused_initial_history_completely: test\nnative_declarations::incremental_units::new_components_do_not_promote_ports_to_compiler_units: test\nnative_declarations::incremental_units::new_command_targets_keep_exact_incremental_cache_and_detached_behavior: test\nnative_declarations::incremental_units::new_port_type_failure_preserves_authority_and_cache_then_recovers: test\nunrelated: test\n";
-const SUCCESS: &str = "\nrunning 17 tests\ntest native_owned_fixture ... ok\ntest native_byte_buffer_fixture ... ok\ntest native_byte_ranges_fixture ... ok\ntest resident_policy::fixture ... ok\ntest native_declarations::native_owned_products::parallel::native_parallel_fixture ... ok\ntest native_declarations::native_parallel_reads::native_parallel_reads_fixture ... ok\ntest native_refresh::fixture ... ok\ntest copied_binary_authors_builds_and_serves_interactive_topology_from_minimal ... ok\ntest native_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment ... ok\ntest native_declarations::native_fold::native_blocked_folds_import_exactly_and_preserve_complete_results_after_source_removal ... ok\ntest native_declarations::native_fold::native_blocked_folds_reject_wrong_contract_without_changing_accepted_consumer ... ok\ntest native_declarations::native_fold::native_blocked_folds_admit_the_complete_argument_before_invoking_a_callback ... ok\ntest native_declarations::native_fold::history::native_blocked_folds_retain_every_nested_prefix_across_blocks_and_source_removal ... ok\ntest native_declarations::native_fold::history::native_blocked_folds_admit_nested_input_and_unused_initial_history_completely ... ok\ntest native_declarations::incremental_units::new_components_do_not_promote_ports_to_compiler_units ... ok\ntest native_declarations::incremental_units::new_command_targets_keep_exact_incremental_cache_and_detached_behavior ... ok\ntest native_declarations::incremental_units::new_port_type_failure_preserves_authority_and_cache_then_recovers ... ok\n\ntest result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s\n";
 
 fn runner<'a>(root: &'a Path, control: &'a process::ProcessControl) -> Runner<'a> {
     let candidate = root.join("candidate");
@@ -30,8 +69,9 @@ fn runner<'a>(root: &'a Path, control: &'a process::ProcessControl) -> Runner<'a
 
 fn harness(root: &Path, output: &str, exit: i32) -> PathBuf {
     let path = root.join("fixture-harness");
+    let listing = listing();
     let script = format!(
-        "#!/bin/sh\nset -eu\n[ \"$PATH\" = '' ]\n[ \"$HOME\" = \"$PWD/home\" ]\n[ \"$TMPDIR\" = \"$PWD/tmp\" ]\n[ -z \"${{CARGO_HOME+x}}\" ]\n[ -z \"${{GH_TOKEN+x}}\" ]\n[ -z \"${{GITHUB_TOKEN+x}}\" ]\n[ -f \"$LKJSCRIPT_RELEASE_CANDIDATE\" ]\nif [ \"$1\" = '--list' ]; then\nprintf '%s' '{LIST}'\nelse\n[ \"$1\" = '--exact' ]\n[ \"$2\" = '--test-threads=1' ]\n[ \"$3\" = '--color=never' ]\n[ \"$#\" = 20 ]\nprintf '%s' '{output}'\nexit {exit}\nfi\n"
+        "#!/bin/sh\nset -eu\n[ \"$PATH\" = '' ]\n[ \"$HOME\" = \"$PWD/home\" ]\n[ \"$TMPDIR\" = \"$PWD/tmp\" ]\n[ -z \"${{CARGO_HOME+x}}\" ]\n[ -z \"${{GH_TOKEN+x}}\" ]\n[ -z \"${{GITHUB_TOKEN+x}}\" ]\n[ -f \"$LKJSCRIPT_RELEASE_CANDIDATE\" ]\nif [ \"$1\" = '--list' ]; then\nprintf '%s' '{listing}'\nelse\n[ \"$1\" = '--exact' ]\n[ \"$2\" = '--test-threads=1' ]\n[ \"$3\" = '--color=never' ]\n[ \"$#\" = 30 ]\nprintf '%s' '{output}'\nexit {exit}\nfi\n"
     );
     fs::write(&path, script).unwrap();
     fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
@@ -42,7 +82,7 @@ fn harness(root: &Path, output: &str, exit: i32) -> PathBuf {
 fn native_runner_uses_closed_environment_exact_inventory_and_retained_processes() {
     let root = tempfile::tempdir().unwrap();
     let work = tempfile::tempdir().unwrap();
-    let executable = harness(root.path(), SUCCESS, 0);
+    let executable = harness(root.path(), &success(), 0);
     let control = process::ProcessControl::default();
     let mut runner = runner(root.path(), &control);
     runner
@@ -50,7 +90,7 @@ fn native_runner_uses_closed_environment_exact_inventory_and_retained_processes(
         .unwrap();
     assert_eq!(
         runner.receipt.inventory.as_ref().unwrap().selected.len(),
-        17
+        27
     );
     assert_eq!(runner.receipt.phases.len(), 2);
     assert!(
@@ -66,7 +106,7 @@ fn native_runner_uses_closed_environment_exact_inventory_and_retained_processes(
         serde_json::from_slice(&fs::read(root.path().join("receipt.json")).unwrap()).unwrap();
     assert_eq!(
         record["inventory"]["selected"].as_array().unwrap().len(),
-        17
+        27
     );
     assert!(root.path().join("inventory.stdout.log").is_file());
     assert!(root.path().join("execute.stderr.log").is_file());
@@ -74,9 +114,10 @@ fn native_runner_uses_closed_environment_exact_inventory_and_retained_processes(
 
 #[test]
 fn native_runner_rejects_failing_process_or_ignored_cases_even_with_a_zero_exit() {
+    let success = success();
     for (output, exit) in [
-        (SUCCESS.to_owned(), 37),
-        (SUCCESS.replacen(" ... ok", " ... ignored", 1), 0),
+        (success.clone(), 37),
+        (success.replacen(" ... ok", " ... ignored", 1), 0),
     ] {
         let root = tempfile::tempdir().unwrap();
         let work = tempfile::tempdir().unwrap();
@@ -189,7 +230,7 @@ fn native_runner_rejects_substituted_or_changed_candidate_even_with_passing_outp
     for mutate_during in [false, true] {
         let root = tempfile::tempdir().unwrap();
         let work = tempfile::tempdir().unwrap();
-        let executable = harness(root.path(), SUCCESS, 0);
+        let executable = harness(root.path(), &success(), 0);
         let control = process::ProcessControl::default();
         let mut runner = runner(root.path(), &control);
         if mutate_during {

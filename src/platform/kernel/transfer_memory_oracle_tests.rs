@@ -502,24 +502,41 @@ fn transfer_memory_oracle_checks_imported_sequence_elements_and_inactive_choices
             !accepts(&weakened),
             "all possible sequence elements require their transferable proof"
         );
-        for form in [TypeForm::Secret, TypeForm::I64] {
-            let mut invalid = source.clone();
+        for (form, admitted) in [(TypeForm::Secret, false), (TypeForm::I64, true)] {
+            let mut changed = source.clone();
             let object = TypeObject::new(form).unwrap();
             let item = encode_type_object(&object).unwrap().0;
-            invalid.types.insert(item, object);
+            changed.types.insert(item, object);
             let mut replaced = false;
-            for object in invalid.types.values_mut() {
+            for object in changed.types.values_mut() {
                 if let TypeForm::OwnedSequence { item: existing } = &mut object.form {
                     *existing = item;
                     replaced = true;
                 }
             }
             assert!(replaced);
-            assert!(
-                !accepts(&invalid),
-                "ordinary data and authority cannot become owned sequence elements"
+            assert_eq!(
+                accepts(&changed),
+                admitted,
+                "ordinary data is eligible while secret authority is rejected by every sequence element closure"
             );
         }
+    }
+    let ordinary = GROUP
+        .replace(
+            "(parameter create value (type O) (use consume))",
+            "(parameter create value (type (owned-sequence I64)) (use consume))",
+        )
+        .replace("(field left O)", "(field left (owned-sequence I64))")
+        .replace("(types O)", "(types (owned-sequence I64))");
+    for source in [
+        author(&format!("{WORKERS}{ordinary}")),
+        imported_group(&ordinary),
+    ] {
+        assert!(
+            accepts(&source),
+            "fresh local and imported ordinary sequence transfer retains its owner"
+        );
     }
 }
 
@@ -534,27 +551,30 @@ fn transfer_memory_oracle_rejects_sequences_in_unused_transfer_type_arguments() 
     (returns Unit) (body (call ignore (types I64))))))
 declarations.end
 "#;
-    let mut snapshot = author(source);
-    assert!(accepts(&snapshot));
-    let object = TypeObject::new(TypeForm::OwnedI64Cell).unwrap();
-    let item = encode_type_object(&object).unwrap().0;
-    snapshot.types.insert(item, object);
-    let object = TypeObject::new(TypeForm::OwnedSequence { item }).unwrap();
-    let sequence = encode_type_object(&object).unwrap().0;
-    snapshot.types.insert(sequence, object);
-    let mut changed = false;
-    for owner in snapshot.owners.values_mut() {
-        if let OwnerRecord::Expression(e) = owner
-            && let ExpressionOperation::Call { type_arguments, .. } = &mut e.operation
-        {
-            *type_arguments = vec![sequence];
-            changed = true;
+    let original = author(source);
+    assert!(accepts(&original));
+    for item_form in [TypeForm::OwnedI64Cell, TypeForm::I64] {
+        let mut snapshot = original.clone();
+        let object = TypeObject::new(item_form).unwrap();
+        let item = encode_type_object(&object).unwrap().0;
+        snapshot.types.insert(item, object);
+        let object = TypeObject::new(TypeForm::OwnedSequence { item }).unwrap();
+        let sequence = encode_type_object(&object).unwrap().0;
+        snapshot.types.insert(sequence, object);
+        let mut changed = false;
+        for owner in snapshot.owners.values_mut() {
+            if let OwnerRecord::Expression(e) = owner
+                && let ExpressionOperation::Call { type_arguments, .. } = &mut e.operation
+            {
+                *type_arguments = vec![sequence];
+                changed = true;
+            }
         }
+        assert!(changed);
+        assert!(
+            !accepts(&snapshot),
+            "an unused ordinary formal cannot admit a sequence token"
+        );
+        assert!(validate_full(&snapshot).is_err());
     }
-    assert!(changed);
-    assert!(
-        !accepts(&snapshot),
-        "an unused ordinary formal cannot admit a sequence token"
-    );
-    assert!(validate_full(&snapshot).is_err());
 }

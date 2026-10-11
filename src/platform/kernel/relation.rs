@@ -1036,6 +1036,8 @@ where
         | ExpressionOperation::SequenceLength { .. }
         | ExpressionOperation::SequencePush { .. }
         | ExpressionOperation::SequencePop { .. }
+        | ExpressionOperation::SequenceGet { .. }
+        | ExpressionOperation::SequenceReplace { .. }
         | ExpressionOperation::BorrowOwnedItem { .. }
         | ExpressionOperation::BorrowCall { .. } => {}
     }

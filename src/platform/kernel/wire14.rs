@@ -638,6 +638,10 @@ impl TryFrom<super::ExpressionOperation> for ExpressionOperation14 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(value: super::ExpressionOperation) -> Result<Self, Self::Error> {
         Ok(match value {
+            super::ExpressionOperation::SequenceGet { .. }
+            | super::ExpressionOperation::SequenceReplace { .. } => {
+                return Err(super::wire30::generalized_sequence_extension());
+            }
             super::ExpressionOperation::ImplementationCall { .. }
             | super::ExpressionOperation::Parallel { .. }
             | super::ExpressionOperation::MethodCall { .. } => return Err(extension()),

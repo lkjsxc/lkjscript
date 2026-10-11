@@ -1,0 +1,48 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create fifo-support
+    (owned-contract create Element (visibility public)
+      (self Self) (type-parameter create Self (constraint owned))
+      (method method_94000000000000000000000000000001 create
+        (parameters (I64 unrestricted)) (returns Self) (effect pure))
+      (method method_94000000000000000000000000000002 observe
+        (parameters (Self borrow)) (returns I64) (effect pure))
+      (method method_94000000000000000000000000000003 finish
+        (parameters (Self consume)) (returns I64) (effect pure)))
+    (function create drain (visibility public) (effect pure)
+      (type-parameter create T (constraint owned))
+      (implementation-parameter implparam_94000000000000000000000000000001 element Element T)
+      (parameter create values (type (list I64)))
+      (parameter create queue (type (owned-product
+        (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (use consume))
+      (returns (owned-product
+        (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+        (field values (list I64))))
+      (body (let (binding popped (type (owned-choice
+        (case empty (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+        (case item (owned-product
+          (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (field value T)))))
+        (call std::fifo-pop (types T) (local queue)))
+        (in (match-owned (type (owned-choice
+          (case empty (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+          (case item (owned-product
+            (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (field value T)))))
+          (local popped)
+          (case empty (binding rest (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))))
+            (in (pack-owned (type (owned-product
+              (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (field values (list I64))))
+              (field rest (local rest)) (field values (local values)))))
+          (case item (binding item (type (owned-product
+            (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (field value T))))
+            (in (unpack-owned (type (owned-product
+              (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (field value T))) (local item)
+              (field rest (binding rest (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))))
+              (field value (binding value (type T)))
+              (in (let (binding n (type I64)
+                (method-call parameter@drain@implparam_94000000000000000000000000000001
+                  Element method_94000000000000000000000000000003 (local value)))
+                (in (implementation-call drain (types T)
+                  (implementations parameter@drain@implparam_94000000000000000000000000000001)
+                  (call std::list-append (types I64) (local values) (local n)) (local rest)))))))))))))))
+declarations.end

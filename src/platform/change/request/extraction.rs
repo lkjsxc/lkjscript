@@ -1529,6 +1529,20 @@ fn replace_expression_reference(
             replace(value);
             replace(source);
         }
+        ExpressionOperation::SequenceGet { index, source, .. } => {
+            replace(index);
+            replace(source);
+        }
+        ExpressionOperation::SequenceReplace {
+            index,
+            value,
+            source,
+            ..
+        } => {
+            replace(index);
+            replace(value);
+            replace(source);
+        }
         ExpressionOperation::ChooseOwned { .. } | ExpressionOperation::MatchOwned { .. } => {
             return Err(extract_error(
                 "change_extract_owned_choice",

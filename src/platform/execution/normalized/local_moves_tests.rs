@@ -51,17 +51,15 @@ pub(super) fn future_read(instructions: &[I], at: usize, local: u32) -> bool {
         }
         match &instructions[pc] {
             I::SequenceLength { source_local, .. }
+            | I::SequenceGet { source_local, .. }
+            | I::SequencePush { source_local, .. }
             | I::SequencePop { source_local, .. }
+            | I::SequenceReplace { source_local, .. }
             | I::BorrowOwnedItem { source_local, .. }
                 if *source_local == local =>
             {
                 return true;
             }
-            I::SequencePush {
-                value_local,
-                source_local,
-                ..
-            } if *value_local == local || *source_local == local => return true,
             I::BorrowOwnedItem { binding_local, .. }
             | I::BorrowOwnedField { binding_local, .. }
                 if *binding_local == local =>

@@ -1247,10 +1247,93 @@ impl ReferenceState<'_> {
             ));
         };
         let item = *item;
-        if direct_memory_type(&self.schema, item, &BTreeMap::new(), self.control)?.is_none() {
-            return Err(reference_type_error("sequence element must be owned"));
+        if direct_memory_type(&self.schema, item, &BTreeMap::new(), self.control)?.is_none()
+            && !self.schema.transferable_types.contains(&item)
+        {
+            return Err(reference_type_error(
+                "sequence element must be owned or ordinary data",
+            ));
         }
         Ok((ty, item))
+    }
+
+    fn sequence_replace_type(
+        &mut self,
+        sequence: TypeObjectDigest,
+        item: TypeObjectDigest,
+        result_type: TypeObjectDigest,
+    ) -> Result<TypeObjectDigest, ExecutionError> {
+        let result = self.resolve_type_arguments(&[result_type])?[0];
+        let Some(TypeForm::OwnedProduct { fields }) =
+            self.schema.types.get(&result).map(|object| &object.form)
+        else {
+            return Err(reference_type_error(
+                "sequence replace requires its exact owned product",
+            ));
+        };
+        if fields.len() != 2
+            || fields[0].name.as_str() != "rest"
+            || fields[0].ty != sequence
+            || fields[1].name.as_str() != "value"
+            || fields[1].ty != item
+        {
+            return Err(reference_type_error(
+                "sequence replacement result fields disagree",
+            ));
+        }
+        Ok(result)
+    }
+
+    fn certify_sequence_item_pair(
+        &mut self,
+        pair: &super::owned_product::OwnedProduct,
+        sequence: TypeObjectDigest,
+        item: TypeObjectDigest,
+        product: TypeObjectDigest,
+        replaced: bool,
+    ) -> Result<(), ExecutionError> {
+        self.control.check()?;
+        if pair.ty() != product {
+            return Err(reference_type_error(
+                "sequence result constructed a foreign product",
+            ));
+        }
+        let expected_item = direct_memory_type(&self.schema, item, &BTreeMap::new(), self.control)?;
+        pair.inspect_transfer(self.memory_domain, |fields| {
+            let [NormalizedValue::OwnedSequence(rest), value] = fields else {
+                return Err(reference_type_error("sequence result has foreign fields"));
+            };
+            if rest.ty() != sequence {
+                return Err(reference_type_error(
+                    "sequence result changed its container type",
+                ));
+            }
+            rest.validate(self.memory_domain, true)?;
+            if let Some(expected_item) = expected_item {
+                if value.memory_form() != Some(expected_item) {
+                    return Err(reference_type_error(
+                        "sequence result changed its element type",
+                    ));
+                }
+                value.memory_validate(self.memory_domain, true)?;
+                CheckedValue::validate_memory_admission(value, self.schema.value_origin)?;
+            } else if self.inspect_raw(value, item, &BTreeMap::new(), None, false)?
+                != Ownership::Ordinary
+            {
+                return Err(reference_type_error(
+                    "sequence ordinary result conceals ownership",
+                ));
+            }
+            if replaced {
+                // The caller independently checked the prior exact sequence and
+                // replacement before mutation. That bounded premise, together
+                // with the checked displaced item, restores only the remainder.
+                rest.establish_admission(self.schema.value_origin)
+            } else {
+                rest.validate_admission(self.schema.value_origin)
+            }
+        })?;
+        pair.establish_admission(self.schema.value_origin)
     }
 
     fn sequence_pop_types(
@@ -1298,7 +1381,7 @@ impl ReferenceState<'_> {
     }
 
     fn certify_sequence_pop(
-        &self,
+        &mut self,
         value: &NormalizedValue,
         sequence: TypeObjectDigest,
         item: TypeObjectDigest,
@@ -1306,8 +1389,6 @@ impl ReferenceState<'_> {
         product: TypeObjectDigest,
     ) -> Result<(), ExecutionError> {
         self.control.check()?;
-        let expected_item = direct_memory_type(&self.schema, item, &BTreeMap::new(), self.control)?
-            .ok_or_else(|| reference_type_error("pop element must remain owned memory"))?;
         let NormalizedValue::OwnedChoice(choice) = value else {
             return Err(reference_type_error(
                 "pop did not construct its exact choice",
@@ -1325,23 +1406,7 @@ impl ReferenceState<'_> {
                     rest.validate_admission(self.schema.value_origin)
                 }
                 (1, NormalizedValue::OwnedProduct(pair)) if pair.ty() == product => {
-                    pair.inspect_transfer(self.memory_domain, |fields| {
-                        let [NormalizedValue::OwnedSequence(rest), value] = fields else {
-                            return Err(reference_type_error(
-                                "pop item product has foreign fields",
-                            ));
-                        };
-                        if rest.ty() != sequence || value.memory_form() != Some(expected_item) {
-                            return Err(reference_type_error(
-                                "pop item fields changed their exact types",
-                            ));
-                        }
-                        rest.validate(self.memory_domain, true)?;
-                        rest.validate_admission(self.schema.value_origin)?;
-                        value.memory_validate(self.memory_domain, true)?;
-                        CheckedValue::validate_memory_admission(value, self.schema.value_origin)
-                    })?;
-                    pair.establish_admission(self.schema.value_origin)
+                    self.certify_sequence_item_pair(pair, sequence, item, product, false)
                 }
                 _ => Err(reference_type_error(
                     "pop constructed a foreign selected payload",
@@ -2646,7 +2711,15 @@ impl ReferenceState<'_> {
                 source,
             } => {
                 let (ty, item) = self.sequence_item_type(sequence_type)?;
-                let child = self.consume_sequence_local(value, locals)?.release();
+                let child =
+                    if direct_memory_type(&self.schema, item, &BTreeMap::new(), self.control)?
+                        .is_some()
+                    {
+                        self.consume_sequence_local(value, locals)?
+                    } else {
+                        self.evaluate(value, locals)?
+                    }
+                    .release();
                 let child = self.product_child(child, item)?.release();
                 let NormalizedValue::OwnedSequence(token) =
                     self.consume_sequence_local(source, locals)?.release()
@@ -2658,12 +2731,97 @@ impl ReferenceState<'_> {
                 if token.ty() != ty {
                     return Err(reference_type_error("sequence push source type mismatch"));
                 }
+                token.validate_admission(self.schema.value_origin)?;
                 let control = self.control;
                 let token = token.push(self.memory_domain, child, control, &mut |bytes| {
                     self.charge_allocation(bytes)
                 })?;
                 token.establish_admission(self.schema.value_origin)?;
                 CheckedValue::memory(&self.schema, NormalizedValue::OwnedSequence(token))
+            }
+            ExpressionOperation::SequenceGet {
+                sequence_type,
+                source,
+                index,
+            } => {
+                let (ty, item) = self.sequence_item_type(sequence_type)?;
+                if direct_memory_type(&self.schema, item, &BTreeMap::new(), self.control)?.is_some()
+                {
+                    return Err(reference_type_error(
+                        "sequence get requires ordinary elements",
+                    ));
+                }
+                let NormalizedValue::I64(index) = self.evaluate(index, locals)?.release() else {
+                    return Err(reference_type_error("sequence index requires I64"));
+                };
+                let parent = self.borrow_parent(source, locals)?;
+                let NormalizedValue::OwnedSequence(token) = parent.raw() else {
+                    return Err(reference_type_error(
+                        "sequence get requires a sequence token",
+                    ));
+                };
+                if token.ty() != ty {
+                    return Err(reference_type_error("sequence get source type mismatch"));
+                }
+                token.validate_admission(self.schema.value_origin)?;
+                let control = self.control;
+                let raw = token.get(self.memory_domain, index, control, &mut |bytes| {
+                    self.charge_allocation(bytes)
+                })?;
+                // A fresh ordinary proof has no source loan or ancestor guard.
+                self.admit_raw(raw, item, &BTreeMap::new(), None, false)
+            }
+            ExpressionOperation::SequenceReplace {
+                sequence_type,
+                result_type,
+                index,
+                value,
+                source,
+            } => {
+                let (ty, item) = self.sequence_item_type(sequence_type)?;
+                let product = self.sequence_replace_type(ty, item, result_type)?;
+                let NormalizedValue::I64(index) = self.evaluate(index, locals)?.release() else {
+                    return Err(reference_type_error("sequence index requires I64"));
+                };
+                let child =
+                    if direct_memory_type(&self.schema, item, &BTreeMap::new(), self.control)?
+                        .is_some()
+                    {
+                        self.consume_sequence_local(value, locals)?
+                    } else {
+                        self.evaluate(value, locals)?
+                    }
+                    .release();
+                let child = self.product_child(child, item)?.release();
+                let NormalizedValue::OwnedSequence(token) =
+                    self.consume_sequence_local(source, locals)?.release()
+                else {
+                    return Err(reference_type_error(
+                        "sequence replace requires a sequence token",
+                    ));
+                };
+                if token.ty() != ty {
+                    return Err(reference_type_error(
+                        "sequence replace source type mismatch",
+                    ));
+                }
+                token.validate_admission(self.schema.value_origin)?;
+                let control = self.control;
+                let replaced = token.replace(
+                    self.memory_domain,
+                    index,
+                    child,
+                    product,
+                    control,
+                    &mut |bytes| self.charge_allocation(bytes),
+                )?;
+                let NormalizedValue::OwnedProduct(pair) = &replaced else {
+                    return Err(reference_type_error(
+                        "sequence replacement did not construct a product",
+                    ));
+                };
+                self.certify_sequence_item_pair(pair, ty, item, product, true)?;
+                CheckedValue::memory(&self.schema, replaced)
             }
             ExpressionOperation::SequencePop {
                 sequence_type,
@@ -2688,8 +2846,9 @@ impl ReferenceState<'_> {
                     token.pop(self.memory_domain, result, product, control, &mut |bytes| {
                         self.charge_allocation(bytes)
                     })?;
-                // The independently checked result types above justify only the
-                // two new wrappers; existing sequence/element certificates are reused.
+                // The exact remainder retains its prior certificate. Admit the
+                // selected ordinary value independently, or recheck the owned
+                // element certificate, before certifying either new wrapper.
                 self.certify_sequence_pop(&popped, ty, item, result, product)?;
                 CheckedValue::memory(&self.schema, popped)
             }
@@ -2701,6 +2860,10 @@ impl ReferenceState<'_> {
                 body,
             } => {
                 let (ty, item) = self.sequence_item_type(sequence_type)?;
+                if direct_memory_type(&self.schema, item, &BTreeMap::new(), self.control)?.is_none()
+                {
+                    return Err(reference_type_error("borrowed sequence item must be owned"));
+                }
                 let record = self.binding(binding, BindingKind::OwnedBorrow)?;
                 let declared = record.declared_type.ok_or_else(|| {
                     reference_type_error("borrowed sequence item binding lacks type")

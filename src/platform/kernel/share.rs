@@ -170,9 +170,6 @@ pub(crate) fn admit_in(
             }
             TypeForm::OwnedSequence { item } => {
                 read.validation_work()?;
-                if !super::memory::direct_in(read, package, item)? {
-                    return Err(reject("shareable owned sequence requires an owned element"));
-                }
                 pending.push((item, depth + 1));
             }
             _ if super::owned_contract::ordinary_with_assumptions_in(

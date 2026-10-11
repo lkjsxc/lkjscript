@@ -130,7 +130,7 @@ fn native_literal_edit_preserves_imported_list_app_and_both_default_policies() {
     );
     let checked = public.cli(&["check"], true);
     let tests = compact_record(&checked, "tests");
-    assert_eq!(compact_field(tests, "passed"), "132"); // 36 local + 96 standard.
+    assert_eq!(compact_field(tests, "passed"), "152"); // 36 local + 116 standard.
     assert_eq!(compact_field(tests, "failed"), "0");
     assert_eq!(compact_field(tests, "differential"), "equal");
     let after = public.root.path().join("after.lkja");

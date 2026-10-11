@@ -60,10 +60,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-38";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 38;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-34";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 34;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-39";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 39;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-35";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 35;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -1699,6 +1699,8 @@ pub const COMPACT_EXPRESSION_FORMS: &[&str] = &[
     "sequence-length",
     "sequence-push",
     "sequence-pop",
+    "sequence-get",
+    "sequence-replace",
     "borrow-call",
     "borrow-owned-item",
     "choose-owned",
@@ -2074,6 +2076,60 @@ pub(crate) const COMPACT_EXPRESSION_FORM_FIELDS: &[CompactFormField] = &[
     },
     CompactFormField {
         form: "sequence-pop",
+        name: "source",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "sequence-get",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "sequence-get",
+        name: "type",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "sequence-get",
+        name: "source",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "sequence-get",
+        name: "index",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "sequence-replace",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "sequence-replace",
+        name: "type",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "sequence-replace",
+        name: "index",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "sequence-replace",
+        name: "value",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "sequence-replace",
         name: "source",
         required: true,
         syntax: "$NAME",
@@ -5571,6 +5627,26 @@ impl Decoder {
                     source: Box::new(self.decode_expression(required(&record, "source")?)?),
                 }
             }
+            "expression.sequence-get" => {
+                check_fields(&record, &["as", "type", "source", "index"])?;
+                let sequence_type = self.decode_type(required(&record, "type")?)?;
+                let index = Box::new(self.decode_expression(required(&record, "index")?)?);
+                let source = Box::new(self.decode_expression(required(&record, "source")?)?);
+                AuthoredExpressionOperation::SequenceGet {
+                    sequence_type,
+                    source,
+                    index,
+                }
+            }
+            "expression.sequence-replace" => {
+                check_fields(&record, &["as", "type", "index", "value", "source"])?;
+                AuthoredExpressionOperation::SequenceReplace {
+                    sequence_type: self.decode_type(required(&record, "type")?)?,
+                    index: Box::new(self.decode_expression(required(&record, "index")?)?),
+                    value: Box::new(self.decode_expression(required(&record, "value")?)?),
+                    source: Box::new(self.decode_expression(required(&record, "source")?)?),
+                }
+            }
             "expression.borrow-call" => {
                 check_fields(&record, &["as", "call", "body"])?;
                 let call = Box::new(self.decode_expression(required(&record, "call")?)?);
@@ -6176,6 +6252,12 @@ fn commitment_codec_identity(intent: &[u8]) -> &'static str {
         "lkjscript-authored-change-codec-30"
     } else if intent.starts_with(b"LKJACR31") {
         "lkjscript-authored-change-codec-31"
+    } else if intent.starts_with(b"LKJACR32")
+        || intent.starts_with(b"LKJACR33")
+        || intent.starts_with(b"LKJACR34")
+    {
+        // Freeze the actual codec34 fallback used by these existing generations.
+        "lkjscript-authored-change-codec-34"
     } else {
         // Retain the existing fallback; do not infer identities from unknown/future magics.
         AUTHORED_CHANGE_CODEC_IDENTITY

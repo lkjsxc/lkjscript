@@ -49,7 +49,7 @@ fn scheme() -> OwnerRecord {
 fn current_scheme_binds_ordered_parameters_and_every_mapping_argument() {
     let original = scheme();
     let (digest, bytes) = encode_owner(&original).unwrap();
-    assert_eq!(&bytes[..8], b"LKJOWN30");
+    assert_eq!(&bytes[..8], b"LKJOWN31");
     assert_eq!(
         decode_owner(&bytes, original.owner(), original.kind(), digest).unwrap(),
         original
@@ -321,7 +321,7 @@ fn prerequisite_declarations_maps_and_nested_arguments_bind_canonical_identity()
             parameter,
         });
     let (digest, bytes) = encode_owner(&original).unwrap();
-    assert_eq!(&bytes[..8], b"LKJOWN30");
+    assert_eq!(&bytes[..8], b"LKJOWN31");
     assert_eq!(
         decode_owner(&bytes, original.owner(), original.kind(), digest).unwrap(),
         original

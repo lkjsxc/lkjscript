@@ -76,7 +76,7 @@ fn witness_contract_domains_are_closed_and_unique() {
         ("scoped_shareable_owned_inputs", 1),
         ("source_tied_owned_read_results", 1),
         ("parameterized_owned_contracts", 1),
-        ("structural_owned_sequences", 1),
+        ("structural_owned_sequences", 2),
         ("lexical_owned_child_borrows", 1),
         ("explicit_transferable_type_parameters", 1),
         ("structured_parallel_owned_tasks", 5),
@@ -175,9 +175,14 @@ fn witness_contract_domains_are_closed_and_unique() {
         digest,
         "validator_contract_c3b83a1024698983f525fcc4206fc263a9668c1beab1e81b688888f8a0269b62"
     );
-    assert_eq!(
+    // Ordinary sequence elements and indexed operations require fresh admission.
+    assert_ne!(
         digest,
         "validator_contract_a495df56bb7989cc1d2f9299466007668eaa0c75f17d070e3c05c1485941f720"
+    );
+    assert_eq!(
+        digest,
+        "validator_contract_1f129f2c5bc9303a54e548ac1fddfc5763ca5418944165cb17e46dfad1eff00e"
     );
 }
 

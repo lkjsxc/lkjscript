@@ -460,6 +460,22 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 self.require_unrestricted(source, state, depth + 1, "owned sequence source")?;
                 Ok(EvaluatedValue::Unrestricted)
             }
+            ExpressionOperation::SequenceGet { index, source, .. } => {
+                self.require_unrestricted(index, state, depth + 1, "sequence get index")?;
+                self.require_unrestricted(source, state, depth + 1, "owned sequence source")?;
+                Ok(EvaluatedValue::Unrestricted)
+            }
+            ExpressionOperation::SequenceReplace {
+                index,
+                value,
+                source,
+                ..
+            } => {
+                self.require_unrestricted(index, state, depth + 1, "sequence replace index")?;
+                self.require_unrestricted(value, state, depth + 1, "sequence replacement item")?;
+                self.require_unrestricted(source, state, depth + 1, "owned sequence source")?;
+                Ok(EvaluatedValue::Unrestricted)
+            }
             ExpressionOperation::BorrowOwnedItem {
                 index,
                 source,

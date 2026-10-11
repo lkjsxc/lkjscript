@@ -1670,6 +1670,8 @@ mod native_owned_parameters;
 
 #[path = "native_composable_owned_implementations.rs"]
 mod native_composable_owned_implementations;
+#[path = "native_data_sequences.rs"]
+mod native_data_sequences;
 #[path = "native_owned_borrows.rs"]
 mod native_owned_borrows;
 #[path = "native_owned_compact_proof.rs"]
@@ -1705,3 +1707,6 @@ mod native_fold;
 
 #[path = "incremental_units.rs"]
 mod incremental_units;
+
+#[path = "native_owned_fifo.rs"]
+mod native_owned_fifo;

@@ -531,7 +531,10 @@ declarations.end"#,
         let OwnerRecord::Declaration(declaration) = &current.owners[&owner] else {
             unreachable!()
         };
-        assert_eq!(declaration.header.contract_version, 30);
+        assert_eq!(
+            declaration.header.contract_version,
+            crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+        );
         let DeclarationPayload::Function(function) = &declaration.payload else {
             unreachable!()
         };
@@ -541,7 +544,10 @@ declarations.end"#,
         else {
             unreachable!()
         };
-        assert_eq!(parameter.header.contract_version, 30);
+        assert_eq!(
+            parameter.header.contract_version,
+            crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+        );
         assert_eq!(parameter.use_mode, ParameterUse::Borrow);
     }
 }

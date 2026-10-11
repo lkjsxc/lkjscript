@@ -1008,6 +1008,87 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 )?;
                 Ok(result_type)
             }
+            ExpressionOperation::SequenceGet {
+                sequence_type,
+                source,
+                index,
+            } => {
+                let item = self.sequence_item_type(sequence_type)?;
+                if !self
+                    .owned_read(|read| super::transfer::ordinary(read, item, context.declaration))?
+                {
+                    return Err(type_error(
+                        "kernel_owned_sequence",
+                        "sequence get requires ordinary first-order elements",
+                    ));
+                }
+                let actual = self.infer(index, context, next)?;
+                let i64_type = self.canonical_type(TypeForm::I64)?;
+                require_same(
+                    i64_type,
+                    actual,
+                    "kernel_owned_sequence",
+                    "sequence get index",
+                )?;
+                let actual = self.sequence_source_type(source, context, next)?;
+                require_same(
+                    sequence_type,
+                    actual,
+                    "kernel_owned_sequence",
+                    "sequence get source",
+                )?;
+                Ok(item)
+            }
+            ExpressionOperation::SequenceReplace {
+                sequence_type,
+                result_type,
+                index,
+                value,
+                source,
+            } => {
+                let item = self.sequence_item_type(sequence_type)?;
+                let actual = self.infer(index, context, next)?;
+                let i64_type = self.canonical_type(TypeForm::I64)?;
+                require_same(
+                    i64_type,
+                    actual,
+                    "kernel_owned_sequence",
+                    "sequence replace index",
+                )?;
+                let actual = self.infer(value, context, next)?;
+                require_same(
+                    item,
+                    actual,
+                    "kernel_owned_sequence",
+                    "sequence replacement item",
+                )?;
+                let actual = self.sequence_source_type(source, context, next)?;
+                require_same(
+                    sequence_type,
+                    actual,
+                    "kernel_owned_sequence",
+                    "sequence replace source",
+                )?;
+                let expected = self.canonical_type(TypeForm::OwnedProduct {
+                    fields: vec![
+                        StructuralTypeField {
+                            name: super::Name::new("rest")?,
+                            ty: sequence_type,
+                        },
+                        StructuralTypeField {
+                            name: super::Name::new("value")?,
+                            ty: item,
+                        },
+                    ],
+                })?;
+                require_same(
+                    expected,
+                    result_type,
+                    "kernel_owned_sequence",
+                    "sequence replace result annotation",
+                )?;
+                Ok(result_type)
+            }
             ExpressionOperation::BorrowCall {
                 call,
                 binding,
@@ -1048,6 +1129,12 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 body,
             } => {
                 let item = self.sequence_item_type(sequence_type)?;
+                if !self.owned_read(|read| super::memory::direct(read, item))? {
+                    return Err(type_error(
+                        "kernel_owned_borrow",
+                        "owned item borrowing requires an owned element type",
+                    ));
+                }
                 let actual = self.infer(index, context, next)?;
                 let i64_type = self.canonical_type(TypeForm::I64)?;
                 require_same(

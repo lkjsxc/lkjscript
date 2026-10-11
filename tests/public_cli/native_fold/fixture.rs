@@ -21,11 +21,11 @@ pub(super) struct Folds {
 
 impl Folds {
     pub fn new() -> Self {
-        Self::from_request(CONSUMER, &["imported", "trap-probe"], "108")
+        Self::from_request(CONSUMER, &["imported", "trap-probe"], "128")
     }
 
     pub fn history() -> Self {
-        Self::from_request(HISTORY, &["history"], "104")
+        Self::from_request(HISTORY, &["history"], "124")
     }
 
     fn from_request(request: &str, targets: &[&str], expected_tests: &str) -> Self {
@@ -38,7 +38,7 @@ impl Folds {
         let checked = supplier.cli(&["check"], true);
         assert_eq!(
             compact_field(compact_record(&checked, "tests"), "passed"),
-            "101"
+            "121"
         );
         let transport = supplier.root.path().join("library.lkjp");
         let exported = supplier.cli(

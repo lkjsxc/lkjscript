@@ -1118,6 +1118,8 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         "sequence-length",
         "sequence-push",
         "sequence-pop",
+        "sequence-get",
+        "sequence-replace",
         "borrow-call",
         "borrow-owned-item",
         "choose-owned",
@@ -1196,11 +1198,19 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         ),
         (
             "sequence-push",
-            "(sequence-push (type SEQUENCE) (local VALUE) (local SOURCE))",
+            "(sequence-push (type SEQUENCE) VALUE (local SOURCE))",
         ),
         (
             "sequence-pop",
             "(sequence-pop (type SEQUENCE) (local SOURCE))",
+        ),
+        (
+            "sequence-get",
+            "(sequence-get (type SEQUENCE) (local SOURCE) (index EXPRESSION))",
+        ),
+        (
+            "sequence-replace",
+            "(sequence-replace (type SEQUENCE) (index EXPRESSION) VALUE (local SOURCE))",
         ),
         (
             "borrow-call",
@@ -1299,6 +1309,8 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "let-scope",
             "owned-child-read-scope",
             "owned-sequence",
+            "ordinary-sequence-get",
+            "sequence-replace",
             "owned-item-read-scope",
             "borrowed-owned-choice-scope",
             "payload-scope",
@@ -3371,7 +3383,7 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
         &["--project", path(&project), "check"],
     );
     let tests = compact_record(&checked, "tests");
-    assert_eq!(compact_field(tests, "passed"), Some("97"));
+    assert_eq!(compact_field(tests, "passed"), Some("117"));
     assert_eq!(compact_field(tests, "failed"), Some("0"));
     assert_eq!(compact_field(tests, "differential"), Some("equal"));
     assert_eq!(
@@ -3439,7 +3451,7 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
     );
     assert_eq!(
         compact_field(compact_record(&checked_after, "tests"), "passed"),
-        Some("97")
+        Some("117")
     );
 
     let artifact = temporary.path().join("sample.lkja");

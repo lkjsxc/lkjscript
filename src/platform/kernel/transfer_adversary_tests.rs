@@ -275,9 +275,20 @@ fn transfer_phantom_actuals_cannot_hide_authority_or_owned_memory() {
             transfer::admit(&read, phantom, None).is_err(),
             "actual={actual}"
         );
+        let sequence = read.ty(TypeForm::OwnedSequence { item: phantom });
+        assert!(
+            owned_product::validate(&read, sequence, None).is_err(),
+            "empty sequence must check phantom actual={actual}"
+        );
+        assert!(transfer::admit(&read, sequence, None).is_err());
+        assert!(share::admit(&read, sequence, None).is_err());
     }
     let ordinary = read.applied(0, 0, vec![scalar]);
     assert!(!transfer::admit(&read, ordinary, None).unwrap());
+    let sequence = read.ty(TypeForm::OwnedSequence { item: ordinary });
+    owned_product::validate(&read, sequence, None).unwrap();
+    assert!(transfer::admit(&read, sequence, None).unwrap());
+    assert!(share::admit(&read, sequence, None).unwrap());
 }
 
 #[test]

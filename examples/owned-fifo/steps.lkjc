@@ -1,0 +1,81 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create fifo-steps
+    ; Operation codes: 0 enqueue, 1 dequeue, 2 peek, 3 clear. Other codes trap.
+    (function create step (visibility public) (effect pure)
+      (type-parameter create T (constraint owned))
+      (implementation-parameter implparam_94000000000000000000000000000002 element fifo-support::Element T)
+      (parameter create kind (type I64)) (parameter create input (type I64))
+      (parameter create queue (type (owned-product
+        (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (use consume))
+      (returns (owned-product
+        (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+        (field present Bool) (field value I64)))
+      (body (if (call std::i64-equal (local kind) (i64 0))
+        (let
+          (binding value (type T) (method-call parameter@step@implparam_94000000000000000000000000000002
+            fifo-support::Element method_94000000000000000000000000000001 (local input)))
+          (binding observed (type I64) (method-call parameter@step@implparam_94000000000000000000000000000002
+            fifo-support::Element method_94000000000000000000000000000002 (local value)))
+          (binding rest (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+            (call std::fifo-push (types T) (local value) (local queue)))
+          (in (pack-owned (type (owned-product
+            (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+            (field present Bool) (field value I64)))
+            (field rest (local rest)) (field present (bool true)) (field value (local observed)))))
+        (if (call std::i64-equal (local kind) (i64 1))
+          (let (binding popped (type (owned-choice
+            (case empty (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+            (case item (owned-product
+              (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (field value T)))))
+            (call std::fifo-pop (types T) (local queue)))
+            (in (match-owned (type (owned-choice
+              (case empty (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+              (case item (owned-product
+                (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (field value T)))))
+              (local popped)
+              (case empty (binding rest (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))))
+                (in (pack-owned (type (owned-product
+                  (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+                  (field present Bool) (field value I64)))
+                  (field rest (local rest)) (field present (bool false)) (field value (i64 0)))))
+              (case item (binding item (type (owned-product
+                (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (field value T))))
+                (in (unpack-owned (type (owned-product
+                  (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (field value T))) (local item)
+                  (field rest (binding rest (type (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))))
+                  (field value (binding value (type T)))
+                  (in (let (binding observed (type I64)
+                    (method-call parameter@step@implparam_94000000000000000000000000000002
+                      fifo-support::Element method_94000000000000000000000000000003 (local value)))
+                    (in (pack-owned (type (owned-product
+                      (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+                      (field present Bool) (field value I64)))
+                      (field rest (local rest)) (field present (bool true)) (field value (local observed))))))))))))
+          (if (call std::i64-equal (local kind) (i64 2))
+            (if (call std::less (i64 0) (call std::fifo-length (types T) (local queue)))
+              (let (binding observed (type I64)
+                (borrow-call (call std::fifo-front (types T) (local queue)) (binding value (type T))
+                  (in (method-call parameter@step@implparam_94000000000000000000000000000002
+                    fifo-support::Element method_94000000000000000000000000000002 (local value)))))
+                (in (pack-owned (type (owned-product
+                  (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+                  (field present Bool) (field value I64)))
+                  (field rest (local queue)) (field present (bool true)) (field value (local observed)))))
+              (pack-owned (type (owned-product
+                (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+                (field present Bool) (field value I64)))
+                (field rest (local queue)) (field present (bool false)) (field value (i64 0))))
+            (sequence
+              (if (call std::i64-equal (local kind) (i64 3)) (unit)
+                (call std::list-get (types Unit) (list Unit) (i64 0)))
+              (call std::fifo-discard (types T) (local queue))
+              (let (binding rest (type (owned-product
+                (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+                (call std::fifo-empty (types T)))
+                (in (pack-owned (type (owned-product
+                  (field rest (owned-product (field incoming (owned-sequence T)) (field outgoing (owned-sequence T))))
+                  (field present Bool) (field value I64)))
+                  (field rest (local rest)) (field present (bool false)) (field value (i64 0)))))))))))))
+declarations.end

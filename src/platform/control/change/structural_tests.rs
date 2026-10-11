@@ -824,6 +824,14 @@ fn structural_owned_sequence_forms_match_independent_flat_requests() {
             "(sequence-pop (type @Sequence) (local $source))",
         ),
         (
+            "expression.sequence-get as=$body type=@Sequence source=$input index=$index\nexpression.local as=$input value=$source\nexpression.i64 as=$index value=2\n",
+            "(sequence-get (type @Sequence) (local $source) (index (i64 2)))",
+        ),
+        (
+            "expression.sequence-replace as=$body type=@Sequence index=$index value=$value source=$input\nexpression.i64 as=$index value=2\nexpression.i64 as=$value value=17\nexpression.local as=$input value=$source\n",
+            "(sequence-replace (type @Sequence) (index (i64 2)) (i64 17) (local $source))",
+        ),
+        (
             "expression.borrow-owned-item as=$body type=@Sequence source=$input index=$index body=$read\nexpression.item-binding parent=$body index=0 as=$view name=view type=@Payload\nexpression.local as=$input value=$source\nexpression.i64 as=$index value=2\nexpression.local as=$read value=$view\n",
             "(borrow-owned-item (type @Sequence) (local $source) (index (i64 2)) (binding view (as $view) (type @Payload)) (in (local view)))",
         ),
@@ -845,6 +853,46 @@ fn structural_owned_sequence_forms_match_independent_flat_requests() {
             } if symbol == &binding.symbol)
             );
         }
+    }
+}
+
+#[test]
+fn generalized_sequence_preflight_checks_every_index_value_and_source_dependency() {
+    let header = format!("request base={}\n", RevisionId::from_digest([7; 32]));
+    let declarations = format!(
+        "{}type.owned-sequence as=@Sequence item=@Payload\n",
+        owned_borrow_declarations("@Sequence"),
+    );
+    for operation in [
+        "expression.sequence-get as=$body type=@Sequence source=$body index=$index\nexpression.i64 as=$index value=0\n",
+        "expression.sequence-get as=$body type=@Sequence source=$input index=$body\nexpression.local as=$input value=$source\n",
+        "expression.sequence-replace as=$body type=@Sequence source=$input index=$index value=$body\nexpression.local as=$input value=$source\nexpression.i64 as=$index value=0\n",
+        "expression.sequence-replace as=$body type=@Sequence source=$body index=$index value=$value\nexpression.i64 as=$index value=0\nexpression.i64 as=$value value=1\n",
+    ] {
+        let errors = decode_compact_change(
+            "generalized-sequence-cycle.lkjc",
+            format!("{header}{operation}{declarations}").as_bytes(),
+        )
+        .unwrap_err();
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.code == "change_expression_cycle"),
+            "{errors:#?}"
+        );
+    }
+    for structural in [
+        "(sequence-get (type @Sequence) (local $source) (i64 2))",
+        "(sequence-get (type @Sequence) (local $source) (index))",
+        "(sequence-get (type @Sequence) (local $source) (index (i64 1) (i64 2)))",
+        "(sequence-replace (type @Sequence) (i64 2) (i64 17) (local $source))",
+        "(sequence-replace (type @Sequence) (index (i64 2)) (local $source))",
+        "(sequence-replace (type @Sequence) (index (i64 2)) (i64 17) (local $source) (unit))",
+    ] {
+        assert!(decode_compact_change(
+            "generalized-sequence-shape.lkjc",
+            format!("{header}expression.block as=$body\n{structural}\nexpression.end\n{declarations}").as_bytes(),
+        ).is_err(), "{structural}");
     }
 }
 

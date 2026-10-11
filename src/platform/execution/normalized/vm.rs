@@ -983,20 +983,16 @@ impl Machine<'_> {
                     if token.ty() != ty {
                         return Err(type_error("sequence length has a foreign sequence type"));
                     }
+                    token.validate_admission(self.program.value_origin)?;
                     let length = token.len(self.memory_domain, self.control)?;
                     self.push_scalar(NormalizedValue::I64(length as i64))?;
                 }
                 NormalizedInstruction::SequencePush {
                     sequence_type,
-                    value_local,
                     source_local,
                 } => {
-                    if value_local == source_local {
-                        return Err(type_error("sequence push requires distinct owning locals"));
-                    }
                     let ty = self.resolve_type_arguments(&[sequence_type])?[0];
                     let item_type = self.sequence_item_type(ty)?;
-                    self.load_local(value_local, ParameterUse::Consume, false)?;
                     let raw = self.pop()?.into_raw();
                     let value = self.product_child(raw, item_type)?.into_raw();
                     self.load_local(source_local, ParameterUse::Consume, false)?;
@@ -1006,6 +1002,9 @@ impl Machine<'_> {
                     if token.ty() != ty {
                         return Err(type_error("sequence push has a foreign sequence type"));
                     }
+                    // New-child admission alone cannot repair a raw-mutated
+                    // prefix. Require the prior exact allocation certificate.
+                    token.validate_admission(self.program.value_origin)?;
                     let control = self.control;
                     let token = token.push(self.memory_domain, value, control, &mut |bytes| {
                         self.charge_allocation(bytes)
@@ -1014,6 +1013,72 @@ impl Machine<'_> {
                     let value =
                         CheckedValue::memory(self.program, NormalizedValue::OwnedSequence(token))?;
                     self.push(value)?;
+                }
+                NormalizedInstruction::SequenceGet {
+                    sequence_type,
+                    source_local,
+                } => {
+                    let NormalizedValue::I64(index) = self.pop()?.into_raw() else {
+                        return Err(type_error("owned sequence index must be I64"));
+                    };
+                    let ty = self.resolve_type_arguments(&[sequence_type])?[0];
+                    let item_type = self.sequence_item_type(ty)?;
+                    if !self.program.comparable_types.contains(&item_type) {
+                        return Err(type_error(
+                            "sequence get requires ordinary first-order data",
+                        ));
+                    }
+                    let source = self.borrow_owned_source(source_local)?;
+                    let NormalizedValue::OwnedSequence(token) = source.raw() else {
+                        return Err(type_error("sequence get requires a sequence token"));
+                    };
+                    if token.ty() != ty {
+                        return Err(type_error("sequence get has a foreign sequence type"));
+                    }
+                    let control = self.control;
+                    let value = source.sequence_item(
+                        self.program,
+                        self.memory_domain,
+                        index,
+                        control,
+                        &mut |bytes| self.charge_allocation(bytes),
+                    )?;
+                    drop(source);
+                    self.push(value)?;
+                }
+                NormalizedInstruction::SequenceReplace {
+                    sequence_type,
+                    result_type,
+                    source_local,
+                } => {
+                    let ty = self.resolve_type_arguments(&[sequence_type])?[0];
+                    let result_type = self.resolve_type_arguments(&[result_type])?[0];
+                    let item_type = self.sequence_item_type(ty)?;
+                    self.sequence_replace_product_type(ty, item_type, result_type)?;
+                    let raw = self.pop()?.into_raw();
+                    let value = self.product_child(raw, item_type)?.into_raw();
+                    let NormalizedValue::I64(index) = self.pop()?.into_raw() else {
+                        return Err(type_error("owned sequence index must be I64"));
+                    };
+                    self.load_local(source_local, ParameterUse::Consume, false)?;
+                    let NormalizedValue::OwnedSequence(token) = self.pop()?.into_raw() else {
+                        return Err(type_error("sequence replace requires a sequence token"));
+                    };
+                    if token.ty() != ty {
+                        return Err(type_error("sequence replace has a foreign sequence type"));
+                    }
+                    token.validate_admission(self.program.value_origin)?;
+                    let control = self.control;
+                    let raw = token.replace(
+                        self.memory_domain,
+                        index,
+                        value,
+                        result_type,
+                        control,
+                        &mut |bytes| self.charge_allocation(bytes),
+                    )?;
+                    self.certify_sequence_replace(&raw, ty, item_type, result_type)?;
+                    self.push(CheckedValue::memory(self.program, raw)?)?;
                 }
                 NormalizedInstruction::SequencePop {
                     sequence_type,
@@ -1032,6 +1097,7 @@ impl Machine<'_> {
                     if token.ty() != ty {
                         return Err(type_error("sequence pop has a foreign sequence type"));
                     }
+                    token.validate_admission(self.program.value_origin)?;
                     let control = self.control;
                     let raw = token.pop(
                         self.memory_domain,
@@ -1055,7 +1121,15 @@ impl Machine<'_> {
                     };
                     let ty = self.resolve_type_arguments(&[sequence_type])?[0];
                     let binding_type = self.resolve_type_arguments(&[binding_type])?[0];
-                    if self.sequence_item_type(ty)? != binding_type {
+                    if self.sequence_item_type(ty)? != binding_type
+                        || direct_memory_type(
+                            self.program,
+                            binding_type,
+                            &BTreeMap::new(),
+                            self.control,
+                        )?
+                        .is_none()
+                    {
                         return Err(type_error(
                             "owned sequence borrow has an inexact element type",
                         ));
@@ -1069,6 +1143,7 @@ impl Machine<'_> {
                     if token.ty() != ty {
                         return Err(type_error("owned item borrow has a foreign sequence type"));
                     }
+                    token.validate_admission(self.program.value_origin)?;
                     let control = self.control;
                     let raw =
                         token.borrow_item(self.memory_domain, index, control, &mut |bytes| {
@@ -1898,10 +1973,42 @@ impl Machine<'_> {
         else {
             return Err(type_error("missing closed owned sequence type"));
         };
-        if direct_memory_type(self.program, *item, &BTreeMap::new(), self.control)?.is_none() {
-            return Err(type_error("owned sequence requires an owned element type"));
+        if direct_memory_type(self.program, *item, &BTreeMap::new(), self.control)?.is_none()
+            && !self.program.comparable_types.contains(item)
+        {
+            return Err(type_error(
+                "owned sequence requires owned memory or ordinary first-order data",
+            ));
         }
         Ok(*item)
+    }
+
+    fn sequence_replace_product_type(
+        &self,
+        sequence: TypeObjectDigest,
+        item: TypeObjectDigest,
+        result: TypeObjectDigest,
+    ) -> Result<(), ExecutionError> {
+        let Some(crate::platform::kernel::TypeObject {
+            form: TypeForm::OwnedProduct { fields },
+            ..
+        }) = self.program.types.get(&result)
+        else {
+            return Err(type_error(
+                "sequence replace requires the exact result product",
+            ));
+        };
+        if fields.len() != 2
+            || fields[0].name.as_str() != "rest"
+            || fields[0].ty != sequence
+            || fields[1].name.as_str() != "value"
+            || fields[1].ty != item
+        {
+            return Err(type_error(
+                "sequence replace requires the exact result fields",
+            ));
+        }
+        Ok(())
     }
 
     fn sequence_pop_product_type(
@@ -2025,8 +2132,6 @@ impl Machine<'_> {
         product: TypeObjectDigest,
     ) -> Result<(), ExecutionError> {
         self.control.check()?;
-        let expected_item = direct_memory_type(self.program, item, &BTreeMap::new(), self.control)?
-            .ok_or_else(|| type_error("pop element must remain owned memory"))?;
         let NormalizedValue::OwnedChoice(choice) = raw else {
             return Err(type_error("pop did not construct its exact choice"));
         };
@@ -2044,13 +2149,12 @@ impl Machine<'_> {
                         let [NormalizedValue::OwnedSequence(rest), value] = fields else {
                             return Err(type_error("pop item product has foreign fields"));
                         };
-                        if rest.ty() != sequence || value.memory_form() != Some(expected_item) {
+                        if rest.ty() != sequence {
                             return Err(type_error("pop item fields changed their exact types"));
                         }
                         rest.validate(self.memory_domain, true)?;
                         rest.validate_admission(self.program.value_origin)?;
-                        value.memory_validate(self.memory_domain, true)?;
-                        CheckedValue::validate_memory_admission(value, self.program.value_origin)
+                        self.certified_sequence_child(value, item)
                     })?;
                     pair.establish_admission(self.program.value_origin)
                 }
@@ -2058,6 +2162,62 @@ impl Machine<'_> {
             }
         })?;
         choice.establish_admission(self.program.value_origin)
+    }
+
+    /// The caller already proved the prior sequence and independently admitted
+    /// its replacement. Certify only the bounded result envelope; the untouched
+    /// vector prefix keeps that proof without being walked again.
+    fn certify_sequence_replace(
+        &self,
+        raw: &NormalizedValue,
+        sequence: TypeObjectDigest,
+        item: TypeObjectDigest,
+        result: TypeObjectDigest,
+    ) -> Result<(), ExecutionError> {
+        self.control.check()?;
+        let NormalizedValue::OwnedProduct(pair) = raw else {
+            return Err(type_error("replace did not construct its exact product"));
+        };
+        if pair.ty() != result {
+            return Err(type_error("replace constructed a foreign result product"));
+        }
+        pair.inspect_transfer(self.memory_domain, |fields| {
+            let [NormalizedValue::OwnedSequence(rest), value] = fields else {
+                return Err(type_error("replace result product has foreign fields"));
+            };
+            if rest.ty() != sequence {
+                return Err(type_error("replace changed its exact sequence type"));
+            }
+            rest.validate(self.memory_domain, true)?;
+            self.certified_sequence_child(value, item)?;
+            rest.establish_admission(self.program.value_origin)
+        })?;
+        pair.establish_admission(self.program.value_origin)
+    }
+
+    /// Only use after checking an exact sequence's prior admission. Its child
+    /// type proof survives removal/replacement; ordinary immutable data requires
+    /// neither a resource token nor a rescan of untouched sibling values.
+    fn certified_sequence_child(
+        &self,
+        value: &NormalizedValue,
+        item: TypeObjectDigest,
+    ) -> Result<(), ExecutionError> {
+        if let Some(expected) =
+            direct_memory_type(self.program, item, &BTreeMap::new(), self.control)?
+        {
+            if value.memory_form() != Some(expected) {
+                return Err(type_error("sequence item changed its exact owned type"));
+            }
+            value.memory_validate(self.memory_domain, true)?;
+            CheckedValue::validate_memory_admission(value, self.program.value_origin)
+        } else if value.memory_form().is_none() && self.program.comparable_types.contains(&item) {
+            Ok(())
+        } else {
+            Err(type_error(
+                "sequence item lacks an exact ordinary data proof",
+            ))
+        }
     }
 
     fn product_child(

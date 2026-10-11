@@ -428,6 +428,10 @@ impl TryFrom<ExpressionOperation> for ExpressionOperation22 {
 
     fn try_from(value: ExpressionOperation) -> Result<Self, Self::Error> {
         Ok(match value {
+            ExpressionOperation::SequenceGet { .. }
+            | ExpressionOperation::SequenceReplace { .. } => {
+                return Err(super::wire30::generalized_sequence_extension());
+            }
             ExpressionOperation::Unit {} => Self::Unit {},
             ExpressionOperation::Bool { value } => Self::Bool { value },
             ExpressionOperation::I64 { value } => Self::I64 { value },

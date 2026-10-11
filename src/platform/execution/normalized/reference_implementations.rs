@@ -966,14 +966,9 @@ impl ReferenceState<'_> {
             }
             _ => unreachable!(),
         };
-        let mut owned = false;
+        let mut owned = sequence;
         for child in children {
             let child_owned = self.method_shape(child, declared, depth + 1, visits)?;
-            if sequence && !child_owned {
-                return Err(reference_type_error(
-                    "owned sequence requires an owned item",
-                ));
-            }
             owned |= child_owned;
         }
         if !owned {

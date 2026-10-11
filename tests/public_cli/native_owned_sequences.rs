@@ -349,10 +349,10 @@ fn native_owned_sequence_rejects_invalid_meaning_preserves_draft_ids_and_recover
         ("borrowed-task-consumption", READ_SCOPE.replace("(effect pure)", "(effect (task))").replace("(use consume)", "(use borrow)").replace(observed, "(call sequence-carriers::cell-finish (local view))")),
         ("wrong-self-witness", APPLICATION.replacen("concrete@sequence-carriers::Scalar", "concrete@sequence-carriers::Octets", 1)),
         ("double-pop", READ_SCOPE.replace("(borrow-owned-item (type (owned-sequence OwnedI64Cell)) (local values)\n      (index (i64 0)) (binding view (type OwnedI64Cell))\n      (in (call sequence-carriers::cell-read (local view))))", "(sequence (sequence-pop (type (owned-sequence OwnedI64Cell)) (local values)) (sequence-pop (type (owned-sequence OwnedI64Cell)) (local values)) (i64 0))")),
-        ("ordinary-element", r#"declarations.begin
+        ("secret-element", r#"declarations.begin
 (units (module create invalid-sequence
   (function create invalid (visibility public) (effect pure)
-    (returns (owned-sequence I64)) (body (sequence-empty (type (owned-sequence I64)))))))
+    (returns (owned-sequence Secret)) (body (sequence-empty (type (owned-sequence Secret)))))))
 declarations.end
 "#.into()),
         ("unconstrained-element", r#"declarations.begin
@@ -366,7 +366,7 @@ declarations.end
   (function create unused (visibility private) (effect pure)
     (type-parameter create T (constraint owned)) (returns I64) (body (i64 0)))
   (function create invalid (visibility public) (effect pure) (returns I64)
-    (body (call unused (types (owned-sequence I64)))))))
+    (body (call unused (types (owned-sequence (function () I64))))))))
 declarations.end
 "#.into()),
         ("ordinary-container", r#"declarations.begin

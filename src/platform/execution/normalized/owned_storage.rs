@@ -288,6 +288,27 @@ impl OwnedStorage {
         }
         Ok(value)
     }
+    /// Replacing one child neither grows nor copies the vector. As with raw
+    /// insertion, only the checked caller may restore the parent certificate.
+    pub(super) fn replace(
+        &self,
+        origin: ValueOrigin,
+        index: usize,
+        value: NormalizedValue,
+        control: &ExecutionControl,
+    ) -> Result<NormalizedValue, ExecutionError> {
+        let mut storage = self.lock();
+        self.validate_storage(&storage, origin, true)?;
+        control.check()?;
+        let slot = storage
+            .fields
+            .as_mut()
+            .and_then(|fields| fields.get_mut(index))
+            .ok_or_else(reject)?;
+        let displaced = std::mem::replace(slot, value);
+        storage.admission_valid = false;
+        Ok(displaced)
+    }
     /// Project a read token while a separately retained parent loan keeps the
     /// complete product in custody. The storage lock never crosses evaluation
     /// of the caller's lexical body.

@@ -67,21 +67,40 @@ fn sequence_transfer_contract_checks_owned_elements_and_unselected_cases() {
         .find(|(_, object)| matches!(object.form, TypeForm::Text))
         .unwrap()
         .0;
+    let secret = TypeObject::new(TypeForm::Secret).unwrap();
+    let secret_type = encode_type_object(&secret).unwrap().0;
+    program.types.insert(secret_type, secret);
     let control = ExecutionControl::uncancelled();
-    for (item, valid) in [(tree, true), (text, false), (callback, false)] {
+    for (item, valid) in [
+        (tree, true),
+        (text, true),
+        (callback, false),
+        (secret_type, false),
+    ] {
         let object = TypeObject::new(TypeForm::OwnedSequence { item }).unwrap();
         let sequence = encode_type_object(&object).unwrap().0;
         program.types.insert(sequence, object);
-        assert_eq!(admit_type(&program, sequence, &control).is_ok(), valid);
+        if valid {
+            // Ordinary elements never make the sequence itself unrestricted.
+            assert!(admit_type(&program, sequence, &control).unwrap());
+            assert!(admit_shareable_type(&program, sequence, &control).unwrap());
+        } else {
+            assert!(admit_type(&program, sequence, &control).is_err());
+            assert!(admit_shareable_type(&program, sequence, &control).is_err());
+        }
     }
     let object = TypeObject::new(TypeForm::OwnedSequence { item: tree }).unwrap();
     let sequence = encode_type_object(&object).unwrap().0;
     program.types.insert(sequence, object);
-    let TypeForm::OwnedChoice { cases } = &mut program.types.get_mut(&tree).unwrap().form else {
-        panic!("choice");
-    };
-    cases[0].ty = callback;
-    assert!(admit_type(&program, sequence, &control).is_err());
+    for hidden in [callback, secret_type] {
+        let TypeForm::OwnedChoice { cases } = &mut program.types.get_mut(&tree).unwrap().form
+        else {
+            panic!("choice");
+        };
+        cases[0].ty = hidden;
+        assert!(admit_type(&program, sequence, &control).is_err());
+        assert!(admit_shareable_type(&program, sequence, &control).is_err());
+    }
 }
 
 #[test]

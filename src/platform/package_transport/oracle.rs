@@ -345,6 +345,10 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
                         15
                     } else if record.header().contract_version < 29 {
                         16
+                    } else if record.header().contract_version < 30 {
+                        17
+                    } else if record.header().contract_version < 31 {
+                        18
                     } else {
                         crate::platform::package_interface::PACKAGE_INTERFACE_CONTRACT_VERSION
                     },

@@ -477,6 +477,27 @@ impl FullValidator<'_> {
                     "owned sequence types require Graph Contract 25",
                 );
             }
+            if self.snapshot.root.graph_contract_version < 31
+                && let TypeForm::OwnedSequence { item } = object.form
+            {
+                // Foreign symbolic ownership is checked under the exact imported
+                // owner below; local and closed unused types still require the cut.
+                let foreign_parameter = matches!(
+                    self.snapshot.types.get(&item).or_else(|| self.snapshot.dependency_types.get(&item)).map(|t| &t.form),
+                    Some(TypeForm::TypeParameter { parameter })
+                        if !self.snapshot.owners.contains_key(&OwnerKey::TypeParameter(*parameter))
+                );
+                if !foreign_parameter {
+                    match super::memory::direct(self.snapshot, item) {
+                        Ok(false) => self.error(
+                            "kernel_sequence_generation",
+                            "ordinary-element owned sequence types require Graph Contract 31",
+                        ),
+                        Ok(true) => {}
+                        Err(diagnostic) => self.diagnostics.push(diagnostic),
+                    }
+                }
+            }
             if self.snapshot.root.graph_contract_version < 20
                 && matches!(object.form, TypeForm::OwnedChoice { .. })
             {

@@ -46,24 +46,28 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
+        Self::from_source(SOURCE, &["empty", "length", "push", "pop", "inspect"])
+    }
+
+    fn from_source(source: &str, names: &[&str]) -> Self {
         let temporary = tempfile::tempdir().unwrap();
         let initial = crate::platform::kernel::tests::witness_snapshot();
         let created =
             GraphRepository::create(&temporary.path().join("meaning"), &initial, None).unwrap();
-        let input = format!("request base={}\n{SOURCE}", created.current.head.revision);
+        let input = format!("request base={}\n{source}", created.current.head.revision);
         let request = decode_compact_change("sequence-reentry.lkjc", input.as_bytes()).unwrap();
         let prepared = created
             .repository
             .prepare_authored_change(&request.semantic, request.options)
             .unwrap_or_else(|errors| panic!("generic sequence admission: {errors:#?}"));
-        let functions = ["empty", "length", "push", "pop", "inspect"]
-            .into_iter()
+        let functions = names
+            .iter()
             .map(|name| {
                 let OwnerKey::Declaration(declaration) = prepared.allocated[&format!("${name}")]
                 else {
                     panic!("function allocation");
                 };
-                (name.to_owned(), declaration)
+                ((*name).to_owned(), declaration)
             })
             .collect();
         let module = prepared.allocated["$module"];
@@ -120,6 +124,21 @@ fn inventory(view: &RepositoryView, function: DeclarationId) -> BTreeMap<OwnerKe
                 }
                 ExpressionOperation::SequencePush { value, source, .. } => {
                     pending.extend([OwnerKey::Expression(*value), OwnerKey::Expression(*source)]);
+                }
+                ExpressionOperation::SequenceGet { index, source, .. } => {
+                    pending.extend([OwnerKey::Expression(*index), OwnerKey::Expression(*source)]);
+                }
+                ExpressionOperation::SequenceReplace {
+                    index,
+                    value,
+                    source,
+                    ..
+                } => {
+                    pending.extend([
+                        OwnerKey::Expression(*index),
+                        OwnerKey::Expression(*value),
+                        OwnerKey::Expression(*source),
+                    ]);
                 }
                 ExpressionOperation::BorrowOwnedItem {
                     source,
@@ -303,5 +322,114 @@ fn cached_owned_sequence_expansion_admits_nested_products_and_choices_completely
     assert_eq!(
         reader.ty(function.result).unwrap_err().code,
         "change_draft_capacity"
+    );
+}
+
+#[test]
+fn generalized_sequence_native_drafts_and_literal_edits_retain_exact_body_owners() {
+    let fixture = Fixture::from_source(
+        r#"declarations.begin
+(units (module create generalized_sequence_reentry (as $module)
+  (function create get (as $get) (visibility public) (effect pure)
+    (type-parameter create T (constraint transferable))
+    (parameter create values (type (owned-sequence T)) (use borrow)) (returns T)
+    (body (sequence-get (type (owned-sequence T)) (local values) (index (i64 11)))))
+  (function create replace (as $replace) (visibility public) (effect pure)
+    (type-parameter create T (constraint transferable))
+    (parameter create value (type T))
+    (parameter create values (type (owned-sequence T)) (use consume))
+    (returns (owned-product (field rest (owned-sequence T)) (field value T)))
+    (body (sequence-replace (type (owned-sequence T)) (index (i64 13)) (local value) (local values))))
+  (function create replace_i64 (as $replace_i64) (visibility public) (effect pure)
+    (parameter create values (type (owned-sequence I64)) (use consume))
+    (returns (owned-product (field rest (owned-sequence I64)) (field value I64)))
+    (body (sequence-replace (type (owned-sequence I64)) (index (i64 19)) (i64 17) (local values))))))
+declarations.end
+"#,
+        &["get", "replace", "replace_i64"],
+    );
+    let original = fixture.draft();
+    assert!(original.contains("(sequence-get "), "{original}");
+    assert!(original.contains("(sequence-replace "), "{original}");
+    let unchanged = decode_compact_change_in_repository(
+        "generalized-sequence-noop.lkjc",
+        original.as_bytes(),
+        &fixture.repository,
+    )
+    .unwrap();
+    assert!(!unchanged.semantic.changes.iter().any(|change| matches!(
+        change,
+        AuthoredChange::SetFunctionLiterals { .. } | AuthoredChange::ReplaceFunctionBody { .. }
+    )));
+    let before_revision = fixture.view().revision();
+    let errors = fixture
+        .repository
+        .prepare_authored_change(&unchanged.semantic, unchanged.options)
+        .unwrap_err();
+    assert_eq!(errors.len(), 1, "{errors:#?}");
+    assert_eq!(errors[0].code, "publication_semantic_no_change");
+    assert_eq!(fixture.view().revision(), before_revision);
+    let before = fixture
+        .functions
+        .iter()
+        .map(|(name, function)| (name.clone(), inventory(&fixture.view(), *function)))
+        .collect::<BTreeMap<_, _>>();
+    let changed = original
+        .replace("(i64 11)", "(i64 12)")
+        .replace("(i64 13)", "(i64 14)")
+        .replace("(i64 17)", "(i64 18)");
+    let request = decode_compact_change_in_repository(
+        "generalized-sequence-literals.lkjc",
+        changed.as_bytes(),
+        &fixture.repository,
+    )
+    .unwrap();
+    assert!(
+        !request
+            .semantic
+            .changes
+            .iter()
+            .any(|change| matches!(change, AuthoredChange::ReplaceFunctionBody { .. }))
+    );
+    let selected = request
+        .semantic
+        .changes
+        .iter()
+        .filter_map(|change| match change {
+            AuthoredChange::SetFunctionLiterals { literals, .. } => Some(literals),
+            _ => None,
+        })
+        .flatten()
+        .map(|update| OwnerKey::Expression(update.expression))
+        .collect::<BTreeSet<_>>();
+    assert_eq!(selected.len(), 3);
+    let prepared = fixture
+        .repository
+        .prepare_authored_change(&request.semantic, request.options)
+        .unwrap();
+    assert!(prepared.logical_plan.allocations.is_empty());
+    assert!(prepared.logical_plan.retirements.is_empty());
+    fixture.repository.publish(&prepared.publication).unwrap();
+    for (name, function) in &fixture.functions {
+        let after = inventory(&fixture.view(), *function);
+        assert_eq!(
+            before[name].keys().collect::<Vec<_>>(),
+            after.keys().collect::<Vec<_>>()
+        );
+        for (owner, previous) in &before[name] {
+            assert_eq!(
+                previous != &after[owner],
+                selected.contains(owner),
+                "{name}/{owner}"
+            );
+        }
+    }
+    assert_eq!(
+        fixture.draft(),
+        changed.replacen(
+            &request.semantic.base.to_string(),
+            &fixture.view().revision().to_string(),
+            1
+        )
     );
 }

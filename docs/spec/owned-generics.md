@@ -9,9 +9,11 @@ are checked projections of that graph.
 `Owned`, `CaptureSafe` and `None` are distinct constraints. An Owned argument must
 be exactly ByteBuffer, OwnedI64Cell, an explicit [owned product](owned-products.md)
 or [owned choice](owned-choices.md), an [owned sequence](owned-sequences.md)
-whose exact element type satisfies Owned,
+whose exact element type is admitted Owned or ordinary first-order data,
 or an in-scope Owned parameter while checking
-a generic body. Ordinary and CaptureSafe parameters cannot receive an owned type,
+a generic body. Sequence custody remains Owned even when its element is ordinary,
+including for `(owned-sequence I64)` and empty sequences. Ordinary and CaptureSafe
+parameters cannot receive an owned type,
 even when the parameter is unused, its container is empty, or the call is in an
 untaken branch. Owned constraints belong to exact graph functions and to Self and
 the ordered additional parameters of an

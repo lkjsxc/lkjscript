@@ -7,8 +7,8 @@ pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-9";
 pub const WITNESS_CONTRACT_VERSION: u16 = 9;
 pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-11";
 pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 11;
-pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-35";
-pub const VALIDATOR_CONTRACT_VERSION: u16 = 35;
+pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-36";
+pub const VALIDATOR_CONTRACT_VERSION: u16 = 36;
 
 pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT09";
 pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM16";
@@ -60,7 +60,7 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 41] = [
     },
     ValidatorFeatureDescriptor {
         name: "structural_owned_sequences",
-        version: 1,
+        version: 2,
     },
     ValidatorFeatureDescriptor {
         name: "lexical_owned_child_borrows",

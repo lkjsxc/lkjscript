@@ -5764,11 +5764,14 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
             | ExpressionOperation::SequenceLength { sequence_type, .. }
             | ExpressionOperation::SequencePush { sequence_type, .. }
             | ExpressionOperation::SequencePop { sequence_type, .. }
+            | ExpressionOperation::SequenceGet { sequence_type, .. }
+            | ExpressionOperation::SequenceReplace { sequence_type, .. }
             | ExpressionOperation::BorrowOwnedItem { sequence_type, .. } => {
                 let form = match &record.operation {
                     ExpressionOperation::SequenceEmpty { .. } => "sequence_empty",
                     ExpressionOperation::SequenceLength { .. } => "sequence_length",
                     ExpressionOperation::SequencePush { .. } => "sequence_push",
+                    ExpressionOperation::SequenceGet { .. } => "sequence_get",
                     ExpressionOperation::SequencePop { result_type, .. } => {
                         self.add_type_reference(
                             "owned_sequence_result_type",
@@ -5777,6 +5780,15 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                             *result_type,
                         )?;
                         "sequence_pop"
+                    }
+                    ExpressionOperation::SequenceReplace { result_type, .. } => {
+                        self.add_type_reference(
+                            "owned_sequence_result_type",
+                            owner,
+                            0,
+                            *result_type,
+                        )?;
+                        "sequence_replace"
                     }
                     _ => "borrow_owned_item",
                 };
@@ -6254,6 +6266,70 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                 )?;
             }
             ExpressionOperation::SequencePush { value, source, .. } => {
+                self.visit_expression_child(
+                    owner,
+                    value,
+                    (
+                        ExpressionChildRole::OwnedSequenceValue,
+                        "owned_sequence_value",
+                    ),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+                self.visit_expression_child(
+                    owner,
+                    source,
+                    (
+                        ExpressionChildRole::OwnedSequenceSource,
+                        "owned_sequence_source",
+                    ),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+            }
+            ExpressionOperation::SequenceGet { index, source, .. } => {
+                self.visit_expression_child(
+                    owner,
+                    index,
+                    (
+                        ExpressionChildRole::OwnedSequenceIndex,
+                        "owned_sequence_index",
+                    ),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+                self.visit_expression_child(
+                    owner,
+                    source,
+                    (
+                        ExpressionChildRole::OwnedSequenceSource,
+                        "owned_sequence_source",
+                    ),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+            }
+            ExpressionOperation::SequenceReplace {
+                index,
+                value,
+                source,
+                ..
+            } => {
+                self.visit_expression_child(
+                    owner,
+                    index,
+                    (
+                        ExpressionChildRole::OwnedSequenceIndex,
+                        "owned_sequence_index",
+                    ),
+                    0,
+                    None,
+                    child_depth,
+                )?;
                 self.visit_expression_child(
                     owner,
                     value,

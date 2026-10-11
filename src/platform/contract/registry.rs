@@ -105,9 +105,9 @@ use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-23";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 23;
-pub const CLI_CONTRACT_VERSION: u16 = 43;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-24";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 24;
+pub const CLI_CONTRACT_VERSION: u16 = 44;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -120,11 +120,19 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
     ),
     (
         "sequence-push",
-        "(sequence-push (type SEQUENCE) (local VALUE) (local SOURCE))",
+        "(sequence-push (type SEQUENCE) VALUE (local SOURCE))",
     ),
     (
         "sequence-pop",
         "(sequence-pop (type SEQUENCE) (local SOURCE))",
+    ),
+    (
+        "sequence-get",
+        "(sequence-get (type SEQUENCE) (local SOURCE) (index EXPRESSION))",
+    ),
+    (
+        "sequence-replace",
+        "(sequence-replace (type SEQUENCE) (index EXPRESSION) VALUE (local SOURCE))",
     ),
     (
         "borrow-call",
@@ -218,8 +226,8 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
 ];
 
 pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
-    "lkjscript-function-definition-projection-19";
-pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 19;
+    "lkjscript-function-definition-projection-20";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 20;
 pub const FUNCTION_DEFINITION_DEFAULT_ITEMS: u64 = 50;
 pub const MAXIMUM_FUNCTION_DEFINITION_ITEMS: u64 = 10_000;
 pub const FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -4549,13 +4557,13 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "kernel_owned_sequence",
             DiagnosticClass::Semantic,
             "An owned sequence violates its element, source, result envelope or scoped read contract.",
-            "Use an exact Owned element type, live correctly typed locals, and a lexical read binding matching that element; pop returns the exact empty/item custody envelope.",
+            "Use exact Owned or ordinary first-order elements, with Owned or ordinary Transferable bounds for open parameters. Borrowed item scopes require Owned elements; indexed get requires ordinary elements. Replacement accepts an ordinary expression or an exact owning local for an Owned element. Preserve live source custody and the exact pop or replacement envelope.",
         ),
         diagnostic(
             "kernel_sequence_generation",
             DiagnosticClass::Semantic,
             "Sequence meaning is labeled with a predecessor source generation.",
-            "Author sequence meaning under Graph 25 and rebuild derived artifacts from accepted meaning.",
+            "Author generalized sequence elements and indexed get/replace under Graph 31 and rebuild derived artifacts from accepted meaning; predecessor sequence meaning retains its original contract.",
         ),
         diagnostic(
             "kernel_sequence_type_tag",
@@ -4570,10 +4578,16 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Preserve the rejected input and rebuild from validated accepted meaning.",
         ),
         diagnostic(
+            "compiler_sequence_get_item",
+            DiagnosticClass::Corrupt,
+            "An indexed sequence get has an owned or unsupported ordinary element type during lowering.",
+            "Use an exact ordinary first-order element and rebuild from validated accepted meaning; borrowed Owned items use their lexical read scope.",
+        ),
+        diagnostic(
             "compiler_sequence_result_type",
             DiagnosticClass::Corrupt,
-            "A sequence pop result differs from its exact empty/item custody envelope.",
-            "Preserve the sequence in both outcomes and the exact element type in the item product.",
+            "A sequence pop or replacement result differs from its exact custody envelope.",
+            "Pop preserves the sequence in both outcomes; replacement returns the sequence and displaced element. Preserve the exact sequence and element types.",
         ),
         diagnostic(
             "compiler_unit_sequence_local",
@@ -4585,7 +4599,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "change_authored_sequence_type",
             DiagnosticClass::Semantic,
             "A sequence proposal does not identify its exact owned sequence type.",
-            "Supply (type (owned-sequence TYPE)) with an eligible Owned element and preserve its exact argument and result bindings.",
+            "Supply (type (owned-sequence TYPE)) with an eligible Owned or ordinary first-order element and preserve its exact argument and result bindings.",
         ),
         diagnostic(
             "kernel_choice_generation",
@@ -4776,8 +4790,8 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "normalized_sequence_index",
             DiagnosticClass::Semantic,
-            "An owned sequence read index is negative or outside its elements.",
-            "Use sequence-length and guard the I64 index before entering a scoped item read.",
+            "An owned sequence read or replacement index is negative or outside its elements.",
+            "Use sequence-length and guard the I64 index before indexed get, replacement or a scoped item read.",
         ),
         diagnostic(
             "normalized_sequence_storage",
@@ -8958,12 +8972,22 @@ fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String
         (
             "owned-sequence",
             "(owned-sequence TYPE)",
-            "runtime-sized affine sequence of exact owned elements, including when empty; sequence-empty constructs, sequence-length borrows, sequence-push consumes VALUE then SOURCE and appends, sequence-pop consumes SOURCE and returns owned-choice empty:SEQUENCE or item:owned-product rest:SEQUENCE,value:TYPE; pop preserves reusable sequence capacity; allocation and cancellation failures release custody without rollback",
+            "runtime-sized affine sequence of exact Owned or ordinary first-order elements, including when empty; generic ordinary elements require an exact in-scope ordinary Transferable bound; sequence-empty constructs, sequence-length borrows, sequence-push evaluates VALUE then consumes SOURCE and appends, with exact owning locals for Owned values and ordinary expression evaluation otherwise; sequence-pop consumes SOURCE and returns owned-choice empty:SEQUENCE or item:owned-product rest:SEQUENCE,value:TYPE; pop preserves reusable sequence capacity; ordinary aliases retain immutable value semantics and do not acquire owner custody; allocation and cancellation failures release custody without rollback",
+        ),
+        (
+            "ordinary-sequence-get",
+            "(sequence-get (type SEQUENCE) (local SOURCE) (index EXPRESSION))",
+            "ordinary first-order elements only; evaluate the I64 index before reading the exact live owning or borrowed sequence; negative or out-of-range indices trap; return an ordinary immutable value with no retained source loan, valid after source replacement, pop, disposal or admitted transfer; never manufacture an owning value from an Owned element",
+        ),
+        (
+            "sequence-replace",
+            "(sequence-replace (type SEQUENCE) (index EXPRESSION) VALUE (local SOURCE))",
+            "exact Owned or ordinary first-order elements; evaluate index, replacement value and exact owning source in that order; Owned replacement values require exact owning locals, while ordinary replacements admit expressions; active source or ancestor loans forbid consumption; admit the exact replacement and reserve the result before swapping; return owned-product rest:SEQUENCE,value:TYPE with the same sequence allocation and displaced element; length is unchanged, bounds errors trap, and failure cleanup establishes neither rollback nor safe retry",
         ),
         (
             "owned-item-read-scope",
             "(borrow-owned-item (type SEQUENCE) (local SOURCE) (index EXPRESSION) (binding VIEW (type TYPE)) (in BODY))",
-            "evaluate the I64 index once before acquiring the exact source and ancestor loans; negative or out-of-range indices trap; VIEW has only lexical read rights and may be lent to shareable parallel inputs while its scope remains live; it cannot escape, be consumed, stored or transferred; retain scope custody through all exits and release internal storage locks before BODY",
+            "Owned elements only; evaluate the I64 index once before acquiring the exact source and ancestor loans; negative or out-of-range indices trap; VIEW has only lexical read rights and may be lent to shareable parallel inputs while its scope remains live; it cannot escape, be consumed, stored or transferred; retain scope custody through all exits and release internal storage locks before BODY",
         ),
         (
             "borrowed-owned-choice-scope",
@@ -9594,9 +9618,9 @@ mod tests {
             .expect("definition projection contract");
         assert_eq!(
             contract.identity,
-            "lkjscript-function-definition-projection-19"
+            "lkjscript-function-definition-projection-20"
         );
-        assert_eq!(contract.version, 19);
+        assert_eq!(contract.version, 20);
         assert_eq!(
             contract_descriptors()
                 .iter()

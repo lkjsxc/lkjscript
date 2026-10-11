@@ -802,6 +802,7 @@ mod tests {
                 steps: MAXIMUM_WORK - 1,
                 bytes: 0,
                 control: &control,
+                type_lookup: type_lookup::TypeLookupBuilder::default(),
             };
             let error = close(&mut program, &BTreeMap::new(), &mut work).unwrap_err();
             if cancelled {

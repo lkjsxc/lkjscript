@@ -6,6 +6,9 @@ mod borrow_result_tests;
 #[path = "memory_borrow_tests.rs"]
 mod borrow_tests;
 #[cfg(test)]
+#[path = "generalized_sequence_memory_tests.rs"]
+mod generalized_sequence_tests;
+#[cfg(test)]
 #[path = "memory_sequence_tests.rs"]
 mod sequence_tests;
 #[cfg(test)]
@@ -808,7 +811,42 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
             } => {
                 let item = self.sequence_item(sequence_type)?;
                 // Authored evaluation order consumes the element before the sequence.
-                self.consume_local(value, item, state, next)?;
+                if direct(self.read, item)? {
+                    self.consume_local(value, item, state, next)?;
+                } else {
+                    plain(value, state)?;
+                }
+                self.consume_local(source, sequence_type, state, next)?;
+                true
+            }
+            ExpressionOperation::SequenceGet {
+                sequence_type,
+                source,
+                index,
+            } => {
+                let item = self.sequence_item(sequence_type)?;
+                if direct(self.read, item)? {
+                    return Err(reject("sequence get requires an ordinary element type"));
+                }
+                plain(index, state)?;
+                self.source_local(source, sequence_type, state, next)?;
+                false
+            }
+            ExpressionOperation::SequenceReplace {
+                sequence_type,
+                result_type,
+                index,
+                value,
+                source,
+            } => {
+                let item = self.sequence_item(sequence_type)?;
+                super::owned_product::validate(self.read, result_type, self.scope)?;
+                plain(index, state)?;
+                if direct(self.read, item)? {
+                    self.consume_local(value, item, state, next)?;
+                } else {
+                    plain(value, state)?;
+                }
                 self.consume_local(source, sequence_type, state, next)?;
                 true
             }
@@ -830,6 +868,11 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 body,
             } => {
                 let item = self.sequence_item(sequence_type)?;
+                if !direct(self.read, item)? {
+                    return Err(reject(
+                        "owned item borrowing requires an owned element type",
+                    ));
+                }
                 self.borrow_binding(binding, item)?;
                 // An effectful index can move the source. Check its liveness afterwards.
                 plain(index, state)?;
@@ -1599,7 +1642,7 @@ pub(crate) fn validate_owner(
         }
     }
     let mut roots = record.type_roots();
-    if record.header().contract_version < 25
+    if record.header().contract_version < 31
         && let OwnerRecord::Declaration(declaration) = record
     {
         let parameters = match &declaration.payload {

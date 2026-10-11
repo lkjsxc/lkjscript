@@ -31,16 +31,20 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-18";
-pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 18;
-pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF18";
+pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-19";
+pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 19;
+pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF19";
 pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str =
-    "lkjscript.package-interface-owner-envelope.v18";
+    "lkjscript.package-interface-owner-envelope.v19";
 const PACKAGE_INTERFACE_IDENTITY_MAGIC: [u8; 8] = *b"LKJPIFI1";
 const PACKAGE_INTERFACE_IDENTITY_DOMAIN: &str = "lkjscript.package-interface-identity.v1";
 pub const MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES: usize = 1024 * 1024;
 pub const MAXIMUM_PACKAGE_INTERFACE_VALIDATION_WORK: usize =
     crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
+
+#[cfg(test)]
+#[path = "package_interface_generalized_sequence_tests.rs"]
+mod generalized_sequence_tests;
 
 #[cfg(test)]
 #[path = "package_interface_owned_scheme_tests.rs"]
@@ -273,6 +277,8 @@ impl PackageInterfaceOwner {
                 16
             } else if canonical.header().contract_version < 30 {
                 17
+            } else if canonical.header().contract_version < 31 {
+                18
             } else {
                 PACKAGE_INTERFACE_CONTRACT_VERSION
             },
@@ -396,6 +402,15 @@ impl PackageInterfaceOwner {
             )?;
             return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
         }
+        if self.contract_version == 18 {
+            let bytes = crate::platform::packed::encode(
+                *b"LKJPIF18",
+                "lkjscript.package-interface-owner-envelope.v18",
+                self,
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
+        }
         let bytes = crate::platform::packed::encode(
             PACKAGE_INTERFACE_MAGIC,
             PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
@@ -417,7 +432,20 @@ impl PackageInterfaceOwner {
                 "package-interface owner bytes disagree with their exact digest",
             ));
         }
-        let value: Self = if bytes.starts_with(b"LKJPIF17") {
+        let value: Self = if bytes.starts_with(b"LKJPIF18") {
+            let value: Self = crate::platform::packed::decode(
+                bytes,
+                *b"LKJPIF18",
+                "lkjscript.package-interface-owner-envelope.v18",
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            if value.contract_version != 18 {
+                return Err(interface_corrupt(
+                    "predecessor interface envelope has a foreign generation",
+                ));
+            }
+            value
+        } else if bytes.starts_with(b"LKJPIF17") {
             let value: Self = crate::platform::packed::decode(
                 bytes,
                 *b"LKJPIF17",
@@ -579,11 +607,17 @@ impl PackageInterfaceOwner {
             && self.contract_version != 15
             && self.contract_version != 16
             && self.contract_version != 17
+            && self.contract_version != 18
         {
             return Err(interface_error(
                 DiagnosticClass::Source,
                 "package_interface_contract",
                 "package-interface owner uses a predecessor or foreign contract",
+            ));
+        }
+        if self.contract_version < 19 && self.record.header().contract_version >= 31 {
+            return Err(interface_corrupt(
+                "Graph 31 owners require interface generation 19",
             ));
         }
         if self.contract_version < 18
@@ -1889,6 +1923,32 @@ fn validate_type_closure<S: ImmutableObjectStore + ?Sized>(
         keys.insert(key);
         objects.entry(digest).or_insert(object);
     }
+    // Eligibility widened in Graph 31 even when a signature only relays the
+    // sequence and contains no new expression operation. Check each use after
+    // loading its exact complete element closure.
+    for (source, digest) in visited {
+        let Some(TypeObject {
+            form: TypeForm::OwnedSequence { item },
+            ..
+        }) = objects.get(&digest)
+        else {
+            continue;
+        };
+        if !interface_owned_type(*item, &objects, owners)
+            && (owners
+                .get(&source)
+                .is_some_and(|owner| owner.record.header().contract_version < 31)
+                || semantic_declaration(source, owners)
+                    .and_then(|declaration| owners.get(&OwnerKey::Declaration(declaration)))
+                    .is_some_and(|owner| owner.record.header().contract_version < 31))
+        {
+            return Err(interface_error(
+                DiagnosticClass::Semantic,
+                "kernel_sequence_generation",
+                "ordinary sequence element interface closures require Graph 31 owners",
+            ));
+        }
+    }
     Ok((objects, keys))
 }
 
@@ -2302,7 +2362,7 @@ mod tests {
             }),
         };
         let (digest, bytes) = original.encode().unwrap();
-        assert_eq!(&bytes[..8], b"LKJPIF18");
+        assert_eq!(&bytes[..8], b"LKJPIF19");
         assert_eq!(
             PackageInterfaceOwner::decode(&bytes, owner, digest).unwrap(),
             original

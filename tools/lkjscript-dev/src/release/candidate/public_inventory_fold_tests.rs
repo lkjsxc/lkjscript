@@ -9,14 +9,9 @@ const CASES: [&str; 5] = [
     "history::native_blocked_folds_retain_every_nested_prefix_across_blocks_and_source_removal",
     "history::native_blocked_folds_admit_nested_input_and_unused_initial_history_completely",
 ];
-const BASE: &str = "native_owned_fixture: test\nnative_byte_buffer_fixture: test\nnative_byte_ranges_fixture: test\nresident_policy::fixture: test\nparallel::native_parallel_fixture: test\nnative_parallel_reads::native_parallel_reads_fixture: test\nnative_refresh::fixture: test\ncopied_binary_authors_builds_and_serves_interactive_topology_from_minimal: test\nnative_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment: test\nnative_declarations::incremental_units::new_components_do_not_promote_ports_to_compiler_units: test\nnative_declarations::incremental_units::new_command_targets_keep_exact_incremental_cache_and_detached_behavior: test\nnative_declarations::incremental_units::new_port_type_failure_preserves_authority_and_cache_then_recovers: test\n";
 
 fn listing() -> String {
-    let mut text = BASE.to_owned();
-    for case in CASES {
-        text.push_str(&format!("{PREFIX}{case}: test\n"));
-    }
-    text
+    tests::listing().replace("unrelated_test: test\n", "")
 }
 
 fn success(inventory: &Inventory) -> String {
@@ -34,7 +29,13 @@ fn native_fold_inventory_requires_every_behavior_witness_not_just_an_oracle() {
         let text = listing().replace(&format!("{PREFIX}{omitted}: test\n"), "");
         assert!(inventory(&text).is_err(), "missing required {omitted}");
     }
-    let oracle = format!("{BASE}{PREFIX}cases::positional_oracle_is_order_sensitive: test\n");
+    let mut oracle = listing();
+    for suffix in CASES {
+        oracle = oracle.replace(&format!("{PREFIX}{suffix}: test\n"), "");
+    }
+    oracle.push_str(&format!(
+        "{PREFIX}cases::positional_oracle_is_order_sensitive: test\n"
+    ));
     assert!(inventory(&oracle).is_err());
 }
 
@@ -45,8 +46,8 @@ fn native_fold_inventory_selects_future_cases_and_checks_each_complete_terminal(
         listing()
     );
     let inventory = inventory(&listing).unwrap();
-    assert_eq!(inventory.selected.len(), 19);
-    assert_eq!(inventory.all.len(), 20);
+    assert_eq!(inventory.selected.len(), 29);
+    assert_eq!(inventory.all.len(), 30);
     assert!(!inventory.selected.contains("unrelated"));
     for suffix in CASES.into_iter().chain(["future_case", "cases::oracle"]) {
         assert!(inventory.selected.contains(&format!("{PREFIX}{suffix}")));

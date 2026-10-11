@@ -520,6 +520,30 @@ impl<'a> Reader<'a> {
                 sequence_type: self.ty(sequence_type)?,
                 source: Box::new(self.expression_at(source, depth + 1)?),
             },
+            E::SequenceGet {
+                sequence_type,
+                source,
+                index,
+            } => {
+                let index = Box::new(self.expression_at(index, depth + 1)?);
+                A::SequenceGet {
+                    sequence_type: self.ty(sequence_type)?,
+                    source: Box::new(self.expression_at(source, depth + 1)?),
+                    index,
+                }
+            }
+            E::SequenceReplace {
+                sequence_type,
+                index,
+                value,
+                source,
+                ..
+            } => A::SequenceReplace {
+                sequence_type: self.ty(sequence_type)?,
+                index: Box::new(self.expression_at(index, depth + 1)?),
+                value: Box::new(self.expression_at(value, depth + 1)?),
+                source: Box::new(self.expression_at(source, depth + 1)?),
+            },
             E::BorrowOwnedItem {
                 sequence_type,
                 source,

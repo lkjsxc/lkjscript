@@ -10,7 +10,7 @@ const TRANSPORT: &str =
 const MATERIAL: &str = "requirement-predecessor";
 const CURRENT: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../tests/fixtures/owned-predecessor-compiler30/requirements.lkja"
+    "/../../tests/fixtures/owned-predecessor-compiler31/requirements.lkja"
 ));
 const CASES: [(&str, &str); 7] = [
     ("predecessor.lkja", "encode-integer"),
@@ -373,11 +373,19 @@ mod current_control_tests {
         fs::write(material_path(root, "predecessor.lkjp"), source).unwrap();
         fs::write(material_path(root, "current.lkja"), CURRENT).unwrap();
         admitted_artifact(root, "current.lkja").unwrap();
+        let historical = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/fixtures/owned-predecessor-compiler30/requirements.lkja"
+        ));
+        let error = lkjscript::platform::contributor::strict_artifact_identity_probe(historical)
+            .unwrap_err();
+        assert!(error.to_string().contains("artifact_bundle_contract"));
+
         fs::write(
             material_path(root, "current.lkja"),
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
-                "/../../tests/fixtures/owned-predecessor-compiler30/transactions.lkja"
+                "/../../tests/fixtures/owned-predecessor-compiler31/transactions.lkja"
             )),
         )
         .unwrap();

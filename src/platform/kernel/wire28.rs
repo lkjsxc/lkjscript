@@ -1175,6 +1175,10 @@ impl TryFrom<ExpressionOperation> for ExpressionOperation28 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: ExpressionOperation) -> Result<Self, Self::Error> {
         Ok(match v {
+            ExpressionOperation::SequenceGet { .. }
+            | ExpressionOperation::SequenceReplace { .. } => {
+                return Err(super::wire30::generalized_sequence_extension());
+            }
             ExpressionOperation::Unit {} => Self::Unit {},
             ExpressionOperation::Bool { value } => Self::Bool { value },
             ExpressionOperation::I64 { value } => Self::I64 { value },

@@ -510,9 +510,7 @@ fn validate_type(
         TypeForm::OwnedSequence { item } => {
             // Empty storage is still an owner and grants no exemption from the
             // complete concrete element contract, including unselected cases.
-            if !validate_type(program, *item, depth + 1, work)? {
-                return Err(reject());
-            }
+            validate_type(program, *item, depth + 1, work)?;
             Ok(true)
         }
         TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {
@@ -539,9 +537,7 @@ fn validate_shareable_type(
     match &program.types.get(&ty).ok_or_else(reject)?.form {
         TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Ok(true),
         TypeForm::OwnedSequence { item } => {
-            if !validate_shareable_type(program, *item, depth + 1, work)? {
-                return Err(reject());
-            }
+            validate_shareable_type(program, *item, depth + 1, work)?;
             Ok(true)
         }
         TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {

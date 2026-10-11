@@ -469,8 +469,25 @@ impl Checker<'_, '_> {
             self.closure.tick()?;
             let operation = self.operation(id)?.clone();
             match &operation {
-                ExpressionOperation::BorrowCall { .. } | ExpressionOperation::Parallel { .. } => {
+                ExpressionOperation::BorrowCall { .. }
+                | ExpressionOperation::Parallel { .. }
+                | ExpressionOperation::SequenceGet { .. }
+                | ExpressionOperation::SequenceReplace { .. } => {
                     return Ok(true);
+                }
+                ExpressionOperation::SequencePush { sequence_type, .. } => {
+                    let sequence = self.closure.identity(*sequence_type, self.types, 0)?;
+                    let TypeForm::OwnedSequence { item } =
+                        self.closure.types.get(&sequence).ok_or_else(reject)?.form
+                    else {
+                        return Err(reject());
+                    };
+                    // Ordinary insertion evaluates an arbitrary expression
+                    // before reusing the container. Independently check that
+                    // expression's ownership effects and the later source.
+                    if !self.owned(item)? {
+                        return Ok(true);
+                    }
                 }
                 ExpressionOperation::Call { function, .. }
                 | ExpressionOperation::ImplementationCall { function, .. }
@@ -567,8 +584,11 @@ impl Checker<'_, '_> {
             | ExpressionOperation::UnpackOwned { .. }
             | ExpressionOperation::BorrowOwnedField { .. }
             | ExpressionOperation::Parallel { .. }
-            | ExpressionOperation::SequencePush { .. } => 2,
-            ExpressionOperation::If { .. } | ExpressionOperation::BorrowOwnedItem { .. } => 3,
+            | ExpressionOperation::SequencePush { .. }
+            | ExpressionOperation::SequenceGet { .. } => 2,
+            ExpressionOperation::If { .. }
+            | ExpressionOperation::BorrowOwnedItem { .. }
+            | ExpressionOperation::SequenceReplace { .. } => 3,
             ExpressionOperation::Sequence { items } | ExpressionOperation::List { items, .. } => {
                 items.len()
             }
@@ -1213,6 +1233,9 @@ impl Checker<'_, '_> {
                 else {
                     return Err(reject());
                 };
+                if !self.owned(item)? {
+                    return Err(reject());
+                }
                 let source = self.local(source, locals, sequence)?;
                 self.scoped(
                     Loan {
@@ -1427,12 +1450,71 @@ impl Checker<'_, '_> {
                 else {
                     return Err(reject());
                 };
-                if self.flow(value, locals, Demand::Owner, depth + 1)? != Some(item)
+                let owned = self.owned(item)?;
+                if owned && !matches!(self.operation(value)?, ExpressionOperation::Local { .. }) {
+                    return Err(reject());
+                }
+                if !matches!(self.operation(source)?, ExpressionOperation::Local { .. })
+                    || self.flow(
+                        value,
+                        locals,
+                        if owned { Demand::Owner } else { Demand::Data },
+                        depth + 1,
+                    )? != owned.then_some(item)
                     || self.flow(source, locals, Demand::Owner, depth + 1)? != Some(sequence)
                 {
                     return Err(reject());
                 }
                 Some(sequence)
+            }
+            ExpressionOperation::SequenceGet {
+                sequence_type,
+                source,
+                index,
+            } => {
+                let sequence = self.closure.identity(sequence_type, self.types, 0)?;
+                let TypeForm::OwnedSequence { item } =
+                    self.closure.types.get(&sequence).ok_or_else(reject)?.form
+                else {
+                    return Err(reject());
+                };
+                if self.owned(item)? {
+                    return Err(reject());
+                }
+                self.flow(index, locals, Demand::Data, depth + 1)?;
+                self.local(source, locals, sequence)?;
+                None
+            }
+            ExpressionOperation::SequenceReplace {
+                sequence_type,
+                result_type,
+                index,
+                value,
+                source,
+            } => {
+                let sequence = self.closure.identity(sequence_type, self.types, 0)?;
+                let TypeForm::OwnedSequence { item } =
+                    self.closure.types.get(&sequence).ok_or_else(reject)?.form
+                else {
+                    return Err(reject());
+                };
+                let owned = self.owned(item)?;
+                if owned && !matches!(self.operation(value)?, ExpressionOperation::Local { .. }) {
+                    return Err(reject());
+                }
+                self.flow(index, locals, Demand::Data, depth + 1)?;
+                if !matches!(self.operation(source)?, ExpressionOperation::Local { .. })
+                    || self.flow(
+                        value,
+                        locals,
+                        if owned { Demand::Owner } else { Demand::Data },
+                        depth + 1,
+                    )? != owned.then_some(item)
+                    || self.flow(source, locals, Demand::Owner, depth + 1)? != Some(sequence)
+                {
+                    return Err(reject());
+                }
+                Some(self.closure.identity(result_type, self.types, 0)?)
             }
             ExpressionOperation::SequencePop {
                 sequence_type,
@@ -1740,6 +1822,202 @@ declarations.end
             ..super::super::NormalizedReferenceSchema::default()
         };
         super::super::complete(&mut schema, &[snapshot], &ExecutionControl::uncancelled())
+    }
+
+    const DATA_SEQUENCES: &str = r#"declarations.begin
+(units (module create independent-data-sequences
+  (type-alias Seq (owned-sequence I64))
+  (type-alias Item (owned-product (field rest Seq) (field value I64)))
+  (type-alias Pop (owned-choice (case empty Seq) (case item Item)))
+  (function create discard (visibility private) (effect pure)
+    (parameter create values (type Seq) (use consume)) (returns I64) (body (i64 0)))
+  (function create peek (visibility public) (effect pure)
+    (parameter create values (type Seq) (use consume)) (returns I64)
+    (body (sequence-get (type Seq) (local values) (index (i64 0)))))
+  (function create replace (visibility public) (effect pure)
+    (parameter create values (type Seq) (use consume)) (returns Item)
+    (body (sequence-replace (type Seq) (index (i64 0)) (i64 7) (local values))))
+  (function create push (visibility public) (effect pure)
+    (parameter create values (type Seq) (use consume)) (returns Seq)
+    (body (sequence-push (type Seq) (i64 7) (local values))))
+  (function create length-after-push (visibility public) (effect pure)
+    (parameter create values (type Seq) (use consume)) (returns I64)
+    (body (let (binding populated (type Seq)
+      (sequence-push (type Seq) (i64 7) (local values)))
+      (in (sequence-length (type Seq) (local populated))))))
+  (function create pop-after-push (visibility public) (effect pure)
+    (parameter create values (type Seq) (use consume)) (returns Pop)
+    (body (let (binding populated (type Seq)
+      (sequence-push (type Seq) (i64 7) (local values)))
+      (in (sequence-pop (type Seq) (local populated))))))
+  (function create read-from (visibility public) (effect pure)
+    (parameter create values (type Seq) (use borrow)) (returns Seq (borrow-from values))
+    (body (local values)))
+  (function create generic-push (visibility public) (effect pure)
+    (type-parameter create T (constraint transferable))
+    (parameter create value (type T))
+    (parameter create values (type (owned-sequence T)) (use consume))
+    (returns (owned-sequence T))
+    (body (sequence-push (type (owned-sequence T)) (local value) (local values))))))
+declarations.end"#;
+
+    fn sequence_source() -> KernelSnapshot {
+        super::super::super::tests::byte_buffer_tests::author_only(DATA_SEQUENCES).unwrap()
+    }
+
+    #[test]
+    fn canonical_data_sequence_source_admits_generic_operations_and_whole_owner_reads() {
+        admit(&sequence_source()).unwrap();
+    }
+
+    #[test]
+    fn canonical_data_sequence_source_rechecks_get_and_replace_after_index_evaluation() {
+        for name in ["peek", "replace"] {
+            let mut source = sequence_source();
+            let body = function(&source, name).body;
+            let input = match operation(&mut source, body) {
+                ExpressionOperation::SequenceGet { source, .. }
+                | ExpressionOperation::SequenceReplace { source, .. } => *source,
+                _ => panic!("sequence operation"),
+            };
+            let discard = reference(&source, "discard");
+            let moved = expression(
+                &mut source,
+                name.as_bytes(),
+                ExpressionOperation::Call {
+                    function: discard,
+                    type_arguments: vec![],
+                    effect_arguments: vec![],
+                    requirement_arguments: vec![],
+                    arguments: vec![input],
+                },
+            );
+            match operation(&mut source, body) {
+                ExpressionOperation::SequenceGet { index, .. }
+                | ExpressionOperation::SequenceReplace { index, .. } => *index = moved,
+                _ => unreachable!(),
+            }
+            assert!(
+                admit(&source).is_err(),
+                "{name} must recheck the moved source after its index"
+            );
+        }
+    }
+
+    #[test]
+    fn canonical_data_sequence_source_rechecks_replace_after_value_evaluation() {
+        let mut source = sequence_source();
+        let body = function(&source, "replace").body;
+        let ExpressionOperation::SequenceReplace { source: input, .. } =
+            operation(&mut source, body)
+        else {
+            panic!("replace")
+        };
+        let input = *input;
+        let discard = reference(&source, "discard");
+        let moved = expression(
+            &mut source,
+            b"replacement-consumes-source",
+            ExpressionOperation::Call {
+                function: discard,
+                type_arguments: vec![],
+                effect_arguments: vec![],
+                requirement_arguments: vec![],
+                arguments: vec![input],
+            },
+        );
+        let ExpressionOperation::SequenceReplace { value, .. } = operation(&mut source, body)
+        else {
+            unreachable!()
+        };
+        *value = moved;
+        assert!(admit(&source).is_err());
+    }
+
+    #[test]
+    fn canonical_data_sequence_source_rechecks_push_after_value_evaluation() {
+        let mut source = sequence_source();
+        let body = function(&source, "push").body;
+        let ExpressionOperation::SequencePush { source: input, .. } = operation(&mut source, body)
+        else {
+            panic!("push")
+        };
+        let input = *input;
+        let discard = reference(&source, "discard");
+        let moved = expression(
+            &mut source,
+            b"push-value-consumes-source",
+            ExpressionOperation::Call {
+                function: discard,
+                type_arguments: vec![],
+                effect_arguments: vec![],
+                requirement_arguments: vec![],
+                arguments: vec![input],
+            },
+        );
+        let ExpressionOperation::SequencePush { value, .. } = operation(&mut source, body) else {
+            unreachable!()
+        };
+        *value = moved;
+        assert!(admit(&source).is_err());
+    }
+
+    #[test]
+    fn canonical_data_sequence_source_preserves_length_and_pop_affinity_after_ordinary_push() {
+        for name in ["length-after-push", "pop-after-push"] {
+            let mut source = sequence_source();
+            let root = function(&source, name).body;
+            let ExpressionOperation::Let { body, .. } = operation(&mut source, root) else {
+                panic!("let")
+            };
+            let body = *body;
+            let input = match operation(&mut source, body) {
+                ExpressionOperation::SequenceLength { source, .. }
+                | ExpressionOperation::SequencePop { source, .. } => *source,
+                _ => panic!("sequence operation"),
+            };
+            let discard = reference(&source, "discard");
+            let moved = expression(
+                &mut source,
+                name.as_bytes(),
+                ExpressionOperation::Call {
+                    function: discard,
+                    type_arguments: vec![],
+                    effect_arguments: vec![],
+                    requirement_arguments: vec![],
+                    arguments: vec![input],
+                },
+            );
+            let successor_operation = operation(&mut source, body).clone();
+            let successor = expression(
+                &mut source,
+                b"moved-data-sequence-successor",
+                successor_operation,
+            );
+            *operation(&mut source, body) = ExpressionOperation::Sequence {
+                items: vec![moved, successor],
+            };
+            assert!(
+                admit(&source).is_err(),
+                "{name} must preserve container affinity"
+            );
+        }
+    }
+
+    #[test]
+    fn canonical_data_sequence_source_rejects_counterfeit_replacement_shape() {
+        let mut source = sequence_source();
+        let body = function(&source, "replace").body;
+        let ExpressionOperation::SequenceReplace {
+            result_type,
+            sequence_type,
+            ..
+        } = operation(&mut source, body)
+        else {
+            panic!("replace")
+        };
+        *result_type = *sequence_type;
+        assert!(admit(&source).is_err());
     }
 
     const PARALLEL_READ: &str = r#"declarations.begin
