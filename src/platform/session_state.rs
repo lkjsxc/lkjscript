@@ -66,6 +66,12 @@ impl<R: SessionShapeRead> Closure<'_, R> {
         let object = self.object(ty)?;
         let next = depth + 1;
         let form = match object.form {
+            TypeForm::AssociatedContractMember { .. }
+            | TypeForm::AssociatedWitnessProjection { .. } => {
+                return Err(
+                    crate::platform::kernel::owned_associated_wire::unsupported_semantics(),
+                );
+            }
             TypeForm::TypeParameter { parameter } => {
                 return bindings.get(&parameter).copied().ok_or_else(|| {
                     session_semantic(
@@ -191,6 +197,12 @@ pub(super) fn validate<R: SessionShapeRead>(
         complete.insert(ty);
         let object = closure.object(ty)?;
         match &object.form {
+            TypeForm::AssociatedContractMember { .. }
+            | TypeForm::AssociatedWitnessProjection { .. } => {
+                return Err(
+                    crate::platform::kernel::owned_associated_wire::unsupported_semantics(),
+                );
+            }
             TypeForm::Unit
             | TypeForm::Bool
             | TypeForm::I64

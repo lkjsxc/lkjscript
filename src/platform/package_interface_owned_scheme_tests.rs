@@ -115,6 +115,7 @@ fn frozen_interface16_rejects_prerequisites_and_retains_original_bytes() {
                     type_arguments: vec![],
                     implementations: vec![],
                 }],
+                associated_types: Vec::new(),
             }),
         }),
     };
@@ -199,6 +200,7 @@ fn generic_interface_selects_and_admits_exact_owned_parameter_children_and_mappi
                 type_arguments: vec![mapped_type],
                 implementations: vec![],
             }],
+            associated_types: Vec::new(),
         }),
     });
     let mut selection = PackageInterfaceSelection::new(package);

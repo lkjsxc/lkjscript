@@ -191,6 +191,12 @@ impl<'a> Reader<'a> {
             .type_object(digest)?
             .ok_or_else(|| error("canonical type object is absent"))?;
         let ty = match object.form {
+            TypeForm::AssociatedContractMember { .. }
+            | TypeForm::AssociatedWitnessProjection { .. } => {
+                return Err(
+                    crate::platform::kernel::owned_associated_wire::unsupported_semantics(),
+                );
+            }
             TypeForm::Unit => AuthoredType::Unit {},
             TypeForm::Bool => AuthoredType::Bool {},
             TypeForm::I64 => AuthoredType::I64 {},

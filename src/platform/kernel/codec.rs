@@ -256,6 +256,7 @@ mod borrowed_result_encoding_tests {
                     result_borrow: Some(0),
                     effect: FunctionEffect::Pure,
                 }],
+                associated_types: Vec::new(),
             }),
         });
         let (digest, bytes) = encode_owner(&record).unwrap();
@@ -523,6 +524,7 @@ mod parameterized_contract_encoding_tests {
                     result_borrow: None,
                     effect: FunctionEffect::Pure,
                 }],
+                associated_types: Vec::new(),
             }),
         });
         let (digest, bytes) = encode_owner(&record).unwrap();
@@ -588,6 +590,7 @@ mod parameterized_contract_encoding_tests {
                     method: MethodId::migrate(seed, 0),
                     function: reference,
                 }],
+                associated_types: Vec::new(),
             }),
         });
         let function = OwnerRecord::Declaration(DeclarationRecord {
@@ -1448,6 +1451,24 @@ pub fn decode_retirement_binding(bytes: &[u8]) -> Result<RetirementBinding, Diag
 
 pub fn encode_owner(record: &OwnerRecord) -> Result<(OwnerObjectDigest, Vec<u8>), Diagnostic> {
     record.validate_local()?;
+    if let OwnerRecord::Declaration(declaration) = record
+        && super::owned_associated_wire::AssociatedOwnedBody::from_payload(&declaration.payload)?
+            .is_some()
+    {
+        if declaration.header.contract_version != super::contract::GRAPH_CONTRACT_VERSION {
+            return Err(codec_error(
+                "kernel_associated_encoding_generation",
+                "associated parents require the exact Graph33 base profile",
+            ));
+        }
+        let bytes = packed::encode(
+            super::contract::OWNED_ASSOCIATED_OWNER_MAGIC,
+            super::contract::OWNED_ASSOCIATED_OWNER_ENVELOPE_DOMAIN,
+            &super::owned_associated_wire::AssociatedOwnerWire(declaration.clone()),
+            MAXIMUM_OWNER_OBJECT_BYTES,
+        )?;
+        return Ok((OwnerObjectDigest::of(&bytes), bytes));
+    }
     if record.header().contract_version == super::contract::PREDECESSOR_GRAPH_CONTRACT_VERSION {
         let wire = super::wire14::OwnerRecord14::try_from(record.clone())?;
         let bytes = packed::encode(
@@ -1647,7 +1668,21 @@ pub fn decode_owner(
         OwnerObjectDigest::of(bytes).bytes(),
         "owner",
     )?;
-    let record: OwnerRecord = if bytes.starts_with(&super::contract::PREDECESSOR_OWNER_MAGIC) {
+    let record: OwnerRecord = if bytes.starts_with(&super::contract::OWNED_ASSOCIATED_OWNER_MAGIC) {
+        let wire: super::owned_associated_wire::AssociatedOwnerWire = packed::decode(
+            bytes,
+            super::contract::OWNED_ASSOCIATED_OWNER_MAGIC,
+            super::contract::OWNED_ASSOCIATED_OWNER_ENVELOPE_DOMAIN,
+            MAXIMUM_OWNER_OBJECT_BYTES,
+        )?;
+        if wire.0.header.contract_version != super::contract::GRAPH_CONTRACT_VERSION {
+            return Err(codec_error(
+                "kernel_associated_encoding_generation",
+                "associated parent has a foreign base generation",
+            ));
+        }
+        OwnerRecord::Declaration(wire.0)
+    } else if bytes.starts_with(&super::contract::PREDECESSOR_OWNER_MAGIC) {
         let wire: super::wire14::OwnerRecord14 = packed::decode(
             bytes,
             super::contract::PREDECESSOR_OWNER_MAGIC,
@@ -1865,6 +1900,15 @@ pub fn decode_owner(
 
 pub fn encode_type_object(object: &TypeObject) -> Result<(TypeObjectDigest, Vec<u8>), Diagnostic> {
     object.validate_local()?;
+    if object.form.is_associated() {
+        let bytes = packed::encode(
+            super::contract::OWNED_ASSOCIATED_TYPE_MAGIC,
+            super::contract::OWNED_ASSOCIATED_TYPE_ENVELOPE_DOMAIN,
+            &super::owned_associated_wire::AssociatedTypeWire(object.clone()),
+            MAXIMUM_TYPE_OBJECT_BYTES,
+        )?;
+        return Ok((TypeObjectDigest::of(&bytes), bytes));
+    }
     if let super::TypeForm::OwnedSequence { item } = &object.form {
         let bytes = packed::encode(
             super::contract::OWNED_SEQUENCE_TYPE_MAGIC,
@@ -2007,6 +2051,23 @@ pub fn decode_type_object(
         TypeObjectDigest::of(bytes).bytes(),
         "type",
     )?;
+    if bytes.starts_with(&super::contract::OWNED_ASSOCIATED_TYPE_MAGIC) {
+        let wire: super::owned_associated_wire::AssociatedTypeWire = packed::decode(
+            bytes,
+            super::contract::OWNED_ASSOCIATED_TYPE_MAGIC,
+            super::contract::OWNED_ASSOCIATED_TYPE_ENVELOPE_DOMAIN,
+            MAXIMUM_TYPE_OBJECT_BYTES,
+        )?;
+        let (digest, canonical) = encode_type_object(&wire.0)?;
+        verify_canonical(
+            bytes,
+            &canonical,
+            digest.bytes(),
+            expected_digest.bytes(),
+            "type",
+        )?;
+        return Ok(wire.0);
+    }
     if bytes.starts_with(&super::contract::OWNED_SEQUENCE_TYPE_MAGIC) {
         let (contract_version, tag, item): (u16, u8, TypeObjectDigest) = packed::decode(
             bytes,

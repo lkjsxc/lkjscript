@@ -745,6 +745,12 @@ fn property_types(
             Ok(())
         };
         match &object.form {
+            TypeForm::AssociatedContractMember { .. }
+            | TypeForm::AssociatedWitnessProjection { .. } => {
+                return Err(
+                    crate::platform::kernel::owned_associated_wire::unsupported_semantics(),
+                );
+            }
             _ if program.owned_record_layout(*root).is_some() => {
                 // Nominal ownership is independent of the field inventory.
                 // Even empty and ordinary-only records carry affine custody.

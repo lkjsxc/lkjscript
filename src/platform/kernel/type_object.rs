@@ -5,7 +5,9 @@ use super::digest::TypeObjectDigest;
 use super::name::Name;
 use super::reference::DeclarationReference;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
-use crate::platform::semantic_id::TypeParameterId;
+use crate::platform::semantic_id::{
+    AssociatedTypeMemberId, ImplementationParameterId, TypeParameterId,
+};
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -20,7 +22,9 @@ pub struct TypeObject {
 impl TypeObject {
     pub fn new(form: TypeForm) -> Result<Self, Diagnostic> {
         let object = Self {
-            contract_version: if matches!(form, TypeForm::OwnedSequence { .. }) {
+            contract_version: if form.is_associated() {
+                super::contract::OWNED_ASSOCIATED_CONTRACT_VERSION
+            } else if matches!(form, TypeForm::OwnedSequence { .. }) {
                 super::contract::OWNED_SEQUENCE_TYPE_CONTRACT_VERSION
             } else if matches!(form, TypeForm::OwnedChoice { .. }) {
                 super::contract::OWNED_CHOICE_TYPE_CONTRACT_VERSION
@@ -46,7 +50,9 @@ impl TypeObject {
     }
 
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
-        let expected = if matches!(self.form, TypeForm::OwnedSequence { .. }) {
+        let expected = if self.form.is_associated() {
+            super::contract::OWNED_ASSOCIATED_CONTRACT_VERSION
+        } else if matches!(self.form, TypeForm::OwnedSequence { .. }) {
             super::contract::OWNED_SEQUENCE_TYPE_CONTRACT_VERSION
         } else if matches!(self.form, TypeForm::OwnedChoice { .. }) {
             super::contract::OWNED_CHOICE_TYPE_CONTRACT_VERSION
@@ -116,6 +122,8 @@ impl TypeObject {
             | TypeForm::Option { .. }
             | TypeForm::Result { .. }
             | TypeForm::Stream { .. } => {}
+            TypeForm::AssociatedContractMember { .. }
+            | TypeForm::AssociatedWitnessProjection { .. } => {}
             TypeForm::OwnedSequence { .. } => {}
         }
         Ok(())
@@ -181,6 +189,8 @@ impl TypeObject {
             | TypeForm::TypeParameter { .. }
             | TypeForm::Named { .. }
             | TypeForm::CapabilityResource { .. } => Vec::new(),
+            TypeForm::AssociatedContractMember { .. }
+            | TypeForm::AssociatedWitnessProjection { .. } => Vec::new(),
         }
     }
 }
@@ -257,6 +267,27 @@ pub enum TypeForm {
     OwnedSequence {
         item: TypeObjectDigest,
     },
+    /// Contract-local abstract member, legal only in its exact contract's method signatures.
+    AssociatedContractMember {
+        contract: DeclarationReference,
+        member: AssociatedTypeMemberId,
+    },
+    /// Exact lexical witness identity. Equal Self types confer no selection authority.
+    AssociatedWitnessProjection {
+        scope: DeclarationReference,
+        parameter: ImplementationParameterId,
+        contract: DeclarationReference,
+        member: AssociatedTypeMemberId,
+    },
+}
+
+impl TypeForm {
+    pub(crate) fn is_associated(&self) -> bool {
+        matches!(
+            self,
+            Self::AssociatedContractMember { .. } | Self::AssociatedWitnessProjection { .. }
+        )
+    }
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]

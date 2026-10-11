@@ -628,6 +628,7 @@ pub enum ContractKey {
     SecurityAdapter,
     Stream,
     WorkerRunner,
+    OwnedAssociatedTypes,
 }
 
 impl ContractKey {
@@ -638,6 +639,7 @@ impl ContractKey {
             Self::MeaningGraph => "meaning_graph",
             Self::TypeObject => "type_object",
             Self::NominalApplication => "nominal_application",
+            Self::OwnedAssociatedTypes => "owned_associated_types",
             Self::ImmutableObjectStore => "immutable_object_store",
             Self::ImmutablePack => "immutable_pack",
             Self::ObjectCatalog => "object_catalog",
@@ -850,6 +852,23 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             predecessor_policy: REJECT,
             magic_values: &["LKJTAP01"],
             digest_domains: &[super::super::kernel::contract::NOMINAL_APPLICATION_ENVELOPE_DOMAIN],
+        },
+        ContractDescriptor {
+            key: ContractKey::OwnedAssociatedTypes,
+            name: "associated owned type codec foundation; semantic admission unsupported",
+            identity: super::super::kernel::contract::OWNED_ASSOCIATED_CONTRACT_IDENTITY,
+            version: super::super::kernel::contract::OWNED_ASSOCIATED_CONTRACT_VERSION,
+            stability: CURRENT,
+            authority: ContractAuthority::CanonicalMeaning,
+            predecessor_policy: REJECT,
+            magic_values: &["LKJOAT01", "LKJTAT01", "LKJPAT01", "LKJCAU01"],
+            digest_domains: &[
+                super::super::kernel::contract::OWNED_ASSOCIATED_OWNER_ENVELOPE_DOMAIN,
+                super::super::kernel::contract::OWNED_ASSOCIATED_TYPE_ENVELOPE_DOMAIN,
+                super::super::package_interface::ASSOCIATED_INTERFACE_ENVELOPE_DOMAIN,
+                super::super::compiler::ASSOCIATED_UNIT_ENVELOPE_DOMAIN,
+                super::super::compiler::ASSOCIATED_UNIT_KEY_DOMAIN,
+            ],
         },
         simple_contract(
             ContractKey::ImmutableObjectStore,

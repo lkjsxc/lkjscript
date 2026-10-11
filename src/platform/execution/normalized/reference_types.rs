@@ -1868,6 +1868,14 @@ impl<'a> Closure<'a> {
         self.clone_type(ty)?;
         let object = self.types.get(&ty).cloned().ok_or_else(failure)?;
         let form = match object.form {
+            TypeForm::AssociatedContractMember { .. }
+            | TypeForm::AssociatedWitnessProjection { .. } => {
+                return Err(ExecutionError::new(
+                    crate::platform::execution::ExecutionFailureClass::Infrastructure,
+                    "owned_associated_semantics_unsupported",
+                    "associated owned type instantiation is not yet supported",
+                ));
+            }
             TypeForm::TypeParameter { parameter } => {
                 return bindings.get(&parameter).copied().ok_or_else(failure);
             }

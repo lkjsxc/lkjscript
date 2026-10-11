@@ -84,6 +84,7 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
             self_parameter,
             type_parameters,
             methods: lowered,
+            associated_types: Vec::new(),
         })
     }
     fn owned_implementation_value(
@@ -132,6 +133,7 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
             self_type,
             type_arguments,
             methods: lowered,
+            associated_types: Vec::new(),
         })
     }
     pub(super) fn lower_implementation_operand(

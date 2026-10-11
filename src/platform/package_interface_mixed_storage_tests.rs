@@ -37,6 +37,7 @@ fn fixture(
                 type_arguments: vec![],
                 implementations: vec![],
             }],
+            associated_types: Vec::new(),
         })
     } else {
         PackageInterfaceDeclarationPayload::OwnedContract(OwnedContract {
@@ -50,6 +51,7 @@ fn fixture(
                 result_borrow: None,
                 effect: FunctionEffect::Pure,
             }],
+            associated_types: Vec::new(),
         })
     };
     let mut owners = BTreeMap::from([

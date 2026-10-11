@@ -7,8 +7,8 @@ pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-9";
 pub const WITNESS_CONTRACT_VERSION: u16 = 9;
 pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-11";
 pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 11;
-pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-38";
-pub const VALIDATOR_CONTRACT_VERSION: u16 = 38;
+pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-39";
+pub const VALIDATOR_CONTRACT_VERSION: u16 = 39;
 
 pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT09";
 pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM16";
@@ -45,7 +45,7 @@ pub struct ValidatorFeatureDescriptor {
 
 /// This list is the executable owner for rules that affect acceptance or safe witness reuse.
 /// Changing one rule requires changing its feature version, which changes the validator digest.
-pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 42] = [
+pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 43] = [
     ValidatorFeatureDescriptor {
         name: "opaque_nominal_owned_records",
         version: 1,
@@ -214,6 +214,10 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 42] = [
     ValidatorFeatureDescriptor {
         name: "exact_http_route_topology",
         version: 2,
+    },
+    ValidatorFeatureDescriptor {
+        name: "witness_selected_owned_associated_types",
+        version: 1,
     },
 ];
 

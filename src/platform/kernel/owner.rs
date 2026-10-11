@@ -310,6 +310,14 @@ pub struct DeclarationRecord {
 impl DeclarationRecord {
     fn validate_local(&self) -> Result<(), Diagnostic> {
         validate_header_domain(self.header, self.expected_kind())?;
+        if self.payload.has_associated_types()
+            && self.header.contract_version != super::contract::GRAPH_CONTRACT_VERSION
+        {
+            return Err(owner_error(
+                "kernel_associated_encoding_generation",
+                "associated parents require the exact Graph 33 base profile",
+            ));
+        }
         validate_names([&self.name])?;
         if self.header.contract_version < 32
             && matches!(self.payload, DeclarationPayload::OwnedRecord { .. })
@@ -500,6 +508,14 @@ pub enum DeclarationPayload {
 }
 
 impl DeclarationPayload {
+    pub(crate) fn has_associated_types(&self) -> bool {
+        match self {
+            Self::OwnedContract(c) => !c.associated_types.is_empty(),
+            Self::OwnedImplementation(i) => !i.associated_types.is_empty(),
+            _ => false,
+        }
+    }
+
     pub fn type_parameters(&self) -> DeclarationTypeParameters<'_> {
         let (first, second) = match self {
             Self::Record {

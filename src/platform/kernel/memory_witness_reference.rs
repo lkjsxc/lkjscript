@@ -733,6 +733,8 @@ impl Oracle<'_> {
                 | TypeForm::OwnedProduct { .. }
                 | TypeForm::OwnedChoice { .. }
                 | TypeForm::OwnedSequence { .. }
+                | TypeForm::AssociatedContractMember { .. }
+                | TypeForm::AssociatedWitnessProjection { .. }
                 | TypeForm::Secret
                 | TypeForm::Stream { .. } => return false,
                 TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {

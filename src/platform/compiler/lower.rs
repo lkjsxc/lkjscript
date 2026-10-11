@@ -141,7 +141,15 @@ pub fn compile_unit<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         test: bound_summary.summary.test,
         validation_dependencies: bound_summary.summary.validation_dependencies,
     };
-    let key = CompilationUnitKey::derive(&source, optimization)?;
+    let associated_tag = match &record {
+        OwnerRecord::Declaration(d) => match &d.payload {
+            DeclarationPayload::OwnedContract(c) if !c.associated_types.is_empty() => Some(1),
+            DeclarationPayload::OwnedImplementation(i) if !i.associated_types.is_empty() => Some(2),
+            _ => None,
+        },
+        _ => None,
+    };
+    let key = CompilationUnitKey::derive_for_tag(&source, optimization, associated_tag)?;
     let route_ids = target_route_ids(witness, owner, &mut builder.work)?;
     let payload = builder.compile_payload(owner, record, &route_ids)?;
     builder.complete_owned_record_type_closure()?;
@@ -836,6 +844,9 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
             }
             DeclarationPayload::OwnedImplementation(i) => {
                 self.compile_type_parameter_constraints(declaration, &i.type_parameters)?;
+                for binding in &i.associated_types {
+                    self.tables.ty(binding.ty)?;
+                }
                 self.tables.declaration(i.contract)?;
                 self.tables.ty(i.self_type)?;
                 for ty in &i.type_arguments {

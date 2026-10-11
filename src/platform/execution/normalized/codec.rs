@@ -300,6 +300,10 @@ fn from_json(
     require_depth(limits, path, depth)?;
     let form = json_form(program, ty, true, path)?;
     match form {
+        TypeForm::AssociatedContractMember { .. }
+        | TypeForm::AssociatedWitnessProjection { .. } => {
+            Err(crate::platform::kernel::owned_associated_wire::unsupported_semantics())
+        }
         TypeForm::Unit if value.is_null() => Ok(NormalizedValue::Unit),
         TypeForm::Unit => Err(type_error(path, "expected null for Unit")),
         TypeForm::Bool => value

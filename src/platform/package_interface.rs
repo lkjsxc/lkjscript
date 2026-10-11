@@ -33,6 +33,9 @@ use std::fmt;
 
 pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-21";
 pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 21;
+pub(crate) const ASSOCIATED_INTERFACE_MAGIC: [u8; 8] = *b"LKJPAT01";
+pub(crate) const ASSOCIATED_INTERFACE_ENVELOPE_DOMAIN: &str =
+    "lkjscript.package-interface-associated-owner-envelope.v1";
 pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF21";
 pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str =
     "lkjscript.package-interface-owner-envelope.v21";
@@ -144,6 +147,86 @@ pub struct PackageInterfaceOwner {
     pub contract_version: u16,
     pub record: PackageInterfaceRecord,
 }
+
+fn associated_interface_body(
+    record: &PackageInterfaceRecord,
+) -> Result<Option<crate::platform::kernel::owned_associated_wire::AssociatedOwnedBody>, Diagnostic>
+{
+    use crate::platform::kernel::owned_associated_wire::AssociatedOwnedBody;
+    match record {
+        PackageInterfaceRecord::Declaration(d) => match &d.payload {
+            PackageInterfaceDeclarationPayload::OwnedContract(c)
+                if !c.associated_types.is_empty() =>
+            {
+                AssociatedOwnedBody::contract(c).map(Some)
+            }
+            PackageInterfaceDeclarationPayload::OwnedImplementation(i)
+                if !i.associated_types.is_empty() =>
+            {
+                AssociatedOwnedBody::implementation(i).map(Some)
+            }
+            _ => Ok(None),
+        },
+        _ => Ok(None),
+    }
+}
+
+struct AssociatedInterfaceWire(PackageInterfaceOwner);
+impl Encode for AssociatedInterfaceWire {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        let PackageInterfaceRecord::Declaration(record) = &self.0.record else {
+            return Err(bincode::error::EncodeError::Other(
+                "associated interface requires a public declaration",
+            ));
+        };
+        let body = associated_interface_body(&self.0.record)
+            .map_err(|e| bincode::error::EncodeError::OtherString(e.message))?
+            .ok_or(bincode::error::EncodeError::Other(
+                "interface has no associated inventory",
+            ))?;
+        crate::platform::kernel::contract::OWNED_ASSOCIATED_CONTRACT_VERSION.encode(encoder)?;
+        body.tag().encode(encoder)?;
+        self.0.contract_version.encode(encoder)?;
+        record.header.encode(encoder)?;
+        record.name.encode(encoder)?;
+        body.encode_data(encoder)
+    }
+}
+impl<C> Decode<C> for AssociatedInterfaceWire {
+    fn decode<D: bincode::de::Decoder<Context = C>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        use crate::platform::kernel::owned_associated_wire::{AssociatedOwnedBody, decode_version};
+        decode_version(decoder)?;
+        let tag = u8::decode(decoder)?;
+        let contract_version = u16::decode(decoder)?;
+        let header = crate::platform::kernel::OwnerHeader::decode(decoder)?;
+        let name = crate::platform::kernel::Name::decode(decoder)?;
+        let payload = match AssociatedOwnedBody::decode_data(tag, decoder)?.into_payload() {
+            DeclarationPayload::OwnedContract(c) => {
+                PackageInterfaceDeclarationPayload::OwnedContract(c)
+            }
+            DeclarationPayload::OwnedImplementation(i) => {
+                PackageInterfaceDeclarationPayload::OwnedImplementation(i)
+            }
+            _ => unreachable!("associated body has only owned parent forms"),
+        };
+        Ok(Self(PackageInterfaceOwner {
+            contract_version,
+            record: PackageInterfaceRecord::Declaration(
+                crate::platform::kernel::PackageInterfaceDeclaration {
+                    header,
+                    name,
+                    payload,
+                },
+            ),
+        }))
+    }
+}
+bincode::impl_borrow_decode!(AssociatedInterfaceWire);
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 struct PackageInterfaceOwner10 {
@@ -384,6 +467,23 @@ impl PackageInterfaceOwner {
 
     pub fn encode(&self) -> Result<(PackageInterfaceOwnerDigest, Vec<u8>), Diagnostic> {
         self.validate_local()?;
+        if associated_interface_body(&self.record)?.is_some() {
+            if self.contract_version != PACKAGE_INTERFACE_CONTRACT_VERSION
+                || self.record.header().contract_version
+                    != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+            {
+                return Err(interface_corrupt(
+                    "associated interface requires the exact Interface21/Graph33 base profile",
+                ));
+            }
+            let bytes = crate::platform::packed::encode(
+                ASSOCIATED_INTERFACE_MAGIC,
+                ASSOCIATED_INTERFACE_ENVELOPE_DOMAIN,
+                &AssociatedInterfaceWire(self.clone()),
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
+        }
         if self.contract_version == 10 {
             let wire = PackageInterfaceOwner10 {
                 contract_version: 10,
@@ -532,7 +632,23 @@ impl PackageInterfaceOwner {
                 "package-interface owner bytes disagree with their exact digest",
             ));
         }
-        let value: Self = if bytes.starts_with(b"LKJPIF20") {
+        let value: Self = if bytes.starts_with(&ASSOCIATED_INTERFACE_MAGIC) {
+            let wire: AssociatedInterfaceWire = crate::platform::packed::decode(
+                bytes,
+                ASSOCIATED_INTERFACE_MAGIC,
+                ASSOCIATED_INTERFACE_ENVELOPE_DOMAIN,
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            if wire.0.contract_version != PACKAGE_INTERFACE_CONTRACT_VERSION
+                || wire.0.record.header().contract_version
+                    != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+            {
+                return Err(interface_corrupt(
+                    "associated interface has a foreign base generation",
+                ));
+            }
+            wire.0
+        } else if bytes.starts_with(b"LKJPIF20") {
             let value: Self = crate::platform::packed::decode(
                 bytes,
                 *b"LKJPIF20",
@@ -724,6 +840,17 @@ impl PackageInterfaceOwner {
     }
 
     fn validate_local(&self) -> Result<(), Diagnostic> {
+        if associated_interface_body(&self.record)?.is_some()
+            && (self.contract_version != PACKAGE_INTERFACE_CONTRACT_VERSION
+                || self.record.header().contract_version
+                    != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
+        {
+            return Err(interface_error(
+                DiagnosticClass::Source,
+                "package_interface_associated_generation",
+                "associated parents require the exact Graph 33/interface 21 base profile",
+            ));
+        }
         if self.contract_version != PACKAGE_INTERFACE_CONTRACT_VERSION
             && self.contract_version != 10
             && self.contract_version != 11
@@ -1501,6 +1628,9 @@ pub(crate) fn validate_package_interface_metered<S: ImmutableObjectStore + ?Size
     let (type_objects, type_keys) = validate_type_closure(package, &owners, store, work, visit)?;
     for object in type_objects.values() {
         visit(1)?;
+        if object.form.is_associated() {
+            return Err(crate::platform::kernel::owned_associated_wire::unsupported_semantics());
+        }
         if let TypeForm::TaskFunction { effect, .. } = &object.form {
             visit(effect.requirements.len() as u64)?;
         }
@@ -1521,18 +1651,23 @@ pub(crate) fn interface_owner_validation_visits(owner: &PackageInterfaceOwner) -
         | PackageInterfaceRecord::RepresentationDeclaration(declaration) => {
             match &declaration.payload {
                 PackageInterfaceDeclarationPayload::OwnedContract(c) => {
-                    c.methods
-                        .iter()
-                        .map(|m| {
-                            let row = m.effect.row();
-                            m.parameters.len() + row.requirements.len() + row.parameters.len() + 1
-                        })
-                        .sum::<usize>()
+                    c.associated_types.len()
+                        + c.methods
+                            .iter()
+                            .map(|m| {
+                                let row = m.effect.row();
+                                m.parameters.len()
+                                    + row.requirements.len()
+                                    + row.parameters.len()
+                                    + 1
+                            })
+                            .sum::<usize>()
                         + c.type_parameters.len()
                         + 1
                 }
                 PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
-                    i.methods.len()
+                    i.associated_types.len()
+                        + i.methods.len()
                         + i.type_arguments.len()
                         + i.type_parameters.len()
                         + i.implementation_parameters.len()
@@ -1638,6 +1773,9 @@ fn validate_owner_closure_metered(
         .collect::<BTreeSet<_>>();
     expected.extend(representation_declarations(package, owners, types, visit)?);
     for (owner, value) in owners {
+        if associated_interface_body(&value.record)?.is_some() {
+            return Err(crate::platform::kernel::owned_associated_wire::unsupported_semantics());
+        }
         let declaration = match &value.record {
             PackageInterfaceRecord::Declaration(declaration)
             | PackageInterfaceRecord::RepresentationDeclaration(declaration) => declaration,
@@ -2421,6 +2559,10 @@ fn validate_interface_type_reference(
     owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
 ) -> Result<(), Diagnostic> {
     match form {
+        TypeForm::AssociatedContractMember { .. }
+        | TypeForm::AssociatedWitnessProjection { .. } => {
+            return Err(crate::platform::kernel::owned_associated_wire::unsupported_semantics());
+        }
         TypeForm::TaskFunction { effect, .. } => {
             effect.validate()?;
             for parameter in &effect.parameters {
@@ -3428,6 +3570,7 @@ mod tests {
                                 result_borrow: None,
                                 effect: FunctionEffect::Pure,
                             }],
+                            associated_types: Vec::new(),
                         }),
                     }),
                 },

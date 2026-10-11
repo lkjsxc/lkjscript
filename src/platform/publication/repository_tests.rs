@@ -2874,6 +2874,7 @@ fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
                     result: unit,
                     effect: FunctionEffect::Pure,
                 }],
+                associated_types: Vec::new(),
             }),
         ),
         (
@@ -2898,6 +2899,7 @@ fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
                         declaration: method_function,
                     },
                 }],
+                associated_types: Vec::new(),
             }),
         ),
         (
@@ -6045,6 +6047,10 @@ fn authored_type_builder_interns_every_unrestricted_graph_nine_type_form() {
         observed_types.insert(parameter.ty);
         let form = view.type_object(parameter.ty).unwrap().value.unwrap().form;
         observed.insert(match form {
+            TypeForm::AssociatedContractMember { .. }
+            | TypeForm::AssociatedWitnessProjection { .. } => {
+                panic!("feature-free fixture cannot acquire associated type forms")
+            }
             TypeForm::Unit => "unit",
             TypeForm::Bool => "bool",
             TypeForm::I64 => "i64",

@@ -359,6 +359,42 @@ impl FullValidator<'_> {
 
     fn validate(&mut self) {
         self.validate_root_and_records();
+        if self
+            .snapshot
+            .dependency_types
+            .values()
+            .any(|ty| ty.form.is_associated())
+            || self
+                .snapshot
+                .dependency_interfaces
+                .values()
+                .any(|interface| {
+                    interface.values().any(|record| match record {
+                        PackageInterfaceRecord::Declaration(declaration) => {
+                            match &declaration.payload {
+                                PackageInterfaceDeclarationPayload::OwnedContract(contract) => {
+                                    !contract.associated_types.is_empty()
+                                }
+                                PackageInterfaceDeclarationPayload::OwnedImplementation(
+                                    implementation,
+                                ) => !implementation.associated_types.is_empty(),
+                                _ => false,
+                            }
+                        }
+                        _ => false,
+                    })
+                })
+        {
+            self.diagnostics
+                .push(super::owned_associated_wire::unsupported_semantics());
+        }
+        if self
+            .diagnostics
+            .iter()
+            .any(|error| error.code == "owned_associated_semantics_unsupported")
+        {
+            return;
+        }
         if self.exhausted() {
             return;
         }
@@ -447,6 +483,10 @@ impl FullValidator<'_> {
                 return;
             }
             self.capture(record.validate_local());
+            if matches!(record, OwnerRecord::Declaration(d) if d.payload.has_associated_types()) {
+                self.diagnostics
+                    .push(super::owned_associated_wire::unsupported_semantics());
+            }
             if record.header().contract_version
                 == super::contract::PREDECESSOR_GRAPH_CONTRACT_VERSION
                 && super::wire14::OwnerRecord14::try_from(record.clone()).is_err()
@@ -475,6 +515,10 @@ impl FullValidator<'_> {
         for (digest, object) in &self.snapshot.types {
             if !self.consume_work() {
                 return;
+            }
+            if object.form.is_associated() {
+                self.diagnostics
+                    .push(super::owned_associated_wire::unsupported_semantics());
             }
             if self.snapshot.root.graph_contract_version < 25
                 && matches!(object.form, TypeForm::OwnedSequence { .. })

@@ -132,6 +132,7 @@ fn phantom_fixture() -> (KernelSnapshot, Ids) {
                     result: unit,
                     effect: FunctionEffect::Pure,
                 }],
+                associated_types: Vec::new(),
             }),
         ),
         (
@@ -150,6 +151,7 @@ fn phantom_fixture() -> (KernelSnapshot, Ids) {
                     method: ids.method,
                     function: reference(ids.method_function),
                 }],
+                associated_types: Vec::new(),
             }),
         ),
         (

@@ -324,6 +324,8 @@ fn decode_value_charged(
 ) -> Result<NormalizedValue, Diagnostic> {
     state.enter(depth, precharged)?;
     match type_form(program, ty)? {
+        TypeForm::AssociatedContractMember { .. }
+        | TypeForm::AssociatedWitnessProjection { .. } => Err(unsupported("associated owned type")),
         TypeForm::Unit => Ok(NormalizedValue::Unit),
         TypeForm::Bool => match cursor.u8("normalized_data_bool")? {
             0 => Ok(NormalizedValue::Bool(false)),
@@ -531,6 +533,10 @@ fn describe_layout(
     }
     append_bytes(output, &ty.bytes())?;
     match type_form(program, ty)? {
+        TypeForm::AssociatedContractMember { .. }
+        | TypeForm::AssociatedWitnessProjection { .. } => {
+            return Err(unsupported("associated owned type"));
+        }
         TypeForm::Unit => append_bytes(output, &[0])?,
         TypeForm::Bool => append_bytes(output, &[1])?,
         TypeForm::I64 => append_bytes(output, &[2])?,

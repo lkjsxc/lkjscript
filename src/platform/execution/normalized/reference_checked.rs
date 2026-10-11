@@ -1865,7 +1865,9 @@ impl ReferenceState<'_> {
                 | TypeForm::OwnedChoice { .. }
                 | TypeForm::OwnedSequence { .. }
                 | TypeForm::CapabilityResource { .. }
-                | TypeForm::TypeParameter { .. } => {
+                | TypeForm::TypeParameter { .. }
+                | TypeForm::AssociatedContractMember { .. }
+                | TypeForm::AssociatedWitnessProjection { .. } => {
                     return Err(reject(
                         "capture stores a secret, stream, resource, or unknown type parameter",
                     ));

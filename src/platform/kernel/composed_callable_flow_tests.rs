@@ -154,6 +154,7 @@ impl Read {
         self.declaration(
             n,
             DeclarationPayload::OwnedImplementation(OwnedImplementation {
+                associated_types: Vec::new(),
                 type_parameters: (0..arity).map(|i| parameter(n, i as u64)).collect(),
                 implementation_parameters: Vec::new(),
                 contract: reference(900),

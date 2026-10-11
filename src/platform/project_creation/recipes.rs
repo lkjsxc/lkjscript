@@ -650,6 +650,10 @@ fn authored_type(
         )
     })?;
     Ok(match &object.form {
+        TypeForm::AssociatedContractMember { .. }
+        | TypeForm::AssociatedWitnessProjection { .. } => {
+            return Err(crate::platform::kernel::owned_associated_wire::unsupported_semantics());
+        }
         TypeForm::Unit => AuthoredType::Unit {},
         TypeForm::Bool => AuthoredType::Bool {},
         TypeForm::I64 => AuthoredType::I64 {},

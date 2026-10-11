@@ -64,6 +64,7 @@ pub enum RelationKind {
     ImplementationSelection,
     ImplementationMethod,
     BorrowResultSource,
+    AssociatedWitnessScopeUse,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -80,7 +81,7 @@ pub enum PropagationClass {
 }
 
 impl RelationKind {
-    pub const ALL: [Self; 37] = [
+    pub const ALL: [Self; 38] = [
         Self::DeclarationModule,
         Self::MemberDeclaration,
         Self::ParameterOperation,
@@ -118,6 +119,7 @@ impl RelationKind {
         Self::ImplementationSelection,
         Self::ImplementationMethod,
         Self::BorrowResultSource,
+        Self::AssociatedWitnessScopeUse,
     ];
 
     pub const fn tag(self) -> u8 {
@@ -135,6 +137,7 @@ impl RelationKind {
             Self::ImplementationSelection => 35,
             Self::ImplementationMethod => 36,
             Self::BorrowResultSource => 37,
+            Self::AssociatedWitnessScopeUse => 38,
             Self::NamedTypeUse => 7,
             Self::LocalValueReference => 8,
             Self::ConstantReference => 9,
@@ -181,6 +184,7 @@ impl RelationKind {
             Self::ImplementationSelection => "implementation_selection",
             Self::ImplementationMethod => "implementation_method",
             Self::BorrowResultSource => "borrow_result_source",
+            Self::AssociatedWitnessScopeUse => "associated_witness_scope_use",
             Self::NamedTypeUse => "named_type_use",
             Self::LocalValueReference => "local_value_reference",
             Self::ConstantReference => "constant_reference",
@@ -229,6 +233,7 @@ impl RelationKind {
             | Self::ExpressionParent
             | Self::ExpressionRoot => PropagationClass::Ownership,
             Self::OwnedContractUse
+            | Self::AssociatedWitnessScopeUse
             | Self::BorrowResultSource
             | Self::RequirementParameterUse
             | Self::EffectParameterUse
@@ -1101,6 +1106,33 @@ where
             )
         })?;
         match &object.form {
+            TypeForm::AssociatedContractMember { contract, .. } => {
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::OwnedContractUse,
+                    contract.package,
+                    OwnerKey::Declaration(contract.declaration),
+                )?;
+            }
+            TypeForm::AssociatedWitnessProjection {
+                scope, contract, ..
+            } => {
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::OwnedContractUse,
+                    contract.package,
+                    OwnerKey::Declaration(contract.declaration),
+                )?;
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::AssociatedWitnessScopeUse,
+                    scope.package,
+                    OwnerKey::Declaration(scope.declaration),
+                )?;
+            }
             TypeForm::TaskFunction { effect, .. } => {
                 extract_effect_relations(source, effect, edges)?;
                 pending.extend(object.child_types());

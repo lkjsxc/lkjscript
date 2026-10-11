@@ -2,6 +2,15 @@
 
 pub const GRAPH_CONTRACT_IDENTITY: &str = "lkjscript-meaning-graph-33";
 pub const GRAPH_CONTRACT_VERSION: u16 = 33;
+/// A separately identified additive wire capability; semantic admission remains gated.
+pub const OWNED_ASSOCIATED_CONTRACT_IDENTITY: &str = "lkjscript-owned-associated-types-1";
+pub const OWNED_ASSOCIATED_CONTRACT_VERSION: u16 = 1;
+pub const OWNED_ASSOCIATED_OWNER_MAGIC: [u8; 8] = *b"LKJOAT01";
+pub const OWNED_ASSOCIATED_TYPE_MAGIC: [u8; 8] = *b"LKJTAT01";
+pub const OWNED_ASSOCIATED_OWNER_ENVELOPE_DOMAIN: &str =
+    "lkjscript.kernel.owned-associated-owner-envelope.v1";
+pub const OWNED_ASSOCIATED_TYPE_ENVELOPE_DOMAIN: &str =
+    "lkjscript.kernel.owned-associated-type-envelope.v1";
 pub const MIXED_STORAGE_GRAPH_CONTRACT_VERSION: u16 = 33;
 pub const OWNED_RECORD_GRAPH_CONTRACT_VERSION: u16 = 32;
 pub const GENERALIZED_SEQUENCE_GRAPH_CONTRACT_VERSION: u16 = 31;

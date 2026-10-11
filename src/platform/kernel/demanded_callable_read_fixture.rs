@@ -127,6 +127,7 @@ impl Fixture {
                     result_borrow: None,
                     effect: FunctionEffect::Pure,
                 }],
+                associated_types: Vec::new(),
             }),
         )?;
         let parameter = fixture.parameter(caller, 1)?;
@@ -213,6 +214,7 @@ impl Fixture {
                     type_arguments: vec![variable],
                     implementations: operands,
                 }],
+                associated_types: Vec::new(),
             }),
         )?;
         Ok(fixture)

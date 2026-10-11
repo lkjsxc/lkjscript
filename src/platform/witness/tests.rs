@@ -90,6 +90,7 @@ fn witness_contract_domains_are_closed_and_unique() {
         ("owner_summary_dimensions", 4),
         ("same_task_owned_transfer", 2),
         ("sealed_owned_i64_cells", 1),
+        ("witness_selected_owned_associated_types", 1),
     ] {
         assert_eq!(
             contract::VALIDATOR_FEATURES
@@ -191,10 +192,13 @@ fn witness_contract_domains_are_closed_and_unique() {
         digest,
         "validator_contract_36232afacf81a91ea3830ef2c7a0442254440e0978662beb4c682b291e6e7fe8"
     );
-    assert_eq!(
+    // The additive codec capability still requires fresh semantic admission.
+    assert_ne!(
         digest,
         "validator_contract_e62113a5ebb94b6911c2cbef5e97c37bacd2fc102c72fcdb281f3bce3ad2f9a1"
     );
+    assert_eq!(contract::VALIDATOR_CONTRACT_VERSION, 39);
+    assert_eq!(contract::VALIDATOR_FEATURES.len(), 43);
 }
 
 #[test]

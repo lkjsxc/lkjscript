@@ -44,13 +44,14 @@ pub use manifest::{
     CompilationBinding, CompilationManifest, CompilationManifestDigest, CompilerUnitObjectDigest,
 };
 pub(crate) use manifest::{COMPILATION_MANIFEST_ENVELOPE_DOMAIN, COMPILATION_MANIFEST_MAGIC};
+pub(crate) use unit::{
+    ASSOCIATED_UNIT_ENVELOPE_DOMAIN, ASSOCIATED_UNIT_KEY_DOMAIN, COMPILER_UNIT_ENVELOPE_DOMAIN,
+    COMPILER_UNIT_KEY_DOMAIN, COMPILER_UNIT_MAGIC,
+};
 pub use unit::{
     BYTECODE_CONTRACT_IDENTITY, BYTECODE_CONTRACT_VERSION, COMPILER_UNIT_CONTRACT_IDENTITY,
     COMPILER_UNIT_CONTRACT_VERSION, CompilationPayload, CompilationSource, CompilationUnit,
     CompilationUnitKey, CompiledCode, CompiledInstruction, OptimizationPolicy,
-};
-pub(crate) use unit::{
-    COMPILER_UNIT_ENVELOPE_DOMAIN, COMPILER_UNIT_KEY_DOMAIN, COMPILER_UNIT_MAGIC,
 };
 
 #[cfg(test)]

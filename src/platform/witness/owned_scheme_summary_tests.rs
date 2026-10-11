@@ -70,6 +70,7 @@ fn original_graph27_implementation_and_operand_summary_material_remains_exact() 
                 function: reference,
                 type_arguments: Vec::new(),
             }],
+            associated_types: Vec::new(),
         }),
     });
     let summary = local_summary(owner, &record, None).unwrap();
@@ -164,6 +165,7 @@ fn scheme_children_and_mapping_applications_contribute_to_summaries() {
                 function: reference,
                 type_arguments: types,
             }],
+            associated_types: Vec::new(),
         }),
     });
     assert_eq!(

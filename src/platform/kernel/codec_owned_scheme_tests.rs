@@ -41,6 +41,7 @@ fn scheme() -> OwnerRecord {
                 function: reference(),
                 type_arguments: vec![parameter_type, owned_type(TypeForm::ByteBuffer)],
             }],
+            associated_types: Vec::new(),
         }),
     })
 }

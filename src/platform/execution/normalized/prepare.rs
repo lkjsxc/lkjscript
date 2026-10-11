@@ -766,6 +766,8 @@ impl NormalizedProgram {
         let object = self.types.get(&digest)?;
         let next = depth.saturating_add(1);
         let form = match &object.form {
+            TypeForm::AssociatedContractMember { .. }
+            | TypeForm::AssociatedWitnessProjection { .. } => return None,
             TypeForm::TypeParameter { parameter } => {
                 let digest = substitutions.get(parameter).copied()?;
                 return self.types.contains_key(&digest).then_some(digest);

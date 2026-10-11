@@ -3,7 +3,9 @@
 use super::*;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::DeclarationId;
-use crate::platform::semantic_id::{ImplementationParameterId, MethodId, TypeParameterId};
+use crate::platform::semantic_id::{
+    AssociatedTypeMemberId, ImplementationParameterId, MethodId, TypeParameterId,
+};
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -31,12 +33,14 @@ fn admit_dependency(
     Ok(())
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct OwnedContract {
     pub self_parameter: TypeParameterId,
     pub type_parameters: Vec<TypeParameterId>,
     pub methods: Vec<OwnedMethod>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub associated_types: Vec<AssociatedTypeMember>,
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
@@ -58,7 +62,7 @@ pub struct OwnedMethodParameter {
     pub use_mode: ParameterUse,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct OwnedImplementation {
     pub type_parameters: Vec<TypeParameterId>,
@@ -67,6 +71,51 @@ pub struct OwnedImplementation {
     pub self_type: TypeObjectDigest,
     pub type_arguments: Vec<TypeObjectDigest>,
     pub methods: Vec<OwnedMethodImplementation>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub associated_types: Vec<AssociatedTypeBinding>,
+}
+
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AssociatedTypeMember {
+    pub id: AssociatedTypeMemberId,
+    pub name: Name,
+    pub bound: AssociatedTypeBound,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AssociatedTypeBound {
+    Owned,
+}
+
+impl Encode for AssociatedTypeBound {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        1_u8.encode(encoder)
+    }
+}
+impl<C> Decode<C> for AssociatedTypeBound {
+    fn decode<D: bincode::de::Decoder<Context = C>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        match u8::decode(decoder)? {
+            1 => Ok(Self::Owned),
+            _ => Err(bincode::error::DecodeError::Other(
+                "unknown associated owned type bound",
+            )),
+        }
+    }
+}
+bincode::impl_borrow_decode!(AssociatedTypeBound);
+
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AssociatedTypeBinding {
+    pub member: AssociatedTypeMemberId,
+    pub ty: TypeObjectDigest,
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
@@ -104,6 +153,17 @@ pub enum ImplementationOperand {
 
 impl OwnedContract {
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
+        let mut associated_ids = BTreeSet::new();
+        let mut associated_names = BTreeSet::new();
+        if self.associated_types.len() > contract::MAXIMUM_CHILDREN
+            || self.associated_types.iter().any(|member| {
+                !associated_ids.insert(member.id) || !associated_names.insert(&member.name)
+            })
+        {
+            return Err(reject(
+                "associated members require bounded distinct identities and names",
+            ));
+        }
         if self.type_parameters.len() >= contract::MAXIMUM_CHILDREN
             || self.type_parameters.contains(&self.self_parameter)
             || self
@@ -172,6 +232,16 @@ impl OwnedImplementation {
     }
 
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
+        if self.associated_types.len() > contract::MAXIMUM_CHILDREN
+            || self
+                .associated_types
+                .windows(2)
+                .any(|pair| pair[0].member >= pair[1].member)
+        {
+            return Err(reject(
+                "associated bindings require a bounded strictly ordered inventory",
+            ));
+        }
         if self.type_parameters.len() >= contract::MAXIMUM_CHILDREN
             || self
                 .type_parameters
@@ -219,6 +289,7 @@ impl OwnedImplementation {
 
     pub(crate) fn type_roots(&self) -> Vec<TypeObjectDigest> {
         std::iter::once(self.self_type)
+            .chain(self.associated_types.iter().map(|binding| binding.ty))
             .chain(self.type_arguments.iter().copied())
             .chain(
                 self.implementation_parameters.iter().flat_map(|p| {
@@ -814,7 +885,7 @@ pub(crate) fn validate_owned_type(
     }
 }
 
-fn type_parameter_at(
+pub(crate) fn type_parameter_at(
     read: &(impl ExpressionRead + ?Sized),
     scope: DeclarationReference,
     id: TypeParameterId,
@@ -844,7 +915,7 @@ fn type_parameter_at(
 
 /// Every actual retains the requirements of its formal, including phantom arguments.
 /// The formal's defining scope and the actual's lexical scope are independent.
-fn validate_type_argument_constraints(
+pub(crate) fn validate_type_argument_constraints(
     read: &(impl ExpressionRead + ?Sized),
     constraints: TypeParameterConstraints,
     ty: TypeObjectDigest,
@@ -1880,6 +1951,10 @@ pub(super) fn ordinary_with_assumptions_in(
             .type_object(ty)?
             .ok_or_else(|| reject("missing method ordinary type"))?;
         match &t.form {
+            TypeForm::AssociatedContractMember { .. }
+            | TypeForm::AssociatedWitnessProjection { .. } => {
+                return Err(super::owned_associated_wire::unsupported_semantics());
+            }
             TypeForm::TypeParameter { parameter } => {
                 if !bindings.contains(parameter) {
                     return Ok(false);

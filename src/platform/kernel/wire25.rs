@@ -291,6 +291,7 @@ impl TryFrom<PackageFunctionSignature> for PackageFunctionSignature25 {
 impl From<OwnedContract25> for OwnedContract {
     fn from(v: OwnedContract25) -> Self {
         Self {
+            associated_types: Vec::new(),
             self_parameter: v.self_parameter,
             methods: v.methods.into_iter().map(Into::into).collect(),
             type_parameters: Vec::new(),
@@ -301,6 +302,7 @@ impl From<OwnedContract25> for OwnedContract {
 impl TryFrom<OwnedContract> for OwnedContract25 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: OwnedContract) -> Result<Self, Self::Error> {
+        super::owned_associated_wire::require_base_inventory(v.associated_types.is_empty())?;
         if !v.type_parameters.is_empty() {
             return Err(extension());
         }
@@ -318,6 +320,7 @@ impl TryFrom<OwnedContract> for OwnedContract25 {
 impl From<OwnedImplementation25> for OwnedImplementation {
     fn from(v: OwnedImplementation25) -> Self {
         Self {
+            associated_types: Vec::new(),
             contract: v.contract,
             self_type: v.self_type,
             methods: v.methods.into_iter().map(Into::into).collect(),
@@ -331,6 +334,7 @@ impl From<OwnedImplementation25> for OwnedImplementation {
 impl TryFrom<OwnedImplementation> for OwnedImplementation25 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: OwnedImplementation) -> Result<Self, Self::Error> {
+        super::owned_associated_wire::require_base_inventory(v.associated_types.is_empty())?;
         if !v.implementation_parameters.is_empty()
             || v.methods.iter().any(|m| !m.implementations.is_empty())
         {

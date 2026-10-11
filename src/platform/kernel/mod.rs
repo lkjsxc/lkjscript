@@ -11,6 +11,8 @@
 mod affine;
 #[cfg(test)]
 mod affine_reference;
+#[cfg(test)]
+mod associated_flow_reference_tests;
 pub(crate) mod callable_flow;
 mod codec;
 pub mod contract;
@@ -26,12 +28,18 @@ pub(crate) mod memory;
 pub(crate) mod memory_reference;
 mod name;
 mod namespace;
+pub(crate) mod owned_associated;
+#[cfg(test)]
+mod owned_associated_codec_tests;
+pub(crate) mod owned_associated_wire;
 mod owned_contract;
 pub(crate) mod owned_product;
 pub(crate) mod owned_record;
 mod owner;
 pub(crate) mod parallel;
 pub(crate) mod parallel_types;
+#[cfg(test)]
+mod parallel_types_tests;
 pub(crate) mod share;
 pub(crate) mod transfer;
 pub use owned_contract::*;

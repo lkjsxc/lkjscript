@@ -261,6 +261,7 @@ impl TryFrom<PackageFunctionSignature> for PackageFunctionSignature26 {
 impl From<OwnedContract26> for OwnedContract {
     fn from(v: OwnedContract26) -> Self {
         Self {
+            associated_types: Vec::new(),
             self_parameter: v.self_parameter,
             methods: v.methods.into_iter().map(Into::into).collect(),
             type_parameters: v.type_parameters,
@@ -271,6 +272,7 @@ impl From<OwnedContract26> for OwnedContract {
 impl TryFrom<OwnedContract> for OwnedContract26 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: OwnedContract) -> Result<Self, Self::Error> {
+        super::owned_associated_wire::require_base_inventory(v.associated_types.is_empty())?;
         Ok(Self {
             self_parameter: v.self_parameter,
             type_parameters: v.type_parameters,

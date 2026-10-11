@@ -644,6 +644,10 @@ fn kernel_type<R: ExpressionRead + ?Sized>(
         .ok_or_else(|| signature_error("external type is missing"))?;
     let mut child = |digest| kernel_type(read, digest, depth + 1, work, maximum);
     Ok(match &object.form {
+        TypeForm::AssociatedContractMember { .. }
+        | TypeForm::AssociatedWitnessProjection { .. } => {
+            return Err(crate::platform::kernel::owned_associated_wire::unsupported_semantics());
+        }
         TypeForm::Unit => IntrinsicType::Unit,
         TypeForm::Bool => IntrinsicType::Bool,
         TypeForm::I64 => IntrinsicType::I64,

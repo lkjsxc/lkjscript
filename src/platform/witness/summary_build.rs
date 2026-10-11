@@ -1142,7 +1142,18 @@ fn local_summary(
                 }
                 DeclarationPayload::OwnedContract(c) => {
                     interface.raw_piece(2, &[9]);
-                    if record.header.contract_version < 26 {
+                    if !c.associated_types.is_empty() {
+                        if record.header.contract_version
+                            != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+                        {
+                            return Err(witness_error(
+                                DiagnosticClass::Semantic,
+                                "kernel_associated_encoding_generation",
+                                "associated contract summary requires Graph33",
+                            ));
+                        }
+                        interface.piece(10, &crate::platform::kernel::owned_associated_wire::AssociatedOwnedBody::contract(c)?)?;
+                    } else if record.header.contract_version < 26 {
                         interface.piece(
                             10,
                             &crate::platform::kernel::wire25::OwnedContract25::try_from(c.clone())?,
@@ -1164,7 +1175,19 @@ fn local_summary(
                 }
                 DeclarationPayload::OwnedImplementation(i) => {
                     interface.raw_piece(2, &[10]);
-                    if record.header.contract_version < 26 {
+                    if !i.associated_types.is_empty() {
+                        if record.header.contract_version
+                            != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+                        {
+                            return Err(witness_error(
+                                DiagnosticClass::Semantic,
+                                "kernel_associated_encoding_generation",
+                                "associated implementation summary requires Graph33",
+                            ));
+                        }
+                        interface.piece(10, &crate::platform::kernel::owned_associated_wire::AssociatedOwnedBody::implementation(i)?)?;
+                        implementation.piece(11, &i.associated_types)?;
+                    } else if record.header.contract_version < 26 {
                         interface.piece(
                             10,
                             &crate::platform::kernel::wire25::OwnedImplementation25::try_from(

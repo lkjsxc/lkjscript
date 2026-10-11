@@ -1051,6 +1051,10 @@ fn append_type(
         ("form".to_owned(), type_form_name(&ty.form).to_owned()),
     ];
     match &ty.form {
+        TypeForm::AssociatedContractMember { .. }
+        | TypeForm::AssociatedWitnessProjection { .. } => {
+            return Err(crate::platform::kernel::owned_associated_wire::unsupported_semantics());
+        }
         TypeForm::TypeParameter { parameter } => {
             fields.push(("parameter".to_owned(), parameter.to_string()));
         }
@@ -1134,6 +1138,10 @@ fn append_type(
         }
     }
     match &ty.form {
+        TypeForm::AssociatedContractMember { .. }
+        | TypeForm::AssociatedWitnessProjection { .. } => {
+            return Err(crate::platform::kernel::owned_associated_wire::unsupported_semantics());
+        }
         TypeForm::Applied { arguments, .. } => {
             for (index, argument) in arguments.iter().enumerate() {
                 append_type(
@@ -1325,6 +1333,8 @@ fn exact_owner_reference(package: PackageId, owner: OwnerKey) -> String {
 
 fn type_form_name(form: &TypeForm) -> &'static str {
     match form {
+        TypeForm::AssociatedContractMember { .. } => "associated-contract-member",
+        TypeForm::AssociatedWitnessProjection { .. } => "associated-witness-projection",
         TypeForm::Unit => "unit",
         TypeForm::Bool => "bool",
         TypeForm::I64 => "i64",

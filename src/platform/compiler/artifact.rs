@@ -2707,6 +2707,11 @@ fn trace_object_closure(
                         &mut store_work,
                     )?;
                     let unit = CompilationUnit::decode(&unit_bytes, binding.object.object_key())?;
+                    if matches!(&unit.payload, CompilationPayload::OwnedContract(c) if !c.associated_types.is_empty())
+                        || matches!(&unit.payload, CompilationPayload::OwnedImplementation(i) if !i.associated_types.is_empty())
+                    {
+                        return Err(crate::platform::kernel::owned_associated_wire::unsupported_semantics());
+                    }
                     if unit.key != binding.key
                         || unit.contract_version != compilation.compiler_contract_version
                         || unit.bytecode_contract_version != compilation.bytecode_contract_version
@@ -2818,6 +2823,9 @@ fn trace_object_closure(
             &mut store_work,
         )?;
         let object = decode_type_object(&bytes, digest)?;
+        if object.form.is_associated() {
+            return Err(crate::platform::kernel::owned_associated_wire::unsupported_semantics());
+        }
         if manifest.graph_contract_version < 25
             && matches!(object.form, TypeForm::OwnedSequence { .. })
         {

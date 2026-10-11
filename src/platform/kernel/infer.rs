@@ -2661,6 +2661,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 ));
             }
             let children = match self.type_object(ty)?.form {
+                TypeForm::AssociatedContractMember { .. }
+                | TypeForm::AssociatedWitnessProjection { .. } => {
+                    return Err(super::owned_associated_wire::unsupported_semantics());
+                }
                 TypeForm::Unit
                 | TypeForm::Bool
                 | TypeForm::I64
@@ -4087,6 +4091,12 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         let object = self.type_object(digest)?;
         let next = depth.saturating_add(1);
         let form = match object.form {
+            TypeForm::AssociatedContractMember { .. }
+            | TypeForm::AssociatedWitnessProjection { .. } => {
+                return Err(
+                    crate::platform::kernel::owned_associated_wire::unsupported_semantics(),
+                );
+            }
             TypeForm::TypeParameter { parameter } => {
                 return substitutions.get(&parameter).copied().ok_or_else(|| {
                     type_error(

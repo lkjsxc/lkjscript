@@ -318,6 +318,8 @@ fn read_reserved_value(
 ) -> Result<NormalizedValue, Diagnostic> {
     budget.visit(depth, already_charged)?;
     match form(program, ty)? {
+        TypeForm::AssociatedContractMember { .. }
+        | TypeForm::AssociatedWitnessProjection { .. } => Err(unsupported("associated owned type")),
         TypeForm::Unit => Ok(NormalizedValue::Unit),
         TypeForm::Bool => match input.read_u8("normalized_data_bool")? {
             0 => Ok(NormalizedValue::Bool(false)),
@@ -510,6 +512,10 @@ fn describe_type(
     }
     write_bytes(description, &ty.bytes())?;
     match form(program, ty)? {
+        TypeForm::AssociatedContractMember { .. }
+        | TypeForm::AssociatedWitnessProjection { .. } => {
+            return Err(unsupported("associated owned type"));
+        }
         TypeForm::Unit => write_bytes(description, &[0])?,
         TypeForm::Bool => write_bytes(description, &[1])?,
         TypeForm::I64 => write_bytes(description, &[2])?,

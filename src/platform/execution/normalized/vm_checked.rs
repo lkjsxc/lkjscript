@@ -1022,7 +1022,9 @@ impl Admission<'_> {
                 | TypeForm::OwnedChoice { .. }
                 | TypeForm::OwnedSequence { .. }
                 | TypeForm::CapabilityResource { .. }
-                | TypeForm::TypeParameter { .. } => {
+                | TypeForm::TypeParameter { .. }
+                | TypeForm::AssociatedContractMember { .. }
+                | TypeForm::AssociatedWitnessProjection { .. } => {
                     return Err(admission_error(
                         "capture type contains a secret, stream, resource, or unresolved stored parameter",
                     ));
