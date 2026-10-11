@@ -95,8 +95,9 @@ shares invocation preparation, not graph state or acceptance authority.
 ## Refusals and capacity
 
 Existing complete validation precedes component traversal. Inclusive per-proposal
-bounds are 4,096 nodes, 4,096 roots and 16,384 successor entries; repeated entries
-count. Capacity takes precedence in nodes, roots, edges order and returns
+bounds are 10,000 nodes, 10,000 roots and 100,000 successor entries; repeated
+entries count. Ordinary CLI JSON limits are a separate input boundary. Capacity
+takes precedence in nodes, roots, edges order and returns
 `{"case":"capacity","value":"nodes"}`, or the corresponding dimension.
 
 Structural invalidity returns `{"case":"invalid","value":{"code":TEXT,
@@ -129,7 +130,11 @@ every function with matching ownership/type signatures.
 The public regression uses a test-only pairwise-reachability oracle independent
 of this two-pass algorithm. It includes all 512 directed three-vertex graphs,
 signed extremes, disconnected components, 257-node chains and cycles, broad
-worklists, repeated references, inclusive capacities and one-past-bound refusals.
+worklists, repeated references and the former 4,096-node/16,384-edge boundary
+shapes. Those remain ordinary valid regressions within the larger native bounds;
+structural refusals still precede subsequent valid proposals. Exact current
+capacity fits, one-over refusals and simultaneous precedence are checked through
+the compiler's separate JSON embedding envelope.
 It requires equal complete results from flat and chunked storage before and after
 removing authoring projects and transports, unchanged artifacts/executables,
 zero remaining owned handles and joined cleanup. Empty batches are checked by

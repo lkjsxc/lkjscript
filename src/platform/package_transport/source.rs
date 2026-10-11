@@ -5,12 +5,14 @@ use super::{
     store_diagnostic, validate_package_transport_closure_metered,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
+use crate::platform::execution::ExecutionControl;
+use crate::platform::execution::normalized::execution_diagnostic;
 use crate::platform::kernel::*;
 use crate::platform::package_interface::{
     PackageInterfaceOwner, PackageInterfaceSelection, PackageInterfaceValidation,
     build_package_interface, interface_owner_validation_visits,
 };
-use crate::platform::persistent_map::{MapRoot, MapWork, PersistentMap};
+use crate::platform::persistent_map::{MapErrorClass, MapRoot, MapWork, PersistentMap};
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, StageOutcome, StoreError, StoreErrorClass,
     StoreReadAdmission, StoreReadLimits, StoreWork,
@@ -120,6 +122,7 @@ pub struct AdmittedClosure {
     pub container: PackageContainer,
     pub packages: BTreeMap<PackageRevisionDigest, ImmutablePackage>,
     pub dependency_order: Vec<PackageRevisionDigest>,
+    pub(crate) dependency_plan: super::NativePackagePlanEvidence,
     pub validation_visits: u64,
     pub validation_read_bytes: u64,
     pub dependency_edges: usize,
@@ -401,14 +404,40 @@ impl PackageContainer {
     }
 
     pub fn admit(&self) -> Result<AdmittedClosure, Diagnostic> {
-        self.admit_with_budget(MAXIMUM_VALIDATION_VISITS, MAXIMUM_VALIDATION_READ_BYTES)
+        self.admit_with_control(&ExecutionControl::uncancelled())
     }
 
+    pub fn admit_with_control(
+        &self,
+        control: &ExecutionControl,
+    ) -> Result<AdmittedClosure, Diagnostic> {
+        self.admit_with_budget_and_control(
+            MAXIMUM_VALIDATION_VISITS,
+            MAXIMUM_VALIDATION_READ_BYTES,
+            control,
+        )
+    }
+
+    #[cfg(test)]
     pub(crate) fn admit_with_budget(
         &self,
         maximum_visits: u64,
         maximum_read_bytes: u64,
     ) -> Result<AdmittedClosure, Diagnostic> {
+        self.admit_with_budget_and_control(
+            maximum_visits,
+            maximum_read_bytes,
+            &ExecutionControl::uncancelled(),
+        )
+    }
+
+    pub(crate) fn admit_with_budget_and_control(
+        &self,
+        maximum_visits: u64,
+        maximum_read_bytes: u64,
+        control: &ExecutionControl,
+    ) -> Result<AdmittedClosure, Diagnostic> {
+        control.check().map_err(execution_diagnostic)?;
         if maximum_visits > MAXIMUM_VALIDATION_VISITS
             || maximum_read_bytes > MAXIMUM_VALIDATION_READ_BYTES
         {
@@ -423,8 +452,14 @@ impl PackageContainer {
         let reads = maximum_read_bytes
             .checked_sub(input_bytes)
             .ok_or_else(|| limit("validation-read bytes"))?;
-        let mut admitted =
-            collect_with_budget(&self.objects, self.root, &self.selections, visits, reads)?;
+        let mut admitted = collect_with_budget_and_control(
+            &self.objects,
+            self.root,
+            &self.selections,
+            visits,
+            reads,
+            control,
+        )?;
         if admitted.container.objects != self.objects {
             return Err(corrupt(
                 "package_container_completeness",
@@ -666,41 +701,103 @@ pub fn collect<S: ImmutableObjectStore + ?Sized>(
     root: PackageTransportBinding,
     selections: &[PackageTransportBinding],
 ) -> Result<AdmittedClosure, Diagnostic> {
-    collect_with_budget(
+    collect_with_control(base, root, selections, &ExecutionControl::uncancelled())
+}
+
+pub fn collect_with_control<S: ImmutableObjectStore + ?Sized>(
+    base: &S,
+    root: PackageTransportBinding,
+    selections: &[PackageTransportBinding],
+    control: &ExecutionControl,
+) -> Result<AdmittedClosure, Diagnostic> {
+    collect_with_budget_and_control(
         base,
         root,
         selections,
         MAXIMUM_VALIDATION_VISITS,
         MAXIMUM_VALIDATION_READ_BYTES,
+        control,
     )
 }
 
-pub(crate) fn collect_with_budget<S: ImmutableObjectStore + ?Sized>(
+pub(crate) fn collect_with_budget_and_control<S: ImmutableObjectStore + ?Sized>(
     base: &S,
     root: PackageTransportBinding,
     selections: &[PackageTransportBinding],
     maximum_visits: u64,
     maximum_read_bytes: u64,
+    control: &ExecutionControl,
 ) -> Result<AdmittedClosure, Diagnostic> {
-    collect_admitted(base, root, selections, maximum_visits, maximum_read_bytes).map_err(|error| {
-        Diagnostic::new(
-            error.class,
-            error.code,
-            format!(
-                "exact source {} ({}): {}; export, restage, and replan this exact closure",
-                root.package_revision, root.transport, error.message
-            ),
-        )
-    })
+    collect_admitted(
+        base,
+        root,
+        selections,
+        maximum_visits,
+        maximum_read_bytes,
+        control,
+        None,
+    )
+    .map_err(|error| source_context(root, error))
 }
 
+fn source_context(root: PackageTransportBinding, mut error: Diagnostic) -> Diagnostic {
+    error.message = format!(
+        "exact source {} ({}): {}; export, restage, and replan this exact closure",
+        root.package_revision, root.transport, error.message
+    );
+    error
+}
+
+/// Reuse the operation's private native planning context while independently
+/// reading and admitting its complete source under the current collector budget.
+pub(crate) fn collect_preplanned_with_control<S: ImmutableObjectStore + ?Sized>(
+    base: &S,
+    prior: super::PackageTransportClosureValidation,
+    control: &ExecutionControl,
+) -> Result<AdmittedClosure, Diagnostic> {
+    collect_preplanned_with_budget_and_control(
+        base,
+        prior,
+        MAXIMUM_VALIDATION_VISITS,
+        MAXIMUM_VALIDATION_READ_BYTES,
+        control,
+    )
+}
+
+pub(crate) fn collect_preplanned_with_budget_and_control<S: ImmutableObjectStore + ?Sized>(
+    base: &S,
+    prior: super::PackageTransportClosureValidation,
+    maximum_visits: u64,
+    maximum_read_bytes: u64,
+    control: &ExecutionControl,
+) -> Result<AdmittedClosure, Diagnostic> {
+    let root = PackageTransportBinding {
+        package_revision: prior.logical.root,
+        transport: prior.root_transport_digest,
+    };
+    collect_admitted(
+        base,
+        root,
+        &prior.selections,
+        maximum_visits,
+        maximum_read_bytes,
+        control,
+        Some(&prior.logical),
+    )
+    .map_err(|error| source_context(root, error))
+}
+
+#[allow(clippy::too_many_arguments)]
 fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
     base: &S,
     root: PackageTransportBinding,
     selections: &[PackageTransportBinding],
     maximum_visits: u64,
     maximum_read_bytes: u64,
+    control: &ExecutionControl,
+    prior: Option<&super::PackageRevisionClosureValidation>,
 ) -> Result<AdmittedClosure, Diagnostic> {
+    control.check().map_err(execution_diagnostic)?;
     if maximum_visits > MAXIMUM_VALIDATION_VISITS
         || maximum_read_bytes > MAXIMUM_VALIDATION_READ_BYTES
     {
@@ -719,15 +816,33 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
         semantic_visits: std::cell::Cell::new(0),
     };
     let mut work = StoreWork::default();
-    let validated = validate_package_transport_closure_metered(
-        &store,
-        root.package_revision,
-        selections,
-        None,
-        &mut work,
-        &mut crate::platform::persistent_map::MapAdmission::unbounded(),
-        &mut |count| store.charge_visits(count),
-    )?;
+    let mut map_admission = crate::platform::persistent_map::MapAdmission::unbounded();
+    let mut visit = |count| {
+        control.check().map_err(execution_diagnostic)?;
+        store.charge_visits(count)
+    };
+    let validated = match prior {
+        Some(prior) => super::revalidate_package_transport_closure_metered(
+            &store,
+            root.package_revision,
+            selections,
+            prior,
+            &mut work,
+            &mut map_admission,
+            &mut visit,
+            control,
+        ),
+        None => validate_package_transport_closure_metered(
+            &store,
+            root.package_revision,
+            selections,
+            None,
+            &mut work,
+            &mut map_admission,
+            &mut visit,
+            control,
+        ),
+    }?;
     if validated.root_transport_digest != root.transport {
         return Err(corrupt(
             "package_container_root",
@@ -739,6 +854,7 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
     let mut interfaces = BTreeMap::new();
     let mut transports = BTreeMap::new();
     for binding in selections {
+        control.check().map_err(execution_diagnostic)?;
         let revision = read_revision(&store, binding.package_revision, &mut work)?;
         let (transport, interface) = super::validate_package_transport_local_metered(
             &store,
@@ -746,7 +862,10 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
             &revision,
             &mut work,
             &mut crate::platform::persistent_map::MapAdmission::unbounded(),
-            &mut |count| store.charge_visits(count),
+            &mut |count| {
+                control.check().map_err(execution_diagnostic)?;
+                store.charge_visits(count)
+            },
         )?;
         snapshots.insert(
             binding.package_revision,
@@ -761,6 +880,7 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
     // Every canonical read charges a decoding/validation visit, including repeated interface
     // validation and map traversal. Full type/expression/relation work shares the same remainder.
     for binding in selections {
+        control.check().map_err(execution_diagnostic)?;
         let mut snapshot = snapshots
             .remove(&binding.package_revision)
             .ok_or_else(|| corrupt("package_source_snapshot", "source snapshot disappeared"))?;
@@ -851,49 +971,17 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
     let mut composed_work = 0;
     crate::platform::kernel::callable_flow::validate_snapshot_callable_closure(
         &source_snapshots,
-        &|| Ok(()),
+        &|| control.check().map_err(execution_diagnostic),
         &mut composed_work,
         usize::try_from(maximum_visits - store.visits()).map_err(|_| limit("validation visits"))?,
     )?;
     store.charge_visits(composed_work as u64)?;
-    let mut dependency_order = Vec::new();
-    let mut counts = BTreeMap::new();
-    let mut parents = BTreeMap::<PackageRevisionDigest, BTreeSet<PackageRevisionDigest>>::new();
-    let mut ready = BTreeSet::new();
-    for (digest, package) in &packages {
-        counts.insert(*digest, package.revision.dependencies.len());
-        if package.revision.dependencies.is_empty() {
-            ready.insert(*digest);
-        }
-        for dependency in &package.revision.dependencies {
-            parents
-                .entry(dependency.package_revision)
-                .or_default()
-                .insert(*digest);
-        }
-    }
-    while let Some(next) = ready.pop_first() {
-        dependency_order.push(next);
-        if let Some(parents) = parents.get(&next) {
-            for parent in parents {
-                let count = counts.get_mut(parent).ok_or_else(|| {
-                    corrupt("package_source_edges", "dependency order lost its parent")
-                })?;
-                *count = count.checked_sub(1).ok_or_else(|| {
-                    corrupt("package_source_edges", "duplicate dependency order edge")
-                })?;
-                if *count == 0 {
-                    ready.insert(*parent);
-                }
-            }
-        }
-    }
-    if dependency_order.len() != packages.len() {
-        return Err(corrupt(
-            "package_source_cycle",
-            "source dependency closure is cyclic",
-        ));
-    }
+    // Topology belongs to the checked native planner. Every exact package was
+    // independently admitted above; retain that operation's plan through source
+    // reconstruction instead of recomputing a second host order.
+    let dependency_plan = validated.logical.dependency_plan.evidence().clone();
+    let dependency_order = validated.logical.dependency_plan.into_order();
+    control.check().map_err(execution_diagnostic)?;
     let validation_visits = store.visits();
     Ok(AdmittedClosure {
         validation_read_bytes: maximum_read_bytes
@@ -905,6 +993,7 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
         },
         packages,
         dependency_order,
+        dependency_plan,
         validation_visits,
         dependency_edges: validated.dependency_edges,
     })
@@ -945,7 +1034,14 @@ pub(crate) fn entries<S: ImmutableObjectStore + ?Sized>(
             entries.push((key.to_vec(), value.to_vec()));
             Ok(())
         })
-        .map_err(|error| corrupt("package_source_map", error.message))?;
+        .map_err(|error| {
+            let class = match error.class {
+                MapErrorClass::Resource => DiagnosticClass::Resource,
+                MapErrorClass::Store => DiagnosticClass::Infrastructure,
+                MapErrorClass::Input | MapErrorClass::Corrupt => DiagnosticClass::Corrupt,
+            };
+            package_error(class, "package_source_map", error.message)
+        })?;
     if entries.len() as u64 != root.entries() {
         return Err(corrupt(
             "package_source_map_count",
@@ -1175,6 +1271,8 @@ mod tests {
     include!("dependency_copy_admission_tests.rs");
     include!("dependency_interface_measurement_tests.rs");
     include!("shared_dependency_interface_tests.rs");
+    include!("native_plan_source_tests.rs");
+    include!("native_plan_reuse_tests.rs");
 
     #[test]
     fn source_transport_preserves_supported_composite_and_task_owner_envelopes() {
@@ -1490,22 +1588,35 @@ mod tests {
     #[test]
     fn aggregate_validation_exact_fit_and_one_over_and_independent_inventory() {
         let source = standard_source();
+        let standalone = source.container.admit().unwrap();
         let exact = source
             .container
-            .admit_with_budget(source.validation_visits, source.validation_read_bytes)
+            .admit_with_budget(
+                standalone.validation_visits,
+                standalone.validation_read_bytes,
+            )
             .unwrap();
-        assert_eq!(exact.validation_visits, source.validation_visits);
-        assert_eq!(exact.validation_read_bytes, source.validation_read_bytes);
+        assert_eq!(exact.validation_visits, standalone.validation_visits);
+        assert_eq!(
+            exact.validation_read_bytes,
+            standalone.validation_read_bytes
+        );
         assert!(
             source
                 .container
-                .admit_with_budget(source.validation_visits - 1, source.validation_read_bytes)
+                .admit_with_budget(
+                    standalone.validation_visits - 1,
+                    standalone.validation_read_bytes
+                )
                 .is_err()
         );
         assert!(
             source
                 .container
-                .admit_with_budget(source.validation_visits, source.validation_read_bytes - 1)
+                .admit_with_budget(
+                    standalone.validation_visits,
+                    standalone.validation_read_bytes - 1
+                )
                 .is_err()
         );
         let oracle =

@@ -44,6 +44,7 @@ pub struct PreparedApplication {
     pub semantic_state: SemanticStateDigest,
     pub cache_profile: LifecycleCacheProfile,
     pub compilation: CompilationManifestDigest,
+    pub(crate) dependency_plan: super::package_transport::NativePackagePlanEvidence,
     pub units_compiled: u64,
     pub units_reused: u64,
     pub units_removed: u64,
@@ -377,7 +378,7 @@ pub(crate) fn prepare_repository_with_control(
                 // A corrupt disposable unit can share its key with the clean result. Recovery
                 // compiles admitted immutable source without rewriting damaged immutable packs.
                 // Revalidate source first: canonical corruption is never a cache miss.
-                let rechecked = repository.export_package_container()?;
+                let rechecked = repository.export_package_container_with_control(control)?;
                 if rechecked.container.objects != closure.container.objects {
                     return Err(lifecycle_error(
                         DiagnosticClass::Corrupt,
@@ -458,6 +459,7 @@ pub(crate) fn prepare_repository_with_control(
         semantic_state: accepted.semantic_state,
         cache_profile,
         compilation,
+        dependency_plan: closure.dependency_plan,
         units_compiled: units_compiled
             .checked_add(dependency_units)
             .ok_or_else(|| {

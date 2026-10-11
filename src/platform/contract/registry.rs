@@ -107,7 +107,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-25";
 pub const REGISTRY_CONTRACT_VERSION: u16 = 25;
-pub const CLI_CONTRACT_VERSION: u16 = 45;
+pub const CLI_CONTRACT_VERSION: u16 = 46;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;

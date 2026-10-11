@@ -1,0 +1,19 @@
+declarations.begin
+(units
+  (module create package-plan
+    (type-alias Node (record (id I64) (successors (list I64))))
+    (type-alias Proposal (record (roots (list I64)) (nodes (list Node))))
+    (type-alias Row (record (members (list I64)) (cyclic Bool) (dependencies (list I64))))
+    (function create plan (visibility public) (effect pure)
+      (parameter create proposal (type Proposal)) (returns $PlannerOutcome)
+      (body (call verified-plan::storage-flat-flat (local proposal))))
+    (test create empty (visibility private)
+      (actual (call plan (record structural (field roots (list I64)) (field nodes (list Node)))))
+      (expected (variant $PlannerValid
+        (record structural (field components (list Row)) (field stages (list (list I64)))
+          (field reachable (list I64)) (field unreachable (list I64))))))
+    (component create command (visibility private)
+      (port create plan (type (function (Proposal) $PlannerOutcome)) (function plan))))
+  (target create package-plan (component package-plan::command)
+    (runner command) (port package-plan::command::plan)))
+declarations.end

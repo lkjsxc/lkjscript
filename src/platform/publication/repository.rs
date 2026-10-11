@@ -4,6 +4,10 @@
 #[path = "recovery_lock_tests.rs"]
 mod recovery_lock_tests;
 
+#[cfg(test)]
+#[path = "package_plan_control_tests.rs"]
+mod package_plan_control_tests;
+
 use super::contract::{HEAD_MAGIC, MAXIMUM_HEAD_BYTES, REVISION_CONTRACT_VERSION};
 use super::idempotency::{
     IdempotencyBinding, advance_idempotency_history, empty_idempotency_history,
@@ -18,12 +22,15 @@ use super::{
 };
 use crate::platform::change::{AuthoredChangeSet, CanonicalReadAdmission, PrimitiveEdit};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
+use crate::platform::execution::ExecutionControl;
+use crate::platform::execution::normalized::execution_diagnostic;
 use crate::platform::kernel::{
     KernelSnapshot, SemanticRoot, decode_root, encode_root, semantic_state_digest_from_root,
 };
 use crate::platform::package_transport::{
     PackageRevision, PackageTransport, PackageTransportBinding, PackageTransportClosureValidation,
-    validate_package_revision_closure, validate_package_transport_closure_admitted,
+    validate_package_revision_closure_with_control,
+    validate_package_transport_closure_planned_admitted,
 };
 use crate::platform::persistent_map::{
     MapAdmission, MapDifference, MapError, MapErrorClass, MapRoot, MapWork, MemoryPageStore,
@@ -350,6 +357,7 @@ impl GraphRepository {
                     package_transport.digest,
                     &package_transport.container,
                     None,
+                    &ExecutionControl::uncancelled(),
                 )?;
             }
             let initial = prepare_initial_publication(logical, &preparation_store, intent)
@@ -460,7 +468,15 @@ impl GraphRepository {
     pub(crate) fn export_package_container(
         &self,
     ) -> Result<crate::platform::package_transport::source::AdmittedClosure, Diagnostic> {
-        self.view_current()?.export_package_container()
+        self.export_package_container_with_control(&ExecutionControl::uncancelled())
+    }
+
+    pub(crate) fn export_package_container_with_control(
+        &self,
+        control: &ExecutionControl,
+    ) -> Result<crate::platform::package_transport::source::AdmittedClosure, Diagnostic> {
+        self.view_current_with_control(control)?
+            .export_package_container()
     }
 
     pub(crate) fn staged_package_source(
@@ -476,13 +492,10 @@ impl GraphRepository {
             None,
             &mut StoreWork::default(),
         )?;
-        crate::platform::package_transport::source::collect(
+        crate::platform::package_transport::source::collect_preplanned_with_control(
             &store,
-            PackageTransportBinding {
-                package_revision: revision,
-                transport: closure.root_transport_digest,
-            },
-            &closure.selections,
+            closure,
+            &ExecutionControl::uncancelled(),
         )
     }
 
@@ -492,7 +505,20 @@ impl GraphRepository {
         digest: crate::platform::kernel::PackageTransportDigest,
         container: &[u8],
     ) -> Result<PackageTransportStageReceipt, Diagnostic> {
-        self.stage_package_transport_at(digest, container, None)
+        self.stage_package_transport_with_control(
+            digest,
+            container,
+            &ExecutionControl::uncancelled(),
+        )
+    }
+
+    pub(crate) fn stage_package_transport_with_control(
+        &self,
+        digest: crate::platform::kernel::PackageTransportDigest,
+        container: &[u8],
+        control: &ExecutionControl,
+    ) -> Result<PackageTransportStageReceipt, Diagnostic> {
+        self.stage_package_transport_at(digest, container, None, control)
     }
 
     #[cfg(test)]
@@ -502,7 +528,12 @@ impl GraphRepository {
         container: &[u8],
         fault: PackageStagePoint,
     ) -> Result<PackageTransportStageReceipt, Diagnostic> {
-        self.stage_package_transport_at(digest, container, Some(fault))
+        self.stage_package_transport_at(
+            digest,
+            container,
+            Some(fault),
+            &ExecutionControl::uncancelled(),
+        )
     }
 
     fn stage_package_transport_at(
@@ -510,11 +541,14 @@ impl GraphRepository {
         digest: crate::platform::kernel::PackageTransportDigest,
         container: &[u8],
         fault: Option<PackageStagePoint>,
+        control: &ExecutionControl,
     ) -> Result<PackageTransportStageReceipt, Diagnostic> {
+        control.check().map_err(execution_diagnostic)?;
         let root_directory = open_directory(&self.root)?;
         let lock = open_lock(&root_directory)?;
         FileExt::lock_exclusive(&lock)
             .map_err(|error| io_diagnostic("publication_package_stage_lock", &self.root, error))?;
+        control.check().map_err(execution_diagnostic)?;
         let mut store = open_store_exclusive(&root_directory, &self.root)?;
         let before = read_current_optional(&root_directory, &store)?.ok_or_else(|| {
             repository_error(
@@ -523,8 +557,14 @@ impl GraphRepository {
                 "Graph 10 repository has no accepted HEAD",
             )
         })?;
-        let installed =
-            install_package_container(&root_directory, &mut store, digest, container, fault)?;
+        let installed = install_package_container(
+            &root_directory,
+            &mut store,
+            digest,
+            container,
+            fault,
+            control,
+        )?;
         let after = read_current_optional(&root_directory, &store)?.ok_or_else(|| {
             repository_error(
                 DiagnosticClass::Corrupt,
@@ -2297,7 +2337,27 @@ pub(super) fn resolve_package_transport_closure<S: ImmutableObjectStore + ?Sized
     expected: Option<&crate::platform::kernel::DependencyRecord>,
     work: &mut StoreWork,
 ) -> Result<PackageTransportClosureValidation, Diagnostic> {
-    resolve_package_transport_closure_admitted(
+    resolve_package_transport_closure_with_control(
+        store,
+        catalog,
+        root_revision,
+        root_override,
+        expected,
+        work,
+        &ExecutionControl::uncancelled(),
+    )
+}
+
+pub(super) fn resolve_package_transport_closure_with_control<S: ImmutableObjectStore + ?Sized>(
+    store: &S,
+    catalog: &PackDirectoryStore,
+    root_revision: crate::platform::kernel::PackageRevisionDigest,
+    root_override: Option<PackageTransportBinding>,
+    expected: Option<&crate::platform::kernel::DependencyRecord>,
+    work: &mut StoreWork,
+    control: &ExecutionControl,
+) -> Result<PackageTransportClosureValidation, Diagnostic> {
+    resolve_package_transport_closure_admitted_with_control(
         store,
         catalog,
         root_revision,
@@ -2305,10 +2365,17 @@ pub(super) fn resolve_package_transport_closure<S: ImmutableObjectStore + ?Sized
         expected,
         work,
         &mut MapAdmission::unbounded(),
+        control,
     )
 }
 
-pub(super) fn resolve_package_transport_closure_admitted<S: ImmutableObjectStore + ?Sized>(
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the exact source and admission inputs retain their owning cancellation control"
+)]
+pub(super) fn resolve_package_transport_closure_admitted_with_control<
+    S: ImmutableObjectStore + ?Sized,
+>(
     store: &S,
     catalog: &PackDirectoryStore,
     root_revision: crate::platform::kernel::PackageRevisionDigest,
@@ -2316,11 +2383,20 @@ pub(super) fn resolve_package_transport_closure_admitted<S: ImmutableObjectStore
     expected: Option<&crate::platform::kernel::DependencyRecord>,
     work: &mut StoreWork,
     interface_map_admission: &mut MapAdmission,
+    control: &ExecutionControl,
 ) -> Result<PackageTransportClosureValidation, Diagnostic> {
-    let logical = validate_package_revision_closure(store, root_revision, expected, work)?;
+    let logical = validate_package_revision_closure_with_control(
+        store,
+        root_revision,
+        expected,
+        work,
+        control,
+    )?;
+    control.check().map_err(execution_diagnostic)?;
     let readiness = read_package_readiness(catalog.root())?;
-    let mut selections = Vec::with_capacity(logical.revisions.len());
-    for revision_digest in logical.revisions.keys() {
+    let mut selections = Vec::with_capacity(logical.revisions().len());
+    for revision_digest in logical.revisions().keys() {
+        control.check().map_err(execution_diagnostic)?;
         let transport =
             match root_override.filter(|binding| binding.package_revision == *revision_digest) {
                 Some(binding) => binding.transport,
@@ -2334,13 +2410,14 @@ pub(super) fn resolve_package_transport_closure_admitted<S: ImmutableObjectStore
             transport,
         });
     }
-    validate_package_transport_closure_admitted(
+    validate_package_transport_closure_planned_admitted(
         store,
         root_revision,
         &selections,
-        expected,
+        logical,
         work,
         interface_map_admission,
+        control,
     )
 }
 
@@ -2348,18 +2425,26 @@ pub(super) fn validate_prepared_dependency_sources(
     store: &PackDirectoryStore,
     prepared: &PreparedPublication,
 ) -> Result<(), Diagnostic> {
-    validate_prepared_dependency_sources_controlled(store, prepared, &|| Ok(()))
+    validate_prepared_dependency_sources_controlled(
+        store,
+        prepared,
+        &|| Ok(()),
+        &ExecutionControl::uncancelled(),
+    )
 }
 
 pub(super) fn validate_prepared_dependency_sources_controlled(
     store: &PackDirectoryStore,
     prepared: &PreparedPublication,
     checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
+    control: &ExecutionControl,
 ) -> Result<(), Diagnostic> {
+    control.check().map_err(execution_diagnostic)?;
     checkpoint()?;
     let mut overlay = ObjectStage::new(store);
     let mut work = StoreWork::default();
     for (key, bytes) in &prepared.objects {
+        control.check().map_err(execution_diagnostic)?;
         overlay
             .stage(*key, bytes, &mut work)
             .map_err(store_diagnostic)?;
@@ -2369,6 +2454,7 @@ pub(super) fn validate_prepared_dependency_sources_controlled(
         store,
         &prepared.authority.semantic.root,
         checkpoint,
+        control,
     )
     .map(|_| ())
 }
@@ -2378,12 +2464,14 @@ pub(super) fn validate_dependency_sources_controlled<S: ImmutableObjectStore + ?
     store: &PackDirectoryStore,
     root: &crate::platform::kernel::SemanticRoot,
     checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
+    control: &ExecutionControl,
 ) -> Result<u64, Diagnostic> {
     use crate::platform::kernel::{PackageId, decode_dependency, decode_dependency_binding};
     use crate::platform::package_transport::source::{
-        MAXIMUM_VALIDATION_READ_BYTES, MAXIMUM_VALIDATION_VISITS, collect_with_budget, entries,
-        required,
+        MAXIMUM_VALIDATION_READ_BYTES, MAXIMUM_VALIDATION_VISITS,
+        collect_preplanned_with_budget_and_control, entries, required,
     };
+    control.check().map_err(execution_diagnostic)?;
     checkpoint()?;
     let mut work = StoreWork::default();
     let overlay = crate::platform::package_transport::source::CollectingStore::new(source);
@@ -2491,13 +2579,14 @@ pub(super) fn validate_dependency_sources_controlled<S: ImmutableObjectStore + ?
         if checked.contains(&dependency.package_revision) {
             continue;
         }
-        let closure = resolve_package_transport_closure(
+        let closure = resolve_package_transport_closure_with_control(
             &overlay,
             store,
             dependency.package_revision,
             None,
             Some(&dependency),
             &mut work,
+            control,
         )?;
         let before_reads = overlay.visits();
         let visits = MAXIMUM_VALIDATION_VISITS
@@ -2511,15 +2600,8 @@ pub(super) fn validate_dependency_sources_controlled<S: ImmutableObjectStore + ?
                 )
             })?;
         let read_bytes = MAXIMUM_VALIDATION_READ_BYTES - overlay.read_bytes();
-        let admitted = collect_with_budget(
-            &overlay,
-            PackageTransportBinding {
-                package_revision: dependency.package_revision,
-                transport: closure.root_transport_digest,
-            },
-            &closure.selections,
-            visits,
-            read_bytes,
+        let admitted = collect_preplanned_with_budget_and_control(
+            &overlay, closure, visits, read_bytes, control,
         )?;
         semantic_visits = semantic_visits
             .checked_add(admitted.validation_visits - (overlay.visits() - before_reads))
@@ -2660,8 +2742,10 @@ fn install_package_container(
     digest: crate::platform::kernel::PackageTransportDigest,
     bytes: &[u8],
     fault: Option<PackageStagePoint>,
+    control: &ExecutionControl,
 ) -> Result<InstalledPackageTransport, Diagnostic> {
     use crate::platform::package_transport::source::PackageContainer;
+    control.check().map_err(execution_diagnostic)?;
     let container = PackageContainer::decode(bytes, digest)?;
     // Reserve the owning store's possible existing-object comparison and final durable readback
     // before semantic validation. Neither stage nor readback may reset the admission counters.
@@ -2683,10 +2767,12 @@ fn install_package_container(
                 "staging validation-visit reservation overflow; restage a smaller closure",
             )
         })?;
-    let admitted = container.admit_with_budget(
+    let admitted = container.admit_with_budget_and_control(
         crate::platform::package_transport::source::MAXIMUM_VALIDATION_VISITS - reserved_visits,
         crate::platform::package_transport::source::MAXIMUM_VALIDATION_READ_BYTES - reserved_reads,
+        control,
     )?;
+    control.check().map_err(execution_diagnostic)?;
     let package = admitted
         .packages
         .get(&container.root.package_revision)
@@ -2709,6 +2795,7 @@ fn install_package_container(
         .get(&container.root.package_revision)
         .copied();
     for selection in &container.selections {
+        control.check().map_err(execution_diagnostic)?;
         readiness
             .bindings
             .insert(selection.package_revision, selection.transport);
@@ -2728,6 +2815,7 @@ fn install_package_container(
     );
     package_stage_checkpoint(fault, PackageStagePoint::BeforeObjects)?;
     for (index, (key, value)) in container.objects.iter().enumerate() {
+        control.check().map_err(execution_diagnostic)?;
         store
             .stage_admitted(*key, value, &mut install_admission, &mut work)
             .map_err(store_diagnostic)?;
@@ -2752,6 +2840,7 @@ fn install_package_container(
     package_stage_checkpoint(fault, PackageStagePoint::ObjectsDurable)?;
     // Re-read immutable bytes before the sole readiness visibility point. No source falls back.
     for (key, expected) in &container.objects {
+        control.check().map_err(execution_diagnostic)?;
         let actual = store
             .read_admitted(
                 *key,
@@ -2768,7 +2857,7 @@ fn install_package_container(
             ));
         }
     }
-    publish_package_readiness(&directory, &ready_bytes, fault)?;
+    publish_package_readiness(&directory, &ready_bytes, fault, control)?;
     Ok(InstalledPackageTransport {
         revision: package.revision.clone(),
         transport: package.transport.clone(),
@@ -2812,7 +2901,9 @@ fn publish_package_readiness(
     directory: &File,
     bytes: &[u8],
     fault: Option<PackageStagePoint>,
+    control: &ExecutionControl,
 ) -> Result<(), Diagnostic> {
+    control.check().map_err(execution_diagnostic)?;
     let temporary = format!(
         "{PACKAGE_TRANSPORT_SELECTION_STAGE_PREFIX}{}",
         random_hex("publication_package_readiness_random")?
@@ -2836,6 +2927,7 @@ fn publish_package_readiness(
                 )
             })?;
         package_stage_checkpoint(fault, PackageStagePoint::ReadinessSynced)?;
+        control.check().map_err(execution_diagnostic)?;
         rustix::fs::renameat(
             directory,
             temporary.as_str(),

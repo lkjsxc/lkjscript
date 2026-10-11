@@ -8824,6 +8824,19 @@ fn append_lifecycle_records(
         compilation.push(("recovered-code", diagnostic.code.clone()));
     }
     append_compact_record(output, "compilation", &compilation)?;
+    let plan = &prepared.dependency_plan;
+    append_compact_record(
+        output,
+        "native-package-plan",
+        &[
+            ("artifact-sha256", plan.artifact_sha256.clone()),
+            ("input-sha256", plan.input_sha256.clone()),
+            ("outcome-sha256", plan.outcome_sha256.clone()),
+            ("order-sha256", plan.order_sha256.clone()),
+            ("packages", plan.packages.to_string()),
+            ("edges", plan.edges.to_string()),
+        ],
+    )?;
     append_compact_record(
         output,
         "artifact",

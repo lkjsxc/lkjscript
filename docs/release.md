@@ -85,11 +85,13 @@ substitute for final-byte acceptance. Normal promotion and anonymous acquisition
 still use the unchanged assets and existing authority; no credentials, protections,
 immutable tags or prior assets are changed.
 
-`lkjscript-final-candidate-acceptance-9` and workload
-`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-9`
+`lkjscript-final-candidate-acceptance-10` and workload
+`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-10`
 require the complete Map matrix, the exact native-fold, incremental-compiler,
 FIFO, generalized-sequence, nominal-owned-record and mixed indexed-storage behavior witnesses and native-public proof in addition
-to all previous source, six target-owner, two userland and installation boundaries. The current
+to all previous source, six target-owner, two userland and installation boundaries.
+Generation 10 additionally requires maintained native package-planner source,
+exact artifact regeneration and copied-product compiler adoption witnesses. The current
 controller rejects predecessor contracts, predecessor workloads and mixed generations
 rather than relabelling them. Their original contracts and evidence remain historical facts;
 a corrected successor requires a fresh producer. In particular, producer 37046478616
@@ -192,13 +194,13 @@ new bootstrap is the upgrade/recovery route. Do not edit old manifests, receipts
 
 ## Coverage and admission
 
-`check full --fresh` remains an honest standalone complete profile with its existing 26 gates.
+`check full --fresh` remains an honest standalone complete profile with 29 gates.
 Release acceptance instead requires the dependency-complete union below; a profile label alone is
 never equivalent proof. The [verification specification](spec/verification.md) owns the full mapping.
 
 | Previous claim | Current required owner |
 | --- | --- |
-| Source/reference, safe Rust, lint, tooling/checker correctness, generated assets, maintained consumers | Fresh `check release-source`: 20 gates, including retained default/all-feature distinctions |
+| Source/reference, safe Rust, lint, tooling/checker correctness, generated assets, maintained consumers and native package-planner regeneration | Fresh `check release-source`: 23 gates, including retained default/all-feature distinctions |
 | External service, distributed HTTP, outbound HTTP, offline packages, pure tail, stateful HTTP | Six target owners once against the executable extracted from the final archive |
 | Static linkage and both pinned userlands | Native ELF admission and the existing exact target admission |
 | Installed lifecycle, upgrade, retained runtime/selection and two-version recovery | Candidate installation tier once; real bootstrap/native installation |

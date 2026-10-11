@@ -3,6 +3,9 @@
 #[path = "recursive_tests.rs"]
 mod recursive_tests;
 
+#[path = "runner_pure_artifact_tests.rs"]
+mod pure_artifact_runner_tests;
+
 #[path = "f64_codec_tests.rs"]
 mod f64_codec_tests;
 

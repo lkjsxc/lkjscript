@@ -302,6 +302,7 @@ pub(crate) fn base_registry(
     let builtin_artifact = outputs.join("builtin-standard.lkja");
     let builtin_transport = outputs.join("builtin-standard.lkjp");
     let application = outputs.join("lkjournal.lkja");
+    let package_plan = outputs.join("package-plan.lkja");
     let mut workspace_tests = cargo_gate(
         "workspace_tests",
         &[
@@ -722,6 +723,40 @@ pub(crate) fn base_registry(
         &repository.join("applications/lkjournal/generated/lkjournal.lkja"),
         "application_artifact_build",
     ));
+    gates.push(project_gate(
+        "native_package_plan_test",
+        &binary,
+        "tools/native-package-plan/project",
+        &["check"],
+    ));
+    let mut package_plan_build = output_gate(
+        "native_package_plan_build",
+        vec![
+            path_string(&binary),
+            "--project".to_owned(),
+            "tools/native-package-plan/project".to_owned(),
+            "build".to_owned(),
+            "--output".to_owned(),
+            path_string(&package_plan),
+        ],
+        vec![
+            path_string(&binary),
+            "--project".to_owned(),
+            "tools/native-package-plan/project".to_owned(),
+            "build".to_owned(),
+            "--output".to_owned(),
+            "$RUN/outputs/package-plan.lkja".to_owned(),
+        ],
+        &package_plan,
+    );
+    package_plan_build.dependencies = vec!["native_package_plan_test".to_owned()];
+    gates.push(package_plan_build);
+    gates.push(compare_gate(
+        "native_package_plan_compare",
+        &package_plan,
+        &repository.join("tools/native-package-plan/generated/package-plan.lkja"),
+        "native_package_plan_build",
+    ));
 
     let mut service = gate(
         "service_acceptance",
@@ -789,6 +824,9 @@ pub(crate) fn profile(name: &str) -> Option<Vec<String>> {
             "builtin_transport_compare",
             "application_artifact_build",
             "application_artifact_compare",
+            "native_package_plan_test",
+            "native_package_plan_build",
+            "native_package_plan_compare",
             "diff_check",
         ],
         "service" => &[
@@ -827,6 +865,9 @@ pub(crate) fn profile(name: &str) -> Option<Vec<String>> {
             "builtin_transport_compare",
             "application_artifact_build",
             "application_artifact_compare",
+            "native_package_plan_test",
+            "native_package_plan_build",
+            "native_package_plan_compare",
             "service_acceptance",
             "diff_check",
         ],
@@ -853,6 +894,9 @@ pub(crate) fn profile(name: &str) -> Option<Vec<String>> {
             "builtin_transport_compare",
             "application_artifact_build",
             "application_artifact_compare",
+            "native_package_plan_test",
+            "native_package_plan_build",
+            "native_package_plan_compare",
             "diff_check",
         ],
         _ => return None,
@@ -1020,6 +1064,70 @@ mod tests {
     }
 
     #[test]
+    fn native_package_plan_requires_checked_source_build_and_exact_bytes() {
+        let temporary = tempfile::tempdir().expect("temporary registry repository");
+        let registry = base_registry(temporary.path(), temporary.path(), Path::new("/bin/true"))
+            .expect("maintained registry");
+        let checked = registry.gate("native_package_plan_test").unwrap();
+        assert_eq!(
+            checked.command,
+            [
+                path_string(&temporary.path().join("target/release/lkjscript")),
+                "--project".to_owned(),
+                "tools/native-package-plan/project".to_owned(),
+                "check".to_owned(),
+            ]
+        );
+        assert_eq!(checked.dependencies, ["release_command_lifecycle"]);
+        let built = registry.gate("native_package_plan_build").unwrap();
+        assert_eq!(built.dependencies, ["native_package_plan_test"]);
+        assert_eq!(
+            built.required_outputs,
+            [temporary.path().join("outputs/package-plan.lkja")]
+        );
+        assert!(!built.cacheable);
+        let compared = registry.gate("native_package_plan_compare").unwrap();
+        assert_eq!(compared.dependencies, ["native_package_plan_build"]);
+        assert_eq!(
+            compared.command,
+            [
+                "cmp".to_owned(),
+                path_string(&temporary.path().join("outputs/package-plan.lkja")),
+                path_string(
+                    &temporary
+                        .path()
+                        .join("tools/native-package-plan/generated/package-plan.lkja")
+                ),
+            ]
+        );
+        assert!(!compared.cacheable);
+        for profile_name in ["product", "full", "release-source"] {
+            let closure = registry.closure(&profile(profile_name).unwrap()).unwrap();
+            let indices = [
+                "release_command_lifecycle",
+                "native_package_plan_test",
+                "native_package_plan_build",
+                "native_package_plan_compare",
+            ]
+            .map(|name| {
+                closure
+                    .iter()
+                    .position(|gate| gate == name)
+                    .unwrap_or_else(|| panic!("{profile_name}: missing {name}"))
+            });
+            assert!(indices.windows(2).all(|pair| pair[0] < pair[1]));
+        }
+        for profile_name in ["focused", "service"] {
+            let closure = registry.closure(&profile(profile_name).unwrap()).unwrap();
+            assert!(
+                !closure
+                    .iter()
+                    .any(|gate| gate == "native_package_plan_build")
+            );
+        }
+    }
+
+    #[test]
     fn workspace_test_gate_collects_all_target_results_without_reusing_fail_fast_identity() {
         let temporary = tempfile::tempdir().expect("temporary registry repository");
         let mut registry =
@@ -1124,7 +1232,7 @@ mod tests {
             .expect("first maintained registry");
         let second = base_registry(temporary.path(), &second_run, Path::new("/bin/true"))
             .expect("second maintained registry");
-        assert_eq!(first.gates.len(), 32);
+        assert_eq!(first.gates.len(), 35);
         for profile_name in ["focused", "product", "service", "full"] {
             let requested = profile(profile_name).expect("maintained profile");
             assert!(requested.iter().any(|name| name == "rust_only_tooling"));
@@ -1232,7 +1340,7 @@ mod tests {
             "stateful_http_application",
             "service_acceptance",
         ];
-        assert_eq!(full.len(), 26);
+        assert_eq!(full.len(), 29);
         assert_eq!(source.len(), super::super::RELEASE_SOURCE_GATE_COUNT);
         for name in candidate {
             assert!(full.iter().any(|value| value == name));

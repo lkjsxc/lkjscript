@@ -2,10 +2,12 @@
 use super::*;
 
 const PREFIX: &str = "native_declarations::incremental_units::";
-const CASES: [&str; 3] = [
+const CASES: [&str; 5] = [
     "new_components_do_not_promote_ports_to_compiler_units",
     "new_command_targets_keep_exact_incremental_cache_and_detached_behavior",
     "new_port_type_failure_preserves_authority_and_cache_then_recovers",
+    "native_package_planner_rebuilds_exactly_and_runs_checked_plan_after_source_deletion",
+    "native_package_planner_compiles_independently_authored_diamond_and_detached_results",
 ];
 
 fn success(inventory: &Inventory) -> String {
@@ -32,8 +34,8 @@ fn incremental_inventory_selects_future_cases_and_requires_each_terminal_once() 
     let listing =
         tests::listing() + &format!("{PREFIX}future_case: test\n{PREFIX}nested::oracle: test\n");
     let inventory = inventory(&listing).unwrap();
-    assert_eq!(inventory.selected.len(), 37);
-    assert_eq!(inventory.all.len(), 38);
+    assert_eq!(inventory.selected.len(), 39);
+    assert_eq!(inventory.all.len(), 40);
     assert!(!inventory.selected.contains("unrelated_test"));
     let complete = success(&inventory);
     passed(&complete, &inventory).unwrap();

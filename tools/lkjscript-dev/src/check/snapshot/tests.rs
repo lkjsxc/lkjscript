@@ -1,6 +1,7 @@
 //! Changed-profile coverage for native programs and embedded Rust-site documents.
 use super::{
-    capture_profile, capture_profile_between_samples, changed_profile, checked_bytes, site_inputs,
+    capture, capture_profile, capture_profile_between_samples, changed_profile, checked_bytes,
+    site_inputs,
 };
 use crate::check::registry;
 use std::collections::BTreeSet;
@@ -125,6 +126,73 @@ fn native_examples_select_full_when_untracked() {
         write(root.path(), path, b"new fixture\n");
         assert_full(root.path(), path);
     }
+}
+
+#[test]
+fn native_package_plan_inputs_select_complete_acceptance_in_every_git_state() {
+    for path in [
+        "tools/native-package-plan/requests/entrypoint.lkjc",
+        "tools/native-package-plan/project/HEAD",
+        "tools/native-package-plan/project/packs/pack_fixture.lkjp",
+        "tools/native-package-plan/generated/package-plan.lkja",
+        "src/platform/package_transport/native_plan.rs",
+        "src/platform/package_transport/source.rs",
+    ] {
+        for state in ["untracked", "modified", "staged", "deleted"] {
+            let root = if state == "untracked" {
+                fixture()
+            } else {
+                tracked(path)
+            };
+            if state == "deleted" {
+                fs::remove_file(root.path().join(path)).unwrap();
+            } else {
+                write(root.path(), path, b"changed planner input\n");
+                if state == "staged" {
+                    git(root.path(), &["add", "--", path]);
+                }
+            }
+            assert_full(root.path(), &format!("{path}: {state}"));
+            let selected = changed_profile(root.path()).unwrap();
+            for gate in [
+                "native_package_plan_test",
+                "native_package_plan_build",
+                "native_package_plan_compare",
+            ] {
+                assert!(
+                    selected.iter().any(|selected| selected == gate),
+                    "{path}: {gate}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn native_package_plan_snapshot_binds_absent_and_ignored_embedding_inputs() {
+    let root = tracked("Cargo.lock");
+    let absent = capture(root.path()).unwrap();
+    for path in super::NATIVE_PACKAGE_PLAN_INPUTS {
+        assert!(absent.entries.iter().any(|entry| entry.proof.path == path));
+    }
+    let asset = "tools/native-package-plan/generated/package-plan.lkja";
+    write(root.path(), ".gitignore", format!("/{asset}\n").as_bytes());
+    write(root.path(), asset, b"first embedded planner\n");
+    let before = capture(root.path()).unwrap();
+    write(root.path(), asset, b"substituted embedded planner\n");
+    let after = capture(root.path()).unwrap();
+    assert_ne!(before.digest, after.digest);
+    let retained = |snapshot: &crate::check::model::InputSnapshot| {
+        snapshot
+            .entries
+            .iter()
+            .find(|entry| entry.proof.path == asset)
+            .unwrap()
+            .proof
+            .digest
+            .clone()
+    };
+    assert_ne!(retained(&before), retained(&after));
 }
 
 #[test]

@@ -3,10 +3,12 @@ use super::{DevError, require};
 use std::collections::BTreeSet;
 
 const PREFIX: &str = "native_declarations::incremental_units::";
-const REQUIRED: [&str; 3] = [
+const REQUIRED: [&str; 5] = [
     "new_components_do_not_promote_ports_to_compiler_units",
     "new_command_targets_keep_exact_incremental_cache_and_detached_behavior",
     "new_port_type_failure_preserves_authority_and_cache_then_recovers",
+    "native_package_planner_rebuilds_exactly_and_runs_checked_plan_after_source_deletion",
+    "native_package_planner_compiles_independently_authored_diamond_and_detached_results",
 ];
 
 pub(super) fn admit(all: &BTreeSet<String>) -> Result<(), DevError> {

@@ -1108,9 +1108,63 @@ release-candidate prerequisite, alternate adapter, dual reader/writer, or public
 
 ## Package and public-release evidence
 
+### Native package dependency planning
+
+The [native planning boundary](../decisions/native-package-planning.md) must own
+both production package cycle refusal and the actual compilation dependency order.
+Inspect the call path and remove the predecessor production algorithms; invoking an
+unused graph tool or comparing equivalent independent-unit orders is insufficient.
+Retain the strict artifact reader's separate host topology check, including fixed
+decoded cycle adversaries. First native initialization must not recursively load
+itself through production planning.
+
+Run the complete-outcome checker against independent small-graph expectations and
+false plans/negative outcomes. Cover inclusive 10,000-node/root and 100,000-edge
+ceilings, one-over and simultaneous refusals, unreachable invalid references,
+cycles, broad stages and deep chains. Exercise more than 100,000 JSON entries and
+more than 1 MiB through the compiler's bounded embedding envelope without raising
+ordinary CLI defaults. Complete raw typing, output decoding, identity mapping and
+joined cleanup remain independent obligations.
+
+Prove cancellation during native input admission, not only before host collection,
+with unchanged accepted HEAD/readiness and healthy recovery. Failed initialization
+must not poison the shared immutable preparation. Concurrent first use shares only
+successfully prepared code. Invocation and encoding failure must explicitly join
+the execution owner and preserve cleanup failure before reporting success.
+
+Operation-local plan reuse must reread and exactly match the complete private
+logical context under the source collector's current budget. Compare fresh and
+reused complete object inventories, canonical bytes, read/visit counts and exact
+fit/one-below refusal. Reject missing or corrupted revisions, missing private
+bodies and altered private contexts; mutable descriptive fields cannot replace
+the seal. Cancellation during the actual reread must recover cleanly. Observe
+native invocation counts through internal compilation/export and repository
+helpers, and require independently loaded containers to perform fresh planning.
+
+Compile exact packages under a native stage order that differs from predecessor
+digest-priority Kahn order and require identical complete artifacts. Copied-product
+proof must author separate packages, build and execute a real dependency diamond,
+then execute after source deletion. The CLI 46 `native-package-plan` record binds
+the actual successful invocation's embedded artifact, complete input, checked
+outcome, returned order and exact package/edge counts. These digests are traceable
+observations, not standalone proof or publication authority.
+
+Public native `check`, deterministic build and exact-byte comparison of the
+maintained planner asset are mandatory in full and release-source. Reconcile changed
+selectors for the native source, bridge and artifact dependencies. Source-matched
+finalized-byte public inventory must include the new compiler witnesses.
+
+Measure identical package workloads against the host predecessor, retaining
+warmups and end-to-end build costs including cold preparation and native
+production/checking. Report compiler phase timings as unavailable when the public
+operation does not expose them. Keep slow controls and capacity refusal distinct
+from algorithmic invalidity.
+
+### Source and finalized-byte coverage
+
 Release acceptance is the dependency-complete union of `check release-source --fresh` and
-exact-final-candidate admission. `check full` remains a standalone complete, fresh 26-gate profile;
-release-source is a separately named 20-gate profile and cannot claim full proof by itself.
+exact-final-candidate admission. `check full` remains a standalone complete, fresh 29-gate profile;
+release-source is a separately named 23-gate profile and cannot claim full proof by itself.
 Main integration and public closure remain distinct. Accepted source can reach main while an
 external non-publishing candidate job completes, but the missing hosted proof must remain explicit.
 
@@ -1121,6 +1175,7 @@ external non-publishing candidate job completes, but the missing hosted proof mu
 | Checker correctness and no-Python/product-surface policy | Release-source `checker_self_test`, `rust_only_tooling`, `product_surface_audit`, `diff_check` |
 | Maintained standard/lkjournal and built-in artifacts/transports, generated discovery | The existing ten package/artifact gates and `generated_public_guides` in release-source |
 | Native development-tool source, all eight guides, exact derived artifact, fresh authoring, canonical re-entry, independent output and detached old/new execution | Existing `workspace_tests` through `tests/public_cli/native_guides.rs`; `generated_public_guides` separately checks published document bytes |
+| Maintained native package planner, independent checker and exact derived asset | `native_package_plan_test`, `native_package_plan_build`, `native_package_plan_compare`; copied-product compiler witnesses remain required separately |
 | Complete checked Map-entry matrix and all enumerated Map cases; existing native public families | The source-matched `public_cli` harness runs the finalized executable outside the checkout, with explicit candidate identity binding and exact per-case terminal admission |
 | Distributed HTTP, outbound HTTP, offline packages, pure tail, stateful HTTP, standalone service | The six unchanged target owners run once against the immutable executable extracted from the final archive |
 | Embedded evaluator/reference/resource/cancellation probes used by offline packages and pure tail | The same source-built, identity-bound verifier executes and admits these source-only subprocesses within those target owners; they are explicitly not target-executable observations |
@@ -1230,10 +1285,10 @@ A clean-tree selection does not prove committed implementation. `product` builds
 verifies copied-binary workflows, maintained typed meaning graph consumers, generated docs,
 and built-in/generated assets. `service` owns isolated standalone artifact bundle
 HTTP/interactive/worker service acceptance. The data cutover additionally requires the
-contributor PostgreSQL differential/resource receipt. The 26-gate `full` profile owns
+contributor PostgreSQL differential/resource receipt. The 29-gate `full` profile owns
 formatting, lints, workspace targets, all tests, release/product/service classification,
 and diff checks; final full evidence must be fresh. `release-source` is the separately
-identified fresh 20-gate source tier above;
+identified fresh 23-gate source tier above;
 it excludes only the six external application owners moved to final candidate admission. The
 ordinary focused default tests remain available, while release-source retains the existing default
 release lifecycle and all-feature workspace proof without adding duplicate source test suites.
@@ -1872,8 +1927,10 @@ in authored order. Return reachable and unreachable identities in original node
 order. The graph `10->[20,30],20->[40],30->[40],40->[20],50->[50],60->[]`, rooted at
 10, must yield `[10,20,30,40]` and `[50,60]` under both storage witnesses. Cover
 disconnected cycles, signed-ID extremes, repeated scheduling and invalid
-unreachable nodes. Prove exact-fit and one-over limits of 4,096 nodes, 4,096 roots
-and 16,384 edges, with capacity refusal distinct from invalid input.
+unreachable nodes. Prove exact-fit and one-over limits of 10,000 nodes, 10,000 roots
+and 100,000 edges, with capacity refusal distinct from invalid input. Cases above
+ordinary CLI JSON limits use the compiler's explicit bounded embedding envelope;
+retain the former 4,096/16,384 shapes as within-capacity regression controls.
 
 Reject wrong contract argument arity/order, foreign parameters, invalid ownership
 constraints, mismatched witnesses, double consumption, escaping loans and wrong

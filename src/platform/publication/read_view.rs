@@ -484,6 +484,51 @@ pub(crate) struct BuiltPackageRevision {
     pub read_work: RepositoryReadWork,
 }
 
+/// One operation's fully admitted source and its descriptive public export.
+/// Internal compilation consumes the admitted closure directly; public export
+/// still encodes an independently admissible complete container.
+struct BuiltPackageTransport {
+    revision: PackageRevision,
+    revision_digest: PackageRevisionDigest,
+    revision_bytes: Vec<u8>,
+    transport: PackageTransport,
+    transport_digest: PackageTransportDigest,
+    admitted: crate::platform::package_transport::source::AdmittedClosure,
+    interface_owners: BTreeMap<OwnerKey, PackageInterfaceOwner>,
+    interface_types: BTreeMap<TypeObjectDigest, Vec<u8>>,
+    interface_owner_count: u64,
+    interface_type_count: u64,
+    interface_map_work: MapWork,
+    read_work: RepositoryReadWork,
+    closure_work: StoreWork,
+}
+
+impl BuiltPackageTransport {
+    fn into_export(self) -> Result<ExportedPackageTransport, Diagnostic> {
+        let container = self.admitted.container.encode().map_err(|mut error| {
+            error
+                .notes
+                .push("while encoding the collected package container".into());
+            error
+        })?;
+        Ok(ExportedPackageTransport {
+            revision: self.revision,
+            revision_digest: self.revision_digest,
+            revision_bytes: self.revision_bytes,
+            transport: self.transport,
+            transport_digest: self.transport_digest,
+            container,
+            interface_owners: self.interface_owners,
+            interface_types: self.interface_types,
+            interface_owner_count: self.interface_owner_count,
+            interface_type_count: self.interface_type_count,
+            interface_map_work: self.interface_map_work,
+            read_work: self.read_work,
+            closure_work: self.closure_work,
+        })
+    }
+}
+
 /// One fully validated authored request plus its exact request-local identity allocation.
 #[derive(Clone, Debug)]
 pub struct PreparedAuthoredPublication {
@@ -856,6 +901,7 @@ impl RepositoryView {
                         &self.store,
                         &self.current.semantic_root,
                         &|| self.validation_checkpoint(),
+                        &self.control,
                     )
                 } else {
                     Ok(0)
@@ -1419,11 +1465,13 @@ impl RepositoryView {
             self.store.persistent_base(),
             options,
             self.revalidated.as_ref().map(|base| &base.facts),
+            &self.control,
         )?;
         super::repository::validate_prepared_dependency_sources_controlled(
             &self.store,
             &publication,
             &|| self.validation_checkpoint(),
+            &self.control,
         )
         .map_err(|diagnostic| vec![diagnostic])?;
         Ok(PreparedChangeWithAnalysis {
@@ -1580,7 +1628,7 @@ impl RepositoryView {
             admission.maximum_canonical_records,
         );
         let initial_map_admission = admission.map;
-        let validated = super::repository::resolve_package_transport_closure_admitted(
+        let validated = super::repository::resolve_package_transport_closure_admitted_with_control(
             &admitted_store,
             &self.store,
             revision,
@@ -1588,6 +1636,7 @@ impl RepositoryView {
             None,
             &mut work.store,
             &mut admission.map,
+            &self.control,
         )?;
         admission.store = admitted_store.remaining_store();
         let remaining_records = admitted_store.remaining_canonical_records();
@@ -2160,16 +2209,15 @@ impl RepositoryView {
     pub(crate) fn export_package_container(
         &self,
     ) -> Result<crate::platform::package_transport::source::AdmittedClosure, Diagnostic> {
-        let exported = self.export_package_transport()?;
-        crate::platform::package_transport::source::PackageContainer::decode(
-            &exported.container,
-            exported.transport_digest,
-        )?
-        .admit()
+        Ok(self.build_package_transport()?.admitted)
     }
 
     /// Builds one logical package revision and its separate physical acceptance transport.
     pub fn export_package_transport(&self) -> Result<ExportedPackageTransport, Diagnostic> {
+        self.build_package_transport()?.into_export()
+    }
+
+    fn build_package_transport(&self) -> Result<BuiltPackageTransport, Diagnostic> {
         self.require_current_validation()?;
         let BuiltPackageRevision {
             revision,
@@ -2207,6 +2255,7 @@ impl RepositoryView {
         let mut stage = ObjectStage::new(&self.store);
         let mut closure_work = StoreWork::default();
         for (key, value) in &interface.objects {
+            self.validation_checkpoint()?;
             stage
                 .stage(*key, value, &mut closure_work)
                 .map_err(store_diagnostic)?;
@@ -2232,7 +2281,7 @@ impl RepositoryView {
                 &mut closure_work,
             )
             .map_err(store_diagnostic)?;
-        let validated = super::repository::resolve_package_transport_closure(
+        let validated = super::repository::resolve_package_transport_closure_with_control(
             &stage,
             &self.store,
             revision_digest,
@@ -2244,6 +2293,7 @@ impl RepositoryView {
             ),
             None,
             &mut closure_work,
+            &self.control,
         )
         .map_err(|mut error| {
             error
@@ -2258,13 +2308,10 @@ impl RepositoryView {
                 "exported package revision or transport changed during closure validation",
             ));
         }
-        let admitted = crate::platform::package_transport::source::collect(
+        let admitted = crate::platform::package_transport::source::collect_preplanned_with_control(
             &stage,
-            crate::platform::package_transport::PackageTransportBinding {
-                package_revision: revision_digest,
-                transport: transport_digest,
-            },
-            &validated.selections,
+            validated,
+            &self.control,
         )
         .map_err(|mut error| {
             error
@@ -2272,19 +2319,17 @@ impl RepositoryView {
                 .push("while collecting authenticated package source objects".into());
             error
         })?;
-        let container = admitted.container.encode().map_err(|mut error| {
-            error
-                .notes
-                .push("while encoding the collected package container".into());
-            error
-        })?;
-        Ok(ExportedPackageTransport {
+        // Internal use skips wire encoding and decoding, while keeping the
+        // complete container's inventory and byte ceilings at the same boundary.
+        admitted.container.encoded_size()?;
+        self.validation_checkpoint()?;
+        Ok(BuiltPackageTransport {
             revision,
             revision_digest,
             revision_bytes,
             transport,
             transport_digest,
-            container,
+            admitted,
             interface_owners,
             interface_types,
             interface_owner_count: interface.owner_count,

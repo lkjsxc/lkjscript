@@ -28,7 +28,7 @@ const MAXIMUM_RETAINED_RUNS: usize = 8;
 static RUN_ORDINAL: AtomicU64 = AtomicU64::new(0);
 
 pub(crate) use reader::read_release_source_receipt;
-pub(crate) const RELEASE_SOURCE_GATE_COUNT: usize = 20;
+pub(crate) const RELEASE_SOURCE_GATE_COUNT: usize = 23;
 
 #[derive(Clone, Debug)]
 struct Options {

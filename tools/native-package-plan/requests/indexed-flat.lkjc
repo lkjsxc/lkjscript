@@ -1,0 +1,36 @@
+request base=rev_cb1f13ab31c1d3a41c76d13c94077bd427b144209e760cf642621762e9747a50
+add.dependency package=pkg_10000000000000000000000000000001 semantic-revision=rev_6818785d8919028a69659b24df495b2d7a42f2676a95fd1aa0ae143a32623013 package-revision=package_revision_3a0f78fdb296b222dc03b1ef01219534c049ae0081362a0004654c78fd88ac73
+add.dependency package=pkg_1d9d36489a20b14c677117da5a7a1b9a semantic-revision=rev_1a7432a9f67783bab2f5f50236ef1199bc80672941ca3aba63c3f39448f0948c package-revision=package_revision_e6700480a115b15426d08ab7b8e3a9659d5901ffd60fab8fa9a04f6cdb352f82
+declarations.begin
+(units (use indexed-data pkg_1d9d36489a20b14c677117da5a7a1b9a package_revision_e6700480a115b15426d08ab7b8e3a9659d5901ffd60fab8fa9a04f6cdb352f82))
+declarations.end
+declarations.begin
+(units
+  (use std builtin)
+  (module create indexed-flat
+    (owned-implementation create Flat (visibility public)
+      (type-parameter create T (constraint transferable))
+      (contract indexed-data::IndexedData) (self (owned-sequence T)) (types T)
+      (method method_a1000000000000000000000000000001 std::data-sequence-empty (types T))
+      (method method_a1000000000000000000000000000002 std::data-sequence-length (types T))
+      (method method_a1000000000000000000000000000003 std::data-sequence-push (types T))
+      (method method_a1000000000000000000000000000004 std::data-sequence-get (types T))
+      (method method_a1000000000000000000000000000005 std::data-sequence-replace (types T))
+      (method method_a1000000000000000000000000000006 std::data-sequence-discard (types T)))
+    (function create reverse-get (visibility public) (effect pure)
+      (type-parameter create T (constraint transferable))
+      (parameter create index (type I64))
+      (parameter create storage (type (owned-sequence T)) (use borrow)) (returns T)
+      (body (call std::data-sequence-get (types T)
+        (call std::subtract (call std::data-sequence-length (types T) (local storage))
+          (call std::add (local index) (i64 1))) (local storage))))
+    (owned-implementation create Reverse (visibility public)
+      (type-parameter create T (constraint transferable))
+      (contract indexed-data::IndexedData) (self (owned-sequence T)) (types T)
+      (method method_a1000000000000000000000000000001 std::data-sequence-empty (types T))
+      (method method_a1000000000000000000000000000002 std::data-sequence-length (types T))
+      (method method_a1000000000000000000000000000003 std::data-sequence-push (types T))
+      (method method_a1000000000000000000000000000004 reverse-get (types T))
+      (method method_a1000000000000000000000000000005 std::data-sequence-replace (types T))
+      (method method_a1000000000000000000000000000006 std::data-sequence-discard (types T)))))
+declarations.end

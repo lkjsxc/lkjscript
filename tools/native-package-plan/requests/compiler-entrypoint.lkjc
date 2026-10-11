@@ -1,0 +1,49 @@
+request base=rev_752b120b3acb6b97875f1154811b78f0279d68a027b5c62e743f42f0bc55fae5
+declarations.begin
+(units (use owned-worklists pkg_ae613a5ea13f9751af50862960c15a05 package_revision_85a5a8bdbeecea29363db3a0f1950b757de6859dec2ca2f5c44a6659ea76f10a))
+declarations.end
+declarations.begin
+(units (use worklist-carriers pkg_d2c6ea605e6acb8fcdd0e21aa152b7c2 package_revision_3826223cfd2e6a05b6ea328a0a7bb4eda1706045d322decaa41313174ff27581))
+declarations.end
+declarations.begin
+(units (use indexed-data pkg_1d9d36489a20b14c677117da5a7a1b9a package_revision_e6700480a115b15426d08ab7b8e3a9659d5901ffd60fab8fa9a04f6cdb352f82))
+declarations.end
+declarations.begin
+(units (use indexed-flat pkg_83d764f88db1b739f4620bd01da200eb package_revision_c700b2c8694ead85fee1257d55ad798b6ab13c1856e86bcfaac0a64cadb6ce64))
+declarations.end
+declarations.begin
+(units (use indexed-chunked pkg_398c95967f8157fdfefedc8edf01a3e8 package_revision_44b1085f52759cecca8615ef591d10a8e828ab93af6af98dd2ed9e9d3d87d562))
+declarations.end
+declarations.begin
+(units (use dependency-verifier pkg_cb70981eb0d9b04f846fdcd382b6f630 package_revision_ff72c10fbc2e3bfd2de138c7d31b944c8b0df74d2b009a35481faf99d57737d6))
+declarations.end
+declarations.begin
+(units (use dependency-plan pkg_a9d92d76176c3a02667d4d1fca1da7f0 package_revision_d3db714950830308b176ac1f7f61d0cdb9ff2b77f07ce96edf787fcca5ef7229))
+declarations.end
+reference.package as=$planner package=pkg_a9d92d76176c3a02667d4d1fca1da7f0 package-revision=package_revision_d3db714950830308b176ac1f7f61d0cdb9ff2b77f07ce96edf787fcca5ef7229
+reference.owner as=$PlannerOutcome package=$planner class=declaration owner=decl_b8e21996a00caaae3a6234560fb6bd36
+reference.owner as=$PlannerFlat package=$planner class=declaration owner=decl_25b6a1d4d16aa59161189ad74f3412a9
+reference.owner as=$PlannerChunked package=$planner class=declaration owner=decl_68f3e72860de5238aa166115db44b27c
+reference.owner as=$PlannerValid package=$planner class=case parent=$PlannerOutcome name=valid
+reference.owner as=$PlannerInvalid package=$planner class=case parent=$PlannerOutcome name=invalid
+reference.owner as=$PlannerCapacity package=$planner class=case parent=$PlannerOutcome name=capacity
+reference.owner as=$PlannerInconsistent package=$planner class=case parent=$PlannerOutcome name=inconsistent
+declarations.begin
+(units
+  (module create package-plan
+    (type-alias Node (record (id I64) (successors (list I64))))
+    (type-alias Proposal (record (roots (list I64)) (nodes (list Node))))
+    (type-alias Row (record (members (list I64)) (cyclic Bool) (dependencies (list I64))))
+    (function create plan (visibility public) (effect pure)
+      (parameter create proposal (type Proposal)) (returns $PlannerOutcome)
+      (body (call verified-plan::storage-flat-flat (local proposal))))
+    (test create empty (visibility private)
+      (actual (call plan (record structural (field roots (list I64)) (field nodes (list Node)))))
+      (expected (variant $PlannerValid
+        (record structural (field components (list Row)) (field stages (list (list I64)))
+          (field reachable (list I64)) (field unreachable (list I64))))))
+    (component create command (visibility private)
+      (port create plan (type (function (Proposal) $PlannerOutcome)) (function plan))))
+  (target create package-plan (component package-plan::command)
+    (runner command) (port package-plan::command::plan)))
+declarations.end

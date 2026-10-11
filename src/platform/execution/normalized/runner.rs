@@ -174,18 +174,44 @@ pub(crate) fn run_pure_artifact_command(
         prepare_command_invocation(program, target_name, arguments_json, policy.json, control)?;
     require_pure_invocation(program, &invocation)?;
     let mut executor = StructuredExecutor::new();
-    let (value, _) = NormalizedVm::new(program, policy.execution, &executor.handle())
-        .invoke_root_target(target_name, invocation.arguments, None, control)
-        .map_err(execution_diagnostic)?;
-    let result = encode_typed_with_control(
-        program.as_ref(),
-        &value,
-        invocation.result_type,
-        policy.json,
-        control,
-    )?;
-    executor.shutdown().map_err(execution_diagnostic)?;
-    Ok(result)
+    execute_pure_artifact_invocation(program, invocation, policy, control, &mut executor)
+}
+
+/// Join the execution owner on every ordinary result, including cancellation and
+/// output refusal. Drop remains an unwind fallback, not a cleanup diagnostic.
+pub(super) fn execute_pure_artifact_invocation(
+    program: &Arc<NormalizedProgram>,
+    invocation: PreparedCommandInvocation,
+    policy: NormalizedCommandPolicy,
+    control: &ExecutionControl,
+    executor: &mut StructuredExecutor,
+) -> Result<Vec<u8>, Diagnostic> {
+    let outcome = (|| {
+        require_pure_invocation(program, &invocation)?;
+        let (value, _) = NormalizedVm::new(program, policy.execution, &executor.handle())
+            .invoke_root_target(&invocation.target.name, invocation.arguments, None, control)
+            .map_err(execution_diagnostic)?;
+        encode_typed_with_control(
+            program.as_ref(),
+            &value,
+            invocation.result_type,
+            policy.json,
+            control,
+        )
+    })();
+    let cleanup = executor.shutdown().map_err(execution_diagnostic);
+    match (outcome, cleanup) {
+        (Ok(bytes), Ok(_)) => Ok(bytes),
+        (Ok(_), Err(cleanup)) => Err(cleanup),
+        (Err(mut primary), Err(cleanup)) => {
+            primary.notes.push(format!(
+                "pure artifact structured cleanup failed with safe code '{}'",
+                cleanup.code
+            ));
+            Err(primary)
+        }
+        (Err(primary), Ok(_)) => Err(primary),
+    }
 }
 
 fn require_pure_invocation(

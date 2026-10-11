@@ -164,9 +164,14 @@ pub fn prepare_change_publication<
         store,
         options,
         None,
+        &crate::platform::execution::ExecutionControl::uncancelled(),
     )
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the exact publication inputs retain their owning cancellation control"
+)]
 pub(crate) fn prepare_change_publication_with_facts<
     B: CanonicalBaseRead + ?Sized,
     W: WitnessBaseRead + ?Sized,
@@ -179,7 +184,11 @@ pub(crate) fn prepare_change_publication_with_facts<
     store: &S,
     options: PublicationOptions,
     current_facts: Option<&crate::platform::witness::CanonicalWitnessFacts>,
+    control: &crate::platform::execution::ExecutionControl,
 ) -> Result<PreparedPublication, Vec<Diagnostic>> {
+    control.check().map_err(|error| {
+        vec![crate::platform::execution::normalized::execution_diagnostic(error)]
+    })?;
     validate_base(
         base,
         base_snapshot,
@@ -264,6 +273,7 @@ pub(crate) fn prepare_change_publication_with_facts<
         &owner_map_edits,
         &mut stage,
         map_admission,
+        control,
     )?;
     authority.store_work.add(support_work);
     if authority.semantic.state == base.semantic_state {

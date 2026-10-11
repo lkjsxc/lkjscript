@@ -277,14 +277,14 @@ publication or execution authority; shared source admission and runtime machiner
 remain explicit trust boundaries. Prefer binding this checked interface to a real
 compiler consumer over adding another disconnected graph-analysis example.
 
-Select package dependency planning as the next compiler replacement when the
-native boundary owns complete inputs, outcomes and failures. Before takeover,
-cover the existing 10,000-package/100,000-edge closure limit with a compiler-owned
-bounded input envelope. The existing pure-tool embedding accepts explicit JSON
-limits independently of CLI defaults; retain strict complete decoding and typed
-admission. Replace both cycle refusal and ordering, while keeping artifact loading
-independent so loading the native planner cannot recursively invoke itself. Reordering
-independent compiler units does not establish useful adoption. Keep resumable
+Use [native package planning](decisions/native-package-planning.md) to move both
+production cycle refusal and the compilation dependency plan into checked native
+code. Its maintained producer/checker and bounded embedding cover the existing
+10,000-package/100,000-edge closure ceiling. Retain complete structural and typed
+admission, real operation cancellation and independent artifact topology so loading
+the planner cannot recursively invoke itself. Measure cold preparation and native
+producer/checker costs on actual package operations before choosing the next
+compiler boundary. Status owns acceptance and delivery of this takeover. Keep resumable
 execution before a scheduler rewrite, measured custody needs before a region
 runtime, and a stable typed lowering boundary before a native backend.
 

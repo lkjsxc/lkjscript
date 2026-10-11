@@ -1,0 +1,6 @@
+declarations.begin
+(units (module create base
+  (function create identity (visibility public) (effect pure)
+    (parameter create n (type I64)) (returns I64)
+    (body (local n)))))
+declarations.end

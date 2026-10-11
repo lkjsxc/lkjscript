@@ -199,15 +199,37 @@ fn dependency_interface_fanout_refuses_before_next_owner_or_type_copy_and_exact_
             assert!(error.message.contains("aggregate validation visits"));
         }
     }
+    // Internal export now returns its already admitted source directly. The
+    // standalone wire boundary has its own complete input/object admission work.
+    let standalone = source.container.admit().unwrap();
     let exact = source
         .container
-        .admit_with_budget(source.validation_visits, source.validation_read_bytes)
+        .admit_with_budget(
+            standalone.validation_visits,
+            standalone.validation_read_bytes,
+        )
         .unwrap();
-    assert_eq!(exact.validation_visits, source.validation_visits);
+    assert_eq!(exact.validation_visits, standalone.validation_visits);
+    assert_eq!(
+        exact.validation_read_bytes,
+        standalone.validation_read_bytes
+    );
     assert!(
         source
             .container
-            .admit_with_budget(source.validation_visits - 1, source.validation_read_bytes)
+            .admit_with_budget(
+                standalone.validation_visits - 1,
+                standalone.validation_read_bytes
+            )
+            .is_err(),
+    );
+    assert!(
+        source
+            .container
+            .admit_with_budget(
+                standalone.validation_visits,
+                standalone.validation_read_bytes - 1
+            )
             .is_err(),
     );
     let oracle =

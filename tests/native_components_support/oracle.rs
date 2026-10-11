@@ -6,15 +6,15 @@ pub fn expected(proposal: &Value) -> Value {
     let nodes = proposal["nodes"].as_array().unwrap();
     let roots = proposal["roots"].as_array().unwrap();
     for (dimension, count, limit) in [
-        ("nodes", nodes.len(), 4096),
-        ("roots", roots.len(), 4096),
+        ("nodes", nodes.len(), 10000),
+        ("roots", roots.len(), 10000),
         (
             "edges",
             nodes
                 .iter()
                 .map(|node| node["successors"].as_array().unwrap().len())
                 .sum(),
-            16384,
+            100000,
         ),
     ] {
         if count > limit {

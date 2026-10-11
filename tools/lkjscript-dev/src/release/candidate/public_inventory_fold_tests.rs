@@ -46,8 +46,8 @@ fn native_fold_inventory_selects_future_cases_and_checks_each_complete_terminal(
         listing()
     );
     let inventory = inventory(&listing).unwrap();
-    assert_eq!(inventory.selected.len(), 37);
-    assert_eq!(inventory.all.len(), 38);
+    assert_eq!(inventory.selected.len(), 39);
+    assert_eq!(inventory.all.len(), 40);
     assert!(!inventory.selected.contains("unrelated"));
     for suffix in CASES.into_iter().chain(["future_case", "cases::oracle"]) {
         assert!(inventory.selected.contains(&format!("{PREFIX}{suffix}")));

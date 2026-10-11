@@ -60,7 +60,9 @@ pub fn suite() -> Vec<Value> {
         })
         .collect();
     proposals.push(json!({"roots":[0,0],"nodes":star}));
-    // Inclusive capacity boundaries, not just one-past-bound refusals.
+    // Retain the former capacity shapes under unchanged public CLI JSON limits.
+    // The larger current inclusive bounds cross those limits and are exercised
+    // through the compiler embedding envelope in capacity_suite().
     proposals.push(json!({"roots":[],"nodes":(0..4096).map(|id|
         json!({"id":id,"successors":[]})).collect::<Vec<_>>()}));
     proposals.push(json!({"roots":vec![-1;4096],"nodes":[{"id":-1,"successors":[]}]}));
@@ -78,4 +80,47 @@ pub fn suite() -> Vec<Value> {
         proposals.push(example()); // Invalid input must not contaminate a later invocation.
     }
     proposals
+}
+
+/// These graphs require the compiler embedding JSON envelope rather than the
+/// ordinary command's unchanged 1 MiB / 100,000-entry defaults.
+#[allow(dead_code)] // Shared with compiler embedding tests, not every CLI harness.
+pub fn capacity_suite() -> Vec<(&'static str, Value)> {
+    let isolated = |count| {
+        (0..count)
+            .map(|id| json!({"id":id,"successors":[]}))
+            .collect::<Vec<_>>()
+    };
+    vec![
+        ("nodes-exact", json!({"roots":[],"nodes":isolated(10000)})),
+        (
+            "roots-exact",
+            json!({"roots":vec![-1;10000],"nodes":[{"id":-1,"successors":[]}]}),
+        ),
+        (
+            "edges-exact",
+            json!({"roots":[],"nodes":[{"id":i64::MIN,"successors":vec![i64::MIN;100000]}]}),
+        ),
+        ("nodes-over", json!({"roots":[],"nodes":isolated(10001)})),
+        (
+            "roots-over",
+            json!({"roots":vec![-1;10001],"nodes":[{"id":-1,"successors":[]}]}),
+        ),
+        (
+            "edges-over",
+            json!({"roots":[],"nodes":[{"id":i64::MIN,"successors":vec![i64::MIN;100001]}]}),
+        ),
+        (
+            "nodes-precede-roots-edges-structure",
+            json!({"roots":vec![9;10001],"nodes":vec![json!({"id":1,"successors":vec![1;11]});10001]}),
+        ),
+        (
+            "roots-precede-edges-structure",
+            json!({"roots":vec![9;10001],"nodes":[{"id":1,"successors":vec![1;100001]},{"id":1,"successors":[]}]}),
+        ),
+        (
+            "edges-precede-structure",
+            json!({"roots":[9],"nodes":[{"id":1,"successors":vec![1;100001]},{"id":1,"successors":[]}]}),
+        ),
+    ]
 }

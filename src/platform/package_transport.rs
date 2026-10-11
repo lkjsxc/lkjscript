@@ -282,24 +282,138 @@ fn validate_dependencies(
     Ok(())
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct PackageRevisionClosureValidation {
-    pub root_revision: PackageRevision,
-    pub revisions: BTreeMap<PackageRevisionDigest, PackageRevision>,
-    pub dependency_edges: usize,
+mod native_plan;
+pub(crate) use native_plan::NativePackagePlanEvidence;
+
+/// Exact immutable inputs after complete structural admission, before topology.
+/// Only this module can construct an unplanned closure. It cannot confer readiness.
+struct CollectedPackageRevisionInputs {
+    root_revision: PackageRevision,
+    revisions: BTreeMap<PackageRevisionDigest, PackageRevision>,
+    dependency_edges: usize,
 }
 
-pub(crate) fn validate_package_revision_closure<S: ImmutableObjectStore + ?Sized>(
+#[derive(Clone, Debug)]
+pub(crate) struct PackageRevisionClosureValidation {
+    root: PackageRevisionDigest,
+    root_revision: PackageRevision,
+    revisions: BTreeMap<PackageRevisionDigest, PackageRevision>,
+    dependency_edges: usize,
+    dependency_plan: native_plan::DependencyPlan,
+}
+
+impl PackageRevisionClosureValidation {
+    pub(crate) fn revisions(&self) -> &BTreeMap<PackageRevisionDigest, PackageRevision> {
+        &self.revisions
+    }
+}
+
+/// Artifact loading has an independent topology reader. Loading the native
+/// planner's own artifact must never recursively invoke that planner.
+pub(crate) struct ArtifactPackageRevisionClosureValidation {
+    pub root_revision: PackageRevision,
+    pub revisions: BTreeMap<PackageRevisionDigest, PackageRevision>,
+}
+
+pub(crate) fn validate_package_revision_closure_with_control<S: ImmutableObjectStore + ?Sized>(
     store: &S,
     root: PackageRevisionDigest,
     expected: Option<&DependencyRecord>,
     work: &mut StoreWork,
+    control: &crate::platform::execution::ExecutionControl,
 ) -> Result<PackageRevisionClosureValidation, Diagnostic> {
+    let collected = collect_package_revision_inputs(store, root, expected, work, control)?;
+    let dependency_plan = native_plan::plan(&collected, root, control)?;
+    Ok(PackageRevisionClosureValidation {
+        root,
+        root_revision: collected.root_revision,
+        revisions: collected.revisions,
+        dependency_edges: collected.dependency_edges,
+        dependency_plan,
+    })
+}
+
+/// Re-admit the complete immutable inputs under this operation's store budget
+/// before reusing an earlier successful native plan. Projected transport fields
+/// are never the authority for this comparison.
+fn revalidate_package_revision_closure_with_control<S: ImmutableObjectStore + ?Sized>(
+    store: &S,
+    root: PackageRevisionDigest,
+    expected: Option<&DependencyRecord>,
+    prior: &PackageRevisionClosureValidation,
+    work: &mut StoreWork,
+    control: &crate::platform::execution::ExecutionControl,
+) -> Result<PackageRevisionClosureValidation, Diagnostic> {
+    let collected = collect_package_revision_inputs(store, root, expected, work, control)?;
+    if root != prior.root
+        || collected.root_revision != prior.root_revision
+        || collected.dependency_edges != prior.dependency_edges
+        || collected.revisions.len() != prior.revisions.len()
+    {
+        return Err(planning_binding_mismatch());
+    }
+    for (fresh, admitted) in collected.revisions.iter().zip(&prior.revisions) {
+        control
+            .check()
+            .map_err(crate::platform::execution::normalized::execution_diagnostic)?;
+        if fresh != admitted {
+            return Err(planning_binding_mismatch());
+        }
+    }
+    control
+        .check()
+        .map_err(crate::platform::execution::normalized::execution_diagnostic)?;
+    Ok(PackageRevisionClosureValidation {
+        root,
+        root_revision: collected.root_revision,
+        revisions: collected.revisions,
+        dependency_edges: collected.dependency_edges,
+        dependency_plan: prior.dependency_plan.clone(),
+    })
+}
+
+fn planning_binding_mismatch() -> Diagnostic {
+    package_error(
+        DiagnosticClass::Corrupt,
+        "package_revision_plan_binding",
+        "re-admitted exact logical closure differs from the private native planning context",
+    )
+}
+
+pub(crate) fn validate_artifact_package_revision_closure<S: ImmutableObjectStore + ?Sized>(
+    store: &S,
+    root: PackageRevisionDigest,
+    work: &mut StoreWork,
+) -> Result<ArtifactPackageRevisionClosureValidation, Diagnostic> {
+    let collected = collect_package_revision_inputs(
+        store,
+        root,
+        None,
+        work,
+        &crate::platform::execution::ExecutionControl::uncancelled(),
+    )?;
+    reject_dependency_cycle(&collected.revisions)?;
+    Ok(ArtifactPackageRevisionClosureValidation {
+        root_revision: collected.root_revision,
+        revisions: collected.revisions,
+    })
+}
+
+fn collect_package_revision_inputs<S: ImmutableObjectStore + ?Sized>(
+    store: &S,
+    root: PackageRevisionDigest,
+    expected: Option<&DependencyRecord>,
+    work: &mut StoreWork,
+    control: &crate::platform::execution::ExecutionControl,
+) -> Result<CollectedPackageRevisionInputs, Diagnostic> {
     let mut pending = VecDeque::from([root]);
     let mut revisions = BTreeMap::new();
     let mut packages = BTreeMap::new();
     let mut dependency_edges = 0_usize;
     while let Some(digest) = pending.pop_front() {
+        control
+            .check()
+            .map_err(crate::platform::execution::normalized::execution_diagnostic)?;
         if revisions.contains_key(&digest) {
             continue;
         }
@@ -342,7 +456,6 @@ pub(crate) fn validate_package_revision_closure<S: ImmutableObjectStore + ?Sized
         revisions.insert(digest, revision);
     }
     validate_revision_edges(&revisions)?;
-    reject_dependency_cycle(&revisions)?;
     let root_revision = revisions.get(&root).cloned().ok_or_else(|| {
         package_error(
             DiagnosticClass::Corrupt,
@@ -350,14 +463,14 @@ pub(crate) fn validate_package_revision_closure<S: ImmutableObjectStore + ?Sized
             "validated logical package closure lost its root revision",
         )
     })?;
-    Ok(PackageRevisionClosureValidation {
+    Ok(CollectedPackageRevisionInputs {
         root_revision,
         revisions,
         dependency_edges,
     })
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct PackageTransportClosureValidation {
     pub selections: Vec<PackageTransportBinding>,
     pub root_transport_digest: PackageTransportDigest,
@@ -370,6 +483,9 @@ pub(crate) struct PackageTransportClosureValidation {
     pub representation_interfaces: BTreeMap<PackageRevisionDigest, PackageInterfaceValidation>,
     pub interface_map_work: MapWork,
     pub dependency_edges: usize,
+    /// Complete immutable native planning context, separate from mutable
+    /// descriptive projections above. Only exact re-admission can reuse it.
+    logical: PackageRevisionClosureValidation,
 }
 
 pub(crate) fn validate_package_transport_local<S: ImmutableObjectStore + ?Sized>(
@@ -466,6 +582,28 @@ pub(crate) fn validate_package_transport_closure_admitted<S: ImmutableObjectStor
     work: &mut StoreWork,
     interface_map_admission: &mut MapAdmission,
 ) -> Result<PackageTransportClosureValidation, Diagnostic> {
+    validate_package_transport_closure_admitted_with_control(
+        store,
+        root_revision,
+        selections,
+        expected,
+        work,
+        interface_map_admission,
+        &crate::platform::execution::ExecutionControl::uncancelled(),
+    )
+}
+
+pub(crate) fn validate_package_transport_closure_admitted_with_control<
+    S: ImmutableObjectStore + ?Sized,
+>(
+    store: &S,
+    root_revision: PackageRevisionDigest,
+    selections: &[PackageTransportBinding],
+    expected: Option<&DependencyRecord>,
+    work: &mut StoreWork,
+    interface_map_admission: &mut MapAdmission,
+    control: &crate::platform::execution::ExecutionControl,
+) -> Result<PackageTransportClosureValidation, Diagnostic> {
     validate_package_transport_closure_metered(
         store,
         root_revision,
@@ -473,10 +611,44 @@ pub(crate) fn validate_package_transport_closure_admitted<S: ImmutableObjectStor
         expected,
         work,
         interface_map_admission,
-        &mut |_| Ok(()),
+        &mut |_| {
+            control
+                .check()
+                .map_err(crate::platform::execution::normalized::execution_diagnostic)
+        },
+        control,
     )
 }
 
+/// Reuse only the operation's already admitted immutable logical closure when
+/// selecting its physical transports. No process-wide admission cache is involved.
+pub(crate) fn validate_package_transport_closure_planned_admitted<
+    S: ImmutableObjectStore + ?Sized,
+>(
+    store: &S,
+    root_revision: PackageRevisionDigest,
+    selections: &[PackageTransportBinding],
+    logical: PackageRevisionClosureValidation,
+    work: &mut StoreWork,
+    interface_map_admission: &mut MapAdmission,
+    control: &crate::platform::execution::ExecutionControl,
+) -> Result<PackageTransportClosureValidation, Diagnostic> {
+    validate_package_transport_closure_planned(
+        store,
+        root_revision,
+        selections,
+        logical,
+        work,
+        interface_map_admission,
+        &mut |_| {
+            control
+                .check()
+                .map_err(crate::platform::execution::normalized::execution_diagnostic)
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn validate_package_transport_closure_metered<S: ImmutableObjectStore + ?Sized>(
     store: &S,
     root_revision: PackageRevisionDigest,
@@ -485,8 +657,73 @@ pub(crate) fn validate_package_transport_closure_metered<S: ImmutableObjectStore
     work: &mut StoreWork,
     interface_map_admission: &mut MapAdmission,
     visit: &mut dyn FnMut(u64) -> Result<(), Diagnostic>,
+    control: &crate::platform::execution::ExecutionControl,
 ) -> Result<PackageTransportClosureValidation, Diagnostic> {
-    let logical = validate_package_revision_closure(store, root_revision, expected, work)?;
+    let logical = validate_package_revision_closure_with_control(
+        store,
+        root_revision,
+        expected,
+        work,
+        control,
+    )?;
+    validate_package_transport_closure_planned(
+        store,
+        root_revision,
+        selections,
+        logical,
+        work,
+        interface_map_admission,
+        visit,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn revalidate_package_transport_closure_metered<S: ImmutableObjectStore + ?Sized>(
+    store: &S,
+    root_revision: PackageRevisionDigest,
+    selections: &[PackageTransportBinding],
+    prior: &PackageRevisionClosureValidation,
+    work: &mut StoreWork,
+    interface_map_admission: &mut MapAdmission,
+    visit: &mut dyn FnMut(u64) -> Result<(), Diagnostic>,
+    control: &crate::platform::execution::ExecutionControl,
+) -> Result<PackageTransportClosureValidation, Diagnostic> {
+    let logical = revalidate_package_revision_closure_with_control(
+        store,
+        root_revision,
+        None,
+        prior,
+        work,
+        control,
+    )?;
+    validate_package_transport_closure_planned(
+        store,
+        root_revision,
+        selections,
+        logical,
+        work,
+        interface_map_admission,
+        visit,
+    )
+}
+
+fn validate_package_transport_closure_planned<S: ImmutableObjectStore + ?Sized>(
+    store: &S,
+    root_revision: PackageRevisionDigest,
+    selections: &[PackageTransportBinding],
+    logical: PackageRevisionClosureValidation,
+    work: &mut StoreWork,
+    interface_map_admission: &mut MapAdmission,
+    visit: &mut dyn FnMut(u64) -> Result<(), Diagnostic>,
+) -> Result<PackageTransportClosureValidation, Diagnostic> {
+    visit(0)?;
+    if logical.root != root_revision {
+        return Err(package_error(
+            DiagnosticClass::Corrupt,
+            "package_transport_plan_root",
+            "transport selection does not bind the planned exact logical root",
+        ));
+    }
     if selections.len() != logical.revisions.len() {
         return Err(package_error(
             DiagnosticClass::Corrupt,
@@ -504,11 +741,12 @@ pub(crate) fn validate_package_transport_closure_metered<S: ImmutableObjectStore
             "physical transport selections must be unique and ordered by logical revision",
         ));
     }
-    let mut revisions = logical.revisions;
+    let revisions = &logical.revisions;
     let mut transports = BTreeMap::new();
     let mut interfaces = BTreeMap::new();
     let mut interface_map_work = MapWork::default();
     for selection in selections {
+        visit(0)?;
         let revision = revisions.get(&selection.package_revision).ok_or_else(|| {
             package_error(
                 DiagnosticClass::Corrupt,
@@ -534,7 +772,7 @@ pub(crate) fn validate_package_transport_closure_metered<S: ImmutableObjectStore
             visit(crate::platform::package_interface::interface_owner_validation_visits(owner))?;
         }
     }
-    validate_interface_dependencies(&revisions, &interfaces)?;
+    validate_interface_dependencies(revisions, &interfaces)?;
     let (root_transport_digest, root_transport) =
         transports.remove(&root_revision).ok_or_else(|| {
             package_error(
@@ -543,15 +781,9 @@ pub(crate) fn validate_package_transport_closure_metered<S: ImmutableObjectStore
                 "validated transport closure lost its root",
             )
         })?;
-    let root_revision = revisions
-        .remove(&root_transport.package_revision)
-        .ok_or_else(|| {
-            package_error(
-                DiagnosticClass::Corrupt,
-                "package_transport_root_revision",
-                "validated transport closure lost its root logical revision",
-            )
-        })?;
+    let root_revision = logical.root_revision.clone();
+    let mut representation_revisions = logical.revisions.clone();
+    representation_revisions.remove(&logical.root);
     let root_interface = interfaces
         .remove(&root_transport.package_revision)
         .ok_or_else(|| {
@@ -567,10 +799,11 @@ pub(crate) fn validate_package_transport_closure_metered<S: ImmutableObjectStore
         root_revision,
         root_transport,
         root_interface,
-        representation_revisions: revisions,
+        representation_revisions,
         representation_interfaces: interfaces,
         interface_map_work,
         dependency_edges: logical.dependency_edges,
+        logical,
     })
 }
 

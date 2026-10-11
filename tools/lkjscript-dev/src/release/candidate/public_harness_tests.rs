@@ -37,7 +37,7 @@ fn success() -> String {
         .map(|line| line.strip_suffix(": test").unwrap())
         .filter(|name| *name != "unrelated")
         .collect::<Vec<_>>();
-    assert_eq!(names.len(), 35);
+    assert_eq!(names.len(), 37);
     let mut output = format!("\nrunning {} tests\n", names.len());
     for name in &names {
         output.push_str(&format!("test {name} ... ok\n"));
@@ -49,7 +49,7 @@ fn success() -> String {
     output
 }
 
-const LIST: &str = "native_owned_fixture: test\nnative_byte_buffer_fixture: test\nnative_byte_ranges_fixture: test\nresident_policy::fixture: test\nnative_declarations::native_owned_products::parallel::native_parallel_fixture: test\nnative_declarations::native_parallel_reads::native_parallel_reads_fixture: test\nnative_refresh::fixture: test\ncopied_binary_authors_builds_and_serves_interactive_topology_from_minimal: test\nnative_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment: test\nnative_declarations::native_fold::native_blocked_folds_import_exactly_and_preserve_complete_results_after_source_removal: test\nnative_declarations::native_fold::native_blocked_folds_reject_wrong_contract_without_changing_accepted_consumer: test\nnative_declarations::native_fold::native_blocked_folds_admit_the_complete_argument_before_invoking_a_callback: test\nnative_declarations::native_fold::history::native_blocked_folds_retain_every_nested_prefix_across_blocks_and_source_removal: test\nnative_declarations::native_fold::history::native_blocked_folds_admit_nested_input_and_unused_initial_history_completely: test\nnative_declarations::incremental_units::new_components_do_not_promote_ports_to_compiler_units: test\nnative_declarations::incremental_units::new_command_targets_keep_exact_incremental_cache_and_detached_behavior: test\nnative_declarations::incremental_units::new_port_type_failure_preserves_authority_and_cache_then_recovers: test\nunrelated: test\n";
+const LIST: &str = "native_owned_fixture: test\nnative_byte_buffer_fixture: test\nnative_byte_ranges_fixture: test\nresident_policy::fixture: test\nnative_declarations::native_owned_products::parallel::native_parallel_fixture: test\nnative_declarations::native_parallel_reads::native_parallel_reads_fixture: test\nnative_refresh::fixture: test\ncopied_binary_authors_builds_and_serves_interactive_topology_from_minimal: test\nnative_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment: test\nnative_declarations::native_fold::native_blocked_folds_import_exactly_and_preserve_complete_results_after_source_removal: test\nnative_declarations::native_fold::native_blocked_folds_reject_wrong_contract_without_changing_accepted_consumer: test\nnative_declarations::native_fold::native_blocked_folds_admit_the_complete_argument_before_invoking_a_callback: test\nnative_declarations::native_fold::history::native_blocked_folds_retain_every_nested_prefix_across_blocks_and_source_removal: test\nnative_declarations::native_fold::history::native_blocked_folds_admit_nested_input_and_unused_initial_history_completely: test\nnative_declarations::incremental_units::new_components_do_not_promote_ports_to_compiler_units: test\nnative_declarations::incremental_units::new_command_targets_keep_exact_incremental_cache_and_detached_behavior: test\nnative_declarations::incremental_units::new_port_type_failure_preserves_authority_and_cache_then_recovers: test\nnative_declarations::incremental_units::native_package_planner_rebuilds_exactly_and_runs_checked_plan_after_source_deletion: test\nnative_declarations::incremental_units::native_package_planner_compiles_independently_authored_diamond_and_detached_results: test\nunrelated: test\n";
 
 fn runner<'a>(root: &'a Path, control: &'a process::ProcessControl) -> Runner<'a> {
     let candidate = root.join("candidate");
@@ -79,7 +79,7 @@ fn harness(root: &Path, output: &str, exit: i32) -> PathBuf {
     let path = root.join("fixture-harness");
     let listing = listing();
     let script = format!(
-        "#!/bin/sh\nset -eu\n[ \"$PATH\" = '' ]\n[ \"$HOME\" = \"$PWD/home\" ]\n[ \"$TMPDIR\" = \"$PWD/tmp\" ]\n[ -z \"${{CARGO_HOME+x}}\" ]\n[ -z \"${{GH_TOKEN+x}}\" ]\n[ -z \"${{GITHUB_TOKEN+x}}\" ]\n[ -f \"$LKJSCRIPT_RELEASE_CANDIDATE\" ]\nif [ \"$1\" = '--list' ]; then\nprintf '%s' '{listing}'\nelse\n[ \"$1\" = '--exact' ]\n[ \"$2\" = '--test-threads=1' ]\n[ \"$3\" = '--color=never' ]\n[ \"$#\" = 38 ]\nprintf '%s' '{output}'\nexit {exit}\nfi\n"
+        "#!/bin/sh\nset -eu\n[ \"$PATH\" = '' ]\n[ \"$HOME\" = \"$PWD/home\" ]\n[ \"$TMPDIR\" = \"$PWD/tmp\" ]\n[ -z \"${{CARGO_HOME+x}}\" ]\n[ -z \"${{GH_TOKEN+x}}\" ]\n[ -z \"${{GITHUB_TOKEN+x}}\" ]\n[ -f \"$LKJSCRIPT_RELEASE_CANDIDATE\" ]\nif [ \"$1\" = '--list' ]; then\nprintf '%s' '{listing}'\nelse\n[ \"$1\" = '--exact' ]\n[ \"$2\" = '--test-threads=1' ]\n[ \"$3\" = '--color=never' ]\n[ \"$#\" = 40 ]\nprintf '%s' '{output}'\nexit {exit}\nfi\n"
     );
     fs::write(&path, script).unwrap();
     fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
@@ -98,7 +98,7 @@ fn native_runner_uses_closed_environment_exact_inventory_and_retained_processes(
         .unwrap();
     assert_eq!(
         runner.receipt.inventory.as_ref().unwrap().selected.len(),
-        35
+        37
     );
     assert_eq!(runner.receipt.phases.len(), 2);
     assert!(
@@ -114,7 +114,7 @@ fn native_runner_uses_closed_environment_exact_inventory_and_retained_processes(
         serde_json::from_slice(&fs::read(root.path().join("receipt.json")).unwrap()).unwrap();
     assert_eq!(
         record["inventory"]["selected"].as_array().unwrap().len(),
-        35
+        37
     );
     assert!(root.path().join("inventory.stdout.log").is_file());
     assert!(root.path().join("execute.stderr.log").is_file());

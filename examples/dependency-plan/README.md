@@ -129,8 +129,9 @@ The four independent choices have both single and batch descriptors:
 
 ## Refusals
 
-The inherited inclusive capacities are 4,096 nodes, 4,096 roots and 16,384 successor
-entries per proposal. Repeated entries count before condensation. Capacity refusals
+The inherited inclusive native capacities are 10,000 nodes, 10,000 roots and
+100,000 successor entries per proposal. Ordinary CLI JSON limits remain separate.
+Repeated entries count before condensation. Capacity refusals
 precede structural invalidity in nodes, roots, edges order. Duplicate IDs precede
 missing roots, then missing successors in authored order. Invalid unreachable edges
 are never ignored. Signed I64 extremes and -1 are ordinary valid node identities.
@@ -158,8 +159,11 @@ node actions. Allocation failure and cancellation retain ordinary runtime behavi
 The public regression independently expects 4,635 proposals: the existing 532-case
 component suite, all 4,096 loop-free four-vertex graphs, and seven larger planning
 and metamorphic cases. The existing suite includes all 512 three-vertex graphs
-with self-loops, signed extremes, 257-node chains/cycles, wide worklists, inclusive
-capacities and one-past-bound/structural refusals followed by valid proposals.
+with self-loops, signed extremes, 257-node chains/cycles, wide worklists and the
+former 4,096-node/16,384-edge boundary shapes. These shapes remain ordinary valid
+regressions within the larger native bounds. Structural refusals are followed by
+valid proposals. Exact current capacity fits, one-over refusals and simultaneous
+precedence are checked through the compiler's separate JSON embedding envelope.
 
 The oracle uses pairwise reachability for components and synchronous longest-path
 relaxation for stages. The product uses two-pass component discovery followed by
@@ -187,8 +191,10 @@ allocation and encoding have separate costs. Compare chains, wide frontiers and
 diamonds through existing capacities; check bounded per-update admission without
 rescanning untouched sequence prefixes, and retain slower measured outcomes.
 This is not a linear wall-time, zero-copy, bounded-RSS or application-speedup claim.
-It does not replace a production compiler pass or establish complete self-hosting.
-A later production consumer needs its own checked admission and authority boundary.
+The [maintained package consumer](../../tools/native-package-plan/README.md)
+imports the complete planner and independent checker at its own checked compiler
+boundary. These algorithm measurements do not establish complete self-hosting or
+predict that consumer's end-to-end cost.
 
 ## Matched storage measurements
 

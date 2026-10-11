@@ -25,7 +25,7 @@ use crate::platform::package_interface::{
     validate_package_interface,
 };
 use crate::platform::package_transport::{
-    PackageRevision, validate_package_interface_closure, validate_package_revision_closure,
+    PackageRevision, validate_artifact_package_revision_closure, validate_package_interface_closure,
 };
 use crate::platform::persistent_map::{MapError, MapErrorClass, MapRoot, MapWork, PersistentMap};
 use crate::platform::semantic_id::{
@@ -2579,7 +2579,7 @@ fn trace_object_closure(
         })?;
     let mut store_work = StoreWork::default();
     let logical =
-        validate_package_revision_closure(&store, root.package_revision, None, &mut store_work)?;
+        validate_artifact_package_revision_closure(&store, root.package_revision, &mut store_work)?;
     if logical.root_revision.package != manifest.root_package {
         return Err(artifact_error(
             DiagnosticClass::Corrupt,

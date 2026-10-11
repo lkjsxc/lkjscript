@@ -21,6 +21,11 @@ use std::time::Duration;
 
 const MAXIMUM_COMMAND_OUTPUT_BYTES: usize = 64 * 1024 * 1024;
 const MAXIMUM_COMMAND_ERROR_BYTES: usize = 1024 * 1024;
+const NATIVE_PACKAGE_PLAN_INPUTS: [&str; 3] = [
+    "tools/native-package-plan/project/HEAD",
+    "tools/native-package-plan/project/PACKAGE-TRANSPORTS/CURRENT",
+    "tools/native-package-plan/generated/package-plan.lkja",
+];
 
 pub(crate) fn capture(repository: &Path) -> Result<InputSnapshot, DevError> {
     let tracked = listed_paths(repository, &["ls-files", "--cached", "-z"])?;
@@ -42,6 +47,13 @@ pub(crate) fn capture(repository: &Path) -> Result<InputSnapshot, DevError> {
     // directories and ignored files must invalidate the same source proof.
     for path in surface::input_paths(repository)? {
         paths.entry(path).or_insert(InputSource::Untracked);
+    }
+    // The compiler embeds these maintained bytes. Bind absent or ignored inputs
+    // too; Git visibility cannot remove an executable planner from source proof.
+    for path in NATIVE_PACKAGE_PLAN_INPUTS {
+        paths
+            .entry(path.to_owned())
+            .or_insert(InputSource::Untracked);
     }
 
     let mut entries = Vec::with_capacity(paths.len());
@@ -292,6 +304,7 @@ fn select_changed_paths(paths: impl IntoIterator<Item = String>) -> Result<Vec<S
             || path == "Cargo.lock"
             || path.starts_with("src/")
             || path.starts_with("tests/")
+            || path.starts_with("tools/native-package-plan/")
             // Native examples include embedded recipes and executable test/deployment inputs.
             // Their directory name must not classify program changes as documentation-only.
             || path.starts_with("docs/guides/examples/")

@@ -1,0 +1,18 @@
+declarations.begin
+(units
+  (module create diamond
+    (type-alias Result (record (left I64) (right I64) (total I64)))
+    (external create add (visibility private) (implementation core.i64.add)
+      (parameter create a (type I64)) (parameter create b (type I64)) (returns I64))
+    (function create main (visibility public) (effect pure)
+      (parameter create n (type I64)) (returns Result)
+      (body (let
+        (binding l (type I64) (call left::transform (local n)))
+        (binding r (type I64) (call right::transform (local n)))
+        (in (record structural (field left (local l)) (field right (local r))
+          (field total (call add (local l) (local r))))))))
+    (component create command (visibility private)
+      (port create main (type (function (I64) Result)) (function main))))
+  (target create diamond (component diamond::command) (runner command)
+    (port diamond::command::main)))
+declarations.end

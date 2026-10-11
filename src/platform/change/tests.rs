@@ -976,6 +976,7 @@ fn prepared_authority_path_copies_semantic_and_witness_roots_through_one_object_
         &owner_map_edits,
         &mut stage,
         crate::platform::persistent_map::MapAdmission::unbounded(),
+        &crate::platform::execution::ExecutionControl::uncancelled(),
     )
     .expect("candidate authority must stage");
 

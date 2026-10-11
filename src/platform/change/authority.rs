@@ -4,6 +4,8 @@ use super::{
     CanonicalBaseRead, CanonicalDelta, CanonicalReadWork, PreparedChangeAnalysis, WitnessBaseRead,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
+use crate::platform::execution::ExecutionControl;
+use crate::platform::execution::normalized::execution_diagnostic;
 use crate::platform::kernel::{
     DependencyBinding, KernelSnapshot, OwnerBinding, OwnerKey, OwnerRecord, RetirementBinding,
     SemanticRoot, SemanticRootDigest, SemanticStateDigest, dependency_map_key, encode_dependency,
@@ -11,7 +13,7 @@ use crate::platform::kernel::{
     encode_retirement_binding, encode_root, encode_type_object, owner_map_key, retirement_map_key,
     semantic_state_digest, semantic_state_digest_from_root,
 };
-use crate::platform::package_transport::validate_package_revision_closure;
+use crate::platform::package_transport::validate_package_revision_closure_with_control;
 use crate::platform::persistent_map::{
     BatchOutcome, MapAdmission, MapEdit, MapError, MapErrorClass, MapWork, PageStore, PersistentMap,
 };
@@ -87,7 +89,11 @@ pub(crate) fn stage_prepared_authority<
     owner_map_edits: &PreparedOwnerMapEdits,
     store: &mut ObjectStage<'_, S>,
     map_admission: MapAdmission,
+    control: &ExecutionControl,
 ) -> Result<PreparedAuthority, Vec<Diagnostic>> {
+    control
+        .check()
+        .map_err(|error| vec![execution_diagnostic(error)])?;
     let base_manifest = base_witness.witness_manifest();
     let (base_digest, _) = encode_root(base_root).map_err(|error| vec![error])?;
     if base_manifest.semantic_root != base_digest
@@ -109,6 +115,7 @@ pub(crate) fn stage_prepared_authority<
         store,
         &mut store_work,
         map_admission,
+        control,
     )
     .map_err(|error| vec![error])?;
     stage_incremental_witness_objects(prepared, store, &mut store_work)
@@ -148,8 +155,13 @@ pub fn stage_full_authority<S: ImmutableObjectStore + ?Sized>(
 ) -> Result<FullStagedAuthority, Vec<Diagnostic>> {
     crate::platform::kernel::validate_full(logical)?;
     let mut store_work = StoreWork::default();
-    let semantic =
-        stage_full_semantic(logical, store, &mut store_work).map_err(|error| vec![error])?;
+    let semantic = stage_full_semantic(
+        logical,
+        store,
+        &mut store_work,
+        &ExecutionControl::uncancelled(),
+    )
+    .map_err(|error| vec![error])?;
     let mut snapshot = logical.clone();
     snapshot.root = semantic.root.clone();
     let witness = rebuild_full_witness(&snapshot)?;
@@ -176,8 +188,9 @@ fn stage_semantic_delta<S: ImmutableObjectStore + ?Sized>(
     store: &mut S,
     store_work: &mut StoreWork,
     map_admission: MapAdmission,
+    control: &ExecutionControl,
 ) -> Result<SemanticAuthority, Diagnostic> {
-    stage_delta_objects(delta, store, store_work)?;
+    stage_delta_objects(delta, store, store_work, control)?;
     let mut map_work = MapWork::with_admission(map_admission);
     let mut counts = CanonicalMapEditCounts::default();
     let root = base_root;
@@ -249,6 +262,7 @@ fn stage_full_semantic<S: ImmutableObjectStore + ?Sized>(
     logical: &KernelSnapshot,
     store: &mut S,
     store_work: &mut StoreWork,
+    control: &ExecutionControl,
 ) -> Result<SemanticAuthority, Diagnostic> {
     let mut owner_entries = Vec::with_capacity(logical.owners.len());
     for (owner, record) in &logical.owners {
@@ -298,11 +312,12 @@ fn stage_full_semantic<S: ImmutableObjectStore + ?Sized>(
 
     let mut dependency_entries = Vec::with_capacity(logical.dependencies.len());
     for (package, record) in &logical.dependencies {
-        validate_package_revision_closure(
+        validate_package_revision_closure_with_control(
             store,
             record.package_revision,
             Some(record),
             store_work,
+            control,
         )?;
         let (digest, bytes) = encode_dependency(record)?;
         stage_typed(
@@ -398,8 +413,10 @@ fn stage_delta_objects<S: ImmutableObjectStore + ?Sized>(
     delta: &CanonicalDelta,
     store: &mut S,
     work: &mut StoreWork,
+    control: &ExecutionControl,
 ) -> Result<(), Diagnostic> {
     for edit in delta.owners.values() {
+        control.check().map_err(execution_diagnostic)?;
         if let Some((expected, record)) = &edit.after {
             let (digest, bytes) = encode_owner(record)?;
             require_digest("owner", digest.bytes(), expected.bytes())?;
@@ -407,13 +424,21 @@ fn stage_delta_objects<S: ImmutableObjectStore + ?Sized>(
         }
     }
     for (expected, object) in &delta.type_additions {
+        control.check().map_err(execution_diagnostic)?;
         let (digest, bytes) = encode_type_object(object)?;
         require_digest("type", digest.bytes(), expected.bytes())?;
         stage_typed(store, ObjectDomain::Type, digest.bytes(), &bytes, work)?;
     }
     for edit in delta.dependencies.values() {
+        control.check().map_err(execution_diagnostic)?;
         if let Some((expected, record)) = &edit.after {
-            validate_package_revision_closure(store, record.package_revision, Some(record), work)?;
+            validate_package_revision_closure_with_control(
+                store,
+                record.package_revision,
+                Some(record),
+                work,
+                control,
+            )?;
             let (digest, bytes) = encode_dependency(record)?;
             require_digest("dependency", digest.bytes(), expected.bytes())?;
             stage_typed(

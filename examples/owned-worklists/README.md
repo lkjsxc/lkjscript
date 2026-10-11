@@ -156,7 +156,9 @@ IDs are arbitrary signed I64 identities. Repeated roots/edges, cycles and self-e
 are admitted; visited marking at enqueue schedules each node once. Output lists
 retain authored node order. Empty roots make every node unreachable.
 
-The tool admits 4,096 nodes, 4,096 roots and 16,384 successor entries, inclusive.
+The native validator admits 10,000 nodes, 10,000 roots and 100,000 successor
+entries, inclusive. Ordinary CLI JSON limits remain separate; the compiler-owned
+embedding envelope admits complete projections at these native bounds.
 Capacity results use `{"case":"capacity","value":"nodes|roots|edges"}` with
 one exact dimension name, in that precedence. Complete validation precedes
 traversal and includes unreachable nodes. Duplicate IDs take precedence, followed
