@@ -85,6 +85,18 @@ presumed.
 
 ## Acceptance evidence
 
+The [successful original full run](../../.artifacts/lkjscript-dev/check/1791727236348792345-2336981-0/receipt.json)
+accepts source `d01708a2d089af33e79747c097ca61b5c90d4fd7`, tree
+`d08f9a0d64afca0a320d0d7a8b0b93a20f788036`: **29/29** fresh gates, **0 reused**,
+**0 unrun**, stable inputs and terminal exit **0** after **2,896.017618526 seconds**.
+Receipt SHA-256 is
+`c0912b08adfd985f487cad4461006563ffd211c5e3e11929c933a6e592c191c0`.
+The [verified summary](../../.artifacts/native-package-planner/full-second-summary.json)
+and [71-file inventory](../../.artifacts/native-package-planner/full-second-inventory.json)
+retain exact original evidence. This is source acceptance; mainline delivery and
+finalized-byte publication remain separate gates. Later docs-only reporting does
+not change the receipt's source binding.
+
 The [first full run](../../.artifacts/lkjscript-dev/check/1791722983656536426-2131509-0/receipt.json)
 on `d1488367758226e02a3c5522476b7058fd881ce2` failed after 2,866.089739 seconds:
 **28/29** fresh gates passed, **0 reused**, **0 unrun**, inputs stable. Only
@@ -95,8 +107,7 @@ capacity/negative precedence contract. The
 [sixth all-target build](../../.artifacts/native-package-planner/build/selected-sixth.json)
 returned exit 0 on corrected source `5a9629ef986ed2dc63b8befbc8ad081a10c04b28`;
 [all 18 focused cases](../../.artifacts/native-package-planner/tests/focused-sixth-20261011/summary.json)
-pass with 0 failed or ignored. Complete fresh **29-gate** acceptance remains
-pending.
+pass with 0 failed or ignored before the successful full acceptance above.
 The native asset and production behavior remain unchanged by those corrections.
 
 ## Observed public build costs
