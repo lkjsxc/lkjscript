@@ -2,6 +2,8 @@
 //! A finite conservative call graph first excludes unsupported recursive witness construction.
 //! Exact prerequisite selections then retain independent type-growth slots/SCCs.
 
+#[path = "associated_callable_flow.rs"]
+mod associated;
 #[path = "prerequisite_callable_flow.rs"]
 mod prerequisites;
 #[path = "recursive_callable_flow.rs"]
@@ -15,7 +17,7 @@ use crate::platform::kernel::{
     OwnerKey, OwnerRecord, PackageId, TypeForm, TypeObject, TypeObjectDigest,
 };
 use crate::platform::semantic_id::{
-    ExpressionId, ImplementationParameterId, MethodId, TypeParameterId,
+    AssociatedTypeMemberId, ExpressionId, ImplementationParameterId, MethodId, TypeParameterId,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -117,9 +119,54 @@ pub(crate) fn validate_snapshot_callable_closure(
     )
 }
 
+#[cfg(test)]
+pub(crate) fn validate_snapshot_callable_closure_eager(
+    snapshots: &[&KernelSnapshot],
+    checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
+    work: &mut usize,
+    maximum_work: usize,
+) -> Result<CallableFlowWork, Diagnostic> {
+    validate_callable_closure_with_scope(
+        &Snapshots {
+            snapshots,
+            checkpoint,
+        },
+        work,
+        maximum_work,
+        recursive::ProofScope::All,
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn validate_snapshot_callable_closure_with_limits(
+    snapshots: &[&KernelSnapshot],
+    checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
+    work: &mut usize,
+    maximum_work: usize,
+    maximum_metadata_bytes: usize,
+    eager: bool,
+) -> Result<CallableFlowWork, Diagnostic> {
+    validate_callable_closure_with_limits(
+        &Snapshots {
+            snapshots,
+            checkpoint,
+        },
+        work,
+        maximum_work,
+        maximum_metadata_bytes.min(MAXIMUM_ANALYSIS_BYTES),
+        if eager {
+            recursive::ProofScope::All
+        } else {
+            recursive::ProofScope::Recursive
+        },
+    )
+}
+
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum Selection {
-    Unknown,
+    Unknown {
+        contract: DeclarationReference,
+    },
     Scheme {
         implementation: DeclarationReference,
         prerequisites: Vec<SelectionId>,
@@ -127,7 +174,6 @@ enum Selection {
 }
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct SelectionId(usize);
-const UNKNOWN_SELECTION: SelectionId = SelectionId(0);
 struct SelectionInfo {
     shape: Selection,
     parameters: Vec<TypeParameterId>,
@@ -178,11 +224,13 @@ struct Edge {
     expression: Option<ExpressionId>,
     argument: usize,
     path: Vec<usize>,
+    expanding: bool,
 }
 struct Analysis<'a, R: ?Sized> {
     read: &'a R,
     work: &'a mut usize,
     maximum_work: usize,
+    maximum_metadata_bytes: usize,
     observation: CallableFlowWork,
     contexts: Vec<ContextInfo>,
     indexes: BTreeMap<Context, usize>,
@@ -192,6 +240,7 @@ struct Analysis<'a, R: ?Sized> {
     calls: Vec<recursive::CallSite>,
     slot_owners: Vec<(usize, usize)>,
     edges: Vec<Edge>,
+    associated: associated::State,
 }
 fn implementation_parameters(
     payload: &DeclarationPayload,
@@ -246,6 +295,16 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         self.tick()?;
         let mut depth = 0usize;
         let parameters = self.scheme_parameters(implementation)?;
+        let DeclarationPayload::OwnedImplementation(scheme) =
+            self.declaration(implementation)?.payload
+        else {
+            return Err(associated::invalid());
+        };
+        for (parameter, selected) in scheme.implementation_parameters.iter().zip(&prerequisites) {
+            if self.selection_contract(*selected)? != parameter.contract {
+                return Err(associated::invalid());
+            }
+        }
         let mut has_parameters = !parameters.is_empty();
         for child in &prerequisites {
             self.tick()?;
@@ -309,7 +368,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         self.observation.metadata_bytes = count
             .checked_mul(std::mem::size_of::<T>() + 4 * std::mem::size_of::<usize>())
             .and_then(|n| self.observation.metadata_bytes.checked_add(n))
-            .filter(|n| *n <= MAXIMUM_ANALYSIS_BYTES)
+            .filter(|n| *n <= self.maximum_metadata_bytes)
             .ok_or_else(|| {
                 Diagnostic::new(
                     DiagnosticClass::Resource,
@@ -404,6 +463,13 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                         "function context has a foreign method or witness arity",
                     ));
                 }
+                for (parameter, selected) in
+                    f.implementation_parameters.iter().zip(&key.implementations)
+                {
+                    if self.selection_contract(*selected)? != parameter.contract {
+                        return Err(associated::invalid());
+                    }
+                }
             }
             DeclarationPayload::OwnedImplementation(i) => {
                 if i.implementation_parameters.len() != key.implementations.len() {
@@ -411,6 +477,13 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                         "kernel_callable_flow_method",
                         "implementation context has no exact method mapping",
                     ));
+                }
+                for (parameter, selected) in
+                    i.implementation_parameters.iter().zip(&key.implementations)
+                {
+                    if self.selection_contract(*selected)? != parameter.contract {
+                        return Err(associated::invalid());
+                    }
                 }
                 self.mapping(i, key.method)?;
             }
@@ -559,16 +632,20 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         argument: usize,
         path: Vec<usize>,
     ) -> Result<(), Diagnostic> {
-        self.tick()?;
-        self.reserve::<Edge>(1)?;
-        self.edges.push(Edge {
+        self.push_edge(Edge {
             from,
             to,
             origin,
             expression,
             argument,
+            expanding: !path.is_empty(),
             path,
-        });
+        })
+    }
+    fn push_edge(&mut self, edge: Edge) -> Result<(), Diagnostic> {
+        self.tick()?;
+        self.reserve::<Edge>(1)?;
+        self.edges.push(edge);
         Ok(())
     }
     fn arguments(
@@ -619,7 +696,20 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                         "complete callable source is missing an application type",
                     )
                 })?;
-                if let TypeForm::TypeParameter { parameter } = object.form {
+                if let TypeForm::AssociatedWitnessProjection {
+                    scope,
+                    parameter,
+                    contract,
+                    member,
+                } = object.form
+                {
+                    let from = self.projection_slot(source, scope, parameter, contract, member)?;
+                    if let Some(targets) = targets {
+                        self.edge(from, targets[argument], caller, expression, argument, path)?;
+                    }
+                } else if matches!(object.form, TypeForm::AssociatedContractMember { .. }) {
+                    return Err(associated::invalid());
+                } else if let TypeForm::TypeParameter { parameter } = object.form {
                     let ordinal = self.contexts[source]
                         .parameters
                         .iter()
@@ -635,6 +725,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                         self.edge(from, targets[argument], caller, expression, argument, path)?;
                     }
                 } else {
+                    self.reserve::<TypeObjectDigest>(object.child_type_count())?;
                     for (index, child) in object.child_types().into_iter().enumerate() {
                         self.tick()?;
                         if path.len() >= crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
@@ -814,7 +905,10 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                     Some(expression),
                 )?;
                 for (ordinal, operand) in implementations.iter().enumerate() {
-                    if target.key.implementations[ordinal] != UNKNOWN_SELECTION {
+                    if !matches!(
+                        self.selections[target.key.implementations[ordinal].0].shape,
+                        Selection::Unknown { .. }
+                    ) {
                         self.witness_arguments(
                             source,
                             target,
@@ -912,7 +1006,10 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
             ));
         }
         for (ordinal, operand) in operands.iter().enumerate() {
-            if target.key.implementations[ordinal] != UNKNOWN_SELECTION {
+            if !matches!(
+                self.selections[target.key.implementations[ordinal].0].shape,
+                Selection::Unknown { .. }
+            ) {
                 self.witness_arguments(source, target, &[ordinal], operand, expression)?;
             }
         }
@@ -1088,7 +1185,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         for i in 0..self.edges.len() {
             self.tick()?;
             let edge = &self.edges[i];
-            if !edge.path.is_empty() && components[edge.from] == components[edge.to] {
+            if edge.expanding && components[edge.from] == components[edge.to] {
                 let (from_context, from_ordinal) = self.slot_owners[edge.from];
                 let (to_context, to_ordinal) = self.slot_owners[edge.to];
                 let from = &self.contexts[from_context].key;
@@ -1130,10 +1227,21 @@ fn validate_callable_closure_with_scope<R: CallableClosureRead + ?Sized>(
     maximum_work: usize,
     scope: recursive::ProofScope,
 ) -> Result<CallableFlowWork, Diagnostic> {
+    validate_callable_closure_with_limits(read, work, maximum_work, MAXIMUM_ANALYSIS_BYTES, scope)
+}
+
+fn validate_callable_closure_with_limits<R: CallableClosureRead + ?Sized>(
+    read: &R,
+    work: &mut usize,
+    maximum_work: usize,
+    maximum_metadata_bytes: usize,
+    scope: recursive::ProofScope,
+) -> Result<CallableFlowWork, Diagnostic> {
     let mut analysis = Analysis {
         read,
         work,
         maximum_work,
+        maximum_metadata_bytes,
         observation: CallableFlowWork::default(),
         contexts: Vec::new(),
         indexes: BTreeMap::new(),
@@ -1143,36 +1251,41 @@ fn validate_callable_closure_with_scope<R: CallableClosureRead + ?Sized>(
         calls: Vec::new(),
         slot_owners: Vec::new(),
         edges: Vec::new(),
+        associated: associated::State::default(),
     };
     analysis.tick()?;
-    analysis.reserve::<SelectionInfo>(1)?;
-    analysis.selections.push(SelectionInfo {
-        shape: Selection::Unknown,
-        parameters: Vec::new(),
-        depth: 0,
-        has_parameters: false,
-    });
     prerequisites::validate(&mut analysis)?;
     read.visit_callable_owners(&mut |owner| {
         let declaration = analysis.declaration(owner)?;
         match declaration.payload {
             DeclarationPayload::OwnedImplementation(i) => {
+                analysis.validate_associated_scheme(owner, &i)?;
                 analysis.reserve::<SelectionId>(i.implementation_parameters.len())?;
+                let unknown = analysis.unknown_parameters(&i.implementation_parameters)?;
                 for mapping in i.methods {
                     analysis.reserve::<SelectionId>(i.implementation_parameters.len())?;
                     analysis.context(Context {
                         owner,
                         method: Some(mapping.method),
-                        implementations: vec![UNKNOWN_SELECTION; i.implementation_parameters.len()],
+                        implementations: unknown.clone(),
                     })?;
                 }
             }
             DeclarationPayload::Function(f) => {
                 analysis.reserve::<SelectionId>(f.implementation_parameters.len())?;
+                let unknown = analysis.unknown_parameters(&f.implementation_parameters)?;
                 analysis.context(Context {
                     owner,
                     method: None,
-                    implementations: vec![UNKNOWN_SELECTION; f.implementation_parameters.len()],
+                    implementations: unknown,
+                })?;
+            }
+            DeclarationPayload::OwnedContract(c) => {
+                analysis.associated.enabled |= !c.associated_types.is_empty();
+                analysis.context(Context {
+                    owner,
+                    method: None,
+                    implementations: Vec::new(),
                 })?;
             }
             _ => {

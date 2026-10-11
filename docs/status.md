@@ -1,9 +1,10 @@
 # Current status
 
 Snapshot: 2026-10-11. Development **0.1.95** selects first-order associated Owned
-members on exact implementation witnesses. The codec, occurrence-aware ownership,
-call-signature and borrowed-result integration passes the full library suite and
-strict Clippy. Complete associated semantics
+members on exact implementation witnesses. The committed codec, occurrence-aware
+ownership, call-signature and borrowed-result checkpoint passed the full library
+suite and strict Clippy. The preparation, runtime, reference and growth checkpoint
+also passes strict Clippy, 168 focused checks and the full library suite. Complete associated semantics
 remain explicitly unsupported and unavailable on main. Native package planning
 **0.1.94** has passed all **29**
 fresh full acceptance gates on its separate exact source.
@@ -16,8 +17,12 @@ Worktree `/home/coder/workspace/lkjscript-associated-owned-types-20261011`, bran
 this worktree's successor edits. Local foundation commit
 `e45d1b6d8ffc6c6e83e0077f2e01320b572119d2` and reporting merge
 `803a2cfeb21c854375b3890d094fe5f92c40caaa` preserve the accepted ancestry.
-The semantic integration is a validated local development checkpoint, not complete
-feature acceptance. Preserve both worktrees and
+Semantic checkpoint `2ce8d546e6445b8a08ff10ff7daec5a141d582d8` and normal mainline
+reporting merge `da96f27b3ba78b2cece1f2b66229331f00daf63e` retain that proof and the
+delivered planner ancestry. The preparation/runtime checkpoint below extends this
+ancestry; its local commit identity is retained in the selection record. Complete
+feature acceptance remains pending.
+Preserve both worktrees and
 ignored original evidence. The local
 [selection record](../.artifacts/associated-owned-types/selection.json) owns current
 implementation assignments, original design evidence and build coordination.
@@ -28,7 +33,9 @@ to the member through their exact lexical witness, without a separate caller-
 selected Block argument. Concrete type equality never authorizes witness swapping.
 The intended maintained adoption is BlockRead traversal in native planner
 materialization, using flat storage and real private-layout nominal chunk blocks.
-Traversal already works with an explicit Block argument; no speedup is promised.
+The maintained planner currently reads each element through IndexedData::get.
+BlockRead is a new integration; an explicit Block argument is an expressible design
+baseline, not an existing maintained traversal. No speedup is promised.
 
 The first implementation slice owns inline inventories, exact member identities,
 frozen base codecs and explicit nonempty associated encodings. It must preserve
@@ -107,6 +114,29 @@ every child still pays traversal work and performs its contextual nominal checks
 Quota limits were not raised, and original semantic depth diagnostics remain owned
 by their structural type validators. Next complete preparation and runtime closure,
 the remaining canonical memory reference, and finite-flow proof with independent adapters.
+The current slice carries complete closed member inventories through a
+borrowed witness DAG, exact runtime function contexts, and sparse application type
+lookup. It materializes inactive/local/parallel roots and independently rechecks
+selected binding templates on runtime hits. The new finite-flow relation separates
+constructor growth from member/path aliases and demands unused witness actuals.
+Nine raw canonical adapter fixtures compare selected growth, alias, permutation,
+reset and capacity cases with the independent model and eager production path.
+Stable source `ecf530c148bdbe88151770d7c4c9406c3cb1ea5cc8d206c2d3e2b0d5df46a227`
+passes strict Clippy, **168/168** focused checks, and the full library suite:
+**2,013 passed, 0 failed, 8 ignored** in 188.14 seconds. The focused inventory
+includes all 42 new tests, ordinary/bootstrap controls, and every regression from
+the first full run. Originals and immutable executable selections remain under
+the selection record. The earlier stable `ca353840` result (**144/146** focused;
+**1,989 passed, 24 failed, 8 ignored** full) is retained separately. Corrections
+restore raw ordinary structural admission and runtime diagnostic ordering while
+preserving exact associated contexts. Cancellation tests now exhaust every cutoff
+through first success, checking custody at each attempt; production limits are
+unchanged. The two corrected fixtures now follow actual code sharing and exact
+callable owner kinds. Canonical memory closure and preparation
+references remain separately owned, with full reference schema, multiple-root
+growth comparisons and cross-layer capacity/private-nominal evidence incomplete.
+Next integrate the independent full reference schema, extend canonical growth
+comparisons, and prove private nominal supplier borrowing before enabling admission.
 Complete public composition, maintained BlockRead adoption and dependency-complete
 fresh acceptance on stable source. Source
 acceptance, exact-source mainline delivery and finalized-byte publication remain

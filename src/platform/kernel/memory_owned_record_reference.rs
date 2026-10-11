@@ -274,6 +274,15 @@ impl Oracle<'_> {
                     }
                 }
             }
+            match object.form {
+                TypeForm::AssociatedWitnessProjection { scope, .. } => {
+                    candidates.insert(scope);
+                }
+                TypeForm::AssociatedContractMember { contract, .. } => {
+                    candidates.insert(contract);
+                }
+                _ => {}
+            }
             pending.extend(object.child_types());
         }
         candidates
@@ -360,6 +369,13 @@ impl Oracle<'_> {
         *remaining = remaining.checked_sub(1)?;
         match self.form(ty)? {
             TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Some(true),
+            TypeForm::AssociatedContractMember { .. }
+            | TypeForm::AssociatedWitnessProjection { .. } => {
+                // Caller projections are opaque actuals. A raw nominal field
+                // has Forbidden context, so this cannot authorize stored
+                // projections in a representation template.
+                self.associated_owned(ty).then_some(true)
+            }
             TypeForm::TypeParameter { parameter } => {
                 let parameter = self.scoped_parameter(*parameter)?;
                 (parameter.constraints.has_owned() || parameter.constraints.requires_transfer())

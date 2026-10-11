@@ -7,6 +7,9 @@ use crate::platform::semantic_id::{
     AssociatedTypeMemberId, ImplementationParameterId, TypeParameterId,
 };
 
+#[path = "memory_associated_closure_reference.rs"]
+mod closure;
+
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(super) enum Context {
     Contract(DeclarationReference),
@@ -72,6 +75,11 @@ impl Oracle<'_> {
                     ..
                 }
                 | ExpressionOperation::ImplementationCall {
+                    function,
+                    type_arguments,
+                    ..
+                }
+                | ExpressionOperation::FunctionValue {
                     function,
                     type_arguments,
                     ..
@@ -285,6 +293,9 @@ pub(super) enum Failure {
     BindingProjection,
     Category,
     Capacity,
+    // An older boolean structural sub-proof cannot distinguish its own quota
+    // exhaustion from refusal. Never promote that ambiguity to invalid meaning.
+    Unproved,
 }
 type Result<T> = std::result::Result<T, Failure>;
 
@@ -316,7 +327,8 @@ pub(super) struct Resolver<'a> {
     pub derived: BTreeMap<TypeObjectDigest, TypeObject>,
     remaining: usize,
     maximum_objects: usize,
-    resolutions: BTreeMap<(TypeObjectDigest, Environment), TypeObjectDigest>,
+    retained_entries: usize,
+    resolutions: BTreeMap<TypeObjectDigest, Vec<(Environment, TypeObjectDigest)>>,
     active_operands: BTreeSet<(ImplementationOperand, Occurrence)>,
 }
 
@@ -330,6 +342,7 @@ impl<'a> Resolver<'a> {
             derived: BTreeMap::new(),
             remaining: limits.work,
             maximum_objects: limits.objects,
+            retained_entries: 0,
             resolutions: BTreeMap::new(),
             active_operands: BTreeSet::new(),
         }
@@ -343,6 +356,21 @@ impl<'a> Resolver<'a> {
     }
     pub fn remaining(&self) -> usize {
         self.remaining
+    }
+    pub fn retained_entries(&self) -> usize {
+        self.retained_entries
+    }
+    // A deliberately independent logical metadata allowance, shared by the
+    // complete occurrence pass and its resolution cache. It is not allocator
+    // accounting and exhaustion does not establish invalid source meaning.
+    fn reserve_entries(&mut self, count: usize) -> Result<()> {
+        let next = self
+            .retained_entries
+            .checked_add(count)
+            .filter(|n| *n <= self.maximum_objects)
+            .ok_or(Failure::Capacity)?;
+        self.retained_entries = next;
+        Ok(())
     }
     fn object(&self, ty: TypeObjectDigest) -> Result<&TypeObject> {
         self.derived
@@ -391,7 +419,7 @@ impl<'a> Resolver<'a> {
         }
         Ok(header)
     }
-    fn generation(&self, occurrence: Occurrence) -> Result<u16> {
+    fn current(&self, occurrence: Occurrence) -> Result<()> {
         let (package, key) = occurrence.consumer;
         let owner = self.header(package, key, false)?.contract_version;
         let selected = if package == self.source.root.package_id {
@@ -403,12 +431,10 @@ impl<'a> Resolver<'a> {
                 .ok_or(Failure::Authority)?
                 .graph_contract_version
         };
-        Ok(owner
-            .min(selected)
-            .min(self.source.root.graph_contract_version))
-    }
-    fn current(&self, occurrence: Occurrence) -> Result<()> {
-        if self.generation(occurrence)? == contract::GRAPH_CONTRACT_VERSION {
+        if [owner, selected, self.source.root.graph_contract_version]
+            .into_iter()
+            .all(|generation| generation == contract::GRAPH_CONTRACT_VERSION)
+        {
             Ok(())
         } else {
             Err(Failure::Generation)
@@ -727,7 +753,7 @@ impl<'a> Resolver<'a> {
             }
             let occurrence = self.declaration_occurrence(scope, Context::Lexical(scope));
             self.admit_roots(&[binding.ty], occurrence, true)?;
-            if !Oracle(self.source, Some(scope)).owned_type_in_scope(binding.ty) {
+            if !self.owned_type(binding.ty, occurrence, 0)? {
                 return Err(Failure::Category);
             }
         }
@@ -796,7 +822,7 @@ impl<'a> Resolver<'a> {
                         depth,
                         &mut self.remaining,
                     )
-                    .ok_or(Failure::Category)?;
+                    .ok_or(Failure::Unproved)?;
                 let arguments = match self.object(ty)?.form.clone() {
                     TypeForm::Applied { arguments, .. } => arguments,
                     _ => vec![],
@@ -833,7 +859,7 @@ impl<'a> Resolver<'a> {
         if Oracle(&overlay, occurrence.parameter_scope).ordinary(ty) {
             Ok(false)
         } else {
-            Err(Failure::Category)
+            Err(Failure::Unproved)
         }
     }
     pub fn constraints(
@@ -857,7 +883,13 @@ impl<'a> Resolver<'a> {
         {
             let overlay = self.overlay();
             if !Oracle(&overlay, occurrence.parameter_scope).satisfies_constraints(ty, bounds) {
-                return Err(Failure::Category);
+                return Err(
+                    if Oracle(&overlay, occurrence.parameter_scope).associated_closure(ty) {
+                        Failure::Category
+                    } else {
+                        Failure::Unproved
+                    },
+                );
             }
         }
         Ok(())
@@ -1034,8 +1066,8 @@ impl<'a> Resolver<'a> {
         if !self.source.types.contains_key(&digest)
             && !self.source.dependency_types.contains_key(&digest)
         {
-            if !self.derived.contains_key(&digest) && self.derived.len() >= self.maximum_objects {
-                return Err(Failure::Capacity);
+            if !self.derived.contains_key(&digest) {
+                self.reserve_entries(1)?;
             }
             self.derived.entry(digest).or_insert(object);
         }
@@ -1385,8 +1417,12 @@ impl<'a> Resolver<'a> {
         for actual in environment.ordinary.values() {
             self.admit_roots(&[*actual], environment.caller, false)?;
         }
-        if let Some(result) = self.resolutions.get(&(ty, environment.clone())) {
-            return Ok(*result);
+        if let Some(result) = self.resolutions.get(&ty).and_then(|entries| {
+            entries
+                .iter()
+                .find_map(|(saved, result)| (saved == environment).then_some(*result))
+        }) {
+            return Ok(result);
         }
         let object = self.object(ty)?.clone();
         let result = match object.form {
@@ -1420,10 +1456,20 @@ impl<'a> Resolver<'a> {
                 self.intern(form)?
             }
         };
-        if self.resolutions.len() >= self.maximum_objects {
-            return Err(Failure::Capacity);
-        }
-        self.resolutions.insert((ty, environment.clone()), result);
+        self.reserve_entries(
+            1 + environment.ordinary.len()
+                + environment.witnesses.len()
+                + environment
+                    .witnesses
+                    .values()
+                    .chain(environment.contract_operand.iter())
+                    .map(|operand| operand.walk().count())
+                    .sum::<usize>(),
+        )?;
+        self.resolutions
+            .entry(ty)
+            .or_default()
+            .push((environment.clone(), result));
         Ok(result)
     }
 }

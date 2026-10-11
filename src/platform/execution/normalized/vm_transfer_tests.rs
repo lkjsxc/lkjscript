@@ -467,7 +467,10 @@ fn cancelled_sequence_transfer_reclaims_items_with_intermediate_origins() {
     let control = ExecutionControl::uncancelled();
     let mut failed = 0;
     let mut completed = 0;
-    for checks in 0..10 {
+    // Exhaust every checkpoint through the first complete adoption, including
+    // application revalidation and partial retagging. The ceiling only bounds
+    // this tiny fixture's test harness; it is not a runtime quota or phase offset.
+    for checks in 0..512 {
         let cells = Cells::start();
         let products = Products::start();
         let source = ValueOrigin::fresh().unwrap();
@@ -489,22 +492,31 @@ fn cancelled_sequence_transfer_reclaims_items_with_intermediate_origins() {
         match output.adopt(&program, destination, function, ty, &cancelled) {
             Ok(value) => {
                 completed += 1;
+                assert!(!cancelled.is_cancelled());
                 super::super::super::value::release_raw_value(value);
             }
             Err(error) => {
                 failed += 1;
-                assert_eq!(error.class, ExecutionFailureClass::Cancelled);
+                assert_eq!(
+                    error.class,
+                    ExecutionFailureClass::Cancelled,
+                    "checks={checks}"
+                );
+                assert_eq!(error.code, "execution_cancelled");
+                assert!(cancelled.is_cancelled());
             }
-        }
-        // Check four interrupts the second item after the first item has been
-        // retagged, while the sequence still belongs to the source invocation.
-        if checks == 3 {
-            assert!(cancelled.is_cancelled());
         }
         assert_eq!((cells.live(), products.live()), ((1, 0), (0, 0)));
         assert_eq!(unrelated.extract().unwrap(), 911);
+        if completed == 1 {
+            println!("sequence adoption first-success-checks={checks}");
+            break;
+        }
     }
-    assert!(failed > 0 && completed > 0);
+    assert!(
+        failed > 0 && completed == 1,
+        "exhaustive cancellation sweep did not reach healthy completion within the harness guard"
+    );
 }
 
 #[test]
@@ -804,7 +816,10 @@ fn sealed_transfer_cancellation_at_each_walk_phase_cleans_all_owners_and_preserv
     for preparing in [true, false] {
         let mut failed = 0;
         let mut completed = 0;
-        for checks in 0..24 {
+        // An exhaustive prefix reaches every real phase despite changes to
+        // application/type checks before payload inspection or adoption. This
+        // finite harness guard does not grant runtime work or transfer authority.
+        for checks in 0..512 {
             let buffers = Buffers::start();
             let cells = Cells::start();
             let products = Products::start();
@@ -831,11 +846,18 @@ fn sealed_transfer_cancellation_at_each_walk_phase_cleans_all_owners_and_preserv
             }) {
                 Ok((_, values)) => {
                     completed += 1;
+                    assert!(!cancelled.is_cancelled());
                     release_raw_values(values);
                 }
                 Err(error) => {
                     failed += 1;
-                    assert_eq!(error.class, ExecutionFailureClass::Cancelled);
+                    assert_eq!(
+                        error.class,
+                        ExecutionFailureClass::Cancelled,
+                        "preparing={preparing}, checks={checks}"
+                    );
+                    assert_eq!(error.code, "execution_cancelled");
+                    assert!(cancelled.is_cancelled());
                 }
             }
             assert_eq!(
@@ -843,8 +865,15 @@ fn sealed_transfer_cancellation_at_each_walk_phase_cleans_all_owners_and_preserv
                 ((0, 0), (1, 0), (0, 0))
             );
             assert_eq!(unrelated.extract().unwrap(), 911);
+            if completed == 1 {
+                println!("argument transfer preparing={preparing} first-success-checks={checks}");
+                break;
+            }
         }
-        assert!(failed > 0 && completed > 0, "preparing={preparing}");
+        assert!(
+            failed > 0 && completed == 1,
+            "preparing={preparing}: exhaustive cancellation sweep did not reach healthy completion within the harness guard"
+        );
     }
 }
 
@@ -1149,7 +1178,10 @@ fn sealed_result_cancellation_cleans_partial_adoption_and_preserves_unrelated_ow
     for preparing in [true, false] {
         let mut failed = 0;
         let mut completed = 0;
-        for checks in 0..24 {
+        // Sweep every checkpoint through healthy completion, including the
+        // signature recheck before partial adoption. The finite ceiling protects
+        // this test harness and is not a runtime quota or claimed retag position.
+        for checks in 0..512 {
             let buffers = Buffers::start();
             let cells = Cells::start();
             let products = Products::start();
@@ -1180,25 +1212,34 @@ fn sealed_result_cancellation_cleans_partial_adoption_and_preserves_unrelated_ow
             match adopted {
                 Ok(value) => {
                     completed += 1;
+                    assert!(!cancelled.is_cancelled());
                     super::super::super::value::release_raw_value(value);
                 }
                 Err(error) => {
                     failed += 1;
-                    assert_eq!(error.class, ExecutionFailureClass::Cancelled);
+                    assert_eq!(
+                        error.class,
+                        ExecutionFailureClass::Cancelled,
+                        "preparing={preparing}, checks={checks}"
+                    );
+                    assert_eq!(error.code, "execution_cancelled");
+                    assert!(cancelled.is_cancelled());
                 }
-            }
-            // Check 4 during adoption has already retagged the buffer; the next
-            // leaf check cancels. Mixed intermediate domains cannot escape custody.
-            if !preparing && checks == 4 {
-                assert!(cancelled.is_cancelled());
             }
             assert_eq!(
                 (buffers.live(), cells.live(), products.live()),
                 ((0, 0), (1, 0), (0, 0))
             );
             assert_eq!(unrelated.extract().unwrap(), 911);
+            if completed == 1 {
+                println!("result transfer preparing={preparing} first-success-checks={checks}");
+                break;
+            }
         }
-        assert!(failed > 0 && completed > 0, "preparing={preparing}");
+        assert!(
+            failed > 0 && completed == 1,
+            "preparing={preparing}: exhaustive cancellation sweep did not reach healthy completion within the harness guard"
+        );
     }
 }
 

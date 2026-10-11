@@ -6,6 +6,9 @@ use crate::platform::semantic_id::{
     AssociatedTypeMemberId, DeclarationId, ImplementationParameterId, MethodId, TypeParameterId,
 };
 
+#[path = "associated_memory_closure_oracle_tests.rs"]
+mod closure_tests;
+
 const SEED: &[u8] = b"independent-associated-memory";
 struct Fixture {
     source: KernelSnapshot,
@@ -622,27 +625,35 @@ fn associated_memory_reference_agrees_on_projected_calls_and_exact_borrowed_sour
 fn associated_memory_reference_agrees_on_child_generations_and_absent_transport_rights() {
     use super::super::memory::associated_tests::{FlowKind, check_caller, fixture as flow_fixture};
     for kind in [FlowKind::Direct, FlowKind::Witness, FlowKind::Method] {
-        for target in 0..6 {
-            let mut f = flow_fixture(kind);
-            let key = match target {
-                0 => OwnerKey::Declaration(f.caller.declaration),
-                1 => OwnerKey::Parameter(f.first),
-                2 => OwnerKey::Binding(f.binding),
-                3 => OwnerKey::Expression(f.local),
-                4 => OwnerKey::Expression(f.call),
-                _ => OwnerKey::Expression(f.borrow),
-            };
-            f.source
-                .owners
-                .get_mut(&key)
-                .unwrap()
-                .set_encoding_for_edit(32);
-            assert!(check_caller(&f).is_err());
-            assert!(
-                !accepts(&f.source),
-                "consumer {target} acquired authority from its parent"
-            );
+        for generation in [32, 34] {
+            for target in 0..6 {
+                let mut f = flow_fixture(kind);
+                let key = match target {
+                    0 => OwnerKey::Declaration(f.caller.declaration),
+                    1 => OwnerKey::Parameter(f.first),
+                    2 => OwnerKey::Binding(f.binding),
+                    3 => OwnerKey::Expression(f.local),
+                    4 => OwnerKey::Expression(f.call),
+                    _ => OwnerKey::Expression(f.borrow),
+                };
+                f.source
+                    .owners
+                    .get_mut(&key)
+                    .unwrap()
+                    .set_encoding_for_edit(generation);
+                assert!(check_caller(&f).is_err());
+                assert!(
+                    !accepts(&f.source),
+                    "consumer {target} at generation {generation} acquired authority from its parent"
+                );
+            }
         }
+        let mut future_root = flow_fixture(kind);
+        future_root.source.root.graph_contract_version = 34;
+        assert_eq!(
+            Resolver::new(&future_root.source).admit_canonical_closure(),
+            Err(Failure::Generation)
+        );
     }
     for bounds in [
         TypeParameterConstraints::OwnedTransferable,

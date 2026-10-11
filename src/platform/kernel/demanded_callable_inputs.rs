@@ -6,7 +6,7 @@ use std::rc::Rc;
 #[path = "demanded_callable_input_storage.rs"]
 mod storage;
 
-pub(super) enum Inputs {
+pub(in super::super::super) enum Inputs {
     Application {
         arguments: Vec<TypeObjectDigest>,
         operands: Vec<ImplementationOperand>,
@@ -14,17 +14,17 @@ pub(super) enum Inputs {
     Method(ImplementationOperand),
 }
 
-pub(super) struct Incoming {
-    pub(super) call: CallSite,
+pub(in super::super::super) struct Incoming {
+    pub(in super::super::super) call: CallSite,
     inputs: Option<Rc<Inputs>>,
 }
 
 impl Incoming {
-    pub(super) fn new(call: CallSite) -> Self {
+    pub(in super::super::super) fn new(call: CallSite) -> Self {
         Self { call, inputs: None }
     }
 
-    pub(super) fn resolve(
+    pub(in super::super::super) fn resolve(
         &mut self,
         load: impl FnOnce(CallSite) -> Result<Inputs, Diagnostic>,
     ) -> Result<Rc<Inputs>, Diagnostic> {
@@ -38,7 +38,7 @@ impl Incoming {
     }
 }
 
-pub(super) fn load<R: CallableClosureRead + ?Sized>(
+pub(in super::super::super) fn load<R: CallableClosureRead + ?Sized>(
     analysis: &mut Analysis<'_, R>,
     call: CallSite,
 ) -> Result<Inputs, Diagnostic> {

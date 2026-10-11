@@ -14,6 +14,9 @@ pub(in super::super) use application::TaskApplication;
 #[path = "vm_transfer_type.rs"]
 mod types;
 pub(in super::super) use types::resolve as resolve_type;
+pub(in super::super) use types::{
+    contains_associated_type, context_error, resolve_application, validate_associated_bindings,
+};
 
 #[path = "scoped_read.rs"]
 mod scoped_read;
@@ -430,7 +433,7 @@ impl TransferResult {
             || self.ty != ty
             || self.application.types().as_ref() != types
             || self.application.result() != ty
-            || !self.application.matches(program)
+            || !self.application.matches(program, control)?
         {
             return Err(reject());
         }

@@ -83,6 +83,9 @@ const MAXIMUM_METADATA_BYTES: usize = 256 * 1024 * 1024;
 #[path = "reference_borrowed_admission.rs"]
 mod borrowed_admission;
 
+#[path = "reference_associated_preparation.rs"]
+pub(super) mod associated_preparation;
+
 struct Closure<'a> {
     parallel_targets: BTreeSet<(
         DeclarationReference,
@@ -2693,6 +2696,22 @@ pub(super) fn complete(
     snapshots: &[&KernelSnapshot],
     control: &crate::platform::execution::ExecutionControl,
 ) -> Result<(), ExecutionError> {
+    if snapshots.iter().any(|snapshot| {
+        snapshot.types.values().chain(snapshot.dependency_types.values()).any(|object| object.form.is_associated())
+            || snapshot.owners.values().any(|owner| matches!(owner,
+                OwnerRecord::Declaration(owner) if matches!(&owner.payload,
+                    DeclarationPayload::OwnedContract(contract) if !contract.associated_types.is_empty())
+                    || matches!(&owner.payload, DeclarationPayload::OwnedImplementation(implementation) if !implementation.associated_types.is_empty())))
+    }) {
+        // The canonical preparation proof runs independently before this unfinished
+        // full-schema path refuses. Its private tests do not grant execution admission.
+        associated_preparation::check_inventory(snapshots, control)?;
+        return Err(ExecutionError::new(
+            crate::platform::execution::ExecutionFailureClass::Infrastructure,
+            "owned_associated_semantics_unsupported",
+            "complete associated reference schema admission remains unfinished",
+        ));
+    }
     // The witness-only admission entry bypasses reconstruction deliberately.
     // Rebuild missing affine nominal metadata from its canonical owners here too.
     let mut nominal_metadata_bytes = 0;

@@ -3,9 +3,9 @@
 //! are derived here without changing type identities or the artifact encoding.
 
 use super::prepare::{
-    NormalizedCode, NormalizedEntryPoint, NormalizedFunctionBody, NormalizedInstruction,
-    NormalizedProgram, NormalizedRecordLayout, NormalizedTransactionRequirement,
-    NormalizedVariantLayout,
+    ClosedTypeEnvironment, NormalizedCode, NormalizedEntryPoint, NormalizedFunctionBody,
+    NormalizedInstruction, NormalizedProgram, NormalizedRecordLayout,
+    NormalizedTransactionRequirement, NormalizedVariantLayout,
 };
 use super::value::FunctionIndex;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -15,6 +15,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 #[path = "prepared_implementations.rs"]
 mod implementations;
+#[cfg(test)]
+pub(super) use implementations::associated_tests::prepared_associated_model;
 #[path = "prepared_product_depth.rs"]
 mod product_depth;
 #[path = "prepared_shared_code.rs"]
@@ -23,7 +25,30 @@ mod shared_code;
 mod type_lookup;
 pub(super) use type_lookup::PreparedTypeLookup;
 
+#[cfg(test)]
+#[path = "prepared_associated_type_tests.rs"]
+mod associated_tests;
+
 type Context = (FunctionIndex, Vec<TypeObjectDigest>);
+/// Source selection is borrowed from an exact closed DAG. Only executable roots
+/// carry a function index; intermediate implementation mappings cannot populate
+/// a different caller application's lookup.
+struct TypeApplication<'a> {
+    bindings: &'a BTreeMap<TypeParameterId, TypeObjectDigest>,
+    associated: Option<&'a ClosedTypeEnvironment<'a>>,
+    function: Option<FunctionIndex>,
+}
+
+impl<'a> TypeApplication<'a> {
+    fn ordinary(bindings: &'a BTreeMap<TypeParameterId, TypeObjectDigest>) -> Self {
+        Self {
+            bindings,
+            associated: None,
+            function: None,
+        }
+    }
+}
+
 type EffectBindings =
     BTreeMap<crate::platform::kernel::EffectParameterReference, crate::platform::kernel::EffectRow>;
 type EffectApplication = (
@@ -246,10 +271,11 @@ fn complete_budgeted(
         }
     }
     let empty = BTreeMap::new();
+    let standalone = TypeApplication::ordinary(&empty);
     for test in program.tests.values() {
         calls(
             &test.actual,
-            &empty,
+            &standalone,
             &mut program.types,
             &mut pending,
             work,
@@ -258,7 +284,7 @@ fn complete_budgeted(
         )?;
         calls(
             &test.expected,
-            &empty,
+            &standalone,
             &mut program.types,
             &mut pending,
             work,
@@ -272,7 +298,7 @@ fn complete_budgeted(
         {
             calls(
                 code,
-                &empty,
+                &standalone,
                 &mut program.types,
                 &mut pending,
                 work,
@@ -288,6 +314,9 @@ fn complete_budgeted(
         work.reserve::<TypeObjectDigest>(arguments.len())?;
         if !visited.insert((index, arguments.clone())) {
             continue;
+        }
+        if index.1 != program.value_origin {
+            return Err(missing());
         }
         let function = program
             .functions
@@ -309,9 +338,27 @@ fn complete_budgeted(
             .copied()
             .zip(arguments)
             .collect();
-        substitute(&mut program.types, function.result, &bindings, 0, work)?;
+        let environment = ClosedTypeEnvironment::for_function(function)?;
+        let application_types = TypeApplication {
+            bindings: &bindings,
+            associated: Some(&environment),
+            function: Some(index),
+        };
+        substitute_in(
+            &mut program.types,
+            function.result,
+            &application_types,
+            0,
+            work,
+        )?;
         for parameter in function.parameters.iter() {
-            substitute(&mut program.types, parameter.ty, &bindings, 0, work)?;
+            substitute_in(
+                &mut program.types,
+                parameter.ty,
+                &application_types,
+                0,
+                work,
+            )?;
         }
         if function.implementation_parameters.len() != function.implementation_arguments.len() {
             return Err(missing());
@@ -322,8 +369,13 @@ fn complete_budgeted(
             .zip(function.implementation_arguments.iter())
         {
             if parameter.contract != application.contract
-                || substitute(&mut program.types, parameter.self_type, &bindings, 0, work)?
-                    != application.self_type
+                || substitute_in(
+                    &mut program.types,
+                    parameter.self_type,
+                    &application_types,
+                    0,
+                    work,
+                )? != application.self_type
                 || parameter.type_arguments.len() != application.type_arguments.len()
             {
                 return Err(missing());
@@ -334,7 +386,9 @@ fn complete_budgeted(
                 .iter()
                 .zip(application.type_arguments.iter())
             {
-                if substitute(&mut program.types, *expected, &bindings, 0, work)? != *actual {
+                if substitute_in(&mut program.types, *expected, &application_types, 0, work)?
+                    != *actual
+                {
                     return Err(missing());
                 }
             }
@@ -342,7 +396,7 @@ fn complete_budgeted(
         if let NormalizedFunctionBody::Code(code) = &function.body {
             calls(
                 code,
-                &bindings,
+                &application_types,
                 &mut program.types,
                 &mut pending,
                 work,
@@ -365,11 +419,13 @@ fn complete_budgeted(
     }
     product_depth::validate_program(program, work)?;
     program.work.type_objects = program.types.len() as u64;
-    program.capture_safe_types = property_types(program, work, Property::Capture)?;
-    program.ordinary_types = property_types(program, work, Property::Ordinary)?;
-    program.buffer_free_types = property_types(program, work, Property::BufferFree)?;
-    program.comparable_types = property_types(program, work, Property::Equality)?;
-    program.application_free_types = property_types(program, work, Property::NoApplication)?;
+    let unresolved = unresolved_associated_types(&program.types, work)?;
+    program.capture_safe_types = property_types(program, work, Property::Capture, &unresolved)?;
+    program.ordinary_types = property_types(program, work, Property::Ordinary, &unresolved)?;
+    program.buffer_free_types = property_types(program, work, Property::BufferFree, &unresolved)?;
+    program.comparable_types = property_types(program, work, Property::Equality, &unresolved)?;
+    program.application_free_types =
+        property_types(program, work, Property::NoApplication, &unresolved)?;
     let mut bytes = 0usize;
     for function in program.functions.iter() {
         step(work)?;
@@ -419,7 +475,9 @@ fn instantiated_type(
     }
     let object = types.get(&ty).ok_or_else(missing)?;
     let mut closed = match &object.form {
-        TypeForm::TypeParameter { .. } => false,
+        TypeForm::TypeParameter { .. }
+        | TypeForm::AssociatedContractMember { .. }
+        | TypeForm::AssociatedWitnessProjection { .. } => false,
         TypeForm::TaskFunction { effect, .. } => effect.is_closed(),
         _ => true,
     };
@@ -719,10 +777,63 @@ enum Property {
     NoApplication,
 }
 
+/// Raw function signatures deliberately retain templates. Even properties whose
+/// ordinary callable rules ignore signature children must not certify a type
+/// containing an unresolved associated selection as a concrete runtime type.
+fn unresolved_associated_types(
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    work: &mut Budget<'_>,
+) -> Result<BTreeSet<TypeObjectDigest>, Diagnostic> {
+    let mut unresolved = BTreeSet::new();
+    let mut pending = Vec::new();
+    for (ty, object) in types {
+        step(work)?;
+        if object.form.is_associated() {
+            work.node::<TypeObjectDigest>()?;
+            work.reserve::<TypeObjectDigest>(1)?;
+            unresolved.insert(*ty);
+            pending.push(*ty);
+        }
+    }
+    if pending.is_empty() {
+        return Ok(unresolved);
+    }
+    let mut reverse = BTreeMap::<TypeObjectDigest, Vec<TypeObjectDigest>>::new();
+    for (ty, object) in types {
+        step(work)?;
+        work.reserve::<TypeObjectDigest>(object.child_type_count())?;
+        for child in object.child_types() {
+            step(work)?;
+            if !types.contains_key(&child) {
+                return Err(missing());
+            }
+            if !reverse.contains_key(&child) {
+                work.node::<(TypeObjectDigest, Vec<TypeObjectDigest>)>()?;
+            }
+            work.reserve::<TypeObjectDigest>(1)?;
+            reverse.entry(child).or_default().push(*ty);
+        }
+    }
+    while let Some(ty) = pending.pop() {
+        step(work)?;
+        for parent in reverse.get(&ty).into_iter().flatten() {
+            step(work)?;
+            if !unresolved.contains(parent) {
+                work.node::<TypeObjectDigest>()?;
+                work.reserve::<TypeObjectDigest>(1)?;
+                unresolved.insert(*parent);
+                pending.push(*parent);
+            }
+        }
+    }
+    Ok(unresolved)
+}
+
 fn property_types(
     program: &NormalizedProgram,
     work: &mut Budget<'_>,
     property: Property,
+    unresolved: &BTreeSet<TypeObjectDigest>,
 ) -> Result<BTreeSet<TypeObjectDigest>, Diagnostic> {
     let mut safe = BTreeSet::new();
     let mut reverse: BTreeMap<TypeObjectDigest, Vec<TypeObjectDigest>> = BTreeMap::new();
@@ -745,11 +856,12 @@ fn property_types(
             Ok(())
         };
         match &object.form {
+            _ if unresolved.contains(root) => admitted = false,
             TypeForm::AssociatedContractMember { .. }
             | TypeForm::AssociatedWitnessProjection { .. } => {
-                return Err(
-                    crate::platform::kernel::owned_associated_wire::unsupported_semantics(),
-                );
+                // Raw signature templates remain in the canonical table. Only
+                // their materialized application types can acquire properties.
+                admitted = false;
             }
             _ if program.owned_record_layout(*root).is_some() => {
                 // Nominal ownership is independent of the field inventory.
@@ -875,7 +987,7 @@ fn property_types(
 
 fn calls(
     code: &NormalizedCode,
-    bindings: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+    application: &TypeApplication<'_>,
     types: &mut BTreeMap<TypeObjectDigest, TypeObject>,
     pending: &mut BTreeSet<Context>,
     work: &mut Budget<'_>,
@@ -927,22 +1039,22 @@ fn calls(
             ..
         } = instruction
         {
-            substitute(types, *product_type, bindings, 0, work)?;
+            substitute_in(types, *product_type, application, 0, work)?;
         }
         match instruction {
             NormalizedInstruction::BorrowOwnedField { binding_type, .. }
             | NormalizedInstruction::BorrowOwnedItem { binding_type, .. }
             | NormalizedInstruction::AdoptBorrowResult { binding_type, .. } => {
-                substitute(types, *binding_type, bindings, 0, work)?;
+                substitute_in(types, *binding_type, application, 0, work)?;
             }
             NormalizedInstruction::SequencePop { result_type, .. }
             | NormalizedInstruction::SequenceReplace { result_type, .. } => {
-                substitute(types, *result_type, bindings, 0, work)?;
+                substitute_in(types, *result_type, application, 0, work)?;
             }
             NormalizedInstruction::MatchBorrowedOwned { cases, .. } => {
                 for case in cases.iter() {
                     step(work)?;
-                    substitute(types, case.binding_type, bindings, 0, work)?;
+                    substitute_in(types, case.binding_type, application, 0, work)?;
                 }
             }
             _ => {}
@@ -987,7 +1099,7 @@ fn calls(
             work.reserve::<TypeObjectDigest>(arguments.len())?;
             let arguments = arguments
                 .iter()
-                .map(|ty| substitute(types, *ty, bindings, 0, work))
+                .map(|ty| substitute_in(types, *ty, application, 0, work))
                 .collect::<Result<Vec<_>, _>>()?;
             let form = if arguments.is_empty() {
                 TypeForm::Named { declaration }
@@ -1016,12 +1128,12 @@ fn calls(
         {
             // A joined pair may be only an intermediate local: no function
             // signature needs to retain its concrete substituted type for us.
-            substitute(types, *result_type, bindings, 0, work)?;
+            substitute_in(types, *result_type, application, 0, work)?;
             for (function, types_actual) in [(left, left_types), (right, right_types)] {
                 work.reserve::<TypeObjectDigest>(types_actual.len())?;
                 let arguments = types_actual
                     .iter()
-                    .map(|ty| substitute(types, *ty, bindings, 0, work))
+                    .map(|ty| substitute_in(types, *ty, application, 0, work))
                     .collect::<Result<Vec<_>, _>>()?;
                 work.node::<Context>()?;
                 pending.insert((*function, arguments));
@@ -1047,7 +1159,7 @@ fn calls(
             work.reserve::<TypeObjectDigest>(type_arguments.len())?;
             let arguments = type_arguments
                 .iter()
-                .map(|ty| substitute(types, *ty, bindings, 0, work))
+                .map(|ty| substitute_in(types, *ty, application, 0, work))
                 .collect::<Result<_, _>>()?;
             work.node::<Context>()?;
             pending.insert((*function, arguments));
@@ -1074,6 +1186,55 @@ pub(super) fn check_product_substitution(
     let mut work = Budget::new(&control);
     substitute(&mut types, ty, &bindings, 0, &mut work)?;
     product_depth::validate(&types, &mut work)
+}
+
+/// Test bridge for the independent canonical oracle. Inputs enter at the same
+/// effect-closed boundary as complete_budgeted; this runs the real producer
+/// substitution and rejects any unresolved output without fabricating an artifact.
+#[cfg(test)]
+pub(super) fn materialize_associated_roots(
+    function: &super::prepare::NormalizedFunction,
+    ordinary: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+    roots: &[TypeObjectDigest],
+    types: &mut BTreeMap<TypeObjectDigest, TypeObject>,
+    control: &crate::platform::execution::ExecutionControl,
+) -> Result<Vec<TypeObjectDigest>, Diagnostic> {
+    if ordinary.len() != function.type_parameters.len()
+        || function
+            .type_parameters
+            .iter()
+            .any(|parameter| !ordinary.contains_key(parameter))
+    {
+        return Err(missing());
+    }
+    if !function.type_arguments.is_empty()
+        && (function.type_arguments.len() != function.type_parameters.len()
+            || function
+                .type_parameters
+                .iter()
+                .zip(function.type_arguments.iter())
+                .any(|(parameter, actual)| ordinary.get(parameter) != Some(actual)))
+    {
+        return Err(missing());
+    }
+    let environment = ClosedTypeEnvironment::for_function(function)?;
+    let application = TypeApplication {
+        bindings: ordinary,
+        associated: Some(&environment),
+        function: None,
+    };
+    let mut work = Budget::new(control);
+    work.reserve::<TypeObjectDigest>(roots.len())?;
+    let mut resolved = Vec::new();
+    let mut closed = BTreeMap::new();
+    for root in roots {
+        let result = substitute_in(types, *root, &application, 0, &mut work)?;
+        if !instantiated_type(types, result, &mut closed, 0, &mut work)? {
+            return Err(missing());
+        }
+        resolved.push(result);
+    }
+    Ok(resolved)
 }
 
 /// Effect applications have a finite exact requirement universe. Ordinary type applications
@@ -1849,19 +2010,72 @@ fn substitute(
     depth: usize,
     work: &mut Budget<'_>,
 ) -> Result<TypeObjectDigest, Diagnostic> {
+    substitute_in(types, ty, &TypeApplication::ordinary(bindings), depth, work)
+}
+
+fn substitute_in(
+    types: &mut BTreeMap<TypeObjectDigest, TypeObject>,
+    ty: TypeObjectDigest,
+    application: &TypeApplication<'_>,
+    depth: usize,
+    work: &mut Budget<'_>,
+) -> Result<TypeObjectDigest, Diagnostic> {
+    let (result, selected) = substitute_inner(types, ty, application, depth, work)?;
+    if depth == 0 && result != ty {
+        if selected {
+            if let Some(function) = application.function {
+                work.remember_application_substitution(function, ty, result, application.bindings)?;
+            }
+        } else if !matches!(
+            types.get(&ty).map(|object| &object.form),
+            Some(TypeForm::TypeParameter { .. })
+        ) {
+            work.remember_type_substitution(ty, result, application.bindings)?;
+        }
+    }
+    Ok(result)
+}
+
+fn substitute_inner(
+    types: &mut BTreeMap<TypeObjectDigest, TypeObject>,
+    ty: TypeObjectDigest,
+    application: &TypeApplication<'_>,
+    depth: usize,
+    work: &mut Budget<'_>,
+) -> Result<(TypeObjectDigest, bool), Diagnostic> {
     step(work)?;
     if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
         return Err(missing());
     }
     work.cloned_type(types.get(&ty).ok_or_else(missing)?)?;
     let mut object = types.get(&ty).cloned().ok_or_else(missing)?;
+    let mut selected = false;
     let mut descend = |ty: &mut TypeObjectDigest| -> Result<(), Diagnostic> {
-        *ty = substitute(types, *ty, bindings, depth + 1, work)?;
+        let (resolved, associated) = substitute_inner(types, *ty, application, depth + 1, work)?;
+        *ty = resolved;
+        selected |= associated;
         Ok(())
     };
     match &mut object.form {
         TypeForm::TypeParameter { parameter } => {
-            return bindings.get(parameter).copied().ok_or_else(missing);
+            return application
+                .bindings
+                .get(parameter)
+                .copied()
+                .map(|ty| (ty, false))
+                .ok_or_else(missing);
+        }
+        TypeForm::AssociatedContractMember { .. }
+        | TypeForm::AssociatedWitnessProjection { .. } => {
+            let resolved = application
+                .associated
+                .ok_or_else(missing)?
+                .resolve_leaf(&object.form)?
+                .ok_or_else(missing)?;
+            if !types.contains_key(&resolved) {
+                return Err(missing());
+            }
+            return Ok((resolved, true));
         }
         TypeForm::StructuralRecord { fields }
         | TypeForm::OwnedProduct { fields }
@@ -1904,10 +2118,7 @@ fn substitute(
         work.node::<(TypeObjectDigest, TypeObject)>()?;
     }
     types.entry(identity).or_insert(object);
-    if depth == 0 && identity != ty {
-        work.remember_type_substitution(ty, identity, bindings)?;
-    }
-    Ok(identity)
+    Ok((identity, selected))
 }
 
 #[cfg(test)]
@@ -1928,6 +2139,49 @@ mod tests {
         crate::platform::kernel::StructuralTypeField {
             name: crate::platform::kernel::Name::new("payload").unwrap(),
             ty,
+        }
+    }
+
+    #[test]
+    fn associated_templates_are_uninstantiated_and_need_an_exact_selection() {
+        use crate::platform::kernel::{DeclarationReference, PackageId};
+        use crate::platform::semantic_id::{
+            AssociatedTypeMemberId, DeclarationId, ImplementationParameterId,
+        };
+        let declaration = DeclarationReference {
+            package: PackageId::migrate(b"prepared-associated-template", 0),
+            declaration: DeclarationId::migrate(b"prepared-associated-template", 0),
+        };
+        let member = AssociatedTypeMemberId::migrate(b"prepared-associated-template", 0);
+        let parameter = ImplementationParameterId::migrate(b"prepared-associated-template", 0);
+        let mut types = BTreeMap::new();
+        let cell = type_in(&mut types, TypeForm::OwnedI64Cell);
+        let contract_member = type_in(
+            &mut types,
+            TypeForm::AssociatedContractMember {
+                contract: declaration,
+                member,
+            },
+        );
+        let projection = type_in(
+            &mut types,
+            TypeForm::AssociatedWitnessProjection {
+                scope: declaration,
+                parameter,
+                contract: declaration,
+                member,
+            },
+        );
+        let control = crate::platform::execution::ExecutionControl::uncancelled();
+        let mut work = Budget::new(&control);
+        let mut known = BTreeMap::new();
+        assert!(instantiated_type(&types, cell, &mut known, 0, &mut work).unwrap());
+        for root in [contract_member, projection] {
+            let composite = type_in(&mut types, TypeForm::OwnedSequence { item: root });
+            for ty in [root, composite] {
+                assert!(!instantiated_type(&types, ty, &mut known, 0, &mut work).unwrap());
+                assert!(substitute(&mut types, ty, &BTreeMap::new(), 0, &mut work).is_err());
+            }
         }
     }
 
@@ -2005,7 +2259,7 @@ mod tests {
             };
             calls(
                 &code,
-                &BTreeMap::from([(parameter, cell)]),
+                &TypeApplication::ordinary(&BTreeMap::from([(parameter, cell)])),
                 &mut actual,
                 &mut BTreeSet::new(),
                 &mut Budget::new(&control),
@@ -2089,7 +2343,7 @@ mod tests {
             };
             calls(
                 &code,
-                &BTreeMap::from([(parameter, scalar)]),
+                &TypeApplication::ordinary(&BTreeMap::from([(parameter, scalar)])),
                 &mut actual,
                 &mut BTreeSet::new(),
                 &mut Budget::new(&control),
@@ -2128,7 +2382,7 @@ mod tests {
         let control = crate::platform::execution::ExecutionControl::uncancelled();
         let error = calls(
             &code,
-            &BTreeMap::new(),
+            &TypeApplication::ordinary(&BTreeMap::new()),
             &mut types,
             &mut BTreeSet::new(),
             &mut Budget::new(&control),

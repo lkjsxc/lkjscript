@@ -194,6 +194,10 @@ fn owned_vm_rechecks_closed_witness_self_and_binding_arity() {
                             depth: 0,
                             implementation: scalar,
                             contract: function.implementation_parameters[0].contract,
+                            implementation_generation: 0,
+                            contract_generation: 0,
+                            implementation_type_parameters: Arc::from([]),
+                            implementation_parameter_ids: Arc::from([]),
                             implementation_type_arguments: Arc::from([]),
                             implementation_type_parameter_constraints: Arc::from([]),
                             self_type: i64_type,
@@ -201,6 +205,7 @@ fn owned_vm_rechecks_closed_witness_self_and_binding_arity() {
                             contract_type_parameter_constraints: Arc::from([]),
                             implementations: Arc::from([]),
                             prerequisites: Arc::from([]),
+                            associated_types: Arc::from([]),
                         },
                     )])
                 };

@@ -188,9 +188,6 @@ impl Oracle<'_> {
         generation: u16,
         package: PackageId,
     ) -> bool {
-        if generation >= 32 {
-            return true;
-        }
         let mut pending = roots;
         let mut visited = BTreeSet::new();
         while let Some(ty) = pending.pop() {
@@ -205,6 +202,9 @@ impl Oracle<'_> {
             else {
                 return false;
             };
+            if object.form.is_associated() && generation < 33 {
+                return false;
+            }
             if generation < 32 && self.nominal_owner(ty).is_some() {
                 return false;
             }
@@ -937,6 +937,44 @@ impl Oracle<'_> {
         };
         let signature = self.function(function)?;
         let mut remaining = contract::MAXIMUM_VALIDATION_WORK;
+        if self.associated_invocation_required(id) {
+            if !signature.requirement_parameters.is_empty()
+                || !signature.effect_parameters.is_empty()
+                || !matches!(&signature.effect, FunctionEffect::Task { requirements, effect_parameters } if requirements.is_empty() && effect_parameters.is_empty())
+                || signature.parameters.len() != arguments.len()
+                || signature.result_borrow.is_some()
+            {
+                return None;
+            }
+            let invocation = self.associated_invocation(id)?;
+            if invocation.result_borrow.is_some() {
+                return None;
+            }
+            let mut overlay = self.0.clone();
+            overlay.types.extend(invocation.derived);
+            let resolved = Oracle(&overlay, self.1);
+            let result =
+                resolved.parallel_shape(invocation.result, &BTreeMap::new(), 0, &mut remaining)?;
+            let mut owned = false;
+            for (id, (_, ty, mode)) in signature.parameters.iter().zip(&invocation.parameters) {
+                let p = self.parameter(function.package, *id)?;
+                let memory = if *mode == ParameterUse::Borrow {
+                    resolved.read_shape(*ty, &BTreeMap::new(), 0, &mut remaining)?
+                } else {
+                    resolved.parallel_shape(*ty, &BTreeMap::new(), 0, &mut remaining)?
+                };
+                if p.parent != ParameterParent::Function(function.declaration)
+                    || p.resource_requirement.is_some()
+                    || (owned && !memory)
+                    || (memory && *mode == ParameterUse::Unrestricted)
+                    || (!memory && *mode != ParameterUse::Unrestricted)
+                {
+                    return None;
+                }
+                owned |= memory;
+            }
+            return Some(result);
+        }
         if !self.application(function, types)
             || !self.witnesses(function, types, implementations)
             || !signature.requirement_parameters.is_empty()
@@ -1045,6 +1083,18 @@ impl Oracle<'_> {
         rights: &mut Rights,
         depth: usize,
     ) -> Option<Vec<Vec<LocalValueReference>>> {
+        if self.associated_invocation_required(call) {
+            let invocation = self.associated_invocation(call)?;
+            let mut overlay = self.0.clone();
+            overlay.types.extend(invocation.derived);
+            return Oracle(&overlay, self.1).held_arguments(
+                &invocation.parameters,
+                &invocation.arguments,
+                rights,
+                depth,
+                &BTreeMap::new(),
+            );
+        }
         let (function, type_arguments, arguments) = match self.expression(call)? {
             ExpressionOperation::Call {
                 function,
@@ -2345,11 +2395,16 @@ impl Oracle<'_> {
     }
 }
 pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
+    let mut associated_closure = associated::Resolver::new(snapshot);
+    if associated_closure.admit_canonical_closure().is_err() {
+        return false;
+    }
     let Some(derived) = witnesses::materialized_witness_types(snapshot) else {
         return false;
     };
     let mut materialized = snapshot.clone();
     materialized.types.extend(derived);
+    materialized.types.extend(associated_closure.derived);
     let snapshot = &materialized;
     let oracle = Oracle(snapshot, None);
     for (package, selection) in &snapshot.representation_dependencies {
@@ -2763,9 +2818,6 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                 | ExpressionOperation::BorrowOwnedRecordField { .. }))
         {
             return false;
-        }
-        if generation >= 32 {
-            continue;
         }
         let mut roots = owner.type_roots();
         if let OwnerRecord::Declaration(declaration) = owner

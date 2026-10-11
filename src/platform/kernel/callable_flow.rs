@@ -1,4 +1,6 @@
-//! Finite ordinary callable instantiation from explicit, simultaneous parameter flow.
+//! Package-local ordinary preflight from explicit, simultaneous parameter flow.
+//! Associated projections and supplier callbacks require the complete composed
+//! admission exported below. Success here alone is not a callable-closure proof.
 //! No runtime branch, variance, nominal layout or preparation frontier changes this relation.
 
 #[cfg(test)]
@@ -9,6 +11,10 @@ mod tests;
 mod composed;
 pub(crate) use composed::{
     CallableClosureRead, validate_callable_closure, validate_snapshot_callable_closure,
+};
+#[cfg(test)]
+pub(crate) use composed::{
+    validate_snapshot_callable_closure_eager, validate_snapshot_callable_closure_with_limits,
 };
 
 use super::{
@@ -191,6 +197,14 @@ impl<R: ExpressionRead> Flow<'_, R> {
                         argument_type: *ty,
                         path,
                     });
+                } else if matches!(
+                    object.form,
+                    TypeForm::AssociatedContractMember { .. }
+                        | TypeForm::AssociatedWitnessProjection { .. }
+                ) {
+                    // A zero-child associated form has no ordinary dependency to
+                    // add here. Its exact member/binding/path relation is admitted
+                    // by the mandatory complete-source composed pass.
                 } else {
                     for (index, child) in object.child_types().into_iter().enumerate() {
                         self.tick()?;
@@ -522,6 +536,8 @@ fn storage_overflow() -> Diagnostic {
     )
 }
 
+/// Ordinary package-local preflight only; exposing boundaries must also run the
+/// complete-source composed admission for callbacks and associated outputs.
 pub(crate) fn validate_callable_flow<R: ExpressionRead>(
     read: &R,
     roots: impl IntoIterator<Item = OwnerKey>,

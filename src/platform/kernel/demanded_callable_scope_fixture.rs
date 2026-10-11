@@ -123,6 +123,7 @@ pub(super) fn analysis<'a>(read: &'a Source, work: &'a mut usize) -> Analysis<'a
         read,
         work,
         maximum_work: 10_000_000,
+        maximum_metadata_bytes: MAXIMUM_ANALYSIS_BYTES,
         observation: CallableFlowWork::default(),
         contexts: Vec::new(),
         indexes: BTreeMap::new(),
@@ -132,5 +133,6 @@ pub(super) fn analysis<'a>(read: &'a Source, work: &'a mut usize) -> Analysis<'a
         calls: Vec::new(),
         slot_owners: Vec::new(),
         edges: Vec::new(),
+        associated: associated::State::default(),
     }
 }

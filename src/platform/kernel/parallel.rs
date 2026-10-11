@@ -150,7 +150,7 @@ pub(crate) fn admit_call_at(
             "parallel child argument count differs from its exact signature",
         ));
     }
-    let result_owned = admit_result(&applied, result, scope)?;
+    let result_owned = admit_result_at(&applied, result, occurrence, admission)?;
     let mut parameters = Vec::new();
     let mut seen_owned = false;
     for id in signature.parameters {
@@ -186,10 +186,10 @@ pub(crate) fn admit_call_at(
                         {
                             return Err(reject("parallel borrowed parameters require Graph 30"));
                         }
-                        super::share::admit(&applied, parameter.ty, scope)?;
+                        super::share::admit_at(&applied, parameter.ty, occurrence, admission)?;
                     }
                     ParameterUse::Consume => {
-                        admit_result(&applied, parameter.ty, scope)?;
+                        admit_result_at(&applied, parameter.ty, occurrence, admission)?;
                     }
                     ParameterUse::Unrestricted => {
                         return Err(reject(
@@ -200,7 +200,7 @@ pub(crate) fn admit_call_at(
                 seen_owned = true;
             }
             false => {
-                admit_result(&applied, parameter.ty, scope)?;
+                admit_result_at(&applied, parameter.ty, occurrence, admission)?;
                 if seen_owned || parameter.use_mode != ParameterUse::Unrestricted {
                     return Err(reject(
                         "parallel child parameters require transferable data followed by shareable reads or consuming transferable owners",
@@ -238,4 +238,142 @@ pub(crate) fn admit_result(
             error
         }
     })
+}
+
+pub(crate) fn admit_result_at(
+    read: &(impl ExpressionRead + ?Sized),
+    result: TypeObjectDigest,
+    occurrence: super::owned_associated::OwnedTypeOccurrence,
+    admission: &super::owned_associated::OwnedAssociatedAdmission,
+) -> Result<bool, Diagnostic> {
+    super::transfer::admit_at(read, result, occurrence, admission).map_err(|error| {
+        if error.class == DiagnosticClass::Semantic {
+            reject(error.message)
+        } else {
+            error
+        }
+    })
+}
+
+#[cfg(test)]
+mod occurrence_tests {
+    use super::*;
+    use crate::platform::kernel::memory::associated_tests::{FlowKind, fixture};
+    use crate::platform::kernel::owned_associated::{
+        AssociatedAdmissionLimits, OwnedAssociatedAdmission,
+    };
+
+    #[test]
+    fn parallel_phantom_projection_uses_exact_child_generation_and_shared_budget() {
+        let mut flow = fixture(FlowKind::Direct);
+        let unit = flow
+            .source
+            .types
+            .iter()
+            .find_map(|(ty, object)| matches!(object.form, TypeForm::Unit).then_some(*ty))
+            .unwrap();
+        let OwnerRecord::Declaration(callee) = flow
+            .source
+            .owners
+            .get_mut(&OwnerKey::Declaration(flow.callee.declaration))
+            .unwrap()
+        else {
+            panic!("callee declaration");
+        };
+        callee.header.kind = OwnerKind::TaskFunction;
+        let DeclarationPayload::Function(callee) = &mut callee.payload else {
+            panic!("callee function");
+        };
+        callee.parameters.clear();
+        callee.result = unit;
+        callee.result_borrow = None;
+        callee.effect = FunctionEffect::Task {
+            requirements: vec![],
+            effect_parameters: vec![],
+        };
+        let OwnerRecord::Expression(call) = flow
+            .source
+            .owners
+            .get_mut(&OwnerKey::Expression(flow.call))
+            .unwrap()
+        else {
+            panic!("call expression");
+        };
+        let ExpressionOperation::Call { arguments, .. } = &mut call.operation else {
+            panic!("direct call");
+        };
+        arguments.clear();
+
+        // Out:Owned is only a metadata actual here. A phantom actual does not
+        // acquire a moving or sharing obligation from this ordinary result.
+        let healthy = OwnedAssociatedAdmission::new();
+        let call = admit_call_at(
+            &flow.source,
+            flow.call,
+            Some(flow.caller.declaration),
+            &healthy,
+        )
+        .unwrap();
+        assert!(!call.result_owned);
+        assert_eq!(call.result, unit);
+        let (steps, _) = healthy.work();
+        assert!(steps > 0);
+        let exact = OwnedAssociatedAdmission::with_limits(AssociatedAdmissionLimits {
+            maximum_steps: steps,
+            ..AssociatedAdmissionLimits::default()
+        });
+        assert!(
+            admit_call_at(
+                &flow.source,
+                flow.call,
+                Some(flow.caller.declaration),
+                &exact,
+            )
+            .is_ok()
+        );
+        assert_eq!(exact.work().0, steps);
+        assert_eq!(
+            admit_call_at(
+                &flow.source,
+                flow.call,
+                Some(flow.caller.declaration),
+                &exact,
+            )
+            .err()
+            .unwrap()
+            .class,
+            DiagnosticClass::Resource,
+        );
+        assert!(
+            admit_call_at(
+                &flow.source,
+                flow.call,
+                Some(flow.caller.declaration),
+                &OwnedAssociatedAdmission::new(),
+            )
+            .is_ok()
+        );
+
+        let OwnerRecord::Expression(call) = flow
+            .source
+            .owners
+            .get_mut(&OwnerKey::Expression(flow.call))
+            .unwrap()
+        else {
+            panic!("call expression");
+        };
+        call.contract_version = contract::GRAPH_CONTRACT_VERSION - 1;
+        assert_eq!(
+            admit_call_at(
+                &flow.source,
+                flow.call,
+                Some(flow.caller.declaration),
+                &OwnedAssociatedAdmission::new(),
+            )
+            .err()
+            .unwrap()
+            .class,
+            DiagnosticClass::Semantic,
+        );
+    }
 }

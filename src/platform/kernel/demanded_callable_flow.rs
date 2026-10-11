@@ -1,8 +1,8 @@
-//! Backward closure from declaration type slots. Every constructor edge starts at
-//! such a slot; therefore every expanding cycle is in this closure. Pure witness
-//! forwarding outside it cannot grow a type. Keep exact paths, never shape aliases.
+//! Feature-free backward closure from declaration type slots. The associated lane
+//! additionally seeds every explicit witness actual and queues member outputs
+//! independently, in associated_callable_flow. Keep exact paths, never shape aliases.
 #[path = "demanded_callable_inputs.rs"]
-mod inputs;
+pub(super) mod inputs;
 #[cfg(test)]
 #[path = "demanded_callable_read_tests.rs"]
 mod read_tests;
@@ -98,7 +98,10 @@ impl Demands {
             };
             selected = *prerequisites.get(*child).ok_or_else(missing_path)?;
         }
-        if selected == UNKNOWN_SELECTION {
+        if matches!(
+            analysis.selections[selected.0].shape,
+            Selection::Unknown { .. }
+        ) {
             return Err(missing_path());
         }
         Ok(analysis.selections[selected.0].parameters.len())

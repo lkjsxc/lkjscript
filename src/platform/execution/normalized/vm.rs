@@ -7,7 +7,7 @@ use super::capability::{
 use super::prepare::{
     NormalizedCode, NormalizedEntryPoint, NormalizedFieldSelector, NormalizedFunctionBody,
     NormalizedInstruction, NormalizedProgram, NormalizedTarget, NormalizedTransactionOutcome,
-    NormalizedTransactionRequirement,
+    NormalizedTransactionRequirement, PreparedApplicationContext,
 };
 use super::resource::NormalizedResourceScope;
 use super::value::{
@@ -865,11 +865,9 @@ impl Machine<'_> {
                     } else {
                         self.resolve_parallel_types(right_types)?
                     };
-                    let result_type = transfer::resolve_type(
-                        self.program,
+                    let result_type = self.resolve_frame_type(
                         result_type,
-                        &self.current_frame()?.type_arguments,
-                        self.control,
+                        "parallel result escaped its exact function application",
                     )?;
                     self.charge_allocation(super::value::collection_storage_bytes(
                         u64::from(left_arguments) + u64::from(right_arguments),
@@ -1406,6 +1404,7 @@ impl Machine<'_> {
                         self.program,
                         function,
                         type_arguments,
+                        self.control,
                     )?)?;
                 }
                 NormalizedInstruction::Invoke { arguments } => {
@@ -1823,11 +1822,9 @@ impl Machine<'_> {
                                 "borrowed result requires its sealed return path",
                             ));
                         }
-                        let memory_form = direct_memory_type(
-                            self.program,
+                        let memory_form = self.frame_memory_form(
                             f.result,
-                            &self.current_frame()?.type_arguments,
-                            self.control,
+                            "function result escaped its exact function application",
                         )?;
                         let expected = memory_form.is_some();
                         if (result.class(self.program, &mut self.observation.value_work)?
@@ -2417,11 +2414,9 @@ impl Machine<'_> {
             .function
             .ok_or_else(|| type_error("borrowed return requires a graph activation"))?;
         let function = &self.program.functions[function_index.0 as usize];
-        let expected = direct_memory_type(
-            self.program,
+        let expected = self.frame_memory_form(
             function.result,
-            &frame.type_arguments,
-            self.control,
+            "borrowed result escaped its exact function application",
         )?;
         if expected.is_none() || value.raw().memory_form() != expected {
             return Err(type_error("borrowed result representation mismatch"));
@@ -2620,29 +2615,90 @@ impl Machine<'_> {
         &self,
         type_arguments: &[TypeObjectDigest],
     ) -> Result<Arc<[TypeObjectDigest]>, ExecutionError> {
-        let substitutions = self
-            .frames
-            .last()
-            .map(|frame| &frame.type_arguments)
-            .ok_or_else(|| {
-                runtime_error(
-                    "normalized_frame_missing",
-                    "normalized call type arguments have no active frame",
+        let frame = self.frames.last().ok_or_else(|| {
+            runtime_error(
+                "normalized_frame_missing",
+                "normalized call type arguments have no active frame",
+            )
+        })?;
+        let context = frame
+            .function
+            .map(|function| {
+                PreparedApplicationContext::new(
+                    self.program,
+                    function,
+                    &frame.type_arguments,
+                    self.control,
                 )
-            })?;
+                .map_err(runtime_context_error)
+            })
+            .transpose()?;
         type_arguments
             .iter()
-            .map(|ty| {
-                resolve_runtime_type(
+            .map(|ty| match &context {
+                Some(context) => resolve_runtime_application_type(
                     self.program,
                     *ty,
-                    substitutions,
+                    context,
                     self.control,
                     "normalized call type argument escaped its exact function scope",
-                )
+                ),
+                None => resolve_runtime_type(
+                    self.program,
+                    *ty,
+                    &frame.type_arguments,
+                    self.control,
+                    "functionless code requires closed ordinary type arguments",
+                ),
             })
             .collect::<Result<Vec<_>, _>>()
             .map(Into::into)
+    }
+
+    fn resolve_frame_type(
+        &self,
+        ty: TypeObjectDigest,
+        message: &'static str,
+    ) -> Result<TypeObjectDigest, ExecutionError> {
+        let frame = self.current_frame()?;
+        match frame.function {
+            Some(function) => {
+                let context = PreparedApplicationContext::new(
+                    self.program,
+                    function,
+                    &frame.type_arguments,
+                    self.control,
+                )
+                .map_err(runtime_context_error)?;
+                resolve_runtime_application_type(self.program, ty, &context, self.control, message)
+            }
+            None => resolve_runtime_type(
+                self.program,
+                ty,
+                &frame.type_arguments,
+                self.control,
+                message,
+            ),
+        }
+    }
+
+    fn frame_memory_form(
+        &self,
+        ty: TypeObjectDigest,
+        message: &'static str,
+    ) -> Result<Option<super::value::MemoryForm>, ExecutionError> {
+        let frame = self.current_frame()?;
+        if transfer::contains_associated_type(self.program, ty, self.control)
+            .map_err(|error| runtime_type_error(error, message))?
+        {
+            let result = self.resolve_frame_type(ty, message)?;
+            direct_memory_type(self.program, result, &BTreeMap::new(), self.control)
+        } else {
+            // Ordinary raw generic entries deliberately need not have a closed
+            // aggregate object retained by preparation. Their checked value
+            // admission keeps the source template and complete ordinary map.
+            direct_memory_type(self.program, ty, &frame.type_arguments, self.control)
+        }
     }
 
     fn outcome_layouts(
@@ -3069,10 +3125,23 @@ impl Machine<'_> {
                 &mut witness_visited,
                 &mut |bytes| self.charge_allocation(bytes),
             )?;
-            if resolve_runtime_type(
+        }
+        let application_context = PreparedApplicationContext::new(
+            self.program,
+            function_index,
+            &type_arguments_by_parameter,
+            self.control,
+        )
+        .map_err(runtime_context_error)?;
+        for (parameter, application) in function
+            .implementation_parameters
+            .iter()
+            .zip(function.implementation_arguments.iter())
+        {
+            if resolve_runtime_application_type(
                 self.program,
                 parameter.self_type,
-                &type_arguments_by_parameter,
+                &application_context,
                 self.control,
                 "implementation Self is unresolved",
             )? != application.self_type
@@ -3091,10 +3160,10 @@ impl Machine<'_> {
                 .iter()
                 .zip(application.type_arguments.iter())
             {
-                if resolve_runtime_type(
+                if resolve_runtime_application_type(
                     self.program,
                     *expected,
-                    &type_arguments_by_parameter,
+                    &application_context,
                     self.control,
                     "implementation contract type argument is unresolved",
                 )? != *actual
@@ -3105,7 +3174,7 @@ impl Machine<'_> {
                 }
             }
         }
-        self.validate_call_resources(function, &type_arguments_by_parameter, &arguments)?;
+        self.validate_call_resources(function, &application_context, &arguments)?;
         let pending = self
             .frames
             .last()
@@ -3207,13 +3276,36 @@ impl Machine<'_> {
     fn validate_call_resources(
         &mut self,
         function: &super::prepare::NormalizedFunction,
-        substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+        context: &PreparedApplicationContext<'_>,
         arguments: &[CheckedValue],
     ) -> Result<(), ExecutionError> {
         let mut uses = BTreeMap::new();
         for (parameter, argument) in function.parameters.iter().zip(arguments) {
             let memory_form =
-                direct_memory_type(self.program, parameter.ty, substitutions, self.control)?;
+                if transfer::contains_associated_type(self.program, parameter.ty, self.control)
+                    .map_err(|error| {
+                        runtime_type_error(
+                            error,
+                            "call parameter escaped its exact function application",
+                        )
+                    })?
+                {
+                    let ty = resolve_runtime_application_type(
+                        self.program,
+                        parameter.ty,
+                        context,
+                        self.control,
+                        "call parameter escaped its exact function application",
+                    )?;
+                    direct_memory_type(self.program, ty, &BTreeMap::new(), self.control)?
+                } else {
+                    direct_memory_type(
+                        self.program,
+                        parameter.ty,
+                        context.ordinary(),
+                        self.control,
+                    )?
+                };
             if memory_form.is_some() {
                 if parameter.resource_requirement.is_some()
                     || parameter.use_mode == ParameterUse::Unrestricted
@@ -5235,6 +5327,21 @@ fn resource_error(code: &'static str, message: &'static str) -> ExecutionError {
     ExecutionError::resource(code, message)
 }
 
+fn runtime_type_error(error: ExecutionError, message: &'static str) -> ExecutionError {
+    if error.class == ExecutionFailureClass::Trap && error.code == "normalized_parallel_transfer" {
+        type_error(message)
+    } else {
+        error
+    }
+}
+
+fn runtime_context_error(error: crate::platform::diagnostic::Diagnostic) -> ExecutionError {
+    runtime_type_error(
+        transfer::context_error(error),
+        "function application differs from its exact prepared context",
+    )
+}
+
 fn validate_runtime_implementation(
     program: &NormalizedProgram,
     application: &super::prepare::NormalizedImplementationArgument,
@@ -5269,6 +5376,14 @@ fn validate_runtime_implementation(
     if depth.saturating_add(canonical.depth) > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
     {
         return Err(type_error("implementation DAG exceeds finite depth"));
+    }
+    if !application.associated_types.is_empty() {
+        let mut type_nodes = *nodes as u64;
+        let result =
+            transfer::validate_associated_bindings(program, application, control, &mut type_nodes);
+        *nodes = usize::try_from(type_nodes)
+            .map_err(|_| type_error("implementation witness inventory overflow"))?;
+        result?;
     }
     if visited.contains(&application.identity) {
         return Ok(());
@@ -5380,15 +5495,19 @@ fn resolve_runtime_type(
     control: &ExecutionControl,
     message: &'static str,
 ) -> Result<TypeObjectDigest, ExecutionError> {
-    transfer::resolve_type(program, ty, substitutions, control).map_err(|error| {
-        if error.class == ExecutionFailureClass::Trap
-            && error.code == "normalized_parallel_transfer"
-        {
-            type_error(message)
-        } else {
-            error
-        }
-    })
+    transfer::resolve_type(program, ty, substitutions, control)
+        .map_err(|error| runtime_type_error(error, message))
+}
+
+fn resolve_runtime_application_type(
+    program: &NormalizedProgram,
+    ty: TypeObjectDigest,
+    context: &PreparedApplicationContext<'_>,
+    control: &ExecutionControl,
+    message: &'static str,
+) -> Result<TypeObjectDigest, ExecutionError> {
+    transfer::resolve_application(program, ty, context, control)
+        .map_err(|error| runtime_type_error(error, message))
 }
 
 fn direct_memory_type(

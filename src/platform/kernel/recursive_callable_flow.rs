@@ -1,9 +1,11 @@
 //! A type-slot cycle projects to a cycle of exact callable contexts. Discover that
 //! finite graph first; acyclic edges cannot participate in an expanding slot SCC.
-//! Demand only provenance that can feed a declaration slot, without unifying paths.
+//! Ordinary demands retain predecessor behavior; associated demands additionally
+//! preserve every effective witness actual and exact member-output provenance.
 #[path = "demanded_callable_flow.rs"]
 mod demanded;
 use super::*;
+pub(super) use demanded::inputs::{Incoming, Inputs, load as load_inputs};
 
 #[derive(Clone, Copy)]
 pub(super) struct CallSite {
@@ -36,6 +38,13 @@ pub(super) fn connect<R: CallableClosureRead + ?Sized>(
     scope: ProofScope,
 ) -> Result<(), Diagnostic> {
     let components = components(analysis)?;
+    if analysis.associated.enabled {
+        #[cfg(test)]
+        let all = matches!(scope, ProofScope::All);
+        #[cfg(not(test))]
+        let all = false;
+        return associated::connect(analysis, &components, all);
+    }
     match scope {
         ProofScope::Recursive => demanded::connect(analysis, &components),
         #[cfg(test)]

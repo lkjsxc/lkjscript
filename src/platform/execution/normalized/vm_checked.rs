@@ -286,6 +286,7 @@ impl Value {
         program: &NormalizedProgram,
         function: FunctionIndex,
         type_arguments: Arc<[TypeObjectDigest]>,
+        control: &ExecutionControl,
     ) -> Result<Self, ExecutionError> {
         let target = program.functions.get(function.0 as usize)
             .filter(|_| function.1 == program.value_origin)
@@ -302,13 +303,20 @@ impl Value {
             || target.type_parameters.len() != type_arguments.len()
             || (!target.type_arguments.is_empty()
                 && target.type_arguments.as_ref() != type_arguments.as_ref())
-            || type_arguments
-                .iter()
-                .any(|ty| program.substitute_type(*ty, &BTreeMap::new(), 0).is_none())
         {
             return Err(admission_error(
                 "function constructor requires exact resolved type arguments",
             ));
+        }
+        // Callable construction accepts closed actuals already retained by the
+        // program. Validate them by borrowed matching; this boundary does not
+        // derive or encode canonical types at execution time.
+        for ty in type_arguments.iter() {
+            if super::transfer::resolve_type(program, *ty, &BTreeMap::new(), control)? != *ty {
+                return Err(admission_error(
+                    "function constructor requires exact resolved type arguments",
+                ));
+            }
         }
         if target
             .type_parameter_constraints

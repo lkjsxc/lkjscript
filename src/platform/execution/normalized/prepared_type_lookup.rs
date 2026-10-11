@@ -6,16 +6,19 @@ use super::*;
 type Bindings = BTreeMap<TypeParameterId, TypeObjectDigest>;
 type ResolvedTypes = BTreeMap<TypeObjectDigest, TypeObjectDigest>;
 type Contexts = BTreeMap<Bindings, ResolvedTypes>;
+type Applications = BTreeMap<FunctionIndex, Contexts>;
 
 #[derive(Default)]
 pub(super) struct TypeLookupBuilder {
     contexts: Contexts,
+    applications: Applications,
 }
 
 #[derive(Clone, Debug)]
 pub(in super::super) struct PreparedTypeLookup {
     origin: ValueOrigin,
     contexts: Contexts,
+    applications: Applications,
 }
 
 impl PreparedTypeLookup {
@@ -23,6 +26,7 @@ impl PreparedTypeLookup {
         Self {
             origin,
             contexts: BTreeMap::new(),
+            applications: BTreeMap::new(),
         }
     }
 
@@ -40,6 +44,44 @@ impl PreparedTypeLookup {
             .get(bindings)
             .and_then(|types| types.get(&template))
             .copied())
+    }
+
+    /// The exact function index binds the sealed witness application. Ordinary
+    /// bindings alone cannot select an associated member, even for equal outputs.
+    pub(in super::super) fn get_application(
+        &self,
+        origin: ValueOrigin,
+        function: FunctionIndex,
+        template: TypeObjectDigest,
+        bindings: &Bindings,
+    ) -> Result<Option<TypeObjectDigest>, ()> {
+        if self.origin != origin || function.1 != origin {
+            return Err(());
+        }
+        Ok(self
+            .applications
+            .get(&function)
+            .and_then(|contexts| contexts.get(bindings))
+            .and_then(|types| types.get(&template))
+            .copied())
+    }
+
+    #[cfg(test)]
+    pub(in super::super) fn corrupt_application(
+        &mut self,
+        function: FunctionIndex,
+        template: TypeObjectDigest,
+        bindings: &Bindings,
+        result: TypeObjectDigest,
+    ) {
+        *self
+            .applications
+            .get_mut(&function)
+            .expect("existing application")
+            .get_mut(bindings)
+            .expect("existing complete bindings")
+            .get_mut(&template)
+            .expect("existing proved root") = result;
     }
 }
 
@@ -89,7 +131,57 @@ impl Budget<'_> {
         PreparedTypeLookup {
             origin,
             contexts: std::mem::take(&mut self.type_lookup.contexts),
+            applications: std::mem::take(&mut self.type_lookup.applications),
         }
+    }
+
+    pub(super) fn remember_application_substitution(
+        &mut self,
+        function: FunctionIndex,
+        template: TypeObjectDigest,
+        result: TypeObjectDigest,
+        bindings: &Bindings,
+    ) -> Result<(), Diagnostic> {
+        step(self)?;
+        if let Some(existing) = self
+            .type_lookup
+            .applications
+            .get(&function)
+            .and_then(|contexts| contexts.get(bindings))
+            .and_then(|types| types.get(&template))
+        {
+            return if *existing == result {
+                Ok(())
+            } else {
+                Err(missing())
+            };
+        }
+        // Complete reservations and cancellation checks before publishing any
+        // application, binding map or result. A failed proof exposes no entry.
+        if !self.type_lookup.applications.contains_key(&function) {
+            self.node::<(FunctionIndex, Contexts)>()?;
+        }
+        if !self
+            .type_lookup
+            .applications
+            .get(&function)
+            .is_some_and(|contexts| contexts.contains_key(bindings))
+        {
+            self.node::<(Bindings, ResolvedTypes)>()?;
+            for _ in bindings {
+                step(self)?;
+                self.node::<(TypeParameterId, TypeObjectDigest)>()?;
+            }
+        }
+        self.node::<(TypeObjectDigest, TypeObjectDigest)>()?;
+        step(self)?;
+        let contexts = self.type_lookup.applications.entry(function).or_default();
+        if let Some(types) = contexts.get_mut(bindings) {
+            types.insert(template, result);
+        } else {
+            contexts.insert(bindings.clone(), BTreeMap::from([(template, result)]));
+        }
+        Ok(())
     }
 }
 
@@ -100,6 +192,122 @@ mod tests {
 
     fn node_bytes<T>() -> usize {
         std::mem::size_of::<T>() + 3 * std::mem::size_of::<usize>()
+    }
+
+    #[test]
+    fn prepared_application_lookup_separates_witness_applications_and_full_bindings() {
+        let origin = ValueOrigin::fresh().unwrap();
+        let first = FunctionIndex(3, origin);
+        let second = FunctionIndex(4, origin);
+        let template = TypeObjectDigest::from_bytes([101; 32]);
+        let a = TypeObjectDigest::from_bytes([103; 32]);
+        let b = TypeObjectDigest::from_bytes([107; 32]);
+        let parameter = TypeParameterId::migrate(b"application-lookup", 0);
+        let bindings = BTreeMap::from([(parameter, a)]);
+        let other_bindings = BTreeMap::from([(parameter, b)]);
+        let control = ExecutionControl::uncancelled();
+        let mut work = Budget::new(&control);
+        work.remember_application_substitution(first, template, a, &bindings)
+            .unwrap();
+        work.remember_application_substitution(second, template, b, &bindings)
+            .unwrap();
+        work.remember_application_substitution(first, template, b, &other_bindings)
+            .unwrap();
+        // Equal outputs remain separate application proofs, not witness identities.
+        work.remember_application_substitution(second, a, a, &bindings)
+            .unwrap();
+        let lookup = work.finish_type_lookup(origin);
+        assert_eq!(
+            lookup.get_application(origin, first, template, &bindings),
+            Ok(Some(a))
+        );
+        assert_eq!(
+            lookup.get_application(origin, second, template, &bindings),
+            Ok(Some(b))
+        );
+        assert_eq!(
+            lookup.get_application(origin, first, template, &other_bindings),
+            Ok(Some(b))
+        );
+        assert_eq!(
+            lookup.get_application(origin, second, template, &other_bindings),
+            Ok(None)
+        );
+        assert_eq!(
+            lookup.get_application(origin, FunctionIndex(5, origin), template, &bindings),
+            Ok(None)
+        );
+        assert_eq!(lookup.get(origin, template, &bindings), Ok(None));
+        let foreign = ValueOrigin::fresh().unwrap();
+        assert!(
+            lookup
+                .get_application(foreign, first, template, &bindings)
+                .is_err()
+        );
+        assert!(
+            lookup
+                .get_application(origin, FunctionIndex(first.0, foreign), template, &bindings)
+                .is_err()
+        );
+        assert!(work.type_lookup.applications.is_empty());
+    }
+
+    #[test]
+    fn prepared_application_lookup_reserves_before_growth_and_rechecks_hits() {
+        let origin = ValueOrigin::fresh().unwrap();
+        let function = FunctionIndex(7, origin);
+        let parameter = TypeParameterId::migrate(b"application-lookup-capacity", 0);
+        let template = TypeObjectDigest::from_bytes([109; 32]);
+        let result = TypeObjectDigest::from_bytes([113; 32]);
+        let bindings = BTreeMap::from([(parameter, result)]);
+        let required = node_bytes::<(FunctionIndex, Contexts)>()
+            + node_bytes::<(Bindings, ResolvedTypes)>()
+            + node_bytes::<(TypeParameterId, TypeObjectDigest)>()
+            + node_bytes::<(TypeObjectDigest, TypeObjectDigest)>();
+        let control = ExecutionControl::uncancelled();
+        let cancelled = ExecutionControl::cancel_after_checks(0);
+        for short in [false, true] {
+            let mut work = Budget::new(&control);
+            work.bytes = MAXIMUM_METADATA_BYTES - required + usize::from(short);
+            let outcome =
+                work.remember_application_substitution(function, template, result, &bindings);
+            if short {
+                assert_eq!(outcome.unwrap_err().class, DiagnosticClass::Resource);
+                assert!(work.type_lookup.applications.is_empty());
+            } else {
+                outcome.unwrap();
+                assert_eq!(work.bytes, MAXIMUM_METADATA_BYTES);
+                work.remember_application_substitution(function, template, result, &bindings)
+                    .unwrap();
+                assert_eq!(work.bytes, MAXIMUM_METADATA_BYTES);
+                assert!(
+                    work.remember_application_substitution(function, template, template, &bindings)
+                        .is_err()
+                );
+                work.control = &cancelled;
+                assert_eq!(
+                    work.remember_application_substitution(function, template, result, &bindings)
+                        .unwrap_err()
+                        .class,
+                    DiagnosticClass::Cancelled
+                );
+            }
+        }
+        let mut refused = false;
+        let mut succeeded = false;
+        for checks in 0..8 {
+            let control = ExecutionControl::cancel_after_checks(checks);
+            let mut work = Budget::new(&control);
+            match work.remember_application_substitution(function, template, result, &bindings) {
+                Ok(()) => succeeded = true,
+                Err(error) => {
+                    refused = true;
+                    assert_eq!(error.class, DiagnosticClass::Cancelled);
+                    assert!(work.type_lookup.applications.is_empty());
+                }
+            }
+        }
+        assert!(refused && succeeded);
     }
 
     #[test]

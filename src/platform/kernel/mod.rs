@@ -12,6 +12,10 @@ mod affine;
 #[cfg(test)]
 mod affine_reference;
 #[cfg(test)]
+mod associated_flow_canonical_reference;
+#[cfg(test)]
+mod associated_flow_canonical_tests;
+#[cfg(test)]
 mod associated_flow_reference_tests;
 pub(crate) mod callable_flow;
 mod codec;

@@ -1172,6 +1172,7 @@ impl Oracle<'_> {
                 .iter()
                 .any(|operand| !scoped.mapping_operand(operand, reference, admission, depth + 1))
                 || !scoped.matching_witnesses(
+                    mapping.function,
                     &f.implementation_parameters,
                     &target_bindings,
                     &mapping.implementations,
@@ -1441,6 +1442,7 @@ impl Oracle<'_> {
                     .zip(type_arguments.iter().copied())
                     .collect();
                 if !self.matching_witnesses(
+                    *implementation,
                     &i.implementation_parameters,
                     &bindings,
                     implementations,
@@ -1448,6 +1450,24 @@ impl Oracle<'_> {
                     depth + 1,
                 ) {
                     return None;
+                }
+                if self.associated_operand(operand) {
+                    // Full definition/mapped-method admission above remains
+                    // independent of this substitution algebra. The source
+                    // scheme's projections must now select the supplied exact
+                    // prerequisite, rather than survive ordinary substitution.
+                    let mut resolver = associated::Resolver::with_limits(
+                        self.0,
+                        associated::Limits {
+                            work: admission.remaining,
+                            ..Default::default()
+                        },
+                    );
+                    let result = resolver
+                        .admit_operand(operand, self.declaration_occurrence()?, depth + 1)
+                        .ok();
+                    admission.remaining = resolver.remaining();
+                    return result;
                 }
                 let mut derived = WitnessTypes::new(self.0);
                 derived.remaining = admission.remaining;
@@ -1513,6 +1533,7 @@ impl Oracle<'_> {
             .zip(types.iter().copied())
             .collect();
         self.matching_witnesses(
+            function,
             &f.implementation_parameters,
             &bindings,
             operands,
@@ -1523,12 +1544,54 @@ impl Oracle<'_> {
 
     fn matching_witnesses(
         &self,
+        source: DeclarationReference,
         parameters: &[ImplementationParameter],
         bindings: &BTreeMap<TypeParameterId, TypeObjectDigest>,
         operands: &[ImplementationOperand],
         admission: &mut WitnessAdmission,
         depth: usize,
     ) -> bool {
+        if parameters.len() != operands.len() {
+            return false;
+        }
+        if parameters
+            .iter()
+            .flat_map(|p| std::iter::once(p.self_type).chain(p.type_arguments.iter().copied()))
+            .chain(bindings.values().copied())
+            .any(|ty| self.associated_closure(ty))
+            || operands.iter().any(|p| self.associated_operand(p))
+        {
+            if operands
+                .iter()
+                .any(|operand| self.admit_witness(operand, admission, depth).is_none())
+            {
+                return false;
+            }
+            let Some(caller) = self.declaration_occurrence() else {
+                return false;
+            };
+            let environment = associated::Environment {
+                ordinary: bindings.clone(),
+                source: associated::Context::Lexical(source),
+                caller,
+                contract_operand: None,
+                witnesses: parameters
+                    .iter()
+                    .map(|p| p.id)
+                    .zip(operands.iter().cloned())
+                    .collect(),
+            };
+            let mut resolver = associated::Resolver::with_limits(
+                self.0,
+                associated::Limits {
+                    work: admission.remaining,
+                    ..Default::default()
+                },
+            );
+            let result = resolver.admit_application(&environment).is_ok();
+            admission.remaining = resolver.remaining();
+            return result;
+        }
         parameters.len() == operands.len()
             && parameters.iter().zip(operands).all(|(p, operand)| {
                 self.admit_witness(operand, admission, depth)

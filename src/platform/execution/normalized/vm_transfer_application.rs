@@ -11,6 +11,9 @@ pub(in super::super::super) struct TaskApplication {
     result: TypeObjectDigest,
     canonical_result: TypeObjectDigest,
     parameters: Option<Vec<TypeObjectDigest>>,
+    bindings: BTreeMap<TypeParameterId, TypeObjectDigest>,
+    canonical_parameters: Arc<[super::super::super::prepare::NormalizedParameter]>,
+    implementations: Arc<[super::super::super::prepare::NormalizedImplementationArgument]>,
 }
 impl TaskApplication {
     pub(in super::super::super) fn function(&self) -> FunctionIndex {
@@ -52,7 +55,7 @@ impl TaskApplication {
         let mut work = Work { control, nodes: 0 };
         for (ty, constraint) in types.iter().zip(f.type_parameter_constraints.iter()) {
             work.visit(0)?;
-            let owned = closed_owned_type(program, *ty)?;
+            let owned = closed_owned_type(program, *ty, &mut work)?;
             if owned != constraint.has_owned()
                 || (!owned && !program.buffer_free_types.contains(ty))
                 || (constraint.requires_capture_safe() && !program.capture_safe_types.contains(ty))
@@ -86,6 +89,10 @@ impl TaskApplication {
         if bindings.len() != types.len() {
             return Err(reject());
         }
+        let context = super::super::super::prepare::PreparedApplicationContext::new(
+            program, function, &bindings, control,
+        )
+        .map_err(types::context_error)?;
         let mut witness_visited = BTreeSet::new();
         for (parameter, application) in f
             .implementation_parameters
@@ -102,7 +109,7 @@ impl TaskApplication {
                 reserve,
             )?;
             if parameter.contract != application.contract
-                || resolve_type(program, parameter.self_type, &bindings, control)?
+                || types::resolve_application_in(program, parameter.self_type, &context, &mut work)?
                     != application.self_type
                 || parameter.type_arguments.len() != application.type_arguments.len()
             {
@@ -114,19 +121,32 @@ impl TaskApplication {
                 .zip(application.type_arguments.iter())
             {
                 work.visit(0)?;
-                if resolve_type(program, *expected, &bindings, control)? != *actual {
+                if types::resolve_application_in(program, *expected, &context, &mut work)?
+                    != *actual
+                {
                     return Err(reject());
                 }
             }
         }
-        if types.is_empty() {
-            validate_type(program, f.result, 0, &mut work)?;
+        if types.is_empty() && f.implementation_arguments.is_empty() {
+            for parameter in f.parameters.iter() {
+                let ty = types::resolve_application_in(program, parameter.ty, &context, &mut work)?;
+                if ty != parameter.ty {
+                    return Err(reject());
+                }
+                validate_parameter_type(program, ty, parameter.use_mode, &mut work)?;
+            }
+            let result = types::resolve_application_in(program, f.result, &context, &mut work)?;
+            validate_type(program, result, 0, &mut work)?;
             return Ok(Self {
                 function,
                 types,
-                result: f.result,
+                result,
                 canonical_result: f.result,
                 parameters: None,
+                bindings,
+                canonical_parameters: Arc::clone(&f.parameters),
+                implementations: Arc::clone(&f.implementation_arguments),
             });
         }
         reserve(super::super::super::value::collection_storage_bytes(
@@ -137,11 +157,11 @@ impl TaskApplication {
         let mut parameters = Vec::with_capacity(f.parameters.len());
         for p in f.parameters.iter() {
             work.visit(0)?;
-            let ty = resolve_type(program, p.ty, &bindings, control)?;
+            let ty = types::resolve_application_in(program, p.ty, &context, &mut work)?;
             validate_parameter_type(program, ty, p.use_mode, &mut work)?;
             parameters.push(ty);
         }
-        let result = resolve_type(program, f.result, &bindings, control)?;
+        let result = types::resolve_application_in(program, f.result, &context, &mut work)?;
         validate_type(program, result, 0, &mut work)?;
         Ok(Self {
             function,
@@ -149,17 +169,56 @@ impl TaskApplication {
             result,
             canonical_result: f.result,
             parameters: Some(parameters),
+            bindings,
+            canonical_parameters: Arc::clone(&f.parameters),
+            implementations: Arc::clone(&f.implementation_arguments),
         })
     }
 
-    pub(super) fn matches(&self, program: &NormalizedProgram) -> bool {
-        self.function.1 == program.value_origin
-            && program
-                .functions
-                .get(self.function.0 as usize)
-                .is_some_and(|f| {
-                    f.result == self.canonical_result && f.type_parameters.len() == self.types.len()
-                })
+    pub(super) fn matches(
+        &self,
+        program: &NormalizedProgram,
+        control: &ExecutionControl,
+    ) -> Result<bool, ExecutionError> {
+        control.check()?;
+        let Some(function) = program.functions.get(self.function.0 as usize) else {
+            return Ok(false);
+        };
+        if self.function.1 != program.value_origin
+            || !function.graph_function
+            || !matches!(&function.effect, FunctionEffect::Task { requirements, effect_parameters } if requirements.is_empty() && effect_parameters.is_empty())
+            || !function.task_requirements.is_empty()
+            || !function.effect_parameters.is_empty()
+            || !function.requirement_parameters.is_empty()
+            || function.result_borrow.is_some()
+            || function.result != self.canonical_result
+            || function.type_parameters.len() != self.types.len()
+            || !Arc::ptr_eq(&function.parameters, &self.canonical_parameters)
+            || !Arc::ptr_eq(&function.implementation_arguments, &self.implementations)
+        {
+            return Ok(false);
+        }
+        let context = super::super::super::prepare::PreparedApplicationContext::new(
+            program,
+            self.function,
+            &self.bindings,
+            control,
+        )
+        .map_err(types::context_error)?;
+        let mut work = Work { control, nodes: 0 };
+        if types::resolve_application_in(program, function.result, &context, &mut work)?
+            != self.result
+        {
+            return Ok(false);
+        }
+        for (index, parameter) in function.parameters.iter().enumerate() {
+            if types::resolve_application_in(program, parameter.ty, &context, &mut work)?
+                != self.parameter(program, index)?
+            {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     pub(in super::super::super) fn parameter(
@@ -184,7 +243,11 @@ impl TaskApplication {
 fn closed_owned_type(
     program: &NormalizedProgram,
     ty: TypeObjectDigest,
+    work: &mut Work<'_>,
 ) -> Result<bool, ExecutionError> {
+    if types::resolve_in(program, ty, &BTreeMap::new(), work)? != ty {
+        return Err(reject());
+    }
     let object = program.types.get(&ty).ok_or_else(reject)?;
     if matches!(object.form, TypeForm::TypeParameter { .. }) {
         return Err(reject());
@@ -227,12 +290,15 @@ fn validate_implementation(
     {
         return Err(reject());
     }
+    if !application.associated_types.is_empty() {
+        types::validate_associated_bindings_in(program, application, work)?;
+    }
     if visited.contains(&application.identity) {
         return Ok(());
     }
     reserve((std::mem::size_of::<u32>() + 3 * std::mem::size_of::<usize>()) as u64)?;
     visited.insert(application.identity);
-    if !closed_owned_type(program, application.self_type)? {
+    if !closed_owned_type(program, application.self_type, work)? {
         return Err(reject());
     }
     for (arguments, constraints, contract) in [
@@ -252,7 +318,7 @@ fn validate_implementation(
         }
         for (ty, constraint) in arguments.iter().zip(constraints.iter()) {
             work.visit(0)?;
-            let owned = closed_owned_type(program, *ty)?;
+            let owned = closed_owned_type(program, *ty, work)?;
             if (contract
                 && !matches!(constraint,
                 crate::platform::kernel::TypeParameterConstraints::Owned

@@ -1,8 +1,268 @@
 //! Resolve substitutions by matching already admitted types, without constructing
 //! a TypeObject, copying names or allocating canonical encoding scratch at runtime.
+use super::super::super::prepare::{
+    ClosedTypeEnvironment, NormalizedImplementationArgument, PreparedApplicationContext,
+};
 use super::*;
+use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::TypeParameterId;
 use std::collections::BTreeMap;
+
+#[derive(Clone, Copy)]
+enum OrdinaryBindings<'a> {
+    Map(&'a BTreeMap<TypeParameterId, TypeObjectDigest>),
+    Selected(&'a NormalizedImplementationArgument),
+}
+
+#[derive(Clone, Copy)]
+struct TypeContext<'a> {
+    ordinary: OrdinaryBindings<'a>,
+    associated: ClosedTypeEnvironment<'a>,
+}
+
+impl<'a> TypeContext<'a> {
+    fn ordinary(bindings: &'a BTreeMap<TypeParameterId, TypeObjectDigest>) -> Self {
+        Self {
+            ordinary: OrdinaryBindings::Map(bindings),
+            associated: ClosedTypeEnvironment::forbidden(),
+        }
+    }
+
+    fn selected(
+        program: &NormalizedProgram,
+        selected: &'a NormalizedImplementationArgument,
+        work: &mut Work<'_>,
+    ) -> Result<Self, ExecutionError> {
+        if selected.implementation_type_parameters.len()
+            != selected.implementation_type_arguments.len()
+            || selected.implementation_type_parameter_constraints.len()
+                != selected.implementation_type_arguments.len()
+        {
+            return Err(reject());
+        }
+        for (position, parameter) in selected.implementation_type_parameters.iter().enumerate() {
+            for previous in &selected.implementation_type_parameters[..position] {
+                work.visit(0)?;
+                if previous == parameter {
+                    return Err(reject());
+                }
+            }
+        }
+        for ty in selected.implementation_type_arguments.iter() {
+            if resolve_in(program, *ty, &BTreeMap::new(), work)? != *ty {
+                return Err(reject());
+            }
+        }
+        Ok(Self {
+            ordinary: OrdinaryBindings::Selected(selected),
+            // Stored member RHSs are projection-free. Their ordinary formals
+            // belong to this exact implementation scheme; a prerequisite does
+            // not authorize interpreting a stored RHS as a new projection.
+            associated: ClosedTypeEnvironment::forbidden(),
+        })
+    }
+
+    fn parameter(self, parameter: TypeParameterId) -> Option<TypeObjectDigest> {
+        match self.ordinary {
+            OrdinaryBindings::Map(bindings) => bindings.get(&parameter).copied(),
+            OrdinaryBindings::Selected(selected) => selected
+                .implementation_type_parameters
+                .iter()
+                .position(|id| *id == parameter)
+                .map(|position| selected.implementation_type_arguments[position]),
+        }
+    }
+}
+
+pub(in super::super::super) fn context_error(error: Diagnostic) -> ExecutionError {
+    match error.class {
+        DiagnosticClass::Cancelled => {
+            ExecutionError::new(ExecutionFailureClass::Cancelled, error.code, error.message)
+        }
+        DiagnosticClass::Resource => ExecutionError::resource(error.code, error.message),
+        _ => reject(),
+    }
+}
+
+/// An application hit binds both the complete ordinary map and the exact
+/// catalogued witness selection. A miss only falls back for ordinary templates.
+pub(in super::super::super) fn resolve_application(
+    program: &NormalizedProgram,
+    template: TypeObjectDigest,
+    context: &PreparedApplicationContext<'_>,
+    control: &ExecutionControl,
+) -> Result<TypeObjectDigest, ExecutionError> {
+    let mut work = Work { control, nodes: 0 };
+    resolve_application_in(program, template, context, &mut work)
+}
+
+pub(super) fn resolve_application_in(
+    program: &NormalizedProgram,
+    template: TypeObjectDigest,
+    context: &PreparedApplicationContext<'_>,
+    work: &mut Work<'_>,
+) -> Result<TypeObjectDigest, ExecutionError> {
+    work.control.check()?;
+    if !std::ptr::eq(program, context.program()) {
+        return Err(reject());
+    }
+    if let Some(actual) = program
+        .prepared_type_lookup
+        .get_application(
+            program.value_origin,
+            context.function(),
+            template,
+            context.ordinary(),
+        )
+        .map_err(|()| reject())?
+    {
+        let exact = matches_context(
+            program,
+            template,
+            actual,
+            TypeContext {
+                ordinary: OrdinaryBindings::Map(context.ordinary()),
+                associated: *context.environment(),
+            },
+            0,
+            work,
+        )?;
+        work.control.check()?;
+        return if exact { Ok(actual) } else { Err(reject()) };
+    }
+    if contains_associated(program, template, 0, work)? {
+        return Err(reject());
+    }
+    resolve_in(program, template, context.ordinary(), work)
+}
+
+pub(in super::super::super) fn contains_associated_type(
+    program: &NormalizedProgram,
+    ty: TypeObjectDigest,
+    control: &ExecutionControl,
+) -> Result<bool, ExecutionError> {
+    contains_associated(program, ty, 0, &mut Work { control, nodes: 0 })
+}
+
+fn contains_associated(
+    program: &NormalizedProgram,
+    ty: TypeObjectDigest,
+    depth: usize,
+    work: &mut Work<'_>,
+) -> Result<bool, ExecutionError> {
+    work.visit(depth)?;
+    let object = program.types.get(&ty).ok_or_else(reject)?;
+    if matches!(
+        object.form,
+        TypeForm::AssociatedContractMember { .. } | TypeForm::AssociatedWitnessProjection { .. }
+    ) {
+        return Ok(true);
+    }
+    let mut child = |ty| contains_associated(program, ty, depth + 1, work);
+    match &object.form {
+        TypeForm::StructuralRecord { fields }
+        | TypeForm::OwnedProduct { fields }
+        | TypeForm::OwnedChoice { cases: fields } => {
+            for field in fields {
+                if child(field.ty)? {
+                    return Ok(true);
+                }
+            }
+        }
+        TypeForm::Applied { arguments, .. } => {
+            for ty in arguments {
+                if child(*ty)? {
+                    return Ok(true);
+                }
+            }
+        }
+        TypeForm::Function { parameters, result }
+        | TypeForm::TaskFunction {
+            parameters, result, ..
+        } => {
+            for ty in parameters {
+                if child(*ty)? {
+                    return Ok(true);
+                }
+            }
+            return child(*result);
+        }
+        TypeForm::List { item }
+        | TypeForm::OwnedSequence { item }
+        | TypeForm::Option { item }
+        | TypeForm::Stream { item } => return child(*item),
+        TypeForm::Map { key, value } => return Ok(child(*key)? || child(*value)?),
+        TypeForm::Result { ok, error } => return Ok(child(*ok)? || child(*error)?),
+        _ => {}
+    }
+    Ok(false)
+}
+
+fn catalogued(
+    program: &NormalizedProgram,
+    selected: &NormalizedImplementationArgument,
+    depth: usize,
+    work: &mut Work<'_>,
+) -> Result<(), ExecutionError> {
+    work.visit(depth)?;
+    let canonical = program
+        .implementation_applications
+        .get(selected.identity as usize)
+        .ok_or_else(reject)?;
+    if canonical.identity != selected.identity
+        || !std::sync::Arc::ptr_eq(canonical, selected)
+        || depth.saturating_add(selected.depth)
+            > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
+    {
+        return Err(reject());
+    }
+    Ok(())
+}
+
+pub(super) fn validate_associated_bindings_in(
+    program: &NormalizedProgram,
+    selected: &NormalizedImplementationArgument,
+    work: &mut Work<'_>,
+) -> Result<(), ExecutionError> {
+    catalogued(program, selected, 0, work)?;
+    if selected.implementation_generation
+        != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+        || selected.contract_generation != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+    {
+        return Err(reject());
+    }
+    let context = TypeContext::selected(program, selected, work)?;
+    for (position, binding) in selected.associated_types.iter().enumerate() {
+        work.visit(0)?;
+        for previous in &selected.associated_types[..position] {
+            work.visit(0)?;
+            if previous.member == binding.member {
+                return Err(reject());
+            }
+        }
+        if !program.is_owned_type(binding.ty)
+            || !matches_context(program, binding.template, binding.ty, context, 0, work)?
+        {
+            return Err(reject());
+        }
+    }
+    Ok(())
+}
+
+pub(in super::super::super) fn validate_associated_bindings(
+    program: &NormalizedProgram,
+    selected: &NormalizedImplementationArgument,
+    control: &ExecutionControl,
+    nodes: &mut u64,
+) -> Result<(), ExecutionError> {
+    let mut work = Work {
+        control,
+        nodes: *nodes,
+    };
+    let result = validate_associated_bindings_in(program, selected, &mut work);
+    *nodes = work.nodes;
+    result
+}
 
 pub(in super::super::super) fn resolve(
     program: &NormalizedProgram,
@@ -14,7 +274,7 @@ pub(in super::super::super) fn resolve(
     resolve_in(program, template, bindings, &mut work)
 }
 
-fn resolve_in(
+pub(super) fn resolve_in(
     program: &NormalizedProgram,
     template: TypeObjectDigest,
     bindings: &BTreeMap<TypeParameterId, TypeObjectDigest>,
@@ -79,6 +339,10 @@ fn scan(
 #[path = "vm_type_lookup_tests.rs"]
 mod lookup_tests;
 
+#[cfg(test)]
+#[path = "vm_associated_type_tests.rs"]
+mod associated_tests;
+
 fn matches(
     program: &NormalizedProgram,
     template: TypeObjectDigest,
@@ -87,17 +351,63 @@ fn matches(
     depth: usize,
     work: &mut Work<'_>,
 ) -> Result<bool, ExecutionError> {
+    matches_context(
+        program,
+        template,
+        actual,
+        TypeContext::ordinary(bindings),
+        depth,
+        work,
+    )
+}
+
+fn matches_context(
+    program: &NormalizedProgram,
+    template: TypeObjectDigest,
+    actual: TypeObjectDigest,
+    context: TypeContext<'_>,
+    depth: usize,
+    work: &mut Work<'_>,
+) -> Result<bool, ExecutionError> {
     work.visit(depth)?;
     let template = program.types.get(&template).ok_or_else(reject)?;
+    // Resolve a member before comparing generations or ordinary forms. The
+    // stored output is derived metadata; its original RHS is checked again in
+    // the selected implementation's own scope and scheme actuals on every hit.
+    if let Some(selection) = context
+        .associated
+        .resolve_selection(&template.form)
+        .map_err(context_error)?
+    {
+        if template.contract_version
+            != crate::platform::kernel::contract::OWNED_ASSOCIATED_CONTRACT_VERSION
+        {
+            return Err(reject());
+        }
+        catalogued(program, selection.selected(), depth + 1, work)?;
+        if selection.ty() != actual || !program.is_owned_type(actual) {
+            return Ok(false);
+        }
+        return matches_context(
+            program,
+            selection.binding().template,
+            actual,
+            TypeContext::selected(program, selection.selected(), work)?,
+            depth + 1,
+            work,
+        );
+    }
     if let TypeForm::TypeParameter { parameter } = &template.form {
-        return Ok(bindings.get(parameter) == Some(&actual) && program.types.contains_key(&actual));
+        return Ok(
+            context.parameter(*parameter) == Some(actual) && program.types.contains_key(&actual)
+        );
     }
     let actual = program.types.get(&actual).ok_or_else(reject)?;
     if template.contract_version != actual.contract_version {
         return Ok(false);
     }
     let mut child =
-        |template, actual| matches(program, template, actual, bindings, depth + 1, work);
+        |template, actual| matches_context(program, template, actual, context, depth + 1, work);
     match (&template.form, &actual.form) {
         (TypeForm::Unit, TypeForm::Unit)
         | (TypeForm::Bool, TypeForm::Bool)

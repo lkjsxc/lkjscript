@@ -24,7 +24,8 @@ use crate::platform::kernel::{
 use crate::platform::package::RunnerKind;
 use crate::platform::persistent_map::{MapError, MapErrorClass, MapWork, PersistentMap};
 use crate::platform::semantic_id::{
-    HttpRouteId, ParameterId, RepositoryId, RevisionId, TargetId, TypeParameterId,
+    AssociatedTypeMemberId, HttpRouteId, ImplementationParameterId, ParameterId, RepositoryId,
+    RevisionId, TargetId, TypeParameterId,
 };
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, StoreError, StoreErrorClass, StoreWork,
@@ -357,6 +358,10 @@ pub struct NormalizedImplementationApplication {
     pub depth: usize,
     pub implementation: DeclarationReference,
     pub contract: DeclarationReference,
+    pub implementation_generation: u16,
+    pub contract_generation: u16,
+    pub implementation_type_parameters: Arc<[TypeParameterId]>,
+    pub implementation_parameter_ids: Arc<[ImplementationParameterId]>,
     /// Exact ordered arguments of the selected implementation scheme.
     pub implementation_type_arguments: Arc<[TypeObjectDigest]>,
     /// Exact formal obligations retained from the admitted implementation owner.
@@ -372,6 +377,300 @@ pub struct NormalizedImplementationApplication {
     /// application identity is admitted through this program's canonical catalogue.
     pub implementations: Arc<[NormalizedImplementationArgument]>,
     pub prerequisites: Arc<[NormalizedImplementationConstraint]>,
+    /// Complete, contract-ordered inventory, including members unused by code.
+    pub associated_types: Arc<[NormalizedAssociatedTypeBinding]>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedAssociatedTypeBinding {
+    pub member: AssociatedTypeMemberId,
+    pub template: TypeObjectDigest,
+    pub ty: TypeObjectDigest,
+}
+
+#[derive(Clone, Copy)]
+enum ClosedWitnessParameters<'a> {
+    Declarations(&'a [crate::platform::kernel::ImplementationParameter]),
+    Ids(&'a [ImplementationParameterId]),
+}
+
+impl ClosedWitnessParameters<'_> {
+    fn len(self) -> usize {
+        match self {
+            Self::Declarations(parameters) => parameters.len(),
+            Self::Ids(parameters) => parameters.len(),
+        }
+    }
+
+    fn position(self, parameter: ImplementationParameterId) -> Option<usize> {
+        match self {
+            Self::Declarations(parameters) => parameters.iter().position(|p| p.id == parameter),
+            Self::Ids(parameters) => parameters.iter().position(|p| *p == parameter),
+        }
+    }
+}
+
+/// Borrowed exact source authority over the shared closed witness DAG.
+/// No numeric identity, equal Self, or equal output type chooses a witness.
+/// Parameter identities are unique by complete canonical declaration admission;
+/// preparation retains those immutable inventories without changing their order.
+#[derive(Clone, Copy)]
+pub(super) struct ClosedTypeEnvironment<'a> {
+    scope: Option<DeclarationReference>,
+    generation: u16,
+    parameters: ClosedWitnessParameters<'a>,
+    arguments: &'a [NormalizedImplementationArgument],
+    contract: Option<&'a NormalizedImplementationArgument>,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct ClosedAssociatedSelection<'a> {
+    selected: &'a NormalizedImplementationArgument,
+    binding: &'a NormalizedAssociatedTypeBinding,
+}
+
+impl<'a> ClosedAssociatedSelection<'a> {
+    pub(super) fn selected(self) -> &'a NormalizedImplementationArgument {
+        self.selected
+    }
+
+    pub(super) fn binding(self) -> &'a NormalizedAssociatedTypeBinding {
+        self.binding
+    }
+
+    pub(super) fn ty(self) -> TypeObjectDigest {
+        self.binding.ty
+    }
+}
+
+impl<'a> ClosedTypeEnvironment<'a> {
+    pub(super) fn forbidden() -> Self {
+        Self {
+            scope: None,
+            generation: 0,
+            parameters: ClosedWitnessParameters::Ids(&[]),
+            arguments: &[],
+            contract: None,
+        }
+    }
+
+    pub(super) fn for_function(function: &'a NormalizedFunction) -> Result<Self, Diagnostic> {
+        Self::for_function_application(function, &function.implementation_arguments)
+    }
+
+    pub(super) fn for_function_application(
+        function: &'a NormalizedFunction,
+        arguments: &'a [NormalizedImplementationArgument],
+    ) -> Result<Self, Diagnostic> {
+        if function.implementation_parameters.len() != arguments.len()
+            || (!function.graph_function && !arguments.is_empty())
+        {
+            return Err(closed_context_error());
+        }
+        Ok(Self {
+            scope: function.graph_function.then_some(function.declaration),
+            generation: function.source_generation,
+            parameters: ClosedWitnessParameters::Declarations(&function.implementation_parameters),
+            arguments,
+            contract: None,
+        })
+    }
+
+    pub(super) fn for_implementation(
+        scope: DeclarationReference,
+        implementation: &'a crate::platform::kernel::OwnedImplementation,
+        arguments: &'a [NormalizedImplementationArgument],
+        generation: u16,
+    ) -> Result<Self, Diagnostic> {
+        if implementation.implementation_parameters.len() != arguments.len() {
+            return Err(closed_context_error());
+        }
+        Ok(Self {
+            scope: Some(scope),
+            generation,
+            parameters: ClosedWitnessParameters::Declarations(
+                &implementation.implementation_parameters,
+            ),
+            arguments,
+            contract: None,
+        })
+    }
+
+    pub(super) fn for_selected(
+        selected: &'a NormalizedImplementationArgument,
+    ) -> Result<Self, Diagnostic> {
+        if selected.implementation_parameter_ids.len() != selected.implementations.len()
+            || selected.prerequisites.len() != selected.implementations.len()
+        {
+            return Err(closed_context_error());
+        }
+        Ok(Self {
+            scope: Some(selected.implementation),
+            generation: selected.implementation_generation,
+            parameters: ClosedWitnessParameters::Ids(&selected.implementation_parameter_ids),
+            arguments: &selected.implementations,
+            contract: None,
+        })
+    }
+
+    #[cfg(test)]
+    pub(super) fn for_contract(selected: &'a NormalizedImplementationArgument) -> Self {
+        Self {
+            scope: None,
+            generation: selected.contract_generation,
+            parameters: ClosedWitnessParameters::Ids(&[]),
+            arguments: &[],
+            contract: Some(selected),
+        }
+    }
+
+    pub(super) fn resolve_leaf(
+        &self,
+        form: &TypeForm,
+    ) -> Result<Option<TypeObjectDigest>, Diagnostic> {
+        Ok(self
+            .resolve_selection(form)?
+            .map(ClosedAssociatedSelection::ty))
+    }
+
+    pub(super) fn resolve_selection(
+        &self,
+        form: &TypeForm,
+    ) -> Result<Option<ClosedAssociatedSelection<'a>>, Diagnostic> {
+        let (selected, contract, member) = match form {
+            TypeForm::AssociatedWitnessProjection {
+                scope,
+                parameter,
+                contract,
+                member,
+            } => {
+                if self.scope != Some(*scope) || self.parameters.len() != self.arguments.len() {
+                    return Err(closed_context_error());
+                }
+                let position = self
+                    .parameters
+                    .position(*parameter)
+                    .ok_or_else(closed_context_error)?;
+                if let ClosedWitnessParameters::Declarations(parameters) = self.parameters
+                    && parameters[position].contract != *contract
+                {
+                    return Err(closed_context_error());
+                }
+                (&self.arguments[position], *contract, *member)
+            }
+            TypeForm::AssociatedContractMember { contract, member } => (
+                self.contract.ok_or_else(closed_context_error)?,
+                *contract,
+                *member,
+            ),
+            _ => return Ok(None),
+        };
+        if self.generation != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+            || selected.contract_generation
+                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+            || selected.implementation_generation
+                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+            || selected.contract != contract
+        {
+            return Err(closed_context_error());
+        }
+        let mut matches = selected
+            .associated_types
+            .iter()
+            .filter(|binding| binding.member == member);
+        let binding = matches.next().ok_or_else(closed_context_error)?;
+        if matches.next().is_some() {
+            return Err(closed_context_error());
+        }
+        Ok(Some(ClosedAssociatedSelection { selected, binding }))
+    }
+}
+
+fn closed_context_error() -> Diagnostic {
+    runtime_corrupt(
+        "normalized_associated_context",
+        "associated type does not have an exact closed source and witness context",
+    )
+}
+
+/// A runtime consumer binds the actual prepared function and complete ordinary map.
+/// Construction borrows immutable catalogued selections; it never unfolds the DAG.
+pub(super) struct PreparedApplicationContext<'a> {
+    program: &'a NormalizedProgram,
+    function: FunctionIndex,
+    ordinary: &'a BTreeMap<TypeParameterId, TypeObjectDigest>,
+    environment: ClosedTypeEnvironment<'a>,
+}
+
+impl<'a> PreparedApplicationContext<'a> {
+    pub(super) fn new(
+        program: &'a NormalizedProgram,
+        function: FunctionIndex,
+        ordinary: &'a BTreeMap<TypeParameterId, TypeObjectDigest>,
+        control: &crate::platform::execution::ExecutionControl,
+    ) -> Result<Self, Diagnostic> {
+        control.check().map_err(|error| {
+            Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message)
+        })?;
+        if function.1 != program.value_origin {
+            return Err(closed_context_error());
+        }
+        let declaration = program
+            .functions
+            .get(function.0 as usize)
+            .ok_or_else(closed_context_error)?;
+        if declaration.type_parameters.len() != ordinary.len()
+            || (!declaration.type_arguments.is_empty()
+                && declaration.type_arguments.len() != declaration.type_parameters.len())
+        {
+            return Err(closed_context_error());
+        }
+        // The immutable prepared declaration retains the unique canonical formal
+        // inventory. Equal arity plus every formal's membership proves that this
+        // caller map contains exactly those keys, without allocating on lookup.
+        for (position, parameter) in declaration.type_parameters.iter().enumerate() {
+            control.check().map_err(|error| {
+                Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message)
+            })?;
+            let actual = ordinary.get(parameter).ok_or_else(closed_context_error)?;
+            if !declaration.type_arguments.is_empty()
+                && declaration.type_arguments[position] != *actual
+            {
+                return Err(closed_context_error());
+            }
+        }
+        for selected in declaration.implementation_arguments.iter() {
+            control.check().map_err(|error| {
+                Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message)
+            })?;
+            let canonical = program
+                .implementation_applications
+                .get(selected.identity as usize)
+                .ok_or_else(closed_context_error)?;
+            if !Arc::ptr_eq(canonical, selected) {
+                return Err(closed_context_error());
+            }
+        }
+        Ok(Self {
+            program,
+            function,
+            ordinary,
+            environment: ClosedTypeEnvironment::for_function(declaration)?,
+        })
+    }
+
+    pub(super) fn program(&self) -> &'a NormalizedProgram {
+        self.program
+    }
+    pub(super) fn function(&self) -> FunctionIndex {
+        self.function
+    }
+    pub(super) fn ordinary(&self) -> &'a BTreeMap<TypeParameterId, TypeObjectDigest> {
+        self.ordinary
+    }
+    pub(super) fn environment(&self) -> &ClosedTypeEnvironment<'a> {
+        &self.environment
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -397,6 +696,8 @@ pub enum NormalizedCallSite {
 
 #[derive(Clone, Debug)]
 pub struct NormalizedFunction {
+    /// Actual canonical source declaration header; specialization preserves it.
+    pub(super) source_generation: u16,
     pub implementation_parameters: Arc<[crate::platform::kernel::ImplementationParameter]>,
     pub implementation_arguments: Arc<[NormalizedImplementationArgument]>,
     /// Sparse, instruction-position ordered targets private to this application.
@@ -1609,6 +1910,7 @@ fn prepare_functions(
             _ => None,
         };
         functions[index.0 as usize] = Some(NormalizedFunction {
+            source_generation: canonical.header.contract_version,
             implementation_parameters: implementation_parameters.into(),
             implementation_arguments: Arc::from([]),
             callsites: Arc::from([]),

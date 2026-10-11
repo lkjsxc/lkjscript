@@ -1,7 +1,8 @@
 //! Finite closure of callable types and exact applied static witnesses.
 //! A caller's type scope is resolved before any witness crosses a call boundary.
 use super::super::prepare::{
-    NormalizedFunction, NormalizedImplementationApplication, NormalizedImplementationArgument,
+    ClosedTypeEnvironment, NormalizedAssociatedTypeBinding, NormalizedFunction,
+    NormalizedImplementationApplication, NormalizedImplementationArgument,
     NormalizedImplementationConstraint,
 };
 use super::*;
@@ -10,7 +11,7 @@ use crate::platform::kernel::{
     DeclarationReference, ImplementationOperand, OwnedContract, OwnedImplementation, OwnerKey,
     OwnerRecord, PackageId, TypeParameterConstraints,
 };
-use crate::platform::semantic_id::ImplementationParameterId;
+use crate::platform::semantic_id::{AssociatedTypeMemberId, ImplementationParameterId};
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
@@ -102,12 +103,80 @@ impl Closing<'_, '_> {
         &mut self,
         arguments: &[TypeObjectDigest],
         bindings: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+        associated: Option<&ClosedTypeEnvironment<'_>>,
     ) -> Result<Vec<TypeObjectDigest>, Diagnostic> {
         self.work.reserve::<TypeObjectDigest>(arguments.len())?;
         arguments
             .iter()
-            .map(|ty| substitute(self.types, *ty, bindings, 0, self.work))
+            .map(|ty| {
+                substitute_in(
+                    self.types,
+                    *ty,
+                    &TypeApplication {
+                        bindings,
+                        associated,
+                        function: None,
+                    },
+                    0,
+                    self.work,
+                )
+            })
             .collect()
+    }
+
+    fn generation(&self, reference: DeclarationReference) -> Result<u16, Diagnostic> {
+        match self.runtime_owners.get(&(
+            reference.package,
+            OwnerKey::Declaration(reference.declaration),
+        )) {
+            Some(OwnerRecord::Declaration(declaration))
+                if declaration.header.owner == OwnerKey::Declaration(reference.declaration) =>
+            {
+                Ok(declaration.header.contract_version)
+            }
+            _ => Err(missing()),
+        }
+    }
+
+    fn owned(&self, ty: TypeObjectDigest) -> bool {
+        matches!(
+            self.types.get(&ty).map(|t| &t.form),
+            Some(
+                TypeForm::ByteBuffer
+                    | TypeForm::OwnedI64Cell
+                    | TypeForm::OwnedProduct { .. }
+                    | TypeForm::OwnedChoice { .. }
+                    | TypeForm::OwnedSequence { .. }
+            )
+        ) || matches!(self.types.get(&ty).map(|t| &t.form), Some(TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. }) if self.owned_records.contains(declaration))
+    }
+
+    fn binding_template(
+        &mut self,
+        ty: TypeObjectDigest,
+        parameters: &[TypeParameterId],
+        depth: usize,
+    ) -> Result<(), Diagnostic> {
+        step(self.work)?;
+        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+            return Err(missing());
+        }
+        let object = self.types.get(&ty).ok_or_else(missing)?;
+        match object.form {
+            TypeForm::AssociatedContractMember { .. }
+            | TypeForm::AssociatedWitnessProjection { .. } => return Err(missing()),
+            TypeForm::TypeParameter { parameter } if !parameters.contains(&parameter) => {
+                return Err(missing());
+            }
+            _ => {}
+        }
+        self.work
+            .reserve::<TypeObjectDigest>(object.child_type_count())?;
+        let children = object.child_types();
+        for child in children {
+            self.binding_template(child, parameters, depth + 1)?;
+        }
+        Ok(())
     }
 
     fn reserve_operand(
@@ -136,6 +205,7 @@ impl Closing<'_, '_> {
         Ok(())
     }
 
+    #[cfg(test)]
     fn operand(
         &mut self,
         operand: &ImplementationOperand,
@@ -143,7 +213,18 @@ impl Closing<'_, '_> {
         bindings: &Bindings,
         types: &BTreeMap<TypeParameterId, TypeObjectDigest>,
     ) -> Result<AppliedWitness, Diagnostic> {
-        self.operand_at(operand, scope, bindings, types, 0)
+        self.operand_in(operand, scope, bindings, types, None)
+    }
+
+    fn operand_in(
+        &mut self,
+        operand: &ImplementationOperand,
+        scope: Option<DeclarationReference>,
+        bindings: &Bindings,
+        types: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+        associated: Option<&ClosedTypeEnvironment<'_>>,
+    ) -> Result<AppliedWitness, Diagnostic> {
+        self.operand_at(operand, scope, bindings, types, associated, 0)
     }
 
     fn operand_at(
@@ -152,6 +233,7 @@ impl Closing<'_, '_> {
         scope: Option<DeclarationReference>,
         bindings: &Bindings,
         types: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+        associated: Option<&ClosedTypeEnvironment<'_>>,
         depth: usize,
     ) -> Result<AppliedWitness, Diagnostic> {
         step(self.work)?;
@@ -173,22 +255,11 @@ impl Closing<'_, '_> {
                 {
                     return Err(missing());
                 }
-                let arguments = self.arguments(type_arguments, types)?;
+                let arguments = self.arguments(type_arguments, types, associated)?;
                 let constraints = self.constraints(*implementation, &scheme.type_parameters)?;
                 let mut closed = BTreeMap::new();
                 for (ty, constraint) in arguments.iter().zip(&constraints) {
-                    let owned = matches!(
-                        self.types.get(ty).map(|t| &t.form),
-                        Some(
-                            TypeForm::ByteBuffer
-                                | TypeForm::OwnedI64Cell
-                                | TypeForm::OwnedProduct { .. }
-                                | TypeForm::OwnedChoice { .. }
-                                | TypeForm::OwnedSequence { .. }
-                        )
-                    ) || matches!(self.types.get(ty).map(|t| &t.form),
-                        Some(TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. })
-                            if self.owned_records.contains(declaration));
+                    let owned = self.owned(*ty);
                     if owned != constraint.has_owned()
                         || !instantiated_type(self.types, *ty, &mut closed, 0, self.work)?
                     {
@@ -199,7 +270,9 @@ impl Closing<'_, '_> {
                 self.work.reserve::<usize>(2)?;
                 let prerequisites = implementations
                     .iter()
-                    .map(|operand| self.operand_at(operand, scope, bindings, types, depth + 1))
+                    .map(|operand| {
+                        self.operand_at(operand, scope, bindings, types, associated, depth + 1)
+                    })
                     .collect::<Result<Vec<_>, _>>()?;
                 let subtree_depth = prerequisites
                     .iter()
@@ -287,43 +360,126 @@ impl Closing<'_, '_> {
             .copied()
             .zip(witness.type_arguments.iter().copied())
             .collect();
-        let self_type = substitute(self.types, implementation.self_type, &types, 0, self.work)?;
-        let type_arguments = self.arguments(&implementation.type_arguments, &types)?;
+        let implementation_generation = self.generation(witness.implementation)?;
+        let contract_generation = self.generation(implementation.contract)?;
         let implementation_constraints =
             self.constraints(witness.implementation, &implementation.type_parameters)?;
         let contract = *self
             .contracts
             .get(&implementation.contract)
             .ok_or_else(missing)?;
-        if type_arguments.len() != contract.type_parameters.len() {
-            return Err(missing());
-        }
         let contract_constraints =
             self.constraints(implementation.contract, &contract.type_parameters)?;
         self.work
             .reserve::<NormalizedImplementationArgument>(witness.implementations.len())?;
         self.work
             .reserve::<NormalizedImplementationConstraint>(witness.implementations.len())?;
-        self.work.reserve::<usize>(8)?;
+        // Nine retained Arc slices each carry two allocation header words.
+        // The enclosing application Arc is reserved separately below.
+        self.work.reserve::<usize>(18)?;
         let mut prerequisites = Vec::new();
         let mut obligations = Vec::new();
-        for (parameter, child) in implementation
+        // Close the entire borrowed prerequisite DAG before applying any source
+        // projection. The node is not published until every obligation/member fits.
+        for child in witness.implementations.iter() {
+            prerequisites.push(self.normalize_witness(child, depth + 1)?);
+        }
+        let environment = ClosedTypeEnvironment::for_implementation(
+            witness.implementation,
+            implementation,
+            &prerequisites,
+            implementation_generation,
+        )?;
+        let application = TypeApplication {
+            bindings: &types,
+            associated: Some(&environment),
+            function: None,
+        };
+        let self_type = substitute_in(
+            self.types,
+            implementation.self_type,
+            &application,
+            0,
+            self.work,
+        )?;
+        let type_arguments =
+            self.arguments(&implementation.type_arguments, &types, Some(&environment))?;
+        if type_arguments.len() != contract.type_parameters.len() {
+            return Err(missing());
+        }
+        for (parameter, selected) in implementation
             .implementation_parameters
             .iter()
-            .zip(witness.implementations.iter())
+            .zip(&prerequisites)
         {
-            let application = self.normalize_witness(child, depth + 1)?;
-            self.match_parameter(parameter, &application, &types)?;
-            let self_type = substitute(self.types, parameter.self_type, &types, 0, self.work)?;
-            let type_arguments = self.arguments(&parameter.type_arguments, &types)?;
+            self.match_parameter(parameter, selected, &types, Some(&environment))?;
+            let self_type =
+                substitute_in(self.types, parameter.self_type, &application, 0, self.work)?;
+            let type_arguments =
+                self.arguments(&parameter.type_arguments, &types, Some(&environment))?;
             self.work.reserve::<usize>(2)?;
             obligations.push(NormalizedImplementationConstraint {
                 contract: parameter.contract,
                 self_type,
                 type_arguments: type_arguments.into(),
             });
-            prerequisites.push(application);
         }
+        if contract.associated_types.len() != implementation.associated_types.len()
+            || contract.associated_types.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN
+        {
+            return Err(missing());
+        }
+        if !contract.associated_types.is_empty()
+            && (implementation_generation
+                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+                || contract_generation != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
+        {
+            return Err(missing());
+        }
+        self.work
+            .reserve::<NormalizedAssociatedTypeBinding>(contract.associated_types.len())?;
+        let mut binding_index = BTreeMap::new();
+        let mut previous = None;
+        for binding in &implementation.associated_types {
+            step(self.work)?;
+            if previous.is_some_and(|member| member >= binding.member) {
+                return Err(missing());
+            }
+            self.work.node::<(
+                AssociatedTypeMemberId,
+                &crate::platform::kernel::AssociatedTypeBinding,
+            )>()?;
+            binding_index.insert(binding.member, binding);
+            previous = Some(binding.member);
+        }
+        let mut associated_types = Vec::new();
+        let mut member_ids = BTreeSet::new();
+        let mut member_names = BTreeSet::new();
+        let mut closed = BTreeMap::new();
+        for member in &contract.associated_types {
+            step(self.work)?;
+            // Inventory ordering comes from the contract, not a selected use.
+            self.work.node::<AssociatedTypeMemberId>()?;
+            self.work.node::<&crate::platform::kernel::Name>()?;
+            if !member_ids.insert(member.id) || !member_names.insert(&member.name) {
+                return Err(missing());
+            }
+            let binding = binding_index.get(&member.id).ok_or_else(missing)?;
+            self.binding_template(binding.ty, &implementation.type_parameters, 0)?;
+            let ty = substitute(self.types, binding.ty, &types, 0, self.work)?;
+            if !self.owned(ty) || !instantiated_type(self.types, ty, &mut closed, 0, self.work)? {
+                return Err(missing());
+            }
+            associated_types.push(NormalizedAssociatedTypeBinding {
+                member: member.id,
+                template: binding.ty,
+                ty,
+            });
+        }
+        self.work
+            .reserve::<TypeParameterId>(implementation.type_parameters.len())?;
+        self.work
+            .reserve::<ImplementationParameterId>(implementation.implementation_parameters.len())?;
         self.work
             .reserve::<TypeObjectDigest>(witness.type_arguments.len())?;
         self.work
@@ -334,6 +490,15 @@ impl Closing<'_, '_> {
             depth: witness.depth,
             implementation: witness.implementation,
             contract: implementation.contract,
+            implementation_generation,
+            contract_generation,
+            implementation_type_parameters: implementation.type_parameters.clone().into(),
+            implementation_parameter_ids: implementation
+                .implementation_parameters
+                .iter()
+                .map(|p| p.id)
+                .collect::<Vec<_>>()
+                .into(),
             implementation_type_arguments: witness.type_arguments.clone().into(),
             implementation_type_parameter_constraints: implementation_constraints.into(),
             self_type,
@@ -341,6 +506,7 @@ impl Closing<'_, '_> {
             contract_type_parameter_constraints: contract_constraints.into(),
             implementations: prerequisites.into(),
             prerequisites: obligations.into(),
+            associated_types: associated_types.into(),
         });
         self.work
             .node::<(AppliedWitness, NormalizedImplementationArgument)>()?;
@@ -353,11 +519,21 @@ impl Closing<'_, '_> {
         parameter: &crate::platform::kernel::ImplementationParameter,
         application: &NormalizedImplementationArgument,
         types: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+        associated: Option<&ClosedTypeEnvironment<'_>>,
     ) -> Result<(), Diagnostic> {
         step(self.work)?;
         if parameter.contract != application.contract
-            || substitute(self.types, parameter.self_type, types, 0, self.work)?
-                != application.self_type
+            || substitute_in(
+                self.types,
+                parameter.self_type,
+                &TypeApplication {
+                    bindings: types,
+                    associated,
+                    function: None,
+                },
+                0,
+                self.work,
+            )? != application.self_type
             || parameter.type_arguments.len() != application.type_arguments.len()
         {
             return Err(missing());
@@ -367,7 +543,18 @@ impl Closing<'_, '_> {
             .iter()
             .zip(application.type_arguments.iter())
         {
-            if substitute(self.types, *expected, types, 0, self.work)? != *actual {
+            if substitute_in(
+                self.types,
+                *expected,
+                &TypeApplication {
+                    bindings: types,
+                    associated,
+                    function: None,
+                },
+                0,
+                self.work,
+            )? != *actual
+            {
                 return Err(missing());
             }
         }
@@ -409,10 +596,17 @@ impl Closing<'_, '_> {
             .zip(key.1.iter().copied())
             .collect();
         let mut supplied = Vec::new();
-        for (p, witness) in template.implementation_parameters.iter().zip(&key.2) {
-            let application = self.normalize_witness(witness, 0)?;
-            self.match_parameter(p, &application, &function_bindings)?;
-            supplied.push(application);
+        for witness in &key.2 {
+            supplied.push(self.normalize_witness(witness, 0)?);
+        }
+        let environment = ClosedTypeEnvironment::for_function_application(template, &supplied)?;
+        for (parameter, application) in template.implementation_parameters.iter().zip(&supplied) {
+            self.match_parameter(
+                parameter,
+                application,
+                &function_bindings,
+                Some(&environment),
+            )?;
         }
         self.work.node::<(Application, FunctionIndex)>()?;
         self.work.node::<(Application, FunctionIndex)>()?;
@@ -450,6 +644,35 @@ impl Closing<'_, '_> {
         bindings: &Bindings,
         types: &BTreeMap<TypeParameterId, TypeObjectDigest>,
     ) -> Result<(), Diagnostic> {
+        let templates = Arc::clone(&self.templates);
+        let source = scope
+            .map(|scope| {
+                templates
+                    .iter()
+                    .find(|function| function.declaration == scope)
+                    .ok_or_else(missing)
+            })
+            .transpose()?;
+        self.work
+            .reserve::<NormalizedImplementationArgument>(bindings.len())?;
+        self.work.reserve::<usize>(2)?;
+        let mut selections = Vec::new();
+        if let Some(function) = source {
+            if function.implementation_parameters.len() != bindings.len() {
+                return Err(missing());
+            }
+            for parameter in function.implementation_parameters.iter() {
+                let witness = bindings.get(&parameter.id).ok_or_else(missing)?;
+                selections.push(self.normalize_witness(witness, 0)?);
+            }
+        } else if !bindings.is_empty() {
+            return Err(missing());
+        }
+        let environment = if let Some(function) = source {
+            ClosedTypeEnvironment::for_function_application(function, &selections)?
+        } else {
+            ClosedTypeEnvironment::forbidden()
+        };
         self.work
             .reserve::<NormalizedInstruction>(code.instructions.len())?;
         // Concrete witness operands own vectors, unlike the Arc-backed call operands.
@@ -479,9 +702,15 @@ impl Closing<'_, '_> {
                         self.work.reserve::<AppliedWitness>(implementations.len())?;
                         let mut selected = Vec::new();
                         for operand in implementations.iter() {
-                            selected.push(self.operand(operand, scope, bindings, types)?);
+                            selected.push(self.operand_in(
+                                operand,
+                                scope,
+                                bindings,
+                                types,
+                                Some(&environment),
+                            )?);
                         }
-                        let applied = self.arguments(arguments, types)?;
+                        let applied = self.arguments(arguments, types, Some(&environment))?;
                         self.work.reserve::<TypeObjectDigest>(applied.len())?;
                         self.work.reserve::<usize>(2)?;
                         *arguments = Arc::from(applied.clone());
@@ -500,9 +729,15 @@ impl Closing<'_, '_> {
                     self.work.reserve::<AppliedWitness>(implementations.len())?;
                     let mut selected = Vec::new();
                     for operand in implementations.iter() {
-                        selected.push(self.operand(operand, scope, bindings, types)?);
+                        selected.push(self.operand_in(
+                            operand,
+                            scope,
+                            bindings,
+                            types,
+                            Some(&environment),
+                        )?);
                     }
-                    let applied = self.arguments(type_arguments, types)?;
+                    let applied = self.arguments(type_arguments, types, Some(&environment))?;
                     self.work.reserve::<TypeObjectDigest>(applied.len())?;
                     self.work.reserve::<usize>(2)?;
                     let function = self.application(*function, applied.clone(), selected)?;
@@ -520,7 +755,11 @@ impl Closing<'_, '_> {
                     method,
                     arguments,
                 } => {
-                    let selected = self.operand(witness, scope, bindings, types)?;
+                    let selected =
+                        self.operand_in(witness, scope, bindings, types, Some(&environment))?;
+                    let normalized_selected = self.normalize_witness(&selected, 0)?;
+                    let implementation_environment =
+                        ClosedTypeEnvironment::for_selected(&normalized_selected)?;
                     let implementation = *self
                         .implementations
                         .get(&selected.implementation)
@@ -570,16 +809,21 @@ impl Closing<'_, '_> {
                         .map(|p| p.id)
                         .zip(selected.implementations.iter().cloned())
                         .collect();
-                    let applied = self.arguments(&mapped_types, &implementation_bindings)?;
+                    let applied = self.arguments(
+                        &mapped_types,
+                        &implementation_bindings,
+                        Some(&implementation_environment),
+                    )?;
                     self.work
                         .reserve::<AppliedWitness>(mapped_implementations.len())?;
                     let mut prerequisites = Vec::new();
                     for operand in &mapped_implementations {
-                        prerequisites.push(self.operand(
+                        prerequisites.push(self.operand_in(
                             operand,
                             Some(selected.implementation),
                             &implementation_witnesses,
                             &implementation_bindings,
+                            Some(&implementation_environment),
                         )?);
                     }
                     self.work.reserve::<TypeObjectDigest>(applied.len())?;
@@ -608,7 +852,7 @@ impl Closing<'_, '_> {
                     type_arguments,
                     ..
                 } => {
-                    let applied = self.arguments(type_arguments, types)?;
+                    let applied = self.arguments(type_arguments, types, Some(&environment))?;
                     self.work.reserve::<TypeObjectDigest>(applied.len())?;
                     self.work.reserve::<usize>(2)?;
                     *type_arguments = Arc::from(applied.clone());
@@ -981,6 +1225,10 @@ mod tests {
                         depth: 0,
                         implementation: reference,
                         contract: reference,
+                        implementation_generation: 0,
+                        contract_generation: 0,
+                        implementation_type_parameters: Arc::from([]),
+                        implementation_parameter_ids: Arc::from([]),
                         implementation_type_arguments: Arc::from([]),
                         implementation_type_parameter_constraints: Arc::from([]),
                         self_type: f.result,
@@ -988,6 +1236,7 @@ mod tests {
                         contract_type_parameter_constraints: Arc::from([]),
                         implementations: Arc::from([]),
                         prerequisites: Arc::from([]),
+                        associated_types: Arc::from([]),
                     })]);
             } else {
                 f.implementation_parameters =
@@ -1243,3 +1492,7 @@ mod storage_tests;
 #[cfg(test)]
 #[path = "prepared_witness_reservation_tests.rs"]
 mod reservation_tests;
+
+#[cfg(test)]
+#[path = "prepared_associated_tests.rs"]
+pub(super) mod associated_tests;
