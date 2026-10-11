@@ -16,11 +16,11 @@ use crate::platform::change::{
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     BindingKind, BindingRecord, CaseReference, DeclarationPayload, DeclarationRecord,
-    DeclarationReference, ExactOwnerKey, ExpressionOperation, ExpressionRecord, FieldReference,
-    FieldSelector, FunctionEffect, LocalValueReference, OperationReference, OwnerKey, OwnerRecord,
-    PackageId, PackageInterfaceRecord, ParameterParent, ParameterUse, PortImplementation,
-    PortReference, RelationEndpoint, RelationKind, RequirementReference, StructuralTypeField,
-    TextValue, TypeForm, TypeObject, TypeObjectDigest, encode_type_object,
+    DeclarationReference, ExactOwnerKey, ExpressionOperation, ExpressionRead, ExpressionRecord,
+    FieldReference, FieldSelector, FunctionEffect, LocalValueReference, OperationReference,
+    OwnerKey, OwnerRecord, PackageId, PackageInterfaceRecord, ParameterParent, ParameterUse,
+    PortImplementation, PortReference, RelationEndpoint, RelationKind, RequirementReference,
+    StructuralTypeField, TextValue, TypeForm, TypeObject, TypeObjectDigest, encode_type_object,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::semantic_id::{
@@ -29,6 +29,7 @@ use crate::platform::semantic_id::{
 };
 use crate::platform::session::{CanonicalSessionRead, validate_session_function_type};
 use crate::platform::storage::object::ObjectKey;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 
 struct SignatureGenerics<'a> {
@@ -98,6 +99,7 @@ pub fn compile_unit<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         },
         tables: TablesBuilder::default(),
         derived_type_objects: BTreeMap::new(),
+        derived_type_admission: DerivedTypeAdmission::default(),
         work: CompilationWork {
             witness: summary_read.work,
             ..CompilationWork::default()
@@ -142,6 +144,7 @@ pub fn compile_unit<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     let key = CompilationUnitKey::derive(&source, optimization)?;
     let route_ids = target_route_ids(witness, owner, &mut builder.work)?;
     let payload = builder.compile_payload(owner, record, &route_ids)?;
+    builder.complete_owned_record_type_closure()?;
     let tables = builder.tables.finish();
     let mut work = builder.work;
     let unit = CompilationUnit {
@@ -241,11 +244,30 @@ struct UnitBuilder<'a, B: ?Sized> {
     scope: Option<DeclarationId>,
     tables: TablesBuilder,
     derived_type_objects: BTreeMap<ObjectKey, Vec<u8>>,
+    derived_type_admission: DerivedTypeAdmission,
     work: CompilationWork,
+}
+
+struct DerivedTypeAdmission {
+    bytes: usize,
+    maximum_bytes: usize,
+}
+
+impl Default for DerivedTypeAdmission {
+    fn default() -> Self {
+        Self {
+            bytes: 0,
+            maximum_bytes: 64 * 1_048_576,
+        }
+    }
 }
 
 #[path = "parallel_lower.rs"]
 mod parallel_lower;
+
+#[cfg(test)]
+#[path = "derived_type_admission_tests.rs"]
+mod derived_type_admission_tests;
 
 /// Exact point reads needed for expression lowering. Artifact admission supplies these from its
 /// independently admitted canonical closure, without a repository or a producer's witness.
@@ -265,9 +287,54 @@ pub(super) trait CodeRead {
         package: PackageId,
         owner: OwnerKey,
     ) -> Result<CanonicalRead<Option<PackageInterfaceRecord>>, Diagnostic>;
+    fn code_representation_dependency(
+        &self,
+        package: PackageId,
+    ) -> Result<CanonicalRead<bool>, Diagnostic> {
+        self.code_dependency(package)
+    }
+    fn code_representation_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<CanonicalRead<Option<PackageInterfaceRecord>>, Diagnostic> {
+        self.code_interface(package, owner)
+    }
+}
+
+fn representation_dependency<B: CanonicalBaseRead + ?Sized>(
+    read: &B,
+    package: PackageId,
+) -> Result<CanonicalRead<Option<crate::platform::kernel::DependencyRecord>>, Diagnostic> {
+    let roots = read.read_dependencies()?;
+    let mut work = roots.work;
+    let mut selected = None;
+    for root in roots.value {
+        read.validation_checkpoint()?;
+        let dependency = read.read_representation_dependency(&root, package)?;
+        work.add(dependency.work);
+        if let Some(binding) = dependency.value {
+            if binding.package != package
+                || selected.as_ref().is_some_and(|prior| *prior != binding)
+            {
+                return Err(compiler_corrupt(
+                    "compiler_representation_binding",
+                    "exact imported representations bind one package to conflicting revisions",
+                ));
+            }
+            selected = Some(binding);
+        }
+    }
+    Ok(CanonicalRead {
+        value: selected,
+        work,
+    })
 }
 
 impl<B: CanonicalBaseRead + ?Sized> CodeRead for B {
+    fn code_step(&self) -> Result<(), Diagnostic> {
+        self.validation_checkpoint()
+    }
     fn code_dependency(&self, package: PackageId) -> Result<CanonicalRead<bool>, Diagnostic> {
         let r = self.read_dependency(package)?;
         Ok(CanonicalRead {
@@ -303,6 +370,103 @@ impl<B: CanonicalBaseRead + ?Sized> CodeRead for B {
         read.work.add(dependency.work);
         Ok(read)
     }
+    fn code_representation_dependency(
+        &self,
+        package: PackageId,
+    ) -> Result<CanonicalRead<bool>, Diagnostic> {
+        let read = representation_dependency(self, package)?;
+        Ok(CanonicalRead {
+            value: read.value.is_some(),
+            work: read.work,
+        })
+    }
+    fn code_representation_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<CanonicalRead<Option<PackageInterfaceRecord>>, Diagnostic> {
+        let dependency = representation_dependency(self, package)?;
+        let Some(binding) = dependency.value else {
+            return Ok(CanonicalRead {
+                value: None,
+                work: dependency.work,
+            });
+        };
+        let mut read = self.read_package_interface_owner(&binding, owner)?;
+        read.work.add(dependency.work);
+        Ok(read)
+    }
+}
+
+/// The same nominal representation proof runs against repository point reads and the
+/// independently admitted artifact closure. Derived substitutions remain compiler metadata.
+struct CodeExpressionRead<'a, B: ?Sized> {
+    canonical: &'a B,
+    package: PackageId,
+    derived: &'a BTreeMap<ObjectKey, Vec<u8>>,
+    work: RefCell<CanonicalReadWork>,
+    owners: Cell<u64>,
+}
+
+impl<B: CodeRead + ?Sized> crate::platform::kernel::ExpressionRead for CodeExpressionRead<'_, B> {
+    fn package_id(&self) -> PackageId {
+        self.package
+    }
+
+    fn owner(&self, owner: OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic> {
+        let read = self.canonical.code_owner(owner)?;
+        self.work.borrow_mut().add(read.work);
+        self.owners.set(self.owners.get().saturating_add(1));
+        Ok(read.value)
+    }
+
+    fn type_object(&self, ty: TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic> {
+        let key = ObjectKey::from_digest(
+            crate::platform::storage::object::ObjectDomain::Type,
+            ty.bytes(),
+        );
+        if let Some(bytes) = self.derived.get(&key) {
+            self.canonical.code_step()?;
+            return crate::platform::kernel::decode_type_object(bytes, ty).map(Some);
+        }
+        let read = self.canonical.code_type(ty)?;
+        self.work.borrow_mut().add(read.work);
+        Ok(read.value)
+    }
+
+    fn package_interface_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        let read = self.canonical.code_interface(package, owner)?;
+        self.work.borrow_mut().add(read.work);
+        Ok(read.value)
+    }
+
+    fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        let read = self.canonical.code_dependency(package)?;
+        self.work.borrow_mut().add(read.work);
+        Ok(read.value)
+    }
+    fn has_representation_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        let read = self.canonical.code_representation_dependency(package)?;
+        self.work.borrow_mut().add(read.work);
+        Ok(read.value)
+    }
+    fn package_representation_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        let read = self.canonical.code_representation_owner(package, owner)?;
+        self.work.borrow_mut().add(read.work);
+        Ok(read.value)
+    }
+
+    fn validation_work(&self) -> Result<(), Diagnostic> {
+        self.canonical.code_step()
+    }
 }
 
 pub(super) fn canonical_code<B: CodeRead + ?Sized>(
@@ -319,6 +483,7 @@ pub(super) fn canonical_code<B: CodeRead + ?Sized>(
         scope,
         tables: TablesBuilder::from_tables(tables),
         derived_type_objects: BTreeMap::new(),
+        derived_type_admission: DerivedTypeAdmission::default(),
         work: CompilationWork::default(),
     };
     builder.compile_code(root, parameters)
@@ -341,8 +506,35 @@ pub(super) fn reconstruct_parallel_result_types<B: CanonicalBaseRead + ?Sized>(
         },
         tables: TablesBuilder::default(),
         derived_type_objects: BTreeMap::new(),
+        derived_type_admission: DerivedTypeAdmission::default(),
         work: CompilationWork::default(),
     };
+    // Nominal applications can synthesize nested field substitutions even when their
+    // bytecode only names the outer record. Carry that complete derived type closure.
+    for ty in &unit.tables.types {
+        read.validation_checkpoint()?;
+        *remaining = remaining.checked_sub(1).ok_or_else(|| {
+            compiler_error(
+                DiagnosticClass::Resource,
+                "compiler_owned_record_type_limit",
+                "owned record type reconstruction exceeds the existing validation work bound",
+            )
+        })?;
+        let object = builder.with_expression_read(|read| read.type_object(*ty))?;
+        if object.is_some_and(|object| {
+            matches!(
+                object.form,
+                TypeForm::Named { .. } | TypeForm::Applied { .. }
+            )
+        }) {
+            let package = builder.package;
+            if builder.with_expression_read(|read| {
+                crate::platform::kernel::owned_record::is_owned(read, package, *ty)
+            })? {
+                builder.owned_record_fields(*ty, false)?;
+            }
+        }
+    }
     let mut reconstruct = |code: &CompiledCode| -> Result<(), Diagnostic> {
         for instruction in &code.instructions {
             read.validation_checkpoint()?;
@@ -422,6 +614,9 @@ pub(super) fn reconstruct_parallel_result_types<B: CanonicalBaseRead + ?Sized>(
         }
         _ => {}
     }
+    // Closed parallel children may introduce a nominal application absent from
+    // canonical storage; complete its field substitutions after recreating it.
+    builder.complete_owned_record_type_closure()?;
     Ok((builder.derived_type_objects, builder.work.canonical))
 }
 
@@ -663,6 +858,29 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                     }
                 }
                 Ok(CompilationPayload::OwnedImplementation(i))
+            }
+            DeclarationPayload::OwnedRecord {
+                fields,
+                type_parameters,
+            } => {
+                let type_parameter_constraints =
+                    self.compile_type_parameter_constraints(declaration, &type_parameters)?;
+                let mut compiled = Vec::with_capacity(fields.len());
+                for field in fields {
+                    let field_record = self.required_field(field, declaration)?;
+                    compiled.push(CompiledFieldLayout {
+                        field: self.tables.field(FieldReference {
+                            package: self.package,
+                            field,
+                        })?,
+                        ty: self.tables.ty(field_record.ty)?,
+                    });
+                }
+                Ok(CompilationPayload::OwnedRecord {
+                    type_parameters,
+                    type_parameter_constraints,
+                    fields: compiled,
+                })
             }
             DeclarationPayload::Record {
                 fields,
@@ -1009,6 +1227,183 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
 }
 
 impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
+    fn retain_derived_type(
+        &mut self,
+        expected: Option<TypeObjectDigest>,
+        object: &TypeObject,
+    ) -> Result<TypeObjectDigest, Diagnostic> {
+        if let Some(digest) = expected
+            && self
+                .derived_type_objects
+                .contains_key(&ObjectKey::from_digest(
+                    crate::platform::storage::object::ObjectDomain::Type,
+                    digest.bytes(),
+                ))
+        {
+            return Ok(digest);
+        }
+        if self.derived_type_objects.len() >= MAXIMUM_COMPILER_UNIT_ITEMS {
+            return Err(compiler_error(
+                DiagnosticClass::Resource,
+                "compiler_derived_type_storage",
+                "derived type inventory exceeds the compiler-unit bound",
+            ));
+        }
+        // Count canonical payload bytes without constructing a buffer. Reserve the
+        // retained map entry and temporary encoding buffers before producing them.
+        let mut size = bincode::enc::write::SizeWriter::default();
+        bincode::encode_into_writer(
+            object,
+            &mut size,
+            bincode::config::standard()
+                .with_little_endian()
+                .with_variable_int_encoding(),
+        )
+        .map_err(|error| {
+            compiler_corrupt(
+                "compiler_derived_type_encoding",
+                format!("derived type size admission failed: {error}"),
+            )
+        })?;
+        let reserve = size
+            .bytes_written
+            .checked_add(256)
+            .and_then(|bytes| bytes.checked_mul(4))
+            .and_then(|bytes| {
+                bytes.checked_add(
+                    std::mem::size_of::<(ObjectKey, Vec<u8>)>() + 4 * std::mem::size_of::<usize>(),
+                )
+            })
+            .ok_or_else(|| {
+                compiler_error(
+                    DiagnosticClass::Resource,
+                    "compiler_derived_type_storage",
+                    "derived type metadata size overflow",
+                )
+            })?;
+        self.derived_type_admission.bytes = self
+            .derived_type_admission
+            .bytes
+            .checked_add(reserve)
+            .filter(|bytes| *bytes <= self.derived_type_admission.maximum_bytes)
+            .ok_or_else(|| {
+                compiler_error(
+                    DiagnosticClass::Resource,
+                    "compiler_derived_type_storage",
+                    "cumulative derived type metadata exceeds its storage admission",
+                )
+            })?;
+        let (digest, bytes) = encode_type_object(object)?;
+        if expected.is_some_and(|expected| expected != digest) {
+            return Err(compiler_corrupt(
+                "compiler_owned_record_type",
+                "derived field type has another digest",
+            ));
+        }
+        let key = ObjectKey::from_digest(
+            crate::platform::storage::object::ObjectDomain::Type,
+            digest.bytes(),
+        );
+        match self.derived_type_objects.entry(key) {
+            std::collections::btree_map::Entry::Occupied(_) => {
+                self.derived_type_admission.bytes -= reserve;
+            }
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(bytes);
+            }
+        }
+        Ok(digest)
+    }
+
+    fn complete_owned_record_type_closure(&mut self) -> Result<(), Diagnostic> {
+        let mut pending = self.tables.types.values.clone();
+        let mut seen = BTreeSet::new();
+        while let Some(ty) = pending.pop() {
+            self.canonical.code_step()?;
+            if !seen.insert(ty) {
+                continue;
+            }
+            if seen.len() > MAXIMUM_COMPILER_UNIT_ITEMS {
+                return Err(compiler_error(
+                    DiagnosticClass::Resource,
+                    "compiler_owned_record_type_limit",
+                    "owned record type closure exceeds the compiler-unit bound",
+                ));
+            }
+            let object = self
+                .with_expression_read(|read| read.type_object(ty))?
+                .ok_or_else(|| {
+                    compiler_corrupt(
+                        "compiler_owned_record_type",
+                        "type closure omits an exact type object",
+                    )
+                })?;
+            pending.extend(object.child_types());
+            if matches!(
+                object.form,
+                TypeForm::Named { .. } | TypeForm::Applied { .. }
+            ) {
+                let package = self.package;
+                if self.with_expression_read(|read| {
+                    crate::platform::kernel::owned_record::is_owned(read, package, ty)
+                })? {
+                    pending.extend(
+                        self.owned_record_fields(ty, false)?
+                            .into_iter()
+                            .map(|(_, ty)| ty),
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn with_expression_read<T>(
+        &mut self,
+        operation: impl FnOnce(&CodeExpressionRead<'_, B>) -> Result<T, Diagnostic>,
+    ) -> Result<T, Diagnostic> {
+        let read = CodeExpressionRead {
+            canonical: self.canonical,
+            package: self.package,
+            derived: &self.derived_type_objects,
+            work: RefCell::new(CanonicalReadWork::default()),
+            owners: Cell::new(0),
+        };
+        let result = operation(&read);
+        self.work.canonical.add(read.work.into_inner());
+        self.work.owner_records_read = self
+            .work
+            .owner_records_read
+            .saturating_add(read.owners.get());
+        result
+    }
+
+    fn owned_record_fields(
+        &mut self,
+        ty: TypeObjectDigest,
+        require_access: bool,
+    ) -> Result<Vec<(FieldReference, TypeObjectDigest)>, Diagnostic> {
+        let scope = self.scope.map(|declaration| DeclarationReference {
+            package: self.package,
+            declaration,
+        });
+        let layout = self.with_expression_read(|read| {
+            if require_access {
+                crate::platform::kernel::owned_record::require_access(read, ty, scope)?;
+            }
+            crate::platform::kernel::owned_record::layout(read, ty)
+        })?;
+        for (digest, object) in layout.types {
+            self.canonical.code_step()?;
+            self.retain_derived_type(Some(digest), &object)?;
+        }
+        for (field, ty) in &layout.fields {
+            self.tables.field(*field)?;
+            self.tables.ty(*ty)?;
+        }
+        Ok(layout.fields)
+    }
+
     fn implementation_operand(
         &mut self,
         operand: &crate::platform::kernel::ImplementationOperand,
@@ -1078,9 +1473,8 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
     }
 
     fn owned_local_type(&mut self, ty: TypeObjectDigest) -> Result<bool, Diagnostic> {
-        let read = self.canonical.code_type(ty)?;
-        self.work.canonical.add(read.work);
-        Ok(match read.value.map(|t| t.form) {
+        let object = self.with_expression_read(|read| read.type_object(ty))?;
+        Ok(match object.map(|t| t.form) {
             Some(
                 TypeForm::ByteBuffer
                 | TypeForm::OwnedI64Cell
@@ -1092,6 +1486,12 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
                 self.required_owner(OwnerKey::TypeParameter(parameter), "owned local parameter")?,
                 OwnerRecord::TypeParameter(p) if p.constraints.has_owned()
             ),
+            Some(TypeForm::Named { .. } | TypeForm::Applied { .. }) => {
+                let package = self.package;
+                self.with_expression_read(|read| {
+                    crate::platform::kernel::owned_record::is_owned(read, package, ty)
+                })?
+            }
             _ => false,
         })
     }
@@ -1584,6 +1984,7 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
                     }
                     record.constraints.has_owned()
                 }
+                TypeForm::Named { .. } | TypeForm::Applied { .. } => self.owned_local_type(ty)?,
                 _ => false,
             };
         }
@@ -1610,14 +2011,7 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
         } else {
             TypeForm::StructuralRecord { fields }
         })?;
-        let (digest, bytes) = encode_type_object(&object)?;
-        self.derived_type_objects.insert(
-            ObjectKey::from_digest(
-                crate::platform::storage::object::ObjectDomain::Type,
-                digest.bytes(),
-            ),
-            bytes,
-        );
+        let digest = self.retain_derived_type(None, &object)?;
         self.tables.ty(digest)
     }
 }
@@ -2114,6 +2508,38 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 self.push(CompiledInstruction::EndOwnedBorrow { binding_local })?;
                 self.locals.remove(&reference);
             }
+            ExpressionOperation::BorrowOwnedRecordField {
+                record_type,
+                source,
+                field,
+                binding,
+                body,
+            } => {
+                let fields = self.unit.owned_record_fields(record_type, true)?;
+                let (slot, (_, ty)) = fields
+                    .iter()
+                    .enumerate()
+                    .find(|(_, (candidate, _))| *candidate == field)
+                    .ok_or_else(|| {
+                        compiler_corrupt(
+                            "compiler_owned_record_field",
+                            "borrow names no exact nominal owned field",
+                        )
+                    })?;
+                let source_local = self.borrow_source_local(source, record_type, depth)?;
+                let (reference, binding_local, binding_type) = self.borrow_binding(binding, *ty)?;
+                let product_type = self.unit.tables.ty(record_type)?;
+                self.push(CompiledInstruction::BorrowOwnedField {
+                    product_type,
+                    source_local,
+                    field: u32_count("borrowed owned record field", slot)?,
+                    binding_local,
+                    binding_type,
+                })?;
+                self.expression_with_use(body, depth, use_mode)?;
+                self.push(CompiledInstruction::EndOwnedBorrow { binding_local })?;
+                self.locals.remove(&reference);
+            }
             ExpressionOperation::BorrowOwnedField {
                 product_type,
                 source,
@@ -2298,6 +2724,95 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 }
                 self.instructions[switch as usize] =
                     CompiledInstruction::MatchOwned { choice_type, cases };
+            }
+            ExpressionOperation::PackOwnedRecord {
+                record_type,
+                fields,
+            } => {
+                let expected = self.unit.owned_record_fields(record_type, true)?;
+                let mut order = Vec::with_capacity(fields.len());
+                let mut seen = BTreeSet::new();
+                for field in fields {
+                    let slot = expected
+                        .iter()
+                        .position(|(candidate, _)| *candidate == field.field)
+                        .ok_or_else(|| {
+                            compiler_corrupt(
+                                "compiler_owned_record_field",
+                                "pack names no exact nominal owned field",
+                            )
+                        })?;
+                    if !seen.insert(slot) {
+                        return Err(compiler_corrupt(
+                            "compiler_owned_record_fields",
+                            "pack repeats one exact nominal owned field",
+                        ));
+                    }
+                    self.expression(field.value, depth)?;
+                    order.push(u32_count("owned record field", slot)?);
+                }
+                if seen.len() != expected.len() {
+                    return Err(compiler_corrupt(
+                        "compiler_owned_record_fields",
+                        "pack must initialize the complete exact nominal owned layout",
+                    ));
+                }
+                let product_type = self.unit.tables.ty(record_type)?;
+                self.push(CompiledInstruction::PackOwned {
+                    product_type,
+                    fields: order,
+                })?;
+            }
+            ExpressionOperation::UnpackOwnedRecord {
+                record_type,
+                source,
+                fields,
+                body,
+            } => {
+                let expected = self.unit.owned_record_fields(record_type, true)?;
+                self.expression_with_use(source, depth, ParameterUse::Consume)?;
+                let mut locals = vec![None; expected.len()];
+                let mut scoped = Vec::with_capacity(fields.len());
+                for field in fields {
+                    let slot = expected
+                        .iter()
+                        .position(|(candidate, _)| *candidate == field.field)
+                        .ok_or_else(|| {
+                            compiler_corrupt(
+                                "compiler_owned_record_field",
+                                "unpack names no exact nominal owned field",
+                            )
+                        })?;
+                    self.binding(field.binding, BindingKind::OwnedUnpack)?;
+                    let reference = LocalValueReference::LexicalBinding(field.binding);
+                    if locals[slot].replace(self.bind(reference)?).is_some() {
+                        return Err(compiler_corrupt(
+                            "compiler_owned_record_fields",
+                            "unpack repeats one exact nominal owned field",
+                        ));
+                    }
+                    scoped.push(reference);
+                }
+                let locals = locals
+                    .into_iter()
+                    .collect::<Option<Vec<_>>>()
+                    .ok_or_else(|| {
+                        compiler_corrupt(
+                            "compiler_owned_record_fields",
+                            "unpack must bind the complete exact nominal owned layout",
+                        )
+                    })?;
+                let product_type = self.unit.tables.ty(record_type)?;
+                self.push(CompiledInstruction::UnpackOwned {
+                    product_type,
+                    locals: locals.clone(),
+                })?;
+                self.expression_with_use(body, depth, use_mode)?;
+                for local in locals {
+                    self.push(CompiledInstruction::Unit)?;
+                    self.push(CompiledInstruction::StoreLocal(local))?;
+                }
+                self.unbind_all(&scoped);
             }
             ExpressionOperation::PackOwned {
                 product_type,

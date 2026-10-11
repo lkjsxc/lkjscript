@@ -208,6 +208,7 @@ pub(in crate::platform::change::request) fn lower_record<
     module: &ModuleSelector,
     name: &Name,
     visibility: DeclarationVisibility,
+    owned: bool,
     type_parameters: &[AuthoredTypeParameter],
     fields: &[AuthoredField],
 ) -> Result<(), Diagnostic> {
@@ -228,13 +229,27 @@ pub(in crate::platform::change::request) fn lower_record<
     }
     field_ids.sort_unstable();
     lowerer.insert_created(OwnerRecord::Declaration(DeclarationRecord {
-        header: OwnerHeader::new(OwnerKey::Declaration(declaration), OwnerKind::Record),
+        header: OwnerHeader::new(
+            OwnerKey::Declaration(declaration),
+            if owned {
+                OwnerKind::OwnedRecord
+            } else {
+                OwnerKind::Record
+            },
+        ),
         module,
         name: name.clone(),
         visibility,
-        payload: DeclarationPayload::Record {
-            type_parameters,
-            fields: field_ids,
+        payload: if owned {
+            DeclarationPayload::OwnedRecord {
+                type_parameters,
+                fields: field_ids,
+            }
+        } else {
+            DeclarationPayload::Record {
+                type_parameters,
+                fields: field_ids,
+            }
         },
     }))
 }

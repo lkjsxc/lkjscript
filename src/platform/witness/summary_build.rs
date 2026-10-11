@@ -783,7 +783,9 @@ pub(crate) fn aggregation_children(
     if let OwnerRecord::Declaration(record) = record
         && matches!(
             record.payload,
-            DeclarationPayload::Record { .. } | DeclarationPayload::Variant { .. }
+            DeclarationPayload::Record { .. }
+                | DeclarationPayload::Variant { .. }
+                | DeclarationPayload::OwnedRecord { .. }
         )
     {
         children.extend(record.payload.type_parameters().iter().map(|parameter| {
@@ -813,7 +815,8 @@ pub(crate) fn aggregation_children(
                     )
                 }))
             }
-            DeclarationPayload::Record { fields, .. } => children.extend(
+            DeclarationPayload::Record { fields, .. }
+            | DeclarationPayload::OwnedRecord { fields, .. } => children.extend(
                 fields
                     .iter()
                     .map(|field| (OwnershipRole::DeclarationField, OwnerKey::Field(*field))),
@@ -944,6 +947,7 @@ pub(crate) fn aggregation_children(
             }));
             match &record.operation {
                 ExpressionOperation::BorrowOwnedField { binding, .. }
+                | ExpressionOperation::BorrowOwnedRecordField { binding, .. }
                 | ExpressionOperation::BorrowOwnedItem { binding, .. }
                 | ExpressionOperation::BorrowCall { binding, .. } => children.push((
                     OwnershipRole::ExpressionBinding {
@@ -975,6 +979,17 @@ pub(crate) fn aggregation_children(
                     }
                 }
                 ExpressionOperation::UnpackOwned { fields, .. } => {
+                    for (ordinal, field) in fields.iter().enumerate() {
+                        children.push((
+                            OwnershipRole::ExpressionBinding {
+                                role: BindingContainerRole::OwnedUnpack,
+                                ordinal: summary_ordinal(ordinal)?,
+                            },
+                            OwnerKey::Binding(field.binding),
+                        ));
+                    }
+                }
+                ExpressionOperation::UnpackOwnedRecord { fields, .. } => {
                     for (ordinal, field) in fields.iter().enumerate() {
                         children.push((
                             OwnershipRole::ExpressionBinding {
@@ -1095,6 +1110,14 @@ fn local_summary(
                     type_parameters,
                 } => {
                     interface.raw_piece(2, &[1]);
+                    interface.piece(3, fields)?;
+                    interface.piece(4, type_parameters)?;
+                }
+                DeclarationPayload::OwnedRecord {
+                    fields,
+                    type_parameters,
+                } => {
+                    interface.raw_piece(2, &[11]);
                     interface.piece(3, fields)?;
                     interface.piece(4, type_parameters)?;
                 }

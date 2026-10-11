@@ -198,6 +198,40 @@ pub trait CanonicalBaseRead {
         package: PackageId,
     ) -> Result<CanonicalRead<Option<DependencyRecord>>, Diagnostic>;
 
+    /// Exact direct roots; consumers must apply proposal additions and removals before use.
+    fn read_dependencies(&self) -> Result<CanonicalRead<Vec<DependencyRecord>>, Diagnostic> {
+        self.read_dependencies_admitted(CanonicalReadAdmission::unbounded())
+    }
+
+    fn read_dependencies_admitted(
+        &self,
+        _admission: CanonicalReadAdmission,
+    ) -> Result<CanonicalRead<Vec<DependencyRecord>>, Diagnostic> {
+        Err(admission_unsupported("direct dependency inventory"))
+    }
+
+    /// Metadata authority under one exact direct root, without public import authority.
+    fn read_representation_dependency(
+        &self,
+        root: &DependencyRecord,
+        package: PackageId,
+    ) -> Result<CanonicalRead<Option<DependencyRecord>>, Diagnostic> {
+        self.read_representation_dependency_admitted(
+            root,
+            package,
+            CanonicalReadAdmission::unbounded(),
+        )
+    }
+
+    fn read_representation_dependency_admitted(
+        &self,
+        _root: &DependencyRecord,
+        _package: PackageId,
+        _admission: CanonicalReadAdmission,
+    ) -> Result<CanonicalRead<Option<DependencyRecord>>, Diagnostic> {
+        Err(admission_unsupported("private representation dependency"))
+    }
+
     fn read_retirement(
         &self,
         owner: OwnerKey,
@@ -476,6 +510,21 @@ impl<'a, B: CanonicalBaseRead + ?Sized> BudgetedCanonicalBase<'a, B> {
 }
 
 impl<B: CanonicalBaseRead + ?Sized> CanonicalBaseRead for BudgetedCanonicalBase<'_, B> {
+    fn read_dependencies(&self) -> Result<CanonicalRead<Vec<DependencyRecord>>, Diagnostic> {
+        self.read_admitted(|admission| self.base.read_dependencies_admitted(admission))
+    }
+
+    fn read_representation_dependency(
+        &self,
+        root: &DependencyRecord,
+        package: PackageId,
+    ) -> Result<CanonicalRead<Option<DependencyRecord>>, Diagnostic> {
+        self.read_admitted(|admission| {
+            self.base
+                .read_representation_dependency_admitted(root, package, admission)
+        })
+    }
+
     fn accepted_retry_encoding(&self) -> Option<u16> {
         self.base.accepted_retry_encoding()
     }
@@ -740,6 +789,50 @@ impl<W: WitnessBaseRead + ?Sized> WitnessBaseRead for BudgetedWitnessBase<'_, W>
 }
 
 impl CanonicalBaseRead for KernelSnapshot {
+    fn read_dependencies_admitted(
+        &self,
+        admission: CanonicalReadAdmission,
+    ) -> Result<CanonicalRead<Vec<DependencyRecord>>, Diagnostic> {
+        let work = CanonicalReadWork {
+            point_reads: 1,
+            canonical_records_decoded: u64::try_from(self.dependencies.len()).unwrap_or(u64::MAX),
+            ..CanonicalReadWork::default()
+        };
+        admission.check_work(work, "in-memory direct dependency inventory")?;
+        Ok(CanonicalRead {
+            value: self.dependencies.values().cloned().collect(),
+            work,
+        })
+    }
+
+    fn read_representation_dependency_admitted(
+        &self,
+        root: &DependencyRecord,
+        package: PackageId,
+        admission: CanonicalReadAdmission,
+    ) -> Result<CanonicalRead<Option<DependencyRecord>>, Diagnostic> {
+        canonical_memory_read(admission, || {
+            let selected = self
+                .dependencies
+                .get(&root.package)
+                .or_else(|| self.representation_dependencies.get(&root.package))?;
+            if selected.package_revision != root.package_revision
+                || selected.semantic_revision != root.semantic_revision
+            {
+                return None;
+            }
+            self.dependencies
+                .get(&package)
+                .or_else(|| self.representation_dependencies.get(&package))
+                .cloned()
+                .map(|mut dependency| {
+                    dependency.graph_contract_version =
+                        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+                    dependency
+                })
+        })
+    }
+
     fn semantic_root(&self) -> &SemanticRoot {
         &self.root
     }
@@ -1327,6 +1420,7 @@ mod tests {
         base: &'a KernelSnapshot,
         admitted_calls: Cell<u64>,
         raw_type_calls: Cell<u64>,
+        inventory_records_returned: Cell<u64>,
         last_admission: Cell<Option<CanonicalReadAdmission>>,
         failure: Option<&'static str>,
     }
@@ -1395,6 +1489,30 @@ mod tests {
             package: PackageId,
         ) -> Result<CanonicalRead<Option<DependencyRecord>>, Diagnostic> {
             self.base.read_dependency(package)
+        }
+
+        fn read_dependencies_admitted(
+            &self,
+            admission: CanonicalReadAdmission,
+        ) -> Result<CanonicalRead<Vec<DependencyRecord>>, Diagnostic> {
+            self.admitted_calls.set(self.admitted_calls.get() + 1);
+            self.last_admission.set(Some(admission));
+            let result = self.base.read_dependencies_admitted(admission)?;
+            self.inventory_records_returned
+                .set(self.inventory_records_returned.get() + result.value.len() as u64);
+            Ok(result)
+        }
+
+        fn read_representation_dependency_admitted(
+            &self,
+            root: &DependencyRecord,
+            package: PackageId,
+            admission: CanonicalReadAdmission,
+        ) -> Result<CanonicalRead<Option<DependencyRecord>>, Diagnostic> {
+            self.admitted_calls.set(self.admitted_calls.get() + 1);
+            self.last_admission.set(Some(admission));
+            self.base
+                .read_representation_dependency_admitted(root, package, admission)
         }
 
         fn read_retirement(
@@ -1558,9 +1676,184 @@ mod tests {
             base,
             admitted_calls: Cell::new(0),
             raw_type_calls: Cell::new(0),
+            inventory_records_returned: Cell::new(0),
             last_admission: Cell::new(None),
             failure,
         }
+    }
+
+    fn representation_snapshot() -> (KernelSnapshot, DependencyRecord, DependencyRecord) {
+        let mut base = crate::platform::kernel::tests::witness_snapshot();
+        base.dependencies.clear();
+        base.representation_dependencies.clear();
+        let dependency = |ordinal: u8| DependencyRecord {
+            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+            package: PackageId::migrate(b"representation-base-read", u64::from(ordinal)),
+            semantic_revision: RevisionId::from_digest([ordinal; 32]),
+            package_revision: crate::platform::kernel::PackageRevisionDigest::from_bytes(
+                [ordinal; 32],
+            ),
+        };
+        let direct = dependency(1);
+        let sibling = dependency(2);
+        let private = dependency(3);
+        base.dependencies.insert(direct.package, direct.clone());
+        base.dependencies.insert(sibling.package, sibling);
+        base.representation_dependencies
+            .insert(private.package, private.clone());
+        (base, direct, private)
+    }
+
+    #[test]
+    fn direct_inventory_does_not_grant_private_transitive_import_authority() {
+        let (base, direct, private) = representation_snapshot();
+        let inventory = base.read_dependencies().unwrap();
+        assert_eq!(inventory.value.len(), 2);
+        assert!(inventory.value.contains(&direct));
+        assert!(!inventory.value.contains(&private));
+        assert_eq!(inventory.work.canonical_records_decoded, 2);
+        assert!(
+            base.read_dependency(private.package)
+                .unwrap()
+                .value
+                .is_none()
+        );
+        assert_eq!(
+            base.read_representation_dependency(&direct, private.package)
+                .unwrap()
+                .value,
+            Some(private.clone())
+        );
+
+        // Exercise each independently authenticated identity dimension.
+        let mut stale = direct.clone();
+        stale.package_revision =
+            crate::platform::kernel::PackageRevisionDigest::from_bytes([99; 32]);
+        assert!(
+            base.read_representation_dependency(&stale, private.package)
+                .unwrap()
+                .value
+                .is_none()
+        );
+        let mut stale = direct.clone();
+        stale.semantic_revision = RevisionId::from_digest([99; 32]);
+        assert!(
+            base.read_representation_dependency(&stale, private.package)
+                .unwrap()
+                .value
+                .is_none()
+        );
+        let mut absent = direct;
+        absent.package = PackageId::migrate(b"representation-base-read", 99);
+        assert!(
+            base.read_representation_dependency(&absent, private.package)
+                .unwrap()
+                .value
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn representation_reads_obey_zero_and_cumulative_point_admission_before_source() {
+        let (base, direct, private) = representation_snapshot();
+        let source = canonical_source(&base, None);
+        let zero = BudgetedCanonicalBase::new(
+            &source,
+            CanonicalReadAdmission {
+                maximum_point_reads: 0,
+                ..CanonicalReadAdmission::unbounded()
+            },
+            CanonicalReadWork::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            zero.read_dependencies().unwrap_err().code,
+            "change_budget_canonical_point_reads"
+        );
+        assert_eq!(
+            zero.read_representation_dependency(&direct, private.package)
+                .unwrap_err()
+                .code,
+            "change_budget_canonical_point_reads"
+        );
+        assert_eq!(source.admitted_calls(), 0);
+        assert_eq!(zero.work(), CanonicalReadWork::default());
+
+        let admitted = BudgetedCanonicalBase::new(
+            &source,
+            CanonicalReadAdmission {
+                maximum_point_reads: 2,
+                ..CanonicalReadAdmission::unbounded()
+            },
+            CanonicalReadWork {
+                point_reads: 1,
+                ..CanonicalReadWork::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            admitted
+                .read_representation_dependency(&direct, private.package)
+                .unwrap()
+                .value,
+            Some(private)
+        );
+        assert_eq!(source.admitted_calls(), 1);
+        assert_eq!(admitted.work().point_reads, 2);
+        assert_eq!(
+            admitted.read_dependencies().unwrap_err().code,
+            "change_budget_canonical_point_reads"
+        );
+        assert_eq!(source.admitted_calls(), 1);
+    }
+
+    #[test]
+    fn direct_inventory_admits_complete_record_count_before_returning_any_records() {
+        let (base, _, _) = representation_snapshot();
+        let source = canonical_source(&base, None);
+        let zero = BudgetedCanonicalBase::new(
+            &source,
+            CanonicalReadAdmission {
+                maximum_decoded_records: 0,
+                ..CanonicalReadAdmission::unbounded()
+            },
+            CanonicalReadWork::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            zero.read_dependencies().unwrap_err().code,
+            "change_budget_canonical_decoded_records"
+        );
+        assert_eq!(source.inventory_records_returned.get(), 0);
+        assert_eq!(zero.work(), CanonicalReadWork::default());
+
+        let source = canonical_source(&base, None);
+        let admitted = BudgetedCanonicalBase::new(
+            &source,
+            CanonicalReadAdmission {
+                maximum_decoded_records: 3,
+                ..CanonicalReadAdmission::unbounded()
+            },
+            CanonicalReadWork {
+                canonical_records_decoded: 1,
+                ..CanonicalReadWork::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(admitted.read_dependencies().unwrap().value.len(), 2);
+        assert_eq!(admitted.work().canonical_records_decoded, 3);
+        assert_eq!(source.inventory_records_returned.get(), 2);
+        let work = admitted.work();
+        assert_eq!(
+            admitted.read_dependencies().unwrap_err().code,
+            "change_budget_canonical_decoded_records"
+        );
+        assert_eq!(source.inventory_records_returned.get(), 2);
+        assert_eq!(admitted.work(), work);
+        assert_eq!(
+            source.last_admission.get().unwrap().maximum_decoded_records,
+            0
+        );
     }
 
     fn witness_source<'a>(

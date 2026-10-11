@@ -16,6 +16,9 @@ mod fifo;
 #[path = "public_inventory_sequences.rs"]
 mod sequences;
 
+#[path = "public_inventory_nominals.rs"]
+mod nominals;
+
 const FAMILIES: [&str; 6] = [
     "native_owned_",
     "native_byte_buffer_",
@@ -137,6 +140,7 @@ pub(super) fn inventory(output: &str) -> Result<Inventory, DevError> {
     incremental::admit(&all)?;
     fifo::admit(&all)?;
     sequences::admit(&all)?;
+    nominals::admit(&all)?;
     let selected = all
         .iter()
         .filter(|name| {
@@ -146,6 +150,7 @@ pub(super) fn inventory(output: &str) -> Result<Inventory, DevError> {
                 || incremental::selected(name)
                 || fifo::selected(name)
                 || sequences::selected(name)
+                || nominals::selected(name)
                 || *name == TOPOLOGY
         })
         .cloned()
@@ -218,3 +223,7 @@ mod fifo_tests;
 #[cfg(test)]
 #[path = "public_inventory_sequences_tests.rs"]
 mod sequence_tests;
+
+#[cfg(test)]
+#[path = "public_inventory_nominals_tests.rs"]
+mod nominal_tests;

@@ -428,6 +428,13 @@ impl TryFrom<ExpressionOperation> for ExpressionOperation22 {
 
     fn try_from(value: ExpressionOperation) -> Result<Self, Self::Error> {
         Ok(match value {
+            super::ExpressionOperation::PackOwnedRecord { .. }
+            | super::ExpressionOperation::UnpackOwnedRecord { .. }
+            | super::ExpressionOperation::BorrowOwnedRecordField { .. } => {
+                return Err(super::owned_record::reject(
+                    "nominal owned operations require Graph 32",
+                ));
+            }
             ExpressionOperation::SequenceGet { .. }
             | ExpressionOperation::SequenceReplace { .. } => {
                 return Err(super::wire30::generalized_sequence_extension());

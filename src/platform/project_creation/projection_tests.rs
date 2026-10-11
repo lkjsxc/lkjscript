@@ -433,6 +433,9 @@ fn visit_expression(
     match &record.operation {
         ExpressionOperation::PackOwned { .. }
         | ExpressionOperation::UnpackOwned { .. }
+        | ExpressionOperation::PackOwnedRecord { .. }
+        | ExpressionOperation::UnpackOwnedRecord { .. }
+        | ExpressionOperation::BorrowOwnedRecordField { .. }
         | ExpressionOperation::ChooseOwned { .. }
         | ExpressionOperation::MatchOwned { .. }
         | ExpressionOperation::BorrowOwnedField { .. }

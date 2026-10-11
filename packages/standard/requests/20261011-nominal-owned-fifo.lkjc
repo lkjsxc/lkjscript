@@ -1,0 +1,382 @@
+request base=rev_55fb7bfafcef4ec97b158b23e5f8d49c244e8cf64d32786fa81448f136effc59 repository=repo_c1358d64c351873b51c954b69d1ac988 package=pkg_10000000000000000000000000000001
+
+declarations.begin
+(units
+  ; Native nominal migration of the selected canonical FIFO draft.
+  ; Existing callable declarations, parameters and graph tests retain their identities.
+  ; Draft binding aliases are request-local labels; typed body owners may be replaced.
+  (reference ref_fifo-discard_3 declaration pkg_10000000000000000000000000000001/decl_0715624a6042ad2e161e980bd18f3db1)
+  (reference ref_fifo-front_12 declaration pkg_10000000000000000000000000000001/decl_13c95816f2f8c003bcb01f755e82a7bb)
+  (reference ref_list-append_16 declaration pkg_10000000000000000000000000000001/decl_20157b3db57e8092254e33a49cf278d4)
+  (reference ref_less_4 declaration pkg_10000000000000000000000000000001/decl_3b91f4bc0297fb837202526c46a9e7a7)
+  (reference ref_fifo-test-buffer_17 declaration pkg_10000000000000000000000000000001/decl_4a9a6bda70a2e70d7a311961d216f8ea)
+  (reference ref_subtract_5 declaration pkg_10000000000000000000000000000001/decl_5027c49a62b96f4b44ad43e9c22719a6)
+  (reference ref_bytes-from-list_7 declaration pkg_10000000000000000000000000000001/decl_53e54989788b94ba5555f4688281d7da)
+  (reference ref_add_18 declaration pkg_10000000000000000000000000000001/decl_72b38e6cd864cb4239b329b7e337577f)
+  (reference ref_fifo-test-drain_15 declaration pkg_10000000000000000000000000000001/decl_7a8e14a8a5909a1457cfb58a64c46f10)
+  (reference ref_fifo-push_2 declaration pkg_10000000000000000000000000000001/decl_86693de502ffbed1d8585f5126d8c5df)
+  (reference ref_fifo-length_10 declaration pkg_10000000000000000000000000000001/decl_9abd40b90563143029bb5d0fd5d02d40)
+  (reference ref_buffer-empty_8 declaration pkg_10000000000000000000000000000001/decl_a4e342db561935cccdd5b7929189963f)
+  (reference ref_buffer-push_9 declaration pkg_10000000000000000000000000000001/decl_aa35215ea8e1921020cca89a0fa9c475)
+  (reference ref_fifo-pop_13 declaration pkg_10000000000000000000000000000001/decl_b049106a3459c431a1c15b214ca11a22)
+  (reference ref_fifo-empty_1 declaration pkg_10000000000000000000000000000001/decl_b95dc3db0694edd792cae9f24b3c4912)
+  (reference ref_buffer-get_20 declaration pkg_10000000000000000000000000000001/decl_ca6fc3f0eecd44b6e838e9c039bbb706)
+  (reference ref_fifo-test-values_6 declaration pkg_10000000000000000000000000000001/decl_dd13e90fa507461b94b074a42b5446d4)
+  (reference ref_fifo-reverse_19 declaration pkg_10000000000000000000000000000001/decl_e947ab1d847dfffd3507f757ce7706eb)
+  (reference ref_fifo-test-three_0 declaration pkg_10000000000000000000000000000001/decl_e9ed0d379618e5f44496a1d50ba5f2c9)
+  (reference ref_buffer-freeze_14 declaration pkg_10000000000000000000000000000001/decl_e9f959cd3419b60ced1135ee31483f66)
+  (reference ref_fifo-test-front_11 declaration pkg_10000000000000000000000000000001/decl_f2de560d88ca2dba3e2eb699e505f173)
+  (type-alias type_0 (owned-sequence ByteBuffer))
+  (type-alias type_1 (core::Fifo ByteBuffer))
+  (type-alias type_2 (owned-sequence type_1))
+  (type-alias type_3 (core::Fifo type_1))
+  (type-alias type_4 (parameter-type typeparam_45d84e1adddc1f61f55157d17bb34211))
+  (type-alias type_5 (owned-sequence type_4))
+  (type-alias type_6 (core::Fifo type_4))
+  (type-alias type_7 (parameter-type typeparam_fef008b14bee2da81340d7b20338375a))
+  (type-alias type_8 (owned-sequence type_7))
+  (type-alias type_9 (core::Fifo type_7))
+  (type-alias type_10 (list Bytes))
+  (type-alias type_11 (owned-product (field rest type_1) (field values type_10)))
+  (type-alias type_12 (owned-product (field rest type_1) (field value ByteBuffer)))
+  (type-alias type_13 (owned-choice (case empty type_1) (case item type_12)))
+  (type-alias type_14 (parameter-type typeparam_52e73b45838e940f06839cfe3bbf42e8))
+  (type-alias type_15 (owned-sequence type_14))
+  (type-alias type_16 (core::Fifo type_14))
+  (type-alias type_17 (parameter-type typeparam_e37f65582eab2a00e02a47bdcebfcfa3))
+  (type-alias type_18 (owned-sequence type_17))
+  (type-alias type_19 (core::Fifo type_17))
+  (type-alias type_20 (parameter-type typeparam_c5c1d66909aec50afb17645b3863dba2))
+  (type-alias type_21 (owned-sequence type_20))
+  (type-alias type_22 (core::Fifo type_20))
+  (type-alias type_23 (owned-product (field rest type_22) (field value type_20)))
+  (type-alias type_24 (owned-choice (case empty type_22) (case item type_23)))
+  (type-alias type_25 (owned-product (field rest type_21) (field value type_20)))
+  (type-alias type_26 (owned-choice (case empty type_21) (case item type_25)))
+  (type-alias type_27 (parameter-type typeparam_732248cd0caa38d24beef2c4eea4c200))
+  (type-alias type_28 (owned-sequence type_27))
+  (type-alias type_29 (core::Fifo type_27))
+  (type-alias type_30 (parameter-type typeparam_faf7fa529a65d8a565a20b953b3e4861))
+  (type-alias type_31 (owned-sequence type_30))
+  (type-alias type_32 (core::Fifo type_30))
+  (type-alias type_33 (owned-product (field rest type_31) (field value type_30)))
+  (type-alias type_34 (owned-choice (case empty type_31) (case item type_33)))
+  (module edit mod_1424cf669aac85e52e56b57899fe2c7c core
+    ; Representation access belongs to this exact module; callers name only Fifo<T>.
+    (owned-record create Fifo (visibility public)
+      (type-parameter create T (constraint owned))
+      (field create incoming (type (owned-sequence T)))
+      (field create outgoing (type (owned-sequence T))))
+    (test edit decl_0393ff61a7c2f844811daa426c5da2e8 fifo-discards-nested-populated
+      (visibility private)
+      (actual (let (binding inner (as $b_bind_5d384e757733e1408abf17f282944ed2) (type type_1) (call ref_fifo-test-three_0))
+          (binding outer (as $b_bind_05f28a5659724b2a1645ae8d98651110) (type type_3) (call ref_fifo-empty_1
+              (types type_1))) (binding outer (as $b_bind_53c6673576f042404a58d217eddda0c1) (type type_3)
+            (call ref_fifo-push_2 (types type_1) (local inner) (local outer))) (in (call ref_fifo-discard_3
+              (types type_1) (local outer)))))
+      (expected (unit)))
+    (function edit decl_0715624a6042ad2e161e980bd18f3db1 fifo-discard
+      (visibility public)
+      (returns Unit)
+      (effect pure)
+      (body (unit))
+      (type-parameter edit typeparam_45d84e1adddc1f61f55157d17bb34211 T
+        (constraint owned))
+      (parameter edit param_cc6675a2f3f9d9638649e794829cb7c8 queue
+        (type type_6)
+        (use consume)))
+    (function edit decl_13c95816f2f8c003bcb01f755e82a7bb fifo-front
+      (visibility public)
+      (returns type_7 (borrow-from queue))
+      (effect pure)
+      (body (borrow-owned-field (type type_9) (local queue) (field outgoing (binding outgoing (as $b_bind_916f02e17578f12294df61f9a41fcf28)
+              (type type_8))) (in (let (binding ready (as $b_bind_e65ed443ff49220573824c1113d0a45f) (type I64)
+                (sequence-length (type type_8) (local outgoing))) (in (if (call ref_less_4 (i64 0) (local ready))
+                  (borrow-owned-item (type type_8) (local outgoing) (index (call ref_subtract_5 (local ready)
+                        (i64 1))) (binding value (as $b_bind_49195e6e0db6e89f0f2b1e74e7e75194) (type type_7))
+                    (in (local value))) (borrow-owned-field (type type_9) (local queue) (field incoming
+                      (binding incoming (as $b_bind_db30a814b5781324aa6334cfd368c18a) (type type_8)))
+                    (in (borrow-owned-item (type type_8) (local incoming) (index (i64 0)) (binding value
+                          (as $b_bind_23e529ac0799d28f74f06ef8d1f24c3c) (type type_7)) (in (local value)))))))))))
+      (type-parameter edit typeparam_fef008b14bee2da81340d7b20338375a T
+        (constraint owned))
+      (parameter edit param_7d4774d44ed7353befcfc9d6cc66c2df queue
+        (type type_9)
+        (use borrow)))
+    (test edit decl_22abc3343b9eb5402aa14f05fb8e7462 fifo-insertion-order
+      (visibility private)
+      (actual (let (binding q (as $b_bind_8181ce5d5be8a2b19b87311c652ae34c) (type type_1) (call ref_fifo-test-three_0))
+          (in (call ref_fifo-test-values_6 (local q)))))
+      (expected (list Bytes (call ref_bytes-from-list_7 (list I64 (i64 0))) (call ref_bytes-from-list_7
+            (list I64 (i64 255))) (call ref_bytes-from-list_7 (list I64 (i64 128))))))
+    (function edit decl_4a9a6bda70a2e70d7a311961d216f8ea fifo-test-buffer
+      (visibility private)
+      (returns ByteBuffer)
+      (effect pure)
+      (body (let (binding b (as $b_bind_a22cab606bda13ecdc492b7ed66d9424) (type ByteBuffer) (call ref_buffer-empty_8))
+          (in (call ref_buffer-push_9 (local n) (local b)))))
+      (parameter edit param_134c18559176f09e9aa80568fe086584 n
+        (type I64)
+        (use unrestricted)))
+    (test edit decl_572179f7b3cefe1a7621b1b63c140a24 fifo-empty-length
+      (visibility private)
+      (actual (let (binding q (as $b_bind_2bb48aa653840e5abdc56e4002c056a7) (type type_1) (call ref_fifo-empty_1
+              (types ByteBuffer))) (in (call ref_fifo-length_10 (types ByteBuffer) (local q)))))
+      (expected (i64 0)))
+    (test edit decl_5854df11b0665362252cd2fc2e9d99eb fifo-front-repeat-before-refill
+      (visibility private)
+      (actual (let (binding q (as $b_bind_ce5fcb1f89098fbe535ea1a032c23abe) (type type_1) (call ref_fifo-test-three_0))
+          (binding first (as $b_bind_f2a89d06bc84ceff4136b86d6d5d3ebb) (type I64) (call ref_fifo-test-front_11
+              (local q))) (binding again (as $b_bind_588f560748539c5039f137091c5babdf) (type I64) (call ref_fifo-test-front_11
+              (local q))) (binding count (as $b_bind_5a8b8fb6408030a353b5125237b979e3) (type I64) (call ref_fifo-length_10
+              (types ByteBuffer) (local q))) (in (let (binding record-field (as $b_bind_56c2495ed0d72a67bb816d68bd1237d6)
+                (local first)) (binding record-field (as $b_bind_837c6c78b68f8c8bb004ff2701fe3e26) (local again))
+              (binding record-field (as $b_bind_a486fa50553e8e58025213c971d909bb) (local count)) (binding record-field
+                (as $b_bind_e627b8e65caca8aa2190e945d2045275) (call ref_fifo-test-values_6 (local q)))
+              (in (record structural (field again (local $b_bind_837c6c78b68f8c8bb004ff2701fe3e26)) (field count
+                    (local $b_bind_a486fa50553e8e58025213c971d909bb)) (field first (local $b_bind_56c2495ed0d72a67bb816d68bd1237d6))
+                  (field values (local record-field))))))))
+      (expected (let (binding record-field (as $b_bind_4b6ebb4159b5216d193c52fc5900972c) (i64 0)) (binding record-field
+            (as $b_bind_bf2edb0997bd936fec8684a9feaf8dee) (i64 0)) (binding record-field (as $b_bind_1f67006a6707a62e60237be049c7285a)
+            (i64 3)) (binding record-field (as $b_bind_a4fe7eae9f8c44ea9b2744f26ceb6c71) (list Bytes
+              (call ref_bytes-from-list_7 (list I64 (i64 0))) (call ref_bytes-from-list_7 (list I64 (i64 255)))
+              (call ref_bytes-from-list_7 (list I64 (i64 128))))) (in (record structural (field again
+                (local $b_bind_bf2edb0997bd936fec8684a9feaf8dee)) (field count (local $b_bind_1f67006a6707a62e60237be049c7285a))
+              (field first (local $b_bind_4b6ebb4159b5216d193c52fc5900972c)) (field values (local record-field)))))))
+    (test edit decl_6844c557e775e09b1b9b5fdb61bb3e48 fifo-nested-front-provenance
+      (visibility private)
+      (actual (let (binding inner (as $b_bind_dcd2884c56ff23440d459f401bb574c4) (type type_1) (call ref_fifo-test-three_0))
+          (binding outer (as $b_bind_8dfc3c3c850b293c6e9ddd3e76cca2ae) (type type_3) (call ref_fifo-empty_1
+              (types type_1))) (binding outer (as $b_bind_89dc43421718a3a9694fd0a7946b73de) (type type_3)
+            (call ref_fifo-push_2 (types type_1) (local inner) (local outer))) (binding observed (as $b_bind_6db8c6f6c2ea155baefb099b29ebe811)
+            (type I64) (borrow-call (call ref_fifo-front_12 (types type_1) (local outer)) (binding inner
+                (as $b_bind_2c59523799d009835e7bdbded019004d) (type type_1)) (in (call ref_fifo-test-front_11
+                  (local inner))))) (in (sequence (call ref_fifo-discard_3 (types type_1) (local outer))
+              (local observed)))))
+      (expected (i64 0)))
+    (test edit decl_71bc57249035900277116458b13a4198 fifo-discard-populated
+      (visibility private)
+      (actual (let (binding q (as $b_bind_7e204bae8c1a5ba7a770d492318fd84a) (type type_1) (call ref_fifo-test-three_0))
+          (in (call ref_fifo-discard_3 (types ByteBuffer) (local q)))))
+      (expected (unit)))
+    (function edit decl_7a8e14a8a5909a1457cfb58a64c46f10 fifo-test-drain
+      (visibility private)
+      (returns type_11)
+      (effect pure)
+      (body (let (binding popped (as $b_bind_890fa68a2045a77a07552c1354dbc7bd) (type type_13) (call ref_fifo-pop_13
+              (types ByteBuffer) (local q))) (in (match-owned (type type_13) (local popped) (case empty
+                (binding rest (as $b_bind_51de30b37cd3d84a780336bf558a857b) (type type_1)) (in (pack-owned
+                    (type type_11) (field rest (local rest)) (field values (local values))))) (case item
+                (binding item (as $b_bind_aa5f75e7c02d7523638500b26a1c9a78) (type type_12)) (in (unpack-owned
+                    (type type_12) (local item) (field rest (binding rest (as $b_bind_c20b0c2758bdf2dc84484adfad081e87)
+                        (type type_1))) (field value (binding value (as $b_bind_d0929da79c8c8dd46424762fd74b85ef)
+                        (type ByteBuffer))) (in (let (binding bytes (as $b_bind_b6982a9120ab6196ba880821b9c61a05)
+                          (type Bytes) (call ref_buffer-freeze_14 (local value))) (in (call ref_fifo-test-drain_15
+                            (call ref_list-append_16 (types Bytes) (local values) (local bytes)) (local rest))))))))))))
+      (parameter edit param_db45150361073e7afabf3eda196a622c values
+        (type type_10)
+        (use unrestricted))
+      (parameter edit param_969ae77588b9d173458e912bc6bdbd08 q
+        (type type_1)
+        (use consume)))
+    (function edit decl_86693de502ffbed1d8585f5126d8c5df fifo-push
+      (visibility public)
+      (returns type_16)
+      (effect pure)
+      (body (unpack-owned (type type_16) (local queue) (field incoming (binding incoming (as $b_bind_f20946851fe1bb7d5938a3388a48e44e)
+              (type type_15))) (field outgoing (binding outgoing (as $b_bind_8f3378f3b8a5de680363916ae9836538)
+              (type type_15))) (in (let (binding next (as $b_bind_ef511e22a0bb18ed9dbf084f5500a291) (type type_15)
+                (sequence-push (type type_15) (local value) (local incoming))) (in (pack-owned (type type_16)
+                  (field incoming (local next)) (field outgoing (local outgoing))))))))
+      (type-parameter edit typeparam_52e73b45838e940f06839cfe3bbf42e8 T
+        (constraint owned))
+      (parameter edit param_192f08af5f35e887d34a9ac639fe5c0e value
+        (type type_14)
+        (use consume))
+      (parameter edit param_f9333b03ae478dcd271f6b916b9dcf23 queue
+        (type type_16)
+        (use consume)))
+    (test edit decl_8ccad277cdaa1f143ca7448bfa3de806 fifo-drain-retains-empty-owner
+      (visibility private)
+      (actual (let (binding q (as $b_bind_8365685ca89ca364d6f878a1e6d659af) (type type_1) (call ref_fifo-test-three_0))
+          (binding drained (as $b_bind_fcd580e493d01f5ff19f04816dafc06d) (type type_11) (call ref_fifo-test-drain_15
+              (list Bytes) (local q))) (in (unpack-owned (type type_11) (local drained) (field rest (binding q
+                  (as $b_bind_4143188d7894212ad8c9c4f876c0b556) (type type_1))) (field values (binding values
+                  (as $b_bind_88147003b495b28ee678d3e78c00ac4f) (type type_10))) (in (let (binding empty
+                    (as $b_bind_a44a4dbfadfc771ff414f679d96b4ec1) (type I64) (call ref_fifo-length_10
+                      (types ByteBuffer) (local q))) (binding value (as $b_bind_f99254759ca5ace4a5a462a41a18cfe8)
+                    (type ByteBuffer) (call ref_fifo-test-buffer_17 (i64 42))) (binding q (as $b_bind_051b4e47484c8b21a6136c8c4040b8b7)
+                    (type type_1) (call ref_fifo-push_2 (types ByteBuffer) (local value) (local q)))
+                  (in (record structural (field empty (local empty)) (field reused (call ref_fifo-test-values_6
+                          (local q)))))))))))
+      (expected (record structural (field empty (i64 0)) (field reused (list Bytes (call ref_bytes-from-list_7
+                (list I64 (i64 42))))))))
+    (test edit decl_95af9047ef935f839a04fb5035382add fifo-empty-pop-reuse
+      (visibility private)
+      (actual (let (binding q (as $b_bind_25b8c41801bfdb426526552a6fa7b063) (type type_1) (call ref_fifo-empty_1
+              (types ByteBuffer))) (binding popped (as $b_bind_4f53531bf65b8f7ecb5e24a272e97969) (type type_13)
+            (call ref_fifo-pop_13 (types ByteBuffer) (local q))) (in (match-owned (type type_13) (local popped)
+              (case empty (binding rest (as $b_bind_950b9d02cd015890cf139ee6e6b8e66b) (type type_1))
+                (in (let (binding value (as $b_bind_f383db9459ef42c3f411e1685d85dcf3) (type ByteBuffer)
+                      (call ref_fifo-test-buffer_17 (i64 7))) (binding q (as $b_bind_10720e08b88d7475e7c0d8f813cc5f28)
+                      (type type_1) (call ref_fifo-push_2 (types ByteBuffer) (local value) (local rest)))
+                    (in (call ref_fifo-test-values_6 (local q)))))) (case item (binding item (as $b_bind_cf3d3aa2d85a2e4b08b5ef7b73db7b71)
+                  (type type_12)) (in (list Bytes)))))))
+      (expected (list Bytes (call ref_bytes-from-list_7 (list I64 (i64 7))))))
+    (function edit decl_9abd40b90563143029bb5d0fd5d02d40 fifo-length
+      (visibility public)
+      (returns I64)
+      (effect pure)
+      (body (let (binding pending (as $b_bind_3fd7a7979867517396b9cfe573820df0) (type I64) (borrow-owned-field
+              (type type_19) (local queue) (field incoming (binding incoming (as $b_bind_b8b404fb7381f228b43fcea759a9e60d)
+                  (type type_18))) (in (sequence-length (type type_18) (local incoming))))) (in (borrow-owned-field
+              (type type_19) (local queue) (field outgoing (binding outgoing (as $b_bind_88190d679a233141ce0aadde3f64da35)
+                  (type type_18))) (in (call ref_add_18 (local pending) (sequence-length (type type_18)
+                    (local outgoing))))))))
+      (type-parameter edit typeparam_e37f65582eab2a00e02a47bdcebfcfa3 T
+        (constraint owned))
+      (parameter edit param_c58d85c82de9add0d311393f2005eecf queue
+        (type type_19)
+        (use borrow)))
+    (function edit decl_b049106a3459c431a1c15b214ca11a22 fifo-pop
+      (visibility public)
+      (returns type_24)
+      (effect pure)
+      (body (unpack-owned (type type_22) (local queue) (field incoming (binding incoming (as $b_bind_77dda1c08538e575ed3c19edce470a92)
+              (type type_21))) (field outgoing (binding outgoing (as $b_bind_1e3f291d5b87861d7e6fb50192316340)
+              (type type_21))) (in (let (binding popped (as $b_bind_825d5eecb04663330b557e662e2f55b0)
+                (type type_26) (sequence-pop (type type_21) (local outgoing))) (in (match-owned (type type_26)
+                  (local popped) (case empty (binding outgoing (as $b_bind_36eec15b188bb82e39bd8924072be36d)
+                      (type type_21)) (in (if (call ref_less_4 (i64 0) (sequence-length (type type_21)
+                            (local incoming))) (let (binding ready (as $b_bind_62ec0d55989e1dd0792b6ee805643285)
+                            (type type_22) (call ref_fifo-reverse_19 (types type_20) (local incoming)
+                              (local outgoing))) (in (call ref_fifo-pop_13 (types type_20) (local ready))))
+                        (let (binding rest (as $b_bind_2e6d0de6d65ee9bda967c48ae9f1ef35) (type type_22)
+                            (pack-owned (type type_22) (field incoming (local incoming)) (field outgoing
+                                (local outgoing)))) (in (choose-owned (type type_24) (case empty) (local rest)))))))
+                  (case item (binding item (as $b_bind_29f66e82de4db49a7d69bf5f08813f55) (type type_25))
+                    (in (unpack-owned (type type_25) (local item) (field rest (binding outgoing (as $b_bind_960458f630753bcfad27db26d05ed403)
+                            (type type_21))) (field value (binding value (as $b_bind_ae9c0939cd156e766df6da4c518f350b)
+                            (type type_20))) (in (let (binding rest (as $b_bind_60e24a6842bdaad03e9e94f6bc71a431)
+                              (type type_22) (pack-owned (type type_22) (field incoming (local incoming))
+                                (field outgoing (local outgoing)))) (binding result (as $b_bind_8c4d3683dc696d0185ad72c409f90953)
+                              (type type_23) (pack-owned (type type_23) (field rest (local rest)) (field value
+                                  (local value)))) (in (choose-owned (type type_24) (case item) (local result))))))))))))))
+      (type-parameter edit typeparam_c5c1d66909aec50afb17645b3863dba2 T
+        (constraint owned))
+      (parameter edit param_b815dc2a7ce0c4f84a713eec816d50f4 queue
+        (type type_22)
+        (use consume)))
+    (function edit decl_b95dc3db0694edd792cae9f24b3c4912 fifo-empty
+      (visibility public)
+      (returns type_29)
+      (effect pure)
+      (body (let (binding incoming (as $b_bind_6e80a1ae9f2df7c84e3836eb0c70f51b) (type type_28) (sequence-empty
+              (type type_28))) (binding outgoing (as $b_bind_c79d131b582318bd94475d06dfd5b679) (type type_28)
+            (sequence-empty (type type_28))) (in (pack-owned (type type_29) (field incoming (local incoming))
+              (field outgoing (local outgoing))))))
+      (type-parameter edit typeparam_732248cd0caa38d24beef2c4eea4c200 T
+        (constraint owned)))
+    (test edit decl_d0bfa6106938a079b584faaedaeac1d8 fifo-interleaved-refill-order
+      (visibility private)
+      (actual (let (binding q (as $b_bind_22b30e100ac903a3692edbe4a92f491d) (type type_1) (call ref_fifo-test-three_0))
+          (binding popped (as $b_bind_c4069622b3488a5b0c9b512551c726e4) (type type_13) (call ref_fifo-pop_13
+              (types ByteBuffer) (local q))) (in (match-owned (type type_13) (local popped) (case empty
+                (binding q (as $b_bind_358f927d8881f584c89b5336a6131580) (type type_1)) (in (let (binding record-field
+                      (as $b_bind_ae325d0d41e9fbb8c2d02e50fcc40ea4) (call ref_bytes-from-list_7 (list I64)))
+                    (binding record-field (as $b_bind_045650d00fcd0b9261413a50838f10b6) (i64 -1)) (binding record-field
+                      (as $b_bind_082f9d1376a4904180206568e680747f) (i64 -1)) (binding record-field (as $b_bind_8f2a7d40205d077016aeaf101e1bb0ca)
+                      (list Bytes)) (in (record structural (field count (local $b_bind_082f9d1376a4904180206568e680747f))
+                        (field front (local $b_bind_045650d00fcd0b9261413a50838f10b6)) (field removed
+                          (local $b_bind_ae325d0d41e9fbb8c2d02e50fcc40ea4)) (field values (local record-field)))))))
+              (case item (binding item (as $b_bind_3c27dc10eb8d02f391c62ca29d0aa646) (type type_12))
+                (in (unpack-owned (type type_12) (local item) (field rest (binding q (as $b_bind_3e584dbd00d235f53a6ad4c936cafe76)
+                        (type type_1))) (field value (binding value (as $b_bind_3e297443ce1f3c08061251ba0c689315)
+                        (type ByteBuffer))) (in (let (binding removed (as $b_bind_5b098496f8c1fd85d9aff1b75aa59361)
+                          (type Bytes) (call ref_buffer-freeze_14 (local value))) (binding a (as $b_bind_883696976bfe75ccf3bd7085e7c8256f)
+                          (type ByteBuffer) (call ref_fifo-test-buffer_17 (i64 7))) (binding q (as $b_bind_d82c1791a929daf02c1a160b9e582570)
+                          (type type_1) (call ref_fifo-push_2 (types ByteBuffer) (local a) (local q)))
+                        (binding b (as $b_bind_c7d1da9ca3807681a4f61afc4b5cf77f) (type ByteBuffer) (call ref_fifo-test-buffer_17
+                            (i64 11))) (binding q (as $b_bind_68704328438872cde69fd63610956e11) (type type_1)
+                          (call ref_fifo-push_2 (types ByteBuffer) (local b) (local q))) (binding front
+                          (as $b_bind_4abb18d20d8cd7c31babe85fb43e85b6) (type I64) (call ref_fifo-test-front_11
+                            (local q))) (binding count (as $b_bind_1c274f0a882bdb78ed898f8f575b4269)
+                          (type I64) (call ref_fifo-length_10 (types ByteBuffer) (local q))) (in (let
+                            (binding record-field (as $b_bind_b6ce50115746d839572a8735cbcf081a) (local removed))
+                            (binding record-field (as $b_bind_a6fdd9f082fd80d24ebf108f36939646) (local front))
+                            (binding record-field (as $b_bind_a7919842552083d8cd36023a89731f78) (local count))
+                            (binding record-field (as $b_bind_a08a9c6df7dc208ca371ec2ef8658228) (call ref_fifo-test-values_6
+                                (local q))) (in (record structural (field count (local $b_bind_a7919842552083d8cd36023a89731f78))
+                                (field front (local $b_bind_a6fdd9f082fd80d24ebf108f36939646)) (field removed
+                                  (local $b_bind_b6ce50115746d839572a8735cbcf081a)) (field values (local record-field)))))))))))))))
+      (expected (let (binding record-field (as $b_bind_dbc619a60221918daca0461b79410af3) (call ref_bytes-from-list_7
+              (list I64 (i64 0)))) (binding record-field (as $b_bind_5a26ef9ed7198828094d8d655f471620)
+            (i64 255)) (binding record-field (as $b_bind_ee4916f2f343e1afaf046476ea7e6ae9) (i64 4)) (binding record-field
+            (as $b_bind_b4566c6f55198d7fcf1c1e44a7b27685) (list Bytes (call ref_bytes-from-list_7 (list I64
+                  (i64 255))) (call ref_bytes-from-list_7 (list I64 (i64 128))) (call ref_bytes-from-list_7
+                (list I64 (i64 7))) (call ref_bytes-from-list_7 (list I64 (i64 11))))) (in (record structural
+              (field count (local $b_bind_ee4916f2f343e1afaf046476ea7e6ae9)) (field front (local $b_bind_5a26ef9ed7198828094d8d655f471620))
+              (field removed (local $b_bind_dbc619a60221918daca0461b79410af3)) (field values (local record-field)))))))
+    (function edit decl_dd13e90fa507461b94b074a42b5446d4 fifo-test-values
+      (visibility private)
+      (returns type_10)
+      (effect pure)
+      (body (let (binding drained (as $b_bind_4a08c2136f87cdc276b23e3615db3f62) (type type_11) (call ref_fifo-test-drain_15
+              (list Bytes) (local q))) (in (field (local drained) (name values)))))
+      (parameter edit param_1bfef3cd11cb801be3a618b2fada662d q
+        (type type_1)
+        (use consume)))
+    (function edit decl_e947ab1d847dfffd3507f757ce7706eb fifo-reverse
+      (visibility private)
+      (returns type_32)
+      (effect pure)
+      (body (let (binding popped (as $b_bind_b5d21ae585fc4713ba2ad9af47d18fcb) (type type_34) (sequence-pop
+              (type type_31) (local incoming))) (in (match-owned (type type_34) (local popped) (case empty
+                (binding rest (as $b_bind_38ed78da66f59f03248dfd9fd7e42b58) (type type_31)) (in (pack-owned
+                    (type type_32) (field incoming (local rest)) (field outgoing (local outgoing)))))
+              (case item (binding item (as $b_bind_4a25e48bc8ce75b544d1105e234f4f1a) (type type_33))
+                (in (unpack-owned (type type_33) (local item) (field rest (binding rest (as $b_bind_2d7ecc633bae9f778241918f1f6353f8)
+                        (type type_31))) (field value (binding value (as $b_bind_2b7eb96361cf42cea29fed6b2f2abf08)
+                        (type type_30))) (in (let (binding next (as $b_bind_687ede0a0ad5af009c72020dd116daac)
+                          (type type_31) (sequence-push (type type_31) (local value) (local outgoing)))
+                        (in (call ref_fifo-reverse_19 (types type_30) (local rest) (local next))))))))))))
+      (type-parameter edit typeparam_faf7fa529a65d8a565a20b953b3e4861 T
+        (constraint owned))
+      (parameter edit param_4aaaca62e7c73b750117e4059747c563 incoming
+        (type type_31)
+        (use consume))
+      (parameter edit param_ab7311ad6f423b6e75d87b5bedaec2f3 outgoing
+        (type type_31)
+        (use consume)))
+    (function edit decl_e9ed0d379618e5f44496a1d50ba5f2c9 fifo-test-three
+      (visibility private)
+      (returns type_1)
+      (effect pure)
+      (body (let (binding q (as $b_bind_c991846c29d6db0d7e17a214e9d7f37a) (type type_1) (call ref_fifo-empty_1
+              (types ByteBuffer))) (binding a (as $b_bind_838ff9bfbfad746d0faf625dbc3b5632) (type ByteBuffer)
+            (call ref_fifo-test-buffer_17 (i64 0))) (binding q (as $b_bind_9bd0acf04d3863c4b44d2bbadc95bf82)
+            (type type_1) (call ref_fifo-push_2 (types ByteBuffer) (local a) (local q))) (binding b (as $b_bind_33c663add3aaf396ad5236d7652eda0c)
+            (type ByteBuffer) (call ref_fifo-test-buffer_17 (i64 255))) (binding q (as $b_bind_4d120ac5e1dcd66d475d0a215bf8c46f)
+            (type type_1) (call ref_fifo-push_2 (types ByteBuffer) (local b) (local q))) (binding c (as $b_bind_5a9724cba71ddb4ec611f9cbd0c8a91d)
+            (type ByteBuffer) (call ref_fifo-test-buffer_17 (i64 128))) (in (call ref_fifo-push_2 (types ByteBuffer)
+              (local c) (local q))))))
+    (test edit decl_f2b3f50c6f7670efe5f7a8c36919190c fifo-empty-buffer-is-an-item
+      (visibility private)
+      (actual (let (binding q (as $b_bind_a69d4bca0b9f600c9da2130a40eef52d) (type type_1) (call ref_fifo-empty_1
+              (types ByteBuffer))) (binding value (as $b_bind_a4b16a823c0b6b9ce6d6bed995a06dd5) (type ByteBuffer)
+            (call ref_buffer-empty_8)) (binding q (as $b_bind_4a34414756a994c02dd214570756374a) (type type_1)
+            (call ref_fifo-push_2 (types ByteBuffer) (local value) (local q))) (in (call ref_fifo-test-values_6
+              (local q)))))
+      (expected (list Bytes (call ref_bytes-from-list_7 (list I64)))))
+    (function edit decl_f2de560d88ca2dba3e2eb699e505f173 fifo-test-front
+      (visibility private)
+      (returns I64)
+      (effect pure)
+      (body (borrow-call (call ref_fifo-front_12 (types ByteBuffer) (local q)) (binding view (as $b_bind_19369f3dccd0ff54da016265f82929b3)
+            (type ByteBuffer)) (in (call ref_buffer-get_20 (i64 0) (local view)))))
+      (parameter edit param_1a579cc7237b5f041511ba37c20a95f4 q
+        (type type_1)
+        (use borrow)))
+  )
+)
+declarations.end

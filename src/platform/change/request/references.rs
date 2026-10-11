@@ -311,7 +311,8 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
                             for (owner, record) in &read.value.owners {
                                 self.work.ownership_steps = self.work.ownership_steps.checked_add(1).ok_or_else(|| reference_error("change_reference_work", "reference namespace work overflowed"))?;
                                 self.check_budget("reference namespace indexing")?;
-                                let key = interface_namespace(record);
+                                let Some(key) = interface_namespace(record) else { continue; };
+                                if !interface_namespace_exposed(&key, &read.value.owners) { continue; }
                                 names.entry(key).and_modify(|value| *value = None).or_insert(Some(*owner));
                             }
                             interfaces.insert(*package, InterfaceIndex { owners: read.value.owners, names, interface: read.value.revision.interface });
@@ -394,7 +395,10 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
                     parent.is_none()
                 }
             }
-            NamespaceClass::Field => parent_kind == Some(OwnerKind::Record),
+            NamespaceClass::Field => matches!(
+                parent_kind,
+                Some(OwnerKind::Record | OwnerKind::OwnedRecord)
+            ),
             NamespaceClass::Case => parent_kind == Some(OwnerKind::Variant),
             NamespaceClass::Operation => parent_kind == Some(OwnerKind::Interface),
             NamespaceClass::Requirement | NamespaceClass::Port => {
@@ -413,6 +417,7 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
                 parent_kind,
                 Some(
                     OwnerKind::Record
+                        | OwnerKind::OwnedRecord
                         | OwnerKind::Variant
                         | OwnerKind::OwnedContract
                         | OwnerKind::OwnedImplementation
@@ -494,7 +499,18 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
                     "the selected exact declaration is absent from the admitted public interface",
                 )
             })?;
-            let namespace = interface_namespace(record);
+            let namespace = interface_namespace(record).ok_or_else(|| {
+                reference_error(
+                    "change_reference_not_exposed",
+                    "representation-only metadata cannot be selected as an authoring reference",
+                )
+            })?;
+            if !interface_namespace_exposed(&namespace, &interfaces[&package].owners) {
+                return Err(reference_error(
+                    "change_reference_not_exposed",
+                    "private representation members cannot be selected as authoring references",
+                ));
+            }
             if namespace.class != selector.class || namespace.parent != parent_owner {
                 return Err(reference_error(
                     "change_reference_namespace",
@@ -544,9 +560,26 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
     }
 }
 
-fn interface_namespace(record: &crate::platform::kernel::PackageInterfaceRecord) -> NamespaceKey {
+fn interface_namespace_exposed(
+    namespace: &NamespaceKey,
+    owners: &BTreeMap<OwnerKey, crate::platform::kernel::PackageInterfaceRecord>,
+) -> bool {
+    use crate::platform::kernel::{OwnerKind, PackageInterfaceRecord as R};
+    match namespace.parent.and_then(|parent| owners.get(&parent)) {
+        Some(R::RepresentationDeclaration(_)) => false,
+        Some(R::Declaration(record)) if record.header.kind == OwnerKind::OwnedRecord => {
+            namespace.class != NamespaceClass::Field
+        }
+        _ => true,
+    }
+}
+
+fn interface_namespace(
+    record: &crate::platform::kernel::PackageInterfaceRecord,
+) -> Option<NamespaceKey> {
     use crate::platform::kernel::{PackageInterfaceRecord as R, ParameterParent};
     let (parent, class, name) = match record {
+        R::RepresentationDeclaration(_) => return None,
         R::Declaration(record) => (None, NamespaceClass::Declaration, &record.name),
         R::TypeParameter(record) => (
             Some(OwnerKey::Declaration(record.declaration)),
@@ -597,9 +630,9 @@ fn interface_namespace(record: &crate::platform::kernel::PackageInterfaceRecord)
             &record.name,
         ),
     };
-    NamespaceKey {
+    Some(NamespaceKey {
         parent,
         class,
         name: name.clone(),
-    }
+    })
 }

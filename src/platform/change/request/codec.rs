@@ -131,6 +131,7 @@ struct Writer {
     owned_borrow_extension: bool,
     sequence_extension: bool,
     generalized_sequence_extension: bool,
+    owned_record_extension: bool,
     parameterized_contract_extension: bool,
     borrowed_result_extension: bool,
     generic_implementation_extension: bool,
@@ -159,6 +160,7 @@ impl Writer {
             owned_borrow_extension: false,
             sequence_extension: false,
             generalized_sequence_extension: false,
+            owned_record_extension: false,
             parameterized_contract_extension: false,
             borrowed_result_extension: false,
             generic_implementation_extension: false,
@@ -167,7 +169,9 @@ impl Writer {
     }
 
     fn finish(mut self) -> Vec<u8> {
-        if self.generalized_sequence_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+        if self.owned_record_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+            self.bytes[..8].copy_from_slice(b"LKJACR36");
+        } else if self.generalized_sequence_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR35");
         } else if self.share_constraint_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR34");
@@ -860,8 +864,18 @@ impl Writer {
                 visibility,
                 type_parameters,
                 fields,
+            }
+            | AuthoredChange::CreateOwnedRecord {
+                symbol,
+                module,
+                name,
+                visibility,
+                type_parameters,
+                fields,
             } => {
-                self.tag(3)?;
+                let owned = matches!(value, AuthoredChange::CreateOwnedRecord { .. });
+                self.owned_record_extension |= owned;
+                self.tag(if owned { 99 } else { 3 })?;
                 self.symbol(symbol, definitions)?;
                 self.module_selector(module, definitions)?;
                 self.name(name)?;
@@ -2169,6 +2183,57 @@ impl Writer {
                     })?;
                     w.expression(body, definitions, next)
                 })
+            }
+            AuthoredExpressionOperation::PackOwnedRecord {
+                record_type,
+                fields,
+            } => {
+                self.owned_record_extension = true;
+                self.tag(47)?;
+                self.authored_type(record_type, definitions, 1)?;
+                self.list(fields, |w, (field, value)| {
+                    w.field_reference(field, definitions)?;
+                    w.expression(value, definitions, next)
+                })
+            }
+            AuthoredExpressionOperation::UnpackOwnedRecord {
+                record_type,
+                source,
+                fields,
+                body,
+            } => {
+                self.owned_record_extension = true;
+                self.tag(48)?;
+                self.authored_type(record_type, definitions, 1)?;
+                self.expression(source, definitions, next)?;
+                self.list(fields, |w, (field, binding)| {
+                    w.field_reference(field, definitions)?;
+                    w.symbol(&binding.symbol, definitions)?;
+                    w.name(&binding.name)?;
+                    w.optional(binding.declared_type.as_ref(), |w, ty| {
+                        w.authored_type(ty, definitions, 1)
+                    })
+                })?;
+                self.expression(body, definitions, next)
+            }
+            AuthoredExpressionOperation::BorrowOwnedRecordField {
+                record_type,
+                source,
+                field,
+                binding,
+                body,
+            } => {
+                self.owned_record_extension = true;
+                self.tag(49)?;
+                self.authored_type(record_type, definitions, 1)?;
+                self.expression(source, definitions, next)?;
+                self.field_reference(field, definitions)?;
+                self.symbol(&binding.symbol, definitions)?;
+                self.name(&binding.name)?;
+                self.optional(binding.declared_type.as_ref(), |w, ty| {
+                    w.authored_type(ty, definitions, 1)
+                })?;
+                self.expression(body, definitions, next)
             }
             AuthoredExpressionOperation::PackOwned {
                 product_type,

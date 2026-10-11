@@ -73,6 +73,7 @@ fn witness_contract_domains_are_closed_and_unique() {
         "validator_contract_a4865032b8c53d9472988c166a7bce1d72eba3158026cb4a803482a08c2fc576"
     );
     for (name, version) in [
+        ("opaque_nominal_owned_records", 1),
         ("scoped_shareable_owned_inputs", 1),
         ("source_tied_owned_read_results", 1),
         ("parameterized_owned_contracts", 1),
@@ -180,9 +181,14 @@ fn witness_contract_domains_are_closed_and_unique() {
         digest,
         "validator_contract_a495df56bb7989cc1d2f9299466007668eaa0c75f17d070e3c05c1485941f720"
     );
-    assert_eq!(
+    // Exact nominal identity and private representations require fresh admission.
+    assert_ne!(
         digest,
         "validator_contract_1f129f2c5bc9303a54e548ac1fddfc5763ca5418944165cb17e46dfad1eff00e"
+    );
+    assert_eq!(
+        digest,
+        "validator_contract_36232afacf81a91ea3830ef2c7a0442254440e0978662beb4c682b291e6e7fe8"
     );
 }
 

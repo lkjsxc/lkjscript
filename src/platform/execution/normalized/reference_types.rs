@@ -142,6 +142,178 @@ fn reserve_witness(
 }
 
 impl<'a> Closure<'a> {
+    fn owned_records(&mut self) -> Result<(), ExecutionError> {
+        allocate::<&KernelSnapshot>(&mut self.allocated, self.snapshots.len())?;
+        let snapshots = self.snapshots.values().copied().collect::<Vec<_>>();
+        for snapshot in snapshots {
+            for (key, owner) in &snapshot.owners {
+                self.tick()?;
+                let (OwnerKey::Declaration(id), OwnerRecord::Declaration(owner)) = (key, owner)
+                else {
+                    continue;
+                };
+                let DeclarationPayload::OwnedRecord {
+                    type_parameters, ..
+                } = &owner.payload
+                else {
+                    continue;
+                };
+                if owner.header.contract_version < 32 || owner.header.owner != *key {
+                    return Err(failure());
+                }
+                let reference = DeclarationReference {
+                    package: snapshot.root.package_id,
+                    declaration: *id,
+                };
+                let mut arguments = Vec::new();
+                allocate::<TypeObjectDigest>(&mut self.allocated, type_parameters.len())?;
+                for parameter in type_parameters {
+                    let object = TypeObject::new(TypeForm::TypeParameter {
+                        parameter: *parameter,
+                    })
+                    .map_err(|_| failure())?;
+                    let (ty, _) = encode_type_object(&object).map_err(|_| failure())?;
+                    index_node::<(TypeObjectDigest, TypeObject)>(&mut self.allocated)?;
+                    self.types.entry(ty).or_insert(object);
+                    arguments.push(ty);
+                }
+                let object = TypeObject::new(if arguments.is_empty() {
+                    TypeForm::Named {
+                        declaration: reference,
+                    }
+                } else {
+                    TypeForm::Applied {
+                        declaration: reference,
+                        arguments,
+                    }
+                })
+                .map_err(|_| failure())?;
+                let (ty, _) = encode_type_object(&object).map_err(|_| failure())?;
+                index_node::<(TypeObjectDigest, TypeObject)>(&mut self.allocated)?;
+                self.types.entry(ty).or_insert(object);
+                self.owned_witness_type(ty, Some(reference), 0)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn nominal_owned(&mut self, ty: TypeObjectDigest) -> Result<bool, ExecutionError> {
+        let declaration = match &self.types.get(&ty).ok_or_else(failure)?.form {
+            TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => *declaration,
+            _ => return Ok(false),
+        };
+        Ok(
+            matches!(self.owner(declaration.package, OwnerKey::Declaration(declaration.declaration))?,
+            OwnerRecord::Declaration(owner) if matches!(owner.payload, DeclarationPayload::OwnedRecord { .. })),
+        )
+    }
+
+    fn owned_record_fields(
+        &mut self,
+        ty: TypeObjectDigest,
+        scope: Option<DeclarationReference>,
+        private: bool,
+    ) -> Result<Vec<(crate::platform::kernel::FieldReference, TypeObjectDigest)>, ExecutionError>
+    {
+        self.tick()?;
+        let (reference, arguments) = match self.types.get(&ty).ok_or_else(failure)?.form.clone() {
+            TypeForm::Named { declaration } => (declaration, Vec::new()),
+            TypeForm::Applied {
+                declaration,
+                arguments,
+            } => (declaration, arguments),
+            _ => return Err(failure()),
+        };
+        let OwnerRecord::Declaration(owner) = self
+            .owner(
+                reference.package,
+                OwnerKey::Declaration(reference.declaration),
+            )?
+            .clone()
+        else {
+            return Err(failure());
+        };
+        if private {
+            let scope = scope.ok_or_else(failure)?;
+            let OwnerRecord::Declaration(caller) =
+                self.owner(scope.package, OwnerKey::Declaration(scope.declaration))?
+            else {
+                return Err(failure());
+            };
+            if scope.package != reference.package || caller.module != owner.module {
+                return Err(failure());
+            }
+        }
+        let DeclarationPayload::OwnedRecord {
+            type_parameters,
+            fields,
+        } = owner.payload
+        else {
+            return Err(failure());
+        };
+        if arguments.len() != type_parameters.len() {
+            return Err(failure());
+        }
+        let mut bindings = Bindings::new();
+        for (parameter, argument) in type_parameters.iter().zip(&arguments) {
+            let OwnerRecord::TypeParameter(record) =
+                self.owner(reference.package, OwnerKey::TypeParameter(*parameter))?
+            else {
+                return Err(failure());
+            };
+            if record.header.owner != OwnerKey::TypeParameter(*parameter)
+                || record.declaration != reference.declaration
+                || (!record.constraints.has_owned() && !record.constraints.requires_transfer())
+                || self.scoped_owned(*argument, scope)? != record.constraints.has_owned()
+            {
+                return Err(failure());
+            }
+            index_node::<(TypeParameterId, TypeObjectDigest)>(&mut self.allocated)?;
+            if bindings.insert(*parameter, *argument).is_some() {
+                return Err(failure());
+            }
+        }
+        allocate::<TypeObjectDigest>(&mut self.allocated, arguments.len())?;
+        index_node::<(
+            DeclarationReference,
+            Vec<TypeObjectDigest>,
+            Option<DeclarationReference>,
+        )>(&mut self.allocated)?;
+        self.constrained_applications
+            .insert((reference, arguments, scope));
+        let mut result = Vec::new();
+        allocate::<(crate::platform::kernel::FieldReference, TypeObjectDigest)>(
+            &mut self.allocated,
+            fields.len(),
+        )?;
+        let mut seen = BTreeSet::new();
+        for field in fields {
+            let OwnerRecord::Field(record) = self
+                .owner(reference.package, OwnerKey::Field(field))?
+                .clone()
+            else {
+                return Err(failure());
+            };
+            if record.header.owner != OwnerKey::Field(field)
+                || record.declaration != reference.declaration
+                || !seen.insert(field)
+            {
+                return Err(failure());
+            }
+            index_node::<crate::platform::semantic_id::FieldId>(&mut self.allocated)?;
+            self.scoped_type_parameters(record.ty, &bindings, 0)?;
+            let field_type = self.identity(record.ty, &bindings, 0)?;
+            result.push((
+                crate::platform::kernel::FieldReference {
+                    package: reference.package,
+                    field,
+                },
+                field_type,
+            ));
+        }
+        Ok(result)
+    }
+
     fn owned_witness_type(
         &mut self,
         ty: TypeObjectDigest,
@@ -151,6 +323,18 @@ impl<'a> Closure<'a> {
         self.tick()?;
         if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
             return Err(failure());
+        }
+        if self.nominal_owned(ty)? {
+            let object = self.types.get(&ty).ok_or_else(failure)?;
+            allocate::<TypeObjectDigest>(&mut self.allocated, object.child_type_count())?;
+            let arguments = object.child_types();
+            for argument in arguments {
+                self.owned_witness_type(argument, scope, depth + 1)?;
+            }
+            for (_, field) in self.owned_record_fields(ty, scope, false)? {
+                self.owned_witness_type(field, scope, depth + 1)?;
+            }
+            return Ok(true);
         }
         let object = self.types.get(&ty).ok_or_else(failure)?;
         let sequence = matches!(object.form, TypeForm::OwnedSequence { .. });
@@ -516,6 +700,7 @@ impl<'a> Closure<'a> {
             | TypeForm::OwnedProduct { .. }
             | TypeForm::OwnedChoice { .. }
             | TypeForm::OwnedSequence { .. } => Ok(true),
+            TypeForm::Named { .. } | TypeForm::Applied { .. } => self.nominal_owned(ty),
             TypeForm::TypeParameter { parameter } => {
                 let declaration = scope.ok_or_else(failure)?;
                 let OwnerRecord::TypeParameter(record) =
@@ -1178,9 +1363,15 @@ impl<'a> Closure<'a> {
         Ok(())
     }
 
-    // Independently propagate the greatest reached depth from every product root.
-    // A substitution may add depth to an otherwise valid symbolic product type.
-    fn product_depths(&mut self) -> Result<(), ExecutionError> {
+    // Independently propagate the greatest reached depth from every owning root.
+    // Hidden nominal fields share one depth bound with syntactic children and
+    // complete arguments, including a child reached first on a shorter path.
+    fn product_depths(
+        &mut self,
+        records: &[super::prepare::NormalizedRecordLayout],
+        record_instances: &BTreeMap<TypeObjectDigest, usize>,
+        owned_declarations: &BTreeSet<DeclarationReference>,
+    ) -> Result<(), ExecutionError> {
         let mut queue = VecDeque::new();
         self.visits = self
             .visits
@@ -1194,12 +1385,20 @@ impl<'a> Closure<'a> {
             })?;
         for (ty, object) in self.types.iter() {
             self.control.check()?;
-            if matches!(
-                object.form,
-                TypeForm::OwnedProduct { .. }
-                    | TypeForm::OwnedChoice { .. }
-                    | TypeForm::OwnedSequence { .. }
-            ) {
+            let nominal_owned = match &object.form {
+                TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
+                    owned_declarations.contains(declaration)
+                }
+                _ => false,
+            };
+            if nominal_owned
+                || matches!(
+                    object.form,
+                    TypeForm::OwnedProduct { .. }
+                        | TypeForm::OwnedChoice { .. }
+                        | TypeForm::OwnedSequence { .. }
+                )
+            {
                 allocate::<(TypeObjectDigest, usize)>(&mut self.allocated, 1)?;
                 queue.push_back((*ty, 0usize));
             }
@@ -1211,7 +1410,7 @@ impl<'a> Closure<'a> {
                 return Err(ExecutionError::new(
                     crate::platform::execution::ExecutionFailureClass::Infrastructure,
                     "reference_product_depth",
-                    "closed owned product exceeds the structural type depth bound",
+                    "combined owned representation exceeds the type depth bound",
                 ));
             }
             if depths.get(&ty).is_some_and(|previous| *previous >= depth) {
@@ -1221,15 +1420,111 @@ impl<'a> Closure<'a> {
                 index_node::<(TypeObjectDigest, usize)>(&mut self.allocated)?;
             }
             depths.insert(ty, depth);
-            let object = self.types.get(&ty).ok_or_else(failure)?;
+            self.clone_type(ty)?;
+            let object = self.types.get(&ty).cloned().ok_or_else(failure)?;
             allocate::<TypeObjectDigest>(&mut self.allocated, object.child_type_count())?;
             allocate::<(TypeObjectDigest, usize)>(&mut self.allocated, object.child_type_count())?;
             for child in object.child_types() {
                 self.tick()?;
                 queue.push_back((child, depth + 1));
             }
+            let nominal = match &object.form {
+                TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. }
+                    if owned_declarations.contains(declaration) =>
+                {
+                    Some(*declaration)
+                }
+                _ => None,
+            };
+            if let Some(declaration) = nominal {
+                if let Some(index) = record_instances.get(&ty) {
+                    let layout = records.get(*index).ok_or_else(failure)?;
+                    let arguments = match &object.form {
+                        TypeForm::Applied { arguments, .. } => arguments.as_slice(),
+                        _ => &[],
+                    };
+                    if !layout.owned
+                        || layout.declaration != declaration
+                        || layout.arguments.as_ref() != arguments
+                        || layout.type_parameters.len() != arguments.len()
+                    {
+                        return Err(failure());
+                    }
+                    allocate::<(TypeObjectDigest, usize)>(
+                        &mut self.allocated,
+                        layout.fields.len(),
+                    )?;
+                    for field in layout.fields.iter() {
+                        self.tick()?;
+                        queue.push_back((field.ty, depth + 1));
+                    }
+                } else {
+                    // Symbolic applications have no runtime layout. Derive their
+                    // actual field identities from canonical members so an outer
+                    // structural prefix cannot erase their hidden depth.
+                    for field in self.symbolic_record_depth_fields(ty, declaration)? {
+                        allocate::<(TypeObjectDigest, usize)>(&mut self.allocated, 1)?;
+                        queue.push_back((field, depth + 1));
+                    }
+                }
+            }
         }
         Ok(())
+    }
+
+    fn symbolic_record_depth_fields(
+        &mut self,
+        ty: TypeObjectDigest,
+        declaration: DeclarationReference,
+    ) -> Result<Vec<TypeObjectDigest>, ExecutionError> {
+        self.clone_type(ty)?;
+        let arguments = match self.types.get(&ty).ok_or_else(failure)?.form.clone() {
+            TypeForm::Applied { arguments, .. } => arguments,
+            TypeForm::Named { .. } => Vec::new(),
+            _ => return Err(failure()),
+        };
+        let OwnerRecord::Declaration(owner) = self.owner(
+            declaration.package,
+            OwnerKey::Declaration(declaration.declaration),
+        )?
+        else {
+            return Err(failure());
+        };
+        let DeclarationPayload::OwnedRecord {
+            type_parameters,
+            fields,
+        } = &owner.payload
+        else {
+            return Err(failure());
+        };
+        if type_parameters.len() != arguments.len() {
+            return Err(failure());
+        }
+        let mut bindings = Bindings::new();
+        for (parameter, argument) in type_parameters.iter().zip(arguments) {
+            index_node::<(TypeParameterId, TypeObjectDigest)>(&mut self.allocated)?;
+            if bindings.insert(*parameter, argument).is_some() {
+                return Err(failure());
+            }
+        }
+        allocate::<TypeObjectDigest>(&mut self.allocated, fields.len())?;
+        let mut result = Vec::new();
+        for field in fields {
+            let OwnerRecord::Field(owner) =
+                self.owner(declaration.package, OwnerKey::Field(*field))?
+            else {
+                return Err(failure());
+            };
+            if owner.header.owner != OwnerKey::Field(*field)
+                || owner.declaration != declaration.declaration
+            {
+                return Err(failure());
+            }
+            let ty = owner.ty;
+            self.scoped_type_parameters(ty, &bindings, 0)?;
+            result.push(self.identity(ty, &bindings, 0)?);
+        }
+        Ok(result)
     }
 
     fn tick(&mut self) -> Result<(), ExecutionError> {
@@ -1424,6 +1719,12 @@ impl<'a> Closure<'a> {
                 _ => None,
             };
             if let Some((declaration, arguments)) = nominal {
+                if matches!(record.operation, ExpressionOperation::Record { .. })
+                    && matches!(self.owner(declaration.package, OwnerKey::Declaration(declaration.declaration))?,
+                        OwnerRecord::Declaration(owner) if matches!(owner.payload, DeclarationPayload::OwnedRecord { .. }))
+                {
+                    return Err(failure());
+                }
                 allocate::<TypeObjectDigest>(&mut self.allocated, arguments.len())?;
                 let arguments = arguments
                     .iter()
@@ -1628,6 +1929,18 @@ impl<'a> Closure<'a> {
                 ExpressionOperation::PackOwned { product_type, .. }
                 | ExpressionOperation::UnpackOwned { product_type, .. }
                 | ExpressionOperation::BorrowOwnedField { product_type, .. }
+                | ExpressionOperation::PackOwnedRecord {
+                    record_type: product_type,
+                    ..
+                }
+                | ExpressionOperation::UnpackOwnedRecord {
+                    record_type: product_type,
+                    ..
+                }
+                | ExpressionOperation::BorrowOwnedRecordField {
+                    record_type: product_type,
+                    ..
+                }
                 | ExpressionOperation::ChooseOwned {
                     choice_type: product_type,
                     ..
@@ -1944,6 +2257,11 @@ fn failure() -> ExecutionError {
     )
 }
 
+fn at_stage(mut error: ExecutionError, stage: &str) -> ExecutionError {
+    error.message = format!("{} ({stage})", error.message);
+    error
+}
+
 #[cfg(test)]
 pub(super) fn check_duplicate_witness_dag(
     source: &KernelSnapshot,
@@ -2057,7 +2375,7 @@ pub(super) fn check_product_substitution(
         interned_witnesses: BTreeMap::new(),
     };
     closure.identity(ty, &bindings, 0)?;
-    closure.product_depths()
+    closure.product_depths(&[], &BTreeMap::new(), &BTreeSet::new())
 }
 
 pub(super) fn complete(
@@ -2065,6 +2383,89 @@ pub(super) fn complete(
     snapshots: &[&KernelSnapshot],
     control: &crate::platform::execution::ExecutionControl,
 ) -> Result<(), ExecutionError> {
+    // The witness-only admission entry bypasses reconstruction deliberately.
+    // Rebuild missing affine nominal metadata from its canonical owners here too.
+    let mut nominal_metadata_bytes = 0;
+    let mut nominal_inventory_visits = 0;
+    for snapshot in snapshots {
+        for (key, record) in &snapshot.owners {
+            control.check()?;
+            nominal_inventory_visits += 1;
+            if nominal_inventory_visits > crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK
+            {
+                return Err(failure());
+            }
+            let (OwnerKey::Declaration(id), OwnerRecord::Declaration(owner)) = (key, record) else {
+                continue;
+            };
+            let DeclarationPayload::OwnedRecord {
+                type_parameters,
+                fields,
+            } = &owner.payload
+            else {
+                continue;
+            };
+            let declaration = DeclarationReference {
+                package: snapshot.root.package_id,
+                declaration: *id,
+            };
+            if !schema.owned_record_declarations.contains(&declaration) {
+                index_node::<DeclarationReference>(&mut nominal_metadata_bytes)?;
+                schema.owned_record_declarations.insert(declaration);
+            }
+            if schema
+                .records
+                .iter()
+                .any(|record| record.declaration == declaration)
+            {
+                continue;
+            }
+            allocate::<super::prepare::NormalizedRecordLayout>(&mut nominal_metadata_bytes, 1)?;
+            allocate::<super::prepare::NormalizedRecordField>(
+                &mut nominal_metadata_bytes,
+                fields.len(),
+            )?;
+            allocate::<TypeParameterId>(&mut nominal_metadata_bytes, type_parameters.len())?;
+            allocate::<crate::platform::kernel::TypeParameterConstraints>(
+                &mut nominal_metadata_bytes,
+                type_parameters.len(),
+            )?;
+            let mut layout = Vec::new();
+            let mut constraints = Vec::new();
+            for parameter in type_parameters {
+                let OwnerRecord::TypeParameter(parameter) =
+                    canonical_owner(snapshots, declaration, OwnerKey::TypeParameter(*parameter))?
+                else {
+                    return Err(failure());
+                };
+                constraints.push(parameter.constraints);
+            }
+            for field in fields {
+                let OwnerRecord::Field(owner) =
+                    canonical_owner(snapshots, declaration, OwnerKey::Field(*field))?
+                else {
+                    return Err(failure());
+                };
+                allocate::<u8>(&mut nominal_metadata_bytes, owner.name.as_str().len())?;
+                layout.push(super::prepare::NormalizedRecordField {
+                    reference: crate::platform::kernel::FieldReference {
+                        package: declaration.package,
+                        field: *field,
+                    },
+                    name: owner.name.clone(),
+                    ty: owner.ty,
+                });
+            }
+            schema.records.push(super::prepare::NormalizedRecordLayout {
+                declaration,
+                owned: true,
+                type_parameters: type_parameters.clone().into(),
+                type_parameter_constraints: constraints.into(),
+                arguments: Vec::new().into(),
+                fields: layout.into(),
+            });
+        }
+    }
     let mut closure = Closure {
         parallel_targets: BTreeSet::new(),
         constrained_applications: BTreeSet::new(),
@@ -2074,8 +2475,8 @@ pub(super) fn complete(
             .map(|snapshot| (snapshot.root.package_id, *snapshot))
             .collect(),
         types: &mut schema.types,
-        visits: 0,
-        allocated: 0,
+        visits: nominal_inventory_visits,
+        allocated: nominal_metadata_bytes,
         control,
         effects: BTreeMap::new(),
         requirements: BTreeMap::new(),
@@ -2084,7 +2485,11 @@ pub(super) fn complete(
         interned_witnesses: BTreeMap::new(),
     };
     let mut calls = VecDeque::new();
-    borrowed_admission::inventory(&mut closure)?;
+    closure
+        .owned_records()
+        .map_err(|error| at_stage(error, "owned-record inventory"))?;
+    borrowed_admission::inventory(&mut closure)
+        .map_err(|error| at_stage(error, "borrowed callable inventory"))?;
     let empty = Bindings::new();
     for snapshot in snapshots {
         let package = snapshot.root.package_id;
@@ -2166,17 +2571,19 @@ pub(super) fn complete(
                                 };
                                 closure.identity(parameter.ty, &bindings, 0)?;
                             }
-                            closure.body(
-                                package,
-                                function.body,
-                                &bindings,
-                                &mut calls,
-                                matches!(
-                                    function.effect,
-                                    crate::platform::kernel::FunctionEffect::Task { .. }
-                                ),
-                                Some(scope),
-                            )?;
+                            closure
+                                .body(
+                                    package,
+                                    function.body,
+                                    &bindings,
+                                    &mut calls,
+                                    matches!(
+                                        function.effect,
+                                        crate::platform::kernel::FunctionEffect::Task { .. }
+                                    ),
+                                    Some(scope),
+                                )
+                                .map_err(|error| at_stage(error, "symbolic function body"))?;
                             closure.symbolic = false;
                             closure.implementation_bindings.clear();
                         }
@@ -2203,7 +2610,14 @@ pub(super) fn complete(
             if matches!(record, OwnerRecord::Declaration(_) | OwnerRecord::Port(_)) {
                 for root in record.expression_roots() {
                     let task_context = matches!(record, OwnerRecord::Port(port) if matches!(snapshot.types.get(&port.function_type).map(|t| &t.form), Some(TypeForm::TaskFunction { .. })));
-                    closure.body(package, root, &empty, &mut calls, task_context, None)?;
+                    let scope = match key {
+                        OwnerKey::Declaration(id) => Some(DeclarationReference {
+                            package,
+                            declaration: *id,
+                        }),
+                        _ => None,
+                    };
+                    closure.body(package, root, &empty, &mut calls, task_context, scope)?;
                 }
             }
         }
@@ -2342,26 +2756,38 @@ pub(super) fn complete(
             closure.identity(parameter.ty, &bindings, 0)?;
         }
         if let Some(body) = body {
-            closure.body(
-                function.package,
-                body,
-                &bindings,
-                &mut calls,
-                task_context,
-                Some(function),
-            )?;
+            closure
+                .body(
+                    function.package,
+                    body,
+                    &bindings,
+                    &mut calls,
+                    task_context,
+                    Some(function),
+                )
+                .map_err(|error| at_stage(error, "closed function body"))?;
         }
     }
     closure.effects.clear();
     closure.requirements.clear();
-    closure.nominals(
-        &mut schema.records,
-        &mut schema.variants,
-        &mut schema.record_instances,
-        &mut schema.variant_instances,
-    )?;
-    closure.sequence_elements()?;
-    closure.product_depths()?;
+    closure
+        .nominals(
+            &mut schema.records,
+            &mut schema.variants,
+            &mut schema.record_instances,
+            &mut schema.variant_instances,
+        )
+        .map_err(|error| at_stage(error, "closed nominal layouts"))?;
+    closure
+        .sequence_elements()
+        .map_err(|error| at_stage(error, "sequence elements"))?;
+    closure
+        .product_depths(
+            &schema.records,
+            &schema.record_instances,
+            &schema.owned_record_declarations,
+        )
+        .map_err(|error| at_stage(error, "owned representation depth"))?;
     let parallel_targets = std::mem::take(&mut closure.parallel_targets);
     let constrained_applications = std::mem::take(&mut closure.constrained_applications);
     allocate::<bool>(&mut closure.allocated, schema.variants.len())?;
@@ -2648,6 +3074,10 @@ fn scoped_owned(
         | TypeForm::OwnedProduct { .. }
         | TypeForm::OwnedChoice { .. }
         | TypeForm::OwnedSequence { .. } => Ok(true),
+        TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => Ok(matches!(
+            canonical_owner(snapshots, *declaration, OwnerKey::Declaration(declaration.declaration))?,
+            OwnerRecord::Declaration(owner) if matches!(owner.payload, DeclarationPayload::OwnedRecord { .. })
+        )),
         TypeForm::TypeParameter { parameter } => {
             let declaration = scope.ok_or_else(failure)?;
             let OwnerRecord::TypeParameter(record) =
@@ -2678,6 +3108,7 @@ fn parallel_transfer_type(
     parallel_carrier_type(
         schema, snapshots, ty, scope, visits, allocated, control, false,
     )
+    .map_err(|error| at_stage(error, "transfer carrier"))
 }
 
 fn parallel_share_type(
@@ -2692,6 +3123,7 @@ fn parallel_share_type(
     parallel_carrier_type(
         schema, snapshots, ty, scope, visits, allocated, control, true,
     )
+    .map_err(|error| at_stage(error, "shared carrier"))
 }
 
 /// Traverse the complete canonical obligation graph. Revisited vertices only suppress
@@ -2793,12 +3225,20 @@ fn parallel_carrier_type(
                     || !owner.payload.type_parameters().contains(parameter)
                     || (!owners_allowed && record.constraints.has_owned())
                     || if context.nominal_formals {
-                        record.constraints.has_owned()
-                            || !matches!(
-                                owner.payload,
-                                DeclarationPayload::Record { .. }
-                                    | DeclarationPayload::Variant { .. }
-                            )
+                        if matches!(owner.payload, DeclarationPayload::OwnedRecord { .. }) {
+                            !(if share && record.constraints.has_owned() {
+                                record.constraints.requires_share()
+                            } else {
+                                record.constraints.requires_transfer()
+                            })
+                        } else {
+                            record.constraints.has_owned()
+                                || !matches!(
+                                    owner.payload,
+                                    DeclarationPayload::Record { .. }
+                                        | DeclarationPayload::Variant { .. }
+                                )
+                        }
                     } else {
                         !(if share && record.constraints.has_owned() {
                             record.constraints.requires_share()
@@ -2808,6 +3248,7 @@ fn parallel_carrier_type(
                             owner.payload,
                             DeclarationPayload::Function(_)
                                 | DeclarationPayload::OwnedImplementation(_)
+                                | DeclarationPayload::OwnedRecord { .. }
                         )
                     }
                 {
@@ -2846,8 +3287,16 @@ fn parallel_carrier_type(
                 else {
                     return Err(failure());
                 };
+                let nominal_owned = matches!(owner.payload, DeclarationPayload::OwnedRecord { .. });
+                if nominal_owned && !owners_allowed {
+                    return Err(failure());
+                }
                 let (parameters, fields, cases) = match &owner.payload {
                     DeclarationPayload::Record {
+                        type_parameters,
+                        fields,
+                    }
+                    | DeclarationPayload::OwnedRecord {
                         type_parameters,
                         fields,
                     } => (type_parameters, fields.as_slice(), &[][..]),
@@ -2871,18 +3320,32 @@ fn parallel_carrier_type(
                         return Err(failure());
                     };
                     if record.declaration != declaration.declaration
-                        || record.constraints.has_owned()
-                        || record.constraints.requires_transfer()
-                        || record.constraints.requires_share()
+                        || if nominal_owned {
+                            (!record.constraints.has_owned()
+                                && !record.constraints.requires_transfer())
+                                || scoped_owned(schema, snapshots, *actual, context.declaration)?
+                                    != record.constraints.has_owned()
+                        } else {
+                            record.constraints.has_owned()
+                                || record.constraints.requires_transfer()
+                                || record.constraints.requires_share()
+                        }
                     {
                         return Err(failure());
                     }
-                    edges.push((*actual, context, false));
+                    edges.push((*actual, context, nominal_owned));
                 }
                 let nested = TransferContext {
                     declaration: Some(*declaration),
                     nominal_formals: true,
                 };
+                let mut substitutions = Bindings::new();
+                if nominal_owned {
+                    for (parameter, argument) in parameters.iter().zip(arguments) {
+                        index_node::<(TypeParameterId, TypeObjectDigest)>(allocated)?;
+                        substitutions.insert(*parameter, *argument);
+                    }
+                }
                 for field in fields {
                     let OwnerRecord::Field(record) =
                         canonical_owner(snapshots, *declaration, OwnerKey::Field(*field))?
@@ -2892,7 +3355,17 @@ fn parallel_carrier_type(
                     if record.declaration != declaration.declaration {
                         return Err(failure());
                     }
-                    edges.push((record.ty, nested, false));
+                    if nominal_owned {
+                        // Owning formals need not promise movement or sharing merely
+                        // to define a record. Its actual arguments and fully
+                        // substituted fields carry those obligations at each use.
+                        let field = schema
+                            .substitute_type(record.ty, &substitutions, 0)
+                            .ok_or_else(failure)?;
+                        edges.push((field, context, true));
+                    } else {
+                        edges.push((record.ty, nested, false));
+                    }
                 }
                 for case in cases {
                     let OwnerRecord::Case(record) =
@@ -3009,6 +3482,9 @@ impl Closure<'_> {
             if self.has_unresolved_type(ty, &mut unresolved, 0)? {
                 continue;
             }
+            if self.nominal_owned(ty)? {
+                self.owned_witness_type(ty, None, 0)?;
+            }
             self.clone_type(ty)?;
             let object = self.types.get(&ty).cloned().ok_or_else(failure)?;
             for child in object.child_types() {
@@ -3060,8 +3536,10 @@ impl Closure<'_> {
                 constraints.push(constraint);
                 bindings.insert(*parameter, *argument);
             }
+            let owned = matches!(owner.payload, DeclarationPayload::OwnedRecord { .. });
             match owner.payload {
-                DeclarationPayload::Record { fields, .. } => {
+                DeclarationPayload::Record { fields, .. }
+                | DeclarationPayload::OwnedRecord { fields, .. } => {
                     let mut layout = Vec::new();
                     for field in fields {
                         let OwnerRecord::Field(member) = self
@@ -3094,6 +3572,7 @@ impl Closure<'_> {
                         ty,
                         super::prepare::NormalizedRecordLayout {
                             declaration,
+                            owned,
                             type_parameters: parameters.into(),
                             type_parameter_constraints: constraints.into(),
                             arguments: arguments.into(),
@@ -3208,23 +3687,11 @@ fn property_types(
     for (ty, object) in &schema.types {
         control.check()?;
         tick(visits)?;
-        if (retention == Retention::BufferFree
-            && !matches!(
-                object.form,
-                TypeForm::ByteBuffer
-                    | TypeForm::OwnedI64Cell
-                    | TypeForm::OwnedProduct { .. }
-                    | TypeForm::OwnedChoice { .. }
-                    | TypeForm::OwnedSequence { .. }
-            ))
+        if (retention == Retention::BufferFree && !schema.is_owned_type(*ty))
             || retention == Retention::NoApplication
             || retention != Retention::BufferFree
-                && !matches!(
-                    object.form,
-                    TypeForm::ByteBuffer | TypeForm::OwnedI64Cell
-                        | TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. } | TypeForm::OwnedSequence { .. }
-                        if !matches!(retention, Retention::Transfer | Retention::Share)
-                )
+                && (!schema.is_owned_type(*ty)
+                    || matches!(retention, Retention::Transfer | Retention::Share))
                 && !matches!(
                     object.form,
                     TypeForm::Stream { .. }
@@ -3258,16 +3725,10 @@ fn property_types(
                 }
                 Ok(safe.contains(&child)
                     && (!matches!(retention, Retention::Transfer | Retention::Share)
-                        || !matches!(
-                            schema.types[&child].form,
-                            TypeForm::ByteBuffer
-                                | TypeForm::OwnedI64Cell
-                                | TypeForm::OwnedProduct { .. }
-                                | TypeForm::OwnedChoice { .. }
-                                | TypeForm::OwnedSequence { .. }
-                        )))
+                        || !schema.is_owned_type(child)))
             };
             let accepted = match &object.form {
+                _ if schema.is_owned_type(*ty) && retention == Retention::BufferFree => false,
                 TypeForm::ByteBuffer
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
@@ -3315,18 +3776,7 @@ fn property_types(
                 TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields }
                     if matches!(retention, Retention::Transfer | Retention::Share) =>
                 {
-                    let mut accepted = fields.iter().any(|field| {
-                        matches!(
-                            schema.types.get(&field.ty).map(|ty| &ty.form),
-                            Some(
-                                TypeForm::ByteBuffer
-                                    | TypeForm::OwnedI64Cell
-                                    | TypeForm::OwnedProduct { .. }
-                                    | TypeForm::OwnedChoice { .. }
-                                    | TypeForm::OwnedSequence { .. }
-                            )
-                        )
-                    });
+                    let mut accepted = fields.iter().any(|field| schema.is_owned_type(field.ty));
                     for field in fields {
                         tick(visits)?;
                         if !schema.types.contains_key(&field.ty) {
@@ -3352,11 +3802,31 @@ fn property_types(
                 TypeForm::Named { .. } | TypeForm::Applied { .. } => {
                     let mut accepted = true;
                     if let Some(index) = schema.record_instances.get(ty).copied() {
-                        for argument in schema.records[index].arguments.iter() {
-                            accepted &= retained(*argument)?;
-                        }
-                        for field in schema.records[index].fields.iter() {
-                            accepted &= retained(field.ty)?;
+                        let record = &schema.records[index];
+                        if record.owned {
+                            accepted = matches!(retention, Retention::Transfer | Retention::Share);
+                            for child in record
+                                .arguments
+                                .iter()
+                                .copied()
+                                .chain(record.fields.iter().map(|field| field.ty))
+                            {
+                                tick(visits)?;
+                                if !schema.types.contains_key(&child) {
+                                    return Err(failure());
+                                }
+                                accepted &= safe.contains(&child);
+                            }
+                            if retention == Retention::NoApplication {
+                                accepted = true;
+                            }
+                        } else {
+                            for argument in record.arguments.iter() {
+                                accepted &= retained(*argument)?;
+                            }
+                            for field in record.fields.iter() {
+                                accepted &= retained(field.ty)?;
+                            }
                         }
                     } else if let Some(index) = schema.variant_instances.get(ty).copied() {
                         for argument in schema.variants[index].arguments.iter() {
@@ -3410,6 +3880,10 @@ fn property_types(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "reference_owned_record_tests.rs"]
+mod owned_record_admission_tests;
 
 #[cfg(test)]
 mod transfer_proof_tests {

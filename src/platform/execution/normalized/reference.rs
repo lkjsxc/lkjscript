@@ -1490,6 +1490,150 @@ impl ReferenceState<'_> {
         Ok((arm.body, local))
     }
 
+    fn bind_owned_record(
+        &mut self,
+        record_type: TypeObjectDigest,
+        source: ExpressionId,
+        fields: &[crate::platform::kernel::OwnedRecordBinding],
+        locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
+    ) -> Result<(), ExecutionError> {
+        let ty = self.resolve_type_arguments(&[record_type])?[0];
+        let schema = Arc::clone(&self.schema);
+        let layout = schema
+            .owned_record_layout(ty)
+            .ok_or_else(|| reference_type_error("unpack requires an exact closed owned record"))?;
+        if fields.len() != layout.fields.len()
+            || fields.iter().any(|field| {
+                locals.contains_key(&LocalValueReference::LexicalBinding(field.binding))
+            })
+        {
+            return Err(reference_type_error(
+                "incomplete or aliased owned record unpack",
+            ));
+        }
+        for (index, field) in fields.iter().enumerate() {
+            if !layout
+                .fields
+                .iter()
+                .any(|expected| expected.reference == field.field)
+                || fields[..index].iter().any(|previous| {
+                    previous.field == field.field || previous.binding == field.binding
+                })
+            {
+                return Err(reference_type_error(
+                    "unknown or repeated owned record field",
+                ));
+            }
+        }
+        self.charge_allocation(super::value::collection_storage_bytes(
+            fields.len() as u64,
+            (std::mem::size_of::<LocalValueReference>() + std::mem::size_of::<CheckedValue>())
+                as u64,
+            "normalized_product_allocation",
+        )?)?;
+        self.control.check()?;
+        let NormalizedValue::OwnedProduct(token) = self.evaluate(source, locals)?.release() else {
+            return Err(reference_type_error(
+                "owned record unpack requires its custody token",
+            ));
+        };
+        let values = token.unpack(self.memory_domain, ty, self.control)?;
+        if values.len() != fields.len() {
+            return Err(reference_type_error(
+                "owned record custody has foreign arity",
+            ));
+        }
+        let mut bound = 0;
+        let result = (|| {
+            for (expected, value) in layout.fields.iter().zip(values) {
+                let field = fields
+                    .iter()
+                    .find(|field| field.field == expected.reference)
+                    .ok_or_else(|| reference_type_error("owned record unpack omitted field"))?;
+                let binding = self.binding(field.binding, BindingKind::OwnedUnpack)?;
+                let declared = binding
+                    .declared_type
+                    .ok_or_else(|| reference_type_error("owned record binding lacks type"))?;
+                if self.resolve_type_arguments(&[declared])?[0] != expected.ty {
+                    return Err(reference_type_error("owned record binding type mismatch"));
+                }
+                let value = self.product_child(value, expected.ty)?;
+                locals.insert(LocalValueReference::LexicalBinding(field.binding), value);
+                bound += 1;
+            }
+            Ok(())
+        })();
+        if result.is_err() {
+            for expected in &layout.fields[..bound] {
+                if let Some(field) = fields
+                    .iter()
+                    .find(|field| field.field == expected.reference)
+                {
+                    locals.remove(&LocalValueReference::LexicalBinding(field.binding));
+                }
+            }
+        }
+        result
+    }
+
+    fn pack_owned_record(
+        &mut self,
+        record_type: TypeObjectDigest,
+        fields: Vec<crate::platform::kernel::OwnedRecordExpressionField>,
+        locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
+    ) -> Result<CheckedValue, ExecutionError> {
+        let ty = self.resolve_type_arguments(&[record_type])?[0];
+        let schema = Arc::clone(&self.schema);
+        let layout = schema
+            .owned_record_layout(ty)
+            .ok_or_else(|| reference_type_error("pack requires an exact closed owned record"))?;
+        if fields.len() != layout.fields.len() {
+            return Err(reference_type_error("incomplete owned record construction"));
+        }
+        self.charge_allocation(super::value::collection_storage_bytes(
+            fields.len() as u64,
+            std::mem::size_of::<(usize, NormalizedValue)>() as u64,
+            "normalized_product_allocation",
+        )?)?;
+        self.control.check()?;
+        let mut children = Vec::with_capacity(fields.len());
+        for field in fields {
+            let (index, expected) = layout
+                .fields
+                .iter()
+                .enumerate()
+                .find(|(_, candidate)| candidate.reference == field.field)
+                .ok_or_else(|| reference_type_error("unknown owned record construction field"))?;
+            let value = self.evaluate(field.value, locals)?.release();
+            children.push((index, self.product_child(value, expected.ty)?.release()));
+        }
+        children.sort_unstable_by_key(|(index, _)| *index);
+        if children
+            .iter()
+            .enumerate()
+            .any(|(index, (actual, _))| index != *actual)
+        {
+            return Err(reference_type_error("repeated owned record field"));
+        }
+        self.charge_allocation(super::value::collection_storage_bytes(
+            children.len() as u64,
+            std::mem::size_of::<NormalizedValue>() as u64,
+            "normalized_product_allocation",
+        )?)?;
+        self.control.check()?;
+        let fields = children.into_iter().map(|(_, value)| value).collect();
+        let control = self.control;
+        let token = super::owned_product::OwnedProduct::create(
+            self.memory_domain,
+            ty,
+            fields,
+            control,
+            &mut |bytes| self.charge_allocation(bytes),
+        )?;
+        token.establish_admission(self.schema.value_origin)?;
+        CheckedValue::memory(&self.schema, NormalizedValue::OwnedProduct(token))
+    }
+
     fn bind_owned_product(
         &mut self,
         product_type: TypeObjectDigest,
@@ -1954,16 +2098,7 @@ impl ReferenceState<'_> {
             self.type_parameter_constraints(declaration, &function.type_parameters)?;
         for (constraint, ty) in constraints.iter().zip(types) {
             self.control.check()?;
-            let owned = matches!(
-                self.schema.types.get(ty).map(|t| &t.form),
-                Some(
-                    TypeForm::ByteBuffer
-                        | TypeForm::OwnedI64Cell
-                        | TypeForm::OwnedProduct { .. }
-                        | TypeForm::OwnedChoice { .. }
-                        | TypeForm::OwnedSequence { .. }
-                )
-            );
+            let owned = self.schema.is_owned_type(*ty);
             if owned != constraint.has_owned()
                 || (!owned && !self.schema.buffer_free_types.contains(ty))
                 || (constraint.requires_capture_safe()
@@ -2408,6 +2543,15 @@ impl ReferenceState<'_> {
                     body,
                 } => {
                     self.bind_owned_product(product_type, source, &fields, locals)?;
+                    expression = body;
+                }
+                ExpressionOperation::UnpackOwnedRecord {
+                    record_type,
+                    source,
+                    fields,
+                    body,
+                } => {
+                    self.bind_owned_record(record_type, source, &fields, locals)?;
                     expression = body;
                 }
                 ExpressionOperation::ImplementationCall {
@@ -2951,6 +3095,60 @@ impl ReferenceState<'_> {
                 let value = self.borrowed_product_child(value, payload_type)?;
                 self.evaluate_borrowed_body(parent, binding, value, body, locals)
             }
+            ExpressionOperation::BorrowOwnedRecordField {
+                record_type,
+                source,
+                field,
+                binding,
+                body,
+            } => {
+                let ty = self.resolve_type_arguments(&[record_type])?[0];
+                let schema = Arc::clone(&self.schema);
+                let layout = schema.owned_record_layout(ty).ok_or_else(|| {
+                    reference_type_error("borrow requires an exact closed owned record")
+                })?;
+                let (index, selected) = layout
+                    .fields
+                    .iter()
+                    .enumerate()
+                    .find(|(_, candidate)| candidate.reference == field)
+                    .ok_or_else(|| reference_type_error("unknown borrowed owned record field"))?;
+                let payload_type = selected.ty;
+                if direct_memory_type(&self.schema, payload_type, &BTreeMap::new(), self.control)?
+                    .is_none()
+                {
+                    return Err(reference_type_error("borrowed record field must be owned"));
+                }
+                let record = self.binding(binding, BindingKind::OwnedBorrow)?;
+                let declared = record
+                    .declared_type
+                    .ok_or_else(|| reference_type_error("borrowed record binding lacks type"))?;
+                if self.resolve_type_arguments(&[declared])?[0] != payload_type {
+                    return Err(reference_type_error("borrowed record field type mismatch"));
+                }
+                self.charge_allocation(
+                    (std::mem::size_of::<LocalValueReference>()
+                        + std::mem::size_of::<CheckedValue>()) as u64,
+                )?;
+                self.control.check()?;
+                let parent = self.borrow_parent(source, locals)?;
+                let NormalizedValue::OwnedProduct(token) = parent.raw() else {
+                    return Err(reference_type_error(
+                        "borrow source requires owned record custody",
+                    ));
+                };
+                if token.ty() != ty {
+                    return Err(reference_type_error("borrow source nominal type mismatch"));
+                }
+                token.validate(self.memory_domain, false)?;
+                let control = self.control;
+                let value =
+                    token.borrow_field(self.memory_domain, index, control, &mut |bytes| {
+                        self.charge_allocation(bytes)
+                    })?;
+                let value = self.borrowed_product_child(value, payload_type)?;
+                self.evaluate_borrowed_body(parent, binding, value, body, locals)
+            }
             ExpressionOperation::MatchBorrowedOwned {
                 choice_type,
                 source,
@@ -3125,6 +3323,23 @@ impl ReferenceState<'_> {
                 body,
             } => {
                 self.bind_owned_product(product_type, source, &fields, locals)?;
+                let result = self.evaluate_in_context(body, locals, demand);
+                for field in fields {
+                    locals.remove(&LocalValueReference::LexicalBinding(field.binding));
+                }
+                result
+            }
+            ExpressionOperation::PackOwnedRecord {
+                record_type,
+                fields,
+            } => self.pack_owned_record(record_type, fields, locals),
+            ExpressionOperation::UnpackOwnedRecord {
+                record_type,
+                source,
+                fields,
+                body,
+            } => {
+                self.bind_owned_record(record_type, source, &fields, locals)?;
                 let result = self.evaluate_in_context(body, locals, demand);
                 for field in fields {
                     locals.remove(&LocalValueReference::LexicalBinding(field.binding));
@@ -4074,23 +4289,43 @@ impl ReferenceState<'_> {
         value: CheckedValue,
         selector: FieldSelector,
     ) -> Result<CheckedValue, ExecutionError> {
-        if let (NormalizedValue::OwnedProduct(token), FieldSelector::Structural(name)) =
-            (value.raw(), &selector)
-        {
-            let Some(crate::platform::kernel::TypeObject {
-                form: TypeForm::OwnedProduct { fields },
-                ..
-            }) = self.schema.types.get(&token.ty())
-            else {
-                return Err(reference_type_error("product metadata has no exact type"));
+        if let NormalizedValue::OwnedProduct(token) = value.raw() {
+            // Independent linear lookup retains exact selector kinds and nominal identities.
+            let (index, ty) = match &selector {
+                FieldSelector::Structural(name) => {
+                    let Some(crate::platform::kernel::TypeObject {
+                        form: TypeForm::OwnedProduct { fields },
+                        ..
+                    }) = self.schema.types.get(&token.ty())
+                    else {
+                        return Err(reference_type_error(
+                            "structural metadata selector requires a structural product",
+                        ));
+                    };
+                    let (index, field) = fields
+                        .iter()
+                        .enumerate()
+                        .find(|(_, field)| &field.name == name)
+                        .ok_or_else(|| reference_type_error("unknown product metadata field"))?;
+                    (index, field.ty)
+                }
+                FieldSelector::Nominal(reference) => {
+                    let layout = self.schema.owned_record_layout(token.ty()).ok_or_else(|| {
+                        reference_type_error(
+                            "nominal metadata selector requires an exact owned record",
+                        )
+                    })?;
+                    let (index, field) = layout
+                        .fields
+                        .iter()
+                        .enumerate()
+                        .find(|(_, field)| &field.reference == reference)
+                        .ok_or_else(|| {
+                            reference_type_error("foreign owned record metadata field")
+                        })?;
+                    (index, field.ty)
+                }
             };
-            // Independent linear lookup rather than the VM's canonical binary search.
-            let (index, field) = fields
-                .iter()
-                .enumerate()
-                .find(|(_, field)| &field.name == name)
-                .ok_or_else(|| reference_type_error("unknown product metadata field"))?;
-            let ty = field.ty;
             if !self.schema.ordinary_types.contains(&ty) {
                 return Err(reference_type_error(
                     "product field read cannot expose owned children",
@@ -4113,6 +4348,11 @@ impl ReferenceState<'_> {
     ) -> Result<RecordLayoutIndex, ExecutionError> {
         let identity = super::value_schema::nominal_identity(declaration, arguments)
             .map_err(|_| reference_type_error("invalid record application"))?;
+        if self.schema.is_owned_type(identity) {
+            return Err(reference_type_error(
+                "owned records require their affine constructor",
+            ));
+        }
         if !arguments.is_empty() && !self.schema.ordinary_types.contains(&identity) {
             return Err(reference_type_error(
                 "record application contains live authority",
@@ -6116,6 +6356,15 @@ fn direct_memory_type(
                 return Ok(Some(super::value::MemoryForm::Product(
                     schema.transfer_type_identity(ty, substitutions, control)?,
                 )));
+            }
+            TypeForm::Named { .. } | TypeForm::Applied { .. } if schema.is_owned_type(ty) => {
+                let identity = schema.transfer_type_identity(ty, substitutions, control)?;
+                if schema.owned_record_layout(identity).is_none() {
+                    return Err(reference_type_error(
+                        "owned nominal type lacks an exact closed layout",
+                    ));
+                }
+                return Ok(Some(super::value::MemoryForm::Product(identity)));
             }
             TypeForm::TypeParameter { parameter } => {
                 ty = *substitutions

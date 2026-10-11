@@ -26,7 +26,7 @@ limits or relabel `worktree_changed_during_run` as acceptance. The
 records the concrete four-pack inventory correction. This does not freeze general
 compiler caches into source or make generated artifacts editable semantic authority.
 
-Current public availability belongs to [status](status.md#public-binary).
+Current public availability belongs to [status](status.md).
 The completed v0.1.64 publication is recorded in the
 [owned-choice continuation](campaigns/20261002-owned-choices.md#completed-v0164-publication).
 Historical selections remain in their original archives and the linked immutable
@@ -51,7 +51,8 @@ case matching `native_owned_`, `native_byte_buffer_`, `native_byte_ranges_`,
 `native_map_entries::`, `native_declarations::native_fold::`,
 `native_declarations::incremental_units::`,
 `native_declarations::native_owned_fifo::` and
-`native_declarations::native_data_sequences::` families, plus the exact
+`native_declarations::native_data_sequences::` and
+`native_declarations::native_owned_nominals::` families, plus the exact
 `copied_binary_authors_builds_and_serves_interactive_topology_from_minimal` case.
 The Map family must include the exact
 `native_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment`
@@ -83,10 +84,10 @@ substitute for final-byte acceptance. Normal promotion and anonymous acquisition
 still use the unchanged assets and existing authority; no credentials, protections,
 immutable tags or prior assets are changed.
 
-`lkjscript-final-candidate-acceptance-7` and workload
-`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-7`
+`lkjscript-final-candidate-acceptance-8` and workload
+`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-8`
 require the complete Map matrix, the exact native-fold, incremental-compiler,
-FIFO and generalized-sequence behavior witnesses and native-public proof in addition
+FIFO, generalized-sequence and nominal-owned-record behavior witnesses and native-public proof in addition
 to all previous source, six target-owner, two userland and installation boundaries. The current
 controller rejects predecessor contracts, predecessor workloads and mixed generations
 rather than relabelling them. Their original contracts and evidence remain historical facts;
@@ -199,9 +200,13 @@ never equivalent proof. The [verification specification](spec/verification.md) o
 
 Source-only probes embedded in behavioral owners remain owned by those original readers; the target
 verifier is source-built. Necessary reference/unit work and host-verifier configurations are not
-second distributable product builds. Workloads, assertions and individual owner deadlines remain
-unchanged. The candidate supervisor has a finite outer allowance covering the existing target-owner
-allowances; no completed broad owner is replayed merely because bytes crossed a job boundary.
+second distributable product builds. Workloads and assertions remain unchanged. The complete
+`workspace_tests` aggregate has a **7,200-second** allowance; the generic **3,600-second** gate
+default and other owner deadlines retain their existing selections. The hosted candidate job has a
+finite **360-minute** outer allowance for cold source verification, construction and required
+finalized-byte acceptance. Source checking has no shorter aggregate timeout around its gates.
+The target supervisor retains its existing finite owner allowance; no completed broad owner is
+replayed merely because bytes crossed a job boundary.
 
 The checker retains immutable output copies for its gates before later Cargo configurations can
 replace shared target paths. Its original reader checks exact source inputs, registry dependency

@@ -1820,6 +1820,7 @@ impl RepositoryView {
 
         let mut dependency_interfaces = BTreeMap::new();
         let mut dependency_types = BTreeMap::new();
+        let mut representation_dependencies = BTreeMap::new();
         for dependency in dependencies.values() {
             self.validation_checkpoint()?;
             let resolved = self.resolve_package_transport(dependency.package_revision)?;
@@ -1828,53 +1829,93 @@ impl RepositoryView {
             validated
                 .root_revision
                 .matches_dependency(dependency.package_revision, dependency)?;
-            let PackageInterfaceValidation {
-                owners: interface_owners,
-                type_objects: interface_types,
-                reachable_objects: _,
-                map_work,
-            } = validated.root_interface;
-            work.add_map(map_work);
-            let interface_items = interface_owners
-                .len()
-                .checked_add(interface_types.len())
-                .ok_or_else(full_oracle_work_error)?;
-            consume_full_oracle_work(&mut consumed, interface_items)?;
-            work.canonical_records_decoded = work
-                .canonical_records_decoded
-                .saturating_add(interface_owners.len() as u64)
-                .saturating_add(interface_types.len() as u64);
-            let records: crate::platform::kernel::DependencyInterface = interface_owners
-                .into_iter()
-                .map(|(owner, value)| (owner, value.record))
-                .collect::<BTreeMap<_, _>>()
-                .into();
-            match dependency_interfaces.entry(dependency.package_revision) {
-                Entry::Vacant(entry) => {
-                    entry.insert(records);
+            // The installed transport has already admitted every exact selected body.
+            // Retain its transitive layout evidence without granting direct import authority.
+            let mut revisions = validated.representation_revisions;
+            let mut interfaces = validated.representation_interfaces;
+            revisions.insert(dependency.package_revision, validated.root_revision);
+            interfaces.insert(dependency.package_revision, validated.root_interface);
+            for (revision_digest, revision) in revisions {
+                self.validation_checkpoint()?;
+                consume_full_oracle_work(&mut consumed, 1)?;
+                let binding = DependencyRecord {
+                    graph_contract_version:
+                        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+                    package: revision.package,
+                    semantic_revision: revision.revision.revision_id()?,
+                    package_revision: revision_digest,
+                };
+                if let Some(direct) = dependencies.get(&binding.package) {
+                    revision.matches_dependency(revision_digest, direct)?;
                 }
-                Entry::Occupied(entry) if entry.get() != &records => {
-                    return Err(read_error(
-                        DiagnosticClass::Corrupt,
-                        "publication_full_oracle_interface_conflict",
-                        "one exact logical package revision reconstructed two different interfaces",
-                    ));
-                }
-                Entry::Occupied(_) => {}
-            }
-            for (digest, object) in interface_types {
-                match dependency_types.entry(digest) {
+                match representation_dependencies.entry(binding.package) {
                     Entry::Vacant(entry) => {
-                        entry.insert(object);
+                        entry.insert(binding);
                     }
-                    Entry::Occupied(entry) if entry.get() != &object => {
+                    Entry::Occupied(entry) if entry.get() != &binding => {
                         return Err(read_error(
-                            DiagnosticClass::Corrupt,
-                            "publication_full_oracle_dependency_type_conflict",
-                            "one dependency type digest reconstructed two different objects",
+                            DiagnosticClass::Semantic,
+                            "publication_full_oracle_representation_conflict",
+                            "private layout closures bind one package to different exact revisions",
                         ));
                     }
                     Entry::Occupied(_) => {}
+                }
+                let interface = interfaces.remove(&revision_digest).ok_or_else(|| {
+                    read_error(
+                        DiagnosticClass::Corrupt,
+                        "publication_full_oracle_representation_interface",
+                        "admitted private layout revision has no exact interface",
+                    )
+                })?;
+                let PackageInterfaceValidation {
+                    owners: interface_owners,
+                    type_objects: interface_types,
+                    reachable_objects: _,
+                    map_work,
+                } = interface;
+                work.add_map(map_work);
+                let interface_items = interface_owners
+                    .len()
+                    .checked_add(interface_types.len())
+                    .ok_or_else(full_oracle_work_error)?;
+                consume_full_oracle_work(&mut consumed, interface_items)?;
+                work.canonical_records_decoded = work
+                    .canonical_records_decoded
+                    .saturating_add(interface_owners.len() as u64)
+                    .saturating_add(interface_types.len() as u64);
+                let records: crate::platform::kernel::DependencyInterface = interface_owners
+                    .into_iter()
+                    .map(|(owner, value)| (owner, value.record))
+                    .collect::<BTreeMap<_, _>>()
+                    .into();
+                match dependency_interfaces.entry(revision_digest) {
+                    Entry::Vacant(entry) => {
+                        entry.insert(records);
+                    }
+                    Entry::Occupied(entry) if entry.get() != &records => {
+                        return Err(read_error(
+                            DiagnosticClass::Corrupt,
+                            "publication_full_oracle_interface_conflict",
+                            "one exact logical package revision reconstructed two different interfaces",
+                        ));
+                    }
+                    Entry::Occupied(_) => {}
+                }
+                for (digest, object) in interface_types {
+                    match dependency_types.entry(digest) {
+                        Entry::Vacant(entry) => {
+                            entry.insert(object);
+                        }
+                        Entry::Occupied(entry) if entry.get() != &object => {
+                            return Err(read_error(
+                                DiagnosticClass::Corrupt,
+                                "publication_full_oracle_dependency_type_conflict",
+                                "one dependency type digest reconstructed two different objects",
+                            ));
+                        }
+                        Entry::Occupied(_) => {}
+                    }
                 }
             }
         }
@@ -1884,6 +1925,7 @@ impl RepositoryView {
             types.len(),
             blobs.len(),
             dependencies.len(),
+            representation_dependencies.len(),
             retirements.len(),
             dependency_types.len(),
         ]
@@ -1915,6 +1957,7 @@ impl RepositoryView {
                 types,
                 dependency_interfaces,
                 dependency_types,
+                representation_dependencies,
                 blobs,
                 dependencies,
                 retirements,
@@ -1927,10 +1970,15 @@ impl RepositoryView {
         self.require_current_validation()?;
         let dependencies = self.package_dependencies()?;
         let mut selection = PackageInterfaceSelection::new(self.package());
+        let mut has_owned_layouts = false;
         let mut interactive_ports = BTreeSet::new();
         let mut read_work = dependencies.work;
         read_work.add(self.for_each_owner_record(|_, record| {
             selection.observe_declaration(record)?;
+            has_owned_layouts |= matches!(&record,
+                OwnerRecord::Declaration(declaration)
+                    if declaration.visibility == crate::platform::kernel::DeclarationVisibility::Public
+                        && matches!(declaration.payload, crate::platform::kernel::DeclarationPayload::OwnedRecord { .. }));
             if let OwnerRecord::Target(target) = record
                 && target.runner == RunnerKind::Interactive
             {
@@ -1946,6 +1994,24 @@ impl RepositoryView {
             Ok(())
         })?);
         read_work.add(self.for_each_owner_record(|_, record| selection.observe_operation(record))?);
+        if has_owned_layouts {
+            let indexed_work = std::cell::RefCell::new(RepositoryReadWork::default());
+            selection.observe_owned_representations_indexed(
+                |owner| {
+                    self.validation_checkpoint()?;
+                    let read = self.owner(owner)?;
+                    indexed_work.borrow_mut().add(read.work);
+                    Ok(read.value)
+                },
+                |digest| {
+                    self.validation_checkpoint()?;
+                    let read = self.type_object(digest)?;
+                    indexed_work.borrow_mut().add(read.work);
+                    Ok(read.value)
+                },
+            )?;
+            read_work.add(indexed_work.into_inner());
+        }
         for port in interactive_ports {
             if port.package != self.package() {
                 return Err(read_error(
@@ -2293,6 +2359,13 @@ impl RepositoryView {
     }
 
     fn package_dependencies(&self) -> Result<RevisionRead<Vec<DependencyRecord>>, Diagnostic> {
+        self.package_dependencies_admitted(&mut RepositoryReadAdmission::unbounded())
+    }
+
+    fn package_dependencies_admitted(
+        &self,
+        admission: &mut RepositoryReadAdmission,
+    ) -> Result<RevisionRead<Vec<DependencyRecord>>, Diagnostic> {
         let count = self.current.semantic_root.dependencies.entries();
         if count > MAXIMUM_PACKAGE_DEPENDENCIES as u64 {
             return Err(read_error(
@@ -2303,15 +2376,31 @@ impl RepositoryView {
                 ),
             ));
         }
-        let reader = ObjectPageReader::new(&self.store);
-        let mut map_work = MapWork::default();
+        admission.admit_canonical_records(count)?;
+        let reader = ObjectPageReader::new_admitted(&self.store, admission.store);
+        let mut map_work = MapWork::with_admission(admission.map);
         let mut bindings = Vec::with_capacity(count as usize);
         PersistentMap::from_root(self.current.semantic_root.dependencies)
             .for_each(&reader, &mut map_work, |key, value| {
+                if bindings.len() >= count as usize {
+                    return Err(MapError {
+                        class: MapErrorClass::Corrupt,
+                        code: "publication_package_dependency_count",
+                        message: "dependency inventory exceeds its declared count".to_owned(),
+                    });
+                }
                 bindings.push((key.to_vec(), value.to_vec()));
                 Ok(())
             })
             .map_err(map_diagnostic)?;
+        admission.map = map_work.remaining_admission();
+        admission.store = StoreReadAdmission::new(reader.remaining_read_admission().unwrap_or(
+            StoreReadLimits {
+                maximum_catalog_lookups: 0,
+                maximum_objects: 0,
+                maximum_bytes: 0,
+            },
+        ));
         let mut work = RepositoryReadWork {
             map: map_work,
             store: reader.work(),
@@ -2334,11 +2423,13 @@ impl RepositoryView {
                 )
             })?;
             let binding = decode_dependency_binding(&binding_bytes)?;
-            let bytes = self.read_required_object(
+            self.validation_checkpoint()?;
+            let bytes = self.read_required_object_admitted(
                 ObjectDomain::Dependency,
                 binding.object.bytes(),
                 "package export found a missing dependency object",
                 &mut work,
+                admission,
             )?;
             dependencies.push(decode_dependency(&bytes, &package, binding.object)?);
         }
@@ -3362,25 +3453,42 @@ impl<'a> RepositoryDefinitionReader<'a> {
         read.value
             .root_revision
             .matches_dependency(dependency.package_revision, &dependency)?;
-        Ok(read
-            .value
-            .root_interface
-            .owners
-            .into_iter()
-            .map(|(id, value)| {
-                let name = match value.record {
-                    I::Declaration(r) => r.name,
-                    I::TypeParameter(r) => r.name,
-                    I::EffectParameter(r) => r.name,
-                    I::RequirementParameter(r) => r.name,
-                    I::Field(r) => r.name,
-                    I::Case(r) => r.name,
-                    I::Operation(r) => r.name,
-                    I::Parameter(r) => r.name,
-                    I::Requirement(r) => r.name,
-                    I::Port(r) => r.name,
+        let owners = read.value.root_interface.owners;
+        Ok(owners
+            .iter()
+            .filter_map(|(id, value)| {
+                let parent = match &value.record {
+                    I::TypeParameter(r) => Some(r.declaration),
+                    I::EffectParameter(r) => Some(r.declaration),
+                    I::RequirementParameter(r) => Some(r.declaration),
+                    I::Field(r) => Some(r.declaration),
+                    I::Case(r) => Some(r.declaration),
+                    _ => None,
                 };
-                (id, name)
+                if parent.is_some_and(|parent| {
+                    owners.get(&OwnerKey::Declaration(parent)).is_some_and(|owner| {
+                        matches!(owner.record, I::RepresentationDeclaration(_))
+                            || (matches!(value.record, I::Field(_))
+                                && matches!(&owner.record, I::Declaration(r)
+                                    if matches!(r.payload, crate::platform::kernel::PackageInterfaceDeclarationPayload::OwnedRecord { .. })))
+                    })
+                }) {
+                    return None;
+                }
+                let name = match &value.record {
+                    I::RepresentationDeclaration(_) => return None,
+                    I::Declaration(r) => &r.name,
+                    I::TypeParameter(r) => &r.name,
+                    I::EffectParameter(r) => &r.name,
+                    I::RequirementParameter(r) => &r.name,
+                    I::Field(r) => &r.name,
+                    I::Case(r) => &r.name,
+                    I::Operation(r) => &r.name,
+                    I::Parameter(r) => &r.name,
+                    I::Requirement(r) => &r.name,
+                    I::Port(r) => &r.name,
+                };
+                Some((*id, name.clone()))
             })
             .collect())
     }
@@ -3673,6 +3781,53 @@ fn admit_decoded_records(
 }
 
 impl CanonicalBaseRead for RepositoryView {
+    fn read_dependencies_admitted(
+        &self,
+        admission: CanonicalReadAdmission,
+    ) -> Result<CanonicalRead<Vec<DependencyRecord>>, Diagnostic> {
+        self.package_dependencies_admitted(&mut RepositoryReadAdmission::canonical(admission))
+            .map(canonical_read)
+    }
+
+    fn read_representation_dependency_admitted(
+        &self,
+        root: &DependencyRecord,
+        package: PackageId,
+        admission: CanonicalReadAdmission,
+    ) -> Result<CanonicalRead<Option<DependencyRecord>>, Diagnostic> {
+        let resolved = self.resolve_package_transport_admitted(
+            root.package_revision,
+            &mut RepositoryReadAdmission::canonical(admission),
+        )?;
+        resolved
+            .value
+            .root_revision
+            .matches_dependency(root.package_revision, root)?;
+        let selected = if package == root.package {
+            let mut selected = root.clone();
+            selected.graph_contract_version =
+                crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+            Some(selected)
+        } else {
+            resolved
+                .value
+                .representation_revisions
+                .iter()
+                .find(|(_, revision)| revision.package == package)
+                .map(|(digest, revision)| {
+                    Ok(DependencyRecord {
+                        graph_contract_version:
+                            crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+                        package,
+                        semantic_revision: revision.revision.revision_id()?,
+                        package_revision: *digest,
+                    })
+                })
+                .transpose()?
+        };
+        Ok(canonical_read(self.read(selected, resolved.work)))
+    }
+
     fn accepted_retry_encoding(&self) -> Option<u16> {
         self.idempotent_result
             .map(|result| result.graph_contract_version)

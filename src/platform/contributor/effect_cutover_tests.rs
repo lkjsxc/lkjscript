@@ -368,6 +368,7 @@ fn successor_snapshot(name: &str) -> crate::platform::kernel::KernelSnapshot {
             .into_iter()
             .collect(),
         dependency_types: BTreeMap::new(),
+        representation_dependencies: BTreeMap::new(),
         dependency_interfaces: BTreeMap::new(),
         dependencies: BTreeMap::new(),
         retirements: serde_json::from_value::<Vec<_>>(value["retirements"].clone())

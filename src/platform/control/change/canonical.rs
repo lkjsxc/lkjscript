@@ -445,6 +445,64 @@ impl<'a> Reader<'a> {
                     }
                 }
             }
+            E::PackOwnedRecord {
+                record_type,
+                fields,
+            } => A::PackOwnedRecord {
+                record_type: self.ty(record_type)?,
+                fields: fields
+                    .into_iter()
+                    .map(|field| {
+                        Ok((
+                            AuthoredFieldReference::Exact {
+                                package: field.field.package,
+                                field: field.field.field,
+                            },
+                            self.expression_at(field.value, depth + 1)?,
+                        ))
+                    })
+                    .collect::<Result<_, Diagnostic>>()?,
+            },
+            E::UnpackOwnedRecord {
+                record_type,
+                source,
+                fields,
+                body,
+            } => {
+                let mut authored = Vec::new();
+                for field in fields {
+                    let binding = self.binding_definition(field.binding)?;
+                    authored.push((
+                        AuthoredFieldReference::Exact {
+                            package: field.field.package,
+                            field: field.field.field,
+                        },
+                        binding,
+                    ));
+                }
+                A::UnpackOwnedRecord {
+                    record_type: self.ty(record_type)?,
+                    source: Box::new(self.expression_at(source, depth + 1)?),
+                    fields: authored,
+                    body: Box::new(self.expression_at(body, depth + 1)?),
+                }
+            }
+            E::BorrowOwnedRecordField {
+                record_type,
+                source,
+                field,
+                binding,
+                body,
+            } => A::BorrowOwnedRecordField {
+                record_type: self.ty(record_type)?,
+                source: Box::new(self.expression_at(source, depth + 1)?),
+                field: AuthoredFieldReference::Exact {
+                    package: field.package,
+                    field: field.field,
+                },
+                binding: Box::new(self.binding_definition(binding)?),
+                body: Box::new(self.expression_at(body, depth + 1)?),
+            },
             E::PackOwned {
                 product_type,
                 fields,

@@ -7,8 +7,8 @@ pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-9";
 pub const WITNESS_CONTRACT_VERSION: u16 = 9;
 pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-11";
 pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 11;
-pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-36";
-pub const VALIDATOR_CONTRACT_VERSION: u16 = 36;
+pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-37";
+pub const VALIDATOR_CONTRACT_VERSION: u16 = 37;
 
 pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT09";
 pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM16";
@@ -45,7 +45,11 @@ pub struct ValidatorFeatureDescriptor {
 
 /// This list is the executable owner for rules that affect acceptance or safe witness reuse.
 /// Changing one rule requires changing its feature version, which changes the validator digest.
-pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 41] = [
+pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 42] = [
+    ValidatorFeatureDescriptor {
+        name: "opaque_nominal_owned_records",
+        version: 1,
+    },
     ValidatorFeatureDescriptor {
         name: "scoped_shareable_owned_inputs",
         version: 1,

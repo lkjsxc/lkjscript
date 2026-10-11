@@ -33,6 +33,10 @@ mod owned_scheme_encoding_tests;
 mod generalized_sequence_encoding_tests;
 
 #[cfg(test)]
+#[path = "codec_nominal_owned_record_tests.rs"]
+mod nominal_owned_record_encoding_tests;
+
+#[cfg(test)]
 mod shareable_encoding_tests {
     use super::*;
     use crate::platform::kernel::{
@@ -57,7 +61,7 @@ mod shareable_encoding_tests {
                 constraints,
             });
             let (digest, bytes) = encode_owner(&record).unwrap();
-            assert_eq!(&bytes[..8], b"LKJOWN31");
+            assert_eq!(&bytes[..8], b"LKJOWN32");
             assert_eq!(
                 decode_owner(&bytes, record.owner(), record.kind(), digest).unwrap(),
                 record
@@ -125,7 +129,7 @@ mod borrowed_result_encoding_tests {
     fn canonical_result_relation_preserves_exact_source_identity() {
         let original = function();
         let (digest, bytes) = encode_owner(&original).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOWN31");
+        assert_eq!(&bytes[..8], b"LKJOWN32");
         assert_eq!(
             decode_owner(&bytes, original.owner(), original.kind(), digest).unwrap(),
             original
@@ -522,7 +526,7 @@ mod parameterized_contract_encoding_tests {
             }),
         });
         let (digest, bytes) = encode_owner(&record).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOWN31");
+        assert_eq!(&bytes[..8], b"LKJOWN32");
         assert_eq!(
             decode_owner(&bytes, owner, record.kind(), digest).unwrap(),
             record
@@ -843,7 +847,7 @@ mod implementation_application_encoding_tests {
             .unwrap();
             let current = OwnerRecord::Expression(expression.clone());
             let (digest, bytes) = encode_owner(&current).unwrap();
-            assert_eq!(&bytes[..8], b"LKJOWN31");
+            assert_eq!(&bytes[..8], b"LKJOWN32");
             assert_eq!(
                 decode_owner(&bytes, current.owner(), current.kind(), digest).unwrap(),
                 current
@@ -912,7 +916,7 @@ mod nominal_encoding_tests {
                 constraints: constraint,
             });
             let (digest, bytes) = encode_owner(&record).unwrap();
-            assert_eq!(&bytes[..8], b"LKJOWN31");
+            assert_eq!(&bytes[..8], b"LKJOWN32");
             assert_eq!(
                 decode_owner(&bytes, key, OwnerKind::TypeParameter, digest).unwrap(),
                 record
@@ -987,7 +991,7 @@ mod nominal_encoding_tests {
         .unwrap();
         let owner = OwnerRecord::Expression(expression.clone());
         let (digest, bytes) = encode_owner(&owner).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOWN31");
+        assert_eq!(&bytes[..8], b"LKJOWN32");
         assert_eq!(
             decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
             owner
@@ -1337,7 +1341,7 @@ mod borrow_encoding_tests {
         ];
         for record in records {
             let (digest, bytes) = encode_owner(&record).unwrap();
-            assert_eq!(&bytes[..8], b"LKJOWN31");
+            assert_eq!(&bytes[..8], b"LKJOWN32");
             assert_eq!(
                 decode_owner(&bytes, record.owner(), record.kind(), digest).unwrap(),
                 record
@@ -1547,6 +1551,13 @@ pub fn encode_owner(record: &OwnerRecord) -> Result<(OwnerObjectDigest, Vec<u8>)
         (
             super::contract::SHARE_OWNER_MAGIC,
             super::contract::SHARE_OWNER_ENVELOPE_DOMAIN,
+        )
+    } else if record.header().contract_version
+        == super::contract::GENERALIZED_SEQUENCE_GRAPH_CONTRACT_VERSION
+    {
+        (
+            super::contract::GENERALIZED_SEQUENCE_OWNER_MAGIC,
+            super::contract::GENERALIZED_SEQUENCE_OWNER_ENVELOPE_DOMAIN,
         )
     } else {
         (OWNER_MAGIC, OWNER_ENVELOPE_DOMAIN)
@@ -1770,6 +1781,12 @@ pub fn decode_owner(
                 super::contract::SHARE_OWNER_MAGIC,
                 super::contract::SHARE_OWNER_ENVELOPE_DOMAIN,
                 super::contract::SHARE_GRAPH_CONTRACT_VERSION,
+            )
+        } else if bytes.starts_with(&super::contract::GENERALIZED_SEQUENCE_OWNER_MAGIC) {
+            (
+                super::contract::GENERALIZED_SEQUENCE_OWNER_MAGIC,
+                super::contract::GENERALIZED_SEQUENCE_OWNER_ENVELOPE_DOMAIN,
+                super::contract::GENERALIZED_SEQUENCE_GRAPH_CONTRACT_VERSION,
             )
         } else {
             (

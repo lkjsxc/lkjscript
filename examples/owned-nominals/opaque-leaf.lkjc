@@ -1,0 +1,16 @@
+declarations.begin
+(units
+  (module create opaque-leaf
+    (owned-record create Leaf (visibility public)
+      (field create value (type I64)))
+    (function create make (visibility public) (effect pure)
+      (parameter create value (type I64)) (returns Leaf)
+      (body (pack-owned (type Leaf) (field value (local value)))))
+    (function create read (visibility public) (effect pure)
+      (parameter create leaf (type Leaf) (use borrow)) (returns I64)
+      (body (field (local leaf) Leaf::value)))
+    (function create finish (visibility public) (effect pure)
+      (parameter create leaf (type Leaf) (use consume)) (returns I64)
+      (body (unpack-owned (type Leaf) (local leaf)
+        (field value (binding value (type I64))) (in (local value)))))))
+declarations.end

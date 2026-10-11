@@ -196,14 +196,7 @@ fn closed_owned_type(
     if matches!(object.form, TypeForm::TypeParameter { .. }) {
         return Err(reject());
     }
-    Ok(matches!(
-        object.form,
-        TypeForm::ByteBuffer
-            | TypeForm::OwnedI64Cell
-            | TypeForm::OwnedProduct { .. }
-            | TypeForm::OwnedChoice { .. }
-            | TypeForm::OwnedSequence { .. }
-    ))
+    Ok(program.is_owned_type(ty))
 }
 
 fn validate_parameter_type(

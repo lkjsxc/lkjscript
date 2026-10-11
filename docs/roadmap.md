@@ -14,6 +14,20 @@ remain baseline requirements.
 
 ## Compose ownership and generic contracts
 
+Use [nominal owned records](spec/owned-records.md) to let a library own its
+representation invariants. The standard FIFO names one affine `Fifo<T>` while its
+defining module retains all field-operation authority. Exact nominal identity,
+private layout admission and source-tied element reads must survive generic
+implementation witnesses, transports and detached artifacts. Empty and data-only
+records remain owned; representation changes do not silently retarget dependencies.
+
+Next, extend additional owned-contract parameters and implementation schemes to
+ordinary Transferable data while retaining an Owned Self. This will let the
+planner's integer and Boolean working storage use generic storage interfaces.
+Keep ordinary and owned parameter categories explicit, including phantom actuals;
+removing Owned-only checks without replacing their proof obligations is unsound.
+This generic-contract extension is separate from nominal representation custody.
+
 Use [scoped reads of owned children](spec/owned-borrows.md) to inspect products and
 choices through exact implementation witnesses, then consume the preserved owner.
 The acceptance witness combines a symbolic reader with independent buffer/scalar

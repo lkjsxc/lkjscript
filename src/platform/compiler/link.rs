@@ -7,6 +7,7 @@ use super::artifact::{
     runtime_owner_expectations,
 };
 use super::cache::load_exact_current_compilation;
+use super::lower::CodeRead;
 use super::manifest::{COMPILATION_MANIFEST_CONTRACT_VERSION, CompilationBinding};
 use super::unit::{
     BYTECODE_CONTRACT_VERSION, COMPILER_UNIT_CONTRACT_VERSION, CompilationPayload, CompilationUnit,
@@ -15,8 +16,9 @@ use super::unit::{
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     DeclarationPayload, EncodedOwnerKey, ExpressionOperation, LocalValueReference, OwnerBinding,
-    OwnerKey, OwnerKind, OwnerRecord, PackageId, PortImplementation, TypeObjectDigest,
-    decode_type_object, encode_owner, encode_owner_binding,
+    OwnerKey, OwnerKind, OwnerRecord, PackageId, PackageInterfaceDeclarationPayload,
+    PackageInterfaceRecord, PortImplementation, TypeObjectDigest, decode_type_object, encode_owner,
+    encode_owner_binding,
 };
 use crate::platform::package_interface::build_package_interface;
 use crate::platform::persistent_map::{
@@ -290,6 +292,34 @@ pub(super) fn link_prepared(
                     )
                 })?;
             decode_type_object(&bytes, ty)
+        },
+        |declaration| {
+            if let Some(unit) = local_units.get(&(
+                declaration.package,
+                OwnerKey::Declaration(declaration.declaration),
+            )) {
+                return Ok(matches!(
+                    unit.payload,
+                    CompilationPayload::OwnedRecord { .. }
+                ));
+            }
+            let read = view.code_representation_owner(
+                declaration.package,
+                OwnerKey::Declaration(declaration.declaration),
+            )?;
+            work.repository.add_canonical(read.work);
+            let record = read.value.ok_or_else(|| {
+                link_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_link_memory_declaration",
+                    "nominal result has no exact admitted representation declaration",
+                )
+            })?;
+            Ok(matches!(record,
+                PackageInterfaceRecord::Declaration(record)
+                | PackageInterfaceRecord::RepresentationDeclaration(record)
+                if matches!(record.payload, PackageInterfaceDeclarationPayload::OwnedRecord { .. })
+            ))
         },
         || view.validation_checkpoint(),
     )? {
@@ -667,8 +697,13 @@ fn reference_expression_bindings(
         ExpressionOperation::UnpackOwned { fields, .. } => {
             bindings.extend(fields.iter().map(|field| field.binding))
         }
+        ExpressionOperation::UnpackOwnedRecord { fields, .. } => {
+            bindings.extend(fields.iter().map(|field| field.binding))
+        }
         ExpressionOperation::BorrowOwnedField { binding, .. }
-        | ExpressionOperation::BorrowOwnedItem { binding, .. } => bindings.push(*binding),
+        | ExpressionOperation::BorrowOwnedRecordField { binding, .. }
+        | ExpressionOperation::BorrowOwnedItem { binding, .. }
+        | ExpressionOperation::BorrowCall { binding, .. } => bindings.push(*binding),
         ExpressionOperation::Match { arms, .. } => {
             bindings.extend(arms.iter().filter_map(|arm| arm.payload_binding));
         }

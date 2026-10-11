@@ -571,7 +571,7 @@ impl ReferenceState<'_> {
         self.ordinary_children(fields.iter().map(|(_, child)| child))?;
         let datum = match layout {
             Some(layout) => {
-                let definition = self.schema.records.get(layout.0 as usize).filter(|_| layout.1 == self.schema.value_origin).ok_or_else(|| reject("record constructor has a foreign preparation; select its canonical layout"))?;
+                let definition = self.schema.records.get(layout.0 as usize).filter(|record| !record.owned && layout.1 == self.schema.value_origin).ok_or_else(|| reject("record constructor has a foreign preparation or affine declaration; select its canonical ordinary layout"))?;
                 if definition.fields.len() != fields.len()
                     || definition
                         .fields
@@ -975,7 +975,7 @@ impl ReferenceState<'_> {
                     match node {
                         NormalizedValue::Record(NormalizedRecord::Nominal { layout, fields }) => {
                             let exact = schema.record_instances.get(&identity).copied();
-                            let definition = schema.records.get(layout.0 as usize).filter(|record| exact == Some(layout.0 as usize) && layout.1 == schema.value_origin && record.declaration == *declaration && record.fields.len() == fields.len())
+                            let definition = schema.records.get(layout.0 as usize).filter(|record| !record.owned && exact == Some(layout.0 as usize) && layout.1 == schema.value_origin && record.declaration == *declaration && record.fields.len() == fields.len())
                             .ok_or_else(|| reject("raw record has a foreign nominal identity or shape; decode against the selected program"))?;
                             self.charge_admission_children(
                                 &mut admission_items,
@@ -1528,16 +1528,7 @@ impl ReferenceState<'_> {
                     "raw invocation requires resolved canonical type arguments",
                 ));
             }
-            let owned = matches!(
-                self.schema.types.get(ty).map(|t| &t.form),
-                Some(
-                    TypeForm::ByteBuffer
-                        | TypeForm::OwnedI64Cell
-                        | TypeForm::OwnedProduct { .. }
-                        | TypeForm::OwnedChoice { .. }
-                        | TypeForm::OwnedSequence { .. }
-                )
-            );
+            let owned = self.schema.is_owned_type(*ty);
             if owned != constraint.has_owned()
                 || (!owned && !self.schema.buffer_free_types.contains(ty))
             {

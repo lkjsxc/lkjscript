@@ -1,0 +1,23 @@
+declarations.begin
+(units
+  (module create opaque-wrapper
+    (owned-record create Envelope (visibility public)
+      (field create hidden (type leaf::Leaf)))
+    (function create make (visibility public) (effect pure)
+      (parameter create value (type I64)) (returns Envelope)
+      (body (let (binding leaf (type leaf::Leaf) (call leaf::make (local value)))
+        (in (pack-owned (type Envelope) (field hidden (local leaf)))))))
+    (function create relay (visibility public) (effect pure)
+      (parameter create packet (type Envelope) (use consume)) (returns Envelope)
+      (body (local packet)))
+    (function create read (visibility public) (effect pure)
+      (parameter create packet (type Envelope) (use borrow)) (returns I64)
+      (body (borrow-owned-field (type Envelope) (local packet)
+        (field hidden (binding leaf (type leaf::Leaf)))
+        (in (call leaf::read (local leaf))))))
+    (function create finish (visibility public) (effect pure)
+      (parameter create packet (type Envelope) (use consume)) (returns I64)
+      (body (unpack-owned (type Envelope) (local packet)
+        (field hidden (binding leaf (type leaf::Leaf)))
+        (in (call leaf::finish (local leaf))))))))
+declarations.end

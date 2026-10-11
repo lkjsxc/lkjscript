@@ -44,6 +44,20 @@ impl<B: CodeRead + ?Sized> ExpressionRead for Read<'_, B> {
         self.work.borrow_mut().add(r.work);
         Ok(r.value)
     }
+    fn has_representation_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        let read = self.source.code_representation_dependency(package)?;
+        self.work.borrow_mut().add(read.work);
+        Ok(read.value)
+    }
+    fn package_representation_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        let read = self.source.code_representation_owner(package, owner)?;
+        self.work.borrow_mut().add(read.work);
+        Ok(read.value)
+    }
     fn validation_work(&self) -> Result<(), Diagnostic> {
         self.source.code_step()
     }
@@ -74,23 +88,9 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
             .collect();
         let mut applied = crate::platform::kernel::parallel_types::AppliedTypes::new(&read);
         let result = applied.substitute(signature.result, &bindings, 0)?;
-        for (_, object) in applied.into_types() {
+        for (digest, object) in applied.into_types() {
             self.canonical.code_step()?;
-            if self.derived_type_objects.len() >= MAXIMUM_COMPILER_UNIT_ITEMS {
-                return Err(compiler_error(
-                    DiagnosticClass::Resource,
-                    "compiler_parallel_result_type_limit",
-                    "closed child types exceed the compiler-unit bound",
-                ));
-            }
-            let (ty, bytes) = encode_type_object(&object)?;
-            self.derived_type_objects.insert(
-                ObjectKey::from_digest(
-                    crate::platform::storage::object::ObjectDomain::Type,
-                    ty.bytes(),
-                ),
-                bytes,
-            );
+            self.retain_derived_type(Some(digest), &object)?;
         }
         self.work.canonical.add(read.work.into_inner());
         Ok(result)

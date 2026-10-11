@@ -128,7 +128,7 @@ against separate fresh stores and must preserve every result and publication beh
 library result is an explicit API change in this designed workload. The earlier authentic scalar
 predecessor fixture likewise retains both original refusals and current-envelope/rebuilt/imported
 executions. Original artifacts, provenance and historical observations are never rewritten;
-`tests/fixtures/owned-predecessor-compiler31` owns the independently reconstructed current controls;
+`tests/fixtures/owned-predecessor-compiler32` owns the independently reconstructed current controls;
 the compiler 29 and 30 controls remain unchanged at their artifact rebuild cuts.
 
 Resource composition continues to use the public `DurableQueue` helper in

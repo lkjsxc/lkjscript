@@ -22,17 +22,64 @@ impl<'a, 'store, S: ?Sized> SharedDependencyInterfaces<'a, 'store, S> {
         }
     }
 
-    pub(super) fn attach(&mut self, snapshot: &mut KernelSnapshot) -> Result<(), Diagnostic> {
+    pub(super) fn attach(
+        &mut self,
+        snapshot: &mut KernelSnapshot,
+        revisions: &BTreeMap<PackageRevisionDigest, PackageRevision>,
+    ) -> Result<(), Diagnostic> {
+        let mut pending = Vec::new();
         for dependency in snapshot.dependencies.values() {
-            // Every incoming binding still owns a bounded lookup and handle insertion.
             self.store.charge_visits(1)?;
+            pending.push(dependency);
+        }
+        while let Some(dependency) = pending.pop() {
+            let package = dependency.package;
+            let binding = DependencyRecord {
+                graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+                ..dependency.clone()
+            };
+            if let Some(previous) = snapshot.representation_dependencies.get(&package) {
+                if previous != &binding {
+                    return Err(corrupt(
+                        "package_source_representation_conflict",
+                        "one opaque representation closure selects conflicting exact package revisions",
+                    ));
+                }
+                continue;
+            }
+            // Every queued binding reserved its lookup and handle insertion before growth.
+            let revision = revisions.get(&dependency.package_revision).ok_or_else(|| {
+                corrupt(
+                    "package_source_dependency",
+                    "exact dependency revision is unavailable",
+                )
+            })?;
+            revision.matches_dependency(dependency.package_revision, dependency)?;
+            for child in &revision.dependencies {
+                self.store.charge_visits(1)?;
+                if let Some(previous) = snapshot.representation_dependencies.get(&child.package) {
+                    let binding = DependencyRecord {
+                        graph_contract_version:
+                            crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+                        ..child.clone()
+                    };
+                    if previous != &binding {
+                        return Err(corrupt(
+                            "package_source_representation_conflict",
+                            "one opaque representation closure selects conflicting exact package revisions",
+                        ));
+                    }
+                } else {
+                    pending.push(child);
+                }
+            }
             let interface = self
                 .interfaces
                 .get(&dependency.package_revision)
                 .ok_or_else(|| {
                     corrupt(
                         "package_source_dependency",
-                        "direct dependency interface is unavailable",
+                        "exact dependency representation interface is unavailable",
                     )
                 })?;
             let owners = if let Some(owners) = self.owners.get(&dependency.package_revision) {
@@ -85,6 +132,9 @@ impl<'a, 'store, S: ?Sized> SharedDependencyInterfaces<'a, 'store, S> {
                 });
                 snapshot.dependency_types.insert(*digest, object.clone());
             }
+            snapshot
+                .representation_dependencies
+                .insert(package, binding);
         }
         Ok(())
     }

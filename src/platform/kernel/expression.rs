@@ -41,6 +41,19 @@ impl ExpressionRecord {
                 ),
             ));
         }
+        if self.contract_version < 32
+            && matches!(
+                self.operation,
+                ExpressionOperation::PackOwnedRecord { .. }
+                    | ExpressionOperation::UnpackOwnedRecord { .. }
+                    | ExpressionOperation::BorrowOwnedRecordField { .. }
+            )
+        {
+            return Err(expression_error(
+                "kernel_owned_record_generation",
+                "nominal owned record operations require Graph 32",
+            ));
+        }
         if self.contract_version < 31
             && matches!(
                 self.operation,
@@ -197,6 +210,9 @@ impl ExpressionRecord {
 
     pub fn type_roots(&self) -> Vec<TypeObjectDigest> {
         match &self.operation {
+            ExpressionOperation::PackOwnedRecord { record_type, .. }
+            | ExpressionOperation::UnpackOwnedRecord { record_type, .. }
+            | ExpressionOperation::BorrowOwnedRecordField { record_type, .. } => vec![*record_type],
             ExpressionOperation::SequenceEmpty { sequence_type }
             | ExpressionOperation::SequenceLength { sequence_type, .. }
             | ExpressionOperation::SequencePush { sequence_type, .. }
@@ -455,6 +471,37 @@ pub enum ExpressionOperation {
         value: ExpressionId,
         source: ExpressionId,
     },
+    PackOwnedRecord {
+        record_type: TypeObjectDigest,
+        fields: Vec<OwnedRecordExpressionField>,
+    },
+    UnpackOwnedRecord {
+        record_type: TypeObjectDigest,
+        source: ExpressionId,
+        fields: Vec<OwnedRecordBinding>,
+        body: ExpressionId,
+    },
+    BorrowOwnedRecordField {
+        record_type: TypeObjectDigest,
+        source: ExpressionId,
+        field: FieldReference,
+        binding: BindingId,
+        body: ExpressionId,
+    },
+}
+
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct OwnedRecordExpressionField {
+    pub field: FieldReference,
+    pub value: ExpressionId,
+}
+
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct OwnedRecordBinding {
+    pub field: FieldReference,
+    pub binding: BindingId,
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
@@ -644,6 +691,23 @@ pub enum ExpressionChildRole {
 
 fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic> {
     match operation {
+        ExpressionOperation::PackOwnedRecord { fields, .. } => {
+            require_count("owned record fields", fields.len(), true)?;
+            require_unique("owned record field", fields.iter().map(|field| field.field))?;
+        }
+        ExpressionOperation::UnpackOwnedRecord { fields, .. } => {
+            require_count("owned record bindings", fields.len(), true)?;
+            require_unique(
+                "owned record binding",
+                fields.iter().map(|field| field.binding),
+            )?;
+            if fields.windows(2).any(|pair| pair[0].field >= pair[1].field) {
+                return Err(expression_error(
+                    "kernel_owned_record_fields",
+                    "unpack fields require unique canonical exact references",
+                ));
+            }
+        }
         ExpressionOperation::ChooseOwned { .. } => {}
         ExpressionOperation::MatchOwned { arms, .. }
         | ExpressionOperation::MatchBorrowedOwned { arms, .. } => {
@@ -840,6 +904,7 @@ fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic>
         ExpressionOperation::Unit {}
         | ExpressionOperation::BorrowCall { .. }
         | ExpressionOperation::BorrowOwnedField { .. }
+        | ExpressionOperation::BorrowOwnedRecordField { .. }
         | ExpressionOperation::SequenceEmpty { .. }
         | ExpressionOperation::SequenceLength { .. }
         | ExpressionOperation::SequencePush { .. }
@@ -1039,7 +1104,19 @@ fn expression_children(operation: &ExpressionOperation) -> Vec<ExpressionChild> 
                 );
             }
         }
+        ExpressionOperation::PackOwnedRecord { fields, .. } => {
+            for (ordinal, field) in fields.iter().enumerate() {
+                push_child(
+                    &mut children,
+                    field.value,
+                    ExpressionChildRole::OwnedProductField,
+                    u32::try_from(ordinal).unwrap_or(u32::MAX),
+                );
+            }
+        }
         ExpressionOperation::UnpackOwned { source, body, .. }
+        | ExpressionOperation::UnpackOwnedRecord { source, body, .. }
+        | ExpressionOperation::BorrowOwnedRecordField { source, body, .. }
         | ExpressionOperation::BorrowOwnedField { source, body, .. } => {
             push_child(
                 &mut children,

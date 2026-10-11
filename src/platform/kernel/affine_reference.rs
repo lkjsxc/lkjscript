@@ -75,7 +75,19 @@ impl Reference<'_> {
                 if package == self.snapshot.root.package_id {
                     matches!(self.snapshot.owners.get(&key), Some(OwnerRecord::TypeParameter(p)) if p.constraints.has_owned())
                 } else {
-                    matches!(self.foreign_owner(package, key), Some(PackageInterfaceRecord::TypeParameter(p)) if p.constraints.has_owned())
+                    matches!(self.representation_owner(package, key), Some(PackageInterfaceRecord::TypeParameter(p)) if p.constraints.has_owned())
+                }
+            }
+            Some(TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. }) => {
+                let key = OwnerKey::Declaration(declaration.declaration);
+                if declaration.package == self.snapshot.root.package_id {
+                    matches!(self.snapshot.owners.get(&key), Some(OwnerRecord::Declaration(record))
+                        if matches!(record.payload, DeclarationPayload::OwnedRecord { .. }))
+                } else {
+                    matches!(self.representation_owner(declaration.package, key),
+                        Some(PackageInterfaceRecord::Declaration(record)
+                            | PackageInterfaceRecord::RepresentationDeclaration(record))
+                        if matches!(record.payload, PackageInterfaceDeclarationPayload::OwnedRecord { .. }))
                 }
             }
             _ => false,
@@ -307,8 +319,16 @@ impl Reference<'_> {
                 }
                 Ok(Value::Plain)
             }
+            ExpressionOperation::PackOwnedRecord { fields, .. } => {
+                for field in fields {
+                    self.plain(field.value, live)?;
+                }
+                Ok(Value::Plain)
+            }
             ExpressionOperation::UnpackOwned { source, body, .. }
-            | ExpressionOperation::BorrowOwnedField { source, body, .. } => {
+            | ExpressionOperation::BorrowOwnedField { source, body, .. }
+            | ExpressionOperation::UnpackOwnedRecord { source, body, .. }
+            | ExpressionOperation::BorrowOwnedRecordField { source, body, .. } => {
                 self.plain(*source, live)?;
                 self.eval(*body, live)
             }
@@ -1027,7 +1047,8 @@ impl Reference<'_> {
                 return Vec::new();
             };
             return match &record.payload {
-                DeclarationPayload::Record { fields, .. } => fields
+                DeclarationPayload::Record { fields, .. }
+                | DeclarationPayload::OwnedRecord { fields, .. } => fields
                     .iter()
                     .filter_map(
                         |field| match self.snapshot.owners.get(&OwnerKey::Field(*field)) {
@@ -1043,17 +1064,22 @@ impl Reference<'_> {
                 _ => Vec::new(),
             };
         }
-        let Some(PackageInterfaceRecord::Declaration(record)) = self.foreign_owner(
+        let record = match self.representation_owner(
             declaration.package,
             OwnerKey::Declaration(declaration.declaration),
-        ) else {
-            return Vec::new();
+        ) {
+            Some(
+                PackageInterfaceRecord::Declaration(record)
+                | PackageInterfaceRecord::RepresentationDeclaration(record),
+            ) => record,
+            _ => return Vec::new(),
         };
         match &record.payload {
-            PackageInterfaceDeclarationPayload::Record { fields, .. } => fields
+            PackageInterfaceDeclarationPayload::Record { fields, .. }
+            | PackageInterfaceDeclarationPayload::OwnedRecord { fields, .. } => fields
                 .iter()
                 .filter_map(|field| {
-                    match self.foreign_owner(declaration.package, OwnerKey::Field(*field)) {
+                    match self.representation_owner(declaration.package, OwnerKey::Field(*field)) {
                         Some(PackageInterfaceRecord::Field(record)) => Some(record.ty),
                         _ => None,
                     }
@@ -1061,7 +1087,12 @@ impl Reference<'_> {
                 .collect(),
             PackageInterfaceDeclarationPayload::Variant { cases, .. } => cases
                 .iter()
-                .filter_map(|case| self.case_payload(declaration.package, *case))
+                .filter_map(|case| {
+                    match self.representation_owner(declaration.package, OwnerKey::Case(*case)) {
+                        Some(PackageInterfaceRecord::Case(record)) => record.payload,
+                        _ => None,
+                    }
+                })
                 .collect(),
             _ => Vec::new(),
         }
@@ -1073,6 +1104,21 @@ impl Reference<'_> {
         owner: OwnerKey,
     ) -> Option<&PackageInterfaceRecord> {
         let dependency = self.snapshot.dependencies.get(&package)?;
+        self.snapshot
+            .dependency_interfaces
+            .get(&dependency.package_revision)?
+            .get(&owner)
+    }
+    fn representation_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Option<&PackageInterfaceRecord> {
+        let dependency = self
+            .snapshot
+            .dependencies
+            .get(&package)
+            .or_else(|| self.snapshot.representation_dependencies.get(&package))?;
         self.snapshot
             .dependency_interfaces
             .get(&dependency.package_revision)?

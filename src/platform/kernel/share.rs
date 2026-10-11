@@ -45,6 +45,9 @@ fn owned_parameter(
     let listed = if scope.package == read.package_id() {
         match read.owner(OwnerKey::Declaration(scope.declaration))? {
             Some(OwnerRecord::Declaration(declaration)) => match declaration.payload {
+                DeclarationPayload::OwnedRecord {
+                    type_parameters, ..
+                } => super::transfer::function_parameter_listed(read, &type_parameters, parameter)?,
                 DeclarationPayload::Function(function) => {
                     super::transfer::function_parameter_listed(
                         read,
@@ -67,7 +70,13 @@ fn owned_parameter(
         match read
             .package_interface_owner(scope.package, OwnerKey::Declaration(scope.declaration))?
         {
-            Some(PackageInterfaceRecord::Declaration(declaration)) => match declaration.payload {
+            Some(
+                PackageInterfaceRecord::Declaration(declaration)
+                | PackageInterfaceRecord::RepresentationDeclaration(declaration),
+            ) => match declaration.payload {
+                PackageInterfaceDeclarationPayload::OwnedRecord {
+                    type_parameters, ..
+                } => super::transfer::function_parameter_listed(read, &type_parameters, parameter)?,
                 PackageInterfaceDeclarationPayload::Function(function) => {
                     super::transfer::function_parameter_listed(
                         read,
@@ -118,6 +127,8 @@ pub(crate) fn admit_in(
     ty: TypeObjectDigest,
     scope: Option<DeclarationReference>,
 ) -> Result<bool, Diagnostic> {
+    let representation = super::owned_record::RepresentationRead { read };
+    let read: &dyn ExpressionRead = &representation;
     read.validation_work()?;
     let package = scope.map_or(read.package_id(), |scope| scope.package);
     let root_owned = super::memory::direct_in(read, package, ty)?;
@@ -128,9 +139,16 @@ pub(crate) fn admit_in(
     // Its transfer assumptions do not confer shareability on any owned member.
     let ordinary_assumptions = super::transfer::ordinary_assumptions_in(read, scope)?;
     read.validation_work()?;
+    let mut derived_types = BTreeMap::new();
+    let mut layout_budget = super::owned_record::LayoutBudget::default();
     let mut pending = vec![(ty, 0usize)];
     let mut depths = BTreeMap::new();
     while let Some((current, depth)) = pending.pop() {
+        let applied_read = super::owned_contract::AppliedTypeRead {
+            read,
+            types: &derived_types,
+        };
+        let read: &dyn ExpressionRead = &applied_read;
         read.validation_work()?;
         if depth > contract::MAXIMUM_TYPE_DEPTH {
             return Err(reject(
@@ -149,6 +167,21 @@ pub(crate) fn admit_in(
             .type_object(current)?
             .ok_or_else(|| reject("share type is absent"))?;
         match object.form {
+            TypeForm::Named { .. } | TypeForm::Applied { .. }
+                if super::owned_record::is_owned(read, package, current)? =>
+            {
+                super::owned_record::validate_application(read, current, scope)?;
+                let layout = super::owned_record::layout(read, current)?;
+                for field_type in object
+                    .child_types()
+                    .into_iter()
+                    .chain(layout.fields.into_iter().map(|(_, field_type)| field_type))
+                {
+                    read.validation_work()?;
+                    pending.push((field_type, depth + 1));
+                }
+                layout_budget.extend_types(&mut derived_types, layout.types)?;
+            }
             TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => {}
             TypeForm::TypeParameter { parameter }
                 if super::memory::direct_in(read, package, current)? =>

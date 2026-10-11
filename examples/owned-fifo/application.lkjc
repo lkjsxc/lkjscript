@@ -6,7 +6,7 @@ declarations.begin
     (type-alias Event (record (kind I64) (present Bool) (value I64) (length I64)))
     (type-alias Scenario (record (events (list Event)) (remaining (list I64)) (empty-length I64) (reused (list I64))))
     (type-alias Packet (owned-product (field payload ByteBuffer) (field stamp I64)))
-    (type-alias Cells (owned-product (field incoming (owned-sequence OwnedI64Cell)) (field outgoing (owned-sequence OwnedI64Cell))))
+    (type-alias Cells (std::Fifo OwnedI64Cell))
     (type-alias CellItem (owned-product (field rest Cells) (field value OwnedI64Cell)))
     (type-alias CellPop (owned-choice (case empty Cells) (case item CellItem)))
     (type-alias Forwarded (record (peek I64) (removed I64) (empty I64)))
@@ -33,8 +33,7 @@ declarations.begin
       (body (call std::list-map (types (list Action) Scenario) (local cases) (function-value packets))))
     (function create forwarded-front (visibility private) (effect pure)
       (type-parameter create T (constraint owned))
-      (parameter create queue (type (owned-product
-        (field incoming (owned-sequence T)) (field outgoing (owned-sequence T)))) (use borrow))
+      (parameter create queue (type (std::Fifo T)) (use borrow))
       (returns T (borrow-from queue))
       (body (borrow-call (call std::fifo-front (types T) (local queue))
         (binding value (type T)) (in (local value)))))

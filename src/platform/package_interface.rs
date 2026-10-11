@@ -31,16 +31,70 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-19";
-pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 19;
-pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF19";
+pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-20";
+pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 20;
+pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF20";
 pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str =
-    "lkjscript.package-interface-owner-envelope.v19";
+    "lkjscript.package-interface-owner-envelope.v20";
 const PACKAGE_INTERFACE_IDENTITY_MAGIC: [u8; 8] = *b"LKJPIFI1";
 const PACKAGE_INTERFACE_IDENTITY_DOMAIN: &str = "lkjscript.package-interface-identity.v1";
 pub const MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES: usize = 1024 * 1024;
 pub const MAXIMUM_PACKAGE_INTERFACE_VALIDATION_WORK: usize =
     crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
+const MAXIMUM_REPRESENTATION_METADATA_BYTES: usize = 64 * 1_048_576;
+
+struct RepresentationBudget {
+    bytes: usize,
+    maximum: usize,
+}
+
+impl Default for RepresentationBudget {
+    fn default() -> Self {
+        Self {
+            bytes: 0,
+            maximum: MAXIMUM_REPRESENTATION_METADATA_BYTES,
+        }
+    }
+}
+
+impl RepresentationBudget {
+    fn reserve<T>(&mut self, count: usize) -> Result<(), Diagnostic> {
+        self.bytes = count
+            .checked_mul(std::mem::size_of::<T>() + 4 * std::mem::size_of::<usize>())
+            .and_then(|bytes| self.bytes.checked_add(bytes))
+            .filter(|bytes| *bytes <= self.maximum)
+            .ok_or_else(|| {
+                interface_error(
+                    DiagnosticClass::Resource,
+                    "package_interface_representation_storage",
+                    "owned representation metadata exceeds its storage admission",
+                )
+            })?;
+        Ok(())
+    }
+
+    fn append_children(
+        &mut self,
+        object: &TypeObject,
+        pending: &mut Vec<TypeObjectDigest>,
+    ) -> Result<(), Diagnostic> {
+        // Reserve both the temporary child inventory and its queued copy before allocation.
+        self.reserve::<TypeObjectDigest>(object.child_type_count())?;
+        self.reserve::<TypeObjectDigest>(object.child_type_count())?;
+        pending.extend(object.child_types());
+        Ok(())
+    }
+
+    fn append_types(
+        &mut self,
+        values: Vec<TypeObjectDigest>,
+        pending: &mut Vec<TypeObjectDigest>,
+    ) -> Result<(), Diagnostic> {
+        self.reserve::<TypeObjectDigest>(values.len())?;
+        pending.extend(values);
+        Ok(())
+    }
+}
 
 #[cfg(test)]
 #[path = "package_interface_generalized_sequence_tests.rs"]
@@ -49,6 +103,10 @@ mod generalized_sequence_tests;
 #[cfg(test)]
 #[path = "package_interface_owned_scheme_tests.rs"]
 mod owned_scheme_tests;
+
+#[cfg(test)]
+#[path = "package_interface_owned_record_tests.rs"]
+mod owned_record_tests;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PackageInterfaceOwnerDigest([u8; 32]);
@@ -229,6 +287,11 @@ impl TryFrom<PackageInterfaceRecord> for PackageInterfaceRecord12 {
             C::Requirement(v) => Self::Requirement(v),
             C::Port(v) => Self::Port(v),
             C::RequirementParameter(v) => Self::RequirementParameter(v),
+            C::RepresentationDeclaration(_) => {
+                return Err(interface_corrupt(
+                    "private representation evidence requires interface generation 20",
+                ));
+            }
         })
     }
 }
@@ -261,7 +324,12 @@ impl PackageInterfaceOwner {
             return Ok(None);
         };
         let value = Self {
-            contract_version: if canonical.header().contract_version == 14 {
+            contract_version: if matches!(
+                record,
+                PackageInterfaceRecord::RepresentationDeclaration(_)
+            ) {
+                PACKAGE_INTERFACE_CONTRACT_VERSION
+            } else if canonical.header().contract_version == 14 {
                 10
             } else if canonical.header().contract_version < 18 {
                 11
@@ -279,6 +347,8 @@ impl PackageInterfaceOwner {
                 17
             } else if canonical.header().contract_version < 31 {
                 18
+            } else if canonical.header().contract_version < 32 {
+                19
             } else {
                 PACKAGE_INTERFACE_CONTRACT_VERSION
             },
@@ -411,6 +481,15 @@ impl PackageInterfaceOwner {
             )?;
             return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
         }
+        if self.contract_version == 19 {
+            let bytes = crate::platform::packed::encode(
+                *b"LKJPIF19",
+                "lkjscript.package-interface-owner-envelope.v19",
+                self,
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
+        }
         let bytes = crate::platform::packed::encode(
             PACKAGE_INTERFACE_MAGIC,
             PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
@@ -432,7 +511,20 @@ impl PackageInterfaceOwner {
                 "package-interface owner bytes disagree with their exact digest",
             ));
         }
-        let value: Self = if bytes.starts_with(b"LKJPIF18") {
+        let value: Self = if bytes.starts_with(b"LKJPIF19") {
+            let value: Self = crate::platform::packed::decode(
+                bytes,
+                *b"LKJPIF19",
+                "lkjscript.package-interface-owner-envelope.v19",
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            if value.contract_version != 19 {
+                return Err(interface_corrupt(
+                    "predecessor interface envelope has a foreign generation",
+                ));
+            }
+            value
+        } else if bytes.starts_with(b"LKJPIF18") {
             let value: Self = crate::platform::packed::decode(
                 bytes,
                 *b"LKJPIF18",
@@ -608,6 +700,7 @@ impl PackageInterfaceOwner {
             && self.contract_version != 16
             && self.contract_version != 17
             && self.contract_version != 18
+            && self.contract_version != 19
         {
             return Err(interface_error(
                 DiagnosticClass::Source,
@@ -618,6 +711,21 @@ impl PackageInterfaceOwner {
         if self.contract_version < 19 && self.record.header().contract_version >= 31 {
             return Err(interface_corrupt(
                 "Graph 31 owners require interface generation 19",
+            ));
+        }
+        if self.contract_version < 20 && self.record.header().contract_version >= 32 {
+            return Err(interface_corrupt(
+                "Graph 32 owners require interface generation 20",
+            ));
+        }
+        if self.contract_version < 20
+            && matches!(
+                self.record,
+                PackageInterfaceRecord::RepresentationDeclaration(_)
+            )
+        {
+            return Err(interface_corrupt(
+                "private representation evidence requires interface generation 20",
             ));
         }
         if self.contract_version < 18
@@ -840,7 +948,8 @@ impl PackageInterfaceSelection {
                 self.type_parameters
                     .extend(i.type_parameters.iter().copied());
             }
-            DeclarationPayload::Record { fields, .. } => self.fields.extend(fields),
+            DeclarationPayload::Record { fields, .. }
+            | DeclarationPayload::OwnedRecord { fields, .. } => self.fields.extend(fields),
             DeclarationPayload::Variant { cases, .. } => self.cases.extend(cases),
             DeclarationPayload::Interface { operations } => self.operations.extend(operations),
             DeclarationPayload::External(ExternalDeclaration {
@@ -897,6 +1006,191 @@ impl PackageInterfaceSelection {
         let operation = operation_id(record.header.owner)?;
         if self.operations.contains(&operation) {
             self.parameters.extend(&record.parameters);
+        }
+        Ok(())
+    }
+
+    /// Extend only the representation closure rooted in exported owned records.
+    /// Ordinary public signatures still require public nominal references.
+    pub(crate) fn observe_owned_representations(
+        &mut self,
+        records: &BTreeMap<OwnerKey, OwnerRecord>,
+        types: &BTreeMap<TypeObjectDigest, TypeObject>,
+        dependency_types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    ) -> Result<(), Diagnostic> {
+        self.observe_owned_representations_admitted(
+            records,
+            types,
+            dependency_types,
+            &mut RepresentationBudget::default(),
+        )
+    }
+
+    fn observe_owned_representations_admitted(
+        &mut self,
+        records: &BTreeMap<OwnerKey, OwnerRecord>,
+        types: &BTreeMap<TypeObjectDigest, TypeObject>,
+        dependency_types: &BTreeMap<TypeObjectDigest, TypeObject>,
+        budget: &mut RepresentationBudget,
+    ) -> Result<(), Diagnostic> {
+        if !self.declarations.iter().any(|id| {
+            matches!(records.get(&OwnerKey::Declaration(*id)),
+                Some(OwnerRecord::Declaration(record))
+                    if matches!(record.payload, DeclarationPayload::OwnedRecord { .. }))
+        }) {
+            return Ok(());
+        }
+        self.observe_owned_representations_indexed_admitted(
+            |key| Ok(records.get(&key).cloned()),
+            |digest| {
+                Ok(types
+                    .get(&digest)
+                    .or_else(|| dependency_types.get(&digest))
+                    .cloned())
+            },
+            budget,
+        )
+    }
+
+    /// Read only the exact owner/type closure needed by exported owned layouts.
+    /// Indexed producers use the same selection and metadata admission as source reconstruction.
+    pub(crate) fn observe_owned_representations_indexed(
+        &mut self,
+        read_owner: impl FnMut(OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic>,
+        read_type: impl FnMut(TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic>,
+    ) -> Result<(), Diagnostic> {
+        self.observe_owned_representations_indexed_admitted(
+            read_owner,
+            read_type,
+            &mut RepresentationBudget::default(),
+        )
+    }
+
+    fn observe_owned_representations_indexed_admitted(
+        &mut self,
+        mut read_owner: impl FnMut(OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic>,
+        mut read_type: impl FnMut(TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic>,
+        budget: &mut RepresentationBudget,
+    ) -> Result<(), Diagnostic> {
+        let mut pending = Vec::new();
+        for declaration in &self.declarations {
+            budget.reserve::<OwnerRecord>(1)?;
+            if let Some(OwnerRecord::Declaration(record)) =
+                read_owner(OwnerKey::Declaration(*declaration))?
+                && let DeclarationPayload::OwnedRecord { fields, .. } = &record.payload
+            {
+                for field in fields {
+                    budget.reserve::<OwnerRecord>(1)?;
+                    match read_owner(OwnerKey::Field(*field))? {
+                        Some(OwnerRecord::Field(field)) => {
+                            budget.reserve::<TypeObjectDigest>(1)?;
+                            pending.push(field.ty);
+                        }
+                        _ => return Err(interface_corrupt("owned representation field is absent")),
+                    }
+                }
+            }
+        }
+        let mut visited = BTreeSet::new();
+        let mut observed_declarations = BTreeSet::new();
+        while let Some(digest) = pending.pop() {
+            if visited.contains(&digest) {
+                continue;
+            }
+            budget.reserve::<TypeObjectDigest>(1)?;
+            visited.insert(digest);
+            if visited.len() > MAXIMUM_PACKAGE_INTERFACE_VALIDATION_WORK {
+                return Err(interface_error(
+                    DiagnosticClass::Resource,
+                    "package_interface_type_work",
+                    "owned representation closure exceeds its explicit validation work budget",
+                ));
+            }
+            budget.reserve::<TypeObject>(1)?;
+            let object = read_type(digest)?
+                .ok_or_else(|| interface_corrupt("owned representation type is absent"))?;
+            budget.append_children(&object, &mut pending)?;
+            let reference = match object.form {
+                TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. }
+                    if declaration.package == self.package =>
+                {
+                    declaration
+                }
+                _ => continue,
+            };
+            if observed_declarations.contains(&reference.declaration) {
+                continue;
+            }
+            budget.reserve::<DeclarationId>(1)?;
+            observed_declarations.insert(reference.declaration);
+            budget.reserve::<OwnerRecord>(1)?;
+            let Some(OwnerRecord::Declaration(record)) =
+                read_owner(OwnerKey::Declaration(reference.declaration))?
+            else {
+                return Err(interface_corrupt(
+                    "owned representation nominal declaration is absent",
+                ));
+            };
+            if !self.declarations.contains(&reference.declaration) {
+                budget.reserve::<DeclarationId>(1)?;
+                self.declarations.insert(reference.declaration);
+            }
+            for parameter in record.payload.type_parameters().iter() {
+                if !self.type_parameters.contains(parameter) {
+                    budget.reserve::<TypeParameterId>(1)?;
+                    self.type_parameters.insert(*parameter);
+                }
+            }
+            match &record.payload {
+                DeclarationPayload::OwnedRecord { fields, .. }
+                | DeclarationPayload::Record { fields, .. } => {
+                    for field in fields {
+                        if !self.fields.contains(field) {
+                            budget.reserve::<FieldId>(1)?;
+                            self.fields.insert(*field);
+                        }
+                        budget.reserve::<OwnerRecord>(1)?;
+                        match read_owner(OwnerKey::Field(*field))? {
+                            Some(OwnerRecord::Field(field)) => {
+                                budget.reserve::<TypeObjectDigest>(1)?;
+                                pending.push(field.ty);
+                            }
+                            _ => {
+                                return Err(interface_corrupt(
+                                    "owned representation field is absent",
+                                ));
+                            }
+                        }
+                    }
+                }
+                DeclarationPayload::Variant { cases, .. } => {
+                    for case in cases {
+                        if !self.cases.contains(case) {
+                            budget.reserve::<CaseId>(1)?;
+                            self.cases.insert(*case);
+                        }
+                        budget.reserve::<OwnerRecord>(1)?;
+                        match read_owner(OwnerKey::Case(*case))? {
+                            Some(OwnerRecord::Case(case)) => {
+                                budget.reserve::<TypeObjectDigest>(usize::from(
+                                    case.payload.is_some(),
+                                ))?;
+                                pending.extend(case.payload);
+                            }
+                            _ => {
+                                return Err(interface_corrupt(
+                                    "owned representation case is absent",
+                                ));
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    return Err(interface_corrupt(
+                        "owned representation names a non-layout declaration",
+                    ));
+                }
+            }
         }
         Ok(())
     }
@@ -1074,6 +1368,10 @@ pub struct PackageInterfaceValidation {
 /// Independently checks the complete implementation-free interface reachable from one package
 /// object. This never reads canonical owner objects or treats witness summaries as a second
 /// writer; it validates the exact derived closure that the dependency binding selected.
+/// This structural result alone grants no readiness. Installed imports first admit every
+/// immutable canonical body and independently reproduce this projection in `source::admit`;
+/// artifact loaders verify projection coherence and their complete retained canonical meaning.
+/// Field eligibility and all instantiated generic constraints belong to those semantic passes.
 pub fn validate_package_interface<S: ImmutableObjectStore + ?Sized>(
     package: PackageId,
     root: MapRoot,
@@ -1167,7 +1465,7 @@ pub(crate) fn validate_package_interface_metered<S: ImmutableObjectStore + ?Size
             visit(effect.requirements.len() as u64)?;
         }
     }
-    validate_owner_closure(package, &owners, &type_objects)?;
+    validate_owner_closure_metered(package, &owners, &type_objects, visit)?;
     reachable_objects.extend(type_keys);
     Ok(PackageInterfaceValidation {
         owners,
@@ -1179,36 +1477,38 @@ pub(crate) fn validate_package_interface_metered<S: ImmutableObjectStore + ?Size
 
 pub(crate) fn interface_owner_validation_visits(owner: &PackageInterfaceOwner) -> u64 {
     let children = match &owner.record {
-        PackageInterfaceRecord::Declaration(declaration) => match &declaration.payload {
-            PackageInterfaceDeclarationPayload::OwnedContract(c) => {
-                c.methods
-                    .iter()
-                    .map(|m| {
-                        let row = m.effect.row();
-                        m.parameters.len() + row.requirements.len() + row.parameters.len() + 1
-                    })
-                    .sum::<usize>()
-                    + c.type_parameters.len()
-                    + 1
-            }
-            PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
-                i.methods.len()
-                    + i.type_arguments.len()
-                    + i.type_parameters.len()
-                    + i.implementation_parameters.len()
-                    + i.implementation_parameters
-                        .iter()
-                        .map(|p| 1 + p.type_arguments.len())
-                        .sum::<usize>()
-                    + i.methods
+        PackageInterfaceRecord::Declaration(declaration)
+        | PackageInterfaceRecord::RepresentationDeclaration(declaration) => {
+            match &declaration.payload {
+                PackageInterfaceDeclarationPayload::OwnedContract(c) => {
+                    c.methods
                         .iter()
                         .map(|m| {
-                            m.type_arguments.len()
-                                + m.implementations
-                                    .iter()
-                                    .flat_map(|operand| operand.walk())
-                                    .map(|operand| {
-                                        match operand {
+                            let row = m.effect.row();
+                            m.parameters.len() + row.requirements.len() + row.parameters.len() + 1
+                        })
+                        .sum::<usize>()
+                        + c.type_parameters.len()
+                        + 1
+                }
+                PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
+                    i.methods.len()
+                        + i.type_arguments.len()
+                        + i.type_parameters.len()
+                        + i.implementation_parameters.len()
+                        + i.implementation_parameters
+                            .iter()
+                            .map(|p| 1 + p.type_arguments.len())
+                            .sum::<usize>()
+                        + i.methods
+                            .iter()
+                            .map(|m| {
+                                m.type_arguments.len()
+                                    + m.implementations
+                                        .iter()
+                                        .flat_map(|operand| operand.walk())
+                                        .map(|operand| {
+                                            match operand {
                                     crate::platform::kernel::ImplementationOperand::Concrete {
                                         type_arguments,
                                         ..
@@ -1217,49 +1517,54 @@ pub(crate) fn interface_owner_validation_visits(owner: &PackageInterfaceOwner) -
                                         ..
                                     } => 1,
                                 }
-                                    })
-                                    .sum::<usize>()
-                        })
-                        .sum::<usize>()
-                    + 1
+                                        })
+                                        .sum::<usize>()
+                            })
+                            .sum::<usize>()
+                        + 1
+                }
+                PackageInterfaceDeclarationPayload::Record {
+                    fields,
+                    type_parameters,
+                }
+                | PackageInterfaceDeclarationPayload::OwnedRecord {
+                    fields,
+                    type_parameters,
+                } => fields.len().saturating_add(type_parameters.len()),
+                PackageInterfaceDeclarationPayload::Variant {
+                    cases,
+                    type_parameters,
+                } => cases.len().saturating_add(type_parameters.len()),
+                PackageInterfaceDeclarationPayload::Interface { operations } => operations.len(),
+                PackageInterfaceDeclarationPayload::Function(function) => {
+                    function.parameters.len()
+                        + function.implementation_parameters.len()
+                        + function
+                            .implementation_parameters
+                            .iter()
+                            .map(|p| p.type_arguments.len())
+                            .sum::<usize>()
+                        + function.type_parameters.len()
+                        + function.requirement_parameters.len()
+                        + function.effect_parameters.len()
+                        + match &function.effect {
+                            FunctionEffect::Pure => 0,
+                            FunctionEffect::Task {
+                                effect_parameters: _,
+                                requirements,
+                            } => requirements.len(),
+                        }
+                }
+                PackageInterfaceDeclarationPayload::External(function) => {
+                    function.parameters.len() + function.type_parameters.len()
+                }
+                PackageInterfaceDeclarationPayload::Component {
+                    requirements,
+                    ports,
+                } => requirements.len() + ports.len(),
+                PackageInterfaceDeclarationPayload::Constant { .. } => 0,
             }
-            PackageInterfaceDeclarationPayload::Record {
-                fields,
-                type_parameters,
-            } => fields.len().saturating_add(type_parameters.len()),
-            PackageInterfaceDeclarationPayload::Variant {
-                cases,
-                type_parameters,
-            } => cases.len().saturating_add(type_parameters.len()),
-            PackageInterfaceDeclarationPayload::Interface { operations } => operations.len(),
-            PackageInterfaceDeclarationPayload::Function(function) => {
-                function.parameters.len()
-                    + function.implementation_parameters.len()
-                    + function
-                        .implementation_parameters
-                        .iter()
-                        .map(|p| p.type_arguments.len())
-                        .sum::<usize>()
-                    + function.type_parameters.len()
-                    + function.requirement_parameters.len()
-                    + function.effect_parameters.len()
-                    + match &function.effect {
-                        FunctionEffect::Pure => 0,
-                        FunctionEffect::Task {
-                            effect_parameters: _,
-                            requirements,
-                        } => requirements.len(),
-                    }
-            }
-            PackageInterfaceDeclarationPayload::External(function) => {
-                function.parameters.len() + function.type_parameters.len()
-            }
-            PackageInterfaceDeclarationPayload::Component {
-                requirements,
-                ports,
-            } => requirements.len() + ports.len(),
-            PackageInterfaceDeclarationPayload::Constant { .. } => 0,
-        },
+        }
         PackageInterfaceRecord::Operation(operation) => operation.parameters.len(),
         PackageInterfaceRecord::Requirement(requirement) => 1 + requirement.operations.len(),
         PackageInterfaceRecord::RequirementParameter(parameter) => {
@@ -1270,10 +1575,20 @@ pub(crate) fn interface_owner_validation_visits(owner: &PackageInterfaceOwner) -
     1 + children as u64
 }
 
+#[cfg(test)]
 fn validate_owner_closure(
     package: PackageId,
     owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
     types: &BTreeMap<TypeObjectDigest, TypeObject>,
+) -> Result<(), Diagnostic> {
+    validate_owner_closure_metered(package, owners, types, &mut |_| Ok(()))
+}
+
+fn validate_owner_closure_metered(
+    package: PackageId,
+    owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    visit: &mut dyn FnMut(u64) -> Result<(), Diagnostic>,
 ) -> Result<(), Diagnostic> {
     let mut expected = owners
         .iter()
@@ -1281,9 +1596,12 @@ fn validate_owner_closure(
             matches!(value.record, PackageInterfaceRecord::Declaration(_)).then_some(*owner)
         })
         .collect::<BTreeSet<_>>();
+    expected.extend(representation_declarations(package, owners, types, visit)?);
     for (owner, value) in owners {
-        let PackageInterfaceRecord::Declaration(declaration) = &value.record else {
-            continue;
+        let declaration = match &value.record {
+            PackageInterfaceRecord::Declaration(declaration)
+            | PackageInterfaceRecord::RepresentationDeclaration(declaration) => declaration,
+            _ => continue,
         };
         let OwnerKey::Declaration(declaration_id) = owner else {
             return Err(interface_corrupt(
@@ -1332,8 +1650,13 @@ fn validate_owner_closure(
                             ));
                         };
                         if source.use_mode != crate::platform::kernel::ParameterUse::Borrow
-                            || !interface_owned_type(source.ty, types, owners)
-                            || !interface_owned_type(method.result, types, owners)
+                            || !interface_owned_type_or_external(package, source.ty, types, owners)
+                            || !interface_owned_type_or_external(
+                                package,
+                                method.result,
+                                types,
+                                owners,
+                            )
                         {
                             return Err(interface_corrupt(
                                 "borrowed method result requires an Owned result and borrowed Owned source",
@@ -1441,7 +1764,16 @@ fn validate_owner_closure(
             PackageInterfaceDeclarationPayload::Record {
                 fields,
                 type_parameters,
+            }
+            | PackageInterfaceDeclarationPayload::OwnedRecord {
+                fields,
+                type_parameters,
             } => {
+                let owned = matches!(
+                    declaration.payload,
+                    PackageInterfaceDeclarationPayload::OwnedRecord { .. }
+                );
+                let mut parameter_names = BTreeSet::new();
                 for parameter in type_parameters {
                     require_child(
                         owners,
@@ -1450,6 +1782,24 @@ fn validate_owner_closure(
                         OwnerKind::TypeParameter,
                         Some(*declaration_id),
                     )?;
+                    if owned {
+                        let Some(PackageInterfaceOwner {
+                            record: PackageInterfaceRecord::TypeParameter(p),
+                            ..
+                        }) = owners.get(&OwnerKey::TypeParameter(*parameter))
+                        else {
+                            return Err(interface_corrupt("owned record parameter is absent"));
+                        };
+                        if !(p.constraints.has_owned() || p.constraints.requires_transfer())
+                            || !parameter_names.insert(&p.name)
+                        {
+                            return Err(interface_error(
+                                DiagnosticClass::Semantic,
+                                "package_interface_owned_record_parameter",
+                                "owned record parameters require distinct names and Owned or ordinary Transferable bounds",
+                            ));
+                        }
+                    }
                 }
                 for field in fields {
                     require_child(
@@ -1541,8 +1891,13 @@ fn validate_owner_closure(
                         ));
                     };
                     if parameter.use_mode != crate::platform::kernel::ParameterUse::Borrow
-                        || !interface_owned_type(parameter.ty, types, owners)
-                        || !interface_owned_type(signature.result, types, owners)
+                        || !interface_owned_type_or_external(package, parameter.ty, types, owners)
+                        || !interface_owned_type_or_external(
+                            package,
+                            signature.result,
+                            types,
+                            owners,
+                        )
                     {
                         return Err(interface_corrupt(
                             "borrowed function result requires an Owned result and borrowed Owned source",
@@ -1740,6 +2095,7 @@ fn require_signature_children(
 }
 
 fn interface_owned_type(
+    package: PackageId,
     ty: TypeObjectDigest,
     types: &BTreeMap<TypeObjectDigest, TypeObject>,
     owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
@@ -1757,8 +2113,30 @@ fn interface_owned_type(
             Some(PackageInterfaceOwner { record: PackageInterfaceRecord::TypeParameter(p), .. })
                 if p.constraints.has_owned()
         ),
+        Some(TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. })
+            if declaration.package == package =>
+        {
+            matches!(
+                owners.get(&OwnerKey::Declaration(declaration.declaration)).map(|owner| &owner.record),
+                Some(PackageInterfaceRecord::Declaration(record) | PackageInterfaceRecord::RepresentationDeclaration(record))
+                    if matches!(record.payload, PackageInterfaceDeclarationPayload::OwnedRecord { .. })
+            )
+        }
         _ => false,
     }
+}
+
+/// An isolated package interface cannot classify a foreign nominal representation. The complete
+/// exact interface closure checks this deferred borrowed-result obligation before admission.
+fn interface_owned_type_or_external(
+    package: PackageId,
+    ty: TypeObjectDigest,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
+) -> bool {
+    matches!(types.get(&ty).map(|object| &object.form),
+        Some(TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. }) if declaration.package != package)
+        || interface_owned_type(package, ty, types, owners)
 }
 
 fn require_parameter(
@@ -1819,7 +2197,9 @@ fn require_child(
             PackageInterfaceRecord::Operation(record) => record.declaration,
             PackageInterfaceRecord::Requirement(record) => record.declaration,
             PackageInterfaceRecord::Port(record) => record.declaration,
-            PackageInterfaceRecord::Declaration(_) | PackageInterfaceRecord::Parameter(_) => {
+            PackageInterfaceRecord::Declaration(_)
+            | PackageInterfaceRecord::RepresentationDeclaration(_)
+            | PackageInterfaceRecord::Parameter(_) => {
                 return Err(interface_corrupt("child kind has no declaration parent"));
             }
         };
@@ -1934,7 +2314,7 @@ fn validate_type_closure<S: ImmutableObjectStore + ?Sized>(
         else {
             continue;
         };
-        if !interface_owned_type(*item, &objects, owners)
+        if !interface_owned_type(package, *item, &objects, owners)
             && (owners
                 .get(&source)
                 .is_some_and(|owner| owner.record.header().contract_version < 31)
@@ -2035,19 +2415,52 @@ fn validate_interface_type_reference(
                     "public signature names a local declaration absent from the package interface",
                 ));
             };
-            if !matches!(value.kind(), OwnerKind::Record | OwnerKind::Variant) {
+            if matches!(
+                value.record,
+                PackageInterfaceRecord::RepresentationDeclaration(_)
+            ) && !interface_representation_source(source, owners)
+            {
+                return Err(interface_error(
+                    DiagnosticClass::Semantic,
+                    "package_interface_private_signature",
+                    "public signatures cannot name private representation declarations",
+                ));
+            }
+            if !matches!(
+                value.kind(),
+                OwnerKind::Record | OwnerKind::Variant | OwnerKind::OwnedRecord
+            ) {
                 return Err(interface_error(
                     DiagnosticClass::Semantic,
                     "package_interface_named_type_kind",
-                    "public signature names a declaration that is not a record or variant",
+                    "public signature names a declaration that is not an admitted nominal type",
                 ));
             }
-            if let PackageInterfaceRecord::Declaration(record) = &value.record {
+            if value.kind() == OwnerKind::OwnedRecord
+                && (owners
+                    .get(&source)
+                    .is_some_and(|owner| owner.record.header().contract_version < 32)
+                    || semantic_declaration(source, owners)
+                        .and_then(|declaration| owners.get(&OwnerKey::Declaration(declaration)))
+                        .is_some_and(|owner| owner.record.header().contract_version < 32))
+            {
+                return Err(interface_error(
+                    DiagnosticClass::Semantic,
+                    "kernel_owned_record_generation",
+                    "nominal owned signature type closure requires Graph 32 owners",
+                ));
+            }
+            if let PackageInterfaceRecord::Declaration(record)
+            | PackageInterfaceRecord::RepresentationDeclaration(record) = &value.record
+            {
                 let parameters = match &record.payload {
                     PackageInterfaceDeclarationPayload::Record {
                         type_parameters, ..
                     }
                     | PackageInterfaceDeclarationPayload::Variant {
+                        type_parameters, ..
+                    }
+                    | PackageInterfaceDeclarationPayload::OwnedRecord {
                         type_parameters, ..
                     } => type_parameters,
                     _ => return Err(interface_corrupt("nominal interface has a foreign kind")),
@@ -2180,6 +2593,304 @@ fn semantic_declaration(
         | OwnerKey::Documentation(_)
         | OwnerKey::Annotation(_) => None,
     }
+}
+
+fn interface_representation_source(
+    source: OwnerKey,
+    owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
+) -> bool {
+    if !matches!(source, OwnerKey::Field(_) | OwnerKey::Case(_)) {
+        return false;
+    }
+    semantic_declaration(source, owners)
+        .and_then(|declaration| owners.get(&OwnerKey::Declaration(declaration)))
+        .is_some_and(|owner| match &owner.record {
+            PackageInterfaceRecord::RepresentationDeclaration(_) => true,
+            PackageInterfaceRecord::Declaration(record) => matches!(
+                record.payload,
+                PackageInterfaceDeclarationPayload::OwnedRecord { .. }
+            ),
+            _ => false,
+        })
+}
+
+fn interface_nominal_layout_types(
+    declaration: DeclarationId,
+    owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
+    budget: &mut RepresentationBudget,
+) -> Result<Vec<TypeObjectDigest>, Diagnostic> {
+    let record = match owners
+        .get(&OwnerKey::Declaration(declaration))
+        .map(|owner| &owner.record)
+    {
+        Some(
+            PackageInterfaceRecord::Declaration(record)
+            | PackageInterfaceRecord::RepresentationDeclaration(record),
+        ) => record,
+        _ => {
+            return Err(interface_corrupt(
+                "representation nominal declaration is absent",
+            ));
+        }
+    };
+    match &record.payload {
+        PackageInterfaceDeclarationPayload::Record { fields, .. }
+        | PackageInterfaceDeclarationPayload::OwnedRecord { fields, .. } => {
+            budget.reserve::<TypeObjectDigest>(fields.len())?;
+            fields
+                .iter()
+                .map(|field| {
+                    match owners
+                        .get(&OwnerKey::Field(*field))
+                        .map(|owner| &owner.record)
+                    {
+                        Some(PackageInterfaceRecord::Field(record))
+                            if record.declaration == declaration =>
+                        {
+                            Ok(record.ty)
+                        }
+                        _ => Err(interface_corrupt(
+                            "representation field is absent or belongs to another declaration",
+                        )),
+                    }
+                })
+                .collect()
+        }
+        PackageInterfaceDeclarationPayload::Variant { cases, .. } => {
+            budget.reserve::<TypeObjectDigest>(cases.len())?;
+            let mut roots = Vec::new();
+            for case in cases {
+                match owners
+                    .get(&OwnerKey::Case(*case))
+                    .map(|owner| &owner.record)
+                {
+                    Some(PackageInterfaceRecord::Case(record))
+                        if record.declaration == declaration =>
+                    {
+                        roots.extend(record.payload)
+                    }
+                    _ => {
+                        return Err(interface_corrupt(
+                            "representation case is absent or belongs to another declaration",
+                        ));
+                    }
+                }
+            }
+            Ok(roots)
+        }
+        _ => Err(interface_corrupt(
+            "representation names a non-layout declaration",
+        )),
+    }
+}
+
+/// Establish private evidence reachability independently of interface presence, and reject
+/// recursive owned layout edges even when an ordinary container separates the declarations.
+fn representation_declarations(
+    package: PackageId,
+    owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    visit: &mut dyn FnMut(u64) -> Result<(), Diagnostic>,
+) -> Result<BTreeSet<OwnerKey>, Diagnostic> {
+    representation_declarations_admitted(
+        package,
+        owners,
+        types,
+        visit,
+        &mut RepresentationBudget::default(),
+    )
+}
+
+fn representation_declarations_admitted(
+    package: PackageId,
+    owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    visit: &mut dyn FnMut(u64) -> Result<(), Diagnostic>,
+    budget: &mut RepresentationBudget,
+) -> Result<BTreeSet<OwnerKey>, Diagnostic> {
+    let mut traversals = 0usize;
+    let mut charge = || {
+        visit(1)?;
+        traversals = traversals.saturating_add(1);
+        if traversals > MAXIMUM_PACKAGE_INTERFACE_VALIDATION_WORK {
+            return Err(interface_error(
+                DiagnosticClass::Resource,
+                "package_interface_type_work",
+                "owned representation traversal exceeds its validation work budget",
+            ));
+        }
+        Ok(())
+    };
+    let mut owned = BTreeSet::new();
+    for (key, owner) in owners {
+        match &owner.record {
+            PackageInterfaceRecord::Declaration(record)
+            | PackageInterfaceRecord::RepresentationDeclaration(record)
+                if matches!(
+                    record.payload,
+                    PackageInterfaceDeclarationPayload::OwnedRecord { .. }
+                ) =>
+            {
+                budget.reserve::<OwnerKey>(1)?;
+                owned.insert(*key);
+            }
+            _ => {}
+        }
+    }
+    let mut reachable = BTreeSet::new();
+    let mut pending = Vec::new();
+    for key in &owned {
+        if let OwnerKey::Declaration(id) = key
+            && matches!(
+                owners.get(key).map(|owner| &owner.record),
+                Some(PackageInterfaceRecord::Declaration(_))
+            )
+        {
+            let roots = interface_nominal_layout_types(*id, owners, budget)?;
+            budget.append_types(roots, &mut pending)?;
+        }
+    }
+    let mut visited = BTreeSet::new();
+    while let Some(digest) = pending.pop() {
+        charge()?;
+        if visited.contains(&digest) {
+            continue;
+        }
+        budget.reserve::<TypeObjectDigest>(1)?;
+        visited.insert(digest);
+        if visited.len() > MAXIMUM_PACKAGE_INTERFACE_VALIDATION_WORK {
+            return Err(interface_error(
+                DiagnosticClass::Resource,
+                "package_interface_type_work",
+                "owned representation closure exceeds its validation work budget",
+            ));
+        }
+        let object = types
+            .get(&digest)
+            .ok_or_else(|| interface_corrupt("owned representation type is absent"))?;
+        budget.append_children(object, &mut pending)?;
+        if let TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } = object.form
+            && declaration.package == package
+        {
+            let key = OwnerKey::Declaration(declaration.declaration);
+            if !reachable.contains(&key) {
+                budget.reserve::<OwnerKey>(1)?;
+                reachable.insert(key);
+                let roots =
+                    interface_nominal_layout_types(declaration.declaration, owners, budget)?;
+                budget.append_types(roots, &mut pending)?;
+            }
+        }
+    }
+    let mut edges = BTreeMap::<OwnerKey, BTreeSet<OwnerKey>>::new();
+    for root in &owned {
+        let OwnerKey::Declaration(id) = root else {
+            continue;
+        };
+        let mut pending = interface_nominal_layout_types(*id, owners, budget)?;
+        let mut seen_types = BTreeSet::new();
+        let mut seen_declarations = BTreeSet::new();
+        while let Some(digest) = pending.pop() {
+            charge()?;
+            if seen_types.contains(&digest) {
+                continue;
+            }
+            budget.reserve::<TypeObjectDigest>(1)?;
+            seen_types.insert(digest);
+            let object = types
+                .get(&digest)
+                .ok_or_else(|| interface_corrupt("owned representation type is absent"))?;
+            budget.append_children(object, &mut pending)?;
+            if let TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } =
+                object.form
+                && declaration.package == package
+            {
+                let key = OwnerKey::Declaration(declaration.declaration);
+                if owned.contains(&key) {
+                    if !edges.contains_key(root) {
+                        budget.reserve::<(OwnerKey, BTreeSet<OwnerKey>)>(1)?;
+                        edges.insert(*root, BTreeSet::new());
+                    }
+                    let targets = edges.get_mut(root).ok_or_else(|| {
+                        interface_corrupt("admitted owned layout adjacency is absent")
+                    })?;
+                    if !targets.contains(&key) {
+                        budget.reserve::<OwnerKey>(1)?;
+                        targets.insert(key);
+                    }
+                } else if !seen_declarations.contains(&key) {
+                    budget.reserve::<OwnerKey>(1)?;
+                    seen_declarations.insert(key);
+                    let roots =
+                        interface_nominal_layout_types(declaration.declaration, owners, budget)?;
+                    budget.append_types(roots, &mut pending)?;
+                }
+            }
+            if seen_types.len() > MAXIMUM_PACKAGE_INTERFACE_VALIDATION_WORK {
+                return Err(interface_error(
+                    DiagnosticClass::Resource,
+                    "package_interface_type_work",
+                    "owned representation closure exceeds its validation work budget",
+                ));
+            }
+        }
+    }
+    // Memoize completed declarations. Shared DAG tails are proved once, without copying
+    // or enumerating every root-to-leaf path. Exit frames derive the longest owned depth.
+    let mut completed = BTreeMap::<OwnerKey, usize>::new();
+    let mut active = BTreeSet::new();
+    let mut frames = Vec::new();
+    for root in &owned {
+        if completed.contains_key(root) {
+            continue;
+        }
+        budget.reserve::<(OwnerKey, bool)>(1)?;
+        frames.push((*root, false));
+        while let Some((current, exiting)) = frames.pop() {
+            charge()?;
+            if exiting {
+                let mut depth = 0usize;
+                for target in edges.get(&current).into_iter().flatten() {
+                    charge()?;
+                    let child_depth = completed
+                        .get(target)
+                        .ok_or_else(|| interface_corrupt("owned layout child proof is absent"))?;
+                    depth = depth.max(child_depth.saturating_add(1));
+                }
+                if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+                    return Err(interface_error(
+                        DiagnosticClass::Resource,
+                        "package_interface_type_work",
+                        "owned layout traversal exceeds its type-depth bound",
+                    ));
+                }
+                active.remove(&current);
+                budget.reserve::<(OwnerKey, usize)>(1)?;
+                completed.insert(current, depth);
+                continue;
+            }
+            if completed.contains_key(&current) {
+                continue;
+            }
+            if active.contains(&current) {
+                return Err(interface_error(
+                    DiagnosticClass::Semantic,
+                    "package_interface_owned_record_cycle",
+                    "recursive nominal owned record layouts are unsupported",
+                ));
+            }
+            budget.reserve::<OwnerKey>(1)?;
+            active.insert(current);
+            budget.reserve::<(OwnerKey, bool)>(1)?;
+            frames.push((current, true));
+            for target in edges.get(&current).into_iter().flatten() {
+                charge()?;
+                budget.reserve::<(OwnerKey, bool)>(1)?;
+                frames.push((*target, false));
+            }
+        }
+    }
+    Ok(reachable)
 }
 
 struct ReachablePageReader<'a, P: ?Sized> {
@@ -2362,7 +3073,7 @@ mod tests {
             }),
         };
         let (digest, bytes) = original.encode().unwrap();
-        assert_eq!(&bytes[..8], b"LKJPIF19");
+        assert_eq!(&bytes[..8], b"LKJPIF20");
         assert_eq!(
             PackageInterfaceOwner::decode(&bytes, owner, digest).unwrap(),
             original

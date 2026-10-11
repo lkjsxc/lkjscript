@@ -411,7 +411,8 @@ where
                 OwnerKey::Module(declaration.module),
             )?;
             match &declaration.payload {
-                DeclarationPayload::Record { fields, .. } => {
+                DeclarationPayload::Record { fields, .. }
+                | DeclarationPayload::OwnedRecord { fields, .. } => {
                     for field in fields {
                         owner_edge(
                             edges,
@@ -1026,6 +1027,37 @@ where
         }
         | ExpressionOperation::List { .. }
         | ExpressionOperation::Map { .. } => {}
+        ExpressionOperation::PackOwnedRecord { fields, .. } => {
+            for field in fields {
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::NominalFieldConstruction,
+                    field.field.package,
+                    OwnerKey::Field(field.field.field),
+                )?;
+            }
+        }
+        ExpressionOperation::UnpackOwnedRecord { fields, .. } => {
+            for field in fields {
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::NominalFieldAccess,
+                    field.field.package,
+                    OwnerKey::Field(field.field.field),
+                )?;
+            }
+        }
+        ExpressionOperation::BorrowOwnedRecordField { field, .. } => {
+            exact_edge(
+                edges,
+                source,
+                RelationKind::NominalFieldAccess,
+                field.package,
+                OwnerKey::Field(field.field),
+            )?;
+        }
         ExpressionOperation::PackOwned { .. }
         | ExpressionOperation::UnpackOwned { .. }
         | ExpressionOperation::BorrowOwnedField { .. }

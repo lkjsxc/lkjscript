@@ -70,6 +70,7 @@ fn probe(
         templates: Arc::from([]),
         functions: Vec::new(),
         implementations,
+        owned_records: program.owned_record_declarations.clone(),
         targets: BTreeMap::new(),
         instances: BTreeMap::new(),
         normalized: BTreeMap::new(),

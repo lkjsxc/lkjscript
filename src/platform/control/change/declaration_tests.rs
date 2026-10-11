@@ -3,6 +3,9 @@ use super::*;
 use crate::platform::change::{CanonicalBaseRead, canonical_authored_intent_bytes};
 use crate::platform::publication::GraphRepository;
 
+#[path = "owned_record_authoring_tests.rs"]
+mod owned_records;
+
 #[test]
 fn parameterized_owned_native_intent_matches_independent_compact_edges() {
     let base = format!("rev_{}", "82".repeat(32));

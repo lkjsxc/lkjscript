@@ -250,6 +250,9 @@ fn write_nominal(
     depth: usize,
 ) -> Result<(), Diagnostic> {
     if let Some((expected_index, record)) = find_record(program, ty) {
+        if record.owned {
+            return Err(unsupported("OwnedRecord"));
+        }
         let NormalizedValue::Record(NormalizedRecord::Nominal { layout, fields }) = value else {
             return Err(layout_error("nominal record"));
         };
@@ -440,6 +443,9 @@ fn read_nominal(
     depth: usize,
 ) -> Result<NormalizedValue, Diagnostic> {
     if let Some((layout, record)) = find_record(program, ty) {
+        if record.owned {
+            return Err(unsupported("OwnedRecord"));
+        }
         let mut fields = Vec::with_capacity(record.fields.len());
         for field in record.fields.iter() {
             fields.push(read_value(program, field.ty, input, budget, depth + 1)?);
@@ -612,6 +618,9 @@ fn describe_nominal_type(
     }
     write_bytes(description, &[1])?;
     if let Some((_, record)) = find_record(program, ty) {
+        if record.owned {
+            return Err(unsupported("OwnedRecord"));
+        }
         write_bytes(description, &[0])?;
         write_length(description, record.fields.len())?;
         for field in record.fields.iter() {

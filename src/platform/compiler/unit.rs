@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-31";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 31;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-26";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 26;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN31";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v31";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v31";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-32";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 32;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-27";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 27;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN32";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v32";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v32";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -204,6 +204,11 @@ pub enum CompilationPayload {
         port: Option<u32>,
         routes: Vec<CompiledHttpRoute>,
         runner: RunnerKind,
+    },
+    OwnedRecord {
+        type_parameters: Vec<TypeParameterId>,
+        type_parameter_constraints: Vec<crate::platform::kernel::TypeParameterConstraints>,
+        fields: Vec<CompiledFieldLayout>,
     },
 }
 
@@ -562,7 +567,7 @@ impl CompilationUnit {
                 "compiler-unit bytes disagree with their exact object-domain digest",
             ));
         }
-        // Derived generations 10–29 require a rebuild from supported canonical owners.
+        // Derived generations 10–31 require a rebuild from supported canonical owners.
         // Refuse before decoding; old bytes never acquire current instruction meaning.
         if [
             b"LKJCUN10",
@@ -586,6 +591,7 @@ impl CompilationUnit {
             b"LKJCUN28",
             b"LKJCUN29",
             b"LKJCUN30",
+            b"LKJCUN31",
         ]
         .iter()
         .any(|magic| bytes.starts_with(*magic))
@@ -782,18 +788,38 @@ impl CompilationPayload {
                     }
                 }
             }
-            Self::Record {
+            Self::OwnedRecord {
+                fields,
+                type_parameters,
+                type_parameter_constraints,
+            }
+            | Self::Record {
                 fields,
                 type_parameters,
                 type_parameter_constraints,
             } => {
-                validate_nominal_parameters(type_parameters, type_parameter_constraints)?;
-                require_kind(source, OwnerKind::Record)?;
-                require_item_count("compiled record fields", fields.len(), false)?;
+                let owned = matches!(self, Self::OwnedRecord { .. });
+                if owned {
+                    validate_owned_record_parameters(type_parameters, type_parameter_constraints)?;
+                } else {
+                    validate_nominal_parameters(type_parameters, type_parameter_constraints)?;
+                }
+                require_kind(
+                    source,
+                    if owned {
+                        OwnerKind::OwnedRecord
+                    } else {
+                        OwnerKind::Record
+                    },
+                )?;
+                require_item_count("compiled record fields", fields.len(), owned)?;
+                let mut unique = BTreeSet::new();
                 for field in fields {
                     require_index("record field", field.field, tables.fields.len())?;
                     require_index("record field type", field.ty, tables.types.len())?;
-                    if tables.fields[field.field as usize].package != source.package {
+                    if tables.fields[field.field as usize].package != source.package
+                        || !unique.insert(field.field)
+                    {
                         return Err(unit_corrupt(
                             "compiler_unit_field_identity",
                             "compiled field layout uses a foreign package relocation",
@@ -1699,7 +1725,7 @@ impl CompiledInstruction {
                 fields,
             } => {
                 require_index("owned product type", *product_type, tables.types.len())?;
-                require_item_count("owned product fields", fields.len(), false)?;
+                require_item_count("owned product fields", fields.len(), true)?;
                 let unique: BTreeSet<_> = fields.iter().copied().collect();
                 if unique.len() != fields.len() || unique.iter().copied().ne(0..fields.len() as u32)
                 {
@@ -1716,7 +1742,7 @@ impl CompiledInstruction {
                 locals,
             } => {
                 require_index("owned product type", *product_type, tables.types.len())?;
-                require_item_count("owned product locals", locals.len(), false)?;
+                require_item_count("owned product locals", locals.len(), true)?;
                 for local in locals {
                     require_index("owned product local", *local, code.local_count as usize)?;
                 }
@@ -2133,6 +2159,25 @@ fn validate_nominal_parameters(
         return Err(unit_corrupt(
             "compiler_nominal_parameters",
             "nominal parameters and constraints must form one exact ordered unique vector",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_owned_record_parameters(
+    parameters: &[TypeParameterId],
+    constraints: &[crate::platform::kernel::TypeParameterConstraints],
+) -> Result<(), Diagnostic> {
+    require_item_count("owned record type parameters", parameters.len(), true)?;
+    if parameters.len() != constraints.len()
+        || parameters.iter().collect::<BTreeSet<_>>().len() != parameters.len()
+        || constraints
+            .iter()
+            .any(|constraint| !constraint.has_owned() && !constraint.requires_transfer())
+    {
+        return Err(unit_corrupt(
+            "compiler_owned_record_parameters",
+            "owned record parameters require exact ordered unique owned or transferable constraints",
         ));
     }
     Ok(())

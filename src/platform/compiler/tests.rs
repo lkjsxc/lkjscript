@@ -19,6 +19,8 @@ mod effect_tests;
 mod generic_implementation_admission_tests;
 #[path = "generic_resource_tests.rs"]
 mod generic_resource_tests;
+#[path = "nominal_owned_record_admission_tests.rs"]
+mod nominal_owned_record_admission_tests;
 #[path = "owned_borrow_admission_tests.rs"]
 mod owned_borrow_admission_tests;
 #[path = "owned_closure_tests.rs"]
@@ -311,6 +313,7 @@ fn structurally_empty_snapshot(seed: &[u8]) -> crate::platform::kernel::KernelSn
         },
         owners: std::collections::BTreeMap::new(),
         types: std::collections::BTreeMap::new(),
+        representation_dependencies: std::collections::BTreeMap::new(),
         dependency_interfaces: std::collections::BTreeMap::new(),
         dependency_types: std::collections::BTreeMap::new(),
         blobs: std::collections::BTreeMap::new(),
@@ -2711,6 +2714,7 @@ impl PayloadCodes for CompilationPayload {
             } => Box::new([actual, expected].into_iter()),
             Self::OwnedContract(_)
             | Self::OwnedImplementation(_)
+            | Self::OwnedRecord { .. }
             | Self::Record { .. }
             | Self::Variant { .. }
             | Self::Interface { .. }

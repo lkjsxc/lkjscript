@@ -21,6 +21,8 @@ pub struct KernelOverlay<'a, B: ?Sized = KernelSnapshot> {
     package_interfaces:
         RefCell<BTreeMap<(PackageRevisionDigest, OwnerKey), Option<PackageInterfaceRecord>>>,
     dependencies: RefCell<BTreeMap<PackageId, Option<DependencyRecord>>>,
+    effective_dependency_roots: RefCell<Option<Vec<DependencyRecord>>>,
+    representation_dependencies: RefCell<BTreeMap<PackageId, Option<DependencyRecord>>>,
     retirements: RefCell<BTreeMap<OwnerKey, Option<RetirementRecord>>>,
     work: RefCell<CanonicalReadWork>,
 }
@@ -37,6 +39,8 @@ impl<'a, B: CanonicalBaseRead + ?Sized> KernelOverlay<'a, B> {
             types: RefCell::new(BTreeMap::new()),
             package_interfaces: RefCell::new(BTreeMap::new()),
             dependencies: RefCell::new(BTreeMap::new()),
+            effective_dependency_roots: RefCell::new(None),
+            representation_dependencies: RefCell::new(BTreeMap::new()),
             retirements: RefCell::new(BTreeMap::new()),
             work: RefCell::new(CanonicalReadWork::default()),
         }
@@ -125,6 +129,101 @@ impl<'a, B: CanonicalBaseRead + ?Sized> KernelOverlay<'a, B> {
             self.dependencies.borrow_mut().insert(package, read.value);
         }
         Ok(self.dependencies.borrow().get(&package).cloned().flatten())
+    }
+
+    fn effective_dependency_roots(&self) -> Result<Vec<DependencyRecord>, Diagnostic> {
+        if self.effective_dependency_roots.borrow().is_none() {
+            let read = self.base.read_dependencies()?;
+            self.work.borrow_mut().add(read.work);
+            let mut roots = read
+                .value
+                .into_iter()
+                .map(|record| (record.package, record))
+                .collect::<BTreeMap<_, _>>();
+            for (package, edit) in &self.delta.dependencies {
+                match &edit.after {
+                    Some((_, record)) => {
+                        roots.insert(*package, record.clone());
+                    }
+                    None => {
+                        roots.remove(package);
+                    }
+                }
+            }
+            *self.effective_dependency_roots.borrow_mut() = Some(roots.into_values().collect());
+        }
+        self.effective_dependency_roots
+            .borrow()
+            .as_ref()
+            .cloned()
+            .ok_or_else(|| {
+                Diagnostic::new(
+                    crate::platform::diagnostic::DiagnosticClass::Corrupt,
+                    "change_representation_roots_missing",
+                    "effective representation roots were not cached after admission",
+                )
+            })
+    }
+
+    pub(crate) fn representation_dependency(
+        &self,
+        package: PackageId,
+    ) -> Result<Option<DependencyRecord>, Diagnostic> {
+        if !self
+            .representation_dependencies
+            .borrow()
+            .contains_key(&package)
+        {
+            let mut selected: Option<DependencyRecord> = None;
+            for root in self.effective_dependency_roots()? {
+                let read = self.base.read_representation_dependency(&root, package)?;
+                self.work.borrow_mut().add(read.work);
+                if let Some(record) = read.value {
+                    if selected
+                        .as_ref()
+                        .is_some_and(|previous| previous != &record)
+                    {
+                        return Err(Diagnostic::new(
+                            crate::platform::diagnostic::DiagnosticClass::Semantic,
+                            "change_representation_dependency_conflict",
+                            "effective direct dependencies select conflicting exact representation revisions",
+                        ));
+                    }
+                    selected = Some(record);
+                }
+            }
+            self.representation_dependencies
+                .borrow_mut()
+                .insert(package, selected);
+        }
+        Ok(self
+            .representation_dependencies
+            .borrow()
+            .get(&package)
+            .cloned()
+            .flatten())
+    }
+
+    pub(crate) fn package_representation_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        let Some(dependency) = self.representation_dependency(package)? else {
+            return Ok(None);
+        };
+        let key = (dependency.package_revision, owner);
+        if !self.package_interfaces.borrow().contains_key(&key) {
+            let read = self.base.read_package_interface_owner(&dependency, owner)?;
+            self.work.borrow_mut().add(read.work);
+            self.package_interfaces.borrow_mut().insert(key, read.value);
+        }
+        Ok(self
+            .package_interfaces
+            .borrow()
+            .get(&key)
+            .cloned()
+            .flatten())
     }
 
     pub fn retirement(&self, owner: OwnerKey) -> Result<Option<RetirementRecord>, Diagnostic> {
@@ -237,6 +336,7 @@ impl<'a> KernelOverlay<'a, KernelSnapshot> {
             root,
             owners,
             types,
+            representation_dependencies: self.base.representation_dependencies.clone(),
             dependency_interfaces: self.base.dependency_interfaces.clone(),
             dependency_types: self.base.dependency_types.clone(),
             blobs: self.base.blobs.clone(),

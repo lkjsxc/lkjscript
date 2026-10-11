@@ -927,6 +927,84 @@ impl ReferenceState<'_> {
                 "owned method type exceeds structural depth",
             ));
         }
+        if self.schema.is_owned_type(ty)
+            && matches!(
+                self.schema.types.get(&ty).map(|object| &object.form),
+                Some(TypeForm::Named { .. } | TypeForm::Applied { .. })
+            )
+        {
+            let (reference, arguments) = match &self.schema.types[&ty].form {
+                TypeForm::Named { declaration } => (*declaration, Vec::new()),
+                TypeForm::Applied {
+                    declaration,
+                    arguments,
+                } => {
+                    let reference = *declaration;
+                    let count = arguments.len();
+                    self.charge_allocation(
+                        (count * std::mem::size_of::<TypeObjectDigest>()) as u64,
+                    )?;
+                    let TypeForm::Applied { arguments, .. } = &self.schema.types[&ty].form else {
+                        unreachable!();
+                    };
+                    (reference, arguments.clone())
+                }
+                _ => unreachable!(),
+            };
+            let owner = self.declaration(reference)?;
+            let DeclarationPayload::OwnedRecord {
+                type_parameters,
+                fields,
+            } = owner.payload
+            else {
+                return Err(reference_type_error(
+                    "owned method nominal identity is foreign",
+                ));
+            };
+            if type_parameters.len() != arguments.len() {
+                return Err(reference_type_error(
+                    "owned method nominal argument arity mismatch",
+                ));
+            }
+            self.charge_allocation(
+                (type_parameters.len()
+                    * (std::mem::size_of::<(TypeParameterId, TypeObjectDigest)>()
+                        + 3 * std::mem::size_of::<usize>())) as u64,
+            )?;
+            let mut bindings = BTreeMap::new();
+            for (parameter, argument) in type_parameters.into_iter().zip(arguments) {
+                let Some(OwnerRecord::TypeParameter(record)) =
+                    self.owner_in_package(reference.package, OwnerKey::TypeParameter(parameter))?
+                else {
+                    return Err(reference_type_error(
+                        "missing owned method nominal parameter",
+                    ));
+                };
+                if record.declaration != reference.declaration
+                    || (!record.constraints.has_owned() && !record.constraints.requires_transfer())
+                    || self.method_shape(argument, declared, depth + 1, visits)?
+                        != record.constraints.has_owned()
+                {
+                    return Err(reference_type_error(
+                        "owned method nominal argument constraint mismatch",
+                    ));
+                }
+                bindings.insert(parameter, argument);
+            }
+            for field in fields {
+                let Some(OwnerRecord::Field(record)) =
+                    self.owner_in_package(reference.package, OwnerKey::Field(field))?
+                else {
+                    return Err(reference_type_error("missing owned method nominal field"));
+                };
+                if record.declaration != reference.declaration {
+                    return Err(reference_type_error("foreign owned method nominal field"));
+                }
+                let field_type = self.method_type(record.ty, &bindings)?;
+                self.method_shape(field_type, declared, depth + 1, visits)?;
+            }
+            return Ok(true);
+        }
         let form = &self
             .schema
             .types

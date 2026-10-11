@@ -1180,6 +1180,40 @@ impl Lowering<'_> {
                 };
             }
             match form.as_str() {
+                "pack-owned" | "unpack-owned" | "borrow-owned-field" => {
+                    if let Some(annotation) = args.first().copied() {
+                        let type_node = self.one(annotation)?;
+                        let ty = self.ty(type_node, scope, 1)?;
+                        let nominal = self
+                            .records
+                            .iter()
+                            .chain(self.source_records.iter())
+                            .find(|record| {
+                                optional(record, "as") == Some(ty.as_str())
+                                    && matches!(
+                                        record.operation.as_str(),
+                                        "type.named" | "type.application"
+                                    )
+                            })
+                            .and_then(|record| optional(record, "declaration"))
+                            .map(str::to_owned);
+                        if let Some(declaration) = nominal {
+                            for operand in &args[1..] {
+                                if self.block.head(*operand) == Some("field") {
+                                    let (_, fields) = self.parts(*operand)?;
+                                    if let Some(field) = fields.first().copied() {
+                                        let value =
+                                            self.owned_record_field(&declaration, field, scope)?;
+                                        block.syntax[field].kind = SyntaxKind::Atom {
+                                            value,
+                                            quoted: false,
+                                        };
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 "implementations" => {
                     for arg in &args {
                         let value = self.implementation_operand(*arg, scope)?;
@@ -1306,6 +1340,72 @@ impl Lowering<'_> {
         Ok(label)
     }
 
+    fn owned_record_field(
+        &mut self,
+        declaration: &str,
+        id: usize,
+        scope: &str,
+    ) -> Result<String, Diagnostic> {
+        let value = self.block.atom(id)?.to_owned();
+        // Canonical drafts bind typed, exact selectors under ordinary lexical
+        // aliases. Resolve that collected namespace before treating a bare word
+        // as a field name relative to the annotated record declaration.
+        if scopes(scope).into_iter().any(|prefix| {
+            self.names
+                .contains_key(&(qualify(prefix, &value), "field".to_owned()))
+        }) || value.contains("::")
+            || value.starts_with('$')
+            || value.contains('/')
+            || value.starts_with("field_")
+        {
+            return self.resolve(&value, scope, "field", id);
+        }
+        let selected = self.selected_owner(declaration).or_else(|| {
+            declaration.split_once('/').and_then(|(package, owner)| {
+                (package.parse::<PackageId>().ok() == self.package)
+                    .then(|| owner.parse::<OwnerKey>().ok())
+                    .flatten()
+            })
+        });
+        if let Some(unit) = self.units.iter().find(|unit| {
+            unit.label == declaration
+                || unit.existing.is_some_and(|owner| {
+                    owner.to_string() == declaration || Some(owner) == selected
+                })
+        }) {
+            let record_scope = qualify(&unit.scope, &unit.name);
+            return self.resolve(&value, &record_scope, "field", id);
+        }
+        let package = self
+            .records
+            .iter()
+            .chain(self.source_records.iter())
+            .find(|record| {
+                record.operation == "reference.owner" && optional(record, "as") == Some(declaration)
+            })
+            .and_then(|record| optional(record, "package"))
+            .map(str::to_owned)
+            .ok_or_else(|| {
+                self.error(
+                    id,
+                    "nominal field names require an exact declaration selection",
+                )
+            })?;
+        let label = self.allocate('$')?;
+        self.record(
+            id,
+            "reference.owner",
+            vec![
+                ("as", label.clone()),
+                ("package", package),
+                ("class", "field".into()),
+                ("name", value),
+                ("parent", declaration.into()),
+            ],
+        )?;
+        Ok(label)
+    }
+
     fn emit(&mut self, unit: &Unit) -> Result<(), Diagnostic> {
         let scope = qualify(&unit.scope, &unit.name);
         let mut fields = vec![("as", unit.label.clone()), ("name", unit.name.clone())];
@@ -1323,7 +1423,9 @@ impl Lowering<'_> {
             allowed.push("visibility");
         }
         let operation = match kind {
-            "module" | "record" | "variant" | "interface" | "component" => format!("create.{kind}"),
+            "module" | "record" | "owned-record" | "variant" | "interface" | "component" => {
+                format!("create.{kind}")
+            }
             "owned-contract" | "owned-implementation" => {
                 allowed.extend(["self", "method"]);
                 let self_type = self.one(self.required_clause(unit, "self")?)?;
@@ -2017,6 +2119,10 @@ pub(super) fn contract_children(record: &crate::platform::kernel::OwnerRecord) -
             D::Record {
                 type_parameters,
                 fields,
+            }
+            | D::OwnedRecord {
+                type_parameters,
+                fields,
             } => {
                 children.extend(type_parameters.iter().copied().map(OwnerKey::TypeParameter));
                 children.extend(fields.iter().copied().map(OwnerKey::Field));
@@ -2084,6 +2190,7 @@ pub(super) fn owner_family(record: &crate::platform::kernel::OwnerRecord) -> &'s
             D::OwnedContract(_) => "owned-contract",
             D::OwnedImplementation(_) => "owned-implementation",
             D::Record { .. } => "record",
+            D::OwnedRecord { .. } => "owned-record",
             D::Variant { .. } => "variant",
             D::Interface { .. } => "interface",
             D::Function(_) => "function",
@@ -2124,6 +2231,7 @@ pub(super) fn finish(
             | AuthoredChange::CreateOwnedImplementation { symbol, .. }
             | AuthoredChange::CreateModule { symbol, .. }
             | AuthoredChange::CreateRecord { symbol, .. }
+            | AuthoredChange::CreateOwnedRecord { symbol, .. }
             | AuthoredChange::CreateVariant { symbol, .. }
             | AuthoredChange::CreateInterface { symbol, .. }
             | AuthoredChange::CreateExternal { symbol, .. }
@@ -2206,6 +2314,7 @@ pub(super) fn finish(
                 ..
             } => changes.push(AuthoredChange::RenameOwner { owner: exact, name }),
             AuthoredChange::CreateRecord { visibility, .. }
+            | AuthoredChange::CreateOwnedRecord { visibility, .. }
             | AuthoredChange::CreateVariant { visibility, .. }
             | AuthoredChange::CreateInterface { visibility, .. }
             | AuthoredChange::CreateComponent { visibility, .. } => {
@@ -2531,6 +2640,7 @@ fn namespace(kind: &str) -> Option<&'static str> {
         "owned-contract"
         | "owned-implementation"
         | "record"
+        | "owned-record"
         | "variant"
         | "interface"
         | "external"
@@ -2556,7 +2666,7 @@ fn namespace(kind: &str) -> Option<&'static str> {
 fn child_allowed(parent: &str, child: &str) -> bool {
     match parent {
         "module" => namespace(child) == Some("declaration"),
-        "record" => matches!(child, "field" | "type-parameter"),
+        "record" | "owned-record" => matches!(child, "field" | "type-parameter"),
         "variant" => matches!(child, "case" | "type-parameter"),
         "owned-contract" | "owned-implementation" => child == "type-parameter",
         "interface" => child == "operation",

@@ -60,10 +60,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-39";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 39;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-35";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 35;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-40";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 40;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-36";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 36;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -136,6 +136,7 @@ pub(crate) enum CompactChangeOperation {
     ReferenceOwner,
     CreateModule,
     CreateRecord,
+    CreateOwnedRecord,
     CreateVariant,
     CreateInterface,
     CreateOwnedContract,
@@ -177,11 +178,12 @@ pub(crate) enum CompactChangeOperation {
 }
 
 impl CompactChangeOperation {
-    pub(crate) const ALL: [Self; 42] = [
+    pub(crate) const ALL: [Self; 43] = [
         Self::ReferencePackage,
         Self::ReferenceOwner,
         Self::CreateModule,
         Self::CreateRecord,
+        Self::CreateOwnedRecord,
         Self::CreateVariant,
         Self::CreateInterface,
         Self::CreateOwnedContract,
@@ -498,6 +500,33 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
     CompactChangeOperationDescriptor {
         operation: CompactChangeOperation::CreateRecord,
         name: "create.record",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "module",
+                required: true,
+                form: FieldForm::ModuleSelector,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "visibility",
+                required: true,
+                form: FieldForm::DeclarationVisibility,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::CreateOwnedRecord,
+        name: "create.owned-record",
         fields: &[
             CompactChangeOperationField {
                 name: "as",
@@ -2871,7 +2900,7 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
                 form: "expression.owned-field",
                 name: "name",
                 required: true,
-                syntax: "name",
+                syntax: "structural-name|nominal-field-reference",
             },
             CompactFormField {
                 form: "expression.owned-field",
@@ -2951,7 +2980,7 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
                 form: "expression.owned-binding",
                 name: "field-name",
                 required: true,
-                syntax: "name",
+                syntax: "structural-name|nominal-field-reference",
             },
             CompactFormField {
                 form: "expression.owned-binding",
@@ -4562,6 +4591,14 @@ impl Decoder {
                 visibility: parse_visibility(record, "visibility")?,
                 fields: Vec::new(),
             }),
+            CompactChangeOperation::CreateOwnedRecord => Ok(AuthoredChange::CreateOwnedRecord {
+                type_parameters: Vec::new(),
+                symbol: symbol(record, "as")?,
+                module: self.parse_module_selector(record, "module")?,
+                name: parse_name(record, "name")?,
+                visibility: parse_visibility(record, "visibility")?,
+                fields: Vec::new(),
+            }),
             CompactChangeOperation::CreateVariant => Ok(AuthoredChange::CreateVariant {
                 type_parameters: Vec::new(),
                 symbol: symbol(record, "as")?,
@@ -5742,6 +5779,25 @@ impl Decoder {
             "expression.pack-owned" => {
                 check_fields(&record, &["as", "type"])?;
                 let product_type = self.decode_type(required(&record, "type")?)?;
+                if matches!(
+                    product_type,
+                    AuthoredType::Named { .. } | AuthoredType::Applied { .. }
+                ) {
+                    let mut fields = Vec::new();
+                    for edge in self.ordered_record_edges("expression.owned-field", symbol)? {
+                        fields.push((
+                            self.parse_field_reference(&edge.record, "name")?,
+                            self.decode_expression(required(&edge.record, "value")?)?,
+                        ));
+                    }
+                    return Ok(AuthoredExpression {
+                        symbol: Some(symbol.to_owned()),
+                        operation: AuthoredExpressionOperation::PackOwnedRecord {
+                            record_type: product_type,
+                            fields,
+                        },
+                    });
+                }
                 let mut fields = Vec::new();
                 for edge in self.ordered_record_edges("expression.owned-field", symbol)? {
                     let value = required(&edge.record, "value")?.to_owned();
@@ -5759,6 +5815,34 @@ impl Decoder {
                 check_fields(&record, &["as", "type", "source", "body"])?;
                 let product_type = self.decode_type(required(&record, "type")?)?;
                 let source = Box::new(self.decode_expression(required(&record, "source")?)?);
+                if matches!(
+                    product_type,
+                    AuthoredType::Named { .. } | AuthoredType::Applied { .. }
+                ) {
+                    let mut fields = Vec::new();
+                    for edge in self.ordered_record_edges("expression.owned-binding", symbol)? {
+                        fields.push((
+                            self.parse_field_reference(&edge.record, "field-name")?,
+                            AuthoredBindingDefinition {
+                                symbol: symbol_field(&edge.record, "as")?,
+                                name: parse_name(&edge.record, "name")?,
+                                declared_type: Some(
+                                    self.decode_type(required(&edge.record, "type")?)?,
+                                ),
+                            },
+                        ));
+                    }
+                    let body = Box::new(self.decode_expression(required(&record, "body")?)?);
+                    return Ok(AuthoredExpression {
+                        symbol: Some(symbol.to_owned()),
+                        operation: AuthoredExpressionOperation::UnpackOwnedRecord {
+                            record_type: product_type,
+                            source,
+                            fields,
+                            body,
+                        },
+                    });
+                }
                 let mut fields = Vec::new();
                 for edge in self.ordered_record_edges("expression.owned-binding", symbol)? {
                     fields.push((
@@ -5782,7 +5866,10 @@ impl Decoder {
                 check_fields(&record, &["as", "type", "source", "field", "body"])?;
                 let product_type = self.decode_type(required(&record, "type")?)?;
                 let source = Box::new(self.decode_expression(required(&record, "source")?)?);
-                let field = parse_name(&record, "field")?;
+                let nominal = matches!(
+                    product_type,
+                    AuthoredType::Named { .. } | AuthoredType::Applied { .. }
+                );
                 let mut edges = self.ordered_record_edges("expression.owned-binding", symbol)?;
                 if edges.len() != 1 {
                     return Err(field_error(
@@ -5793,7 +5880,12 @@ impl Decoder {
                     ));
                 }
                 let edge = edges.remove(0);
-                if parse_name(&edge.record, "field-name")? != field {
+                if if nominal {
+                    self.parse_field_reference(&edge.record, "field-name")?
+                        != self.parse_field_reference(&record, "field")?
+                } else {
+                    parse_name(&edge.record, "field-name")? != parse_name(&record, "field")?
+                } {
                     return Err(field_error(
                         &edge.record,
                         "field-name",
@@ -5807,10 +5899,22 @@ impl Decoder {
                     declared_type: Some(self.decode_type(required(&edge.record, "type")?)?),
                 };
                 let body = Box::new(self.decode_expression(required(&record, "body")?)?);
+                if nominal {
+                    return Ok(AuthoredExpression {
+                        symbol: Some(symbol.to_owned()),
+                        operation: AuthoredExpressionOperation::BorrowOwnedRecordField {
+                            record_type: product_type,
+                            source,
+                            field: self.parse_field_reference(&record, "field")?,
+                            binding: Box::new(binding),
+                            body,
+                        },
+                    });
+                }
                 AuthoredExpressionOperation::BorrowOwnedField {
                     product_type,
                     source,
-                    field,
+                    field: parse_name(&record, "field")?,
                     binding: Box::new(binding),
                     body,
                 }
@@ -6258,6 +6362,8 @@ fn commitment_codec_identity(intent: &[u8]) -> &'static str {
     {
         // Freeze the actual codec34 fallback used by these existing generations.
         "lkjscript-authored-change-codec-34"
+    } else if intent.starts_with(b"LKJACR35") {
+        "lkjscript-authored-change-codec-35"
     } else {
         // Retain the existing fallback; do not infer identities from unknown/future magics.
         AUTHORED_CHANGE_CODEC_IDENTITY

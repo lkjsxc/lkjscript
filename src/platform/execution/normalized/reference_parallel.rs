@@ -171,6 +171,18 @@ impl ReferenceState<'_> {
                 }
                 Ok(true)
             }
+            TypeForm::Named { .. } | TypeForm::Applied { .. } if self.schema.is_owned_type(ty) => {
+                let record = self.schema.owned_record_layout(ty).ok_or_else(|| {
+                    reference_type_error("structured result has no exact owned nominal layout")
+                })?;
+                for argument in record.arguments.iter() {
+                    self.parallel_transfer_type(*argument, depth + 1, nodes)?;
+                }
+                for field in record.fields.iter() {
+                    self.parallel_transfer_type(field.ty, depth + 1, nodes)?;
+                }
+                Ok(true)
+            }
             _ if self.schema.transferable_types.contains(&ty) => Ok(false),
             _ => Err(reference_type_error(
                 "structured result requires closed data or owned memory",

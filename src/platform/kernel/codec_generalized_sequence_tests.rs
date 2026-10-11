@@ -33,7 +33,7 @@ fn indexed_sequence_operations_require_graph31_in_independently_encoded_envelope
     ] {
         let record = OwnerRecord::Expression(ExpressionRecord::new(id, operation).unwrap());
         let (digest, bytes) = encode_owner(&record).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOWN31");
+        assert_eq!(&bytes[..8], b"LKJOWN32");
         assert_eq!(
             decode_owner(&bytes, record.owner(), record.kind(), digest).unwrap(),
             record

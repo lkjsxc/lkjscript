@@ -57,6 +57,7 @@ struct Closing<'a, 'b> {
     templates: Arc<[NormalizedFunction]>,
     functions: Vec<NormalizedFunction>,
     implementations: BTreeMap<DeclarationReference, &'a OwnedImplementation>,
+    owned_records: BTreeSet<DeclarationReference>,
     targets: BTreeMap<DeclarationReference, FunctionIndex>,
     instances: BTreeMap<Application, FunctionIndex>,
     normalized: BTreeMap<AppliedWitness, NormalizedImplementationArgument>,
@@ -145,7 +146,7 @@ impl Closing<'_, '_> {
                 let arguments = self.arguments(type_arguments, types)?;
                 let mut closed = BTreeMap::new();
                 for ty in &arguments {
-                    if !matches!(
+                    let owned = matches!(
                         self.types.get(ty).map(|t| &t.form),
                         Some(
                             TypeForm::ByteBuffer
@@ -154,8 +155,10 @@ impl Closing<'_, '_> {
                                 | TypeForm::OwnedChoice { .. }
                                 | TypeForm::OwnedSequence { .. }
                         )
-                    ) || !instantiated_type(self.types, *ty, &mut closed, 0, self.work)?
-                    {
+                    ) || matches!(self.types.get(ty).map(|t| &t.form),
+                        Some(TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. })
+                            if self.owned_records.contains(declaration));
+                    if !owned || !instantiated_type(self.types, *ty, &mut closed, 0, self.work)? {
                         return Err(missing());
                     }
                 }
@@ -654,8 +657,19 @@ pub(super) fn close(
         return Ok(());
     }
     let mut implementations = BTreeMap::new();
+    let mut owned_records = BTreeSet::new();
     for ((package, owner), unit) in units {
         step(work)?;
+        if matches!(unit.payload, CompilationPayload::OwnedRecord { .. }) {
+            let OwnerKey::Declaration(declaration) = owner else {
+                return Err(missing());
+            };
+            work.node::<DeclarationReference>()?;
+            owned_records.insert(DeclarationReference {
+                package: *package,
+                declaration: *declaration,
+            });
+        }
         if let CompilationPayload::OwnedImplementation(i) = &unit.payload {
             let OwnerKey::Declaration(declaration) = owner else {
                 return Err(missing());
@@ -694,6 +708,7 @@ pub(super) fn close(
         templates: Arc::clone(&program.functions),
         functions: program.functions.to_vec(),
         implementations,
+        owned_records,
         targets,
         instances: BTreeMap::new(),
         normalized: BTreeMap::new(),
@@ -1024,6 +1039,7 @@ mod tests {
             templates: Arc::from([]),
             functions: Vec::new(),
             implementations,
+            owned_records: BTreeSet::new(),
             targets: BTreeMap::new(),
             instances: BTreeMap::new(),
             normalized: BTreeMap::new(),

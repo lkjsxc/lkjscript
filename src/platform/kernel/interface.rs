@@ -30,13 +30,20 @@ pub enum PackageInterfaceRecord {
     Requirement(RequirementRecord),
     Port(PackageInterfacePort),
     RequirementParameter(super::RequirementParameterRecord),
+    /// Exact private layout evidence. Its presence grants no authored reference or lookup access.
+    RepresentationDeclaration(PackageInterfaceDeclaration),
 }
 
 impl PackageInterfaceRecord {
     pub(crate) fn project_public(canonical: &OwnerRecord) -> Result<Option<Self>, Diagnostic> {
         Ok(Some(match canonical {
             OwnerRecord::Declaration(record) => {
-                Self::Declaration(PackageInterfaceDeclaration::project(record)?)
+                let projected = PackageInterfaceDeclaration::project(record)?;
+                if record.visibility == DeclarationVisibility::Public {
+                    Self::Declaration(projected)
+                } else {
+                    Self::RepresentationDeclaration(projected)
+                }
             }
             OwnerRecord::TypeParameter(record) => Self::TypeParameter(record.clone()),
             OwnerRecord::EffectParameter(record) => Self::EffectParameter(record.clone()),
@@ -64,7 +71,7 @@ impl PackageInterfaceRecord {
 
     pub fn header(&self) -> OwnerHeader {
         match self {
-            Self::Declaration(record) => record.header,
+            Self::Declaration(record) | Self::RepresentationDeclaration(record) => record.header,
             Self::TypeParameter(record) => record.header,
             Self::EffectParameter(record) => record.header,
             Self::RequirementParameter(record) => record.header,
@@ -79,7 +86,9 @@ impl PackageInterfaceRecord {
 
     pub fn type_roots(&self) -> Vec<TypeObjectDigest> {
         match self {
-            Self::Declaration(record) => record.type_roots(),
+            Self::Declaration(record) | Self::RepresentationDeclaration(record) => {
+                record.type_roots()
+            }
             Self::Field(record) => vec![record.ty],
             Self::Case(record) => record.payload.into_iter().collect(),
             Self::Operation(record) => vec![record.result],
@@ -95,6 +104,21 @@ impl PackageInterfaceRecord {
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
         match self {
             Self::Declaration(record) => record.validate_local(),
+            Self::RepresentationDeclaration(record) => {
+                if !matches!(
+                    record.payload,
+                    PackageInterfaceDeclarationPayload::Record { .. }
+                        | PackageInterfaceDeclarationPayload::Variant { .. }
+                        | PackageInterfaceDeclarationPayload::OwnedRecord { .. }
+                ) {
+                    return Err(interface_error(
+                        DiagnosticClass::Semantic,
+                        "kernel_package_interface_representation",
+                        "private representation evidence requires a nominal layout",
+                    ));
+                }
+                record.validate_local()
+            }
             Self::RequirementParameter(record) => {
                 OwnerRecord::RequirementParameter(record.clone()).validate_local()
             }
@@ -123,7 +147,14 @@ pub struct PackageInterfaceDeclaration {
 
 impl PackageInterfaceDeclaration {
     fn project(record: &super::DeclarationRecord) -> Result<Self, Diagnostic> {
-        if record.visibility != DeclarationVisibility::Public {
+        if record.visibility != DeclarationVisibility::Public
+            && !matches!(
+                record.payload,
+                DeclarationPayload::Record { .. }
+                    | DeclarationPayload::Variant { .. }
+                    | DeclarationPayload::OwnedRecord { .. }
+            )
+        {
             return Err(interface_error(
                 DiagnosticClass::Corrupt,
                 "kernel_package_interface_visibility",
@@ -135,6 +166,13 @@ impl PackageInterfaceDeclaration {
                 fields,
                 type_parameters,
             } => PackageInterfaceDeclarationPayload::Record {
+                type_parameters: type_parameters.clone(),
+                fields: fields.clone(),
+            },
+            DeclarationPayload::OwnedRecord {
+                fields,
+                type_parameters,
+            } => PackageInterfaceDeclarationPayload::OwnedRecord {
                 type_parameters: type_parameters.clone(),
                 fields: fields.clone(),
             },
@@ -213,6 +251,7 @@ impl PackageInterfaceDeclaration {
             PackageInterfaceDeclarationPayload::OwnedImplementation(i) => i.type_roots(),
             PackageInterfaceDeclarationPayload::Constant { ty } => vec![*ty],
             PackageInterfaceDeclarationPayload::Record { .. }
+            | PackageInterfaceDeclarationPayload::OwnedRecord { .. }
             | PackageInterfaceDeclarationPayload::Variant { .. }
             | PackageInterfaceDeclarationPayload::Interface { .. }
             | PackageInterfaceDeclarationPayload::Component { .. } => Vec::new(),
@@ -221,6 +260,18 @@ impl PackageInterfaceDeclaration {
 
     fn validate_local(&self) -> Result<(), Diagnostic> {
         validate_header(self.header)?;
+        if self.header.contract_version < 32
+            && matches!(
+                self.payload,
+                PackageInterfaceDeclarationPayload::OwnedRecord { .. }
+            )
+        {
+            return Err(interface_error(
+                DiagnosticClass::Semantic,
+                "kernel_owned_record_generation",
+                "nominal owned record interfaces require Graph 32",
+            ));
+        }
         if self.header.contract_version < 29
             && matches!(&self.payload, PackageInterfaceDeclarationPayload::OwnedImplementation(i)
                 if !i.implementation_parameters.is_empty() || i.methods.iter().any(|m| !m.implementations.is_empty()))
@@ -286,6 +337,14 @@ impl PackageInterfaceDeclaration {
                 validate_ordered("variant type parameters", type_parameters)?;
                 validate_sorted("variant cases", cases, false)?;
                 OwnerKind::Variant
+            }
+            PackageInterfaceDeclarationPayload::OwnedRecord {
+                fields,
+                type_parameters,
+            } => {
+                validate_ordered("owned record type parameters", type_parameters)?;
+                validate_sorted("owned record fields", fields, true)?;
+                OwnerKind::OwnedRecord
             }
             PackageInterfaceDeclarationPayload::Interface { operations } => {
                 validate_sorted("interface operations", operations, false)?;
@@ -378,6 +437,10 @@ pub enum PackageInterfaceDeclarationPayload {
     Component {
         requirements: Vec<RequirementId>,
         ports: Vec<PortId>,
+    },
+    OwnedRecord {
+        type_parameters: Vec<TypeParameterId>,
+        fields: Vec<FieldId>,
     },
 }
 

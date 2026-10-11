@@ -81,6 +81,11 @@ grammar, authority boundaries and limits. [Guides](docs/guides/) explain authori
 [specifications](docs/spec/) define language semantics.
 [Security](docs/security.md) describes execution grants and trust boundaries.
 
+[Nominal owned records](docs/spec/owned-records.md) let a library expose an affine
+type while its defining module owns construction and field access. The standard
+[FIFO](docs/guides/native-owned-fifo.md) is the maintained consumer; current source
+acceptance and public availability are recorded separately in status.
+
 ## Inspect and change programs
 
 ```sh

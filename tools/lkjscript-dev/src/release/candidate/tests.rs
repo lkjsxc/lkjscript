@@ -50,8 +50,8 @@ fn terminal() -> Terminal {
         source_commit: "1".repeat(40),
         controller_source_commit: "1".repeat(40),
         tag: "v0.1.39".to_owned(),
-        acceptance_contract: "lkjscript-final-candidate-acceptance-7".to_owned(),
-        workload: "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-7"
+        acceptance_contract: "lkjscript-final-candidate-acceptance-8".to_owned(),
+        workload: "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-8"
             .to_owned(),
         target_triple: "x86_64-unknown-linux-musl".to_owned(),
         target_policy_sha256: target::policy_sha256().expect("current target policy"),
@@ -345,17 +345,17 @@ fn candidate_requires_native_public_proof_without_relabelling_the_old_contract()
 }
 
 #[test]
-fn candidate_terminal_rejects_pre_sequence_and_mixed_acceptance_generations_then_recovers() {
+fn candidate_terminal_rejects_pre_nominal_and_mixed_acceptance_generations_then_recovers() {
     let temporary = tempfile::tempdir().expect("contract fixtures");
     let path = temporary.path().join("terminal.json");
     let current = terminal();
     assert_eq!(
         current.acceptance_contract,
-        "lkjscript-final-candidate-acceptance-7"
+        "lkjscript-final-candidate-acceptance-8"
     );
     assert_eq!(
         current.workload,
-        "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-7"
+        "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-8"
     );
     write_terminal(&path, &current);
     assert!(read_terminal(&path).is_ok());
@@ -384,6 +384,11 @@ fn candidate_terminal_rejects_pre_sequence_and_mixed_acceptance_generations_then
         (7, 4),
         (3, 7),
         (7, 3),
+        (7, 7),
+        (7, 8),
+        (8, 7),
+        (6, 8),
+        (8, 6),
     ] {
         let mut predecessor = current.clone();
         predecessor.acceptance_contract =

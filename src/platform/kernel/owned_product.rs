@@ -15,7 +15,7 @@ pub(crate) fn require_generation(
     roots: Vec<TypeObjectDigest>,
     generation: u16,
 ) -> Result<(), Diagnostic> {
-    if generation >= 31 {
+    if generation >= 32 {
         return Ok(());
     }
     let mut pending = roots;
@@ -28,6 +28,11 @@ pub(crate) fn require_generation(
         let object = read
             .type_object(ty)?
             .ok_or_else(|| reject("missing graph-bound type"))?;
+        if generation < 32 && super::owned_record::is_owned(read, read.package_id(), ty)? {
+            return Err(super::owned_record::reject(
+                "nominal owned record type closure requires Graph 32",
+            ));
+        }
         if generation < 31 && requires_generalized_sequence_generation(read, ty, read.package_id())?
         {
             return Err(Diagnostic::new(
@@ -107,32 +112,14 @@ pub(crate) fn validate_in_scope(
         _ => "kernel_owned_product",
     };
     let reject = |message| Diagnostic::new(DiagnosticClass::Semantic, code, message);
-    // A digest first reached through a short path may occur on a longer path
-    // later. A plain visited set is not a depth proof for a shared type DAG.
-    let mut depths = BTreeMap::new();
-    let mut closure = vec![(ty, 0usize)];
-    while let Some((current, depth)) = closure.pop() {
-        read.validation_work()?;
-        if depth > contract::MAXIMUM_TYPE_DEPTH {
-            return Err(reject(
-                "owned product exceeds the structural type depth bound",
-            ));
+    // One path can cross both structural syntax and private nominal layouts.
+    // Keep the enclosing composite diagnostic while using the shared depth proof.
+    super::owned_record::validate_type_depth(read, ty, 0).map_err(|mut diagnostic| {
+        if diagnostic.code == "kernel_owned_record_depth" {
+            diagnostic.code = code.to_owned();
         }
-        if depths
-            .get(&current)
-            .is_some_and(|previous| *previous >= depth)
-        {
-            continue;
-        }
-        depths.insert(current, depth);
-        let object = read
-            .type_object(current)?
-            .ok_or_else(|| reject("missing product type child"))?;
-        for child in object.child_types() {
-            read.validation_work()?;
-            closure.push((child, depth + 1));
-        }
-    }
+        diagnostic
+    })?;
     let mut pending = vec![(ty, 0)];
     let mut seen = BTreeSet::new();
     while let Some((ty, depth)) = pending.pop() {
@@ -171,6 +158,16 @@ pub(crate) fn validate_in_scope(
                 .type_object(child_type)?
                 .ok_or_else(|| reject("missing owned product field type"))?;
             match child.form {
+                TypeForm::Named { .. } | TypeForm::Applied { .. }
+                    if super::owned_record::is_owned(
+                        read,
+                        scope.map_or(read.package_id(), |s| s.package),
+                        child_type,
+                    )? =>
+                {
+                    super::owned_record::validate_application(read, child_type, scope)?;
+                    owned = true;
+                }
                 TypeForm::OwnedProduct { .. }
                 | TypeForm::OwnedChoice { .. }
                 | TypeForm::OwnedSequence { .. } => {

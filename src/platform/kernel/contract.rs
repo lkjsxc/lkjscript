@@ -1,7 +1,8 @@
 //! Supported graph generations, current type-object codec, and hostile-decoder limits.
 
-pub const GRAPH_CONTRACT_IDENTITY: &str = "lkjscript-meaning-graph-31";
-pub const GRAPH_CONTRACT_VERSION: u16 = 31;
+pub const GRAPH_CONTRACT_IDENTITY: &str = "lkjscript-meaning-graph-32";
+pub const GRAPH_CONTRACT_VERSION: u16 = 32;
+pub const OWNED_RECORD_GRAPH_CONTRACT_VERSION: u16 = 32;
 pub const GENERALIZED_SEQUENCE_GRAPH_CONTRACT_VERSION: u16 = 31;
 pub const SHARE_GRAPH_CONTRACT_VERSION: u16 = 30;
 pub const COMPOSABLE_IMPLEMENTATION_GRAPH_CONTRACT_VERSION: u16 = 29;
@@ -22,6 +23,7 @@ pub const REQUIREMENT_GRAPH_CONTRACT_VERSION: u16 = 15;
 pub const PREDECESSOR_GRAPH_CONTRACT_VERSION: u16 = 14;
 pub const fn supported_graph_contract(version: u16) -> bool {
     version == GRAPH_CONTRACT_VERSION
+        || version == GENERALIZED_SEQUENCE_GRAPH_CONTRACT_VERSION
         || version == SHARE_GRAPH_CONTRACT_VERSION
         || version == COMPOSABLE_IMPLEMENTATION_GRAPH_CONTRACT_VERSION
         || version == IMPLEMENTATION_SCHEME_GRAPH_CONTRACT_VERSION
@@ -76,7 +78,8 @@ pub const NOMINAL_APPLICATION_ENVELOPE_DOMAIN: &str =
     "lkjscript.kernel.nominal-application-envelope.v1";
 pub const SEMANTIC_STATE_CONTRACT_VERSION: u16 = 1;
 
-pub const OWNER_MAGIC: [u8; 8] = *b"LKJOWN31";
+pub const OWNER_MAGIC: [u8; 8] = *b"LKJOWN32";
+pub const GENERALIZED_SEQUENCE_OWNER_MAGIC: [u8; 8] = *b"LKJOWN31";
 pub const SHARE_OWNER_MAGIC: [u8; 8] = *b"LKJOWN30";
 pub const COMPOSABLE_IMPLEMENTATION_OWNER_MAGIC: [u8; 8] = *b"LKJOWN29";
 pub const IMPLEMENTATION_SCHEME_OWNER_MAGIC: [u8; 8] = *b"LKJOWN28";
@@ -99,7 +102,8 @@ pub const ROOT_MAGIC: [u8; 8] = *b"LKJSMR01";
 pub const DEPENDENCY_MAGIC: [u8; 8] = *b"LKJDEP14";
 pub const RETIREMENT_MAGIC: [u8; 8] = *b"LKJRET14";
 
-pub const OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v31";
+pub const OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v32";
+pub const GENERALIZED_SEQUENCE_OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v31";
 pub const SHARE_OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v30";
 pub const COMPOSABLE_IMPLEMENTATION_OWNER_ENVELOPE_DOMAIN: &str =
     "lkjscript.kernel.owner-envelope.v29";

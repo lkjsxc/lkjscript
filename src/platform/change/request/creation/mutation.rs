@@ -262,7 +262,11 @@ pub(in crate::platform::change::request) fn lower_mutation<
                     "use contract requires a parameter owner",
                 ));
             };
+            let changed = parameter.use_mode != *use_mode;
             parameter.use_mode = *use_mode;
+            if changed {
+                promote_parameter_signature(lowerer, owner)?;
+            }
             promote_borrowed_task_parameter(lowerer, owner)?;
             Ok(())
         }
@@ -272,7 +276,11 @@ pub(in crate::platform::change::request) fn lower_mutation<
             let OwnerRecord::Parameter(record) = lowerer.candidate_mut(owner)? else {
                 return Err(mutation_kind("parameter", owner));
             };
+            let changed = record.ty != ty;
             record.ty = ty;
+            if changed {
+                promote_parameter_signature(lowerer, owner)?;
+            }
             promote_borrowed_task_parameter(lowerer, owner)?;
             Ok(())
         }
@@ -360,7 +368,9 @@ fn lower_add_field<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
             OwnerKey::Declaration(declaration),
         ));
     };
-    let DeclarationPayload::Record { fields, .. } = &mut parent.payload else {
+    let (DeclarationPayload::Record { fields, .. }
+    | DeclarationPayload::OwnedRecord { fields, .. }) = &mut parent.payload
+    else {
         return Err(mutation_kind("record declaration", parent.header.owner));
     };
     fields.push(field_id);
@@ -471,6 +481,9 @@ fn lower_add_type_parameter<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + 
         DeclarationPayload::Record {
             type_parameters, ..
         }
+        | DeclarationPayload::OwnedRecord {
+            type_parameters, ..
+        }
         | DeclarationPayload::Variant {
             type_parameters, ..
         } => type_parameters.push(parameter_id),
@@ -561,6 +574,33 @@ fn lower_add_parameter<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Size
         resource_requirement,
     }))?;
     promote_borrowed_task_parameter(lowerer, OwnerKey::Parameter(parameter_id))
+}
+
+/// A changed child parameter contract also changes its enclosing signature's
+/// generation, including scalar-result functions whose own payload is identical.
+fn promote_parameter_signature<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+    lowerer: &mut AuthoredLowerer<'_, B, W>,
+    owner: OwnerKey,
+) -> Result<(), Diagnostic> {
+    let OwnerRecord::Parameter(parameter) = lowerer.candidate_mut(owner)? else {
+        return Err(mutation_kind("parameter", owner));
+    };
+    let ParameterParent::Function(declaration) = parameter.parent else {
+        return Ok(());
+    };
+    let OwnerRecord::Declaration(parent) =
+        lowerer.candidate_mut(OwnerKey::Declaration(declaration))?
+    else {
+        return Err(mutation_kind(
+            "callable declaration",
+            OwnerKey::Declaration(declaration),
+        ));
+    };
+    // A callable owns its complete signature even when its own payload (result,
+    // body and parameter IDs) is unchanged. Authenticated retry encoding is
+    // applied to changed owners at finalization, as for every authored edit.
+    parent.header.contract_version = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+    Ok(())
 }
 
 /// Extending an existing callable's read contract requires both signature owners

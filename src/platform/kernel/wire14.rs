@@ -375,6 +375,11 @@ impl TryFrom<super::DeclarationPayload> for DeclarationPayload14 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(value: super::DeclarationPayload) -> Result<Self, Self::Error> {
         Ok(match value {
+            super::DeclarationPayload::OwnedRecord { .. } => {
+                return Err(super::owned_record::reject(
+                    "nominal owned records require Graph 32",
+                ));
+            }
             super::DeclarationPayload::OwnedContract(_)
             | super::DeclarationPayload::OwnedImplementation(_) => return Err(extension()),
             super::DeclarationPayload::Record {
@@ -638,6 +643,13 @@ impl TryFrom<super::ExpressionOperation> for ExpressionOperation14 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(value: super::ExpressionOperation) -> Result<Self, Self::Error> {
         Ok(match value {
+            super::ExpressionOperation::PackOwnedRecord { .. }
+            | super::ExpressionOperation::UnpackOwnedRecord { .. }
+            | super::ExpressionOperation::BorrowOwnedRecordField { .. } => {
+                return Err(super::owned_record::reject(
+                    "nominal owned operations require Graph 32",
+                ));
+            }
             super::ExpressionOperation::SequenceGet { .. }
             | super::ExpressionOperation::SequenceReplace { .. } => {
                 return Err(super::wire30::generalized_sequence_extension());
@@ -823,6 +835,11 @@ impl TryFrom<super::PackageInterfaceRecord> for PackageInterfaceRecord14 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(value: super::PackageInterfaceRecord) -> Result<Self, Self::Error> {
         Ok(match value {
+            super::PackageInterfaceRecord::RepresentationDeclaration(_) => {
+                return Err(super::owned_record::reject(
+                    "private representation evidence requires Graph 32",
+                ));
+            }
             super::PackageInterfaceRecord::Declaration(value) => {
                 Self::Declaration(value.try_into()?)
             }
@@ -908,6 +925,11 @@ impl TryFrom<super::PackageInterfaceDeclarationPayload> for PackageInterfaceDecl
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(value: super::PackageInterfaceDeclarationPayload) -> Result<Self, Self::Error> {
         Ok(match value {
+            super::PackageInterfaceDeclarationPayload::OwnedRecord { .. } => {
+                return Err(super::owned_record::reject(
+                    "nominal owned records require Graph 32",
+                ));
+            }
             super::PackageInterfaceDeclarationPayload::OwnedContract(_)
             | super::PackageInterfaceDeclarationPayload::OwnedImplementation(_) => {
                 return Err(extension());

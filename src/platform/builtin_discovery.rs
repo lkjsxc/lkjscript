@@ -130,11 +130,12 @@ pub(crate) fn parse_interface_owner_kind(value: &str) -> Result<OwnerKind, Diagn
     }
 }
 
-pub(crate) const fn interface_owner_kinds() -> [OwnerKind; 16] {
+pub(crate) const fn interface_owner_kinds() -> [OwnerKind; 17] {
     [
         OwnerKind::OwnedContract,
         OwnerKind::OwnedImplementation,
         OwnerKind::Record,
+        OwnerKind::OwnedRecord,
         OwnerKind::Variant,
         OwnerKind::Interface,
         OwnerKind::External,
@@ -183,6 +184,7 @@ pub(crate) fn query_interface_owners(
         .interface_owners
         .iter()
         .filter(|(owner, _value)| resume.is_none_or(|resume| **owner > resume))
+        .filter(|(_, value)| public_interface_owner(standard, &value.record))
         .filter(|(_, value)| selector_matches(selector, &value.record))
         .collect::<Vec<_>>();
     let matched = matching.len();
@@ -252,16 +254,22 @@ pub(crate) fn inspect_interface_owner(
             ),
         ));
     }
-    let value = standard.interface_owners.get(&owner).ok_or_else(|| {
-        discovery_error(
-            DiagnosticClass::Source,
-            "builtin_owner_missing",
-            format!(
-                "built-in package interface has no exact {} '{owner}'",
-                kind.name()
-            ),
-        )
-    })?;
+    let value = standard
+        .interface_owners
+        .get(&owner)
+        .filter(|value| {
+            value.record.header().kind == kind && public_interface_owner(standard, &value.record)
+        })
+        .ok_or_else(|| {
+            discovery_error(
+                DiagnosticClass::Source,
+                "builtin_owner_missing",
+                format!(
+                    "built-in package interface has no exact {} '{owner}'",
+                    kind.name()
+                ),
+            )
+        })?;
     let mut records = vec![owner_summary(standard.package, &value.record)?];
     append_owner_detail(standard, &value.record, &mut records)?;
     Ok(records)
@@ -440,6 +448,10 @@ fn append_owner_detail(
             PackageInterfaceDeclarationPayload::Record {
                 fields,
                 type_parameters,
+            }
+            | PackageInterfaceDeclarationPayload::OwnedRecord {
+                fields,
+                type_parameters,
             } => {
                 for (index, parameter) in type_parameters.iter().enumerate() {
                     append_child_owner(
@@ -451,7 +463,14 @@ fn append_owner_detail(
                 }
                 records.push(declaration_detail(
                     declaration,
-                    "record",
+                    if matches!(
+                        declaration.payload,
+                        PackageInterfaceDeclarationPayload::OwnedRecord { .. }
+                    ) {
+                        "owned-record"
+                    } else {
+                        "record"
+                    },
                     fields.len(),
                     None,
                 ));
@@ -628,6 +647,13 @@ fn append_owner_detail(
                 }
             }
         },
+        PackageInterfaceRecord::RepresentationDeclaration(_) => {
+            return Err(discovery_error(
+                DiagnosticClass::Source,
+                "builtin_owner_missing",
+                "private representation evidence is outside the public owner discovery surface",
+            ));
+        }
         PackageInterfaceRecord::TypeParameter(_)
         | PackageInterfaceRecord::EffectParameter(_)
         | PackageInterfaceRecord::RequirementParameter(_)
@@ -959,7 +985,8 @@ fn append_child_detail(
             });
             append_type(standard, "function", port.function_type, records, 0)?;
         }
-        PackageInterfaceRecord::Declaration(_) => {
+        PackageInterfaceRecord::Declaration(_)
+        | PackageInterfaceRecord::RepresentationDeclaration(_) => {
             return Err(discovery_error(
                 DiagnosticClass::Corrupt,
                 "builtin_interface_child_kind",
@@ -1217,9 +1244,40 @@ fn selector_matches(selector: &BuiltinOwnerSelector, record: &PackageInterfaceRe
             .is_none_or(|parent| owner_parent(record) == Some(parent))
 }
 
+fn public_interface_owner(
+    standard: &PackageInterfaceView<'_>,
+    record: &PackageInterfaceRecord,
+) -> bool {
+    let layout_field = matches!(record, PackageInterfaceRecord::Field(_));
+    let mut current = record;
+    for _ in 0..=standard.interface_owners.len() {
+        if matches!(
+            current,
+            PackageInterfaceRecord::RepresentationDeclaration(_)
+        ) {
+            return false;
+        }
+        if layout_field
+            && matches!(current, PackageInterfaceRecord::Declaration(declaration)
+                if matches!(declaration.payload, PackageInterfaceDeclarationPayload::OwnedRecord { .. }))
+        {
+            return false;
+        }
+        let Some(parent) = owner_parent(current) else {
+            return true;
+        };
+        let Some(value) = standard.interface_owners.get(&parent) else {
+            return false;
+        };
+        current = &value.record;
+    }
+    false
+}
+
 fn owner_name(record: &PackageInterfaceRecord) -> &str {
     match record {
-        PackageInterfaceRecord::Declaration(record) => record.name.as_str(),
+        PackageInterfaceRecord::Declaration(record)
+        | PackageInterfaceRecord::RepresentationDeclaration(record) => record.name.as_str(),
         PackageInterfaceRecord::TypeParameter(record) => record.name.as_str(),
         PackageInterfaceRecord::RequirementParameter(record) => record.name.as_str(),
         PackageInterfaceRecord::EffectParameter(record) => record.name.as_str(),
@@ -1234,7 +1292,8 @@ fn owner_name(record: &PackageInterfaceRecord) -> &str {
 
 fn owner_parent(record: &PackageInterfaceRecord) -> Option<OwnerKey> {
     match record {
-        PackageInterfaceRecord::Declaration(_) => None,
+        PackageInterfaceRecord::Declaration(_)
+        | PackageInterfaceRecord::RepresentationDeclaration(_) => None,
         PackageInterfaceRecord::TypeParameter(record) => {
             Some(OwnerKey::Declaration(record.declaration))
         }
@@ -1558,13 +1617,137 @@ mod tests {
         let standard = BuiltinStandard::load().expect("built-in standard");
         let mut observed = BTreeSet::new();
         for (owner, value) in &standard.interface_owners {
+            if !public_interface_owner(&standard.into(), &value.record) {
+                assert_eq!(
+                    inspect_builtin_owner(standard, value.kind(), *owner)
+                        .expect_err("private layout is not a public owner")
+                        .code,
+                    "builtin_owner_missing"
+                );
+                continue;
+            }
             let detail = inspect_builtin_owner(standard, value.kind(), *owner)
                 .expect("exact interface owner detail");
             assert!(!detail.is_empty());
             assert!(detail.len() < 10_000);
             assert!(observed.insert(*owner));
         }
-        assert_eq!(observed.len(), standard.interface_owners.len());
+        assert_eq!(
+            observed.len(),
+            query_builtin_owners(
+                standard,
+                &BuiltinOwnerSelector::default(),
+                10_000,
+                4 * 1024 * 1024,
+                None
+            )
+            .expect("all public owners")
+            .matched
+        );
+    }
+
+    #[test]
+    fn private_layouts_and_their_fields_are_hidden_while_public_owned_records_are_descriptive() {
+        let mut standard = BuiltinStandard::load().expect("built-in standard").clone();
+        let (owner, mut declaration) = standard
+            .interface_owners
+            .iter()
+            .find_map(|(owner, value)| match &value.record {
+                PackageInterfaceRecord::Declaration(declaration)
+                    if matches!(&declaration.payload, PackageInterfaceDeclarationPayload::Record { fields, .. } if !fields.is_empty()) =>
+                {
+                    Some((*owner, declaration.clone()))
+                }
+                _ => None,
+            })
+            .expect("public record with fields");
+        let PackageInterfaceDeclarationPayload::Record {
+            fields,
+            type_parameters,
+        } = declaration.payload
+        else {
+            unreachable!();
+        };
+        let field = OwnerKey::Field(fields[0]);
+        declaration.header.kind = OwnerKind::OwnedRecord;
+        declaration.payload = PackageInterfaceDeclarationPayload::OwnedRecord {
+            fields,
+            type_parameters,
+        };
+        standard.interface_owners.get_mut(&owner).unwrap().record =
+            PackageInterfaceRecord::RepresentationDeclaration(declaration.clone());
+        let selector = BuiltinOwnerSelector {
+            parent: Some(owner),
+            ..BuiltinOwnerSelector::default()
+        };
+        assert_eq!(
+            query_builtin_owners(&standard, &selector, 100, 64 * 1024, None)
+                .unwrap()
+                .matched,
+            0
+        );
+        for (kind, key) in [(OwnerKind::OwnedRecord, owner), (OwnerKind::Field, field)] {
+            assert_eq!(
+                inspect_builtin_owner(&standard, kind, key)
+                    .unwrap_err()
+                    .code,
+                "builtin_owner_missing"
+            );
+        }
+        standard.interface_owners.get_mut(&owner).unwrap().record =
+            PackageInterfaceRecord::Declaration(declaration);
+        let field_selector = BuiltinOwnerSelector {
+            kind: Some(OwnerKind::Field),
+            parent: Some(owner),
+            ..BuiltinOwnerSelector::default()
+        };
+        assert_eq!(
+            query_builtin_owners(&standard, &field_selector, 100, 64 * 1024, None)
+                .unwrap()
+                .matched,
+            0
+        );
+        let named_field_selector = BuiltinOwnerSelector {
+            name: Some(owner_name(&standard.interface_owners[&field].record).to_owned()),
+            ..field_selector
+        };
+        assert_eq!(
+            query_builtin_owners(&standard, &named_field_selector, 100, 64 * 1024, None)
+                .unwrap()
+                .matched,
+            0
+        );
+        assert_eq!(
+            inspect_builtin_owner(&standard, OwnerKind::Field, field)
+                .unwrap_err()
+                .code,
+            "builtin_owner_missing"
+        );
+        assert_eq!(
+            parse_interface_owner_kind("owned_record").unwrap(),
+            OwnerKind::OwnedRecord
+        );
+        let detail = inspect_builtin_owner(&standard, OwnerKind::OwnedRecord, owner).unwrap();
+        assert!(detail.iter().any(|record| {
+            record.operation == "declaration"
+                && record
+                    .fields
+                    .iter()
+                    .any(|(name, value)| name == "kind" && value == "owned-record")
+        }));
+        assert!(detail.iter().any(|record| {
+            record.operation == "owner"
+                && record
+                    .fields
+                    .iter()
+                    .any(|(name, value)| name == "id" && value == &field.to_string())
+        }));
+        assert_eq!(
+            inspect_builtin_owner(&standard, OwnerKind::Record, owner)
+                .unwrap_err()
+                .code,
+            "builtin_owner_missing"
+        );
     }
 
     #[test]

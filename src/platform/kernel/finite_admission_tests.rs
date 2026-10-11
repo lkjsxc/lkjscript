@@ -66,6 +66,7 @@ fn fixture() -> KernelSnapshot {
         },
         owners: BTreeMap::new(),
         types: BTreeMap::new(),
+        representation_dependencies: BTreeMap::new(),
         dependency_interfaces: BTreeMap::new(),
         dependency_types: BTreeMap::new(),
         blobs: BTreeMap::new(),

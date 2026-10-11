@@ -8,6 +8,62 @@ use crate::platform::execution::{ExecutionControl, ExecutionError};
 use crate::platform::kernel::{Name, TypeForm};
 
 impl Value {
+    pub(in super::super) fn owned_record_metadata(
+        &self,
+        program: &NormalizedProgram,
+        domain: ValueOrigin,
+        selected: super::super::super::value::RecordLayoutIndex,
+        offset: u32,
+        control: &ExecutionControl,
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+    ) -> Result<Self, ExecutionError> {
+        control.check()?;
+        if self.origin != program.value_origin
+            || self.class != Class::Memory
+            || selected.1 != program.value_origin
+        {
+            return Err(admission_error(
+                "nominal metadata requires this program's checked owner",
+            ));
+        }
+        let NormalizedValue::OwnedProduct(token) = &self.raw else {
+            return Err(admission_error(
+                "nominal metadata requires an owned record token",
+            ));
+        };
+        token.validate_admission(program.value_origin)?;
+        let exact = program
+            .owned_record_layout(token.ty())
+            .ok_or_else(|| admission_error("nominal metadata has no exact owned layout"))?;
+        let selector = program
+            .records
+            .get(selected.0 as usize)
+            .filter(|layout| layout.owned && layout.declaration == exact.declaration)
+            .ok_or_else(|| admission_error("nominal metadata selects a foreign declaration"))?;
+        let field = exact
+            .fields
+            .get(offset as usize)
+            .filter(|field| {
+                selector
+                    .fields
+                    .get(offset as usize)
+                    .is_some_and(|selected| selected.reference == field.reference)
+            })
+            .ok_or_else(|| admission_error("nominal metadata selects a foreign field"))?;
+        if !program.ordinary_types.contains(&field.ty) {
+            return Err(admission_error(
+                "nominal metadata cannot expose an owning child",
+            ));
+        }
+        let raw = token.read_metadata(domain, offset as usize, control, reserve)?;
+        control.check()?;
+        Ok(Self {
+            raw,
+            origin: program.value_origin,
+            class: Class::Free,
+            borrow: None,
+        })
+    }
     pub(in super::super) fn sequence_item(
         &self,
         program: &NormalizedProgram,

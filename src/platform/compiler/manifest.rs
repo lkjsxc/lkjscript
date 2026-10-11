@@ -214,6 +214,7 @@ impl CompilationManifest {
                     | (29, 29, 24)
                     | (30, 30, 25)
                     | (31, 31, 26)
+                    | (32, 32, 27)
             )
         {
             return Err(manifest_error(
@@ -275,7 +276,7 @@ mod tests {
     use crate::platform::persistent_map::{MapWork, MemoryPageStore, PersistentMap};
 
     #[test]
-    fn shareable_manifest_generation_round_trips_and_rejects_mixed_contracts() {
+    fn current_manifest_generation_round_trips_and_rejects_mixed_contracts() {
         let mut pages = MemoryPageStore::default();
         let units = PersistentMap::empty(&mut pages, &mut MapWork::default())
             .unwrap()
@@ -294,7 +295,8 @@ mod tests {
             optimization: OptimizationPolicy::DeterministicBaseline,
             units,
         };
-        for (graph, compiler, bytecode) in [(29, 29, 24), (30, 30, 25), (31, 31, 26)] {
+        for (graph, compiler, bytecode) in [(29, 29, 24), (30, 30, 25), (31, 31, 26), (32, 32, 27)]
+        {
             manifest.graph_contract_version = graph;
             manifest.compiler_contract_version = compiler;
             manifest.bytecode_contract_version = bytecode;
@@ -313,6 +315,9 @@ mod tests {
             (31, 30, 25),
             (30, 31, 26),
             (31, 31, 25),
+            (31, 32, 27),
+            (32, 31, 26),
+            (32, 32, 26),
         ] {
             manifest.graph_contract_version = graph;
             manifest.compiler_contract_version = compiler;

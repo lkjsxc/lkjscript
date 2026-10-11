@@ -2934,6 +2934,47 @@ fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
         logical.owners.len() as u64,
         logical.root.owners.content(),
     );
+    // Exercise actual owned-record authoring before using the complete graph as
+    // the independent closure oracle. The private storage field must retire with
+    // its defining record and module, just like every other owned member.
+    let fixture = GraphRepository::create(
+        &temporary.path().join("owned-record-fixture"),
+        &logical,
+        None,
+    )
+    .expect("create fixture for owned-record authoring");
+    let owned_record = AuthoredChangeSet {
+        base: fixture.current.head.revision,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
+        changes: vec![AuthoredChange::CreateOwnedRecord {
+            symbol: "$owned_record".to_owned(),
+            module: ModuleSelector::Id { module },
+            name: Name::new("OwnedStorage").unwrap(),
+            visibility: DeclarationVisibility::Private,
+            type_parameters: Vec::new(),
+            fields: vec![AuthoredField {
+                symbol: "$owned_storage".to_owned(),
+                name: Name::new("cell").unwrap(),
+                ty: AuthoredType::OwnedI64Cell {},
+            }],
+        }],
+    };
+    let owned_record = fixture
+        .repository
+        .prepare_authored_change(&owned_record, PublicationOptions::default())
+        .expect("author valid owned record storage");
+    fixture
+        .repository
+        .publish(&owned_record.publication)
+        .expect("publish owned-record fixture");
+    logical = fixture
+        .repository
+        .view_current()
+        .expect("open authored fixture")
+        .reconstruct_full_oracle()
+        .expect("reconstruct independently validated fixture")
+        .value;
     let expected = logical.owners.keys().copied().collect::<BTreeSet<_>>();
     assert_eq!(
         logical
@@ -8489,6 +8530,7 @@ fn empty_snapshot(seed: &[u8]) -> crate::platform::kernel::KernelSnapshot {
         },
         owners: std::collections::BTreeMap::new(),
         types: std::collections::BTreeMap::new(),
+        representation_dependencies: std::collections::BTreeMap::new(),
         dependency_interfaces: std::collections::BTreeMap::new(),
         dependency_types: std::collections::BTreeMap::new(),
         blobs: std::collections::BTreeMap::new(),

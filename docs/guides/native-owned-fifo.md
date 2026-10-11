@@ -2,40 +2,42 @@
 
 The current standard package defines `fifo-empty`, `fifo-length`, `fifo-push`,
 `fifo-pop`, `fifo-front` and `fifo-discard` as ordinary pure generic graph
-functions. They add no FIFO-specific host intrinsic, opcode, capability or
-scheduler. Their accepted graph is the meaning authority; the literal
+functions over the public nominal owned record `Fifo<T: Owned>`. They add no
+FIFO-specific host intrinsic, opcode, capability or scheduler. Their accepted
+graph is the meaning authority; the literal
+[nominal migration request](../../packages/standard/requests/20261011-nominal-owned-fifo.lkjc)
+preserves the existing operation and fixed-test identities. The original
 [operation request](../../packages/standard/requests/20261011-owned-fifo.lkjc)
 and [fixed-test request](../../packages/standard/requests/20261011-owned-fifo-tests.lkjc)
-retain the reviewed native authoring inputs.
+retain their earlier structural authoring inputs.
 
 These are development-source additions, not a claim about an older frozen
 executable. [Status](../status.md) owns source acceptance and publication.
 
-## Exact shape and operations
+## Exact type and operations
 
-For an eligible `T: Owned`, the queue type is the structural owned product:
+For an eligible `T: Owned`, a native consumer names the standard queue type:
 
 ```lisp
-(owned-product
-  (field incoming (owned-sequence T))
-  (field outgoing (owned-sequence T)))
+(std::Fifo T)
 ```
 
-`Queue<T>` below is explanatory notation, not a new language type constructor.
-A concrete native consumer can give that exact shape a local `type-alias`.
-The representation is public, not an opaque nominal type. Any two correctly
-typed sequences have a defined logical order: the reverse of `outgoing`,
-followed by `incoming`. No cached count or hidden representation invariant can
-be forged through ordinary construction.
+The declaration belongs to the standard core module. Its two fields,
+`incoming: owned-sequence T` and `outgoing: owned-sequence T`, are private to
+that exact module. The logical order is the reverse of `outgoing`, followed
+by `incoming`. Consumers construct and inspect queues through the public
+functions. A structural product with similarly named fields has a different
+type and cannot be passed as a `Fifo<T>`, packed into one or relabeled as one.
+Imported consumers cannot unpack the private representation or borrow its fields.
 
 ```text
-fifo-empty<T: Owned>() -> Queue<T>
-fifo-length<T: Owned>(queue: borrow Queue<T>) -> I64
-fifo-push<T: Owned>(value: consume T, queue: consume Queue<T>) -> Queue<T>
-fifo-pop<T: Owned>(queue: consume Queue<T>) ->
-  owned-choice {empty: Queue<T>, item: owned-product {rest: Queue<T>, value: T}}
-fifo-front<T: Owned>(queue: borrow Queue<T>) -> T read-from queue
-fifo-discard<T: Owned>(queue: consume Queue<T>) -> Unit
+fifo-empty<T: Owned>() -> Fifo<T>
+fifo-length<T: Owned>(queue: borrow Fifo<T>) -> I64
+fifo-push<T: Owned>(value: consume T, queue: consume Fifo<T>) -> Fifo<T>
+fifo-pop<T: Owned>(queue: consume Fifo<T>) ->
+  owned-choice {empty: Fifo<T>, item: owned-product {rest: Fifo<T>, value: T}}
+fifo-front<T: Owned>(queue: borrow Fifo<T>) -> T read-from queue
+fifo-discard<T: Owned>(queue: consume Fifo<T>) -> Unit
 ```
 
 Push appends at the logical back. Pop removes the logical front. Both pop
@@ -45,7 +47,7 @@ value. Discard joins ordinary recursive cleanup, including populated nested
 queues. It is not secure erasure.
 
 `T` is Owned even for an empty queue. ByteBuffer, OwnedI64Cell and eligible
-owned products, choices or sequences can be elements. Plain I64 is not an
+owned records, products, choices or sequences can be elements. Plain I64 is not an
 eligible element in this first contract. A scalar-cell wrapper has its own
 allocation and admission costs; it is not a free replacement for an ordinary
 integer collection.
@@ -91,10 +93,12 @@ operation returns no partial queue; invocation cleanup owns transferred inputs.
 This pure local structure does not supply transactions, durable delivery or
 an asynchronous work scheduler.
 
-Replacing the public structural representation would be an explicit API
-change. An opaque generic owned type may eventually provide a stronger
-abstraction boundary; adding a queue-specific runtime carrier merely to hide
-two existing sequences is not required for this increment.
+The migration from the earlier structural queue to `Fifo<T>` is an explicit
+API change. Consumers must name the exact nominal declaration; there is no
+structural compatibility conversion. The generic owned-record mechanism carries
+the two existing sequences, with no queue-specific runtime carrier. Nominal
+field checks and metadata still have costs; the sequence-transfer bound alone
+does not establish an end-to-end performance improvement.
 
 ## Independent consumer
 

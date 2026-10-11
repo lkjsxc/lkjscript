@@ -14,6 +14,8 @@ struct Read<'a> {
     runtime: &'a BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
     interfaces: &'a BTreeMap<PackageId, &'a PackageInterfaceValidation>,
     types: &'a BTreeMap<TypeObjectDigest, TypeObject>,
+    dependencies: &'a [crate::platform::kernel::DependencyRecord],
+    representation_packages: &'a BTreeSet<PackageId>,
     remaining: &'a Cell<usize>,
 }
 
@@ -84,7 +86,32 @@ impl Read<'_> {
 
 impl CodeRead for Read<'_> {
     fn code_dependency(&self, package: PackageId) -> Result<CanonicalRead<bool>, Diagnostic> {
-        self.observed(|| self.interfaces.contains_key(&package))
+        self.observed(|| {
+            self.dependencies
+                .binary_search_by_key(&package, |dependency| dependency.package)
+                .is_ok()
+        })
+    }
+    fn code_representation_dependency(
+        &self,
+        package: PackageId,
+    ) -> Result<CanonicalRead<bool>, Diagnostic> {
+        self.observed(|| self.representation_packages.contains(&package))
+    }
+    fn code_representation_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<CanonicalRead<Option<PackageInterfaceRecord>>, Diagnostic> {
+        self.observed(|| {
+            if !self.representation_packages.contains(&package) {
+                return None;
+            }
+            self.interfaces
+                .get(&package)
+                .and_then(|interface| interface.owners.get(&owner))
+                .map(|owner| owner.record.clone())
+        })
     }
 
     fn code_step(&self) -> Result<(), Diagnostic> {
@@ -129,6 +156,13 @@ impl CodeRead for Read<'_> {
         owner: OwnerKey,
     ) -> Result<CanonicalRead<Option<PackageInterfaceRecord>>, Diagnostic> {
         self.observed(|| {
+            if self
+                .dependencies
+                .binary_search_by_key(&package, |dependency| dependency.package)
+                .is_err()
+            {
+                return None;
+            }
             self.interfaces
                 .get(&package)
                 .and_then(|interface| interface.owners.get(&owner))
@@ -144,6 +178,10 @@ pub(super) fn validate(
     runtime: &BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
     interfaces: &BTreeMap<PackageRevisionDigest, PackageInterfaceValidation>,
     types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    revisions: &BTreeMap<
+        PackageRevisionDigest,
+        crate::platform::package_transport::PackageRevision,
+    >,
 ) -> Result<(), Diagnostic> {
     let interfaces = manifest
         .packages
@@ -156,7 +194,23 @@ pub(super) fn validate(
         })
         .collect::<Result<BTreeMap<_, _>, _>>()?;
     let remaining = Cell::new(crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK);
+    let mut representation_package = None;
+    let mut representation_packages = BTreeSet::new();
     for ((package, owner), unit) in units {
+        let dependencies = manifest
+            .packages
+            .binary_search_by_key(package, |package| package.package)
+            .ok()
+            .and_then(|index| revisions.get(&manifest.packages[index].package_revision))
+            .map(|revision| revision.dependencies.as_slice())
+            .ok_or_else(missing)?;
+        if representation_package != Some(*package) {
+            let mut work = 0;
+            representation_packages =
+                artifact_representation_scope(dependencies, revisions, &mut work, remaining.get())?;
+            remaining.set(remaining.get() - work);
+            representation_package = Some(*package);
+        }
         let read = Read {
             compiler_generation: unit.contract_version,
             package: *package,
@@ -164,6 +218,8 @@ pub(super) fn validate(
             runtime,
             interfaces: &interfaces,
             types,
+            dependencies,
+            representation_packages: &representation_packages,
             remaining: &remaining,
         };
         match &unit.payload {
@@ -235,6 +291,76 @@ fn missing() -> Diagnostic {
 mod tests {
     use super::*;
     #[test]
+    fn private_representation_reads_exclude_unrelated_artifact_branches() {
+        let (revisions, [root, independent, _, leaf]) =
+            super::super::contract_tests::branched_revisions();
+        let source = crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(
+            "declarations.begin\n(units (module create leaf (owned-record create Leaf (visibility private))))\ndeclarations.end\n",
+        ).unwrap();
+        let (owner, record) = source.owners.iter().find(|(_, owner)|
+            matches!(owner, OwnerRecord::Declaration(record) if matches!(record.payload, DeclarationPayload::OwnedRecord { .. }))
+        ).unwrap();
+        let interface = PackageInterfaceValidation {
+            owners: BTreeMap::from([(
+                *owner,
+                crate::platform::package_interface::PackageInterfaceOwner {
+                    contract_version:
+                        crate::platform::package_interface::PACKAGE_INTERFACE_CONTRACT_VERSION,
+                    record: PackageInterfaceRecord::project_public(record)
+                        .unwrap()
+                        .unwrap(),
+                },
+            )]),
+            type_objects: BTreeMap::new(),
+            reachable_objects: BTreeSet::new(),
+            map_work: MapWork::default(),
+        };
+        let interfaces = BTreeMap::from([(leaf.package, &interface)]);
+        let owners = BTreeMap::new();
+        let types = BTreeMap::new();
+        let remaining = Cell::new(crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK);
+        for (package, expected_representation) in [(&root, true), (&independent, false)] {
+            let representation_packages = artifact_representation_scope(
+                &package.dependencies,
+                &revisions,
+                &mut 0,
+                remaining.get(),
+            )
+            .unwrap();
+            let read = Read {
+                compiler_generation: COMPILER_UNIT_CONTRACT_VERSION,
+                package: package.package,
+                owners: &owners,
+                runtime: &owners,
+                interfaces: &interfaces,
+                types: &types,
+                dependencies: &package.dependencies,
+                representation_packages: &representation_packages,
+                remaining: &remaining,
+            };
+            assert!(!read.code_dependency(leaf.package).unwrap().value);
+            assert!(
+                read.code_interface(leaf.package, *owner)
+                    .unwrap()
+                    .value
+                    .is_none()
+            );
+            assert_eq!(
+                read.code_representation_dependency(leaf.package)
+                    .unwrap()
+                    .value,
+                expected_representation
+            );
+            assert_eq!(
+                read.code_representation_owner(leaf.package, *owner)
+                    .unwrap()
+                    .value
+                    .is_some(),
+                expected_representation
+            );
+        }
+    }
+    #[test]
     fn byte_buffer_predecessor_control_admission_checks_canonical_local_annotations() {
         let source =
             crate::platform::execution::normalized::tests::byte_buffer_tests::author("").unwrap();
@@ -264,6 +390,8 @@ mod tests {
                 runtime: &runtime,
                 interfaces: &interfaces,
                 types: &source.types,
+                dependencies: &[],
+                representation_packages: &BTreeSet::new(),
                 remaining: &Cell::new(crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK),
             };
             let result = read.code_owner(key);

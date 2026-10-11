@@ -176,6 +176,7 @@ pub(crate) fn ownership_contributions(
             DeclarationPayload::OwnedContract(_)
             | DeclarationPayload::OwnedImplementation(_)
             | DeclarationPayload::Record { .. }
+            | DeclarationPayload::OwnedRecord { .. }
             | DeclarationPayload::Variant { .. }
             | DeclarationPayload::Interface { .. }
             | DeclarationPayload::External(_)
@@ -217,6 +218,7 @@ pub(crate) fn ownership_contributions(
             }
             match &record.operation {
                 ExpressionOperation::BorrowOwnedField { binding, .. }
+                | ExpressionOperation::BorrowOwnedRecordField { binding, .. }
                 | ExpressionOperation::BorrowOwnedItem { binding, .. }
                 | ExpressionOperation::BorrowCall { binding, .. } => insert_binding_parent(
                     &mut ownership,
@@ -248,6 +250,17 @@ pub(crate) fn ownership_contributions(
                     }
                 }
                 ExpressionOperation::UnpackOwned { fields, .. } => {
+                    for (ordinal, field) in fields.iter().enumerate() {
+                        insert_binding_parent(
+                            &mut ownership,
+                            field.binding,
+                            record.id,
+                            BindingContainerRole::OwnedUnpack,
+                            ordinal,
+                        )?;
+                    }
+                }
+                ExpressionOperation::UnpackOwnedRecord { fields, .. } => {
                     for (ordinal, field) in fields.iter().enumerate() {
                         insert_binding_parent(
                             &mut ownership,

@@ -506,6 +506,7 @@ fn reject_source(snapshot: KernelSnapshot, name: &str, carrier: TypeForm, callee
         &units,
         &mut exhausted,
         |_| panic!("work exhaustion must precede type reads"),
+        |_| panic!("work exhaustion must precede nominal reads"),
         || Ok(()),
     )
     .unwrap_err();
@@ -516,6 +517,7 @@ fn reject_source(snapshot: KernelSnapshot, name: &str, carrier: TypeForm, callee
         &units,
         &mut cancelled,
         |_| panic!("cancellation must precede type reads"),
+        |_| panic!("cancellation must precede nominal reads"),
         || {
             Err(crate::platform::diagnostic::Diagnostic::new(
                 DiagnosticClass::Resource,

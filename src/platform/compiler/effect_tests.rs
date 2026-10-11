@@ -44,7 +44,7 @@ fn strict_artifact_rejects_fully_rehashed_expanding_canonical_applications() {
                 .write_all(&current)
                 .unwrap();
         }
-        let (previous, retained, frozen, expected) = match name {
+        let (previous, retained, frozen, predecessor, expected) = match name {
             "direct" => (
                 include_bytes!(
                     "../../../tests/fixtures/finite-callable-compiler28/expanding-direct.lkja"
@@ -60,6 +60,10 @@ fn strict_artifact_rejects_fully_rehashed_expanding_canonical_applications() {
                 .as_slice(),
                 include_bytes!(
                     "../../../tests/fixtures/finite-callable-compiler31/expanding-direct.lkja"
+                )
+                .as_slice(),
+                include_bytes!(
+                    "../../../tests/fixtures/finite-callable-compiler32/expanding-direct.lkja"
                 )
                 .as_slice(),
             ),
@@ -80,6 +84,10 @@ fn strict_artifact_rejects_fully_rehashed_expanding_canonical_applications() {
                     "../../../tests/fixtures/finite-callable-compiler31/expanding-named.lkja"
                 )
                 .as_slice(),
+                include_bytes!(
+                    "../../../tests/fixtures/finite-callable-compiler32/expanding-named.lkja"
+                )
+                .as_slice(),
             ),
             _ => unreachable!(),
         };
@@ -92,6 +100,11 @@ fn strict_artifact_rejects_fully_rehashed_expanding_canonical_applications() {
             load_artifact(frozen).unwrap_err().code,
             "artifact_bundle_contract",
             "{name}: original compiler30 derived fixture remains frozen"
+        );
+        assert_eq!(
+            load_artifact(predecessor).unwrap_err().code,
+            "artifact_bundle_contract",
+            "{name}: original compiler31 derived fixture remains frozen"
         );
         let error = load_artifact(&current).unwrap_err();
         assert_eq!(error.code, "kernel_callable_expansion", "{name}: {error:?}");
@@ -318,6 +331,7 @@ fn replace_unit_checked(
         29 => (*b"LKJCUN29", "lkjscript.compiler-unit-envelope.v29"),
         30 => (*b"LKJCUN30", "lkjscript.compiler-unit-envelope.v30"),
         31 => (*b"LKJCUN31", "lkjscript.compiler-unit-envelope.v31"),
+        32 => (*b"LKJCUN32", "lkjscript.compiler-unit-envelope.v32"),
         other => panic!("unexpected forged-unit generation {other}"),
     };
     let bytes = crate::platform::packed::encode(

@@ -345,7 +345,18 @@ fn complete_budgeted(
         }
     }
     complete_nominal_layouts(program, work)?;
-    product_depth::validate(&program.types, work)?;
+    program.owned_record_declarations.clear();
+    for layout in program.records.iter().filter(|layout| layout.owned) {
+        step(work)?;
+        if !program
+            .owned_record_declarations
+            .contains(&layout.declaration)
+        {
+            work.node::<crate::platform::kernel::DeclarationReference>()?;
+            program.owned_record_declarations.insert(layout.declaration);
+        }
+    }
+    product_depth::validate_program(program, work)?;
     program.work.type_objects = program.types.len() as u64;
     program.capture_safe_types = property_types(program, work, Property::Capture)?;
     program.ordinary_types = property_types(program, work, Property::Ordinary)?;
@@ -727,6 +738,11 @@ fn property_types(
             Ok(())
         };
         match &object.form {
+            _ if program.owned_record_layout(*root).is_some() => {
+                // Nominal ownership is independent of the field inventory.
+                // Even empty and ordinary-only records carry affine custody.
+                admitted = false;
+            }
             TypeForm::ByteBuffer
             | TypeForm::OwnedI64Cell
             | TypeForm::OwnedProduct { .. }

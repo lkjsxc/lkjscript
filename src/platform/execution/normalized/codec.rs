@@ -139,6 +139,16 @@ fn json_form<'a>(
     path: &str,
 ) -> Result<&'a TypeForm, Diagnostic> {
     let form = type_form(program, ty)?;
+    if program
+        .record_index(ty)
+        .and_then(|index| program.records().get(index))
+        .is_some_and(|layout| layout.owned)
+    {
+        return Err(type_error(
+            path,
+            "owned nominal records cannot cross JSON boundaries",
+        ));
+    }
     match form {
         TypeForm::Secret
         | TypeForm::Stream { .. }

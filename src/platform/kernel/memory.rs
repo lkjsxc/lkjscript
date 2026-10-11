@@ -60,6 +60,9 @@ pub(crate) fn direct_in(
                         Some(PackageInterfaceRecord::TypeParameter(p)) if p.constraints.has_owned())
                 }
             }
+            TypeForm::Named { .. } | TypeForm::Applied { .. } => {
+                super::owned_record::is_owned(read, package, ty)?
+            }
             _ => false,
         },
     )
@@ -100,6 +103,8 @@ pub(crate) fn contains(
     read: &(impl ExpressionRead + ?Sized),
     ty: TypeObjectDigest,
 ) -> Result<bool, Diagnostic> {
+    let representation = super::owned_record::RepresentationRead { read };
+    let read: &dyn ExpressionRead = &representation;
     let mut pending = vec![ty];
     let mut seen = BTreeSet::new();
     let mut declarations = BTreeSet::new();
@@ -135,7 +140,10 @@ pub(crate) fn contains(
                 match read
                     .package_interface_owner(d.package, OwnerKey::Declaration(d.declaration))?
                 {
-                    Some(PackageInterfaceRecord::Declaration(p)) => match p.payload {
+                    Some(
+                        PackageInterfaceRecord::Declaration(p)
+                        | PackageInterfaceRecord::RepresentationDeclaration(p),
+                    ) => match p.payload {
                         PackageInterfaceDeclarationPayload::Record { fields, .. } => {
                             (fields, vec![])
                         }
@@ -567,6 +575,18 @@ struct Check<'a, R: ?Sized> {
     scope: Option<crate::platform::semantic_id::DeclarationId>,
 }
 impl<R: ExpressionRead + ?Sized> Check<'_, R> {
+    fn record_layout(
+        &self,
+        ty: TypeObjectDigest,
+    ) -> Result<super::owned_record::AppliedOwnedRecord, Diagnostic> {
+        let scope = self.scope.map(|declaration| DeclarationReference {
+            package: self.read.package_id(),
+            declaration,
+        });
+        super::owned_record::require_access(self.read, ty, scope)?;
+        super::owned_record::validate_application(self.read, ty, scope)?;
+        super::owned_record::layout(self.read, ty)
+    }
     fn sequence_item(&self, ty: TypeObjectDigest) -> Result<TypeObjectDigest, Diagnostic> {
         super::owned_product::validate(self.read, ty, self.scope)?;
         let TypeForm::OwnedSequence { item } = self
@@ -738,9 +758,11 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                     | ExpressionOperation::BorrowCall { .. }
                     | ExpressionOperation::BorrowOwnedItem { .. }
                     | ExpressionOperation::BorrowOwnedField { .. }
+                    | ExpressionOperation::BorrowOwnedRecordField { .. }
                     | ExpressionOperation::MatchBorrowedOwned { .. }
                     | ExpressionOperation::MatchOwned { .. }
                     | ExpressionOperation::UnpackOwned { .. }
+                    | ExpressionOperation::UnpackOwnedRecord { .. }
                     | ExpressionOperation::Match { .. }
             )
         {
@@ -881,6 +903,38 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 let local = LocalValueReference::LexicalBinding(binding);
                 if state.insert(local, Slot::view(source)).is_some() {
                     return Err(reject("duplicate sequence read binding"));
+                }
+                let result = self.eval(body, state, mode, next)?;
+                state.remove(&local);
+                self.loan(source, state, false)?;
+                result
+            }
+            ExpressionOperation::BorrowOwnedRecordField {
+                record_type,
+                source,
+                field,
+                binding,
+                body,
+            } => {
+                let layout = self.record_layout(record_type)?;
+                let (_, selected) = layout
+                    .fields
+                    .iter()
+                    .find(|(reference, _)| *reference == field)
+                    .ok_or_else(|| reject("unknown nominal owned child field"))?;
+                let overlay = super::owned_contract::AppliedTypeRead {
+                    read: self.read,
+                    types: &layout.types,
+                };
+                if !direct(&overlay, *selected)? {
+                    return Err(reject("nominal child read requires an Owned field"));
+                }
+                self.borrow_binding(binding, *selected)?;
+                let source = self.source_local(source, record_type, state, next)?;
+                self.loan(source, state, true)?;
+                let local = LocalValueReference::LexicalBinding(binding);
+                if state.insert(local, Slot::view(source)).is_some() {
+                    return Err(reject("duplicate nominal child read binding"));
                 }
                 let result = self.eval(body, state, mode, next)?;
                 state.remove(&local);
@@ -1083,6 +1137,79 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 }
                 let (joined, result) = joined.ok_or_else(|| reject("empty owned match"))?;
                 *state = joined;
+                result
+            }
+            ExpressionOperation::PackOwnedRecord {
+                record_type,
+                fields,
+            } => {
+                let layout = self.record_layout(record_type)?;
+                if fields.len() != layout.fields.len() {
+                    return Err(reject("incomplete nominal owned construction"));
+                }
+                let overlay = super::owned_contract::AppliedTypeRead {
+                    read: self.read,
+                    types: &layout.types,
+                };
+                let mut seen = BTreeSet::new();
+                for field in fields {
+                    let (_, ty) = layout
+                        .fields
+                        .iter()
+                        .find(|(reference, _)| *reference == field.field)
+                        .ok_or_else(|| reject("unknown nominal owned construction field"))?;
+                    if !seen.insert(field.field) {
+                        return Err(reject("duplicate nominal owned construction field"));
+                    }
+                    if direct(&overlay, *ty)? {
+                        self.consume_local(field.value, *ty, state, next)?;
+                    } else {
+                        plain(field.value, state)?;
+                    }
+                }
+                true
+            }
+            ExpressionOperation::UnpackOwnedRecord {
+                record_type,
+                source,
+                fields,
+                body,
+            } => {
+                let layout = self.record_layout(record_type)?;
+                self.consume_local(source, record_type, state, next)?;
+                if fields.len() != layout.fields.len() {
+                    return Err(reject("incomplete nominal owned decomposition"));
+                }
+                let overlay = super::owned_contract::AppliedTypeRead {
+                    read: self.read,
+                    types: &layout.types,
+                };
+                let mut scoped = Vec::new();
+                for (field, (reference, ty)) in fields.iter().zip(layout.fields.iter()) {
+                    let Some(OwnerRecord::Binding(binding)) =
+                        self.read.owner(OwnerKey::Binding(field.binding))?
+                    else {
+                        return Err(reject("missing nominal decomposition binding"));
+                    };
+                    if field.field != *reference
+                        || binding.declared_type != Some(*ty)
+                        || binding.kind != BindingKind::OwnedUnpack
+                        || binding.value.is_some()
+                    {
+                        return Err(reject("nominal decomposition binding contract mismatch"));
+                    }
+                    if direct(&overlay, *ty)? {
+                        let local = LocalValueReference::LexicalBinding(field.binding);
+                        if state.insert(local, Slot::owner(false)).is_some() {
+                            return Err(reject("duplicate nominal decomposition local"));
+                        }
+                        scoped.push(local);
+                    }
+                }
+                let result = self.eval(body, state, mode, next)?;
+                for local in scoped {
+                    state.remove(&local);
+                }
                 result
             }
             ExpressionOperation::PackOwned {
@@ -1513,24 +1640,48 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                         .read
                         .type_object(ty)?
                         .ok_or_else(|| reject("missing product metadata source type"))?;
-                    let (TypeForm::OwnedProduct { fields }, FieldSelector::Structural(name)) =
-                        (object.form, selector)
-                    else {
-                        return Err(reject("only structural product metadata can be read"));
-                    };
-                    let mut selected = None;
-                    for field in fields {
-                        self.read.validation_work()?;
-                        if field.name == name {
-                            selected = Some(field.ty);
-                            break;
+                    let selected = match (object.form, selector) {
+                        (TypeForm::OwnedProduct { fields }, FieldSelector::Structural(name)) => {
+                            let ty = fields
+                                .into_iter()
+                                .find(|field| field.name == name)
+                                .map(|field| field.ty)
+                                .ok_or_else(|| reject("unknown product metadata field"))?;
+                            if !super::transfer::ordinary(self.read, ty, self.scope)? {
+                                return Err(reject(
+                                    "product field reads cannot expose owned children",
+                                ));
+                            }
+                            ty
                         }
-                    }
-                    let selected =
-                        selected.ok_or_else(|| reject("unknown product metadata field"))?;
-                    if !super::transfer::ordinary(self.read, selected, self.scope)? {
-                        return Err(reject("product field reads cannot expose owned children"));
-                    }
+                        (
+                            TypeForm::Named { .. } | TypeForm::Applied { .. },
+                            FieldSelector::Nominal(reference),
+                        ) => {
+                            let layout = self.record_layout(ty)?;
+                            let (_, selected) = layout
+                                .fields
+                                .iter()
+                                .find(|(field, _)| *field == reference)
+                                .ok_or_else(|| reject("unknown nominal metadata field"))?;
+                            let overlay = super::owned_contract::AppliedTypeRead {
+                                read: self.read,
+                                types: &layout.types,
+                            };
+                            if !super::transfer::ordinary(&overlay, *selected, self.scope)? {
+                                return Err(reject(
+                                    "nominal field reads cannot expose owned children",
+                                ));
+                            }
+                            *selected
+                        }
+                        _ => {
+                            return Err(reject(
+                                "metadata field must belong to the exact owned source",
+                            ));
+                        }
+                    };
+                    let _ = selected;
                     self.eval(value, state, ParameterUse::Borrow, next)?;
                 } else {
                     // In particular, an owned temporary cannot silently become a loan.
@@ -1642,7 +1793,7 @@ pub(crate) fn validate_owner(
         }
     }
     let mut roots = record.type_roots();
-    if record.header().contract_version < 31
+    if record.header().contract_version < 32
         && let OwnerRecord::Declaration(declaration) = record
     {
         let parameters = match &declaration.payload {
@@ -1679,6 +1830,11 @@ pub(crate) fn validate_owner(
                             && matches!(key, OwnerKey::TypeParameter(id)
                                 if i.type_parameters.contains(&id))
                     }
+                    DeclarationPayload::OwnedRecord {
+                        type_parameters, ..
+                    } => {
+                        matches!(key, OwnerKey::TypeParameter(id) if type_parameters.contains(&id))
+                    }
                     _ => false,
                 },
                 _ => false,
@@ -1687,7 +1843,7 @@ pub(crate) fn validate_owner(
                 return Err(Diagnostic::new(
                     DiagnosticClass::Semantic,
                     "kernel_owned_parameter_owner",
-                    "Owned requires an exact graph-function, owned-contract or implementation-scheme parameter",
+                    "Owned requires an exact graph-function, owned-contract, implementation-scheme or owned-record parameter",
                 ));
             }
         }
@@ -1710,16 +1866,22 @@ pub(crate) fn validate_owner(
                 return Err(reject("buffer adapter port is forbidden"));
             }
             if let PortImplementation::Expression(e) = p.implementation {
-                Check { read, scope: None }.eval(
-                    e,
-                    &mut State::new(),
-                    ParameterUse::Unrestricted,
-                    0,
-                )?;
+                Check {
+                    read,
+                    scope: Some(p.declaration),
+                }
+                .eval(e, &mut State::new(), ParameterUse::Unrestricted, 0)?;
             }
         }
         OwnerRecord::Field(f) if contains(read, f.ty)? => {
-            return Err(reject("buffer field is forbidden"));
+            let allowed = matches!(read.owner(OwnerKey::Declaration(f.declaration))?,
+                Some(OwnerRecord::Declaration(record)) if matches!(record.payload,
+                    DeclarationPayload::OwnedRecord { ref fields, .. } if matches!(key, OwnerKey::Field(id) if fields.contains(&id))));
+            if !allowed {
+                return Err(reject(
+                    "owned fields require an exact owned-record representation",
+                ));
+            }
         }
         OwnerRecord::Case(c)
             if c.payload
@@ -1749,27 +1911,50 @@ pub(crate) fn validate_owner(
                     i,
                 )?
             }
+            DeclarationPayload::OwnedRecord { .. } => {
+                let OwnerKey::Declaration(declaration) = key else {
+                    return Err(reject("owned record requires a declaration identity"));
+                };
+                super::owned_record::validate_definition(
+                    read,
+                    DeclarationReference {
+                        package: read.package_id(),
+                        declaration,
+                    },
+                )?;
+            }
             DeclarationPayload::Constant { ty, value } => {
                 if contains(read, *ty)? {
                     return Err(reject("buffer constants are forbidden"));
                 }
-                Check { read, scope: None }.eval(
-                    *value,
-                    &mut State::new(),
-                    ParameterUse::Unrestricted,
-                    0,
-                )?;
+                Check {
+                    read,
+                    scope: Some(match key {
+                        OwnerKey::Declaration(id) => id,
+                        _ => return Err(reject("constant requires an exact declaration")),
+                    }),
+                }
+                .eval(*value, &mut State::new(), ParameterUse::Unrestricted, 0)?;
             }
             DeclarationPayload::Test {
                 actual, expected, ..
             } => {
-                Check { read, scope: None }.eval(
-                    *actual,
-                    &mut State::new(),
-                    ParameterUse::Unrestricted,
-                    0,
-                )?;
-                Check { read, scope: None }.eval(
+                Check {
+                    read,
+                    scope: Some(match key {
+                        OwnerKey::Declaration(id) => id,
+                        _ => return Err(reject("test requires an exact declaration")),
+                    }),
+                }
+                .eval(*actual, &mut State::new(), ParameterUse::Unrestricted, 0)?;
+                Check {
+                    read,
+                    scope: Some(match key {
+                        OwnerKey::Declaration(id) => id,
+                        _ => return Err(reject("test requires an exact declaration")),
+                    }),
+                }
+                .eval(
                     *expected,
                     &mut State::new(),
                     ParameterUse::Unrestricted,

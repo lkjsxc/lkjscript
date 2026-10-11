@@ -51,7 +51,7 @@ jobs:
     name: Accept final candidate
     if: inputs.operation == 'candidate'
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 360
     permissions:
       contents: read
       actions: read

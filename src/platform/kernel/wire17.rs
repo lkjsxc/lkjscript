@@ -188,6 +188,11 @@ impl TryFrom<DeclarationPayload> for DeclarationPayload17 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: DeclarationPayload) -> Result<Self, Self::Error> {
         Ok(match v {
+            super::DeclarationPayload::OwnedRecord { .. } => {
+                return Err(super::owned_record::reject(
+                    "nominal owned records require Graph 32",
+                ));
+            }
             DeclarationPayload::Record {
                 type_parameters,
                 fields,

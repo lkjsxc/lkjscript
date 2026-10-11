@@ -146,6 +146,11 @@ fn inspect(
         TypeForm::ByteBuffer => MemoryForm::ByteBuffer,
         TypeForm::OwnedI64Cell => MemoryForm::OwnedI64Cell,
         TypeForm::OwnedProduct { .. } => MemoryForm::Product(ty),
+        TypeForm::Named { .. } | TypeForm::Applied { .. }
+            if program.owned_record_layout(ty).is_some() =>
+        {
+            MemoryForm::Product(ty)
+        }
         TypeForm::OwnedChoice { .. } => MemoryForm::Choice(ty),
         TypeForm::OwnedSequence { .. } => MemoryForm::Sequence(ty),
         _ => return Err(super::reject()),

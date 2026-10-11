@@ -1,0 +1,19 @@
+declarations.begin
+(units
+  (module create opaque-consumer
+    (function create relay (visibility public) (effect pure)
+      (parameter create packet (type wrapper::Envelope) (use consume))
+      (returns wrapper::Envelope) (body (call wrapper::relay (local packet))))
+    (function create main (visibility public) (effect pure)
+      (parameter create value (type I64)) (returns (record (before I64) (after I64)))
+      (body (let
+        (binding packet (type wrapper::Envelope) (call wrapper::make (local value)))
+        (binding packet (type wrapper::Envelope) (call relay (local packet)))
+        (binding before (type I64) (call wrapper::read (local packet)))
+        (binding after (type I64) (call wrapper::finish (local packet)))
+        (in (record structural (field before (local before)) (field after (local after)))))))
+    (component create command (visibility private)
+      (port create main (type (function (I64) (record (before I64) (after I64)))) (function main))))
+  (target create nominal-opaque (component opaque-consumer::command) (runner command)
+    (port opaque-consumer::command::main)))
+declarations.end

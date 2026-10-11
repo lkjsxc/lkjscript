@@ -48,6 +48,24 @@ pub(super) fn owners() -> Result<Value, String> {
         standard
             .interface_owners
             .iter()
+            .filter(|(_, value)| {
+                !matches!(
+                    value.record,
+                    PackageInterfaceRecord::RepresentationDeclaration(_)
+                ) && !package_owner_parent(&value.record).is_some_and(|parent| {
+                    standard
+                        .interface_owners
+                        .get(&parent)
+                        .is_some_and(|parent| {
+                            matches!(
+                                parent.record,
+                                PackageInterfaceRecord::RepresentationDeclaration(_)
+                            ) || matches!(value.record, PackageInterfaceRecord::Field(_))
+                                && parent.record.header().kind
+                                    == crate::platform::kernel::OwnerKind::OwnedRecord
+                        })
+                })
+            })
             .map(|(owner, value)| {
                 json!({
                     "kind": value.record.header().kind.name(),
@@ -79,7 +97,8 @@ pub(super) fn limits() -> Value {
 
 fn package_owner_name(record: &PackageInterfaceRecord) -> &str {
     match record {
-        PackageInterfaceRecord::Declaration(value) => value.name.as_str(),
+        PackageInterfaceRecord::Declaration(value)
+        | PackageInterfaceRecord::RepresentationDeclaration(value) => value.name.as_str(),
         PackageInterfaceRecord::TypeParameter(value) => value.name.as_str(),
         PackageInterfaceRecord::RequirementParameter(value) => value.name.as_str(),
         PackageInterfaceRecord::EffectParameter(value) => value.name.as_str(),
@@ -94,7 +113,8 @@ fn package_owner_name(record: &PackageInterfaceRecord) -> &str {
 
 fn package_owner_parent(record: &PackageInterfaceRecord) -> Option<OwnerKey> {
     match record {
-        PackageInterfaceRecord::Declaration(_) => None,
+        PackageInterfaceRecord::Declaration(_)
+        | PackageInterfaceRecord::RepresentationDeclaration(_) => None,
         PackageInterfaceRecord::RequirementParameter(value) => {
             Some(OwnerKey::Declaration(value.declaration))
         }

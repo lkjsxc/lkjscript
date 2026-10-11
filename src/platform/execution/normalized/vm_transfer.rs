@@ -505,6 +505,15 @@ fn validate_type(
     work: &mut Work<'_>,
 ) -> Result<bool, ExecutionError> {
     work.visit(depth)?;
+    if let Some(layout) = program.owned_record_layout(ty) {
+        for argument in layout.arguments.iter() {
+            validate_type(program, *argument, depth + 1, work)?;
+        }
+        for field in layout.fields.iter() {
+            validate_type(program, field.ty, depth + 1, work)?;
+        }
+        return Ok(true);
+    }
     match &program.types.get(&ty).ok_or_else(reject)?.form {
         TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Ok(true),
         TypeForm::OwnedSequence { item } => {
@@ -534,6 +543,15 @@ fn validate_shareable_type(
     work: &mut Work<'_>,
 ) -> Result<bool, ExecutionError> {
     work.visit(depth)?;
+    if let Some(layout) = program.owned_record_layout(ty) {
+        for argument in layout.arguments.iter() {
+            validate_shareable_type(program, *argument, depth + 1, work)?;
+        }
+        for field in layout.fields.iter() {
+            validate_shareable_type(program, field.ty, depth + 1, work)?;
+        }
+        return Ok(true);
+    }
     match &program.types.get(&ty).ok_or_else(reject)?.form {
         TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Ok(true),
         TypeForm::OwnedSequence { item } => {
@@ -584,6 +602,21 @@ fn inspect_value(
                     return Err(reject());
                 }
                 for (value, field) in values.iter().zip(fields) {
+                    inspect_value(program, value, field.ty, source, depth + 1, work, ordinary)?;
+                }
+                Ok(())
+            })
+        }
+        (
+            NormalizedValue::OwnedProduct(token),
+            TypeForm::Named { .. } | TypeForm::Applied { .. },
+        ) if token.ty() == ty => {
+            let layout = program.owned_record_layout(ty).ok_or_else(reject)?;
+            token.inspect_transfer(source, |values| {
+                if values.len() != layout.fields.len() {
+                    return Err(reject());
+                }
+                for (value, field) in values.iter().zip(layout.fields.iter()) {
                     inspect_value(program, value, field.ty, source, depth + 1, work, ordinary)?;
                 }
                 Ok(())

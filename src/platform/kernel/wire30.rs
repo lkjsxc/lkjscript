@@ -552,6 +552,13 @@ impl TryFrom<ExpressionOperation> for ExpressionOperation30 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: ExpressionOperation) -> Result<Self, Self::Error> {
         Ok(match v {
+            super::ExpressionOperation::PackOwnedRecord { .. }
+            | super::ExpressionOperation::UnpackOwnedRecord { .. }
+            | super::ExpressionOperation::BorrowOwnedRecordField { .. } => {
+                return Err(super::owned_record::reject(
+                    "nominal owned operations require Graph 32",
+                ));
+            }
             ExpressionOperation::SequenceGet { .. }
             | ExpressionOperation::SequenceReplace { .. } => {
                 return Err(generalized_sequence_extension());

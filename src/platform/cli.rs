@@ -5760,6 +5760,55 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                 fields.push(("field", field.to_string()));
                 self.add_type_reference("owned_product_type", owner, 0, *product_type)?;
             }
+            ExpressionOperation::PackOwnedRecord {
+                record_type,
+                fields: members,
+            } => {
+                fields.push(("form", "pack_owned_record".into()));
+                fields.push(("fields", members.len().to_string()));
+                self.add_type_reference("owned_record_type", owner, 0, *record_type)?;
+                for (index, member) in members.iter().enumerate() {
+                    self.add_reference(
+                        "owned_record_field",
+                        owner,
+                        index,
+                        "field",
+                        format!("{}/{}", member.field.package, member.field.field),
+                    )?;
+                }
+            }
+            ExpressionOperation::UnpackOwnedRecord {
+                record_type,
+                fields: members,
+                ..
+            } => {
+                fields.push(("form", "unpack_owned_record".into()));
+                fields.push(("fields", members.len().to_string()));
+                self.add_type_reference("owned_record_type", owner, 0, *record_type)?;
+                for (index, member) in members.iter().enumerate() {
+                    self.add_reference(
+                        "owned_record_field",
+                        owner,
+                        index,
+                        "field",
+                        format!("{}/{}", member.field.package, member.field.field),
+                    )?;
+                }
+            }
+            ExpressionOperation::BorrowOwnedRecordField {
+                record_type, field, ..
+            } => {
+                fields.push(("form", "borrow_owned_record_field".into()));
+                fields.push(("field", format!("{}/{}", field.package, field.field)));
+                self.add_type_reference("owned_record_type", owner, 0, *record_type)?;
+                self.add_reference(
+                    "owned_record_field",
+                    owner,
+                    0,
+                    "field",
+                    format!("{}/{}", field.package, field.field),
+                )?;
+            }
             ExpressionOperation::SequenceEmpty { sequence_type }
             | ExpressionOperation::SequenceLength { sequence_type, .. }
             | ExpressionOperation::SequencePush { sequence_type, .. }
@@ -6483,6 +6532,106 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                         child_depth,
                     )?;
                 }
+            }
+            ExpressionOperation::PackOwnedRecord { fields, .. } => {
+                for (index, field) in fields.into_iter().enumerate() {
+                    self.visit_expression_child(
+                        owner,
+                        field.value,
+                        (
+                            ExpressionChildRole::OwnedProductField,
+                            "owned_product_field",
+                        ),
+                        index,
+                        Some(format!("{}/{}", field.field.package, field.field.field)),
+                        child_depth,
+                    )?;
+                }
+            }
+            ExpressionOperation::UnpackOwnedRecord {
+                source,
+                fields,
+                body,
+                ..
+            } => {
+                self.visit_expression_child(
+                    owner,
+                    source,
+                    (
+                        ExpressionChildRole::OwnedProductSource,
+                        "owned_product_source",
+                    ),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+                for (index, field) in fields.into_iter().enumerate() {
+                    self.visit_binding(
+                        field.binding,
+                        DefinitionPosition {
+                            parent: owner,
+                            ownership_role: OwnershipRole::ExpressionBinding {
+                                role: BindingContainerRole::OwnedUnpack,
+                                ordinal: definition_ordinal(index)?,
+                            },
+                            slot: "owned_product_binding",
+                            index: definition_ordinal(index)?,
+                            label: Some(format!("{}/{}", field.field.package, field.field.field)),
+                            depth: child_depth,
+                        },
+                        BindingKind::OwnedUnpack,
+                    )?;
+                }
+                self.visit_expression_child(
+                    owner,
+                    body,
+                    (ExpressionChildRole::OwnedProductBody, "owned_product_body"),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+            }
+            ExpressionOperation::BorrowOwnedRecordField {
+                source,
+                field,
+                binding,
+                body,
+                ..
+            } => {
+                self.visit_expression_child(
+                    owner,
+                    source,
+                    (
+                        ExpressionChildRole::OwnedProductSource,
+                        "owned_product_source",
+                    ),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+                self.visit_binding(
+                    binding,
+                    DefinitionPosition {
+                        parent: owner,
+                        ownership_role: OwnershipRole::ExpressionBinding {
+                            role: BindingContainerRole::OwnedBorrow,
+                            ordinal: 0,
+                        },
+                        slot: "owned_product_binding",
+                        index: 0,
+                        label: Some(format!("{}/{}", field.package, field.field)),
+                        depth: child_depth,
+                    },
+                    BindingKind::OwnedBorrow,
+                )?;
+                self.visit_expression_child(
+                    owner,
+                    body,
+                    (ExpressionChildRole::OwnedProductBody, "owned_product_body"),
+                    0,
+                    None,
+                    child_depth,
+                )?;
             }
             ExpressionOperation::UnpackOwned {
                 source,
@@ -9199,6 +9348,180 @@ mod tests {
         )
         .expect_err("byte budget");
         assert_eq!(byte_error.code, "control_response_byte_budget");
+    }
+
+    #[test]
+    fn nominal_record_definition_projection_preserves_exact_fields_and_oracle_preorder() {
+        use crate::platform::contributor::owned_record_projection_tests::{
+            authored_snapshot, function,
+        };
+
+        let snapshot = authored_snapshot();
+        let temporary = tempfile::tempdir().unwrap();
+        let project = temporary.path().join("meaning");
+        GraphRepository::create(&project, &snapshot, None).unwrap();
+        let before = std::fs::read(project.join("HEAD")).unwrap();
+        for name in ["make", "unpack", "inspect"] {
+            let function = function(&snapshot, name);
+            let oracle = crate::platform::contributor::function_definition_oracle(
+                &project,
+                &function.to_string(),
+            )
+            .unwrap();
+            let base = vec![
+                "--project".into(),
+                project.display().to_string(),
+                "inspect".into(),
+                "owner".into(),
+                "pure_function".into(),
+                function.to_string(),
+                "--detail".into(),
+                "definition".into(),
+            ];
+            let mut complete_arguments = base.clone();
+            complete_arguments.extend([
+                "--limit".into(),
+                "10000".into(),
+                "--bytes".into(),
+                MAXIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES.to_string(),
+            ]);
+            let complete = execute_inspect_owner(complete_arguments).unwrap();
+            let records = parse_records("nominal-record-definition", &complete).unwrap();
+            let field = |record: &crate::platform::control::CompactRecord, name: &str| {
+                record
+                    .fields
+                    .iter()
+                    .find(|field| field.name == name)
+                    .unwrap()
+                    .value
+                    .clone()
+            };
+            assert_eq!(
+                records
+                    .iter()
+                    .filter(|record| matches!(
+                        record.operation.as_str(),
+                        "definition.expression" | "definition.binding"
+                    ))
+                    .map(|record| field(record, "id"))
+                    .collect::<Vec<_>>(),
+                oracle
+                    .body_preorder
+                    .iter()
+                    .map(|owner| owner.owner.clone())
+                    .collect::<Vec<_>>()
+            );
+            let root = oracle
+                .body_root
+                .parse::<super::super::semantic_id::ExpressionId>()
+                .unwrap();
+            let OwnerRecord::Expression(expression) =
+                &snapshot.owners[&KernelOwnerKey::Expression(root)]
+            else {
+                panic!("expression");
+            };
+            let (record_type, expected_fields) = match &expression.operation {
+                ExpressionOperation::PackOwnedRecord {
+                    record_type,
+                    fields,
+                } => (
+                    *record_type,
+                    fields.iter().map(|field| field.field).collect::<Vec<_>>(),
+                ),
+                ExpressionOperation::UnpackOwnedRecord {
+                    record_type,
+                    fields,
+                    ..
+                } => (
+                    *record_type,
+                    fields.iter().map(|field| field.field).collect::<Vec<_>>(),
+                ),
+                ExpressionOperation::BorrowOwnedRecordField {
+                    record_type, field, ..
+                } => (*record_type, vec![*field]),
+                _ => panic!("nominal representation operation"),
+            };
+            assert!(
+                records
+                    .iter()
+                    .any(|record| record.operation == "definition.reference"
+                        && field(record, "role") == "owned_record_type"
+                        && field(record, "target") == record_type.to_string())
+            );
+            let field_references = records
+                .iter()
+                .filter(|record| {
+                    record.operation == "definition.reference"
+                        && field(record, "role") == "owned_record_field"
+                })
+                .collect::<Vec<_>>();
+            assert!(field_references.iter().all(|record| {
+                field(record, "target-kind") == "field"
+                    && field(record, "source") == format!("{}/{}", snapshot.root.package_id, root)
+            }));
+            let mut expected_references = expected_fields
+                .iter()
+                .enumerate()
+                .map(|(index, field)| {
+                    (
+                        u32::try_from(index).unwrap(),
+                        format!("{}/{}", field.package, field.field),
+                    )
+                })
+                .collect::<Vec<_>>();
+            // Reference rows sort by exact target before ordinal. The ordinal retains
+            // authored field order independently of that canonical row ordering.
+            expected_references
+                .sort_by(|left, right| left.1.cmp(&right.1).then(left.0.cmp(&right.0)));
+            assert_eq!(
+                field_references
+                    .iter()
+                    .map(|record| (
+                        field(record, "ordinal").parse::<u32>().unwrap(),
+                        field(record, "target")
+                    ))
+                    .collect::<Vec<_>>(),
+                expected_references,
+            );
+            let complete_records = records
+                .iter()
+                .filter(|record| record.operation.starts_with("definition."))
+                .map(compact_record_identity)
+                .collect::<Vec<_>>();
+            let mut paged = Vec::new();
+            let mut continuation: Option<String> = None;
+            for _ in 0..100 {
+                let mut arguments = base.clone();
+                arguments.extend([
+                    "--limit".into(),
+                    "2".into(),
+                    "--bytes".into(),
+                    "8192".into(),
+                ]);
+                if let Some(token) = &continuation {
+                    arguments.extend(["--continuation".into(), token.clone()]);
+                }
+                let output = execute_inspect_owner(arguments).unwrap();
+                let page = parse_records("nominal-record-definition-page", &output).unwrap();
+                assert_eq!(
+                    response_field(&page, "projection", "digest"),
+                    response_field(&records, "projection", "digest")
+                );
+                paged.extend(
+                    page.iter()
+                        .filter(|record| record.operation.starts_with("definition."))
+                        .map(compact_record_identity),
+                );
+                if response_field(&page, "page", "complete") == "true" {
+                    continuation = None;
+                    break;
+                }
+                continuation = Some(response_field(&page, "continuation", "token").to_owned());
+            }
+            assert!(continuation.is_none());
+            assert_eq!(paged, complete_records);
+        }
+        assert_eq!(std::fs::read(project.join("HEAD")).unwrap(), before);
     }
 
     #[test]

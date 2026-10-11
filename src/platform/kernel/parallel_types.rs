@@ -213,6 +213,16 @@ impl<R: ExpressionRead + ?Sized> ExpressionRead for AppliedTypes<'_, R> {
     fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
         self.read.has_dependency(package)
     }
+    fn package_representation_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        self.read.package_representation_owner(package, owner)
+    }
+    fn has_representation_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        self.read.has_representation_dependency(package)
+    }
     fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
         self.read.validation_checkpoint()
     }

@@ -219,6 +219,21 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         if self.admitted_nominals.contains(&root) {
             return Ok(());
         }
+        if self.owned_read(|read| {
+            super::super::owned_record::definition(read, root)
+                .map(|_| true)
+                .or_else(|error| {
+                    if error.code == "kernel_owned_record" {
+                        Ok(false)
+                    } else {
+                        Err(error)
+                    }
+                })
+        })? {
+            self.owned_read(|read| super::super::owned_record::validate_definition(read, root))?;
+            self.admitted_nominals.insert(root);
+            return Ok(());
+        }
         let mut flow = Flow::default();
         flow.reserve::<DeclarationReference>(1)?;
         let mut pending = BTreeSet::from([root]);
@@ -376,7 +391,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         };
         let mut members = Vec::new();
         match kind {
-            Some(OwnerKind::Record) => {
+            Some(OwnerKind::Record) | Some(OwnerKind::OwnedRecord) => {
                 for field in self.record_fields(declaration)? {
                     self.consume_work()?;
                     let record = self.field_record(declaration.package, field)?;

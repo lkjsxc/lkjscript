@@ -1,7 +1,7 @@
 use super::*;
 use std::os::unix::fs::PermissionsExt;
 
-const SEQUENCE_CASES: [&str; 10] = [
+const OWNERSHIP_CASES: [&str; 15] = [
     "native_declarations::native_owned_fifo::native_owned_fifo_exact_generic_library_exhaustive_interleavings_and_source_free_results",
     "native_declarations::native_owned_fifo::native_owned_fifo_traps_preserve_complete_input_admission_cleanup_and_following_invocations",
     "native_declarations::native_owned_fifo::native_owned_fifo_finite_fuel_refusal_joins_detached_custody_without_partial_results",
@@ -12,11 +12,16 @@ const SEQUENCE_CASES: [&str; 10] = [
     "native_declarations::native_data_sequences::native_data_sequences_owned_replacement_preserves_displaced_custody",
     "native_declarations::native_data_sequences::negative::native_data_sequences_reject_hidden_types_active_loans_and_unsafe_substitutions",
     "native_declarations::native_data_sequences::native_data_sequences_bounds_and_fuel_refusals_join_cleanup_and_recover",
+    "native_declarations::native_owned_nominals::native_owned_nominals_export_generic_identity_and_detached_results",
+    "native_declarations::native_owned_nominals::native_owned_nominals_keep_representation_private",
+    "native_declarations::native_owned_nominals::native_owned_nominals_nested_borrows_preserve_source_until_consumption",
+    "native_declarations::native_owned_nominals::native_owned_nominals_admit_complete_layouts_and_phantom_arguments",
+    "native_declarations::native_owned_nominals::native_owned_nominals_transfer_traps_budget_join_cleanup_and_recovery",
 ];
 
 fn listing() -> String {
     let mut listing = LIST.to_owned();
-    for name in SEQUENCE_CASES {
+    for name in OWNERSHIP_CASES {
         listing.push_str(&format!("{name}: test\n"));
     }
     listing
@@ -29,7 +34,7 @@ fn success() -> String {
         .map(|line| line.strip_suffix(": test").unwrap())
         .filter(|name| *name != "unrelated")
         .collect::<Vec<_>>();
-    assert_eq!(names.len(), 27);
+    assert_eq!(names.len(), 32);
     let mut output = format!("\nrunning {} tests\n", names.len());
     for name in &names {
         output.push_str(&format!("test {name} ... ok\n"));
@@ -71,7 +76,7 @@ fn harness(root: &Path, output: &str, exit: i32) -> PathBuf {
     let path = root.join("fixture-harness");
     let listing = listing();
     let script = format!(
-        "#!/bin/sh\nset -eu\n[ \"$PATH\" = '' ]\n[ \"$HOME\" = \"$PWD/home\" ]\n[ \"$TMPDIR\" = \"$PWD/tmp\" ]\n[ -z \"${{CARGO_HOME+x}}\" ]\n[ -z \"${{GH_TOKEN+x}}\" ]\n[ -z \"${{GITHUB_TOKEN+x}}\" ]\n[ -f \"$LKJSCRIPT_RELEASE_CANDIDATE\" ]\nif [ \"$1\" = '--list' ]; then\nprintf '%s' '{listing}'\nelse\n[ \"$1\" = '--exact' ]\n[ \"$2\" = '--test-threads=1' ]\n[ \"$3\" = '--color=never' ]\n[ \"$#\" = 30 ]\nprintf '%s' '{output}'\nexit {exit}\nfi\n"
+        "#!/bin/sh\nset -eu\n[ \"$PATH\" = '' ]\n[ \"$HOME\" = \"$PWD/home\" ]\n[ \"$TMPDIR\" = \"$PWD/tmp\" ]\n[ -z \"${{CARGO_HOME+x}}\" ]\n[ -z \"${{GH_TOKEN+x}}\" ]\n[ -z \"${{GITHUB_TOKEN+x}}\" ]\n[ -f \"$LKJSCRIPT_RELEASE_CANDIDATE\" ]\nif [ \"$1\" = '--list' ]; then\nprintf '%s' '{listing}'\nelse\n[ \"$1\" = '--exact' ]\n[ \"$2\" = '--test-threads=1' ]\n[ \"$3\" = '--color=never' ]\n[ \"$#\" = 35 ]\nprintf '%s' '{output}'\nexit {exit}\nfi\n"
     );
     fs::write(&path, script).unwrap();
     fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
@@ -90,7 +95,7 @@ fn native_runner_uses_closed_environment_exact_inventory_and_retained_processes(
         .unwrap();
     assert_eq!(
         runner.receipt.inventory.as_ref().unwrap().selected.len(),
-        27
+        32
     );
     assert_eq!(runner.receipt.phases.len(), 2);
     assert!(
@@ -106,7 +111,7 @@ fn native_runner_uses_closed_environment_exact_inventory_and_retained_processes(
         serde_json::from_slice(&fs::read(root.path().join("receipt.json")).unwrap()).unwrap();
     assert_eq!(
         record["inventory"]["selected"].as_array().unwrap().len(),
-        27
+        32
     );
     assert!(root.path().join("inventory.stdout.log").is_file());
     assert!(root.path().join("execute.stderr.log").is_file());

@@ -7,22 +7,41 @@ fn shared_dependency_interfaces_retain_exact_records_without_sharing_private_sna
     let (source, supplier, wrapper) = dependency_copy_triangle(SHARED_INTERFACE_SIGNATURE);
     let root = &source.packages[&source.container.root.package_revision].snapshot;
     let nested = &source.packages[&wrapper].snapshot;
-    assert!(Arc::ptr_eq(&root.dependency_interfaces[&supplier], &nested.dependency_interfaces[&supplier]));
+    assert!(Arc::ptr_eq(
+        &root.dependency_interfaces[&supplier],
+        &nested.dependency_interfaces[&supplier]
+    ));
     let mut changed = root.clone();
-    assert!(Arc::ptr_eq(&root.dependency_interfaces[&supplier], &changed.dependency_interfaces[&supplier]));
+    assert!(Arc::ptr_eq(
+        &root.dependency_interfaces[&supplier],
+        &changed.dependency_interfaces[&supplier]
+    ));
     Arc::make_mut(changed.dependency_interfaces.get_mut(&supplier).unwrap()).clear();
     assert!(!root.dependency_interfaces[&supplier].is_empty());
-    assert!(!Arc::ptr_eq(&root.dependency_interfaces[&supplier], &changed.dependency_interfaces[&supplier]));
+    assert!(!Arc::ptr_eq(
+        &root.dependency_interfaces[&supplier],
+        &changed.dependency_interfaces[&supplier]
+    ));
     changed.dependency_types.clear();
     assert!(!root.dependency_types.is_empty());
     // The source-disjoint oracle still reads and reconstructs every interface itself.
-    let oracle = crate::platform::package_transport::oracle::reconstruct(&source.container).unwrap();
+    let oracle =
+        crate::platform::package_transport::oracle::reconstruct(&source.container).unwrap();
     for package in source.packages.values() {
         let independent = &oracle.snapshots[&package.revision.package];
-        assert_eq!(package.snapshot.dependency_interfaces, independent.dependency_interfaces);
-        assert_eq!(package.snapshot.dependency_types, independent.dependency_types);
+        assert_eq!(
+            package.snapshot.dependency_interfaces,
+            independent.dependency_interfaces
+        );
+        assert_eq!(
+            package.snapshot.dependency_types,
+            independent.dependency_types
+        );
         for (revision, records) in &package.snapshot.dependency_interfaces {
-            assert!(!Arc::ptr_eq(records, &independent.dependency_interfaces[revision]));
+            assert!(!Arc::ptr_eq(
+                records,
+                &independent.dependency_interfaces[revision]
+            ));
         }
     }
 }
@@ -36,13 +55,19 @@ fn shared_dependency_interfaces_are_admission_local_and_reclaim_after_last_snaps
     let root = &source.packages[&key].snapshot;
     let other = &second.packages[&key].snapshot;
     assert_eq!(root.dependency_interfaces, other.dependency_interfaces);
-    assert!(!Arc::ptr_eq(&root.dependency_interfaces[&supplier], &other.dependency_interfaces[&supplier]));
+    assert!(!Arc::ptr_eq(
+        &root.dependency_interfaces[&supplier],
+        &other.dependency_interfaces[&supplier]
+    ));
     let weak = Arc::downgrade(&root.dependency_interfaces[&supplier]);
     let retained = root.clone();
     drop(source);
     assert!(weak.upgrade().is_some());
     drop(retained);
-    assert!(weak.upgrade().is_none(), "neither another admission nor a global cache retains the map");
+    assert!(
+        weak.upgrade().is_none(),
+        "neither another admission nor a global cache retains the map"
+    );
     assert!(!second.packages[&key].snapshot.dependency_interfaces[&supplier].is_empty());
 }
 
@@ -57,7 +82,16 @@ fn shared_dependency_interfaces_never_turn_previous_admission_into_input_authori
     bytes[0] ^= 1;
     assert!(corrupted.admit().is_err());
     assert!(crate::platform::package_transport::oracle::reconstruct(&corrupted).is_err());
-    assert_eq!(source.container.admit().unwrap().container.encode().unwrap(), original);
+    assert_eq!(
+        source
+            .container
+            .admit()
+            .unwrap()
+            .container
+            .encode()
+            .unwrap(),
+        original
+    );
 }
 
 #[test]
@@ -66,11 +100,20 @@ fn shared_dependency_interface_exact_budget_rejects_partial_attachment() {
     // implementation's observed cost. The last refused allocation may be an
     // empty interface entry or a type copy depending on exact package-ID order.
     for (signature, exact, copies) in [
-        ("declarations.begin\n(units (module create supplier (function create value (visibility public) (returns Unit) (effect pure) (body (unit)))))\ndeclarations.end\n", 9, (1, 2)),
-        (SHARED_INTERFACE_SIGNATURE, 15, (2, 4)),
+        (
+            "declarations.begin\n(units (module create supplier (function create value (visibility public) (returns Unit) (effect pure) (body (unit)))))\ndeclarations.end\n",
+            10,
+            (1, 2),
+        ),
+        (SHARED_INTERFACE_SIGNATURE, 16, (2, 4)),
     ] {
         let (source, _, wrapper) = dependency_copy_triangle(signature);
         let interfaces = dependency_copy_interfaces(&source);
+        let revisions = source
+            .packages
+            .iter()
+            .map(|(digest, package)| (*digest, package.revision.clone()))
+            .collect::<BTreeMap<_, _>>();
         for maximum in [exact - 1, exact] {
             let store = dependency_copy_store(&source.container.objects, maximum);
             let mut pool = SharedDependencyInterfaces::new(&interfaces, &store);
@@ -81,7 +124,8 @@ fn shared_dependency_interface_exact_budget_rejects_partial_attachment() {
                 let mut candidate = expected.clone();
                 candidate.dependency_interfaces.clear();
                 candidate.dependency_types.clear();
-                result = pool.attach(&mut candidate);
+                candidate.representation_dependencies.clear();
+                result = pool.attach(&mut candidate, &revisions);
                 let complete = candidate.dependency_interfaces == expected.dependency_interfaces
                     && candidate.dependency_types == expected.dependency_types;
                 if result.is_err() {

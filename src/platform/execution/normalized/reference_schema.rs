@@ -45,6 +45,7 @@ pub struct NormalizedReferenceSchema {
     pub(super) buffer_free_types: BTreeSet<TypeObjectDigest>,
     pub(super) comparable_types: BTreeSet<TypeObjectDigest>,
     pub(super) application_free_types: BTreeSet<TypeObjectDigest>,
+    pub(super) owned_record_declarations: BTreeSet<DeclarationReference>,
     pub functions: Vec<DeclarationReference>,
     pub records: Vec<NormalizedRecordLayout>,
     pub variants: Vec<NormalizedVariantLayout>,
@@ -175,6 +176,10 @@ impl NormalizedReferenceSchema {
                             DeclarationPayload::Record {
                                 fields,
                                 type_parameters,
+                            }
+                            | DeclarationPayload::OwnedRecord {
+                                fields,
+                                type_parameters,
                             } => {
                                 let constraints =
                                     nominal_constraints(snapshot, *id, type_parameters)?;
@@ -205,6 +210,10 @@ impl NormalizedReferenceSchema {
                                     reference,
                                     NormalizedRecordLayout {
                                         declaration: reference,
+                                        owned: matches!(
+                                            declaration.payload,
+                                            DeclarationPayload::OwnedRecord { .. }
+                                        ),
                                         type_parameters: type_parameters.clone().into(),
                                         type_parameter_constraints: constraints.into(),
                                         arguments: Vec::new().into(),
@@ -298,6 +307,47 @@ impl NormalizedReferenceSchema {
         schema.source_admission_steps = source_work as u64;
         super::reference_types::complete(&mut schema, &inputs, control)?;
         Ok(schema)
+    }
+
+    pub(super) fn owned_record_layout(
+        &self,
+        ty: TypeObjectDigest,
+    ) -> Option<&NormalizedRecordLayout> {
+        let (declaration, arguments) = match &self.types.get(&ty)?.form {
+            TypeForm::Named { declaration } => (*declaration, &[][..]),
+            TypeForm::Applied {
+                declaration,
+                arguments,
+            } => (*declaration, arguments.as_slice()),
+            _ => return None,
+        };
+        let layout = self.records.get(*self.record_instances.get(&ty)?)?;
+        (layout.owned
+            && layout.declaration == declaration
+            && layout.arguments.as_ref() == arguments
+            && layout.type_parameters.len() == arguments.len())
+        .then_some(layout)
+    }
+
+    pub(super) fn is_owned_type(&self, ty: TypeObjectDigest) -> bool {
+        self.types.get(&ty).is_some_and(|object| {
+            matches!(
+                object.form,
+                TypeForm::ByteBuffer
+                    | TypeForm::OwnedI64Cell
+                    | TypeForm::OwnedProduct { .. }
+                    | TypeForm::OwnedChoice { .. }
+                    | TypeForm::OwnedSequence { .. }
+            )
+        }) || self
+            .types
+            .get(&ty)
+            .is_some_and(|object| match &object.form {
+                TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
+                    self.owned_record_declarations.contains(declaration)
+                }
+                _ => false,
+            })
     }
 
     pub fn substitute_type(

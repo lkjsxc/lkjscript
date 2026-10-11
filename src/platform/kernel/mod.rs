@@ -28,6 +28,7 @@ mod name;
 mod namespace;
 mod owned_contract;
 pub(crate) mod owned_product;
+pub(crate) mod owned_record;
 mod owner;
 pub(crate) mod parallel;
 pub(crate) mod parallel_types;

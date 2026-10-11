@@ -1,12 +1,13 @@
 # Owned FIFO consumer
 
-This native workload exercises the standard package's generic two-stack FIFO.
-It is not a second queue implementation. `library.lkjc`, `steps.lkjc` and
+This native workload exercises the standard package's public nominal
+`Fifo<T: Owned>` and generic two-stack FIFO operations. `library.lkjc`, `steps.lkjc` and
 `trace.lkjc` are admitted and exported before the separate consumer's concrete
 `elements.lkjc` and `application.lkjc` requests are authored.
 
 The exact standard dependency owns empty, length, enqueue, dequeue, front and
-discard. The small `Element` contract belongs to this observation workload:
+discard. Consumers name `(std::Fifo T)` without access to its private incoming
+and outgoing fields. The small `Element` contract belongs to this observation workload:
 create, borrow-observe and consume-finish make representation differences visible
 without giving the trace knowledge of the element's storage. The native trace
 uses that witness through the imported generic code, including recursive calls.
@@ -37,6 +38,12 @@ The independent oracle enumerates all 781 words of length zero through four
 from enqueue-0, enqueue-255, dequeue, peek and clear. Additional long mixed-stack
 and deterministic mixed-operation traces cover refill and collection boundaries.
 A comparison count is coverage, not a performance score.
+
+The [representation cost experiment](costs/README.md) holds the native
+two-stack algorithm, workloads and complete results constant. It measures
+structural and nominal queues on identical candidate bytes, with a separate
+predecessor structural control. Modeled allocation and joined custody remain
+separate from stage timings and the runtime's test-only storage observations.
 
 Run the focused source regression from the repository root:
 

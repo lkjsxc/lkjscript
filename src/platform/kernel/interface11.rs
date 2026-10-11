@@ -78,6 +78,11 @@ impl TryFrom<PackageInterfaceRecord> for PackageInterfaceRecord11 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(value: PackageInterfaceRecord) -> Result<Self, Self::Error> {
         Ok(match value {
+            PackageInterfaceRecord::RepresentationDeclaration(_) => {
+                return Err(super::owned_record::reject(
+                    "private representation evidence requires Graph 32",
+                ));
+            }
             PackageInterfaceRecord::Declaration(v) => Self::Declaration(v.try_into()?),
             PackageInterfaceRecord::TypeParameter(v) => Self::TypeParameter(v),
             PackageInterfaceRecord::EffectParameter(v) => Self::EffectParameter(v),
@@ -147,6 +152,11 @@ impl TryFrom<PackageInterfaceDeclarationPayload> for PackageInterfaceDeclaration
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: PackageInterfaceDeclarationPayload) -> Result<Self, Self::Error> {
         Ok(match v {
+            PackageInterfaceDeclarationPayload::OwnedRecord { .. } => {
+                return Err(super::owned_record::reject(
+                    "nominal owned records require Graph 32",
+                ));
+            }
             PackageInterfaceDeclarationPayload::Record {
                 type_parameters,
                 fields,

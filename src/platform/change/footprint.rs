@@ -61,6 +61,14 @@ enum ReadKey {
         graph: u16,
         owner: OwnerKey,
     },
+    Dependencies,
+    RepresentationDependency {
+        package: PackageId,
+        revision: PackageRevisionDigest,
+        semantic: RevisionId,
+        graph: u16,
+        target: PackageId,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -181,6 +189,40 @@ impl AuthoredReadFootprint {
     ) -> Result<(), Diagnostic> {
         self.insert(
             ReadKey::Dependency(package),
+            optional(
+                value
+                    .map(|record| encode_dependency(record).map(|(digest, _)| digest.bytes()))
+                    .transpose()?,
+            ),
+        )
+    }
+    pub fn record_dependencies(&mut self, values: &[DependencyRecord]) -> Result<(), Diagnostic> {
+        self.insert(
+            ReadKey::Dependencies,
+            range_observation(values.iter().map(|value| {
+                let mut bytes = Vec::with_capacity(82);
+                bytes.extend_from_slice(&value.package.bytes());
+                bytes.extend_from_slice(&value.package_revision.bytes());
+                bytes.extend_from_slice(&value.semantic_revision.bytes());
+                bytes.extend_from_slice(&value.graph_contract_version.to_be_bytes());
+                bytes
+            }))?,
+        )
+    }
+    pub fn record_representation_dependency(
+        &mut self,
+        root: &DependencyRecord,
+        package: PackageId,
+        value: Option<&DependencyRecord>,
+    ) -> Result<(), Diagnostic> {
+        self.insert(
+            ReadKey::RepresentationDependency {
+                package: root.package,
+                revision: root.package_revision,
+                semantic: root.semantic_revision,
+                graph: root.graph_contract_version,
+                target: package,
+            },
             optional(
                 value
                     .map(|record| encode_dependency(record).map(|(digest, _)| digest.bytes()))
@@ -379,6 +421,18 @@ impl AuthoredReadFootprint {
                     *package,
                     canonical.read_dependency(*package)?.value.as_ref(),
                 )?,
+                ReadKey::Dependencies => {
+                    observed.record_dependencies(&canonical.read_dependencies()?.value)?;
+                }
+                ReadKey::RepresentationDependency { target, .. } => {
+                    let root = key.dependency().ok_or_else(|| inconsistent(key))?;
+                    let read = canonical.read_representation_dependency(&root, *target)?;
+                    observed.record_representation_dependency(
+                        &root,
+                        *target,
+                        read.value.as_ref(),
+                    )?;
+                }
                 ReadKey::Retirement(owner) => observed
                     .record_retirement(*owner, canonical.read_retirement(*owner)?.value.as_ref())?,
                 ReadKey::Namespace(key) => {
@@ -510,6 +564,13 @@ impl ReadKey {
                 semantic,
                 graph,
                 ..
+            }
+            | Self::RepresentationDependency {
+                package,
+                revision,
+                semantic,
+                graph,
+                ..
             } => Some(DependencyRecord {
                 graph_contract_version: *graph,
                 package: *package,
@@ -583,11 +644,18 @@ impl ReadKey {
                 semantic,
                 graph,
                 ..
+            }
+            | Self::RepresentationDependency {
+                package,
+                revision,
+                semantic,
+                graph,
+                ..
             } => {
-                bytes.push(if matches!(self, Self::Interface { .. }) {
-                    11
-                } else {
-                    12
+                bytes.push(match self {
+                    Self::Interface { .. } => 11,
+                    Self::InterfaceOwner { .. } => 12,
+                    _ => 14,
                 });
                 bytes.extend_from_slice(&package.bytes());
                 bytes.extend_from_slice(&revision.bytes());
@@ -596,7 +664,11 @@ impl ReadKey {
                 if let Self::InterfaceOwner { owner, .. } = self {
                     bytes.extend_from_slice(&EncodedOwnerKey::new(*owner).bytes());
                 }
+                if let Self::RepresentationDependency { target, .. } = self {
+                    bytes.extend_from_slice(&target.bytes());
+                }
             }
+            Self::Dependencies => bytes.push(13),
         }
         bytes
     }
@@ -742,9 +814,154 @@ fn conflict(key: &ReadKey) -> Diagnostic {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::platform::change::{CanonicalReadAdmission, RecordedCanonicalBase};
     use crate::platform::kernel::RelationEndpoint;
     use crate::platform::semantic_id::ModuleId;
     use crate::platform::witness::rebuild_full_witness;
+    use std::cell::RefCell;
+
+    fn dependency(ordinal: u8) -> DependencyRecord {
+        DependencyRecord {
+            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+            package: PackageId::migrate(b"recorded-representation-root", u64::from(ordinal)),
+            semantic_revision: RevisionId::from_digest([ordinal; 32]),
+            package_revision: PackageRevisionDigest::from_bytes([ordinal; 32]),
+        }
+    }
+
+    #[test]
+    fn recorded_representation_reads_keep_admission_and_detect_changed_complete_roots() {
+        let mut base = crate::platform::kernel::tests::witness_snapshot();
+        let witness = rebuild_full_witness(&base).unwrap();
+        base.dependencies.clear();
+        base.representation_dependencies.clear();
+        let direct = dependency(1);
+        let private = dependency(2);
+        base.dependencies.insert(direct.package, direct.clone());
+        base.representation_dependencies
+            .insert(private.package, private.clone());
+        let canonical = BudgetedCanonicalBase::new(
+            &base,
+            CanonicalReadAdmission {
+                maximum_point_reads: 2,
+                ..CanonicalReadAdmission::unbounded()
+            },
+            CanonicalReadWork::default(),
+        )
+        .unwrap();
+        let footprint = RefCell::new(AuthoredReadFootprint::default());
+        let recorded = RecordedCanonicalBase {
+            base: &canonical,
+            reads: &footprint,
+        };
+        assert_eq!(
+            recorded.read_dependencies().unwrap().value,
+            vec![direct.clone()]
+        );
+        assert_eq!(
+            recorded
+                .read_representation_dependency(&direct, private.package)
+                .unwrap()
+                .value,
+            Some(private.clone())
+        );
+        assert_eq!(canonical.work().point_reads, 2);
+        assert_eq!(
+            recorded.read_dependencies().unwrap_err().code,
+            "change_budget_canonical_point_reads"
+        );
+        assert_eq!(footprint.borrow().len(), 2);
+        assert!(
+            base.read_dependency(private.package)
+                .unwrap()
+                .value
+                .is_none()
+        );
+        footprint
+            .borrow()
+            .check_against(&base, &witness, ChangeBudget::default())
+            .unwrap();
+
+        let mut changed = base.clone();
+        let additional = dependency(3);
+        changed.dependencies.insert(additional.package, additional);
+        assert_eq!(
+            footprint
+                .borrow()
+                .check_against(&changed, &witness, ChangeBudget::default())
+                .unwrap_err()
+                .code,
+            "change_refresh_conflict"
+        );
+        let mut changed = base.clone();
+        changed
+            .representation_dependencies
+            .get_mut(&private.package)
+            .unwrap()
+            .semantic_revision = RevisionId::from_digest([99; 32]);
+        assert_eq!(
+            footprint
+                .borrow()
+                .check_against(&changed, &witness, ChangeBudget::default())
+                .unwrap_err()
+                .code,
+            "change_refresh_conflict"
+        );
+
+        let zero = BudgetedCanonicalBase::new(
+            &base,
+            CanonicalReadAdmission {
+                maximum_point_reads: 0,
+                ..CanonicalReadAdmission::unbounded()
+            },
+            CanonicalReadWork::default(),
+        )
+        .unwrap();
+        let absent = RefCell::new(AuthoredReadFootprint::default());
+        let recorded = RecordedCanonicalBase {
+            base: &zero,
+            reads: &absent,
+        };
+        for error in [
+            recorded.read_dependencies().unwrap_err(),
+            recorded
+                .read_representation_dependency(&direct, private.package)
+                .unwrap_err(),
+        ] {
+            assert_eq!(error.code, "change_budget_canonical_point_reads");
+        }
+        assert!(absent.borrow().is_empty());
+        assert_eq!(zero.work(), CanonicalReadWork::default());
+    }
+
+    #[test]
+    fn complete_dependency_inventory_guard_preserves_every_exact_binding_in_any_order() {
+        let first = dependency(1);
+        let second = dependency(2);
+        let mut ordered = AuthoredReadFootprint::default();
+        let mut reversed = AuthoredReadFootprint::default();
+        ordered
+            .record_dependencies(&[first.clone(), second.clone()])
+            .unwrap();
+        reversed
+            .record_dependencies(&[second.clone(), first.clone()])
+            .unwrap();
+        assert_eq!(ordered, reversed);
+        for dimension in 0..4 {
+            let mut changed = first.clone();
+            match dimension {
+                0 => changed.package = dependency(3).package,
+                1 => changed.package_revision = dependency(3).package_revision,
+                2 => changed.semantic_revision = dependency(3).semantic_revision,
+                _ => changed.graph_contract_version -= 1,
+            }
+            let mut footprint = AuthoredReadFootprint::default();
+            footprint
+                .record_dependencies(&[changed, second.clone()])
+                .unwrap();
+            assert_ne!(ordered.digest(), footprint.digest());
+        }
+    }
 
     #[test]
     fn complete_range_fingerprint_is_independent_of_returned_order() {

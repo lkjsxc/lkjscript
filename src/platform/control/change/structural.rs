@@ -517,7 +517,7 @@ pub(super) fn layout(
                 scoped = true;
             }
             "pack-owned" => {
-                minimum(&block, id, args, 2)?;
+                minimum(&block, id, args, 1)?;
                 let annotation = clause(&block, args[0], "type")?;
                 arity(&block, args[0], annotation, 1)?;
                 node.record.fields.push(block.field(annotation[0], "type")?);
@@ -531,7 +531,7 @@ pub(super) fn layout(
                 }
             }
             "unpack-owned" => {
-                minimum(&block, id, args, 4)?;
+                minimum(&block, id, args, 3)?;
                 let annotation = clause(&block, args[0], "type")?;
                 arity(&block, args[0], annotation, 1)?;
                 node.record.fields.push(block.field(annotation[0], "type")?);
@@ -1349,20 +1349,53 @@ fn lower_node(
             let member = node.members.first().ok_or_else(|| {
                 inventory_error(record, "borrowed field binding was lost during lowering")
             })?;
-            AuthoredExpressionOperation::BorrowOwnedField {
-                product_type: decoder.decode_type(required(record, "type")?)?,
-                source: Box::new(child()?),
-                field: parse_name(record, "field")?,
-                binding: Box::new(AuthoredBindingDefinition {
-                    symbol: symbol(member, "as")?,
-                    name: parse_name(member, "name")?,
-                    declared_type: Some(decoder.decode_type(required(member, "type")?)?),
-                }),
-                body: Box::new(child()?),
+            let product_type = decoder.decode_type(required(record, "type")?)?;
+            let source = Box::new(child()?);
+            let binding = Box::new(AuthoredBindingDefinition {
+                symbol: symbol(member, "as")?,
+                name: parse_name(member, "name")?,
+                declared_type: Some(decoder.decode_type(required(member, "type")?)?),
+            });
+            let body = Box::new(child()?);
+            if matches!(
+                product_type,
+                AuthoredType::Named { .. } | AuthoredType::Applied { .. }
+            ) {
+                AuthoredExpressionOperation::BorrowOwnedRecordField {
+                    record_type: product_type,
+                    source,
+                    field: decoder.parse_field_reference(record, "field")?,
+                    binding,
+                    body,
+                }
+            } else {
+                AuthoredExpressionOperation::BorrowOwnedField {
+                    product_type,
+                    source,
+                    field: parse_name(record, "field")?,
+                    binding,
+                    body,
+                }
             }
         }
         "expression.pack-owned" => {
             let product_type = decoder.decode_type(required(record, "type")?)?;
+            if matches!(
+                product_type,
+                AuthoredType::Named { .. } | AuthoredType::Applied { .. }
+            ) {
+                let mut fields = Vec::new();
+                for member in &node.members {
+                    fields.push((decoder.parse_field_reference(member, "name")?, child()?));
+                }
+                return Ok(AuthoredExpression {
+                    symbol: Some(node.symbol),
+                    operation: AuthoredExpressionOperation::PackOwnedRecord {
+                        record_type: product_type,
+                        fields,
+                    },
+                });
+            }
             let mut fields = Vec::new();
             for member in &node.members {
                 fields.push((parse_name(member, "name")?, child()?));
@@ -1375,6 +1408,31 @@ fn lower_node(
         "expression.unpack-owned" => {
             let product_type = decoder.decode_type(required(record, "type")?)?;
             let source = Box::new(child()?);
+            if matches!(
+                product_type,
+                AuthoredType::Named { .. } | AuthoredType::Applied { .. }
+            ) {
+                let mut fields = Vec::new();
+                for member in &node.members {
+                    fields.push((
+                        decoder.parse_field_reference(member, "field-name")?,
+                        AuthoredBindingDefinition {
+                            symbol: symbol(member, "as")?,
+                            name: parse_name(member, "name")?,
+                            declared_type: Some(decoder.decode_type(required(member, "type")?)?),
+                        },
+                    ));
+                }
+                return Ok(AuthoredExpression {
+                    symbol: Some(node.symbol),
+                    operation: AuthoredExpressionOperation::UnpackOwnedRecord {
+                        record_type: product_type,
+                        source,
+                        fields,
+                        body: Box::new(child()?),
+                    },
+                });
+            }
             let mut fields = Vec::new();
             for member in &node.members {
                 fields.push((

@@ -71,6 +71,18 @@ impl<R: ExpressionRead + ?Sized> ExpressionRead for Read<'_, R> {
         self.meter.step()?;
         self.inner.has_dependency(package)
     }
+    fn package_representation_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        self.meter.step()?;
+        self.inner.package_representation_owner(package, owner)
+    }
+    fn has_representation_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        self.meter.step()?;
+        self.inner.has_representation_dependency(package)
+    }
 
     fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
         self.inner.validation_checkpoint()

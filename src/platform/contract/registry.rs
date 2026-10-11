@@ -105,9 +105,9 @@ use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-24";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 24;
-pub const CLI_CONTRACT_VERSION: u16 = 44;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-25";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 25;
+pub const CLI_CONTRACT_VERSION: u16 = 45;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -226,8 +226,8 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
 ];
 
 pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
-    "lkjscript-function-definition-projection-20";
-pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 20;
+    "lkjscript-function-definition-projection-21";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 21;
 pub const FUNCTION_DEFINITION_DEFAULT_ITEMS: u64 = 50;
 pub const MAXIMUM_FUNCTION_DEFINITION_ITEMS: u64 = 10_000;
 pub const FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -8701,6 +8701,11 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
             "Ordered authored fields and generic contracts; named types retain declaration identity.",
         ),
         (
+            "owned-record",
+            "(owned-record MODE BINDING (visibility public|package|private) TYPE_PARAMETER... FIELD...)",
+            "Intrinsically affine nominal storage, including empty and data-only records. Parameters have Owned or ordinary Transferable constraints. Representation construction, decomposition and reads are restricted to the exact defining module. Named and applied types retain exact declaration identity; representation-only dependency records confer no lookup authority.",
+        ),
+        (
             "variant",
             "(variant MODE BINDING (visibility VISIBILITY) TYPE_PARAMETER... CASE...)",
             "Cases may contain an explicit payload type.",
@@ -8947,7 +8952,7 @@ fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String
         (
             "type-application",
             "[(types TYPE...)]",
-            "nominal record and variant only; existing arity, constraints, visibility and validity apply",
+            "nominal record, owned-record and variant only; existing arity, constraints, visibility and validity apply",
         ),
         (
             "requirement-argument",
@@ -8966,8 +8971,8 @@ fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String
         ),
         (
             "owned-child-read-scope",
-            "(borrow-owned-field (type PRODUCT) (local SOURCE) (field NAME (binding VIEW (type TYPE))) (in BODY))",
-            "one exact direct owned product field becomes a scoped read view; SOURCE is a live owning or borrowed local; the exact child annotation and all ancestor loans remain checked through BODY; nested inspection, explicit borrow calls and scoped lending to shareable parallel inputs are allowed; consumption, escape, capture, storage and ownership transfer reject; the original source remains available after the scope",
+            "(borrow-owned-field (type PRODUCT_OR_OWNED_RECORD) (local SOURCE) (field FIELD (binding VIEW (type TYPE))) (in BODY))",
+            "one exact direct owned field becomes a scoped read view; structural products select by name, nominal owned records select an exact field identity with defining-module representation access; SOURCE is a live owning or borrowed local; the exact child annotation and all ancestor loans remain checked through BODY; nested inspection, explicit borrow calls and scoped lending to shareable parallel inputs are allowed; consumption, escape, capture, storage and ownership transfer reject; the original source remains available after the scope",
         ),
         (
             "owned-sequence",
@@ -9618,9 +9623,9 @@ mod tests {
             .expect("definition projection contract");
         assert_eq!(
             contract.identity,
-            "lkjscript-function-definition-projection-20"
+            "lkjscript-function-definition-projection-21"
         );
-        assert_eq!(contract.version, 20);
+        assert_eq!(contract.version, 21);
         assert_eq!(
             contract_descriptors()
                 .iter()

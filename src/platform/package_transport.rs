@@ -364,6 +364,10 @@ pub(crate) struct PackageTransportClosureValidation {
     pub root_revision: PackageRevision,
     pub root_transport: PackageTransport,
     pub root_interface: PackageInterfaceValidation,
+    /// Exact transitive metadata admitted with the root, excluding the root itself.
+    /// Presence grants representation proofs, never authored dependency authority.
+    pub representation_revisions: BTreeMap<PackageRevisionDigest, PackageRevision>,
+    pub representation_interfaces: BTreeMap<PackageRevisionDigest, PackageInterfaceValidation>,
     pub interface_map_work: MapWork,
     pub dependency_edges: usize,
 }
@@ -435,6 +439,8 @@ pub(crate) fn validate_package_transport_local_metered<S: ImmutableObjectStore +
     Ok((transport, interface))
 }
 
+/// Check exact revisions and descriptive interface closure. This does not admit executable
+/// source or publish readiness; installed transports additionally pass `source::admit`.
 pub fn validate_package_transport_closure<S: ImmutableObjectStore + ?Sized>(
     store: &S,
     root_revision: PackageRevisionDigest,
@@ -498,7 +504,7 @@ pub(crate) fn validate_package_transport_closure_metered<S: ImmutableObjectStore
             "physical transport selections must be unique and ordered by logical revision",
         ));
     }
-    let revisions = logical.revisions;
+    let mut revisions = logical.revisions;
     let mut transports = BTreeMap::new();
     let mut interfaces = BTreeMap::new();
     let mut interface_map_work = MapWork::default();
@@ -538,8 +544,7 @@ pub(crate) fn validate_package_transport_closure_metered<S: ImmutableObjectStore
             )
         })?;
     let root_revision = revisions
-        .get(&root_transport.package_revision)
-        .cloned()
+        .remove(&root_transport.package_revision)
         .ok_or_else(|| {
             package_error(
                 DiagnosticClass::Corrupt,
@@ -562,6 +567,8 @@ pub(crate) fn validate_package_transport_closure_metered<S: ImmutableObjectStore
         root_revision,
         root_transport,
         root_interface,
+        representation_revisions: revisions,
+        representation_interfaces: interfaces,
         interface_map_work,
         dependency_edges: logical.dependency_edges,
     })
@@ -788,13 +795,37 @@ fn validate_interface_dependencies(
             }
             if let TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } = ty.form
             {
-                closure.require_owner(
+                let nominal = closure.require_owner(
                     revision,
                     declaration.package,
                     OwnerKey::Declaration(declaration.declaration),
-                    &[OwnerKind::Record, OwnerKind::Variant],
+                    &[
+                        OwnerKind::Record,
+                        OwnerKind::Variant,
+                        OwnerKind::OwnedRecord,
+                    ],
                     "named type",
                 )?;
+                if declaration.package != revision.package
+                    && matches!(
+                        nominal.record,
+                        PackageInterfaceRecord::RepresentationDeclaration(_)
+                    )
+                {
+                    return Err(package_error(
+                        DiagnosticClass::Semantic,
+                        "package_transport_interface_private_type",
+                        "interface names a private representation declaration in another package",
+                    ));
+                }
+                if nominal.kind() == OwnerKind::OwnedRecord && revision.graph_contract_version < 32
+                {
+                    return Err(package_error(
+                        DiagnosticClass::Semantic,
+                        "kernel_owned_record_generation",
+                        "nominal owned interface types require Graph 32",
+                    ));
+                }
             }
         }
         for owner in interface.owners.values() {
@@ -824,6 +855,25 @@ fn validate_interface_dependencies(
                         &declaration.payload
                     {
                         for method in &contract.methods {
+                            if let Some(position) = method.result_borrow {
+                                let source =
+                                    method.parameters.get(position as usize).ok_or_else(|| {
+                                        package_error(
+                                            DiagnosticClass::Semantic,
+                                            "package_transport_interface_borrow_result",
+                                            "borrowed method source position is absent",
+                                        )
+                                    })?;
+                                if !closure.owned_type(revision, source.ty)?
+                                    || !closure.owned_type(revision, method.result)?
+                                {
+                                    return Err(package_error(
+                                        DiagnosticClass::Semantic,
+                                        "package_transport_interface_borrow_result",
+                                        "borrowed method signatures require exact Owned source and result types",
+                                    ));
+                                }
+                            }
                             for requirement in method.effect.row().requirements {
                                 closure.require_owner(
                                     revision,
@@ -840,6 +890,31 @@ fn validate_interface_dependencies(
                     else {
                         continue;
                     };
+                    if let Some(source) = signature.result_borrow {
+                        let source = interface
+                            .owners
+                            .get(&OwnerKey::Parameter(source))
+                            .and_then(|owner| match &owner.record {
+                                PackageInterfaceRecord::Parameter(parameter) => Some(parameter),
+                                _ => None,
+                            })
+                            .ok_or_else(|| {
+                                package_error(
+                                    DiagnosticClass::Semantic,
+                                    "package_transport_interface_borrow_result",
+                                    "borrowed function source parameter is absent",
+                                )
+                            })?;
+                        if !closure.owned_type(revision, source.ty)?
+                            || !closure.owned_type(revision, signature.result)?
+                        {
+                            return Err(package_error(
+                                DiagnosticClass::Semantic,
+                                "package_transport_interface_borrow_result",
+                                "borrowed function signatures require exact Owned source and result types",
+                            ));
+                        }
+                    }
                     for parameter in &signature.implementation_parameters {
                         closure.require_owner(
                             revision,
@@ -885,6 +960,7 @@ fn validate_interface_dependencies(
                     )?
                 }
                 PackageInterfaceRecord::TypeParameter(_)
+                | PackageInterfaceRecord::RepresentationDeclaration(_)
                 | PackageInterfaceRecord::EffectParameter(_)
                 | PackageInterfaceRecord::Field(_)
                 | PackageInterfaceRecord::Case(_)
@@ -971,6 +1047,58 @@ struct PackageInterfaceClosure<'a> {
 }
 
 impl<'a> PackageInterfaceClosure<'a> {
+    fn owned_type(
+        &self,
+        source: &PackageRevision,
+        ty: crate::platform::kernel::TypeObjectDigest,
+    ) -> Result<bool, Diagnostic> {
+        let interface = self
+            .packages
+            .get(&source.package)
+            .and_then(|digest| self.interfaces.get(digest))
+            .ok_or_else(|| {
+                package_error(
+                    DiagnosticClass::Corrupt,
+                    "package_transport_interface_source_lost",
+                    "source interface is absent",
+                )
+            })?;
+        let object = interface.type_objects.get(&ty).ok_or_else(|| {
+            package_error(
+                DiagnosticClass::Semantic,
+                "package_transport_interface_borrow_result",
+                "borrowed signature type is absent",
+            )
+        })?;
+        Ok(match &object.form {
+            TypeForm::ByteBuffer
+            | TypeForm::OwnedI64Cell
+            | TypeForm::OwnedProduct { .. }
+            | TypeForm::OwnedChoice { .. }
+            | TypeForm::OwnedSequence { .. } => true,
+            TypeForm::TypeParameter { parameter } => {
+                matches!(interface.owners.get(&OwnerKey::TypeParameter(*parameter)).map(|owner| &owner.record),
+                Some(PackageInterfaceRecord::TypeParameter(parameter)) if parameter.constraints.has_owned())
+            }
+            TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
+                self.require_owner(
+                    source,
+                    declaration.package,
+                    OwnerKey::Declaration(declaration.declaration),
+                    &[
+                        OwnerKind::Record,
+                        OwnerKind::Variant,
+                        OwnerKind::OwnedRecord,
+                    ],
+                    "borrowed signature nominal type",
+                )?
+                .kind()
+                    == OwnerKind::OwnedRecord
+            }
+            _ => false,
+        })
+    }
+
     fn require_owner(
         &self,
         source: &PackageRevision,
@@ -1186,6 +1314,7 @@ mod tests {
                 .map(|dependency| (dependency.package_revision, BTreeMap::new().into()))
                 .collect(),
             dependency_types: BTreeMap::new(),
+            representation_dependencies: BTreeMap::new(),
             blobs: BTreeMap::new(),
             dependencies: dependencies
                 .iter()

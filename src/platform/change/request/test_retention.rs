@@ -220,6 +220,9 @@ fn remap(operation: &mut E, identities: &BTreeMap<OwnerKey, OwnerKey>) {
         E::PackOwned { fields, .. } => fields
             .iter_mut()
             .for_each(|field| expression(&mut field.value)),
+        E::PackOwnedRecord { fields, .. } => fields
+            .iter_mut()
+            .for_each(|field| expression(&mut field.value)),
         E::Variant { payload, .. } => {
             if let Some(payload) = payload {
                 expression(payload);
@@ -260,6 +263,18 @@ fn remap(operation: &mut E, identities: &BTreeMap<OwnerKey, OwnerKey>) {
                 binding(&mut field.binding);
             }
         }
+        E::UnpackOwnedRecord {
+            source,
+            fields,
+            body,
+            ..
+        } => {
+            expression(source);
+            expression(body);
+            for field in fields {
+                binding(&mut field.binding);
+            }
+        }
         E::MatchOwned { source, arms, .. } | E::MatchBorrowedOwned { source, arms, .. } => {
             expression(source);
             for arm in arms {
@@ -268,6 +283,12 @@ fn remap(operation: &mut E, identities: &BTreeMap<OwnerKey, OwnerKey>) {
             }
         }
         E::BorrowOwnedField {
+            source,
+            binding: id,
+            body,
+            ..
+        }
+        | E::BorrowOwnedRecordField {
             source,
             binding: id,
             body,

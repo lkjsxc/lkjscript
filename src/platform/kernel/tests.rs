@@ -594,6 +594,7 @@ fn historical_prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             root,
             owners,
             types,
+            representation_dependencies: BTreeMap::new(),
             dependency_interfaces: BTreeMap::new(),
             dependency_types: BTreeMap::new(),
             blobs: BTreeMap::new(),
@@ -757,6 +758,7 @@ fn graph_ten_permits_a_structurally_empty_package() {
         },
         owners: BTreeMap::new(),
         types: BTreeMap::new(),
+        representation_dependencies: BTreeMap::new(),
         dependency_interfaces: BTreeMap::new(),
         dependency_types: BTreeMap::new(),
         blobs: BTreeMap::new(),
@@ -1790,10 +1792,18 @@ fn canonical_kernel_codec_manifest_is_frozen() {
     let (mut snapshot, _) = historical_prototype_snapshot();
     assert_eq!(
         manifest(&snapshot, contract::GRAPH_CONTRACT_IDENTITY),
-        "b4f5065061d23e10704ccd261bea1e6d6e67977d363b20ce179f0c7a4f723fdd"
+        "e3bb7d9858de34a68a934e9835d75243e665a1b9101a2c2c1ddcb37738eab131"
     );
     // The current identity and owner envelopes advance together. Keep the previous
     // golden under its original generation instead of relabeling its bytes.
+    snapshot.root.graph_contract_version = 31;
+    for owner in snapshot.owners.values_mut() {
+        owner.set_encoding_for_edit(31);
+    }
+    assert_eq!(
+        manifest(&snapshot, "lkjscript-meaning-graph-31"),
+        "b4f5065061d23e10704ccd261bea1e6d6e67977d363b20ce179f0c7a4f723fdd"
+    );
     snapshot.root.graph_contract_version = 30;
     for owner in snapshot.owners.values_mut() {
         owner.set_encoding_for_edit(30);

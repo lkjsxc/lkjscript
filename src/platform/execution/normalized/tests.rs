@@ -67,6 +67,9 @@ mod owned_generic_tests;
 pub(crate) mod owned_implementation_scheme_tests;
 #[path = "owned_product_tests.rs"]
 mod owned_product_tests;
+
+#[path = "owned_nominal_eval_tests.rs"]
+mod owned_nominal_eval_tests;
 #[path = "owned_sequence_eval_tests.rs"]
 mod owned_sequence_eval_tests;
 #[path = "owned_task_boundary_tests.rs"]
@@ -124,7 +127,7 @@ fn graph14_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
     );
     assert_eq!(
         crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-        31
+        32
     );
     assert_eq!(
         crate::platform::kernel::contract::TYPE_OBJECT_CONTRACT_VERSION,
@@ -998,6 +1001,7 @@ fn empty_normalized_snapshot(seed: &[u8]) -> crate::platform::kernel::KernelSnap
         },
         owners: BTreeMap::new(),
         types: BTreeMap::new(),
+        representation_dependencies: BTreeMap::new(),
         dependency_interfaces: BTreeMap::new(),
         dependency_types: BTreeMap::new(),
         blobs: BTreeMap::new(),

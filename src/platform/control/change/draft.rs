@@ -677,6 +677,10 @@ impl Renderer<'_> {
                     D::Record {
                         type_parameters,
                         fields,
+                    }
+                    | D::OwnedRecord {
+                        type_parameters,
+                        fields,
                     } => {
                         children.extend(type_parameters.into_iter().map(OwnerKey::TypeParameter));
                         children.extend(fields.into_iter().map(OwnerKey::Field));
@@ -1116,6 +1120,105 @@ impl Renderer<'_> {
                 }
                 text.push(')');
                 text
+            }
+            E::PackOwnedRecord {
+                record_type,
+                fields,
+            } => {
+                let mut text = format!("(pack-owned (type {})", self.ty(record_type)?);
+                for (field, value) in fields {
+                    let field = self.field(
+                        &AuthoredFieldSelector::Nominal {
+                            field: field.clone(),
+                        },
+                        false,
+                    )?;
+                    append(
+                        &mut text,
+                        &format!(" (field {field} {})", self.expression(value, env)?),
+                        self.maximum,
+                    )?;
+                }
+                text.push(')');
+                text
+            }
+            E::UnpackOwnedRecord {
+                record_type,
+                source,
+                fields,
+                body,
+            } => {
+                let mut text = format!(
+                    "(unpack-owned (type {}) {}",
+                    self.ty(record_type)?,
+                    self.expression(source, env)?
+                );
+                for (field, binding) in fields {
+                    let field = self.field(
+                        &AuthoredFieldSelector::Nominal {
+                            field: field.clone(),
+                        },
+                        false,
+                    )?;
+                    let ty = self.ty(binding
+                        .declared_type
+                        .as_ref()
+                        .ok_or_else(|| error("unpack binding requires a type"))?)?;
+                    append(
+                        &mut text,
+                        &format!(
+                            " (field {field} (binding {} (as {}) (type {ty})))",
+                            binding.name, binding.symbol
+                        ),
+                        self.maximum,
+                    )?;
+                    env.entry(binding.name.to_string())
+                        .or_default()
+                        .push(binding.symbol.clone());
+                }
+                append(
+                    &mut text,
+                    &format!(" (in {}))", self.expression(body, env)?),
+                    self.maximum,
+                )?;
+                for (_, binding) in fields.iter().rev() {
+                    if let Some(values) = env.get_mut(binding.name.as_str()) {
+                        values.pop();
+                    }
+                }
+                text
+            }
+            E::BorrowOwnedRecordField {
+                record_type,
+                source,
+                field,
+                binding,
+                body,
+            } => {
+                let field = self.field(
+                    &AuthoredFieldSelector::Nominal {
+                        field: field.clone(),
+                    },
+                    false,
+                )?;
+                let ty = self.ty(binding
+                    .declared_type
+                    .as_ref()
+                    .ok_or_else(|| error("borrowed field binding requires a type"))?)?;
+                let source = self.expression(source, env)?;
+                env.entry(binding.name.to_string())
+                    .or_default()
+                    .push(binding.symbol.clone());
+                let body = self.expression(body, env)?;
+                if let Some(values) = env.get_mut(binding.name.as_str()) {
+                    values.pop();
+                }
+                format!(
+                    "(borrow-owned-field (type {}) {source} (field {field} (binding {} (as {}) (type {ty}))) (in {body}))",
+                    self.ty(record_type)?,
+                    binding.name,
+                    binding.symbol
+                )
             }
             E::PackOwned {
                 product_type,

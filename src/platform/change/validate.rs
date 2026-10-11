@@ -1109,7 +1109,11 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> IncrementalVali
                 self.require_type_reference(
                     declaration.package,
                     OwnerKey::Declaration(declaration.declaration),
-                    &[OwnerKind::Record, OwnerKind::Variant],
+                    &[
+                        OwnerKind::Record,
+                        OwnerKind::OwnedRecord,
+                        OwnerKind::Variant,
+                    ],
                 );
             }
             TypeForm::CapabilityResource { interface } => self.require_type_reference(
@@ -1164,7 +1168,10 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> IncrementalVali
         } else {
             self.overlay
                 .package_interface_owner(package, owner)
-                .map(|record| record.map(|record| record.header().kind))
+                .map(|record| record.and_then(|record| {
+                    (!matches!(record, crate::platform::kernel::PackageInterfaceRecord::RepresentationDeclaration(_)))
+                        .then(|| record.header().kind)
+                }))
         };
         match actual {
             Ok(Some(kind)) if kinds.contains(&kind) => {}
@@ -1319,6 +1326,18 @@ impl<B: CanonicalBaseRead + ?Sized> ExpressionRead for KernelOverlay<'_, B> {
 
     fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
         Ok(self.dependency(package)?.is_some())
+    }
+
+    fn package_representation_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<crate::platform::kernel::PackageInterfaceRecord>, Diagnostic> {
+        KernelOverlay::package_representation_owner(self, package, owner)
+    }
+
+    fn has_representation_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        Ok(self.representation_dependency(package)?.is_some())
     }
 }
 

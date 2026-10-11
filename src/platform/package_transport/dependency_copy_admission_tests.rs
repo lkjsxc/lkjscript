@@ -22,6 +22,7 @@ fn dependency_copy_empty(seed: &[u8]) -> KernelSnapshot {
         types: BTreeMap::new(),
         dependency_interfaces: BTreeMap::new(),
         dependency_types: BTreeMap::new(),
+        representation_dependencies: BTreeMap::new(),
         blobs: BTreeMap::new(),
         dependencies: BTreeMap::new(),
         retirements: BTreeMap::new(),
@@ -70,7 +71,11 @@ fn dependency_copy_importer(seed: &[u8], imports: &[&AdmittedClosure]) -> Admitt
 
 fn dependency_copy_triangle(
     signature: &str,
-) -> (AdmittedClosure, PackageRevisionDigest, PackageRevisionDigest) {
+) -> (
+    AdmittedClosure,
+    PackageRevisionDigest,
+    PackageRevisionDigest,
+) {
     let snapshot =
         crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(signature)
             .unwrap();
@@ -131,23 +136,34 @@ fn dependency_interface_fanout_refuses_before_next_owner_or_type_copy_and_exact_
         "declarations.begin\n(units (module create supplier (function create value (visibility public) (returns Unit) (effect pure) (body (unit)))))\ndeclarations.end\n",
     );
     let interfaces = dependency_copy_interfaces(&source);
+    let revisions = source
+        .packages
+        .iter()
+        .map(|(digest, package)| (*digest, package.revision.clone()))
+        .collect::<BTreeMap<_, _>>();
     assert_eq!(
-        (interfaces[&supplier].owners.len(), interfaces[&supplier].type_objects.len()),
+        (
+            interfaces[&supplier].owners.len(),
+            interfaces[&supplier].type_objects.len()
+        ),
         (1, 1),
     );
     // Independently: three incoming edges, two shared maps (one empty), one owner,
-    // two scalar copies and the earlier visit total nine. Tiny interfaces add overhead.
+    // two scalar copies, one transitive edge and the earlier visit total ten.
     for (maximum, expected_copies, success) in [
         (1, (0, 0), false),
         (2, (0, 0), false),
         (3, (0, 0), false),
         (4, (1, 0), false),
         (5, (1, 1), false),
-        (9, (1, 2), true),
+        (10, (1, 2), true),
     ] {
         let store = dependency_copy_store(&source.container.objects, maximum);
         DEPENDENCY_COPY_COUNTS.with(|counts| counts.set((0, 0)));
-        assert_eq!(store.charge_visits(u64::MAX).unwrap_err().code, "package_source_budget");
+        assert_eq!(
+            store.charge_visits(u64::MAX).unwrap_err().code,
+            "package_source_budget"
+        );
         assert_eq!(store.visits(), 1);
         assert_eq!(DEPENDENCY_COPY_COUNTS.with(|counts| counts.get()), (0, 0));
         let mut result = Ok(());
@@ -157,14 +173,18 @@ fn dependency_interface_fanout_refuses_before_next_owner_or_type_copy_and_exact_
             let mut snapshot = expected.clone();
             snapshot.dependency_interfaces.clear();
             snapshot.dependency_types.clear();
-            result = pool.attach(&mut snapshot);
+            snapshot.representation_dependencies.clear();
+            result = pool.attach(&mut snapshot, &revisions);
             if result.is_err() {
                 if maximum <= 2 {
                     assert!(snapshot.dependency_types.is_empty());
                 }
                 break;
             }
-            assert_eq!(snapshot.dependency_interfaces, expected.dependency_interfaces);
+            assert_eq!(
+                snapshot.dependency_interfaces,
+                expected.dependency_interfaces
+            );
             assert_eq!(snapshot.dependency_types, expected.dependency_types);
         }
         assert_eq!(
@@ -190,7 +210,8 @@ fn dependency_interface_fanout_refuses_before_next_owner_or_type_copy_and_exact_
             .admit_with_budget(source.validation_visits - 1, source.validation_read_bytes)
             .is_err(),
     );
-    let oracle = crate::platform::package_transport::oracle::reconstruct(&source.container).unwrap();
+    let oracle =
+        crate::platform::package_transport::oracle::reconstruct(&source.container).unwrap();
     for package in exact.packages.values() {
         assert_eq!(
             package.snapshot.owners,
@@ -209,15 +230,23 @@ fn dependency_interface_copy_reserves_owner_and_type_children_before_growth() {
         "declarations.begin\n(units (module create supplier (function create relay (visibility public) (parameter create value (type (record (value I64)))) (returns (record (value I64))) (effect pure) (body (local value)))))\ndeclarations.end\n",
     );
     let interfaces = dependency_copy_interfaces(&source);
+    let revisions = source
+        .packages
+        .iter()
+        .map(|(digest, package)| (*digest, package.revision.clone()))
+        .collect::<BTreeMap<_, _>>();
     assert_eq!(
-        (interfaces[&supplier].owners.len(), interfaces[&supplier].type_objects.len()),
+        (
+            interfaces[&supplier].owners.len(),
+            interfaces[&supplier].type_objects.len()
+        ),
         (2, 2),
     );
     // Independently: function + parameter child + parameter owner = three; scalar type +
     // structural type + its field child = three more per importing package.
     // Three edges + two maps + one owner inventory (3) + two type inventories (6)
-    // + the earlier visit total fifteen; owner records are copied only once.
-    for (maximum, expected_copies, success) in [(9, (2, 2), false), (15, (2, 4), true)] {
+    // + one transitive edge + the earlier visit total sixteen; owners copy once.
+    for (maximum, expected_copies, success) in [(9, (2, 2), false), (16, (2, 4), true)] {
         let store = dependency_copy_store(&source.container.objects, maximum);
         DEPENDENCY_COPY_COUNTS.with(|counts| counts.set((0, 0)));
         let mut result = Ok(());
@@ -226,7 +255,8 @@ fn dependency_interface_copy_reserves_owner_and_type_children_before_growth() {
             let mut snapshot = source.packages[&revision].snapshot.clone();
             snapshot.dependency_interfaces.clear();
             snapshot.dependency_types.clear();
-            result = pool.attach(&mut snapshot);
+            snapshot.representation_dependencies.clear();
+            result = pool.attach(&mut snapshot, &revisions);
             if result.is_err() {
                 break;
             }

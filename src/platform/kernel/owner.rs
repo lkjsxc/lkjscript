@@ -311,6 +311,14 @@ impl DeclarationRecord {
     fn validate_local(&self) -> Result<(), Diagnostic> {
         validate_header_domain(self.header, self.expected_kind())?;
         validate_names([&self.name])?;
+        if self.header.contract_version < 32
+            && matches!(self.payload, DeclarationPayload::OwnedRecord { .. })
+        {
+            return Err(owner_error(
+                "kernel_owned_record_generation",
+                "nominal owned records require Graph 32",
+            ));
+        }
         if self.header.contract_version < 29
             && matches!(&self.payload, DeclarationPayload::OwnedImplementation(i)
                 if !i.implementation_parameters.is_empty() || i.methods.iter().any(|m| !m.implementations.is_empty()))
@@ -354,6 +362,13 @@ impl DeclarationRecord {
         match &self.payload {
             DeclarationPayload::OwnedContract(c) => c.validate_local(),
             DeclarationPayload::OwnedImplementation(i) => i.validate_local(),
+            DeclarationPayload::OwnedRecord {
+                fields,
+                type_parameters,
+            } => {
+                validate_ordered_unique("owned record type parameters", type_parameters, true)?;
+                validate_sorted_ids("owned record fields", fields, true)
+            }
             DeclarationPayload::Record {
                 fields,
                 type_parameters,
@@ -390,6 +405,7 @@ impl DeclarationRecord {
             DeclarationPayload::OwnedContract(_) => OwnerKind::OwnedContract,
             DeclarationPayload::OwnedImplementation(_) => OwnerKind::OwnedImplementation,
             DeclarationPayload::Record { .. } => OwnerKind::Record,
+            DeclarationPayload::OwnedRecord { .. } => OwnerKind::OwnedRecord,
             DeclarationPayload::Variant { .. } => OwnerKind::Variant,
             DeclarationPayload::Interface { .. } => OwnerKind::Interface,
             DeclarationPayload::External(_) => OwnerKind::External,
@@ -418,6 +434,7 @@ impl DeclarationRecord {
             DeclarationPayload::OwnedImplementation(i) => i.type_roots(),
             DeclarationPayload::Constant { ty, .. } => vec![*ty],
             DeclarationPayload::Record { .. }
+            | DeclarationPayload::OwnedRecord { .. }
             | DeclarationPayload::Variant { .. }
             | DeclarationPayload::Interface { .. }
             | DeclarationPayload::Component { .. }
@@ -476,12 +493,19 @@ pub enum DeclarationPayload {
     },
     OwnedContract(super::OwnedContract),
     OwnedImplementation(super::OwnedImplementation),
+    OwnedRecord {
+        type_parameters: Vec<TypeParameterId>,
+        fields: Vec<FieldId>,
+    },
 }
 
 impl DeclarationPayload {
     pub fn type_parameters(&self) -> DeclarationTypeParameters<'_> {
         let (first, second) = match self {
             Self::Record {
+                type_parameters, ..
+            }
+            | Self::OwnedRecord {
                 type_parameters, ..
             }
             | Self::Variant {
@@ -2048,6 +2072,7 @@ fn validate_header_domain(header: OwnerHeader, kind: OwnerKind) -> Result<(), Di
             | (OwnerKey::Declaration(_), OwnerKind::OwnedContract)
             | (OwnerKey::Declaration(_), OwnerKind::OwnedImplementation)
             | (OwnerKey::Declaration(_), OwnerKind::Record)
+            | (OwnerKey::Declaration(_), OwnerKind::OwnedRecord)
             | (OwnerKey::Declaration(_), OwnerKind::Variant)
             | (OwnerKey::Declaration(_), OwnerKind::Interface)
             | (OwnerKey::Declaration(_), OwnerKind::External)

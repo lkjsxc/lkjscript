@@ -23,8 +23,8 @@ Current normalized identity:
 - semantic revision: `rev_a1d97c5d7deda1ece8e2e3383bd7a58ae1e267838368ec5b42678e40c9eb1640`;
 - semantic state: `semantic_state_3832cd12c3fee672d0bdfb975cb363cbc457f6ef45f15cb44a62d40ab47f2dee`;
 - package revision: `package_revision_8de95dabbeda139a7bee02fe38808f3aaa91bbf2b205ae06a2d7fddd99c2fc71`;
-- artifact manifest: `artifact_manifest_1dcc4b43515dcca3e02e91d2671293d70f50fa81a90617fbe72e284dea1d5ff5`;
-- artifact bundle: `artifact_bundle_36f37fd7d8a45e2f46071213f9ed883d9ddde91ad57fc55b72022cf8b7b1d816`;
+- artifact manifest: `artifact_manifest_8d67648751bc1b97b87faafe9e56e784962448e9ede4b692421dc2fcd3a4780c`;
+- artifact bundle: `artifact_bundle_2a3f196a83eaa0963783be82bdc304dd4182e88611363577a72f49d327073315`;
 - 2,044 live root semantic owners and one exact built-in standard dependency.
 
 The original Graph 13 materialization preserved all existing application owner identities and behavior.
@@ -222,10 +222,10 @@ compiler 30, bytecode 25 and artifact 37 through public check/build. All 44 test
 agree between production and reference execution. Accepted HEAD, exact historical
 standard supplier, application behavior and operational data remain unchanged.
 
-The current derived bundle uses compiler 31, bytecode 26 and artifact 38 through
+The current derived bundle uses compiler 32, bytecode 27 and artifact 39 through
 ordinary public check/build. All 44 application and exact-supplier tests pass
 with zero failures and agreement between both evaluators. Accepted HEAD and its
-pinned standard supplier remain unchanged; the application does not adopt ordinary
-sequence working storage. This rebuild neither changes running deployments nor
-migrates operational data. The [release notes](../../docs/releases/v0.1.90.md)
+pinned standard supplier remain unchanged; this application does not yet adopt
+nominal owned records. Running deployments and operational data retain their
+separate authority. The [release notes](../../docs/releases/v0.1.91.md)
 identify the format cut; [status](../../docs/status.md) owns delivery and publication.

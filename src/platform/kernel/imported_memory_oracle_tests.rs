@@ -47,6 +47,7 @@ fn empty(seed: &[u8]) -> KernelSnapshot {
         },
         owners: BTreeMap::new(),
         types: BTreeMap::new(),
+        representation_dependencies: BTreeMap::new(),
         dependency_interfaces: BTreeMap::new(),
         dependency_types: BTreeMap::new(),
         blobs: BTreeMap::new(),
@@ -662,7 +663,8 @@ declarations.end"#,
                 errors
                     .iter()
                     .any(|error| error.code == "kernel_owned_product"
-                        && error.message.contains("structural type depth bound")),
+                        && error.message
+                            == "combined owned representation exceeds the type-depth bound"),
                 "{errors:?}"
             );
         }

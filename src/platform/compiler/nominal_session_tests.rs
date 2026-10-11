@@ -115,6 +115,11 @@ pub(super) fn hostile_bundle(
             *b"LKJAEN38",
             "lkjscript.artifact-bundle.complete.v38",
         ),
+        39 => (
+            *b"LKJART39",
+            *b"LKJAEN39",
+            "lkjscript.artifact-bundle.complete.v39",
+        ),
         other => panic!("unexpected forged-artifact generation {other}"),
     };
     let (digest, manifest_bytes) = manifest.encode().unwrap();
@@ -251,6 +256,29 @@ fn rehashed_compiled_and_canonical_expanding_cycle_rejects_independently() {
     manifest.object_count = count;
     manifest.object_bytes = bytes;
     let bytes = hostile_bundle(&manifest, &objects);
+    let failure = load_artifact(&bytes).unwrap_err();
+    // The transported field row still describes the original canonical owner, so
+    // exact projection coherence rejects before the changed recursive type is admitted.
+    assert_eq!(failure.code, "artifact_interface_source", "{failure}");
+    // Repair that independent interface binding too, retaining the stronger proof
+    // that coherently rehashed canonical and compiled expansion remains invalid.
+    let mut altered = loaded;
+    altered.manifest = manifest;
+    altered.objects = objects;
+    let field_owner = OwnerKey::Field(field.field);
+    let mut projected =
+        nominal_owned_record_admission_tests::interface_owner(&altered, field_owner);
+    let crate::platform::kernel::PackageInterfaceRecord::Field(projected_field) =
+        &mut projected.record
+    else {
+        panic!("record field interface")
+    };
+    projected_field.ty = grow;
+    let bytes = nominal_owned_record_admission_tests::replace_interface_owner(
+        &altered,
+        field_owner,
+        projected,
+    );
     let failure = load_artifact(&bytes).unwrap_err();
     assert_eq!(failure.code, "artifact_nominal_meaning", "{failure}");
     assert!(

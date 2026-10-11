@@ -383,6 +383,7 @@ pub(super) fn body(
         return Ok(());
     }
     let mut locals = Locals::new();
+    let mut expected_owned_result = None;
     let demand = if let Some(scope) = scope {
         let OwnerRecord::Declaration(owner) = checker
             .closure
@@ -390,67 +391,75 @@ pub(super) fn body(
         else {
             return Err(reject());
         };
-        let DeclarationPayload::Function(function) = &owner.payload else {
-            return Err(reject());
-        };
-        let result = checker.closure.identity(function.result, types, 0)?;
-        for id in &function.parameters {
-            let OwnerRecord::Parameter(parameter) = checker
-                .closure
-                .owner(scope.package, OwnerKey::Parameter(*id))?
-            else {
-                return Err(reject());
-            };
-            if parameter.parent != ParameterParent::Function(scope.declaration)
-                || (function.result_borrow == Some(*id) && parameter.resource_requirement.is_some())
-            {
-                return Err(reject());
+        if let DeclarationPayload::Function(function) = &owner.payload {
+            let result = checker.closure.identity(function.result, types, 0)?;
+            if checker.owned(result)? {
+                expected_owned_result = Some(result);
             }
-            let ty = checker.closure.identity(parameter.ty, types, 0)?;
-            if checker.owned(ty)? {
-                if parameter.use_mode == ParameterUse::Unrestricted {
+            for id in &function.parameters {
+                let OwnerRecord::Parameter(parameter) = checker
+                    .closure
+                    .owner(scope.package, OwnerKey::Parameter(*id))?
+                else {
+                    return Err(reject());
+                };
+                if parameter.parent != ParameterParent::Function(scope.declaration)
+                    || (function.result_borrow == Some(*id)
+                        && parameter.resource_requirement.is_some())
+                {
                     return Err(reject());
                 }
-                let key = LocalValueReference::FunctionParameter(*id);
-                checker.insert(
-                    &mut locals,
-                    key,
-                    Local {
-                        ty,
-                        live: true,
-                        owning: parameter.use_mode == ParameterUse::Consume,
-                        root: key,
-                        parent: None,
-                        guards: 0,
-                    },
-                )?;
+                let ty = checker.closure.identity(parameter.ty, types, 0)?;
+                if checker.owned(ty)? {
+                    if parameter.use_mode == ParameterUse::Unrestricted {
+                        return Err(reject());
+                    }
+                    let key = LocalValueReference::FunctionParameter(*id);
+                    checker.insert(
+                        &mut locals,
+                        key,
+                        Local {
+                            ty,
+                            live: true,
+                            owning: parameter.use_mode == ParameterUse::Consume,
+                            root: key,
+                            parent: None,
+                            guards: 0,
+                        },
+                    )?;
+                }
             }
-        }
-        if let Some(source) = function.result_borrow {
-            let key = LocalValueReference::FunctionParameter(source);
-            let source_local = locals.get(&key).ok_or_else(reject)?;
-            if function.effect != FunctionEffect::Pure
-                || !function.parameters.contains(&source)
-                || source_local.owning
-                || !checker.owned(result)?
-            {
-                return Err(reject());
+            if let Some(source) = function.result_borrow {
+                let key = LocalValueReference::FunctionParameter(source);
+                let source_local = locals.get(&key).ok_or_else(reject)?;
+                if function.effect != FunctionEffect::Pure
+                    || !function.parameters.contains(&source)
+                    || source_local.owning
+                    || !checker.owned(result)?
+                {
+                    return Err(reject());
+                }
+                Demand::Read {
+                    root: key,
+                    ty: result,
+                }
+            } else if checker.owned(result)? {
+                Demand::Owner
+            } else {
+                Demand::Data
             }
-            Demand::Read {
-                root: key,
-                ty: result,
-            }
-        } else if checker.owned(result)? {
-            Demand::Owner
         } else {
-            Demand::Data
+            Demand::Owner
         }
     } else {
         // Test declarations can compare owned values; existing admission owns
         // their result mode, while this pass checks every nested invocation.
         Demand::Owner
     };
-    checker.flow(root, &mut locals, demand, 0)?;
+    let actual = checker.flow(root, &mut locals, demand, 0)?;
+    if expected_owned_result.is_some() && actual != expected_owned_result {
+        return Err(reject());
+    }
     Ok(())
 }
 
@@ -470,10 +479,33 @@ impl Checker<'_, '_> {
             let operation = self.operation(id)?.clone();
             match &operation {
                 ExpressionOperation::BorrowCall { .. }
+                | ExpressionOperation::PackOwnedRecord { .. }
+                | ExpressionOperation::UnpackOwnedRecord { .. }
+                | ExpressionOperation::BorrowOwnedRecordField { .. }
                 | ExpressionOperation::Parallel { .. }
                 | ExpressionOperation::SequenceGet { .. }
                 | ExpressionOperation::SequenceReplace { .. } => {
                     return Ok(true);
+                }
+                ExpressionOperation::Field {
+                    selector: crate::platform::kernel::FieldSelector::Nominal(field),
+                    ..
+                } => {
+                    let OwnerRecord::Field(owner) = self
+                        .closure
+                        .owner(field.package, OwnerKey::Field(field.field))?
+                    else {
+                        return Err(reject());
+                    };
+                    let OwnerRecord::Declaration(owner) = self
+                        .closure
+                        .owner(field.package, OwnerKey::Declaration(owner.declaration))?
+                    else {
+                        return Err(reject());
+                    };
+                    if matches!(owner.payload, DeclarationPayload::OwnedRecord { .. }) {
+                        return Ok(true);
+                    }
                 }
                 ExpressionOperation::SequencePush { sequence_type, .. } => {
                     let sequence = self.closure.identity(*sequence_type, self.types, 0)?;
@@ -583,6 +615,8 @@ impl Checker<'_, '_> {
             ExpressionOperation::BorrowCall { .. }
             | ExpressionOperation::UnpackOwned { .. }
             | ExpressionOperation::BorrowOwnedField { .. }
+            | ExpressionOperation::UnpackOwnedRecord { .. }
+            | ExpressionOperation::BorrowOwnedRecordField { .. }
             | ExpressionOperation::Parallel { .. }
             | ExpressionOperation::SequencePush { .. }
             | ExpressionOperation::SequenceGet { .. } => 2,
@@ -607,6 +641,7 @@ impl Checker<'_, '_> {
                 fields.len()
             }
             ExpressionOperation::PackOwned { fields, .. } => fields.len(),
+            ExpressionOperation::PackOwnedRecord { fields, .. } => fields.len(),
             ExpressionOperation::Variant { payload, .. } => usize::from(payload.is_some()),
             ExpressionOperation::Map { entries, .. } => {
                 entries.len().checked_mul(2).ok_or_else(reject)?
@@ -750,7 +785,11 @@ impl Checker<'_, '_> {
             .declared_type
             .map(|ty| self.closure.identity(ty, self.types, 0))
             .transpose()?;
-        if expected_kind == BindingKind::OwnedBorrow && declared != expected {
+        if matches!(
+            expected_kind,
+            BindingKind::OwnedBorrow | BindingKind::OwnedUnpack
+        ) && declared != expected
+        {
             return Err(reject());
         }
         if expected_kind == BindingKind::Let
@@ -1069,6 +1108,8 @@ impl Checker<'_, '_> {
                     | ExpressionOperation::MatchOwned { .. }
                     | ExpressionOperation::UnpackOwned { .. }
                     | ExpressionOperation::BorrowOwnedField { .. }
+                    | ExpressionOperation::UnpackOwnedRecord { .. }
+                    | ExpressionOperation::BorrowOwnedRecordField { .. }
                     | ExpressionOperation::BorrowOwnedItem { .. }
                     | ExpressionOperation::MatchBorrowedOwned { .. }
                     | ExpressionOperation::BorrowCall { .. }
@@ -1219,6 +1260,36 @@ impl Checker<'_, '_> {
                     depth,
                 )?
             }
+            ExpressionOperation::BorrowOwnedRecordField {
+                record_type,
+                source,
+                field,
+                binding,
+                body,
+            } => {
+                let record = self.closure.identity(record_type, self.types, 0)?;
+                let fields = self.closure.owned_record_fields(record, self.scope, true)?;
+                let ty = fields
+                    .iter()
+                    .find(|(candidate, _)| *candidate == field)
+                    .ok_or_else(reject)?
+                    .1;
+                if !self.owned(ty)? {
+                    return Err(reject());
+                }
+                let source = self.local(source, locals, record)?;
+                self.scoped(
+                    Loan {
+                        source,
+                        binding,
+                        ty,
+                    },
+                    body,
+                    locals,
+                    demand,
+                    depth,
+                )?
+            }
             ExpressionOperation::BorrowOwnedItem {
                 sequence_type,
                 source,
@@ -1324,6 +1395,48 @@ impl Checker<'_, '_> {
                         .find(|candidate| candidate.name == field.name)
                         .ok_or_else(reject)?
                         .ty;
+                    self.bind(
+                        field.binding,
+                        BindingKind::OwnedUnpack,
+                        Some(ty),
+                        locals,
+                        None,
+                    )?;
+                }
+                let result = self.flow(body, locals, demand, depth + 1)?;
+                for field in fields {
+                    self.unbind(field.binding, locals)?;
+                }
+                result
+            }
+            ExpressionOperation::UnpackOwnedRecord {
+                record_type,
+                source,
+                fields,
+                body,
+            } => {
+                let record = self.closure.identity(record_type, self.types, 0)?;
+                let types = self.closure.owned_record_fields(record, self.scope, true)?;
+                if fields.len() != types.len()
+                    || self.flow(source, locals, Demand::Owner, depth + 1)? != Some(record)
+                {
+                    return Err(reject());
+                }
+                let mut seen = BTreeSet::new();
+                let mut seen_bindings = BTreeSet::new();
+                for field in &fields {
+                    if !seen.insert(field.field) || !seen_bindings.insert(field.binding) {
+                        return Err(reject());
+                    }
+                    index_node::<crate::platform::kernel::FieldReference>(
+                        &mut self.closure.allocated,
+                    )?;
+                    index_node::<BindingId>(&mut self.closure.allocated)?;
+                    let ty = types
+                        .iter()
+                        .find(|(candidate, _)| *candidate == field.field)
+                        .ok_or_else(reject)?
+                        .1;
                     self.bind(
                         field.binding,
                         BindingKind::OwnedUnpack,
@@ -1536,6 +1649,41 @@ impl Checker<'_, '_> {
                 }
                 Some(self.closure.identity(product_type, self.types, 0)?)
             }
+            ExpressionOperation::PackOwnedRecord {
+                record_type,
+                fields,
+            } => {
+                let record = self.closure.identity(record_type, self.types, 0)?;
+                let types = self.closure.owned_record_fields(record, self.scope, true)?;
+                if fields.len() != types.len() {
+                    return Err(reject());
+                }
+                let mut seen = BTreeSet::new();
+                for field in fields {
+                    if !seen.insert(field.field) {
+                        return Err(reject());
+                    }
+                    index_node::<crate::platform::kernel::FieldReference>(
+                        &mut self.closure.allocated,
+                    )?;
+                    let ty = types
+                        .iter()
+                        .find(|(candidate, _)| *candidate == field.field)
+                        .ok_or_else(reject)?
+                        .1;
+                    let owned = self.owned(ty)?;
+                    if self.flow(
+                        field.value,
+                        locals,
+                        if owned { Demand::Owner } else { Demand::Data },
+                        depth + 1,
+                    )? != owned.then_some(ty)
+                    {
+                        return Err(reject());
+                    }
+                }
+                Some(record)
+            }
             ExpressionOperation::ChooseOwned {
                 choice_type, value, ..
             } => {
@@ -1647,21 +1795,28 @@ impl Checker<'_, '_> {
                     if !local.live {
                         return Err(reject());
                     }
-                    let (
-                        TypeForm::OwnedProduct { fields },
-                        crate::platform::kernel::FieldSelector::Structural(name),
-                    ) = (
-                        &self.closure.types.get(&local.ty).ok_or_else(reject)?.form,
-                        selector,
-                    )
-                    else {
-                        return Err(reject());
+                    let field = match selector {
+                        crate::platform::kernel::FieldSelector::Nominal(reference) => {
+                            self.closure
+                                .owned_record_fields(local.ty, self.scope, true)?
+                                .iter()
+                                .find(|(field, _)| *field == reference)
+                                .ok_or_else(reject)?
+                                .1
+                        }
+                        crate::platform::kernel::FieldSelector::Structural(name) => {
+                            let TypeForm::OwnedProduct { fields } =
+                                &self.closure.types.get(&local.ty).ok_or_else(reject)?.form
+                            else {
+                                return Err(reject());
+                            };
+                            fields
+                                .iter()
+                                .find(|field| field.name == name)
+                                .ok_or_else(reject)?
+                                .ty
+                        }
                     };
-                    let field = fields
-                        .iter()
-                        .find(|field| field.name == name)
-                        .ok_or_else(reject)?
-                        .ty;
                     if self.owned(field)? {
                         return Err(reject());
                     }

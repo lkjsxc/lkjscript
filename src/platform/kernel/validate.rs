@@ -38,6 +38,9 @@ pub struct KernelSnapshot {
     pub dependency_interfaces: BTreeMap<PackageRevisionDigest, DependencyInterface>,
     /// Structural types reachable from the bound dependency interfaces.
     pub dependency_types: BTreeMap<TypeObjectDigest, TypeObject>,
+    /// Exact selections reachable through admitted imports, used only for private
+    /// representation proof. They do not grant authored-reference authority.
+    pub representation_dependencies: BTreeMap<PackageId, DependencyRecord>,
     pub blobs: BTreeMap<BlobObjectDigest, u64>,
     pub dependencies: BTreeMap<PackageId, DependencyRecord>,
     pub retirements: BTreeMap<OwnerKey, RetirementRecord>,
@@ -252,7 +255,8 @@ fn snapshot_named_member_types(
             return Vec::new();
         };
         return match &record.payload {
-            DeclarationPayload::Record { fields, .. } => fields
+            DeclarationPayload::Record { fields, .. }
+            | DeclarationPayload::OwnedRecord { fields, .. } => fields
                 .iter()
                 .filter_map(
                     |field| match snapshot.owners.get(&OwnerKey::Field(*field)) {
@@ -282,13 +286,16 @@ fn snapshot_named_member_types(
     else {
         return Vec::new();
     };
-    let Some(PackageInterfaceRecord::Declaration(record)) =
-        owners.get(&OwnerKey::Declaration(declaration.declaration))
+    let Some(
+        PackageInterfaceRecord::Declaration(record)
+        | PackageInterfaceRecord::RepresentationDeclaration(record),
+    ) = owners.get(&OwnerKey::Declaration(declaration.declaration))
     else {
         return Vec::new();
     };
     match &record.payload {
-        super::PackageInterfaceDeclarationPayload::Record { fields, .. } => fields
+        super::PackageInterfaceDeclarationPayload::Record { fields, .. }
+        | super::PackageInterfaceDeclarationPayload::OwnedRecord { fields, .. } => fields
             .iter()
             .filter_map(|field| match owners.get(&OwnerKey::Field(*field)) {
                 Some(PackageInterfaceRecord::Field(record)) => Some(record.ty),
@@ -630,7 +637,7 @@ impl FullValidator<'_> {
                         "type parameter",
                     );
                     if parameter.constraints.has_owned()
-                        && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::OwnedContract(_) | DeclarationPayload::OwnedImplementation(_) | DeclarationPayload::Function(_)))
+                        && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::OwnedContract(_) | DeclarationPayload::OwnedImplementation(_) | DeclarationPayload::Function(_) | DeclarationPayload::OwnedRecord { .. }))
                     {
                         self.error(
                             "kernel_owned_parameter_owner",
@@ -638,7 +645,7 @@ impl FullValidator<'_> {
                         );
                     }
                     if parameter.constraints.requires_transfer()
-                        && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::Function(_) | DeclarationPayload::OwnedImplementation(_)))
+                        && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::Function(_) | DeclarationPayload::OwnedImplementation(_) | DeclarationPayload::OwnedRecord { .. }))
                     {
                         self.error(
                             "kernel_transfer_parameter_owner",
@@ -646,7 +653,7 @@ impl FullValidator<'_> {
                         );
                     }
                     if parameter.constraints.requires_share()
-                        && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::Function(_) | DeclarationPayload::OwnedImplementation(_)))
+                        && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::Function(_) | DeclarationPayload::OwnedImplementation(_) | DeclarationPayload::OwnedRecord { .. }))
                     {
                         self.error(
                             "kernel_share_parameter_owner",
@@ -1287,6 +1294,10 @@ impl FullValidator<'_> {
             DeclarationPayload::Record {
                 fields,
                 type_parameters,
+            }
+            | DeclarationPayload::OwnedRecord {
+                fields,
+                type_parameters,
             } => {
                 for parameter in type_parameters {
                     self.require_local_kind(
@@ -1527,7 +1538,11 @@ impl FullValidator<'_> {
                 .require_exact_kind(
                     declaration.package,
                     OwnerKey::Declaration(declaration.declaration),
-                    &[OwnerKind::Record, OwnerKind::Variant],
+                    &[
+                        OwnerKind::Record,
+                        OwnerKind::Variant,
+                        OwnerKind::OwnedRecord,
+                    ],
                     "named type",
                 ),
             TypeForm::CapabilityResource { interface } => self.require_exact_kind(
@@ -1606,27 +1621,40 @@ impl FullValidator<'_> {
             if !self.consume_work() {
                 return;
             }
+            let nominal_owned = match super::owned_record::is_owned(
+                &self.read,
+                self.snapshot.root.package_id,
+                digest,
+            ) {
+                Ok(owned) => owned,
+                Err(error) => {
+                    self.diagnostics.push(error);
+                    return;
+                }
+            };
             if !matches!(
                 object.form,
                 TypeForm::OwnedProduct { .. }
                     | TypeForm::OwnedChoice { .. }
                     | TypeForm::OwnedSequence { .. }
-            ) && object.child_types().into_iter().any(|t| {
-                self.snapshot
-                    .types
-                    .get(&t)
-                    .or_else(|| self.snapshot.dependency_types.get(&t))
-                    .is_some_and(|t| {
-                        matches!(
-                            t.form,
-                            TypeForm::ByteBuffer
-                                | TypeForm::OwnedI64Cell
-                                | TypeForm::OwnedProduct { .. }
-                                | TypeForm::OwnedChoice { .. }
-                                | TypeForm::OwnedSequence { .. }
-                        )
-                    })
-            }) {
+            ) && !nominal_owned
+                && object.child_types().into_iter().any(|t| {
+                    self.snapshot
+                        .types
+                        .get(&t)
+                        .or_else(|| self.snapshot.dependency_types.get(&t))
+                        .is_some_and(|t| {
+                            matches!(
+                                t.form,
+                                TypeForm::ByteBuffer
+                                    | TypeForm::OwnedI64Cell
+                                    | TypeForm::OwnedProduct { .. }
+                                    | TypeForm::OwnedChoice { .. }
+                                    | TypeForm::OwnedSequence { .. }
+                            )
+                        })
+                })
+            {
                 self.error("kernel_buffer_container", format!("type object {digest} contains ByteBuffer in an unsupported container or callable descriptor"));
             }
             let forbidden = match &object.form {
@@ -2127,6 +2155,7 @@ impl FullValidator<'_> {
     ) {
         match operation {
             ExpressionOperation::BorrowOwnedField { binding, body, .. }
+            | ExpressionOperation::BorrowOwnedRecordField { binding, body, .. }
             | ExpressionOperation::BorrowOwnedItem { binding, body, .. }
             | ExpressionOperation::BorrowCall { binding, body, .. } => {
                 self.binding_containers
@@ -2163,6 +2192,18 @@ impl FullValidator<'_> {
                 }
             }
             ExpressionOperation::UnpackOwned { fields, body, .. } => {
+                for field in fields {
+                    self.binding_containers
+                        .entry(field.binding)
+                        .or_default()
+                        .push(BindingContainer {
+                            expression,
+                            scope_roots: vec![*body],
+                            kind: BindingContainerKind::OwnedUnpack,
+                        });
+                }
+            }
+            ExpressionOperation::UnpackOwnedRecord { fields, body, .. } => {
                 for field in fields {
                     self.binding_containers
                         .entry(field.binding)
@@ -2629,6 +2670,34 @@ impl FullValidator<'_> {
         operation: &ExpressionOperation,
     ) {
         match operation {
+            ExpressionOperation::PackOwnedRecord { fields, .. } => {
+                for field in fields {
+                    self.require_exact_kind(
+                        field.field.package,
+                        OwnerKey::Field(field.field.field),
+                        &[OwnerKind::Field],
+                        "nominal owned construction field",
+                    );
+                }
+            }
+            ExpressionOperation::UnpackOwnedRecord { fields, .. } => {
+                for field in fields {
+                    self.require_exact_kind(
+                        field.field.package,
+                        OwnerKey::Field(field.field.field),
+                        &[OwnerKind::Field],
+                        "nominal owned decomposition field",
+                    );
+                }
+            }
+            ExpressionOperation::BorrowOwnedRecordField { field, .. } => {
+                self.require_exact_kind(
+                    field.package,
+                    OwnerKey::Field(field.field),
+                    &[OwnerKind::Field],
+                    "nominal owned child field",
+                );
+            }
             ExpressionOperation::Text { value } | ExpressionOperation::StaticText { value } => {
                 if let TextValue::Blob { digest, bytes } = value {
                     self.require_blob(*digest, *bytes, "text");
@@ -2980,6 +3049,9 @@ impl FullValidator<'_> {
                     DeclarationPayload::Record {
                         type_parameters, ..
                     }
+                    | DeclarationPayload::OwnedRecord {
+                        type_parameters, ..
+                    }
                     | DeclarationPayload::Variant {
                         type_parameters, ..
                     } => type_parameters.contains(&id),
@@ -2998,7 +3070,7 @@ impl FullValidator<'_> {
             }
             (OwnerKey::Field(id), OwnerRecord::Declaration(declaration)) => matches!(
                 &declaration.payload,
-                DeclarationPayload::Record { fields, .. } if fields.contains(&id)
+                DeclarationPayload::Record { fields, .. } | DeclarationPayload::OwnedRecord { fields, .. } if fields.contains(&id)
             ),
             (OwnerKey::Case(id), OwnerRecord::Declaration(declaration)) => matches!(
                 &declaration.payload,
@@ -3113,6 +3185,10 @@ impl FullValidator<'_> {
                 .get(&dependency.package_revision)
                 .and_then(|owners| owners.get(&owner))
             {
+                Some(PackageInterfaceRecord::RepresentationDeclaration(_)) => self.error(
+                    "kernel_full_foreign_reference_private",
+                    format!("{label} {owner:?} names private representation evidence rather than a public dependency declaration"),
+                ),
                 Some(record) if kinds.contains(&record.header().kind) => {}
                 Some(record) => self.error(
                     "kernel_full_foreign_reference_kind",

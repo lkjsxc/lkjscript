@@ -136,6 +136,14 @@ pub enum AuthoredChange {
         type_parameters: Vec<AuthoredTypeParameter>,
         fields: Vec<AuthoredField>,
     },
+    CreateOwnedRecord {
+        symbol: String,
+        module: ModuleSelector,
+        name: Name,
+        visibility: crate::platform::kernel::DeclarationVisibility,
+        type_parameters: Vec<AuthoredTypeParameter>,
+        fields: Vec<AuthoredField>,
+    },
     CreateVariant {
         symbol: String,
         module: ModuleSelector,
@@ -761,12 +769,21 @@ pub(crate) fn lower_authored_changes_with_publication_base<
                 visibility,
                 type_parameters,
                 fields,
+            }
+            | AuthoredChange::CreateOwnedRecord {
+                symbol,
+                module,
+                name,
+                visibility,
+                type_parameters,
+                fields,
             } => creation::lower_record(
                 &mut lowerer,
                 symbol,
                 module,
                 name,
                 *visibility,
+                matches!(change, AuthoredChange::CreateOwnedRecord { .. }),
                 type_parameters,
                 fields,
             )?,
@@ -956,6 +973,7 @@ pub(crate) fn lower_authored_changes_with_publication_base<
             | AuthoredChange::ReferenceBindings { .. }
             | AuthoredChange::CreateModule { .. }
             | AuthoredChange::CreateRecord { .. }
+            | AuthoredChange::CreateOwnedRecord { .. }
             | AuthoredChange::CreateVariant { .. }
             | AuthoredChange::CreateInterface { .. }
             | AuthoredChange::CreateExternal { .. }
@@ -1183,6 +1201,12 @@ fn collect_symbol_definitions(
                 define_symbol(&mut definitions, symbol, SymbolKind::Module)?;
             }
             AuthoredChange::CreateRecord {
+                symbol,
+                type_parameters,
+                fields,
+                ..
+            }
+            | AuthoredChange::CreateOwnedRecord {
                 symbol,
                 type_parameters,
                 fields,

@@ -302,6 +302,21 @@ pub(crate) fn base_registry(
     let builtin_artifact = outputs.join("builtin-standard.lkja");
     let builtin_transport = outputs.join("builtin-standard.lkjp");
     let application = outputs.join("lkjournal.lkja");
+    let mut workspace_tests = cargo_gate(
+        "workspace_tests",
+        &[
+            "test",
+            "--workspace",
+            "--all-targets",
+            "--all-features",
+            "--locked",
+            "--no-fail-fast",
+        ],
+        &["clippy", "release_build"],
+    );
+    // The hosted cold run continued making progress when its one-hour allowance
+    // expired. Keep complete coverage and bound this aggregate separately.
+    workspace_tests.timeout = std::time::Duration::from_secs(7_200);
     let mut gates = vec![
         cargo_gate("fmt", &["fmt", "--all", "--", "--check"], &[]),
         cargo_gate(
@@ -329,18 +344,7 @@ pub(crate) fn base_registry(
             &["test", "--test", "public_cli", "--locked"],
             &["library_tests", "general_service_tests"],
         ),
-        cargo_gate(
-            "workspace_tests",
-            &[
-                "test",
-                "--workspace",
-                "--all-targets",
-                "--all-features",
-                "--locked",
-                "--no-fail-fast",
-            ],
-            &["clippy", "release_build"],
-        ),
+        workspace_tests,
         // Development-only obligations. Full/release-source already run these
         // packages through clippy/workspace_tests without duplicating the work.
         cargo_gate(
@@ -1022,6 +1026,14 @@ mod tests {
             base_registry(temporary.path(), temporary.path(), Path::new("/bin/true"))
                 .expect("maintained registry");
         let workspace = registry.gate("workspace_tests").expect("workspace gate");
+        assert_eq!(workspace.timeout, std::time::Duration::from_secs(7_200));
+        assert_eq!(
+            registry
+                .gate("library_tests")
+                .expect("library gate")
+                .timeout,
+            super::super::model::DEFAULT_TIMEOUT
+        );
         assert_eq!(
             workspace
                 .command

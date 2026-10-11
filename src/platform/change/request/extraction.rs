@@ -15,9 +15,10 @@ use crate::platform::kernel::{
     EncodedOwnerKey, ExpressionChildRole, ExpressionOperation, ExpressionRead, ExpressionRecord,
     ExpressionValidationLimits, FunctionDeclaration, FunctionEffect, LocalValueReference, Name,
     OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, PackageId, PackageInterfaceDeclarationPayload,
-    PackageInterfaceRecord, ParameterParent, ParameterRecord, ParameterUse, RequirementReference,
-    TypeForm, TypeObject, TypeObjectDigest, encode_owner, infer_function_expression_type,
-    infer_function_expression_type_object, validate_affine_roots_with_limits,
+    PackageInterfaceRecord, PackageRevisionDigest, ParameterParent, ParameterRecord, ParameterUse,
+    RequirementReference, TypeForm, TypeObject, TypeObjectDigest, encode_owner,
+    infer_function_expression_type, infer_function_expression_type_object,
+    validate_affine_roots_with_limits,
 };
 use crate::platform::semantic_id::{
     BindingId, DeclarationId, ExpressionId, ParameterId, encode_hex,
@@ -575,6 +576,7 @@ fn walk_expression<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     match record.operation {
         ExpressionOperation::BorrowCall { .. }
         | ExpressionOperation::BorrowOwnedField { .. }
+        | ExpressionOperation::BorrowOwnedRecordField { .. }
         | ExpressionOperation::BorrowOwnedItem { .. }
         | ExpressionOperation::MatchBorrowedOwned { .. } => {
             return Err(extract_error(
@@ -588,7 +590,10 @@ fn walk_expression<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
                 "function extraction of owned choice scopes is unsupported",
             ));
         }
-        ExpressionOperation::PackOwned { .. } | ExpressionOperation::UnpackOwned { .. } => {
+        ExpressionOperation::PackOwned { .. }
+        | ExpressionOperation::UnpackOwned { .. }
+        | ExpressionOperation::PackOwnedRecord { .. }
+        | ExpressionOperation::UnpackOwnedRecord { .. } => {
             return Err(extract_error(
                 "change_extract_owned_product",
                 "function extraction of owned product scopes is unsupported",
@@ -1512,6 +1517,7 @@ fn replace_expression_reference(
     match operation {
         ExpressionOperation::BorrowCall { .. }
         | ExpressionOperation::BorrowOwnedField { .. }
+        | ExpressionOperation::BorrowOwnedRecordField { .. }
         | ExpressionOperation::BorrowOwnedItem { .. }
         | ExpressionOperation::MatchBorrowedOwned { .. } => {
             return Err(extract_error(
@@ -1549,7 +1555,10 @@ fn replace_expression_reference(
                 "function extraction of owned choice scopes is unsupported",
             ));
         }
-        ExpressionOperation::PackOwned { .. } | ExpressionOperation::UnpackOwned { .. } => {
+        ExpressionOperation::PackOwned { .. }
+        | ExpressionOperation::UnpackOwned { .. }
+        | ExpressionOperation::PackOwnedRecord { .. }
+        | ExpressionOperation::UnpackOwnedRecord { .. } => {
             return Err(extract_corrupt(
                 "change_extract_owned_product",
                 "owned product extraction is unsupported",
@@ -1953,6 +1962,11 @@ fn resource_class<B: CanonicalBaseRead + ?Sized>(
         | TypeForm::OwnedSequence { .. }
         | TypeForm::OwnedProduct { .. }
         | TypeForm::OwnedChoice { .. } => ResourceClass::Memory,
+        TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. }
+            if nominal_owned_record(reader, declaration)? =>
+        {
+            ResourceClass::Memory
+        }
         TypeForm::Named { declaration } => {
             let key = (declaration.package, declaration.declaration);
             if !active_declarations.insert(key) {
@@ -1994,6 +2008,23 @@ fn resource_class<B: CanonicalBaseRead + ?Sized>(
     };
     active_types.remove(&digest);
     Ok(result)
+}
+
+fn nominal_owned_record<B: CanonicalBaseRead + ?Sized>(
+    reader: &CandidateRead<'_, B>,
+    reference: DeclarationReference,
+) -> Result<bool, Diagnostic> {
+    if reference.package == reader.package_id() {
+        Ok(
+            matches!(reader.owner(OwnerKey::Declaration(reference.declaration))?,
+            Some(OwnerRecord::Declaration(record)) if matches!(record.payload, DeclarationPayload::OwnedRecord { .. })),
+        )
+    } else {
+        Ok(
+            matches!(reader.package_interface_owner(reference.package, OwnerKey::Declaration(reference.declaration))?,
+            Some(PackageInterfaceRecord::Declaration(record) | PackageInterfaceRecord::RepresentationDeclaration(record)) if matches!(record.payload, PackageInterfaceDeclarationPayload::OwnedRecord { .. })),
+        )
+    }
 }
 
 fn named_member_types<B: CanonicalBaseRead + ?Sized>(
@@ -2112,7 +2143,10 @@ struct CandidateRead<'a, B: ?Sized> {
     owners: RefCell<BTreeMap<OwnerKey, Option<OwnerRecord>>>,
     types: RefCell<BTreeMap<TypeObjectDigest, Option<TypeObject>>>,
     dependencies: RefCell<BTreeMap<PackageId, Option<DependencyRecord>>>,
-    package_interfaces: RefCell<BTreeMap<(PackageId, OwnerKey), Option<PackageInterfaceRecord>>>,
+    effective_dependency_roots: RefCell<Option<Vec<DependencyRecord>>>,
+    representation_dependencies: RefCell<BTreeMap<PackageId, Option<DependencyRecord>>>,
+    package_interfaces:
+        RefCell<BTreeMap<(PackageRevisionDigest, OwnerKey), Option<PackageInterfaceRecord>>>,
     work: Cell<crate::platform::change::CanonicalReadWork>,
 }
 
@@ -2143,6 +2177,8 @@ impl<'a, B: CanonicalBaseRead + ?Sized> CandidateRead<'a, B> {
             owners: RefCell::new(owners),
             types: RefCell::new(types),
             dependencies: RefCell::new(dependencies),
+            effective_dependency_roots: RefCell::new(None),
+            representation_dependencies: RefCell::new(BTreeMap::new()),
             package_interfaces: RefCell::new(BTreeMap::new()),
             work: Cell::new(crate::platform::change::CanonicalReadWork::default()),
         }
@@ -2187,14 +2223,14 @@ impl<B: CanonicalBaseRead + ?Sized> ExpressionRead for CandidateRead<'_, B> {
         package: PackageId,
         owner: OwnerKey,
     ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
-        let key = (package, owner);
+        let dependency = self.dependency(package)?.ok_or_else(|| {
+            extract_error(
+                "change_extract_dependency_missing",
+                format!("package {package} is not bound by the exact base"),
+            )
+        })?;
+        let key = (dependency.package_revision, owner);
         if !self.package_interfaces.borrow().contains_key(&key) {
-            let dependency = self.dependency(package)?.ok_or_else(|| {
-                extract_error(
-                    "change_extract_dependency_missing",
-                    format!("package {package} is not bound by the exact base"),
-                )
-            })?;
             let read = self.base.read_package_interface_owner(&dependency, owner)?;
             self.add_work(read.work);
             self.package_interfaces.borrow_mut().insert(key, read.value);
@@ -2210,9 +2246,106 @@ impl<B: CanonicalBaseRead + ?Sized> ExpressionRead for CandidateRead<'_, B> {
     fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
         Ok(self.dependency(package)?.is_some())
     }
+
+    fn package_representation_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        let Some(dependency) = self.representation_dependency(package)? else {
+            return Ok(None);
+        };
+        let key = (dependency.package_revision, owner);
+        if !self.package_interfaces.borrow().contains_key(&key) {
+            let read = self.base.read_package_interface_owner(&dependency, owner)?;
+            self.add_work(read.work);
+            self.package_interfaces.borrow_mut().insert(key, read.value);
+        }
+        Ok(self
+            .package_interfaces
+            .borrow()
+            .get(&key)
+            .cloned()
+            .flatten())
+    }
+
+    fn has_representation_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        Ok(self.representation_dependency(package)?.is_some())
+    }
 }
 
 impl<B: CanonicalBaseRead + ?Sized> CandidateRead<'_, B> {
+    fn effective_dependency_roots(&self) -> Result<Vec<DependencyRecord>, Diagnostic> {
+        if self.effective_dependency_roots.borrow().is_none() {
+            let read = self.base.read_dependencies()?;
+            self.add_work(read.work);
+            let mut roots = read
+                .value
+                .into_iter()
+                .map(|record| (record.package, record))
+                .collect::<BTreeMap<_, _>>();
+            for (package, record) in self.dependencies.borrow().iter() {
+                match record {
+                    Some(record) => {
+                        roots.insert(*package, record.clone());
+                    }
+                    None => {
+                        roots.remove(package);
+                    }
+                }
+            }
+            *self.effective_dependency_roots.borrow_mut() = Some(roots.into_values().collect());
+        }
+        self.effective_dependency_roots
+            .borrow()
+            .as_ref()
+            .cloned()
+            .ok_or_else(|| {
+                extract_corrupt(
+                    "change_extract_representation_roots_missing",
+                    "effective representation roots were not cached after admission",
+                )
+            })
+    }
+
+    fn representation_dependency(
+        &self,
+        package: PackageId,
+    ) -> Result<Option<DependencyRecord>, Diagnostic> {
+        if !self
+            .representation_dependencies
+            .borrow()
+            .contains_key(&package)
+        {
+            let mut selected: Option<DependencyRecord> = None;
+            for root in self.effective_dependency_roots()? {
+                let read = self.base.read_representation_dependency(&root, package)?;
+                self.add_work(read.work);
+                if let Some(record) = read.value {
+                    if selected
+                        .as_ref()
+                        .is_some_and(|previous| previous != &record)
+                    {
+                        return Err(extract_error(
+                            "change_extract_representation_conflict",
+                            "effective direct dependencies select conflicting exact representation revisions",
+                        ));
+                    }
+                    selected = Some(record);
+                }
+            }
+            self.representation_dependencies
+                .borrow_mut()
+                .insert(package, selected);
+        }
+        Ok(self
+            .representation_dependencies
+            .borrow()
+            .get(&package)
+            .cloned()
+            .flatten())
+    }
+
     fn dependency(&self, package: PackageId) -> Result<Option<DependencyRecord>, Diagnostic> {
         if !self.dependencies.borrow().contains_key(&package) {
             let read = self.base.read_dependency(package)?;

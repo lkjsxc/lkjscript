@@ -75,6 +75,8 @@ impl Fifo {
         for module in ["fifo-support", "fifo-steps", "fifo-trace"] {
             let draft = unchanged(&supplier, module);
             assert!(draft.contains("(constraint owned)"));
+            assert!(draft.contains("(reference ref_Fifo_"));
+            assert!(!draft.contains("(field incoming ") && !draft.contains("(field outgoing "));
             assert!(!draft.contains("OwnedI64Cell") && !draft.contains("ByteBuffer"));
         }
         // Publish generic admission before any concrete element implementation exists.

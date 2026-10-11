@@ -174,11 +174,33 @@ fn substitute(
             }
             pairs.extend(a.iter_mut().zip(x).map(|((_, a), (_, x))| (a, x)));
         }
+        (A::PackOwnedRecord { fields: a, .. }, A::PackOwnedRecord { fields: x, .. }) => {
+            if a.len() != x.len() {
+                return Ok(false);
+            }
+            pairs.extend(a.iter_mut().zip(x).map(|((_, a), (_, x))| (a, x)));
+        }
         (
             A::UnpackOwned {
                 source: a, body: b, ..
             },
             A::UnpackOwned {
+                source: x, body: y, ..
+            },
+        )
+        | (
+            A::UnpackOwnedRecord {
+                source: a, body: b, ..
+            },
+            A::UnpackOwnedRecord {
+                source: x, body: y, ..
+            },
+        )
+        | (
+            A::BorrowOwnedRecordField {
+                source: a, body: b, ..
+            },
+            A::BorrowOwnedRecordField {
                 source: x, body: y, ..
             },
         )

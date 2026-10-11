@@ -2079,6 +2079,20 @@ impl Machine<'_> {
         &mut self,
         ty: TypeObjectDigest,
     ) -> Result<Vec<TypeObjectDigest>, ExecutionError> {
+        if let Some(layout) = self.program.owned_record_layout(ty) {
+            let count = layout.fields.len();
+            self.charge_allocation(super::value::collection_storage_bytes(
+                count as u64,
+                std::mem::size_of::<TypeObjectDigest>() as u64,
+                "normalized_product_allocation",
+            )?)?;
+            self.control.check()?;
+            let layout = self
+                .program
+                .owned_record_layout(ty)
+                .ok_or_else(|| type_error("missing exact owned record layout"))?;
+            return Ok(layout.fields.iter().map(|field| field.ty).collect());
+        }
         let Some(crate::platform::kernel::TypeObject {
             form: TypeForm::OwnedProduct { fields },
             ..
@@ -2104,17 +2118,25 @@ impl Machine<'_> {
         value: CheckedValue,
         selector: &NormalizedFieldSelector,
     ) -> Result<CheckedValue, ExecutionError> {
-        if let (NormalizedValue::OwnedProduct(_), NormalizedFieldSelector::Structural(name)) =
-            (value.raw(), selector)
-        {
+        if matches!(value.raw(), NormalizedValue::OwnedProduct(_)) {
             let control = self.control;
-            value.owned_metadata(
-                self.program,
-                self.memory_domain,
-                name,
-                control,
-                &mut |bytes| self.charge_allocation(bytes),
-            )
+            match selector {
+                NormalizedFieldSelector::Structural(name) => value.owned_metadata(
+                    self.program,
+                    self.memory_domain,
+                    name,
+                    control,
+                    &mut |bytes| self.charge_allocation(bytes),
+                ),
+                NormalizedFieldSelector::Nominal { layout, offset } => value.owned_record_metadata(
+                    self.program,
+                    self.memory_domain,
+                    *layout,
+                    *offset,
+                    control,
+                    &mut |bytes| self.charge_allocation(bytes),
+                ),
+            }
         } else {
             value.field(selector, self.program)
         }
@@ -2968,16 +2990,7 @@ impl Machine<'_> {
             .zip(type_arguments.iter())
         {
             self.control.check()?;
-            let owned = matches!(
-                self.program.types.get(ty).map(|t| &t.form),
-                Some(
-                    TypeForm::ByteBuffer
-                        | TypeForm::OwnedI64Cell
-                        | TypeForm::OwnedProduct { .. }
-                        | TypeForm::OwnedChoice { .. }
-                        | TypeForm::OwnedSequence { .. }
-                )
-            );
+            let owned = self.program.is_owned_type(*ty);
             if (constraint.has_owned() && !owned)
                 || (!constraint.has_owned() && !self.program.buffer_free_types.contains(ty))
                 || (constraint.requires_capture_safe()
@@ -5270,16 +5283,7 @@ fn validate_runtime_implementation(
             control,
             "implementation witness type is unresolved",
         )?;
-        if !matches!(
-            program.types.get(ty).map(|t| &t.form),
-            Some(
-                TypeForm::ByteBuffer
-                    | TypeForm::OwnedI64Cell
-                    | TypeForm::OwnedProduct { .. }
-                    | TypeForm::OwnedChoice { .. }
-                    | TypeForm::OwnedSequence { .. }
-            )
-        ) {
+        if !program.is_owned_type(*ty) {
             return Err(type_error("implementation witness type is not owned"));
         }
     }
@@ -5372,6 +5376,21 @@ fn direct_memory_type(
                         "unclosed product type",
                     )?,
                 )));
+            }
+            TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. }
+                if program.owned_record_declarations.contains(declaration) =>
+            {
+                let resolved = resolve_runtime_type(
+                    program,
+                    ty,
+                    substitutions,
+                    control,
+                    "unclosed owned nominal record type",
+                )?;
+                if program.owned_record_layout(resolved).is_none() {
+                    return Err(type_error("missing exact owned nominal record layout"));
+                }
+                return Ok(Some(super::value::MemoryForm::Product(resolved)));
             }
             TypeForm::OwnedSequence { .. } => {
                 return Ok(Some(super::value::MemoryForm::Sequence(

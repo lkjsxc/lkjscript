@@ -1,4 +1,4 @@
-//! Native standard FIFO composition, exact transports and independent state-machine results.
+//! Native nominal standard FIFO composition, exact transports and independent state-machine results.
 use super::native_byte_buffer::{Export, dependency, export, stage};
 use super::native_owned_worklists::{deployment, unchanged};
 use super::*;

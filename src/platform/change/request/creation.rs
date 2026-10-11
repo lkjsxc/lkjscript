@@ -567,6 +567,23 @@ pub enum AuthoredExpressionOperation {
         binding: Box<AuthoredBindingDefinition>,
         body: Box<AuthoredExpression>,
     },
+    PackOwnedRecord {
+        record_type: AuthoredType,
+        fields: Vec<(AuthoredFieldReference, AuthoredExpression)>,
+    },
+    UnpackOwnedRecord {
+        record_type: AuthoredType,
+        source: Box<AuthoredExpression>,
+        fields: Vec<(AuthoredFieldReference, AuthoredBindingDefinition)>,
+        body: Box<AuthoredExpression>,
+    },
+    BorrowOwnedRecordField {
+        record_type: AuthoredType,
+        source: Box<AuthoredExpression>,
+        field: AuthoredFieldReference,
+        binding: Box<AuthoredBindingDefinition>,
+        body: Box<AuthoredExpression>,
+    },
     ImplementationCall {
         function: AuthoredDeclarationReference,
         type_arguments: Vec<AuthoredType>,
@@ -872,6 +889,11 @@ pub(super) fn collect_expression_symbols(
                     stack.push(Visit::Expression(value, next));
                 }
             }
+            AuthoredExpressionOperation::PackOwnedRecord { fields, .. } => {
+                for (_, value) in fields.iter().rev() {
+                    stack.push(Visit::Expression(value, next));
+                }
+            }
             AuthoredExpressionOperation::UnpackOwned {
                 source,
                 fields,
@@ -884,7 +906,29 @@ pub(super) fn collect_expression_symbols(
                 }
                 stack.push(Visit::Expression(source, next));
             }
+            AuthoredExpressionOperation::UnpackOwnedRecord {
+                source,
+                fields,
+                body,
+                ..
+            } => {
+                stack.push(Visit::Expression(body, next));
+                for (_, binding) in fields.iter().rev() {
+                    stack.push(Visit::Binding(&binding.symbol, SymbolKind::LexicalBinding));
+                }
+                stack.push(Visit::Expression(source, next));
+            }
             AuthoredExpressionOperation::BorrowOwnedField {
+                source,
+                binding,
+                body,
+                ..
+            } => {
+                stack.push(Visit::Expression(body, next));
+                stack.push(Visit::Binding(&binding.symbol, SymbolKind::LexicalBinding));
+                stack.push(Visit::Expression(source, next));
+            }
+            AuthoredExpressionOperation::BorrowOwnedRecordField {
                 source,
                 binding,
                 body,
@@ -1669,6 +1713,94 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                         source,
                         arms: lowered,
                     }
+                }
+            }
+            AuthoredExpressionOperation::PackOwnedRecord {
+                record_type,
+                fields,
+            } => {
+                let record_type = self.lower_type(record_type)?;
+                let mut lowered = Vec::new();
+                for (field, value) in fields {
+                    lowered.push(crate::platform::kernel::OwnedRecordExpressionField {
+                        field: self.lower_field_reference(field)?,
+                        value: self.lower_expression(value)?,
+                    });
+                }
+                ExpressionOperation::PackOwnedRecord {
+                    record_type,
+                    fields: lowered,
+                }
+            }
+            AuthoredExpressionOperation::UnpackOwnedRecord {
+                record_type,
+                source,
+                fields,
+                body,
+            } => {
+                let record_type = self.lower_type(record_type)?;
+                let source = self.lower_expression(source)?;
+                let mut lowered = Vec::new();
+                for (field, binding) in fields {
+                    let id = self.lexical_binding_symbol(&binding.symbol)?;
+                    let declared_type = binding
+                        .declared_type
+                        .as_ref()
+                        .map(|ty| self.lower_type(ty))
+                        .transpose()?;
+                    self.insert_created(OwnerRecord::Binding(
+                        crate::platform::kernel::BindingRecord {
+                            header: OwnerHeader::new(OwnerKey::Binding(id), OwnerKind::Binding),
+                            name: binding.name.clone(),
+                            kind: crate::platform::kernel::BindingKind::OwnedUnpack,
+                            value: None,
+                            declared_type,
+                        },
+                    ))?;
+                    lowered.push(crate::platform::kernel::OwnedRecordBinding {
+                        field: self.lower_field_reference(field)?,
+                        binding: id,
+                    });
+                }
+                lowered.sort_by_key(|item| item.field);
+                ExpressionOperation::UnpackOwnedRecord {
+                    record_type,
+                    source,
+                    fields: lowered,
+                    body: self.lower_expression(body)?,
+                }
+            }
+            AuthoredExpressionOperation::BorrowOwnedRecordField {
+                record_type,
+                source,
+                field,
+                binding,
+                body,
+            } => {
+                let record_type = self.lower_type(record_type)?;
+                let source = self.lower_expression(source)?;
+                let field = self.lower_field_reference(field)?;
+                let id = self.lexical_binding_symbol(&binding.symbol)?;
+                let declared_type = binding
+                    .declared_type
+                    .as_ref()
+                    .map(|ty| self.lower_type(ty))
+                    .transpose()?;
+                self.insert_created(OwnerRecord::Binding(
+                    crate::platform::kernel::BindingRecord {
+                        header: OwnerHeader::new(OwnerKey::Binding(id), OwnerKind::Binding),
+                        name: binding.name.clone(),
+                        kind: crate::platform::kernel::BindingKind::OwnedBorrow,
+                        value: None,
+                        declared_type,
+                    },
+                ))?;
+                ExpressionOperation::BorrowOwnedRecordField {
+                    record_type,
+                    source,
+                    field,
+                    binding: id,
+                    body: self.lower_expression(body)?,
                 }
             }
             AuthoredExpressionOperation::PackOwned {

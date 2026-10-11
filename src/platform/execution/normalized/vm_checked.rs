@@ -452,7 +452,7 @@ impl Value {
                 || program
                     .records
                     .get(layout.0 as usize)
-                    .is_none_or(|record| record.fields.len() != fields.len())
+                    .is_none_or(|record| record.owned || record.fields.len() != fields.len())
             {
                 return Err(admission_error(
                     "nominal record constructor has a foreign layout; rebuild from accepted meaning",
@@ -992,6 +992,9 @@ impl Admission<'_> {
                 (std::mem::size_of::<TypeObjectDigest>() + 3 * std::mem::size_of::<usize>()) as u64,
             )?;
             checked.insert(identity);
+            if program.owned_record_layout(identity).is_some() {
+                return Err(admission_error("capture type is an affine nominal owner"));
+            }
             let object = self.program.types.get(&ty).ok_or_else(|| {
                 admission_error("capture type is absent from the prepared program")
             })?;
@@ -1201,7 +1204,7 @@ impl Admission<'_> {
                     TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. },
                 ) => {
                     let exact = self.program.record_instances.get(&identity);
-                    let definition = self.program.records.get(layout.0 as usize).filter(|definition| exact == Some(layout) && layout.1 == self.program.value_origin && definition.declaration == *declaration && definition.fields.len() == fields.len())
+                    let definition = self.program.records.get(layout.0 as usize).filter(|definition| !definition.owned && exact == Some(layout) && layout.1 == self.program.value_origin && definition.declaration == *declaration && definition.fields.len() == fields.len())
                         .ok_or_else(|| admission_error("raw nominal record has a foreign identity or shape; use the exact record layout"))?;
                     self.collection(fields.len())?;
                     for (field, definition) in fields.iter().zip(definition.fields.iter()) {
@@ -1773,6 +1776,10 @@ mod metadata_reservation_tests;
 #[cfg(test)]
 #[path = "vm_owned_metadata_tests.rs"]
 mod metadata_tests;
+
+#[cfg(test)]
+#[path = "vm_owned_nominal_tests.rs"]
+mod owned_nominal_tests;
 
 #[cfg(test)]
 #[path = "vm_sequence_projection_tests.rs"]

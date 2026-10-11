@@ -255,6 +255,24 @@ impl<B: CanonicalBaseRead + ?Sized> CanonicalBaseRead for RecordedCanonicalBase<
             .record_dependency(package, read.value.as_ref())?;
         Ok(read)
     }
+    fn read_dependencies(&self) -> Result<CanonicalRead<Vec<DependencyRecord>>, Diagnostic> {
+        let read = self.base.read_dependencies()?;
+        self.reads.borrow_mut().record_dependencies(&read.value)?;
+        Ok(read)
+    }
+    fn read_representation_dependency(
+        &self,
+        root: &DependencyRecord,
+        package: PackageId,
+    ) -> Result<CanonicalRead<Option<DependencyRecord>>, Diagnostic> {
+        let read = self.base.read_representation_dependency(root, package)?;
+        self.reads.borrow_mut().record_representation_dependency(
+            root,
+            package,
+            read.value.as_ref(),
+        )?;
+        Ok(read)
+    }
     fn read_retirement(
         &self,
         owner: OwnerKey,

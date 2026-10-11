@@ -415,6 +415,16 @@ impl<R: ExpressionRead + ?Sized> ExpressionRead for AppliedTypeRead<'_, R> {
     fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
         self.read.has_dependency(package)
     }
+    fn package_representation_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        self.read.package_representation_owner(package, owner)
+    }
+    fn has_representation_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        self.read.has_representation_dependency(package)
+    }
     fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
         self.read.validation_checkpoint()
     }
@@ -695,6 +705,9 @@ pub(crate) fn validate_owned_parameter(
                 DeclarationPayload::OwnedImplementation(i) => {
                     super::transfer::function_parameter_listed(read, &i.type_parameters, id)?
                 }
+                DeclarationPayload::OwnedRecord {
+                    type_parameters, ..
+                } => super::transfer::function_parameter_listed(read, &type_parameters, id)?,
                 _ => false,
             },
             _ => false,
@@ -703,7 +716,10 @@ pub(crate) fn validate_owned_parameter(
         match read
             .package_interface_owner(scope.package, OwnerKey::Declaration(scope.declaration))?
         {
-            Some(PackageInterfaceRecord::Declaration(d)) => match d.payload {
+            Some(
+                PackageInterfaceRecord::Declaration(d)
+                | PackageInterfaceRecord::RepresentationDeclaration(d),
+            ) => match d.payload {
                 PackageInterfaceDeclarationPayload::Function(f) => {
                     super::transfer::function_parameter_listed(read, &f.type_parameters, id)?
                 }
@@ -714,6 +730,9 @@ pub(crate) fn validate_owned_parameter(
                 PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
                     super::transfer::function_parameter_listed(read, &i.type_parameters, id)?
                 }
+                PackageInterfaceDeclarationPayload::OwnedRecord {
+                    type_parameters, ..
+                } => super::transfer::function_parameter_listed(read, &type_parameters, id)?,
                 _ => false,
             },
             _ => false,
@@ -727,7 +746,7 @@ pub(crate) fn validate_owned_parameter(
     Ok(())
 }
 
-fn validate_owned_type(
+pub(crate) fn validate_owned_type(
     read: &(impl ExpressionRead + ?Sized),
     ty: TypeObjectDigest,
     scope: Option<DeclarationReference>,
@@ -745,6 +764,15 @@ fn validate_owned_type(
             super::owned_product::validate_in_scope(read, ty, scope)
         }
         TypeForm::TypeParameter { parameter } => validate_owned_parameter(read, parameter, scope),
+        TypeForm::Named { .. } | TypeForm::Applied { .. }
+            if super::owned_record::is_owned(
+                read,
+                scope.map_or(read.package_id(), |scope| scope.package),
+                ty,
+            )? =>
+        {
+            super::owned_record::validate_application(read, ty, scope)
+        }
         _ => Err(reject("owned contract arguments require exact Owned types")),
     }
 }
@@ -1621,6 +1649,8 @@ pub(super) fn ordinary_with_assumptions_in(
     scope: Option<DeclarationReference>,
     assumptions: &BTreeSet<TypeParameterId>,
 ) -> Result<bool, Diagnostic> {
+    let representation = super::owned_record::RepresentationRead { read };
+    let read: &dyn ExpressionRead = &representation;
     // This property depends on ordinary parameter assumptions, not representation
     // identities. Check every actual argument in its caller scope, and prove each
     // nominal body under its own ordinary formal parameters. Recursive applications
@@ -1686,6 +1716,9 @@ pub(super) fn ordinary_with_assumptions_in(
             | TypeForm::Function { .. }
             | TypeForm::TaskFunction { .. } => return Ok(false),
             TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
+                if super::owned_record::is_owned(read, declaration.package, ty)? {
+                    return Ok(false);
+                }
                 let (parameters, fields, cases) = nominal_members(read, *declaration)?;
                 let arguments = match &t.form {
                     TypeForm::Applied { arguments, .. } => arguments.as_slice(),
@@ -1839,7 +1872,10 @@ fn nominal_members(
         }
     } else {
         match read.package_interface_owner(d.package, OwnerKey::Declaration(d.declaration))? {
-            Some(PackageInterfaceRecord::Declaration(r)) => match r.payload {
+            Some(
+                PackageInterfaceRecord::Declaration(r)
+                | PackageInterfaceRecord::RepresentationDeclaration(r),
+            ) => match r.payload {
                 PackageInterfaceDeclarationPayload::Record {
                     type_parameters,
                     fields,

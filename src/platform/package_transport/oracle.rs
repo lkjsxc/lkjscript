@@ -229,6 +229,7 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
             dependencies: BTreeMap::new(),
             retirements: BTreeMap::new(),
             dependency_interfaces: BTreeMap::new(),
+            representation_dependencies: BTreeMap::new(),
             dependency_types: BTreeMap::new(),
         };
         for (key, value) in reader.map(snapshot.root.owners)? {
@@ -331,7 +332,12 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
             .iter()
             .map(|(owner, record)| {
                 let value = PackageInterfaceOwner {
-                    contract_version: if record.header().contract_version == 14 {
+                    contract_version: if matches!(
+                        record,
+                        PackageInterfaceRecord::RepresentationDeclaration(_)
+                    ) {
+                        crate::platform::package_interface::PACKAGE_INTERFACE_CONTRACT_VERSION
+                    } else if record.header().contract_version == 14 {
                         10
                     } else if record.header().contract_version <= 17 {
                         11
@@ -349,6 +355,8 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
                         17
                     } else if record.header().contract_version < 31 {
                         18
+                    } else if record.header().contract_version < 32 {
+                        19
                     } else {
                         crate::platform::package_interface::PACKAGE_INTERFACE_CONTRACT_VERSION
                     },
@@ -532,7 +540,31 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
         return Err(failure("cyclic exact closure"));
     }
     for snapshot in snapshots.values_mut() {
-        for dependency in snapshot.dependencies.values() {
+        reader.charge(snapshot.dependencies.len())?;
+        let mut pending = snapshot
+            .dependencies
+            .values()
+            .cloned()
+            .collect::<VecDeque<_>>();
+        while let Some(mut dependency) = pending.pop_front() {
+            reader.charge(1)?;
+            dependency.graph_contract_version =
+                crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+            if let Some(previous) = snapshot
+                .representation_dependencies
+                .get(&dependency.package)
+            {
+                if previous != &dependency {
+                    return Err(failure(
+                        "conflicting opaque representation package revisions",
+                    ));
+                }
+                continue;
+            }
+            let revision = revisions
+                .get(&dependency.package)
+                .ok_or_else(|| failure("unresolved representation revision"))?;
+            revision.matches_dependency(dependency.package_revision, &dependency)?;
             reader.charge(
                 interfaces.get(&dependency.package).map_or(0, BTreeMap::len)
                     + interface_types
@@ -553,6 +585,11 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
                     .cloned()
                     .ok_or_else(|| failure("unresolved dependency types"))?,
             );
+            snapshot
+                .representation_dependencies
+                .insert(dependency.package, dependency);
+            reader.charge(revision.dependencies.len())?;
+            pending.extend(revision.dependencies.iter().cloned());
         }
         let validation = crate::platform::kernel::validate_full_with_limit(
             snapshot,
@@ -689,6 +726,18 @@ fn public_inventory(
                 reader.charge(fields.len())?;
                 selected.extend(fields.iter().copied().map(OwnerKey::Field));
                 PackageInterfaceDeclarationPayload::Record {
+                    type_parameters: type_parameters.clone(),
+                    fields: fields.clone(),
+                }
+            }
+            DeclarationPayload::OwnedRecord {
+                fields,
+                type_parameters,
+            } => {
+                reader.charge(type_parameters.len() + fields.len())?;
+                selected.extend(type_parameters.iter().copied().map(OwnerKey::TypeParameter));
+                selected.extend(fields.iter().copied().map(OwnerKey::Field));
+                PackageInterfaceDeclarationPayload::OwnedRecord {
                     type_parameters: type_parameters.clone(),
                     fields: fields.clone(),
                 }
@@ -853,6 +902,7 @@ fn public_inventory(
         };
         result.insert(owner, projected);
     }
+    extend_representation_inventory(snapshot, reader, &mut result)?;
     let mut types = result
         .values()
         .flat_map(PackageInterfaceRecord::type_roots)
@@ -896,4 +946,157 @@ fn public_inventory(
         }
     }
     Ok(result)
+}
+
+/// Reconstruct private representation evidence from canonical layouts independently of the
+/// producer's selection machinery. A private declaration never becomes a public declaration.
+fn extend_representation_inventory(
+    snapshot: &KernelSnapshot,
+    reader: &Reader<'_>,
+    result: &mut BTreeMap<OwnerKey, PackageInterfaceRecord>,
+) -> Result<(), Diagnostic> {
+    let mut pending = Vec::new();
+    for value in result.values() {
+        reader.charge(1)?;
+        if let PackageInterfaceRecord::Declaration(record) = value
+            && let PackageInterfaceDeclarationPayload::OwnedRecord { fields, .. } = &record.payload
+        {
+            for field in fields {
+                reader.charge(1)?;
+                match snapshot.owners.get(&OwnerKey::Field(*field)) {
+                    Some(OwnerRecord::Field(field)) => pending.push(field.ty),
+                    _ => return Err(failure("owned representation field is absent")),
+                }
+            }
+        }
+    }
+    let mut visited_types = BTreeSet::new();
+    let mut visited_declarations = BTreeSet::new();
+    while let Some(digest) = pending.pop() {
+        reader.charge(1)?;
+        if !visited_types.insert(digest) {
+            continue;
+        }
+        let object = snapshot
+            .types
+            .get(&digest)
+            .or_else(|| snapshot.dependency_types.get(&digest))
+            .ok_or_else(|| failure("owned representation type is absent"))?;
+        reader.charge(object.child_type_count())?;
+        pending.extend(object.child_types());
+        let reference = match object.form {
+            TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. }
+                if declaration.package == snapshot.root.package_id =>
+            {
+                declaration
+            }
+            _ => continue,
+        };
+        if !visited_declarations.insert(reference.declaration) {
+            continue;
+        }
+        let Some(OwnerRecord::Declaration(declaration)) = snapshot
+            .owners
+            .get(&OwnerKey::Declaration(reference.declaration))
+        else {
+            return Err(failure(
+                "owned representation nominal declaration is absent",
+            ));
+        };
+        reader.charge(declaration.payload.type_parameters().iter().count())?;
+        reader.charge(match &declaration.payload {
+            DeclarationPayload::OwnedRecord { fields, .. }
+            | DeclarationPayload::Record { fields, .. } => fields.len().saturating_mul(3),
+            DeclarationPayload::Variant { cases, .. } => cases.len().saturating_mul(3),
+            _ => 0,
+        })?;
+        let (payload, members) = match &declaration.payload {
+            DeclarationPayload::OwnedRecord {
+                type_parameters,
+                fields,
+            } => (
+                PackageInterfaceDeclarationPayload::OwnedRecord {
+                    type_parameters: type_parameters.clone(),
+                    fields: fields.clone(),
+                },
+                fields
+                    .iter()
+                    .copied()
+                    .map(OwnerKey::Field)
+                    .collect::<Vec<_>>(),
+            ),
+            DeclarationPayload::Record {
+                type_parameters,
+                fields,
+            } => (
+                PackageInterfaceDeclarationPayload::Record {
+                    type_parameters: type_parameters.clone(),
+                    fields: fields.clone(),
+                },
+                fields
+                    .iter()
+                    .copied()
+                    .map(OwnerKey::Field)
+                    .collect::<Vec<_>>(),
+            ),
+            DeclarationPayload::Variant {
+                type_parameters,
+                cases,
+            } => (
+                PackageInterfaceDeclarationPayload::Variant {
+                    type_parameters: type_parameters.clone(),
+                    cases: cases.clone(),
+                },
+                cases
+                    .iter()
+                    .copied()
+                    .map(OwnerKey::Case)
+                    .collect::<Vec<_>>(),
+            ),
+            _ => {
+                return Err(failure(
+                    "owned representation names a non-layout declaration",
+                ));
+            }
+        };
+        let projected = PackageInterfaceDeclaration {
+            header: declaration.header,
+            name: declaration.name.clone(),
+            payload,
+        };
+        let value = if declaration.visibility == DeclarationVisibility::Public {
+            PackageInterfaceRecord::Declaration(projected)
+        } else {
+            PackageInterfaceRecord::RepresentationDeclaration(projected)
+        };
+        result.insert(OwnerKey::Declaration(reference.declaration), value);
+        for id in declaration.payload.type_parameters().iter() {
+            reader.charge(1)?;
+            match snapshot.owners.get(&OwnerKey::TypeParameter(*id)) {
+                Some(OwnerRecord::TypeParameter(parameter)) => {
+                    result.insert(
+                        OwnerKey::TypeParameter(*id),
+                        PackageInterfaceRecord::TypeParameter(parameter.clone()),
+                    );
+                }
+                _ => return Err(failure("owned representation parameter is absent")),
+            }
+        }
+        for key in members {
+            reader.charge(1)?;
+            let value = match snapshot.owners.get(&key) {
+                Some(OwnerRecord::Field(field)) => {
+                    pending.push(field.ty);
+                    PackageInterfaceRecord::Field(field.clone())
+                }
+                Some(OwnerRecord::Case(case)) => {
+                    pending.extend(case.payload);
+                    PackageInterfaceRecord::Case(case.clone())
+                }
+                _ => return Err(failure("owned representation member is absent")),
+            };
+            result.insert(key, value);
+        }
+    }
+    Ok(())
 }

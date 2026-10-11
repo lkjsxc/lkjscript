@@ -345,6 +345,11 @@ impl PackageContainer {
                     )
                 && object.get(..8)
                     != Some(crate::platform::kernel::contract::SHARE_OWNER_MAGIC.as_slice())
+                && object.get(..8)
+                    != Some(
+                        crate::platform::kernel::contract::GENERALIZED_SEQUENCE_OWNER_MAGIC
+                            .as_slice(),
+                    )
             {
                 return Err(package_error(
                     DiagnosticClass::Source,
@@ -757,7 +762,7 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
         let mut snapshot = snapshots
             .remove(&binding.package_revision)
             .ok_or_else(|| corrupt("package_source_snapshot", "source snapshot disappeared"))?;
-        shared_interfaces.attach(&mut snapshot)?;
+        shared_interfaces.attach(&mut snapshot, &validated.representation_revisions)?;
         // Dependency type copies have already reserved their base visits before growth.
         let projection_visits = snapshot
             .owners
@@ -969,6 +974,7 @@ fn reconstruct<S: ImmutableObjectStore + ?Sized>(
         types: BTreeMap::new(),
         dependency_interfaces: BTreeMap::new(),
         dependency_types: BTreeMap::new(),
+        representation_dependencies: BTreeMap::new(),
         blobs: BTreeMap::new(),
         dependencies: BTreeMap::new(),
         retirements: BTreeMap::new(),
@@ -1077,6 +1083,11 @@ fn project(
 ) -> Result<InterfaceProjection, Diagnostic> {
     let mut selection =
         PackageInterfaceSelection::from_records(snapshot.root.package_id, &snapshot.owners)?;
+    selection.observe_owned_representations(
+        &snapshot.owners,
+        &snapshot.types,
+        &snapshot.dependency_types,
+    )?;
     let mut owners = BTreeMap::new();
     for owner in selection.owners() {
         let canonical = snapshot
@@ -1154,6 +1165,7 @@ mod tests {
 
     include!("f64_admission_tests.rs");
     include!("owned_product_admission_tests.rs");
+    include!("owned_record_admission_tests.rs");
     include!("owned_sequence_admission_tests.rs");
     include!("generalized_sequence_admission_tests.rs");
     include!("borrowed_result_admission_tests.rs");

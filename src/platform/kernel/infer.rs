@@ -9,7 +9,7 @@ use super::owner::{
     HttpRoutePatternSegment, OperationRecord, OwnerRecord, ParameterParent, ParameterRecord,
     ParameterUse, PortImplementation, RequirementRecord,
 };
-use super::reference::{DeclarationReference, RequirementReference};
+use super::reference::{DeclarationReference, FieldReference, RequirementReference};
 use super::type_object::{StructuralTypeField, TypeForm, TypeObject};
 use super::validate::KernelSnapshot;
 use super::{PackageInterfaceDeclarationPayload, PackageInterfaceRecord, TypeObjectInterner};
@@ -73,6 +73,19 @@ pub(crate) trait ExpressionRead {
 
     fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic>;
 
+    /// Trusted metadata closure of exact imports. Public naming still uses the
+    /// direct dependency methods above; this grants no representation access.
+    fn package_representation_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        self.package_interface_owner(package, owner)
+    }
+    fn has_representation_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        self.has_dependency(package)
+    }
+
     /// Owning operations may interrupt long in-memory analysis even when every read is cached.
     fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
         Ok(())
@@ -115,6 +128,18 @@ impl<R: ExpressionRead + ?Sized> ExpressionRead for CheckedExpressionRead<'_, R>
         self.validation_checkpoint()?;
         self.read.has_dependency(package)
     }
+    fn package_representation_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        self.validation_checkpoint()?;
+        self.read.package_representation_owner(package, owner)
+    }
+    fn has_representation_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        self.validation_checkpoint()?;
+        self.read.has_representation_dependency(package)
+    }
     fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
         (self.checkpoint)()?;
         self.read.validation_checkpoint()
@@ -151,6 +176,16 @@ impl<R: ExpressionRead + ?Sized> ExpressionRead for InferredTypeRead<'_, R> {
     }
     fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
         self.read.has_dependency(package)
+    }
+    fn package_representation_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        self.read.package_representation_owner(package, owner)
+    }
+    fn has_representation_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        self.read.has_representation_dependency(package)
     }
     fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
         self.read.validation_checkpoint()
@@ -210,6 +245,28 @@ impl ExpressionRead for KernelSnapshot {
 
     fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
         Ok(self.dependencies.contains_key(&package))
+    }
+    fn package_representation_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        let Some(dependency) = self
+            .dependencies
+            .get(&package)
+            .or_else(|| self.representation_dependencies.get(&package))
+        else {
+            return Ok(None);
+        };
+        Ok(self
+            .dependency_interfaces
+            .get(&dependency.package_revision)
+            .and_then(|owners| owners.get(&owner))
+            .cloned())
+    }
+    fn has_representation_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        Ok(self.dependencies.contains_key(&package)
+            || self.representation_dependencies.contains_key(&package))
     }
 }
 
@@ -498,12 +555,23 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         }
                     }
                     DeclarationPayload::Constant { ty, value } => {
-                        self.compare_root_type(value, ty, &pure_context(None), "constant");
+                        self.compare_root_type(
+                            value,
+                            ty,
+                            &pure_context(match declaration.header.owner {
+                                OwnerKey::Declaration(id) => Some(id),
+                                _ => None,
+                            }),
+                            "constant",
+                        );
                     }
                     DeclarationPayload::Test {
                         actual, expected, ..
                     } => {
-                        let context = pure_context(None);
+                        let context = pure_context(match declaration.header.owner {
+                            OwnerKey::Declaration(id) => Some(id),
+                            _ => None,
+                        });
                         let actual_type = self.infer(actual, &context, 0);
                         let expected_type = self.infer(expected, &context, 0);
                         match (actual_type, expected_type) {
@@ -564,7 +632,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         },
                     ));
                     let component_context = ExecutionContext {
-                        declaration: None,
+                        declaration: Some(port.declaration),
                         pure: false,
                         requirements,
                         effect_parameters: BTreeSet::new(),
@@ -577,7 +645,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         continue;
                     }
                     let context = ExecutionContext {
-                        declaration: None,
+                        declaration: Some(port.declaration),
                         pure: !signature.task,
                         requirements: signature.requirements,
                         effect_parameters: BTreeSet::new(),
@@ -1339,6 +1407,104 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 }
                 result.ok_or_else(|| type_error("kernel_owned_choice", "owned match has no result"))
             }
+            ExpressionOperation::PackOwnedRecord {
+                record_type,
+                fields,
+            } => {
+                let expected = self.owned_record_fields(record_type, context)?;
+                if fields.len() != expected.len() {
+                    return Err(super::owned_record::reject(
+                        "pack must supply every nominal field exactly once",
+                    ));
+                }
+                let mut seen = BTreeSet::new();
+                for field in fields {
+                    self.consume_work()?;
+                    let (_, ty) = expected
+                        .iter()
+                        .find(|(reference, _)| *reference == field.field)
+                        .ok_or_else(|| super::owned_record::reject("unknown nominal pack field"))?;
+                    if !seen.insert(field.field) {
+                        return Err(super::owned_record::reject("duplicate nominal pack field"));
+                    }
+                    let actual = self.infer(field.value, context, next)?;
+                    require_same(*ty, actual, "kernel_owned_record", "nominal pack field")?;
+                }
+                Ok(record_type)
+            }
+            ExpressionOperation::UnpackOwnedRecord {
+                record_type,
+                source,
+                fields,
+                body,
+            } => {
+                let expected = self.owned_record_fields(record_type, context)?;
+                let actual = self.infer(source, context, next)?;
+                require_same(
+                    record_type,
+                    actual,
+                    "kernel_owned_record",
+                    "nominal unpack source",
+                )?;
+                if fields.len() != expected.len() {
+                    return Err(super::owned_record::reject(
+                        "unpack must bind every nominal field",
+                    ));
+                }
+                let mut scoped = self.scoped_context(context)?;
+                for (field, (reference, ty)) in fields.iter().zip(expected) {
+                    self.consume_work()?;
+                    let Some(OwnerRecord::Binding(binding)) =
+                        self.read.owner(OwnerKey::Binding(field.binding))?
+                    else {
+                        return Err(super::owned_record::reject(
+                            "missing nominal unpack binding",
+                        ));
+                    };
+                    if field.field != reference
+                        || binding.kind != BindingKind::OwnedUnpack
+                        || binding.value.is_some()
+                        || binding.declared_type != Some(ty)
+                    {
+                        return Err(super::owned_record::reject(
+                            "nominal unpack field identity, binding or type mismatch",
+                        ));
+                    }
+                    scoped.bindings.insert(field.binding, (binding.kind, ty));
+                }
+                self.infer(body, &scoped, next)
+            }
+            ExpressionOperation::BorrowOwnedRecordField {
+                record_type,
+                source,
+                field,
+                binding,
+                body,
+            } => {
+                let expected = self.owned_record_fields(record_type, context)?;
+                let actual = self.borrow_source_type(source, context, next)?;
+                require_same(
+                    record_type,
+                    actual,
+                    "kernel_owned_record",
+                    "nominal borrowed source",
+                )?;
+                let (_, ty) = expected
+                    .into_iter()
+                    .find(|(reference, _)| *reference == field)
+                    .ok_or_else(|| super::owned_record::reject("unknown nominal borrowed field"))?;
+                if !self.owned_read(|read| super::memory::direct(read, ty))? {
+                    return Err(super::owned_record::reject(
+                        "nominal child read requires an Owned field",
+                    ));
+                }
+                self.require_borrow_binding(binding, ty)?;
+                let mut scoped = self.scoped_context(context)?;
+                scoped
+                    .bindings
+                    .insert(binding, (BindingKind::OwnedBorrow, ty));
+                self.infer(body, &scoped, next)
+            }
             ExpressionOperation::PackOwned {
                 product_type,
                 fields,
@@ -1687,7 +1853,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             }
             ExpressionOperation::Field { value, selector } => {
                 let value_type = self.infer(value, context, next)?;
-                self.infer_field(value_type, selector)
+                self.infer_field(value_type, selector, context)
             }
             ExpressionOperation::List { item_type, items } => {
                 for item in items {
@@ -2210,13 +2376,46 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         }
     }
 
+    fn owned_record_fields(
+        &mut self,
+        ty: TypeObjectDigest,
+        context: &ExecutionContext,
+    ) -> Result<Vec<(FieldReference, TypeObjectDigest)>, Diagnostic> {
+        let layout = self.owned_read(|read| {
+            let scope = context.declaration.map(|declaration| DeclarationReference {
+                package: read.package_id(),
+                declaration,
+            });
+            super::owned_record::require_access(read, ty, scope)?;
+            super::owned_record::validate_application(read, ty, scope)?;
+            super::owned_record::layout(read, ty)
+        })?;
+        self.adopt_applied_types(layout.types)?;
+        Ok(layout.fields)
+    }
+
     fn infer_field(
         &mut self,
         value_type: TypeObjectDigest,
         selector: FieldSelector,
+        context: &ExecutionContext,
     ) -> Result<TypeObjectDigest, Diagnostic> {
         match selector {
             FieldSelector::Nominal(reference) => {
+                if self.owned_read(|read| {
+                    super::owned_record::is_owned(read, read.package_id(), value_type)
+                })? {
+                    return self
+                        .owned_record_fields(value_type, context)?
+                        .into_iter()
+                        .find(|(field, _)| *field == reference)
+                        .map(|(_, ty)| ty)
+                        .ok_or_else(|| {
+                            super::owned_record::reject(
+                                "nominal field does not belong to the exact owned record",
+                            )
+                        });
+                }
                 let field = self.field_record(reference.package, reference.field)?;
                 let object = self.type_object(value_type)?;
                 let (declaration, arguments) = nominal_parts(&object.form).ok_or_else(|| {
@@ -2454,6 +2653,12 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             self.consume_work()?;
             if !visited.insert(ty) {
                 continue;
+            }
+            if self.owned_read(|read| super::owned_record::is_owned(read, read.package_id(), ty))? {
+                return Err(type_error(
+                    "kernel_type_bind_capture",
+                    "nominal owned records cannot be captured as ordinary values",
+                ));
             }
             let children = match self.type_object(ty)?.form {
                 TypeForm::Unit
@@ -3330,6 +3535,12 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             if !visited.insert((ty, applied)) {
                 continue;
             }
+            if self.owned_read(|read| super::owned_record::is_owned(read, read.package_id(), ty))? {
+                return Err(type_error(
+                    "kernel_type_nominal_equality",
+                    "nominal owned records are affine and cannot participate in data equality",
+                ));
+            }
             let object = self.type_object(ty)?;
             let children = match &object.form {
                 TypeForm::Applied {
@@ -3378,6 +3589,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     DeclarationPayload::Record {
                         type_parameters, ..
                     }
+                    | DeclarationPayload::OwnedRecord {
+                        type_parameters, ..
+                    }
                     | DeclarationPayload::Variant {
                         type_parameters, ..
                     } => Some(type_parameters),
@@ -3391,8 +3605,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 OwnerKey::Declaration(reference.declaration),
                 "nominal template",
             )? {
-                PackageInterfaceRecord::Declaration(record) => match record.payload {
+                PackageInterfaceRecord::Declaration(record)
+                | PackageInterfaceRecord::RepresentationDeclaration(record) => match record.payload
+                {
                     PackageInterfaceDeclarationPayload::Record {
+                        type_parameters, ..
+                    }
+                    | PackageInterfaceDeclarationPayload::OwnedRecord {
                         type_parameters, ..
                     }
                     | PackageInterfaceDeclarationPayload::Variant {
@@ -3415,6 +3634,42 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         &mut self,
         declaration: DeclarationReference,
     ) -> Result<Vec<TypeObjectDigest>, Diagnostic> {
+        if declaration.package != self.read.package_id() {
+            let record = self.dependency_owner(
+                declaration.package,
+                OwnerKey::Declaration(declaration.declaration),
+                "nominal representation",
+            )?;
+            if let PackageInterfaceRecord::RepresentationDeclaration(record) = record {
+                let (fields, cases) = match record.payload {
+                    PackageInterfaceDeclarationPayload::Record { fields, .. }
+                    | PackageInterfaceDeclarationPayload::OwnedRecord { fields, .. } => {
+                        (fields, Vec::new())
+                    }
+                    PackageInterfaceDeclarationPayload::Variant { cases, .. } => {
+                        (Vec::new(), cases)
+                    }
+                    _ => {
+                        return Err(type_error(
+                            "kernel_type_nominal_kind",
+                            "private representation evidence must describe stored data",
+                        ));
+                    }
+                };
+                let mut types = Vec::new();
+                for field in fields {
+                    self.consume_work()?;
+                    types.push(self.field_record(declaration.package, field)?.ty);
+                }
+                for case in cases {
+                    self.consume_work()?;
+                    if let Some(ty) = self.case_record(declaration.package, case)?.payload {
+                        types.push(ty);
+                    }
+                }
+                return Ok(types);
+            }
+        }
         let kind = if declaration.package == self.read.package_id() {
             self.read
                 .owner(OwnerKey::Declaration(declaration.declaration))?
@@ -3431,6 +3686,15 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             )
         };
         match kind {
+            Some(OwnerKind::OwnedRecord) => {
+                let (_, fields) =
+                    self.owned_read(|read| super::owned_record::definition(read, declaration))?;
+                let mut types = Vec::new();
+                for field in fields {
+                    types.push(self.field_record(declaration.package, field)?.ty);
+                }
+                Ok(types)
+            }
             Some(OwnerKind::Record) => {
                 let mut types = Vec::new();
                 for field in self.record_fields(declaration)? {
@@ -3520,7 +3784,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             }
             if matches!(
                 record.payload,
-                DeclarationPayload::Record { .. } | DeclarationPayload::Variant { .. }
+                DeclarationPayload::Record { .. }
+                    | DeclarationPayload::Variant { .. }
+                    | DeclarationPayload::OwnedRecord { .. }
             ) {
                 let reference = DeclarationReference {
                     package: self.read.package_id(),
@@ -3597,6 +3863,11 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             ));
         }
         let object = self.type_object(ty)?;
+        let nominal_owned = matches!(
+            object.form,
+            TypeForm::Named { .. } | TypeForm::Applied { .. }
+        ) && self
+            .owned_read(|read| super::owned_record::is_owned(read, read.package_id(), ty))?;
         if let TypeForm::TypeParameter { parameter } = &object.form {
             let parameter = match self.read.owner(OwnerKey::TypeParameter(*parameter))? {
                 Some(OwnerRecord::TypeParameter(parameter)) => parameter,
@@ -3628,7 +3899,8 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 TypeForm::OwnedProduct { .. }
                     | TypeForm::OwnedChoice { .. }
                     | TypeForm::OwnedSequence { .. }
-            ) && self.type_contains_buffer(child)?
+            ) && !nominal_owned
+                && self.type_contains_buffer(child)?
             {
                 return Err(type_error(
                     "kernel_buffer_container",
@@ -3642,6 +3914,19 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             self.validate_nominal_type(child, context, depth + 1)?;
         }
         if let Some((declaration, arguments)) = nominal_parts(&object.form) {
+            if nominal_owned {
+                self.owned_read(|read| {
+                    super::owned_record::validate_application(
+                        read,
+                        ty,
+                        context.declaration.map(|declaration| DeclarationReference {
+                            package: read.package_id(),
+                            declaration,
+                        }),
+                    )
+                })?;
+                return Ok(());
+            }
             self.validate_nominal_schema(declaration)?;
             let parameters = self.nominal_parameters(declaration)?;
             if parameters.len() != arguments.len() {
@@ -3708,6 +3993,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 continue;
             }
             let object = self.type_object(ty)?;
+            if self.owned_read(|read| super::owned_record::is_owned(read, read.package_id(), ty))? {
+                return Ok(true);
+            }
             if matches!(
                 object.form,
                 TypeForm::ByteBuffer
@@ -3735,6 +4023,12 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             self.consume_work()?;
             if !visited.insert(ty) {
                 continue;
+            }
+            if self.owned_read(|read| super::owned_record::is_owned(read, read.package_id(), ty))? {
+                return Err(type_error(
+                    "kernel_type_nominal_resource",
+                    "ordinary data cannot contain nominal owned records",
+                ));
             }
             let object = self.type_object(ty)?;
             let children = match &object.form {

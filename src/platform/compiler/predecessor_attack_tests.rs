@@ -120,6 +120,16 @@ fn current_derived_fixture_from_source(
                 let key = ObjectKey::from_digest(ObjectDomain::Type, ty.bytes());
                 crate::platform::kernel::decode_type_object(&objects[&key], ty)
             },
+            |declaration| {
+                Ok(current_units
+                    .get(&(
+                        declaration.package,
+                        OwnerKey::Declaration(declaration.declaration),
+                    ))
+                    .is_some_and(|unit| {
+                        matches!(unit.payload, CompilationPayload::OwnedRecord { .. })
+                    }))
+            },
             || Ok(()),
         )
         .unwrap();
@@ -384,7 +394,7 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
                 .write_all(&current)
                 .unwrap();
         }
-        let (previous, retained, frozen, expected) = match name {
+        let (previous, retained, frozen, predecessor, expected) = match name {
             "requirements" => (
                 include_bytes!(
                     "../../../tests/fixtures/owned-predecessor-compiler28/requirements.lkja"
@@ -400,6 +410,10 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
                 .as_slice(),
                 include_bytes!(
                     "../../../tests/fixtures/owned-predecessor-compiler31/requirements.lkja"
+                )
+                .as_slice(),
+                include_bytes!(
+                    "../../../tests/fixtures/owned-predecessor-compiler32/requirements.lkja"
                 )
                 .as_slice(),
             ),
@@ -420,6 +434,10 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
                     "../../../tests/fixtures/owned-predecessor-compiler31/transactions.lkja"
                 )
                 .as_slice(),
+                include_bytes!(
+                    "../../../tests/fixtures/owned-predecessor-compiler32/transactions.lkja"
+                )
+                .as_slice(),
             ),
             "participation" => (
                 include_bytes!(
@@ -438,6 +456,10 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
                     "../../../tests/fixtures/owned-predecessor-compiler31/participation.lkja"
                 )
                 .as_slice(),
+                include_bytes!(
+                    "../../../tests/fixtures/owned-predecessor-compiler32/participation.lkja"
+                )
+                .as_slice(),
             ),
             _ => unreachable!(),
         };
@@ -450,6 +472,11 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
             load_artifact(frozen).unwrap_err().code,
             "artifact_bundle_contract",
             "{name}: original compiler30 derived fixture remains frozen"
+        );
+        assert_eq!(
+            load_artifact(predecessor).unwrap_err().code,
+            "artifact_bundle_contract",
+            "{name}: original compiler31 derived fixture remains frozen"
         );
         expected_artifacts.push((name, retained, expected, current));
     }

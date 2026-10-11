@@ -123,3 +123,111 @@ fn cache_fifo_admission_child() {
     assert_eq!(error.code, "compilation_cache_regular_type");
     std::fs::write(root.join("completed"), b"rejected").unwrap();
 }
+
+#[test]
+fn predecessor_compilation_cache_rebuilds_without_reusing_old_units_or_changing_authority() {
+    let source = crate::platform::kernel::tests::witness_snapshot();
+    let directory = tempfile::tempdir().unwrap();
+    let repository = GraphRepository::create(&directory.path().join("repository"), &source, None)
+        .unwrap()
+        .repository;
+    let before = repository.current().unwrap().head;
+    let current = build_clean(&repository, OptimizationPolicy::DeterministicBaseline).unwrap();
+    let mut predecessor = current.manifest.clone();
+    predecessor.graph_contract_version = 31;
+    predecessor.compiler_contract_version = 31;
+    predecessor.bytecode_contract_version = 26;
+    let (_, bytes) = predecessor.encode().unwrap();
+    let old = install_derived_manifest(&repository, &current.manifest, bytes);
+    let error = load_current_compilation(&repository)
+        .expect_err("a predecessor derived cache never becomes an exact-current hit");
+    assert_eq!(error.class, DiagnosticClass::Source);
+    assert_eq!(error.code, "compilation_cache_contract_outdated");
+    assert_eq!(
+        load_exact_current_compilation(&repository, old)
+            .unwrap_err()
+            .code,
+        "compilation_cache_contract_outdated"
+    );
+    assert_eq!(
+        crate::platform::compiler::link_artifact(&repository, old, &[])
+            .unwrap_err()
+            .code,
+        "compilation_cache_contract_outdated"
+    );
+    let rebuilt = build_clean(&repository, OptimizationPolicy::DeterministicBaseline).unwrap();
+    assert_eq!(rebuilt.manifest_digest, current.manifest_digest);
+    assert_eq!(rebuilt.units_reused, 0);
+    assert_eq!(
+        load_current_compilation(&repository)
+            .unwrap()
+            .unwrap()
+            .digest,
+        current.manifest_digest
+    );
+    assert_eq!(repository.current().unwrap().head, before);
+}
+
+#[test]
+fn corrupt_predecessor_manifest_remains_corrupt_before_cache_recovery() {
+    let source = crate::platform::kernel::tests::witness_snapshot();
+    let directory = tempfile::tempdir().unwrap();
+    let repository = GraphRepository::create(&directory.path().join("repository"), &source, None)
+        .unwrap()
+        .repository;
+    let before = repository.current().unwrap().head;
+    let current = build_clean(&repository, OptimizationPolicy::DeterministicBaseline).unwrap();
+    let mut predecessor = current.manifest.clone();
+    predecessor.graph_contract_version = 31;
+    predecessor.compiler_contract_version = 31;
+    predecessor.bytecode_contract_version = 26;
+    let (_, mut bytes) = predecessor.encode().unwrap();
+    *bytes.last_mut().unwrap() ^= 1;
+    install_derived_manifest(&repository, &current.manifest, bytes);
+    let error = load_current_compilation(&repository)
+        .expect_err("outdated contract metadata cannot hide corrupt envelope bytes");
+    assert_eq!(error.class, DiagnosticClass::Corrupt);
+    assert_eq!(error.code, "packed_checksum");
+    assert_eq!(repository.current().unwrap().head, before);
+}
+
+/// Stage only disposable compiler metadata and its already admitted package revision.
+fn install_derived_manifest(
+    repository: &GraphRepository,
+    current: &CompilationManifest,
+    bytes: Vec<u8>,
+) -> CompilationManifestDigest {
+    let key = ObjectKey::for_bytes(ObjectDomain::CompilationManifest, &bytes);
+    let digest = CompilationManifestDigest::from_bytes(key.digest.bytes());
+    let revision_key = ObjectKey::from_digest(
+        ObjectDomain::PackageRevision,
+        current.package_revision.bytes(),
+    );
+    let revision_bytes = repository
+        .object_store()
+        .unwrap()
+        .read(
+            revision_key,
+            ObjectDomain::PackageRevision.maximum_bytes(),
+            &mut StoreWork::default(),
+        )
+        .unwrap()
+        .unwrap();
+    repository
+        .stage_compilation_objects(
+            repository.current().unwrap().head,
+            &BTreeMap::from([(key, bytes), (revision_key, revision_bytes)]),
+        )
+        .unwrap();
+    write_cache_head(
+        repository,
+        CompilationCacheHead {
+            contract_version: CACHE_HEAD_CONTRACT_VERSION,
+            repository_id: current.repository_id,
+            revision: current.revision,
+            manifest: digest,
+        },
+    )
+    .unwrap();
+    digest
+}

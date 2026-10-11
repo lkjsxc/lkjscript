@@ -253,6 +253,9 @@ fn encode_named(
     depth: usize,
 ) -> Result<(), Diagnostic> {
     if let Some((layout_index, layout)) = record_layout(program, ty) {
+        if layout.owned {
+            return Err(unsupported("owned nominal record"));
+        }
         let NormalizedValue::Record(NormalizedRecord::Nominal {
             layout: actual,
             fields,
@@ -458,6 +461,9 @@ fn decode_named(
     depth: usize,
 ) -> Result<NormalizedValue, Diagnostic> {
     if let Some((layout, record)) = record_layout(program, ty) {
+        if record.owned {
+            return Err(unsupported("owned nominal record"));
+        }
         let mut fields = Vec::with_capacity(record.fields.len());
         for field in record.fields.iter() {
             fields.push(decode_value(program, field.ty, cursor, state, depth + 1)?);
@@ -608,6 +614,9 @@ fn describe_nominal_layout(
     }
     append_bytes(output, &[1])?;
     if let Some((_, layout)) = record_layout(program, ty) {
+        if layout.owned {
+            return Err(unsupported("owned nominal record"));
+        }
         append_bytes(output, &[0])?;
         push_count(output, layout.fields.len())?;
         for field in layout.fields.iter() {

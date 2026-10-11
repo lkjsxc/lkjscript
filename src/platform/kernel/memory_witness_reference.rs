@@ -338,7 +338,75 @@ pub(super) fn materialized_witness_types(
             }
         }
     }
+    // Nominal fields are templates. Reconstruct every concrete field type,
+    // including nested applications discovered only through private layouts.
+    let mut pending: Vec<_> = source
+        .types
+        .keys()
+        .chain(source.dependency_types.keys())
+        .copied()
+        .collect();
+    let mut seen = BTreeSet::new();
+    let mut admitted_records = BTreeSet::new();
+    while let Some(ty) = pending.pop() {
+        if !seen.insert(ty) {
+            continue;
+        }
+        types.remaining = types.remaining.checked_sub(1)?;
+        let form = types
+            .source
+            .types
+            .get(&ty)
+            .or_else(|| types.source.dependency_types.get(&ty))
+            .or_else(|| types.derived.get(&ty))?
+            .form
+            .clone();
+        let (declaration, arguments) = match form {
+            TypeForm::Named { declaration } => (declaration, vec![]),
+            TypeForm::Applied {
+                declaration,
+                arguments,
+            } => (declaration, arguments),
+            _ => continue,
+        };
+        let oracle = Oracle(source, None);
+        let Some((parameters, fields)) = oracle.owned_record_inventory(declaration) else {
+            continue;
+        };
+        if admitted_records.insert(declaration) {
+            oracle.record_layout_acyclic(
+                declaration,
+                &mut BTreeSet::new(),
+                0,
+                &mut types.remaining,
+            )?;
+        }
+        if parameters.len() != arguments.len() {
+            return None;
+        }
+        let bindings = parameters.into_iter().zip(arguments).collect();
+        for (_, field) in fields {
+            let field = types.apply(field, &bindings, 0)?;
+            pending.push(field);
+        }
+        // `apply` can derive applications nested inside a structural type.
+        pending.extend(
+            types
+                .derived
+                .keys()
+                .filter(|ty| !seen.contains(ty))
+                .copied(),
+        );
+    }
     Some(types.derived)
+}
+
+pub(super) fn substituted_type(
+    source: &KernelSnapshot,
+    ty: TypeObjectDigest,
+    bindings: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+) -> Option<TypeObjectDigest> {
+    WitnessTypes::new(source).apply(ty, bindings, 0)
 }
 
 impl Oracle<'_> {
@@ -360,7 +428,7 @@ impl Oracle<'_> {
                 _ => None,
             }
         } else {
-            match self.foreign(package, OwnerKey::TypeParameter(id))? {
+            match self.representation_foreign(package, OwnerKey::TypeParameter(id))? {
                 PackageInterfaceRecord::TypeParameter(p) => Some(p),
                 _ => None,
             }
@@ -386,6 +454,9 @@ impl Oracle<'_> {
                         && self
                             .declaration_generation(declaration)
                             .is_some_and(|v| v >= 30)))
+        } else if let Some((parameters, _)) = self.owned_record_inventory(declaration) {
+            parameters.contains(&id)
+                && (p.constraints.has_owned() || p.constraints.requires_transfer())
         } else {
             false
         };
@@ -491,10 +562,12 @@ impl Oracle<'_> {
                 _ => return None,
             }
         } else {
-            let PackageInterfaceRecord::Declaration(owner) =
-                self.foreign(d.package, OwnerKey::Declaration(d.declaration))?
-            else {
-                return None;
+            let owner = match self
+                .representation_foreign(d.package, OwnerKey::Declaration(d.declaration))?
+            {
+                PackageInterfaceRecord::Declaration(owner)
+                | PackageInterfaceRecord::RepresentationDeclaration(owner) => owner,
+                _ => return None,
             };
             match &owner.payload {
                 PackageInterfaceDeclarationPayload::Record {
@@ -516,7 +589,7 @@ impl Oracle<'_> {
                     _ => return None,
                 }
             } else {
-                match self.foreign(d.package, OwnerKey::Field(f))? {
+                match self.representation_foreign(d.package, OwnerKey::Field(f))? {
                     PackageInterfaceRecord::Field(f) => f,
                     _ => return None,
                 }
@@ -533,7 +606,7 @@ impl Oracle<'_> {
                     _ => return None,
                 }
             } else {
-                match self.foreign(d.package, OwnerKey::Case(c))? {
+                match self.representation_foreign(d.package, OwnerKey::Case(c))? {
                     PackageInterfaceRecord::Case(c) => c,
                     _ => return None,
                 }

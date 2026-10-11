@@ -435,6 +435,7 @@ pub struct NormalizedRecordField {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NormalizedRecordLayout {
     pub declaration: DeclarationReference,
+    pub owned: bool,
     pub type_parameters: Arc<[TypeParameterId]>,
     pub type_parameter_constraints: Arc<[crate::platform::kernel::TypeParameterConstraints]>,
     pub arguments: Arc<[TypeObjectDigest]>,
@@ -555,6 +556,7 @@ pub struct NormalizedProgram {
     pub(crate) records: Arc<[NormalizedRecordLayout]>,
     pub(crate) variants: Arc<[NormalizedVariantLayout]>,
     pub(super) record_instances: BTreeMap<TypeObjectDigest, RecordLayoutIndex>,
+    pub(super) owned_record_declarations: BTreeSet<DeclarationReference>,
     pub(super) variant_instances: BTreeMap<TypeObjectDigest, VariantLayoutIndex>,
     pub(crate) requirements: Arc<[NormalizedRequirement]>,
     pub(crate) operations: Arc<[NormalizedOperation]>,
@@ -699,6 +701,7 @@ impl NormalizedProgram {
             function_by_declaration: indexes.functions,
             records: records.into(),
             record_instances: BTreeMap::new(),
+            owned_record_declarations: BTreeSet::new(),
             variant_instances: BTreeMap::new(),
             variants: variants.into(),
             requirements: requirements.into(),
@@ -849,6 +852,47 @@ impl NormalizedProgram {
         let (digest, _) = encode_type_object(&object).ok()?;
         self.types.contains_key(&digest).then_some(digest)
     }
+
+    /// Nominal custody is a declaration property, including empty and
+    /// ordinary-only records. This lookup grants no field access.
+    pub(super) fn is_owned_type(&self, ty: TypeObjectDigest) -> bool {
+        match self.types.get(&ty).map(|object| &object.form) {
+            Some(
+                TypeForm::ByteBuffer
+                | TypeForm::OwnedI64Cell
+                | TypeForm::OwnedProduct { .. }
+                | TypeForm::OwnedChoice { .. }
+                | TypeForm::OwnedSequence { .. },
+            ) => true,
+            Some(TypeForm::Named { .. } | TypeForm::Applied { .. }) => {
+                self.owned_record_layout(ty).is_some()
+            }
+            _ => false,
+        }
+    }
+
+    /// Only an exact prepared nominal application supplies a physical layout.
+    pub(super) fn owned_record_layout(
+        &self,
+        ty: TypeObjectDigest,
+    ) -> Option<&NormalizedRecordLayout> {
+        let (declaration, arguments) = match &self.types.get(&ty)?.form {
+            TypeForm::Named { declaration } => (*declaration, &[][..]),
+            TypeForm::Applied {
+                declaration,
+                arguments,
+            } => (*declaration, arguments.as_slice()),
+            _ => return None,
+        };
+        let index = self.record_instances.get(&ty)?;
+        let layout = self.records.get(index.0 as usize)?;
+        (index.1 == self.value_origin
+            && layout.owned
+            && layout.declaration == declaration
+            && layout.arguments.as_ref() == arguments
+            && layout.type_parameters.len() == arguments.len())
+        .then_some(layout)
+    }
 }
 
 #[derive(Default)]
@@ -888,7 +932,7 @@ impl RuntimeIndexes {
             match &unit.payload {
                 CompilationPayload::OwnedContract(_)
                 | CompilationPayload::OwnedImplementation(_) => {}
-                CompilationPayload::Record { .. } => {
+                CompilationPayload::Record { .. } | CompilationPayload::OwnedRecord { .. } => {
                     record_refs.insert(reference);
                 }
                 CompilationPayload::Variant { .. } => {
@@ -959,6 +1003,9 @@ impl RuntimeIndexes {
             };
             match &unit.payload {
                 CompilationPayload::Record {
+                    fields: layouts, ..
+                }
+                | CompilationPayload::OwnedRecord {
                     fields: layouts, ..
                 } => {
                     let layout = required_index(&records, declaration, "record layout")?;
@@ -1170,16 +1217,23 @@ fn prepare_records(
     let mut records = vec![None; indexes.records.len()];
     for (declaration, index) in &indexes.records {
         let unit = declaration_unit(units, *declaration)?;
-        let CompilationPayload::Record {
-            fields,
-            type_parameters,
-            type_parameter_constraints,
-        } = &unit.payload
-        else {
-            return Err(runtime_corrupt(
-                "normalized_record_payload",
-                "record layout index names another compiler payload",
-            ));
+        let (fields, type_parameters, type_parameter_constraints, owned) = match &unit.payload {
+            CompilationPayload::Record {
+                fields,
+                type_parameters,
+                type_parameter_constraints,
+            } => (fields, type_parameters, type_parameter_constraints, false),
+            CompilationPayload::OwnedRecord {
+                fields,
+                type_parameters,
+                type_parameter_constraints,
+            } => (fields, type_parameters, type_parameter_constraints, true),
+            _ => {
+                return Err(runtime_corrupt(
+                    "normalized_record_payload",
+                    "record layout index names another compiler payload",
+                ));
+            }
         };
         let fields = fields
             .iter()
@@ -1207,6 +1261,7 @@ fn prepare_records(
             .collect::<Result<Vec<_>, Diagnostic>>()?;
         records[index.0 as usize] = Some(NormalizedRecordLayout {
             declaration: *declaration,
+            owned,
             type_parameters: type_parameters.clone().into(),
             type_parameter_constraints: type_parameter_constraints.clone().into(),
             arguments: Arc::from([]),
@@ -1419,6 +1474,7 @@ fn prepare_functions(
             CompilationPayload::OwnedContract(_)
             | CompilationPayload::OwnedImplementation(_)
             | CompilationPayload::Record { .. }
+            | CompilationPayload::OwnedRecord { .. }
             | CompilationPayload::Variant { .. }
             | CompilationPayload::Interface { .. }
             | CompilationPayload::Component { .. }
@@ -1711,6 +1767,12 @@ fn validate_normalized_resource_signature(
             Some(TypeForm::TypeParameter { parameter }) => {
                 matches!(exact_runtime_owner(owners, declaration.package, OwnerKey::TypeParameter(*parameter), "owned signature type parameter")?, OwnerRecord::TypeParameter(p) if p.constraints.has_owned())
             }
+            Some(TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. }) => {
+                matches!(
+                    declaration_unit(units, *declaration)?.payload,
+                    CompilationPayload::OwnedRecord { .. }
+                )
+            }
             _ => false,
         })
     };
@@ -1975,7 +2037,8 @@ fn normalized_type_contains_resource(
             } else {
                 let unit = declaration_unit(units, *declaration)?;
                 let members = match &unit.payload {
-                    CompilationPayload::Record { fields, .. } => fields
+                    CompilationPayload::Record { fields, .. }
+                    | CompilationPayload::OwnedRecord { fields, .. } => fields
                         .iter()
                         .map(|field| {
                             index_copy(&unit.tables.types, field.ty, "named record field type")

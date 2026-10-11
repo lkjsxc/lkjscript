@@ -92,6 +92,9 @@ pub fn strict_artifact_source_probe(
 mod nominal_cutover_tests;
 
 #[cfg(test)]
+pub(crate) mod owned_record_projection_tests;
+
+#[cfg(test)]
 pub(crate) mod effect_cutover_tests;
 
 #[cfg(test)]
@@ -915,6 +918,7 @@ enum ExtractionOracleResource {
     None,
     Direct(DeclarationReference),
     Contained,
+    OwnedMemory,
 }
 
 fn reconstruct_function_extraction(
@@ -1000,6 +1004,7 @@ fn reconstruct_function_extraction(
         matches!(snapshot.owners.get(owner), Some(OwnerRecord::Expression(record)) if matches!(
             record.operation,
             ExpressionOperation::BorrowOwnedField { .. }
+                | ExpressionOperation::BorrowOwnedRecordField { .. }
                 | ExpressionOperation::BorrowOwnedItem { .. }
                 | ExpressionOperation::MatchBorrowedOwned { .. }
         ))
@@ -1008,6 +1013,19 @@ fn reconstruct_function_extraction(
             DiagnosticClass::Semantic,
             "contributor_extraction_owned_borrow",
             "extraction oracle cannot preserve scoped owned borrowing contracts",
+        ));
+    }
+    if body_owners.iter().any(|owner| {
+        matches!(snapshot.owners.get(owner), Some(OwnerRecord::Expression(record)) if matches!(
+            record.operation,
+            ExpressionOperation::PackOwnedRecord { .. }
+                | ExpressionOperation::UnpackOwnedRecord { .. }
+        ))
+    }) {
+        return Err(oracle_error(
+            DiagnosticClass::Semantic,
+            "contributor_extraction_owned_product",
+            "extraction oracle cannot preserve nominal owned record scopes",
         ));
     }
     let selected_preorder = &body_owners[selected_index..selected_end];
@@ -1159,6 +1177,13 @@ fn reconstruct_function_extraction(
             &mut BTreeSet::new(),
         )? {
             ExtractionOracleResource::None => None,
+            ExtractionOracleResource::OwnedMemory => {
+                return Err(oracle_error(
+                    DiagnosticClass::Semantic,
+                    "contributor_extraction_owned_memory",
+                    "capture contains unsupported owned memory",
+                ));
+            }
             ExtractionOracleResource::Contained => {
                 return Err(oracle_error(
                     DiagnosticClass::Semantic,
@@ -1674,6 +1699,11 @@ fn oracle_resource_class(
     let object = oracle_type_object(snapshot, digest)?;
     let class = match object.form {
         TypeForm::CapabilityResource { interface } => ExtractionOracleResource::Direct(interface),
+        TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. }
+            if oracle_is_owned_record(snapshot, declaration)? =>
+        {
+            ExtractionOracleResource::OwnedMemory
+        }
         TypeForm::Named { declaration } => {
             let key = (declaration.package, declaration.declaration);
             if !active_declarations.insert(key) {
@@ -1717,6 +1747,25 @@ fn oracle_resource_class(
     Ok(class)
 }
 
+fn oracle_is_owned_record(
+    snapshot: &KernelSnapshot,
+    reference: DeclarationReference,
+) -> Result<bool, Diagnostic> {
+    if reference.package == snapshot.root.package_id {
+        return Ok(matches!(
+            snapshot.owners.get(&OwnerKey::Declaration(reference.declaration)),
+            Some(OwnerRecord::Declaration(record))
+                if matches!(record.payload, DeclarationPayload::OwnedRecord { .. })
+        ));
+    }
+    Ok(matches!(
+        oracle_dependency_owner(snapshot, reference.package, OwnerKey::Declaration(reference.declaration))?,
+        PackageInterfaceRecord::Declaration(record)
+            | PackageInterfaceRecord::RepresentationDeclaration(record)
+            if matches!(record.payload, PackageInterfaceDeclarationPayload::OwnedRecord { .. })
+    ))
+}
+
 fn oracle_named_member_types(
     snapshot: &KernelSnapshot,
     reference: DeclarationReference,
@@ -1733,7 +1782,8 @@ fn oracle_named_member_types(
             ));
         };
         return match &declaration.payload {
-            DeclarationPayload::Record { fields, .. } => fields
+            DeclarationPayload::Record { fields, .. }
+            | DeclarationPayload::OwnedRecord { fields, .. } => fields
                 .iter()
                 .map(
                     |field| match snapshot.owners.get(&OwnerKey::Field(*field)) {
@@ -1767,44 +1817,48 @@ fn oracle_named_member_types(
         OwnerKey::Declaration(reference.declaration),
     )?;
     match record {
-        PackageInterfaceRecord::Declaration(declaration) => match declaration.payload {
-            PackageInterfaceDeclarationPayload::Record { fields, .. } => fields
-                .into_iter()
-                .map(|field| {
-                    match oracle_dependency_owner(
-                        snapshot,
-                        reference.package,
-                        OwnerKey::Field(field),
-                    )? {
-                        PackageInterfaceRecord::Field(record) => Ok(record.ty),
-                        _ => Err(oracle_error(
-                            DiagnosticClass::Corrupt,
-                            "contributor_extraction_named_member",
-                            "dependency named record field is missing",
-                        )),
-                    }
-                })
-                .collect(),
-            PackageInterfaceDeclarationPayload::Variant { cases, .. } => cases
-                .into_iter()
-                .map(|case| {
-                    match oracle_dependency_owner(
-                        snapshot,
-                        reference.package,
-                        OwnerKey::Case(case),
-                    )? {
-                        PackageInterfaceRecord::Case(record) => Ok(record.payload),
-                        _ => Err(oracle_error(
-                            DiagnosticClass::Corrupt,
-                            "contributor_extraction_named_member",
-                            "dependency named variant case is missing",
-                        )),
-                    }
-                })
-                .collect::<Result<Vec<_>, _>>()
-                .map(|values| values.into_iter().flatten().collect()),
-            _ => Ok(Vec::new()),
-        },
+        PackageInterfaceRecord::Declaration(declaration)
+        | PackageInterfaceRecord::RepresentationDeclaration(declaration) => {
+            match declaration.payload {
+                PackageInterfaceDeclarationPayload::Record { fields, .. }
+                | PackageInterfaceDeclarationPayload::OwnedRecord { fields, .. } => fields
+                    .into_iter()
+                    .map(|field| {
+                        match oracle_dependency_owner(
+                            snapshot,
+                            reference.package,
+                            OwnerKey::Field(field),
+                        )? {
+                            PackageInterfaceRecord::Field(record) => Ok(record.ty),
+                            _ => Err(oracle_error(
+                                DiagnosticClass::Corrupt,
+                                "contributor_extraction_named_member",
+                                "dependency named record field is missing",
+                            )),
+                        }
+                    })
+                    .collect(),
+                PackageInterfaceDeclarationPayload::Variant { cases, .. } => cases
+                    .into_iter()
+                    .map(|case| {
+                        match oracle_dependency_owner(
+                            snapshot,
+                            reference.package,
+                            OwnerKey::Case(case),
+                        )? {
+                            PackageInterfaceRecord::Case(record) => Ok(record.payload),
+                            _ => Err(oracle_error(
+                                DiagnosticClass::Corrupt,
+                                "contributor_extraction_named_member",
+                                "dependency named variant case is missing",
+                            )),
+                        }
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(|values| values.into_iter().flatten().collect()),
+                _ => Ok(Vec::new()),
+            }
+        }
         _ => Err(oracle_error(
             DiagnosticClass::Corrupt,
             "contributor_extraction_named_type",
@@ -2434,6 +2488,39 @@ impl DefinitionOracleWalker<'_> {
                     ExpressionChildRole::OwnedProductBody,
                 )?;
             }
+            ExpressionOperation::UnpackOwnedRecord {
+                source,
+                fields,
+                body,
+                ..
+            } => {
+                self.visit_expression_child(
+                    *source,
+                    owner,
+                    "owned_product_source",
+                    0,
+                    child_depth,
+                    ExpressionChildRole::OwnedProductSource,
+                )?;
+                for (index, field) in fields.iter().enumerate() {
+                    self.visit_binding(
+                        field.binding,
+                        owner,
+                        "owned_product_binding",
+                        oracle_ordinal(index)?,
+                        child_depth,
+                        (BindingKind::OwnedUnpack, BindingContainerRole::OwnedUnpack),
+                    )?;
+                }
+                self.visit_expression_child(
+                    *body,
+                    owner,
+                    "owned_product_body",
+                    0,
+                    child_depth,
+                    ExpressionChildRole::OwnedProductBody,
+                )?;
+            }
             ExpressionOperation::BorrowCall {
                 call,
                 binding,
@@ -2465,6 +2552,12 @@ impl DefinitionOracleWalker<'_> {
                 )?;
             }
             ExpressionOperation::BorrowOwnedField {
+                source,
+                binding,
+                body,
+                ..
+            }
+            | ExpressionOperation::BorrowOwnedRecordField {
                 source,
                 binding,
                 body,
@@ -2959,6 +3052,9 @@ fn oracle_expression_form(operation: &ExpressionOperation) -> &'static str {
         ExpressionOperation::MatchOwned { .. } => "match_owned",
         ExpressionOperation::MatchBorrowedOwned { .. } => "match_borrowed_owned",
         ExpressionOperation::BorrowOwnedField { .. } => "borrow_owned_field",
+        ExpressionOperation::PackOwnedRecord { .. } => "pack_owned_record",
+        ExpressionOperation::UnpackOwnedRecord { .. } => "unpack_owned_record",
+        ExpressionOperation::BorrowOwnedRecordField { .. } => "borrow_owned_record_field",
         ExpressionOperation::SequenceEmpty { .. } => "sequence_empty",
         ExpressionOperation::SequenceLength { .. } => "sequence_length",
         ExpressionOperation::SequencePush { .. } => "sequence_push",
@@ -3095,8 +3191,8 @@ mod tests {
         let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
         let before = std::fs::read(project.join("HEAD")).expect("standard HEAD before oracle");
         let inventory = semantic_inventory(&project).expect("standard semantic inventory");
-        // The maintained FIFO and generalized sequence graph has 2,796 live owners.
-        assert_eq!(inventory.owners, 2_796);
+        // The maintained graph with nominal owned FIFO state has 2,800 live owners.
+        assert_eq!(inventory.owners, 2_800);
         assert_eq!(inventory.modules, 13);
         assert!(inventory.functions > 0);
         assert!(inventory.relations > 0);

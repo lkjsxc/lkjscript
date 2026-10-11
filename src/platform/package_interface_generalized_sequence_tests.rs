@@ -12,7 +12,11 @@ fn interface19_rejects_graph31_owners_in_rehashed_interface18_envelopes() {
     let value = PackageInterfaceOwner {
         contract_version: 19,
         record: PackageInterfaceRecord::TypeParameter(TypeParameterRecord {
-            header: OwnerHeader::new(owner, OwnerKind::TypeParameter),
+            header: OwnerHeader {
+                contract_version: 31,
+                owner,
+                kind: OwnerKind::TypeParameter,
+            },
             declaration: DeclarationId::migrate(b"interface31", 0),
             name: crate::platform::kernel::Name::new("T").unwrap(),
             constraints: TypeParameterConstraints::Transferable,

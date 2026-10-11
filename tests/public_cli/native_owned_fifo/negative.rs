@@ -4,7 +4,7 @@ const PREFIX: &str = r#"declarations.begin
 (units
   (use std builtin)
   (module create rejected-fifo
-    (type-alias Queue (owned-product (field incoming (owned-sequence ByteBuffer)) (field outgoing (owned-sequence ByteBuffer))))
+    (type-alias Queue (std::Fifo ByteBuffer))
 "#;
 
 #[test]

@@ -2415,7 +2415,7 @@ Original bounded output must establish one passing outcome per selected test;
 unrun, ignored, failed, duplicated or substituted outcomes reject even with a
 successful exit and forged complete summary.
 
-The current contract `lkjscript-final-candidate-acceptance-7` pairs only with
+The generalized-sequence contract `lkjscript-final-candidate-acceptance-7` pairs only with
 `release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-7`.
 Reject predecessor and mixed pairs, including generation 6, at terminal and
 authenticated controller admission. Prior receipts retain their historical
@@ -2424,3 +2424,59 @@ an executable. Existing Map, fold, incremental-compiler, target, userland,
 installation, candidate-binding and joined-cleanup obligations remain required.
 The coordinated semantic format cut is independently owned by graph/interface/
 compiler/artifact admission, rather than inferred from this acceptance generation.
+
+## Nominal owned records and final-byte composition
+
+Prove intrinsic affinity for empty, ordinary-data-only and generic nominal owned
+records. Independently admit complete layouts and every actual argument, including
+phantom arguments. The combined depth of nominal and structural nesting obeys the
+same bound; a nominal boundary cannot reset it. Direct and mutual recursive owned
+layouts reject, including cycles through collection storage. Bound proof work and
+pending metadata before growth.
+
+Prove exact declaration identity rather than structural equivalence. Wrong nominal
+types, wrong generic categories, structural aliases and field references from a
+same-shaped declaration reject. Construction, decomposition, owned-field borrowing
+and ordinary-field projection require the exact defining package and module, even
+in untaken branches. Same-package foreign modules and same-ID foreign packages are
+negative controls. Private layout evidence in a transport grants no authored lookup
+or field-operation rights. Rehashed negative artifacts must reach independent
+semantic admission rather than merely fail their checksum.
+
+Fresh public authoring exports the generic supplier before concrete consumers and
+retains exact implementation-witness applications. Copy the product outside the
+checkout, retain literal requests, and run complete expected results after deleting
+owned source projects and transports. Modify a provider's private metadata layout,
+explicitly update the exact supplier selection, and rebuild unchanged downstream
+program text. This proves an abstraction boundary, not compatibility of old bytes
+with a different program revision.
+
+Keep the standard FIFO's exhaustive independent oracle and its five mandatory
+public witnesses. Source-tied front views preserve every ancestor until scope
+completion; subsequent pop, drain and empty reuse must succeed. Exercise task
+movement and joined shared reads, traps, cancellation, modeled reservation refusal
+and healthy subsequent invocations. Every exit releases owners and loans. Never
+duplicate live effects to compare evaluators.
+
+Matched structural and nominal storage observations require one custody envelope,
+unchanged child allocation identities and no additional prefix scan attributable
+to nominal resolution. Parent repacking may allocate a new parent. Account actual
+algorithmic reversal work and existing ordinary child admission separately; retain
+unfavorable timing. Allocation charges do not measure RSS or API expenditure.
+
+Final-candidate acceptance generation 8 adds the exact namespace
+`native_declarations::native_owned_nominals::` with these mandatory tests:
+
+- `native_owned_nominals_export_generic_identity_and_detached_results`;
+- `native_owned_nominals_keep_representation_private`;
+- `native_owned_nominals_nested_borrows_preserve_source_until_consumption`;
+- `native_owned_nominals_admit_complete_layouts_and_phantom_arguments`;
+- `native_owned_nominals_transfer_traps_budget_join_cleanup_and_recovery`.
+
+Select every present and future test in that namespace. Reject missing families,
+substituted identities, duplicated results and ignored, failed or unrun cases.
+The current `lkjscript-final-candidate-acceptance-8` pairs only with
+`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-8`.
+Reject generation 7 and mixed generation pairs without relabeling their historical
+evidence. All previous mandatory final-byte families and independent publication
+terminals remain required.

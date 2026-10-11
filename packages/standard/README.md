@@ -96,12 +96,13 @@ Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_55fb7bfafcef4ec97b158b23e5f8d49c244e8cf64d32786fa81448f136effc59`;
-- package revision: `package_revision_638391ea909193383a6b0af9c2bcd2372902b4dceaabc6b8deb5aa8a81507df4`;
-- package transport: `package_transport_a2002a365e4bb15c32dcf7ab1e169a6075f2ab55d5c8d05042058af4553b0b8b`;
-- artifact manifest: `artifact_manifest_2aed4d1c1938396cc387020c686bd027320c1c89422be90153502a052b002b50`;
-- artifact bundle: `artifact_bundle_f087bdb14937fecba130b4bf91149079f96db34d057eb311a92befb053df4389`;
-- 2,796 live semantic owners, 290 compiler units, and 116 graph tests.
+- semantic revision: `rev_6818785d8919028a69659b24df495b2d7a42f2676a95fd1aa0ae143a32623013`;
+- package revision: `package_revision_eb44350b1cc4a9d33bfacf0258613ff5b6bda222724ff662df94fc6d39b57769`;
+- package transport: `package_transport_bdf3f20ab74e23842996bc2b58e12784400ea9c950ae04b0afbbcd55620b0621`;
+- artifact manifest: `artifact_manifest_a59c847293012323f5881b97cf2a45e01c034d716679efc194ca1259de3d3783`;
+- artifact bundle: `artifact_bundle_5a681f920ad1ab98c1a1aa75be16dbda3a12568d54877cc5bbb73b36a196afb0`;
+- artifact bundle size: 1,275,854 bytes;
+- 2,800 live semantic owners, 291 compiler units, and 116 graph tests.
 
 The public check passes all 116 tests with zero failures and agreement between
 production and reference execution. Source-full and finalized-archive acceptance
@@ -304,19 +305,29 @@ through public export and the compiler 30 / bytecode 25 / artifact 37 bundle
 through public check/build. All 96 tests agree between production and reference
 execution. The package revision and transport pins at that checkpoint selected those
 wrappers; that refresh retained accepted HEAD and existing standard meaning.
-The [current release notes](../../docs/releases/v0.1.90.md) identify the selected
+The [current release notes](../../docs/releases/v0.1.91.md) identify the selected
 compatibility boundary; [status](../../docs/status.md) owns actual acceptance.
 
-The generalized sequence increment uses Graph 31 and interface 19, with compiler
-31, bytecode 26 and artifact 38. Public check/build/export regenerates the derived
-owners from the accepted standard, including the new ordinary-data wrappers and
-replacement operation. All 116 graph tests agree between both evaluators.
+The generalized sequence increment used Graph 31 and interface 19, with compiler
+31, bytecode 26 and artifact 38. Public check/build/export regenerated the derived
+owners from the accepted standard, including the ordinary-data wrappers and
+replacement operation. All 116 graph tests agreed between both evaluators.
+
+The current nominal owned-record refresh uses Graph 32 and interface 20, with
+compiler 32, bytecode 27 and artifact 39. The native FIFO migration updates the
+accepted standard to public `Fifo<T: Owned>`. Public check/build/export derives
+the transport and bundle identified above; all 116 graph tests pass with zero
+failures and agreement between production and reference execution. Exact retained
+older suppliers remain separate source inputs and require current derived artifacts.
 
 ## Native owned FIFO
 
 The current source adds `fifo-empty<T: Owned>`, `fifo-length`, `fifo-push`,
 `fifo-pop`, `fifo-front` and `fifo-discard` as ordinary pure graph functions.
-Their structural owned product contains incoming and outgoing owned sequences.
+Their public nominal `Fifo<T: Owned>` contains incoming and outgoing owned
+sequences, with representation access private to the exact core module.
+Consumers name `(std::Fifo T)` and use those functions; a structural product
+with the same field names cannot substitute for the nominal queue.
 Push and pop transfer custody; both pop outcomes retain the queue for reuse.
 Front returns an exact source-tied borrowed element without removing it, and an
 empty front traps. Existing lexical loan rules protect every ancestor owner.
@@ -324,8 +335,11 @@ empty front traps. Existing lexical loan rules protect every ancestor owner.
 The private refill moves each enqueued element between stacks at most once;
 this is an amortized sequence-transfer bound, not a constant VM-time or
 bounded-latency claim. No FIFO-specific runtime primitive or encoding change is
-introduced. The [native guide](../../docs/guides/native-owned-fifo.md) records
-representation, allocation, lifetime and resource limits. Ten additional fixed
+introduced by the FIFO operations. The
+[native migration request](requests/20261011-nominal-owned-fifo.lkjc) updates the
+existing callable and test identities through ordinary draft/plan/apply.
+The [native guide](../../docs/guides/native-owned-fifo.md) records
+representation, allocation, lifetime and resource limits. Ten fixed
 graph tests cover order, empty reuse, mixed stacks, repeated front reads and
 nested cleanup. The [independent consumer](../../examples/owned-fifo/README.md)
 exercises transported generic code and source-free execution over three distinct

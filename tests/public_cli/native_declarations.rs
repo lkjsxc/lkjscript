@@ -1710,3 +1710,6 @@ mod incremental_units;
 
 #[path = "native_owned_fifo.rs"]
 mod native_owned_fifo;
+
+#[path = "native_declarations/native_owned_nominals.rs"]
+mod native_owned_nominals;
