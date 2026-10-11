@@ -6,9 +6,9 @@ finalized executable acceptance and public availability are separate boundaries.
 ## Generalized owned sequences
 
 Work is in `/home/coder/workspace/lkjscript-generalized-sequences-20261011`, branch
-`work/generalized-sequences-20261011`. Implementation `8ffb023e` and normal merge
-`3b54f64a9cc1835ba702c14d26f5d00fe28c2d39` preserve the native FIFO work and its
-corrections through `32594261`. Ordinary first-order sequence elements, immutable
+`work/generalized-sequences-20261011`. The implementation preserves the native
+FIFO work and its corrections through `32594261` by normal merge. Ordinary
+first-order sequence elements, immutable
 indexed reads, custody-preserving replacement and dense working storage in the
 bounded native dependency planner are implemented. The [specification](spec/owned-sequences.md),
 [data guide](guides/native-data-sequences.md) and [release notes](releases/v0.1.90.md)
@@ -32,23 +32,25 @@ and modeled metadata costs. This is a capability advance with a measured cost.
 
 ## Source acceptance
 
-Fresh full verification of `3b54f64a` completed with **24/26 gates passed**, zero
-reuse, zero unrun gates and stable inputs. Workspace results were **2,370 passed,
-2 failed, 29 ignored**, apart from two separately filtered child probes. All five
-generalized-sequence witnesses, all five FIFO witnesses, all three planner tests,
-all nine independent verifier tests, 1,762 core tests and 285 developer-tool tests
-passed. Source lint, maintained artifacts, offline packages, outbound/stateful
-HTTP, tail execution and service acceptance passed too.
+Fresh full verification of source
+`99232e109758f646c88d1f36f59d93bf1e1b8b38`, tree
+`57eef72efdb6678d5e0f71a474ce7af1bc0f801d`, passed **26/26 gates**, with zero
+reuse, zero unrun gates and stable inputs. Workspace results were **2,372 passed,
+0 failed, 29 ignored**, plus two separately filtered passing child probes.
+Acceptance includes all five generalized-sequence witnesses, all five FIFO
+witnesses, all three planner tests, all nine independent verifier tests, maintained
+artifacts, source lint, offline packages, HTTP, tail execution and services.
 
-Three stale expectations blocked acceptance: the service integration test still
-required artifact 37 instead of 38; public discovery omitted get/replace; and the
-distributed HTTP checker still required definition projection 19 instead of 20.
-The corrections retain exact admission and historical negative controls. Focused
-reruns now pass all nine service integration tests, complete public discovery and
-all 46 distributed HTTP commands with two runners and joined cleanup. Fresh full
-acceptance of the frozen corrected source remains required before integration.
+The passing receipt is
+`verification_40eb2d40302de639cc773b1f85aa426bd51b37fc23d09f1b1e09bb1642b6c5de`,
+at `.artifacts/lkjscript-dev/check/1791680514015518854-558889-0/receipt.json`.
+Its immutable checker, source identity and independently checked result summary
+are retained in `.artifacts/data-sequences/full-99232e10/`.
 
-The failed full receipt is
+The preceding full run at `3b54f64a` passed 24/26 gates. Its stale artifact,
+discovery and definition-projection expectations were corrected with exact
+admission and historical negative controls retained. The original failed receipt
+is
 `verification_af35c17bcdd2fadf874dc55b7e79cd3807d6b27f3647c9772249edc14bc4b26b`,
 at `.artifacts/lkjscript-dev/check/1791676881020641040-443828-0/receipt.json`.
 Builds, focused checks and both cost studies remain under
@@ -59,16 +61,40 @@ Its fixture corrections are included by normal merge; production limits are unch
 
 ## Mainline and public binary
 
-Last corroborated remote main:
-`574a8b5783077cb0654ecd85ede94105cb6912a1`. PR #14 remains draft at remote head
-`5c86cd33`; this combined increment has not yet reached main.
+Implementation reached remote main through the normal merge of
+[PR #14](https://github.com/lkjsxc/lkjscript/pull/14), commit
+`d8e62956791fd649e0a6bfd2722067375cacce83`. Its tree equals the accepted source
+tree above, and exact accepted-source ancestry was independently verified.
+The integration proof is `.artifacts/data-sequences/delivery/integration.json`.
+This status update is a reporting-only descendant, separate from tested source
+and candidate bytes.
 
 Development is **0.1.90**. Latest observed immutable public release is **v0.1.89**,
-release **407859944**. The v0.1.90 tag is unoccupied. Earlier candidate
+release **407859944**. The v0.1.90 tag and release were unoccupied immediately
+before the new candidate dispatch. Earlier candidate
 `38034392926/1` failed source verification; no finalized bytes from it were accepted
-or promoted. No successor candidate has been dispatched for this increment.
+or promoted.
 
-Next: pass fresh full source acceptance of the corrected source, integrate normally
-and independently verify remote ancestry. Then accept finalized static bytes and
-promote those unchanged assets through the configured release workflow. Application
-selection, deployment and operational data are unchanged.
+Candidate [38103217658/1](https://github.com/lkjsxc/lkjscript/actions/runs/38103217658)
+was dispatched once at **2026-10-11 01:51:09 UTC** from exact product/controller
+source `d8e62956791fd649e0a6bfd2722067375cacce83`. GitHub independently identifies
+repository and head repository `lkjsxc/lkjscript`, workflow **343592338** at
+`.github/workflows/release.yml`, event `workflow_dispatch`, branch `main`, original
+attempt **1**. The run is in progress; checkout succeeded and hosted acceptance
+remains pending. Original dispatch, run, job and artifact responses are retained
+under `.artifacts/data-sequences/delivery/candidate-dispatch/`.
+
+Next: require that exact invocation's **`candidate_accepted`** terminal and required
+assets, verifier and acceptance uploads. Hosted acceptance must independently pass
+fresh release-source checks and generation-7 finalized-byte acceptance, including
+six target owners, two pinned userlands, installed recovery and native public
+witnesses. Local full acceptance does not substitute for these boundaries.
+
+After acceptance, refresh occupancy and publication state, annotate `v0.1.90` on
+the exact admitted product commit, compare and read back the existing scoped
+tag-object selection, then promote that producer/attempt's unchanged assets through
+the [release owner](release.md). Completion requires
+**`immutable_published_and_public_verified`**. No v0.1.90 public acceptance or
+publication is claimed yet. Retain both sequence/FIFO worktrees and their unique
+ignored evidence through this handoff. Application selection, deployment and
+operational data are unchanged.
