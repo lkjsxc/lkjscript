@@ -91,15 +91,23 @@ on `d1488367758226e02a3c5522476b7058fd881ce2` failed after 2,866.089739 seconds:
 `workspace_tests` failed, on three reviewed fixtures: library **1,911/1/8 ignored**,
 native verifier **8/1**, public CLI **269/1/1 ignored**. Original evidence remains
 intact. Test-only corrections preserve standalone input accounting and the current
-capacity/negative precedence contract; corrected executable verification and a
-complete fresh acceptance are pending. The native asset and production behavior
-remain unchanged by those corrections.
+capacity/negative precedence contract. The
+[sixth all-target build](../../.artifacts/native-package-planner/build/selected-sixth.json)
+returned exit 0 on corrected source `5a9629ef986ed2dc63b8befbc8ad081a10c04b28`;
+[all 18 focused cases](../../.artifacts/native-package-planner/tests/focused-sixth-20261011/summary.json)
+pass with 0 failed or ignored. Complete fresh **29-gate** acceptance remains
+pending.
+The native asset and production behavior remain unchanged by those corrections.
 
 ## Observed public build costs
 
 The retained 2026-10-11 comparison uses release-profile 0.1.93 and 0.1.94
 executables, identical accepted source clones, one cold compiler-cache warmup per
-lane and five alternating measured builds per lane. Every invocation starts a new
+lane and five alternating measured builds per lane. Its candidate release binary
+binds earlier source `77decedc`. The
+[release rebuild](../../.artifacts/native-package-planner/build/selected-release-second.json)
+on corrected source `5a9629ef` reproduces both CLI and verifier bytes exactly;
+no corrected-release timing rerun is claimed. Every invocation starts a new
 process; native code preparation is therefore cold even when the project's derived
 compiler cache is warm. All complete artifacts match across lanes and repetitions;
 the planner also reproduces its maintained artifact. Ten detached result checks
