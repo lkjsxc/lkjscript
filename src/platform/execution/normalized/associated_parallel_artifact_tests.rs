@@ -455,9 +455,9 @@ fn associated_parallel_public_imported_selected_outputs_transfer_share_and_quota
                 ..NormalizedRunPolicy::foreground()
             };
             healthy(&fixture, engine, &handle, mirrored, exact);
-            for dimension in 0..3 {
+            for (dimension, total) in totals.iter().enumerate() {
                 let mut below = exact;
-                let bound = totals[dimension]
+                let bound = total
                     .checked_sub(1)
                     .expect("healthy execution charges each dimension");
                 match dimension {
