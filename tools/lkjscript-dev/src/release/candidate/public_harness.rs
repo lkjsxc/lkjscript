@@ -174,13 +174,13 @@ impl Runner<'_> {
         let mut command = vec![
             harness.display().to_string(),
             "--exact".into(),
-            "--test-threads=1".into(),
+            "--test-threads=2".into(),
             "--color=never".into(),
         ];
         command.extend(inventory.selected.iter().cloned());
         self.receipt.inventory = Some(inventory);
-        // The hosted predecessor completed 42 of 96 cases before its 30-minute
-        // aggregate expired. Keep every case and bound execution separately.
+        // Fixed two-worker execution preserves every selected case and the same
+        // aggregate bound. Completion cost and contention remain empirical.
         let observed = self.run(
             "execute",
             command,

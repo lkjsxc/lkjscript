@@ -216,3 +216,62 @@ fn cargo_output_must_bind_one_completed_source_matched_test_executable() {
         assert!(cargo_harness(&output, root).is_err(), "accepted {output}");
     }
 }
+
+#[test]
+fn completion_order_and_selected_long_running_notices_preserve_exact_outcomes() {
+    let inventory = inventory(&listing()).unwrap();
+    let names = inventory.selected.iter().collect::<Vec<_>>();
+    let mut output = format!("running {} tests\n", names.len());
+    output.push_str(&format!(
+        "test {} has been running for over 60 seconds\n",
+        names[0]
+    ));
+    for (index, name) in names.iter().rev().enumerate() {
+        output.push_str(&format!("test {name} ... ok\n"));
+        if index == 0 {
+            output.push_str(&format!(
+                "test {} has been running for over 60 seconds\n",
+                names[1]
+            ));
+        }
+    }
+    output.push_str(&format!(
+        "test result: ok. {} passed; 0 failed; 0 ignored; 0 measured; {} filtered out; finished in 65.00s\n",
+        names.len(), inventory.all.len() - names.len()
+    ));
+    passed(&output, &inventory).unwrap();
+}
+
+#[test]
+fn long_running_notices_never_replace_outcomes_or_grant_foreign_case_credit() {
+    let inventory = inventory(&listing()).unwrap();
+    let name = inventory.selected.first().unwrap();
+    let notice = format!("test {name} has been running for over 60 seconds\n");
+    let header = format!("running {} tests\n", inventory.selected.len());
+    let original = success(&inventory);
+    let missing = original.replace(&format!("test {name} ... ok\n"), "");
+    let valid_prefix = format!("{header}{notice}");
+    for changed in [
+        format!("{notice}{original}"),
+        original.replacen(&header, &format!("{valid_prefix}{notice}"), 1),
+        original.replacen(
+            &header,
+            &format!("{header}test unrelated_test has been running for over 60 seconds\n"),
+            1,
+        ),
+        original.replacen(
+            &format!("test {name} ... ok\n"),
+            &format!("test {name} ... ok\n{notice}"),
+            1,
+        ),
+        format!("{original}{notice}"),
+        missing.replacen(&header, &valid_prefix, 1),
+        original.replacen(
+            &header,
+            &format!("{header}{}", notice.replace("60 seconds", "61 seconds")),
+            1,
+        ),
+    ] {
+        assert!(passed(&changed, &inventory).is_err(), "accepted {changed}");
+    }
+}

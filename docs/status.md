@@ -1,12 +1,13 @@
 # Current status
 
-Snapshot: 2026-10-11. Development **0.1.94** implements native package dependency
-planning. Diagnostic successor `dbef3042` passed **29/29** fresh full gates with stable inputs,
-**0 reused**, **0 unrun** and terminal exit **0**. The accepted implementation
-and earlier reporting descendants are integrated on main with the generation-10
-release controller. Original hosted producer **38152770069/1** failed source
-acceptance at its workspace deadline. The bounded diagnostic successor has local
-source acceptance. A fresh finalized candidate and publication remain pending.
+Snapshot: 2026-10-12. Development **0.1.94** implements native package dependency
+planning. Accepted diagnostic source `dbef3042` retains **29/29** fresh full gates
+with stable inputs, zero reuse/unrun and exit 0. Latest hosted producer
+**38173532140/1** on reporting descendant `f772f229` passed **23/23** fresh source
+gates but failed finalized-byte public-harness acceptance. No .94 publication is
+claimed. The fixed two-worker correction passed **30/30** affected developer-library
+tests and strict Clippy locally; fresh full-source and final-byte acceptance remain
+pending.
 
 ## Selected source and capability
 
@@ -16,9 +17,10 @@ Worktree `/home/coder/workspace/lkjscript-native-package-planner-20261011`, bran
 `cc7381d47f24ea0522b30dac7d60f19b801bb1fb`. It contains the native planner
 implementation, normal ancestry merge from main, reviewed fixture corrections,
 bounded IndexedData progress observations and a 9,600-second workspace allowance.
-Main contains reporting descendant `c3d27a7d451879ab7624279e9e690a54d6c65730`.
-The fresh successor receipt binds the exact source above; this status update is
-a reporting descendant. Preserve the worktrees and ignored original evidence;
+The latest verified mainline delivery selected reporting descendant
+`f772f2294d99177a54fa02ee7229f4e4f5b9d883`.
+The retained full receipt binds `dbef3042`, not the current two-worker correction
+or any subsequent reporting descendant. Preserve the worktrees and ignored original evidence;
 [selection.json](../.artifacts/native-package-planner/selection.json) retains
 earlier executable selections and proof scopes.
 
@@ -106,26 +108,41 @@ end-to-end speed; the dominant cold cost remains unresolved.
 
 ## Remaining gates
 
-The [original hosted producer 38152770069/1](https://github.com/lkjsxc/lkjscript/actions/runs/38152770069)
-on exact `c3d27a7d451879ab7624279e9e690a54d6c65730` failed source acceptance:
-**22/23** gates passed fresh with stable inputs, **0 reused** and **0 unrun**.
-Only `workspace_tests` failed by its **7,200-second timeout**. Public CLI completed
-**269 passed, 1 ignored, 0 failed** of 271 announced cases; the separate-package
-IndexedData matrix remained unfinished. Its underlying noncompletion cause is
-unknown. Finalized asset construction/admission and publication were skipped;
-the original terminal is `incomplete`, with no accepted candidate asset set.
-The [authenticated failure report](../.artifacts/native-package-planner/delivery/mainline-20261011T154018Z/candidate-dispatch-20261011T154733Z/audit-20261011T183737Z/failure-report.md)
-retains original service identities, artifact bytes, receipt and process logs.
+The [latest original hosted producer 38173532140/1](https://github.com/lkjsxc/lkjscript/actions/runs/38173532140)
+on exact `f772f2294d99177a54fa02ee7229f4e4f5b9d883` passed **23/23** source gates
+fresh, with stable inputs and zero reuse/unrun. Final asset construction succeeded,
+but native public execution exhausted its **7,200-second** aggregate allowance
+with **78/102 passed, 0 failed**, and 24 cases incomplete. IndexedData completed
+all **242** runs. Target/userland, installation/recovery and their final readers
+were not reached; cleanup is recorded incomplete, mandatory accepted-candidate
+uploads were skipped, and the maintained terminal is `incomplete`.
+The authenticated failure archive retains exact original artifacts,
+source/public/candidate receipts and process logs.
+The earlier `c3d27a7d` producer **38152770069/1** remains a separate immutable
+failure: **22/23** fresh source gates, with only workspace timeout and no final
+admission.
 
-The successor keeps every required case and adds bounded matrix progress plus a
-**9,600-second** workspace diagnostic allowance. Local fresh acceptance and the
-complete independent transcript check passed; this is not a proven hosted remedy.
-After normal mainline delivery and occupancy refresh, a fresh generation-10
-producer must pass **23** release-source gates and complete the unchanged
-finalized-byte, expanded public inventory, target, userland, installation,
-original-reader and joined-cleanup obligations. Preserve the original `d01708a2`
-acceptance and failed `c3d27a7d` producer separately. No finalized successor
-candidate acceptance or `.94` publication is claimed.
+The active unfinished shared-interfaces case passed a local replay of the exact
+retained public harness and finalized CLI in **17.91 seconds**, with **1 passed / 270 filtered** and unchanged executable
+hashes. This diagnoses one local case; it does not establish hosted case duration,
+the original noncompletion cause, full inventory or candidate acceptance.
+
+The correction pins exactly two public test workers and admits only exact
+selected-name long-running notices with zero pass credit. Every required case,
+unique passing outcome, exact summary, the **7,200-second** public allowance and
+**9,600-second** source workspace allowance remain intact, under generation **10**.
+Retained local controls record **30/30** affected developer-library passes (original session **5889**)
+and strict Clippy exit **0** (session **80961**) on stable working input inventory
+`d80244f3fc8ee4d4249a92848cb41a196b44b8642bc13502dfb2bbcecfc9ac9a`.
+These are targeted working-tree proofs; fresh complete acceptance is pending.
+
+Next record and commit the reviewed correction/status inputs, build a new immutable
+verifier and require stable **29/29** fresh full gates. After normal mainline delivery
+and exact source/version/occupancy refresh, one fresh producer must pass **23**
+source gates and all **102** finalized-byte public cases, plus every target,
+userland, installation, original-reader and joined-cleanup obligation. Preserve
+`d01708a2` and `dbef3042` local acceptance and both failed hosted originals separately.
+No two-worker full acceptance, accepted candidate or .94 publication is claimed.
 
 The generation-9 predecessor lineage is closed. Normal mainline delivery retains
 the accepted ancestry; original checks and remote readback remain in

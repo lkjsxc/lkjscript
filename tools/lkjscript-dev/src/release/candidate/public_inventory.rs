@@ -165,6 +165,7 @@ pub(super) fn inventory(output: &str) -> Result<Inventory, DevError> {
 
 pub(super) fn passed(output: &str, inventory: &Inventory) -> Result<(), DevError> {
     let mut observed = BTreeSet::new();
+    let mut notices = BTreeSet::new();
     let mut summaries = 0;
     let mut headers = 0;
     let count = inventory.selected.len();
@@ -185,6 +186,20 @@ pub(super) fn passed(output: &str, inventory: &Inventory) -> Result<(), DevError
                 "public harness counts contain missing, failed or ignored cases",
             )?;
             summaries += 1;
+        } else if let Some(name) = line
+            .strip_prefix("test ")
+            .and_then(|line| line.strip_suffix(" has been running for over 60 seconds"))
+        {
+            // Libtest notices are observations only. They never count as a
+            // completed test or replace the required full passing summary.
+            require(
+                headers == 1
+                    && summaries == 0
+                    && inventory.selected.contains(name)
+                    && !observed.contains(name)
+                    && notices.insert(name.to_owned()),
+                "public harness long-running notice is not one pending selected test",
+            )?;
         } else if let Some(name) = line
             .strip_prefix("test ")
             .and_then(|line| line.strip_suffix(" ... ok"))

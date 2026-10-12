@@ -79,7 +79,7 @@ fn harness(root: &Path, output: &str, exit: i32) -> PathBuf {
     let path = root.join("fixture-harness");
     let listing = listing();
     let script = format!(
-        "#!/bin/sh\nset -eu\n[ \"$PATH\" = '' ]\n[ \"$HOME\" = \"$PWD/home\" ]\n[ \"$TMPDIR\" = \"$PWD/tmp\" ]\n[ -z \"${{CARGO_HOME+x}}\" ]\n[ -z \"${{GH_TOKEN+x}}\" ]\n[ -z \"${{GITHUB_TOKEN+x}}\" ]\n[ -f \"$LKJSCRIPT_RELEASE_CANDIDATE\" ]\nif [ \"$1\" = '--list' ]; then\nprintf '%s' '{listing}'\nelse\n[ \"$1\" = '--exact' ]\n[ \"$2\" = '--test-threads=1' ]\n[ \"$3\" = '--color=never' ]\n[ \"$#\" = 40 ]\nprintf '%s' '{output}'\nexit {exit}\nfi\n"
+        "#!/bin/sh\nset -eu\n[ \"$PATH\" = '' ]\n[ \"$HOME\" = \"$PWD/home\" ]\n[ \"$TMPDIR\" = \"$PWD/tmp\" ]\n[ -z \"${{CARGO_HOME+x}}\" ]\n[ -z \"${{GH_TOKEN+x}}\" ]\n[ -z \"${{GITHUB_TOKEN+x}}\" ]\n[ -f \"$LKJSCRIPT_RELEASE_CANDIDATE\" ]\nif [ \"$1\" = '--list' ]; then\nprintf '%s' '{listing}'\nelse\n[ \"$1\" = '--exact' ]\n[ \"$2\" = '--test-threads=2' ]\n[ \"$3\" = '--color=never' ]\n[ \"$#\" = 40 ]\nprintf '%s' '{output}'\nexit {exit}\nfi\n"
     );
     fs::write(&path, script).unwrap();
     fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();

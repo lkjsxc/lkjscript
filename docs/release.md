@@ -98,11 +98,23 @@ a corrected successor requires a fresh producer. In particular, producer 3704647
 accepted the earlier 0.1.68 source without the joined-deadline repair and is superseded,
 not a candidate to promote after the repair.
 
-The serial native-public aggregate has a 120-minute execution allowance; its
-separate harness build allowance remains 30 minutes. The authenticated v0.1.91
-producer completed 42 of 96 cases successfully before its former 30-minute
-execution allowance expired. The successor retains every case, exact outcome
-admission and joined-cleanup requirement. That failed producer is not promotable.
+The native-public aggregate uses exactly two test workers and retains a
+120-minute execution allowance; its separate harness build allowance remains
+30 minutes. The [authenticated v0.1.94 producer 38173532140/1](https://github.com/lkjsxc/lkjscript/actions/runs/38173532140)
+exhausted serial execution after **78/102** passing cases, with 24 incomplete and
+no observed test failure. The active unfinished case subsequently passed a
+local one-case replay using the exact retained harness and finalized CLI
+in **17.91 seconds**; this does not establish hosted timing, the remaining
+inventory or candidate acceptance. The underlying hosted noncompletion cause
+remains unknown.
+
+The bounded scheduling experiment retains every case, exact outcome admission
+and joined-cleanup requirement. Exact selected-name libtest long-running notices
+have no pass credit; every unique passing case and the complete exact summary
+remain required. Receipt commands bind the fixed worker selection. This keeps
+acceptance/workload generation 10 and does not relabel failed originals or prove
+that hosted execution will finish within its unchanged allowance. Failed
+producers remain unpromotable.
 
 [Current status](status.md) owns the exact public/latest selection. A pending
 successor producer is release-only waiting; accepted source can proceed to main.
