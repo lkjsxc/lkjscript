@@ -1,5 +1,6 @@
 //! Complete serialized associated-owner controls built from published source.
 use super::*;
+use crate::platform::diagnostic::DiagnosticClass;
 use crate::platform::execution::normalized::tests::associated_serial_artifact_tests::fixture;
 use crate::platform::kernel::{DeclarationPayload, EncodedOwnerKey, KernelSnapshot};
 
