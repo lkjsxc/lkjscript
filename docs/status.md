@@ -1,206 +1,108 @@
 # Current status
 
-Snapshot: 2026-10-12. Development **0.1.94** implements native package dependency
-planning. The fixed two-worker source `0fbf2796` records **29/29** fresh full
-gates with stable inputs, zero reuse/unrun and original exit 0. Independent
-original-evidence authentication is complete; normal mainline delivery remains
-pending. Latest hosted producer **38173532140/1** on `f772f229` passed **23/23** fresh source gates
-but failed finalized-byte public-harness acceptance. No new candidate acceptance
-or .94 publication is claimed.
+Snapshot: 2026-10-12. Public/latest is **v0.1.94**, immutable release **410450135**.
+Native package planning is delivered and its publication/public-verification
+lineage is closed. Accepted producer
+[38206417799/1](https://github.com/lkjsxc/lkjscript/actions/runs/38206417799)
+was promoted by
+[38231452956/1](https://github.com/lkjsxc/lkjscript/actions/runs/38231452956),
+using the same three accepted assets without rebuilding. Anonymous exact/latest
+acquisition and installed smoke passed. No .94 delivery gate remains.
 
-## Selected source and capability
+## Source and capability
 
-Worktree `/home/coder/workspace/lkjscript-native-package-planner-20261011`, branch
-`work/native-package-planner-20261011`, retains tested source
-`0fbf2796a15250bfa4b4638d40fe4c7b0749c3c1`, tree
-`26579b024c69c263a8b328e8f664d594b53b60c1`. It contains the native planner,
-reviewed fixture corrections, bounded IndexedData progress, the 9,600-second
-workspace allowance and fixed two-worker final-public policy with strict selected
-long-running notices. The full receipt binds this exact implementation commit;
-a subsequent status-only reporting descendant is a separate source identity.
-The latest previously verified mainline delivery remains
-`f772f2294d99177a54fa02ee7229f4e4f5b9d883`. Preserve the worktrees and original
-proof scopes; [selection.json](../.artifacts/native-package-planner/selection.json)
-retains current executable selections and historical evidence.
+The local **29/29 fresh** full receipt binds implementation
+`0fbf2796a15250bfa4b4638d40fe4c7b0749c3c1` and stable inventory
+`0c2ae1a9bf4617df69de53d698f7523018d6df8c1ad38d50da177160f36bd4e1`.
+Candidate, controller and published source are
+`f0872272d1bc60392a3a3e852c67ab27a292152a`, its status-only reporting descendant.
+[Normal mainline delivery](../.artifacts/native-package-planner/delivery/two-worker-mainline-20261012T0447/delivery.json)
+and [independent readback](../.artifacts/native-package-planner/delivery/two-worker-mainline-20261012T0447/independent-readback-20261012T045934981835Z/receipt.json)
+retain that exact ancestry. Later reporting descendants retain separate source
+bindings; they do not change the published selection or relabel its originals.
+
+Worktree `/home/coder/workspace/lkjscript-native-package-planner-20261011`,
+branch `work/native-package-planner-20261011`, retains the implementation and
+ignored proof resources. The [selection record](../.artifacts/native-package-planner/selection.json)
+indexes the exact executables, receipts, failed attempts and closed publication.
 
 Production logical admission invokes the checked native planner for cycle refusal
-and dependency-first order. Its operation-local private plan passes through
-transport and source admission into compilation after complete budgeted canonical
-rereads and exact context matching. Standalone admission remains independent.
-Artifact loading uses a distinct host topology reader to avoid recursive native
-initialization. Actual operation cancellation reaches native computation, and
-pure-tool invocation/encoding exits explicitly join cleanup. Cold artifact loading
-still has no internal cancellation checkpoints; bounded cold-load cancellation
-latency is not established.
+and dependency-first order. Its sealed operation-local plan passes through
+transport and source admission after complete budgeted canonical rereads and
+exact context matching. Standalone admission remains independent. Artifact loading
+uses a distinct host topology reader so loading the planner cannot invoke itself.
+Operation cancellation reaches native computation, and invocation/encoding exits
+join cleanup. Bounded cold-load cancellation latency remains unproved.
 
-The [decision](decisions/native-package-planning.md),
-[verification obligations](spec/verification.md#native-package-dependency-planning)
-and [release notes](releases/v0.1.94.md) own the contract. No language, graph,
-interface, compiler-unit, bytecode or artifact encoding cut is intended. CLI
-observation **46** adds invocation-bound planning records; candidate generation
-**10** requires the expanded maintained/public coverage.
+CLI observation **46** adds invocation-bound planning records. No language, graph,
+interface, compiler-unit, bytecode or artifact encoding cut is intended. The
+[decision](decisions/native-package-planning.md), [verification contract](spec/verification.md#native-package-dependency-planning)
+and [0.1.94 notes](releases/v0.1.94.md) own these boundaries.
 
-## Source acceptance and retained evidence
+## Accepted evidence
 
-The original full session **81210**, terminal **2bd31e**, exited **0** on tested
-source `0fbf2796`, with unchanged before/after input inventory
-`0c2ae1a9bf4617df69de53d698f7523018d6df8c1ad38d50da177160f36bd4e1`.
-It records **29/29 fresh**, **0 reused**, **0 unrun**, stable inputs and
-**4,607.046912868 seconds**. Original receipt
-`.artifacts/lkjscript-dev/check/1791775574045354563-3409548-0/receipt.json`
-has SHA-256 `64437e1b90da082dfd84003aeb1c1b97f17e54f2679a072a7f49e0dcc57b1875`.
-Workspace tests passed in **2,746.765870864 seconds**: library **1,912 passed /
-8 ignored**, native verifier **10 passed**, public CLI **270 passed / 1 ignored**,
-and developer library **294 passed / 19 ignored**, with no failures.
+The [original local full receipt](../.artifacts/lkjscript-dev/check/1791775574045354563-3409548-0/receipt.json)
+and [independent authentication](../.artifacts/native-package-planner/diagnostic-successor/two-worker-full-first-independent-authentication-1791780841413.json)
+record **29 fresh, 0 reused, 0 unrun**, stable inputs and original exit 0 on
+`0fbf2796`. The [IndexedData transcript](../.artifacts/native-package-planner/diagnostic-successor/two-worker-full-first-indexed-progress/summary.json)
+checks **510 records / 242 runs**, **124 attached / 118 detached** and **12 stage
+pairs**, with no issues. This transcript proof remains distinct from test outcomes.
 
-The existing independent transcript validator, original **9e6538** exit **0**,
-passes **510 records / 242 runs**, **124 attached / 118 detached**, **12 stage
-pairs** and **0 issues** for this run. Its retained summary is
-`.artifacts/native-package-planner/diagnostic-successor/two-worker-full-first-indexed-progress/summary.json`.
-This validates literal input identity and complete progress; it is separate from
-semantic test outcomes. Independent authentication also verifies all 2,175
-inputs, 29 gate fingerprints/outcomes, exact commands, DAG and 58 original logs,
-retained outputs and harnesses against clean source `0c2ae1a9`. Its retained
-receipt is `two-worker-full-first-independent-authentication-1791780841413.json`,
-SHA-256 `4cdda7ef55bf5922d34088a86632ff60b1621a8cde4d7aefa4e972a767ef4c00`.
-Neither this local full result nor the earlier one-case replay proves hosted
-final-byte completion.
+The [candidate authentication](../.artifacts/native-package-planner/delivery/two-worker-mainline-20261012T0447/candidate-dispatch-first/terminal-handoffs-1791796689851/independent-candidate-authentication-1791797587302.json)
+binds original producer **38206417799/1** to published source/controller `f0872272`:
+**23 fresh source gates**, **102 unique finalized-byte public passes**,
+**6 target owners**, **2 pinned userlands**, installation/recovery and original
+readers. The public harness used exactly **two workers**, with **0 failed /
+0 ignored**; its 25 exact long-running notices granted zero pass credit.
+Acceptance/workload generation remains **10**.
 
-The predecessor [diagnostic successor full receipt](../.artifacts/lkjscript-dev/check/1791746533387196262-2779742-0/receipt.json)
-records **29/29** fresh gates, stable inputs and original session **45425** exit
-**0** after **4,751.478972979 seconds**. Receipt SHA-256 is
-`836962af2fe2c773d161ea1ced8957ca12ba14a683cd5d818ee06846d9d83236`.
-The [authenticated inventory](../.artifacts/native-package-planner/diagnostic-successor/full-first-authenticated.json)
-binds the original terminal, exact copied verifier and 67 retained logs/outputs.
-The independent [IndexedData transcript check](../.artifacts/native-package-planner/indexed-progress-accepted-first-20261011T2042/summary.json)
-passes **510 records / 242 runs**, comprising **124 attached / 118 detached**
-runs and **12 stage pairs**, with no missing or mismatched records. Workspace
-tests passed in **2,804.632151307 seconds**. This local completion does not
-establish why the original hosted run timed out or prove a hosted remedy.
+The [promotion/public authentication](../.artifacts/native-package-planner/delivery/promotion-v0.1.94-38206417799-first/terminal-handoffs-1791798863283/independent-promotion-authentication-1791799615495.json)
+binds **38231452956/1** to that same producer and unchanged assets. Its maintained
+terminal is `immutable_published_and_public_verified`. It authenticates the
+annotated tag/control/source, immutable release **410450135**, latest **v0.1.94**
+and actual anonymous exact/latest bytes and installed lifecycle: **60 original
+commands** across two routes, complete cleanup and both deliberate rejected-apply
+controls. The separate simulated transfer rehearsal is independently labelled.
+[Public release](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.94) owns the
+three immutable assets; [release](release.md) owns their admission procedure.
 
-The [successful original full receipt](../.artifacts/lkjscript-dev/check/1791727236348792345-2336981-0/receipt.json)
-for predecessor `d01708a2` records **29/29** fresh gates, **0 reused**, **0 unrun**, stable inputs and terminal
-exit **0** after **2,896.017618526 seconds**. Receipt SHA-256 is
-`c0912b08adfd985f487cad4461006563ffd211c5e3e11929c933a6e592c191c0`.
-The [verified summary](../.artifacts/native-package-planner/full-second-summary.json)
-and [71-file inventory](../.artifacts/native-package-planner/full-second-inventory.json)
-retain exact originals. The fresh run includes the complete workspace/public
-matrix, maintained standard/journal consumers, generated guides, native planner
-tests and artifact regeneration/comparison. Library **1,912 passed / 8 ignored**,
-native verifier **10 passed**, and public CLI **270 passed / 1 ignored**, with no
-failures.
+## Preserved failures and costs
 
-The [first failed full receipt](../.artifacts/lkjscript-dev/check/1791722983656536426-2131509-0/receipt.json)
-records terminal exit 1 after **2,866.089739 seconds** on stable source `d1488367`.
-It passed **28/29** fresh gates, **0 reused**, **0 unrun**. Only `workspace_tests`
-failed: library **1,911 passed / 1 failed / 8 ignored**,
-native verifier **8/1**, and public CLI **269/1/1 ignored** (1,551.61 seconds).
-Original logs and receipt remain unchanged. The reviewed test-only corrections
-account for standalone container input charges and update stale capacity/negative
-precedence fixtures to the existing 10,000-node / 100,000-edge contract. They do
-not change production behavior. The preceding [18 focused passes](../.artifacts/native-package-planner/tests/focused-sixth-20261011/summary.json)
-and earlier executable-specific successes/failures retain their original scopes
-in the selection record; fresh acceptance does not relabel them.
+The [failed serial producer 38173532140/1](https://github.com/lkjsxc/lkjscript/actions/runs/38173532140)
+on `f772f229` remains an immutable failure. Its
+[authenticated failure summary](../.artifacts/native-package-planner/delivery/diagnostic-mainline-20261011T2044/candidate-dispatch/audit-20261012T014609796503Z/failure-summary.json)
+records **78/102 passed**, **24 incomplete**, no observed test failure and
+incomplete cleanup at the 7,200-second public deadline. The new accepted producer
+is a separate original; it does not rewrite this failure or establish its cause.
+Earlier failed/full and accepted predecessor receipts remain in the selection
+record with their original source and outcome.
 
-The maintained [native asset](../tools/native-package-plan/README.md), authored
-through the copied predecessor, passes **170** native tests. Independent builds
-produce identical 3,371,783-byte artifacts, SHA-256
-`0115358c9dc9c9a91d0bac7755b619a12f36ca9b5e90b69d649639c8ccdb3a54`.
-Fresh maintained regeneration and exact comparison passed in the accepted full run.
+The maintained .94 [native asset](../tools/native-package-plan/README.md) passes
+**170** native checks and regenerates identical **3,371,783-byte** artifacts,
+SHA-256 `0115358c9dc9c9a91d0bac7755b619a12f36ca9b5e90b69d649639c8ccdb3a54`.
+The [matched build comparison](../.artifacts/native-package-planner/costs/run-20261011T124526Z/summary.json)
+retains slower medians on all three observed tiny, diamond and maintained-planner
+projects. The [decision's costs](decisions/native-package-planning.md#observed-public-build-costs)
+retain exact scope and unfavorable samples; no general speedup follows.
 
-The [release-profile rebuild](../.artifacts/native-package-planner/build/selected-release-second.json)
-passed on `5a9629ef`; its CLI and verifier are byte-identical to the prior release
-binaries from `77decedc`. The following
-[matched comparison](../.artifacts/native-package-planner/costs/run-20261011T124526Z/summary.json)
-passes exact artifact, unchanged-HEAD and ten complete detached-result checks.
-Five-sample build medians are **16.060 → 231.065 ms** for the tiny project,
-**26.792 → 239.821 ms** for the four-package diamond, and
-**9,337.967 → 10,336.357 ms** for the maintained planner. The candidate is slower
-in all three observed cases. The [decision](decisions/native-package-planning.md#observed-public-build-costs)
-retains scope and shared-host limitations; separate compiler phase timings remain
-unavailable. The failed first harness run and its unfavorable samples are preserved.
+The thin-consumer variant remains experimental and unadopted.
+[Seven paired idle samples](../.artifacts/native-package-planner/thin-consumer-experiment/timing-idle-01/summary.json)
+show only **3–4%** lower preparation medians with overlapping ranges. They establish
+no compiler-phase or end-to-end speed gain. The published .94 asset stays selected;
+dominant cold preparation cost remains unresolved.
 
-Keep the production planner asset unchanged. The retained thin-consumer experiment
-passes **156** checks and **16** matched functional runs, reducing units **575 →
-543** and bytes **3,371,783 → 3,272,121**. Seven idle paired samples per lane show
-aggregate public preparation medians **213.824 → 206.996 ms** (empty) and
-**217.872 → 208.483 ms** (diamond), about **3–4%** lower with overlapping ranges;
-[original timing evidence](../.artifacts/native-package-planner/thin-consumer-experiment/timing-idle-01/summary.json).
-The thin variant is not adopted. This does not establish compiler phase or
-end-to-end speed; the dominant cold cost remains unresolved.
+## Separate .95 work
 
-## Remaining gates
+The isolated `/home/coder/workspace/lkjscript-associated-admission-20261011` checkout
+holds associated Owned/BlockRead source
+`fce333fd500c23a1413c8b6b00c6a0153cba27e7`, inventory
+`b034fa6754958ca3d7115f986d4f26ae7a1e22372fa503fe6ecf5758cca8e882`.
+Its current full-source and expanded **310-run / 646-record** matrix acceptance
+remain pending. Original serial and maintained adoption proofs retain their
+separate source scopes. This page claims no .95 acceptance, mainline delivery,
+candidate or publication.
 
-The [latest original hosted producer 38173532140/1](https://github.com/lkjsxc/lkjscript/actions/runs/38173532140)
-on exact `f772f2294d99177a54fa02ee7229f4e4f5b9d883` passed **23/23** source gates
-fresh, with stable inputs and zero reuse/unrun. Final asset construction succeeded,
-but native public execution exhausted its **7,200-second** aggregate allowance
-with **78/102 passed, 0 failed**, and 24 cases incomplete. IndexedData completed
-all **242** runs. Target/userland, installation/recovery and their final readers
-were not reached; cleanup is recorded incomplete, mandatory accepted-candidate
-uploads were skipped, and the maintained terminal is `incomplete`.
-The authenticated failure archive retains exact original artifacts,
-source/public/candidate receipts and process logs.
-The earlier `c3d27a7d` producer **38152770069/1** remains a separate immutable
-failure: **22/23** fresh source gates, with only workspace timeout and no final
-admission.
-
-The active unfinished shared-interfaces case passed a local replay of the exact
-retained public harness and finalized CLI in **17.91 seconds**, with **1 passed / 270 filtered** and unchanged executable
-hashes. This diagnoses one local case; it does not establish hosted case duration,
-the original noncompletion cause, full inventory or candidate acceptance.
-
-The correction pins exactly two public test workers and admits only exact
-selected-name long-running notices with zero pass credit. Every required case,
-unique passing outcome, exact summary, the **7,200-second** public allowance and
-**9,600-second** source workspace allowance remain intact, under generation **10**.
-Retained local controls record **30/30** affected developer-library passes (original session **5889**)
-and strict Clippy exit **0** (session **80961**) on stable working input inventory
-`d80244f3fc8ee4d4249a92848cb41a196b44b8642bc13502dfb2bbcecfc9ac9a`.
-These remain targeted working-tree proofs. The subsequent complete local full
-result binds committed source `0fbf2796` separately; neither proof is relabelled.
-
-Next record an accurate status-only reporting descendant and deliver through
-normal mainline integration with protection/ancestry readback. After exact source/version/occupancy
-refresh, one new generation-10 producer must pass **23** fresh source gates and
-all **102** finalized-byte public cases, plus every target, userland, installation,
-original-reader and joined-cleanup obligation. Do not rerun or relabel either failed
-producer. Preserve `d01708a2`, `dbef3042` and `0fbf2796` local results separately.
-No accepted new candidate or .94 publication is claimed.
-
-The generation-9 predecessor lineage is closed. Normal mainline delivery retains
-the accepted ancestry; original checks and remote readback remain in
-`.artifacts/native-package-planner/delivery/mainline-20261011T154018Z/`.
-
-The separate `/home/coder/workspace/lkjscript-associated-owned-types-20261011`
-worktree holds the **0.1.95** associated-owned-types foundation. Its separate
-`01394bef` checkpoint records **2,043 passed / 8 ignored** local library tests
-and **199/199** focused passes. It has no associated feature admission and is
-outside this .94 receipt.
-
-## Accepted predecessors and public availability
-
-Extraction source `2396e69cc3eccd8971bdee092ccc47e7978cbd52` passed **26/26** fresh
-full gates, **0 reused**, with stable inputs and exit 0. Its receipt is
-`/home/coder/workspace/lkjscript-checked-extraction-20261011/.artifacts/lkjscript-dev/check/1791716965778033360-1879238-0/receipt.json`.
-Its normal delivery and retained public proofs remain in that worktree's
-`.artifacts/checked-extraction/delivery/` and `proofs/` directories. Predecessor
-reporting descendant
-`8fb6230aa92a43d82c5e45a093acdf58b7a5f7e4` changes only `docs/status.md`; its normal
-push is independently verified in `delivery/reporting-20261011T115837243Z/`.
-That receipt binds the extraction implementation, not its reporting descendant or
-this successor.
-
-Public/latest is **v0.1.92**, immutable release **409737419**, selecting accepted
-source `a7a3d778fe34df5ed9a8f0fb5595fbf2f858c1a5` and original generation-9 producer
-[38130920573/1](https://github.com/lkjsxc/lkjscript/actions/runs/38130920573).
-Original promotion [38149245391/1](https://github.com/lkjsxc/lkjscript/actions/runs/38149245391)
-published unchanged assets, then failed its public boundary. The maintained
-read-only resume [38150694544/1](https://github.com/lkjsxc/lkjscript/actions/runs/38150694544)
-completed with authenticated `public_recheck_passed`, latest selected, and fresh
-anonymous exact/latest installed lifecycles with joined cleanup. Original publisher
-proof plus the successful resume and unchanged release/tag/control/assets close
-this lineage under [the maintained resume procedure](release.md#select-promote-and-resume).
-The failed promotion terminal remains unchanged; no proof is relabelled.
-The authenticated closure and original evidence are retained at
-`/home/coder/workspace/lkjscript-mixed-storage-20261011/.artifacts/mixed-storage/delivery/promotion-preflight-20261011T145407Z/resume-public-preflight-20261011T151709Z/status-20261011T153330Z/closure-summary.json`.
+The .94 public-closure condition is now satisfied. Finish the separate .95
+source/matrix proof before its normal mainline integration and generation11
+candidate work. Preserve both worktrees, ignored evidence and immutable releases;
+do not replay or relabel the completed .94 lineage.
