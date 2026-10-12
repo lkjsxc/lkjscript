@@ -53,10 +53,14 @@ drains the original collection and reuses its owner. Exact source provenance and
 ordered cleanup cross each package and call boundary; availability remains
 [status-owned](status.md).
 
-Associated view families become useful when storage representations need different
-view shapes or cursors. Select those families, higher-ranked relationships and
-bounded value/region parameters against such a concrete workload. The existing
-explicit Item argument serves readers that return their unchanged element type.
+Use [witness-selected associated Owned members](spec/associated-owned-types.md)
+for representation-specific borrowed blocks. The consumer-first
+[BlockRead witness](../examples/associated-blockread/README.md) selects flat and
+private nominal block shapes through exact witnesses; maintained planner stages
+use the same reader without changing random-access contracts. Associated Owned
+alone grants no Transfer or Share permission. Higher-ranked view relationships,
+cursors and bounded value/region parameters remain subsequent workload-led steps.
+The explicit Item argument still serves unchanged ordinary element reads.
 
 Use [explicit generic implementation schemes](spec/generic-owned-implementations.md)
 to reuse storage and reader methods across independently authored owned items.
@@ -232,11 +236,12 @@ ordinary reads and explicit displaced values from replacement. Parameterize its
 working state over separate `IndexedData` integer and Boolean owners and retain the
 append-only readiness queue. Keep its complete
 independent result checker and current graph capacities. Measure preparation,
-storage growth and bounded per-update admission before deciding whether to move
-this boundary into the compiler. [Nominal owned records](spec/owned-records.md)
-now provide module-private representations, demonstrated by the standard FIFO.
-Associated views and regions remain subsequent milestones justified by concrete
-consumers; ordinary working storage does not depend on those designs.
+storage growth and bounded per-update admission before selecting further compiler
+boundaries. [Nominal owned records](spec/owned-records.md) provide module-private
+representations, demonstrated by the standard FIFO. Exact BlockRead witnesses now
+support scoped stage traversal over the selected integer storage; general view
+relationships and region custody remain subsequent workload-led steps. Random
+updates retain their separate IndexedData contracts.
 The [owned metadata workload](../examples/owned-metadata-costs/README.md) separates
 ordinary list/map projection from packing, unpacking and borrowed metadata reads.
 Use its complete ingress checks and non-regressing cost ceilings.
