@@ -1,0 +1,120 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create indexed-blockread
+    (type-alias Snapshot (record (values (list I64)) (lengths (list I64))))
+    (type-alias Result (record (before Snapshot) (after Snapshot)
+      (displaced I64) (replaced Bool) (length I64)))
+    (function create forward-block (visibility private) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_a7000000000000000000000000000001 reader indexed-data::BlockRead W (types I64))
+      (parameter create index (type I64))
+      (parameter create storage (type W) (use borrow))
+      (returns (associated-witness-projection forward-block implparam_a7000000000000000000000000000001
+        indexed-data::BlockRead assoc_type_a3000000000000000000000000000001) (borrow-from storage))
+      (body (borrow-call
+        (method-call parameter@forward-block@implparam_a7000000000000000000000000000001
+          indexed-data::BlockRead method_a3000000000000000000000000000002 (local index) (local storage))
+        (binding view (type (associated-witness-projection forward-block implparam_a7000000000000000000000000000001
+          indexed-data::BlockRead assoc_type_a3000000000000000000000000000001)))
+        (in (local view)))))
+    (function create collect-block (visibility private) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_a7000000000000000000000000000002 reader indexed-data::BlockRead W (types I64))
+      (parameter create offset (type I64)) (parameter create output (type (list I64)))
+      (parameter create block (type (associated-witness-projection collect-block
+        implparam_a7000000000000000000000000000002 indexed-data::BlockRead assoc_type_a3000000000000000000000000000001)) (use borrow))
+      (returns (list I64))
+      (body (if (call std::less (local offset)
+        (method-call parameter@collect-block@implparam_a7000000000000000000000000000002
+          indexed-data::BlockRead method_a3000000000000000000000000000003 (local block)))
+        (implementation-call collect-block (types W)
+          (implementations parameter@collect-block@implparam_a7000000000000000000000000000002)
+          (call std::add (local offset) (i64 1))
+          (call std::list-append (types I64) (local output)
+            (method-call parameter@collect-block@implparam_a7000000000000000000000000000002
+              indexed-data::BlockRead method_a3000000000000000000000000000004 (local offset) (local block)))
+          (local block))
+        (local output))))
+    (function create scan (visibility private) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_a7000000000000000000000000000003 reader indexed-data::BlockRead W (types I64))
+      (parameter create index (type I64)) (parameter create output (type Snapshot))
+      (parameter create storage (type W) (use borrow)) (returns Snapshot)
+      (body (if (call std::less (local index)
+        (method-call parameter@scan@implparam_a7000000000000000000000000000003
+          indexed-data::BlockRead method_a3000000000000000000000000000001 (local storage)))
+        (let (binding next (type Snapshot)
+          (borrow-call
+            (implementation-call forward-block (types W)
+              (implementations parameter@scan@implparam_a7000000000000000000000000000003)
+              (local index) (local storage))
+            (binding block (type (associated-witness-projection scan implparam_a7000000000000000000000000000003
+              indexed-data::BlockRead assoc_type_a3000000000000000000000000000001)))
+            (in (record structural
+              (field values (implementation-call collect-block (types W)
+                (implementations parameter@scan@implparam_a7000000000000000000000000000003)
+                (i64 0) (field (local output) (name values)) (local block)))
+              (field lengths (call std::list-append (types I64) (field (local output) (name lengths))
+                (method-call parameter@scan@implparam_a7000000000000000000000000000003
+                  indexed-data::BlockRead method_a3000000000000000000000000000003 (local block))))))))
+          (in (implementation-call scan (types W)
+            (implementations parameter@scan@implparam_a7000000000000000000000000000003)
+            (call std::add (local index) (i64 1)) (local next) (local storage))))
+        (local output))))
+    (function create exercise (visibility private) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_a7000000000000000000000000000004 storage indexed-data::IndexedData W (types I64))
+      (implementation-parameter implparam_a7000000000000000000000000000005 reader indexed-data::BlockRead W (types I64))
+      (parameter create input (type (list I64))) (parameter create index (type I64))
+      (parameter create replacement (type I64)) (returns Result)
+      (body (let
+        (binding storage (type W) (implementation-call indexed-data::build (types I64 W)
+          (implementations parameter@exercise@implparam_a7000000000000000000000000000004) (local input)))
+        (binding before (type Snapshot) (implementation-call scan (types W)
+          (implementations parameter@exercise@implparam_a7000000000000000000000000000005)
+          (i64 0) (record structural (field values (list I64)) (field lengths (list I64))) (local storage)))
+        (in (if (call std::less (i64 0) (call std::list-length (types I64) (local input)))
+          (let (binding changed (type (owned-product (field rest W) (field value I64)))
+            (method-call parameter@exercise@implparam_a7000000000000000000000000000004
+              indexed-data::IndexedData method_a1000000000000000000000000000005
+              (local index) (local replacement) (local storage)))
+            (in (unpack-owned (type (owned-product (field rest W) (field value I64))) (local changed)
+              (field rest (binding rest (type W))) (field value (binding displaced (type I64)))
+              (in (let
+                (binding after (type Snapshot) (implementation-call scan (types W)
+                  (implementations parameter@exercise@implparam_a7000000000000000000000000000005)
+                  (i64 0) (record structural (field values (list I64)) (field lengths (list I64))) (local rest)))
+                (binding length (type I64)
+                  (method-call parameter@exercise@implparam_a7000000000000000000000000000004
+                    indexed-data::IndexedData method_a1000000000000000000000000000002 (local rest)))
+                (in (sequence
+                  (method-call parameter@exercise@implparam_a7000000000000000000000000000004
+                    indexed-data::IndexedData method_a1000000000000000000000000000006 (local rest))
+                  (record structural (field before (local before)) (field after (local after))
+                    (field displaced (local displaced)) (field replaced (bool true)) (field length (local length))))))))))
+          (sequence
+            (method-call parameter@exercise@implparam_a7000000000000000000000000000004
+              indexed-data::IndexedData method_a1000000000000000000000000000006 (local storage))
+            (record structural (field before (local before)) (field after (local before))
+              (field displaced (i64 0)) (field replaced (bool false)) (field length (i64 0)))))))))
+    (function create flat (visibility public) (effect pure)
+      (parameter create input (type (list I64))) (parameter create index (type I64))
+      (parameter create replacement (type I64)) (returns Result)
+      (body (implementation-call exercise (types (owned-sequence I64))
+        (implementations (implementation indexed-flat::Flat (types I64))
+          (implementation indexed-flat::Blocks (types I64)))
+        (local input) (local index) (local replacement))))
+    (function create chunked (visibility public) (effect pure)
+      (parameter create input (type (list I64))) (parameter create index (type I64))
+      (parameter create replacement (type I64)) (returns Result)
+      (body (implementation-call exercise (types (indexed-chunked::Chunk32 I64))
+        (implementations (implementation indexed-chunked::Chunked (types I64))
+          (implementation indexed-chunked::Blocks (types I64)))
+        (local input) (local index) (local replacement))))
+    (component create command (visibility private)
+      (port create flat (type (function ((list I64) I64 I64) Result)) (function flat))
+      (port create chunked (type (function ((list I64) I64 I64) Result)) (function chunked))))
+  (target create indexed-blocks-flat (component indexed-blockread::command) (runner command) (port indexed-blockread::command::flat))
+  (target create indexed-blocks-chunked (component indexed-blockread::command) (runner command) (port indexed-blockread::command::chunked)))
+declarations.end

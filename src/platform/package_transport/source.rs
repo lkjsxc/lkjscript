@@ -18,7 +18,7 @@ use crate::platform::storage::object::{
     StoreReadAdmission, StoreReadLimits, StoreWork,
 };
 use crate::platform::storage::page_store::ObjectPageReader;
-use crate::platform::witness::{FullWitness, rebuild_full_witness_with_limit};
+use crate::platform::witness::{FullWitness, rebuild_full_witness_checked};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -910,7 +910,12 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
         store.charge_visits(intrinsic_work as u64)?;
         let remaining = usize::try_from(maximum_visits - store.visits())
             .map_err(|_| limit("validation visits"))?;
-        let witness = rebuild_full_witness_with_limit(&snapshot, remaining).map_err(|errors| {
+        #[cfg(test)]
+        tests::before_source_full_validation(control);
+        let witness = rebuild_full_witness_checked(&snapshot, remaining, &|| {
+            control.check().map_err(execution_diagnostic)
+        })
+        .map_err(|errors| {
             let first = errors.into_iter().next().unwrap_or_else(|| {
                 corrupt("package_source_validation", "full source validation failed")
             });
@@ -1273,6 +1278,7 @@ mod tests {
     include!("shared_dependency_interface_tests.rs");
     include!("native_plan_source_tests.rs");
     include!("native_plan_reuse_tests.rs");
+    include!("source_validation_control_tests.rs");
 
     #[test]
     fn source_transport_preserves_supported_composite_and_task_owner_envelopes() {

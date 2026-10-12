@@ -76,6 +76,26 @@ impl<'a> Budget<'a> {
             type_lookup: type_lookup::TypeLookupBuilder::default(),
         }
     }
+    #[cfg(test)]
+    pub(super) fn work_for_test(&self) -> (usize, usize) {
+        (self.steps, self.bytes)
+    }
+
+    #[cfg(test)]
+    pub(super) fn with_work_for_test(
+        control: &'a crate::platform::execution::ExecutionControl,
+        steps: usize,
+        bytes: usize,
+    ) -> Self {
+        assert!(steps <= MAXIMUM_WORK && bytes <= MAXIMUM_METADATA_BYTES);
+        Self {
+            steps,
+            bytes,
+            control,
+            type_lookup: type_lookup::TypeLookupBuilder::default(),
+        }
+    }
+
     pub(super) fn reserve<T>(&mut self, count: usize) -> Result<(), Diagnostic> {
         reserve_metadata(&mut self.bytes, count, std::mem::size_of::<T>())
     }
@@ -212,12 +232,13 @@ pub(super) fn complete_with_implementations(
         ),
         crate::platform::kernel::OwnerRecord,
     >,
-    control: &crate::platform::execution::ExecutionControl,
+    work: &mut Budget<'_>,
 ) -> Result<(), Diagnostic> {
-    let mut work = Budget::new(control);
-    close_effect_applications(program, &mut work)?;
-    implementations::close(program, units, runtime_owners, &mut work)?;
-    complete_budgeted(program, &mut work)
+    // Raw signature categories and all subsequent closure stages share this
+    // operation's ledger and control; no phase creates a replacement allowance.
+    close_effect_applications(program, work)?;
+    implementations::close(program, units, runtime_owners, work)?;
+    complete_budgeted(program, work)
 }
 
 pub(super) fn share_code(

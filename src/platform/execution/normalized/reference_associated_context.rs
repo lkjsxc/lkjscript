@@ -8,6 +8,61 @@ pub(in super::super::super) struct Context<'a> {
 }
 
 impl Proof {
+    pub(in super::super::super) fn read_function(
+        &self,
+        context: &ReadContext,
+        control: &ExecutionControl,
+    ) -> Result<&Function, ExecutionError> {
+        control.check()?;
+        match context {
+            ReadContext::Application(application) => self.application(application, control),
+            ReadContext::Symbolic(scope) => self.symbolic.get(scope).ok_or_else(reject),
+            ReadContext::Executable(owner) => self.executables.get(owner).ok_or_else(reject),
+        }
+    }
+
+    pub(in super::super::super) fn symbolic_formal(
+        &self,
+        scope: DeclarationReference,
+        parameter: ImplementationParameterId,
+        control: &ExecutionControl,
+    ) -> Result<&ImplementationParameter, ExecutionError> {
+        control.check()?;
+        self.symbolic_formals
+            .get(&(scope, parameter))
+            .ok_or_else(reject)
+    }
+
+    pub(in super::super::super) fn symbolic_mapping(
+        &self,
+        implementation: DeclarationReference,
+        method: MethodId,
+        control: &ExecutionControl,
+    ) -> Result<&SymbolicTarget, ExecutionError> {
+        control.check()?;
+        if !self.implementation_inventory.contains(&implementation) {
+            return Err(reject());
+        }
+        self.symbolic_mappings
+            .get(&(implementation, method))
+            .ok_or_else(reject)
+    }
+
+    pub(in super::super::super) fn mapping_template_at(
+        &self,
+        implementation: DeclarationReference,
+        method: MethodId,
+        control: &ExecutionControl,
+    ) -> Result<&crate::platform::kernel::OwnedMethodImplementation, ExecutionError> {
+        control.check()?;
+        if !self.implementation_inventory.contains(&implementation) {
+            return Err(reject());
+        }
+        self.mapping_templates
+            .get(&(implementation, method))
+            .ok_or_else(reject)
+    }
+
     pub(in super::super::super) fn application(
         &self,
         application: &Application,
@@ -90,6 +145,28 @@ impl Proof {
             .targets
             .get(&expression)
             .filter(|target| self.applications.contains_key(*target))
+            .ok_or_else(reject)
+    }
+
+    pub(in super::super::super) fn invocation(
+        &self,
+        application: &Application,
+        expression: ExpressionId,
+        control: &ExecutionControl,
+    ) -> Result<&Invocation, ExecutionError> {
+        control.check()?;
+        let context = self.context(application, control)?;
+        context.occurrence(
+            (
+                application.function.package,
+                OwnerKey::Expression(expression),
+            ),
+            control,
+        )?;
+        context
+            .function
+            .invocations
+            .get(&expression)
             .ok_or_else(reject)
     }
 

@@ -1,0 +1,33 @@
+declarations.begin
+(units
+  (module create blockread-app
+    (type-alias Observation (record (blocks I64) (values (list I64))))
+    (type-alias Result (record (flat Observation) (chunked Observation)))
+    (function create flat (visibility public) (effect pure)
+      (parameter create input (type (list I64))) (returns Observation)
+      (body (let (binding storage (type (owned-sequence I64))
+        (call blockread-flat::build (types I64) (local input)))
+        (in (implementation-call blockread-consumer::scan-and-finish (types I64 (owned-sequence I64))
+          (implementations (implementation blockread-flat::Flat (types I64))) (local storage))))))
+    (function create chunked (visibility public) (effect pure)
+      (parameter create input (type (list I64))) (returns Observation)
+      (body (let (binding storage (type (blockread-chunked::ChunkStorage I64))
+        (call blockread-chunked::build (types I64) (local input)))
+        (in (implementation-call blockread-consumer::scan-and-finish
+          (types I64 (blockread-chunked::ChunkStorage I64))
+          (implementations (implementation blockread-chunked::Chunked (types I64))) (local storage))))))
+    (function create main (visibility public) (effect pure)
+      (parameter create input (type (list I64))) (returns Result)
+      (body (record structural
+        (field flat (call flat (local input))) (field chunked (call chunked (local input))))))
+    (component create command (visibility private)
+      (port create main (type (function ((list I64)) Result)) (function main))
+      (port create flat (type (function ((list I64)) Observation)) (function flat))
+      (port create chunked (type (function ((list I64)) Observation)) (function chunked))))
+  (target create blockread (component blockread-app::command)
+    (runner command) (port blockread-app::command::main))
+  (target create blockread-flat (component blockread-app::command)
+    (runner command) (port blockread-app::command::flat))
+  (target create blockread-chunked (component blockread-app::command)
+    (runner command) (port blockread-app::command::chunked)))
+declarations.end

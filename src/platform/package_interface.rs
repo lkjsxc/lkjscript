@@ -115,6 +115,10 @@ mod owned_record_tests;
 #[path = "package_interface_mixed_storage_tests.rs"]
 mod mixed_storage_tests;
 
+#[cfg(test)]
+#[path = "package_interface_associated_authority_tests.rs"]
+mod associated_authority_tests;
+
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PackageInterfaceOwnerDigest([u8; 32]);
 
@@ -1625,17 +1629,16 @@ pub(crate) fn validate_package_interface_metered<S: ImmutableObjectStore + ?Size
     for owner in owners.values() {
         visit(interface_owner_validation_visits(owner))?;
     }
-    let (type_objects, type_keys) = validate_type_closure(package, &owners, store, work, visit)?;
+    let mut associated_admission = AssociatedInterfaceAdmission::new(visit);
+    let (type_objects, type_keys) =
+        validate_type_closure(package, &owners, store, work, &mut associated_admission)?;
     for object in type_objects.values() {
-        visit(1)?;
-        if object.form.is_associated() {
-            return Err(crate::platform::kernel::owned_associated_wire::unsupported_semantics());
-        }
+        (associated_admission.visit)(1)?;
         if let TypeForm::TaskFunction { effect, .. } = &object.form {
-            visit(effect.requirements.len() as u64)?;
+            (associated_admission.visit)(effect.requirements.len() as u64)?;
         }
     }
-    validate_owner_closure_metered(package, &owners, &type_objects, visit)?;
+    validate_owner_closure_metered(package, &owners, &type_objects, &mut associated_admission)?;
     reachable_objects.extend(type_keys);
     Ok(PackageInterfaceValidation {
         owners,
@@ -1756,14 +1759,19 @@ fn validate_owner_closure(
     owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
     types: &BTreeMap<TypeObjectDigest, TypeObject>,
 ) -> Result<(), Diagnostic> {
-    validate_owner_closure_metered(package, owners, types, &mut |_| Ok(()))
+    validate_owner_closure_metered(
+        package,
+        owners,
+        types,
+        &mut AssociatedInterfaceAdmission::new(&mut |_| Ok(())),
+    )
 }
 
 fn validate_owner_closure_metered(
     package: PackageId,
     owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
     types: &BTreeMap<TypeObjectDigest, TypeObject>,
-    visit: &mut dyn FnMut(u64) -> Result<(), Diagnostic>,
+    associated_admission: &mut AssociatedInterfaceAdmission<'_>,
 ) -> Result<(), Diagnostic> {
     let mut expected = owners
         .iter()
@@ -1771,11 +1779,13 @@ fn validate_owner_closure_metered(
             matches!(value.record, PackageInterfaceRecord::Declaration(_)).then_some(*owner)
         })
         .collect::<BTreeSet<_>>();
-    expected.extend(representation_declarations(package, owners, types, visit)?);
+    expected.extend(representation_declarations(
+        package,
+        owners,
+        types,
+        &mut *associated_admission.visit,
+    )?);
     for (owner, value) in owners {
-        if associated_interface_body(&value.record)?.is_some() {
-            return Err(crate::platform::kernel::owned_associated_wire::unsupported_semantics());
-        }
         let declaration = match &value.record {
             PackageInterfaceRecord::Declaration(declaration)
             | PackageInterfaceRecord::RepresentationDeclaration(declaration) => declaration,
@@ -1841,26 +1851,14 @@ fn validate_owner_closure_metered(
                     }
                 }
                 for method in &c.methods {
-                    if let Some(position) = method.result_borrow {
-                        let Some(source) = method.parameters.get(position as usize) else {
-                            return Err(interface_corrupt(
-                                "borrowed method result source position is absent",
-                            ));
-                        };
-                        if source.use_mode != crate::platform::kernel::ParameterUse::Borrow
-                            || !interface_owned_type_or_external(package, source.ty, types, owners)
-                            || !interface_owned_type_or_external(
-                                package,
-                                method.result,
-                                types,
-                                owners,
-                            )
-                        {
-                            return Err(interface_corrupt(
-                                "borrowed method result requires an Owned result and borrowed Owned source",
-                            ));
-                        }
-                    }
+                    validate_interface_method_borrow_result(
+                        package,
+                        *owner,
+                        method,
+                        types,
+                        owners,
+                        associated_admission,
+                    )?;
                     if declaration.header.contract_version < 26 {
                         for ty in method
                             .parameters
@@ -2100,30 +2098,14 @@ fn validate_owner_closure_metered(
                     types,
                     owners,
                 )?;
-                if let Some(source) = signature.result_borrow {
-                    let Some(PackageInterfaceOwner {
-                        record: PackageInterfaceRecord::Parameter(parameter),
-                        ..
-                    }) = owners.get(&OwnerKey::Parameter(source))
-                    else {
-                        return Err(interface_corrupt(
-                            "borrowed function result source parameter is absent",
-                        ));
-                    };
-                    if parameter.use_mode != crate::platform::kernel::ParameterUse::Borrow
-                        || !interface_owned_type_or_external(package, parameter.ty, types, owners)
-                        || !interface_owned_type_or_external(
-                            package,
-                            signature.result,
-                            types,
-                            owners,
-                        )
-                    {
-                        return Err(interface_corrupt(
-                            "borrowed function result requires an Owned result and borrowed Owned source",
-                        ));
-                    }
-                }
+                validate_interface_function_borrow_result(
+                    package,
+                    *declaration_id,
+                    signature,
+                    types,
+                    owners,
+                    associated_admission,
+                )?;
                 for parameter in &signature.requirement_parameters {
                     require_child(
                         owners,
@@ -2346,17 +2328,613 @@ fn interface_owned_type(
     }
 }
 
-/// An isolated package interface cannot classify a foreign nominal representation. The complete
-/// exact interface closure checks this deferred borrowed-result obligation before admission.
-fn interface_owned_type_or_external(
+/// Isolated Borrow requirements retain foreign obligations without classifying them as Owned.
+/// The complete exact interface closure rechecks their retained owner/type occurrences before
+/// readiness. This result grants no transfer, sharing, capture or executable source authority.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum InterfaceBorrowRequirementProof {
+    Owned,
+    DeferredNominal(crate::platform::kernel::DeclarationReference),
+    DeferredAssociated(crate::platform::kernel::DeclarationReference),
+}
+
+impl InterfaceBorrowRequirementProof {
+    fn retain(self, package: PackageId) -> Result<Self, Diagnostic> {
+        match self {
+            Self::DeferredNominal(reference) | Self::DeferredAssociated(reference)
+                if reference.package == package =>
+            {
+                Err(associated_interface_error(
+                    "an isolated Borrow requirement cannot defer local declaration authority",
+                ))
+            }
+            _ => Ok(self),
+        }
+    }
+}
+
+fn interface_borrow_requirement_at(
     package: PackageId,
+    source: OwnerKey,
     ty: TypeObjectDigest,
     types: &BTreeMap<TypeObjectDigest, TypeObject>,
     owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
-) -> bool {
-    matches!(types.get(&ty).map(|object| &object.form),
-        Some(TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. }) if declaration.package != package)
-        || interface_owned_type(package, ty, types, owners)
+    admission: &mut AssociatedInterfaceAdmission<'_>,
+) -> Result<Option<InterfaceBorrowRequirementProof>, Diagnostic> {
+    admission.checkpoint()?;
+    let Some(object) = types.get(&ty) else {
+        return Ok(None);
+    };
+    if object.form.is_associated() {
+        return admission
+            .validate_form(package, source, &object.form, owners, types, &mut |_| {
+                Ok(None)
+            })
+            .map(|proof| {
+                Some(match proof {
+                    AssociatedInterfaceProof::Owned => InterfaceBorrowRequirementProof::Owned,
+                    AssociatedInterfaceProof::Deferred(contract) => {
+                        InterfaceBorrowRequirementProof::DeferredAssociated(contract)
+                    }
+                })
+            });
+    }
+    if let TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } = object.form
+        && declaration.package != package
+    {
+        return Ok(Some(InterfaceBorrowRequirementProof::DeferredNominal(
+            declaration,
+        )));
+    }
+    Ok(interface_owned_type(package, ty, types, owners)
+        .then_some(InterfaceBorrowRequirementProof::Owned))
+}
+
+fn validate_interface_method_borrow_result(
+    package: PackageId,
+    owner: OwnerKey,
+    method: &crate::platform::kernel::OwnedMethod,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
+    admission: &mut AssociatedInterfaceAdmission<'_>,
+) -> Result<Option<[InterfaceBorrowRequirementProof; 2]>, Diagnostic> {
+    admission.checkpoint()?;
+    let Some(position) = method.result_borrow else {
+        return Ok(None);
+    };
+    let source = method
+        .parameters
+        .get(position as usize)
+        .ok_or_else(|| interface_corrupt("borrowed method result source position is absent"))?;
+    let invalid = || {
+        interface_corrupt(
+            "borrowed method result requires an Owned result and borrowed Owned source",
+        )
+    };
+    if !matches!(method.effect, FunctionEffect::Pure)
+        || source.use_mode != crate::platform::kernel::ParameterUse::Borrow
+    {
+        return Err(invalid());
+    }
+    let source =
+        interface_borrow_requirement_at(package, owner, source.ty, types, owners, admission)?
+            .ok_or_else(invalid)?;
+    let result =
+        interface_borrow_requirement_at(package, owner, method.result, types, owners, admission)?
+            .ok_or_else(invalid)?;
+    Ok(Some([source.retain(package)?, result.retain(package)?]))
+}
+
+fn validate_interface_function_borrow_result(
+    package: PackageId,
+    declaration: DeclarationId,
+    signature: &crate::platform::kernel::PackageFunctionSignature,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
+    admission: &mut AssociatedInterfaceAdmission<'_>,
+) -> Result<Option<[InterfaceBorrowRequirementProof; 2]>, Diagnostic> {
+    admission.checkpoint()?;
+    let Some(source) = signature.result_borrow else {
+        return Ok(None);
+    };
+    let Some(parameter_owner) = owners.get(&OwnerKey::Parameter(source)) else {
+        return Err(interface_corrupt(
+            "borrowed function result source parameter is absent",
+        ));
+    };
+    let PackageInterfaceRecord::Parameter(parameter) = &parameter_owner.record else {
+        return Err(interface_corrupt(
+            "borrowed function result source parameter has a foreign record kind",
+        ));
+    };
+    let invalid = || {
+        interface_corrupt(
+            "borrowed function result requires an Owned result and borrowed Owned source",
+        )
+    };
+    let mut occurrences = 0;
+    for id in &signature.parameters {
+        // The existing owner/child visit charge covers this inventory. Keep its numeric allowance
+        // unchanged for feature-free interfaces while exposing cancellation on the actual scan.
+        admission.checkpoint()?;
+        occurrences += usize::from(*id == source);
+    }
+    if !matches!(signature.effect, FunctionEffect::Pure)
+        || parameter_owner.owner() != OwnerKey::Parameter(source)
+        || parameter_owner.kind() != OwnerKind::Parameter
+        || occurrences != 1
+        || parameter.parent != ParameterParent::Function(declaration)
+        || parameter.use_mode != crate::platform::kernel::ParameterUse::Borrow
+    {
+        return Err(invalid());
+    }
+    let source_proof = interface_borrow_requirement_at(
+        package,
+        OwnerKey::Parameter(source),
+        parameter.ty,
+        types,
+        owners,
+        admission,
+    )?
+    .ok_or_else(invalid)?;
+    let result_proof = interface_borrow_requirement_at(
+        package,
+        OwnerKey::Declaration(declaration),
+        signature.result,
+        types,
+        owners,
+        admission,
+    )?
+    .ok_or_else(invalid)?;
+    Ok(Some([
+        source_proof.retain(package)?,
+        result_proof.retain(package)?,
+    ]))
+}
+
+/// Descriptive interface authority is deliberately separate from executable source admission.
+/// A foreign obligation is not an Owned proof until the exact dependency closure discharges it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum AssociatedInterfaceProof {
+    Owned,
+    Deferred(crate::platform::kernel::DeclarationReference),
+}
+
+pub(crate) struct AssociatedInterfaceAdmission<'a> {
+    visit: &'a mut dyn FnMut(u64) -> Result<(), Diagnostic>,
+    work: usize,
+    maximum_work: usize,
+    storage: RepresentationBudget,
+}
+
+impl<'v> AssociatedInterfaceAdmission<'v> {
+    pub(crate) fn new(visit: &'v mut dyn FnMut(u64) -> Result<(), Diagnostic>) -> Self {
+        Self {
+            visit,
+            work: 0,
+            maximum_work: MAXIMUM_PACKAGE_INTERFACE_VALIDATION_WORK,
+            storage: RepresentationBudget::default(),
+        }
+    }
+
+    pub(crate) fn step(&mut self) -> Result<(), Diagnostic> {
+        self.charge(1)
+    }
+
+    pub(crate) fn checkpoint(&mut self) -> Result<(), Diagnostic> {
+        (self.visit)(0)
+    }
+
+    pub(crate) fn charge(&mut self, count: usize) -> Result<(), Diagnostic> {
+        (self.visit)(u64::try_from(count).map_err(|_| associated_interface_storage())?)?;
+        self.work = self
+            .work
+            .checked_add(count)
+            .filter(|work| *work <= self.maximum_work)
+            .ok_or_else(|| {
+                interface_error(
+                    DiagnosticClass::Resource,
+                    "package_interface_associated_work",
+                    "associated interface proof exceeds its work admission",
+                )
+            })?;
+        Ok(())
+    }
+
+    pub(crate) fn current(
+        &mut self,
+        owner: &PackageInterfaceOwner,
+        key: OwnerKey,
+    ) -> Result<(), Diagnostic> {
+        self.step()?;
+        if owner.owner() != key
+            || owner.contract_version != PACKAGE_INTERFACE_CONTRACT_VERSION
+            || owner.record.header().contract_version
+                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+        {
+            return Err(associated_interface_error(
+                "associated occurrence requires its exact Interface21/Graph33 owner",
+            ));
+        }
+        Ok(())
+    }
+
+    fn declaration<'a>(
+        &mut self,
+        value: &'a PackageInterfaceOwner,
+        reference: crate::platform::kernel::DeclarationReference,
+    ) -> Result<&'a crate::platform::kernel::PackageInterfaceDeclaration, Diagnostic> {
+        self.current(value, OwnerKey::Declaration(reference.declaration))?;
+        match &value.record {
+            PackageInterfaceRecord::Declaration(declaration) => Ok(declaration),
+            _ => Err(associated_interface_error(
+                "representation metadata grants no associated declaration authority",
+            )),
+        }
+    }
+
+    fn scope<'a>(
+        &mut self,
+        package: PackageId,
+        source: OwnerKey,
+        owners: &'a BTreeMap<OwnerKey, PackageInterfaceOwner>,
+    ) -> Result<
+        (
+            &'a crate::platform::kernel::PackageInterfaceDeclaration,
+            crate::platform::kernel::DeclarationReference,
+        ),
+        Diagnostic,
+    > {
+        let value = owners
+            .get(&source)
+            .ok_or_else(|| associated_interface_error("associated consuming owner is absent"))?;
+        self.current(value, source)?;
+        let declaration = match &value.record {
+            PackageInterfaceRecord::Declaration(_) => match source {
+                OwnerKey::Declaration(declaration) => declaration,
+                _ => {
+                    return Err(associated_interface_error(
+                        "associated declaration has a foreign identity kind",
+                    ));
+                }
+            },
+            PackageInterfaceRecord::Parameter(parameter) => {
+                if value.kind() != OwnerKind::Parameter {
+                    return Err(associated_interface_error(
+                        "associated parameter has a foreign owner kind",
+                    ));
+                }
+                let (OwnerKey::Parameter(id), ParameterParent::Function(declaration)) =
+                    (source, parameter.parent)
+                else {
+                    return Err(associated_interface_error(
+                        "associated parameter has no exact function parent",
+                    ));
+                };
+                let parent = owners
+                    .get(&OwnerKey::Declaration(declaration))
+                    .ok_or_else(|| {
+                        associated_interface_error("associated parameter parent is absent")
+                    })?;
+                let parent = self.declaration(
+                    parent,
+                    crate::platform::kernel::DeclarationReference {
+                        package,
+                        declaration,
+                    },
+                )?;
+                let PackageInterfaceDeclarationPayload::Function(function) = &parent.payload else {
+                    return Err(associated_interface_error(
+                        "associated parameter parent is not a function signature",
+                    ));
+                };
+                let mut occurrences = 0;
+                for parameter in &function.parameters {
+                    self.step()?;
+                    occurrences += usize::from(*parameter == id);
+                }
+                if occurrences != 1 {
+                    return Err(associated_interface_error(
+                        "associated parameter is not an exact listed signature child",
+                    ));
+                }
+                declaration
+            }
+            _ => {
+                return Err(associated_interface_error(
+                    "associated forms are forbidden in this interface owner context",
+                ));
+            }
+        };
+        let reference = crate::platform::kernel::DeclarationReference {
+            package,
+            declaration,
+        };
+        let value = owners
+            .get(&OwnerKey::Declaration(declaration))
+            .ok_or_else(|| associated_interface_error("associated scope is absent"))?;
+        Ok((self.declaration(value, reference)?, reference))
+    }
+
+    /// Checks one actual occurrence without inventing a body for a public function signature.
+    pub(crate) fn validate_form<'a>(
+        &mut self,
+        package: PackageId,
+        source: OwnerKey,
+        form: &TypeForm,
+        owners: &'a BTreeMap<OwnerKey, PackageInterfaceOwner>,
+        types: &BTreeMap<TypeObjectDigest, TypeObject>,
+        resolve: &mut impl FnMut(
+            crate::platform::kernel::DeclarationReference,
+        ) -> Result<Option<&'a PackageInterfaceOwner>, Diagnostic>,
+    ) -> Result<AssociatedInterfaceProof, Diagnostic> {
+        let (scope_record, actual_scope) = self.scope(package, source, owners)?;
+        let (contract, member, lexical) = match form {
+            TypeForm::AssociatedContractMember { contract, member } => {
+                if *contract != actual_scope
+                    || scope_record.header.kind != OwnerKind::OwnedContract
+                    || !matches!(
+                        scope_record.payload,
+                        PackageInterfaceDeclarationPayload::OwnedContract(_)
+                    )
+                {
+                    return Err(associated_interface_error(
+                        "contract member escaped its exact contract signature",
+                    ));
+                }
+                (*contract, *member, None)
+            }
+            TypeForm::AssociatedWitnessProjection {
+                scope,
+                parameter,
+                contract,
+                member,
+            } => {
+                if *scope != actual_scope {
+                    return Err(associated_interface_error(
+                        "projection escaped its exact lexical scope",
+                    ));
+                }
+                let (parameters, ordinary) = match &scope_record.payload {
+                    PackageInterfaceDeclarationPayload::Function(function)
+                        if scope_record.header.kind
+                            == match function.effect {
+                                FunctionEffect::Pure => OwnerKind::PureFunction,
+                                FunctionEffect::Task { .. } => OwnerKind::TaskFunction,
+                            } =>
+                    {
+                        (
+                            &function.implementation_parameters,
+                            &function.type_parameters,
+                        )
+                    }
+                    PackageInterfaceDeclarationPayload::OwnedImplementation(implementation)
+                        if scope_record.header.kind == OwnerKind::OwnedImplementation =>
+                    {
+                        (
+                            &implementation.implementation_parameters,
+                            &implementation.type_parameters,
+                        )
+                    }
+                    _ => {
+                        return Err(associated_interface_error(
+                            "projection scope is not an exact function or implementation",
+                        ));
+                    }
+                };
+                let mut selected = None;
+                for (index, candidate) in parameters.iter().enumerate() {
+                    self.step()?;
+                    for previous in &parameters[..index] {
+                        self.step()?;
+                        if previous.id == candidate.id || previous.name == candidate.name {
+                            return Err(associated_interface_error(
+                                "lexical witness identities and names must be distinct",
+                            ));
+                        }
+                    }
+                    if candidate.id == *parameter {
+                        selected = Some(candidate);
+                    }
+                }
+                let selected = selected.ok_or_else(|| {
+                    associated_interface_error("projection has no exact lexical witness formal")
+                })?;
+                if selected.contract != *contract {
+                    return Err(associated_interface_error(
+                        "projection contract differs from its exact witness formal",
+                    ));
+                }
+                self.step()?;
+                let Some(TypeObject {
+                    form: TypeForm::TypeParameter { parameter },
+                    ..
+                }) = types.get(&selected.self_type)
+                else {
+                    return Err(associated_interface_error(
+                        "lexical witness Self is not an exact Owned type parameter",
+                    ));
+                };
+                let parameter_owner = owners
+                    .get(&OwnerKey::TypeParameter(*parameter))
+                    .ok_or_else(|| {
+                        associated_interface_error("lexical witness Self parameter is absent")
+                    })?;
+                self.current(parameter_owner, OwnerKey::TypeParameter(*parameter))?;
+                let PackageInterfaceRecord::TypeParameter(record) = &parameter_owner.record else {
+                    return Err(associated_interface_error(
+                        "lexical witness Self has the wrong owner record kind",
+                    ));
+                };
+                let mut occurrences = 0;
+                for id in ordinary {
+                    self.step()?;
+                    occurrences += usize::from(*id == *parameter);
+                }
+                if record.header.kind != OwnerKind::TypeParameter
+                    || record.declaration != actual_scope.declaration
+                    || !record.constraints.has_owned()
+                    || occurrences != 1
+                {
+                    return Err(associated_interface_error(
+                        "lexical witness Self is outside the exact Owned parameter inventory",
+                    ));
+                }
+                (*contract, *member, Some(selected))
+            }
+            _ => {
+                return Err(associated_interface_error(
+                    "associated authority proof requires an associated type form",
+                ));
+            }
+        };
+        self.step()?;
+        let value = if contract.package == package {
+            Some(
+                owners
+                    .get(&OwnerKey::Declaration(contract.declaration))
+                    .ok_or_else(|| {
+                        associated_interface_error("local associated contract is absent")
+                    })?,
+            )
+        } else {
+            resolve(contract)?
+        };
+        let Some(value) = value else {
+            return Ok(AssociatedInterfaceProof::Deferred(contract));
+        };
+        let declaration = self.declaration(value, contract)?;
+        let PackageInterfaceDeclarationPayload::OwnedContract(contract_record) =
+            &declaration.payload
+        else {
+            return Err(associated_interface_error(
+                "associated member does not name a public OwnedContract",
+            ));
+        };
+        if declaration.header.kind != OwnerKind::OwnedContract {
+            return Err(associated_interface_error(
+                "associated contract has a foreign owner kind",
+            ));
+        }
+        if lexical.is_some_and(|parameter| {
+            parameter.type_arguments.len() != contract_record.type_parameters.len()
+        }) {
+            return Err(associated_interface_error(
+                "lexical witness contract argument inventory has the wrong arity",
+            ));
+        }
+        let mut found = false;
+        for (index, entry) in contract_record.associated_types.iter().enumerate() {
+            self.step()?;
+            for previous in &contract_record.associated_types[..index] {
+                self.step()?;
+                if previous.id == entry.id || previous.name == entry.name {
+                    return Err(associated_interface_error(
+                        "contract associated member identities and names must be distinct",
+                    ));
+                }
+            }
+            found |= entry.id == member
+                && entry.bound == crate::platform::kernel::AssociatedTypeBound::Owned;
+        }
+        if !found {
+            return Err(associated_interface_error(
+                "associated member is absent from the exact Owned contract inventory",
+            ));
+        }
+        Ok(AssociatedInterfaceProof::Owned)
+    }
+
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the actual source occurrence, complete descriptor maps and authored resolver remain explicit"
+    )]
+    pub(crate) fn validate_occurrences<'a>(
+        &mut self,
+        package: PackageId,
+        source: OwnerKey,
+        roots: &[TypeObjectDigest],
+        projection_free: bool,
+        owners: &'a BTreeMap<OwnerKey, PackageInterfaceOwner>,
+        types: &BTreeMap<TypeObjectDigest, TypeObject>,
+        resolve: &mut impl FnMut(
+            crate::platform::kernel::DeclarationReference,
+        ) -> Result<Option<&'a PackageInterfaceOwner>, Diagnostic>,
+    ) -> Result<bool, Diagnostic> {
+        self.charge(roots.len())?;
+        self.storage
+            .reserve::<(TypeObjectDigest, usize)>(roots.len())?;
+        let mut pending = Vec::new();
+        pending
+            .try_reserve_exact(roots.len())
+            .map_err(|_| associated_interface_storage())?;
+        pending.extend(roots.iter().map(|ty| (*ty, 0_usize)));
+        let mut deferred = false;
+        while let Some((ty, depth)) = pending.pop() {
+            self.step()?;
+            if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+                return Err(interface_error(
+                    DiagnosticClass::Resource,
+                    "package_interface_associated_depth",
+                    "associated interface traversal exceeds its depth admission",
+                ));
+            }
+            let object = types.get(&ty).ok_or_else(|| {
+                associated_interface_error("associated interface type closure is incomplete")
+            })?;
+            if object.form.is_associated() {
+                if projection_free {
+                    return Err(associated_interface_error(
+                        "stored associated binding contains a projection or contract member",
+                    ));
+                }
+                deferred |= matches!(
+                    self.validate_form(package, source, &object.form, owners, types, resolve)?,
+                    AssociatedInterfaceProof::Deferred(_)
+                );
+            }
+            let count = object.child_type_count();
+            self.charge(count)?;
+            self.storage.reserve::<TypeObjectDigest>(count)?;
+            self.storage.reserve::<(TypeObjectDigest, usize)>(count)?;
+            pending
+                .try_reserve(count)
+                .map_err(|_| associated_interface_storage())?;
+            pending.extend(
+                object
+                    .child_types()
+                    .into_iter()
+                    .map(|child| (child, depth + 1)),
+            );
+        }
+        Ok(deferred)
+    }
+
+    pub(crate) fn reserve_roots(
+        &mut self,
+        owner: &PackageInterfaceOwner,
+    ) -> Result<(), Diagnostic> {
+        let count = usize::try_from(interface_owner_validation_visits(owner))
+            .map_err(|_| associated_interface_storage())?;
+        self.charge(count)?;
+        self.storage.reserve::<TypeObjectDigest>(count)
+    }
+}
+
+fn associated_interface_error(message: &str) -> Diagnostic {
+    interface_error(
+        DiagnosticClass::Semantic,
+        "package_interface_associated_authority",
+        message,
+    )
+}
+
+fn associated_interface_storage() -> Diagnostic {
+    interface_error(
+        DiagnosticClass::Resource,
+        "package_interface_associated_storage",
+        "associated interface proof cannot retain its admitted traversal state",
+    )
 }
 
 fn require_parameter(
@@ -2440,7 +3018,7 @@ fn validate_type_closure<S: ImmutableObjectStore + ?Sized>(
     owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
     store: &S,
     work: &mut StoreWork,
-    visit: &mut dyn FnMut(u64) -> Result<(), Diagnostic>,
+    associated_admission: &mut AssociatedInterfaceAdmission<'_>,
 ) -> Result<(BTreeMap<TypeObjectDigest, TypeObject>, BTreeSet<ObjectKey>), Diagnostic> {
     let mut objects = BTreeMap::new();
     let mut keys = BTreeSet::new();
@@ -2458,7 +3036,9 @@ fn validate_type_closure<S: ImmutableObjectStore + ?Sized>(
         if !visited.insert((source, digest)) {
             continue;
         }
-        visit(1)?;
+        // Preserve this legacy traversal's caller charge. Associated proof work below shares the
+        // same callback and its own cumulative admission with the owner/Borrow phase.
+        (associated_admission.visit)(1)?;
         if visited.len() > MAXIMUM_PACKAGE_INTERFACE_VALIDATION_WORK
             || depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
         {
@@ -2523,15 +3103,33 @@ fn validate_type_closure<S: ImmutableObjectStore + ?Sized>(
         keys.insert(key);
         objects.entry(digest).or_insert(object);
     }
-    // Eligibility widened in Graph 31 even when a signature only relays the
-    // sequence and contains no new expression operation. Check each use after
-    // loading its exact complete element closure.
+    // Lexical witness Self/type actuals may be read before their type objects in the pending
+    // traversal. Prove associated authority only once the complete immutable map is available,
+    // within the existing per-owner sequence eligibility pass. No second all-pair scan is added.
+    // Check every actual owner/digest pair: success under another consumer grants no authority.
     for (source, digest) in visited {
-        let Some(TypeObject {
-            form: TypeForm::OwnedSequence { item },
-            ..
-        }) = objects.get(&digest)
-        else {
+        associated_admission.checkpoint()?;
+        let object = objects.get(&digest).ok_or_else(|| {
+            associated_interface_error("completed interface type closure lost a visited object")
+        })?;
+        if object.form.is_associated() {
+            match associated_admission.validate_form(
+                package,
+                source,
+                &object.form,
+                owners,
+                &objects,
+                &mut |_| Ok(None),
+            )? {
+                AssociatedInterfaceProof::Owned | AssociatedInterfaceProof::Deferred(_) => {}
+            }
+            // Foreign Deferred retains the exact occurrence in owners/types. It grants no
+            // readiness or property; the complete selected transport closure must discharge it.
+        }
+        // Eligibility widened in Graph 31 even when a signature only relays the
+        // sequence and contains no new expression operation. Check each use after
+        // loading its exact complete element closure.
+        let TypeForm::OwnedSequence { item } = &object.form else {
             continue;
         };
         if !interface_owned_type(package, *item, &objects, owners)
@@ -2561,7 +3159,8 @@ fn validate_interface_type_reference(
     match form {
         TypeForm::AssociatedContractMember { .. }
         | TypeForm::AssociatedWitnessProjection { .. } => {
-            return Err(crate::platform::kernel::owned_associated_wire::unsupported_semantics());
+            // validate_type_closure proves every associated occurrence after loading its complete
+            // local map. This early reference pass proves ordinary scope/generation only.
         }
         TypeForm::TaskFunction { effect, .. } => {
             effect.validate()?;

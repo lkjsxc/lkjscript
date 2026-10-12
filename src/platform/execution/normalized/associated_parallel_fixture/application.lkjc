@@ -1,0 +1,91 @@
+declarations.begin
+(units
+  (module create associated-parallel-app
+    (type-alias Observation (record (left I64) (observed (record (left I64) (right I64))) (right Bytes)))
+    (external create extract (visibility private) (implementation core.cell.extract)
+      (parameter create value (type OwnedI64Cell) (use consume)) (returns I64))
+    (external create freeze (visibility private) (implementation core.buffer.freeze)
+      (parameter create value (type ByteBuffer) (use consume)) (returns Bytes))
+    (function create main (visibility public) (effect (task))
+      (parameter create n (type I64)) (parameter create mirrored (type Bool))
+      (parameter create read-phase (type Bool))
+      (parameter create left-fail (type Bool)) (parameter create right-fail (type Bool))
+      (parameter create rounds (type I64)) (returns Observation)
+      (body (let
+        (binding take-left-fail (type Bool) (if (local read-phase) (bool false) (local left-fail)))
+        (binding take-right-fail (type Bool) (if (local read-phase) (bool false) (local right-fail)))
+        (binding take-rounds (type I64) (if (local read-phase) (i64 0) (local rounds)))
+        (binding read-left-fail (type Bool) (if (local read-phase) (local left-fail) (bool false)))
+        (binding read-right-fail (type Bool) (if (local read-phase) (local right-fail) (bool false)))
+        (binding read-rounds (type I64) (if (local read-phase) (local rounds) (i64 0)))
+        (binding left (type associated-parallel-supplier::Cargo)
+          (call associated-parallel-supplier::make (local n) (i64 7)))
+        (binding right (type associated-parallel-supplier::Cargo)
+          (call associated-parallel-supplier::make (i64 211) (i64 9)))
+        (in (if (local mirrored)
+          (let
+            (binding pair (type (owned-product (field left ByteBuffer) (field right OwnedI64Cell)))
+              (parallel
+                (implementation-call associated-parallel-consumer::take
+                  (types associated-parallel-supplier::Cargo)
+                  (implementations (implementation associated-parallel-supplier::BufferOut))
+                  (local take-left-fail) (local take-rounds) (local left))
+                (implementation-call associated-parallel-consumer::take
+                  (types associated-parallel-supplier::Cargo)
+                  (implementations (implementation associated-parallel-supplier::CellOut))
+                  (local take-right-fail) (local take-rounds) (local right))))
+            (in (unpack-owned (type (owned-product (field left ByteBuffer) (field right OwnedI64Cell)))
+              (local pair)
+              (field left (binding bytes (type ByteBuffer)))
+              (field right (binding scalar (type OwnedI64Cell)))
+              (in (let
+                (binding observed (type (record (left I64) (right I64)))
+                  (parallel
+                    (implementation-call associated-parallel-consumer::inspect
+                      (types associated-parallel-supplier::Cargo)
+                      (implementations (implementation associated-parallel-supplier::BufferOut))
+                      (local read-left-fail) (local read-rounds) (local bytes))
+                    (implementation-call associated-parallel-consumer::inspect
+                      (types associated-parallel-supplier::Cargo)
+                      (implementations (implementation associated-parallel-supplier::CellOut))
+                      (local read-right-fail) (local read-rounds) (local scalar))))
+                (in (record structural
+                  (field left (call extract (local scalar)))
+                  (field observed (local observed))
+                  (field right (call freeze (local bytes))))))))))
+          (let
+            (binding pair (type (owned-product (field left OwnedI64Cell) (field right ByteBuffer)))
+              (parallel
+                (implementation-call associated-parallel-consumer::take
+                  (types associated-parallel-supplier::Cargo)
+                  (implementations (implementation associated-parallel-supplier::CellOut))
+                  (local take-left-fail) (local take-rounds) (local left))
+                (implementation-call associated-parallel-consumer::take
+                  (types associated-parallel-supplier::Cargo)
+                  (implementations (implementation associated-parallel-supplier::BufferOut))
+                  (local take-right-fail) (local take-rounds) (local right))))
+            (in (unpack-owned (type (owned-product (field left OwnedI64Cell) (field right ByteBuffer)))
+              (local pair)
+              (field left (binding scalar (type OwnedI64Cell)))
+              (field right (binding bytes (type ByteBuffer)))
+              (in (let
+                (binding observed (type (record (left I64) (right I64)))
+                  (parallel
+                    (implementation-call associated-parallel-consumer::inspect
+                      (types associated-parallel-supplier::Cargo)
+                      (implementations (implementation associated-parallel-supplier::CellOut))
+                      (local read-left-fail) (local read-rounds) (local scalar))
+                    (implementation-call associated-parallel-consumer::inspect
+                      (types associated-parallel-supplier::Cargo)
+                      (implementations (implementation associated-parallel-supplier::BufferOut))
+                      (local read-right-fail) (local read-rounds) (local bytes))))
+                (in (record structural
+                  (field left (call extract (local scalar)))
+                  (field observed (local observed))
+                  (field right (call freeze (local bytes)))))))))))))))
+    (component create command (visibility private)
+      (port create main (type (task-function (I64 Bool Bool Bool Bool I64) Observation (row)))
+        (function main))))
+  (target create associated-parallel (component associated-parallel-app::command)
+    (runner command) (port associated-parallel-app::command::main)))
+declarations.end

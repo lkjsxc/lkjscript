@@ -22,11 +22,23 @@ admission also checks nested and unused nominal type arguments.
 
 `flat.lkjc` maps these methods to the standard `data-sequence-*` functions.
 `chunked.lkjc` defines public nominal `Chunk32<T>` with module-private `chunks`
-and `size`. Every chunk except the last contains 32 items. Reads borrow the outer
-owner and selected chunk. Replacement exchanges the selected chunk with an empty
-placeholder, updates that chunk, restores it, and explicitly discards the returned
-placeholder. No native mutable borrowing or runtime primitive is added. Indexed
+and `size`. Its entries are real owned `ChunkBlock<T>` descendants with
+module-private `items`; each has at most 32 items, and every block except the last
+is full. Reads borrow the outer owner and selected block. Replacement exchanges
+the selected block with an empty placeholder, updates its items, restores it, and
+explicitly discards the returned placeholder. No native mutable borrowing or runtime primitive is added. Indexed
 operations contain no collection-prefix traversal or element-copy loop.
+
+The associated Owned adoption adds `BlockRead<Self: Owned, Item: Transferable>`
+with associated `Block: Owned`. The independently selected `Blocks<T>` witnesses
+expose block count, a borrowed block with ReadFrom its storage input, block length
+and ordinary item reads. Flat exposes zero blocks for empty storage and one
+complete owned-sequence block otherwise. Chunk32 exposes its actual ChunkBlock
+entries; generic readers never gain their private field authority. IndexedData
+keeps its six methods and random-access/replacement behavior. The companion
+`blockread.lkjc` exposes `indexed-blocks-flat` and `indexed-blocks-chunked`:
+complete before/after values and block lengths, replacement after all block loans
+close, and explicit owner destruction. Empty storage is discarded without replacement.
 
 `forward.lkjc` exports `Forward<T, W>` with an exact prerequisite witness. Its
 methods forward both ordinary and owned parameters. Nested forwarding preserves
@@ -42,7 +54,7 @@ standard and export its transport. Author `flat.lkjc`, `chunked.lkjc` and
 package and standard selections. Export and stage those transports into a fresh
 command project. Bind exact package IDs and package revisions in `use` declarations
 for `indexed-data`, `indexed-flat`, `indexed-chunked` and `indexed-forward`, then
-author `application.lkjc` and `costs.lkjc`. Each file is a separate `change plan`
+author `application.lkjc`, `costs.lkjc` and `blockread.lkjc`. Each file is a separate `change plan`
 and `change apply` request with the current base revision and returned plan token.
 Run `check`, require canonical drafts to plan unchanged, and build
 `indexed-data.lkja` beside the deployment descriptors.
@@ -94,6 +106,10 @@ executables, artifacts, descriptors, argument files and execution observations.
 The dependency planner adopts independent integer and Boolean witnesses in all
 four flat/chunked combinations; its complete result is still checked by the
 separately authored [native verifier](../dependency-plan/verification/README.md).
+
+The measurements below precede this BlockRead/ChunkBlock adoption and do not
+attest its layout, traversal cost or updated artifact bytes. New block-boundary,
+replacement and detached proofs remain pending at [status](../../docs/status.md).
 
 ### Observed results, 2026-10-11
 

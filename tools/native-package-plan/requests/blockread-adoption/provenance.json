@@ -1,0 +1,2880 @@
+{
+  "schema": "native-package-plan-blockread-adoption-provenance-1",
+  "scope": "Literal accepted proposal and exact producer/proof provenance; the accepted project owns editable meaning. This metadata grants no admission or execution authority.",
+  "source_sha256": "0cf12a33d267d0a75ecae0b6923c861cc0c6013fcd87ea8088ce98c9170c17d6",
+  "artifact": {
+    "bytes": 3710645,
+    "sha256": "5bd6a9568d59df598d1f0a3a7b5538036697db9d04355753f042fe61103bad7d",
+    "bundle": "artifact_bundle_3ce42e5e710c1bec985163652818934f565419ed66b948e631ec3ff33f0d414e",
+    "authority": {
+      "repository": "repo_b9cab24155816538398b153170cb3442",
+      "package": "pkg_0c1e214f0a914c2a1ee89e97ef9731db",
+      "revision": "rev_27a05feb4f7e2d119385e72c09b1cba0ab65f91a6e88a91bb1252516c3596530",
+      "state": "semantic_state_49072c3da9b58fd6ab5c76395ceebcd630822aab076f9cd9e223d1b507f6db5d"
+    }
+  },
+  "accepted_head": {
+    "bytes": 135,
+    "sha256": "526434a7451d263e204f33cc8273e1b414dc430b4a23e677e04af5bb403970fb"
+  },
+  "current_requests": [
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/prefix/indexed-chunked.lkjc",
+      "bytes": 13917,
+      "sha256": "f6a12175a088b201934592f239a8cb3554f701e557314a0cf0a3f89b4c98ba9c",
+      "original_archive": {
+        "role": "prefix-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/prefix-work/requests/indexed-chunked.lkjc",
+        "relative": "requests/indexed-chunked.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-prefix-work.json",
+          "bytes": 228934,
+          "sha256": "28fa27cda43d05eb311bb23d665a1cb6a93454ec136225eb97b248944b70f249"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/prefix/indexed-flat.lkjc",
+      "bytes": 4361,
+      "sha256": "4e58ba4a266ffbd64f655ecc60371d9c0f37cdc450a87228f7d501c65d889e53",
+      "original_archive": {
+        "role": "prefix-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/prefix-work/requests/indexed-flat.lkjc",
+        "relative": "requests/indexed-flat.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-prefix-work.json",
+          "bytes": 228934,
+          "sha256": "28fa27cda43d05eb311bb23d665a1cb6a93454ec136225eb97b248944b70f249"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/prefix/indexed-library.lkjc",
+      "bytes": 8245,
+      "sha256": "f074595b7a321b390431dc2c6ea7a8859b46eaa73c7d66fd6fea9b1a54a6a9b4",
+      "original_archive": {
+        "role": "prefix-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/prefix-work/requests/indexed-library.lkjc",
+        "relative": "requests/indexed-library.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-prefix-work.json",
+          "bytes": 228934,
+          "sha256": "28fa27cda43d05eb311bb23d665a1cb6a93454ec136225eb97b248944b70f249"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/prefix/plan-stages-core.lkjc",
+      "bytes": 23427,
+      "sha256": "04c10ee0bed91cd5645133ca166aa93917df0aee9df6d6bf83b4d7f330c682fa",
+      "original_archive": {
+        "role": "prefix-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/prefix-work/requests/plan-stages-core.lkjc",
+        "relative": "requests/plan-stages-core.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-prefix-work.json",
+          "bytes": 228934,
+          "sha256": "28fa27cda43d05eb311bb23d665a1cb6a93454ec136225eb97b248944b70f249"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/prefix/plan-stages-default-append.lkjc",
+      "bytes": 4100,
+      "sha256": "9f13e3cce177a119a7004e6bfd9d37b93c160bc149f1aa1435d6fe4074d0c482",
+      "original_archive": {
+        "role": "prefix-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/prefix-work/requests/plan-stages-default-append.lkjc",
+        "relative": "requests/plan-stages-default-append.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-prefix-work.json",
+          "bytes": 228934,
+          "sha256": "28fa27cda43d05eb311bb23d665a1cb6a93454ec136225eb97b248944b70f249"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/finish/checked-batch-exact.lkjc",
+      "bytes": 10569,
+      "sha256": "08991c8ac5ea43cdeb12294e0b1c246327e7ed71d4e1f8d6ea77d575f033625c",
+      "original_archive": {
+        "role": "finish-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-work/requests/checked-batch-exact.lkjc",
+        "relative": "requests/checked-batch-exact.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-work.json",
+          "bytes": 507914,
+          "sha256": "ae096f730e7caaa206f0da2c18c4ade5504c289a11148d3f55ccd8f956da7948"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/finish/checked-consumer-exact.lkjc",
+      "bytes": 17495,
+      "sha256": "20a742e7bbd1f69d5f1f4553c586349b44d4b4dc39734a581e6de47c9eeb35b3",
+      "original_archive": {
+        "role": "finish-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-work/requests/checked-consumer-exact.lkjc",
+        "relative": "requests/checked-consumer-exact.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-work.json",
+          "bytes": 507914,
+          "sha256": "ae096f730e7caaa206f0da2c18c4ade5504c289a11148d3f55ccd8f956da7948"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/finish/compiler-entrypoint.lkjc",
+      "bytes": 5872,
+      "sha256": "a7d522ecb9911a35c9bb8d595bcabeb8ed220914ae9982a78dcb56e0572d3cd7",
+      "original_archive": {
+        "role": "finish-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-work/requests/compiler-entrypoint.lkjc",
+        "relative": "requests/compiler-entrypoint.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-work.json",
+          "bytes": 507914,
+          "sha256": "ae096f730e7caaa206f0da2c18c4ade5504c289a11148d3f55ccd8f956da7948"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/finish/component-batch.lkjc",
+      "bytes": 4460,
+      "sha256": "b9cf9bd9ae2cbd11eb6cc58a2b20f001d9a7859ef378691826a49f3bb4450e56",
+      "original_archive": {
+        "role": "finish-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-work/requests/component-batch.lkjc",
+        "relative": "requests/component-batch.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-work.json",
+          "bytes": 507914,
+          "sha256": "ae096f730e7caaa206f0da2c18c4ade5504c289a11148d3f55ccd8f956da7948"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/finish/component-data.lkjc",
+      "bytes": 8880,
+      "sha256": "716f1bcb76e51bd3e5dde702509b3e3a651e20cf1a5938b546fcd95601c466a4",
+      "original_archive": {
+        "role": "finish-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-work/requests/component-data.lkjc",
+        "relative": "requests/component-data.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-work.json",
+          "bytes": 507914,
+          "sha256": "ae096f730e7caaa206f0da2c18c4ade5504c289a11148d3f55ccd8f956da7948"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/finish/component-groups.lkjc",
+      "bytes": 8796,
+      "sha256": "9d783c557b4ae1ebd96dd1307676dac625e2400e5e2169b07507f2a59dee9b61",
+      "original_archive": {
+        "role": "finish-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-work/requests/component-groups.lkjc",
+        "relative": "requests/component-groups.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-work.json",
+          "bytes": 507914,
+          "sha256": "ae096f730e7caaa206f0da2c18c4ade5504c289a11148d3f55ccd8f956da7948"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/finish/component-order.lkjc",
+      "bytes": 10253,
+      "sha256": "0ed72e18d721ff73d7c3e1acee1c3decde37098ac791caf4dac491a9c06c7dfb",
+      "original_archive": {
+        "role": "finish-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-work/requests/component-order.lkjc",
+        "relative": "requests/component-order.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-work.json",
+          "bytes": 507914,
+          "sha256": "ae096f730e7caaa206f0da2c18c4ade5504c289a11148d3f55ccd8f956da7948"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/finish/dependency-components.lkjc",
+      "bytes": 8219,
+      "sha256": "24344e7d84b654b62e87fbcde43c6f3cfe3f041c754652f6603f51f91b06d425",
+      "original_archive": {
+        "role": "finish-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-work/requests/dependency-components.lkjc",
+        "relative": "requests/dependency-components.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-work.json",
+          "bytes": 507914,
+          "sha256": "ae096f730e7caaa206f0da2c18c4ade5504c289a11148d3f55ccd8f956da7948"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/finish/dependency-plan.lkjc",
+      "bytes": 13841,
+      "sha256": "f2730cd7d905f55a64d9c8091db7b55c873841368aacac3dc04738d2c31f0b67",
+      "original_archive": {
+        "role": "finish-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-work/requests/dependency-plan.lkjc",
+        "relative": "requests/dependency-plan.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-work.json",
+          "bytes": 507914,
+          "sha256": "ae096f730e7caaa206f0da2c18c4ade5504c289a11148d3f55ccd8f956da7948"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/finish/plan-batch.lkjc",
+      "bytes": 9877,
+      "sha256": "fd9f88f41d841d0a6a640f0ff86b3f2bddf19dd0f1fa05d3ef2fbfe2d1f43497",
+      "original_archive": {
+        "role": "finish-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-work/requests/plan-batch.lkjc",
+        "relative": "requests/plan-batch.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-work.json",
+          "bytes": 507914,
+          "sha256": "ae096f730e7caaa206f0da2c18c4ade5504c289a11148d3f55ccd8f956da7948"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/finish/plan-edges.lkjc",
+      "bytes": 7642,
+      "sha256": "60549ec88ab546498cff928469c1a2a171a40a824d0e35d351f2cc56887a469d",
+      "original_archive": {
+        "role": "finish-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-work/requests/plan-edges.lkjc",
+        "relative": "requests/plan-edges.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-work.json",
+          "bytes": 507914,
+          "sha256": "ae096f730e7caaa206f0da2c18c4ade5504c289a11148d3f55ccd8f956da7948"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/finish/plan-presentation.lkjc",
+      "bytes": 6119,
+      "sha256": "227930737dcb9120c3853605e0a64c265af7a8aff0ea292961bf8be89c9728d6",
+      "original_archive": {
+        "role": "finish-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-work/requests/plan-presentation.lkjc",
+        "relative": "requests/plan-presentation.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-work.json",
+          "bytes": 507914,
+          "sha256": "ae096f730e7caaa206f0da2c18c4ade5504c289a11148d3f55ccd8f956da7948"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/finish/planner-reachability.lkjc",
+      "bytes": 23710,
+      "sha256": "9b398b2b220753e9f2dfd18738c56ba4a9043fc89b691310a3b8ac1f18098283",
+      "original_archive": {
+        "role": "finish-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-work/requests/planner-reachability.lkjc",
+        "relative": "requests/planner-reachability.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-work.json",
+          "bytes": 507914,
+          "sha256": "ae096f730e7caaa206f0da2c18c4ade5504c289a11148d3f55ccd8f956da7948"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/finish/verifier-data.lkjc",
+      "bytes": 2755,
+      "sha256": "0b7f40d75ea8906997b63a3a015810a68ea17aff18d67352426ffeca6842b2e6",
+      "original_archive": {
+        "role": "finish-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-work/requests/verifier-data.lkjc",
+        "relative": "requests/verifier-data.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-work.json",
+          "bytes": 507914,
+          "sha256": "ae096f730e7caaa206f0da2c18c4ade5504c289a11148d3f55ccd8f956da7948"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/finish/verifier-edges.lkjc",
+      "bytes": 8231,
+      "sha256": "3b5cd7e0cd71743f5c846911a656b2066da730d0c4427b7e05ba100ca17ea17c",
+      "original_archive": {
+        "role": "finish-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-work/requests/verifier-edges.lkjc",
+        "relative": "requests/verifier-edges.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-work.json",
+          "bytes": 507914,
+          "sha256": "ae096f730e7caaa206f0da2c18c4ade5504c289a11148d3f55ccd8f956da7948"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/finish/verifier-members.lkjc",
+      "bytes": 6008,
+      "sha256": "e902b6c267549b27a63cc44d44ec15cc169745acb0fccb1714f4d9f6a96a6c67",
+      "original_archive": {
+        "role": "finish-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-work/requests/verifier-members.lkjc",
+        "relative": "requests/verifier-members.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-work.json",
+          "bytes": 507914,
+          "sha256": "ae096f730e7caaa206f0da2c18c4ade5504c289a11148d3f55ccd8f956da7948"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/finish/verifier-reachability.lkjc",
+      "bytes": 21996,
+      "sha256": "9b9aa6ded42116aa09f930681df2f0288147f5e2ad24e33417793852f7107d13",
+      "original_archive": {
+        "role": "finish-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-work/requests/verifier-reachability.lkjc",
+        "relative": "requests/verifier-reachability.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-work.json",
+          "bytes": 507914,
+          "sha256": "ae096f730e7caaa206f0da2c18c4ade5504c289a11148d3f55ccd8f956da7948"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/finish/verifier-stages.lkjc",
+      "bytes": 6340,
+      "sha256": "61db5d7cebf3b083768837f2f1007abcc054794463dbd89ac5119181d260b657",
+      "original_archive": {
+        "role": "finish-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-work/requests/verifier-stages.lkjc",
+        "relative": "requests/verifier-stages.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-work.json",
+          "bytes": 507914,
+          "sha256": "ae096f730e7caaa206f0da2c18c4ade5504c289a11148d3f55ccd8f956da7948"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/finish/verifier-verify.lkjc",
+      "bytes": 13134,
+      "sha256": "faab11a7784b4c0acf0d71ffb29a23f41c2c4c44bab2936509f162f67636bd26",
+      "original_archive": {
+        "role": "finish-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-work/requests/verifier-verify.lkjc",
+        "relative": "requests/verifier-verify.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-work.json",
+          "bytes": 507914,
+          "sha256": "ae096f730e7caaa206f0da2c18c4ade5504c289a11148d3f55ccd8f956da7948"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/finish/verifier-walk.lkjc",
+      "bytes": 5352,
+      "sha256": "73b7edb93b33cf0b235a8a5a9de95a344f75e3e292c5683eb61445e24af3f032",
+      "original_archive": {
+        "role": "finish-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-work/requests/verifier-walk.lkjc",
+        "relative": "requests/verifier-walk.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-work.json",
+          "bytes": 507914,
+          "sha256": "ae096f730e7caaa206f0da2c18c4ade5504c289a11148d3f55ccd8f956da7948"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/finish/worklist-carriers.lkjc",
+      "bytes": 9756,
+      "sha256": "54cdd68bfc72a0f2e23568935b62ad951c597567c660563198c718568c374cf7",
+      "original_archive": {
+        "role": "finish-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-work/requests/worklist-carriers.lkjc",
+        "relative": "requests/worklist-carriers.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-work.json",
+          "bytes": 507914,
+          "sha256": "ae096f730e7caaa206f0da2c18c4ade5504c289a11148d3f55ccd8f956da7948"
+        }
+      }
+    },
+    {
+      "path": "tools/native-package-plan/requests/blockread-adoption/finish/worklist-library.lkjc",
+      "bytes": 19225,
+      "sha256": "84e85a4974d87084ba817677173d7dda4bc6d1c98e6796e3ca857ad684fef106",
+      "original_archive": {
+        "role": "finish-work",
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-work/requests/worklist-library.lkjc",
+        "relative": "requests/worklist-library.lkjc",
+        "inventory": {
+          "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-work.json",
+          "bytes": 507914,
+          "sha256": "ae096f730e7caaa206f0da2c18c4ade5504c289a11148d3f55ccd8f956da7948"
+        }
+      }
+    }
+  ],
+  "original_records": {
+    "prefix": {
+      "state": {
+        "path": ".artifacts/associated-owned-types/native-blockread-asset-rebuild-proposal/prefix-runs/prefix-reference-catalogue-first/prefix-state.json",
+        "bytes": 2797169,
+        "sha256": "37ae69f5d2a65953086599ca766b20b3701760b402a5376290dc4a6ddf82a666"
+      },
+      "summary": {
+        "path": ".artifacts/associated-owned-types/native-blockread-asset-rebuild-proposal/prefix-runs/prefix-reference-catalogue-first/summary.json",
+        "bytes": 99936,
+        "sha256": "341aab8393b4ee1793d5b17e411ae72449d0750327aadb8a598fa84e8ccc904e"
+      },
+      "original_terminal": {
+        "path": ".artifacts/associated-owned-types/native-blockread-asset-rebuild-proposal/prefix-reference-catalogue-first-outer-terminal.json",
+        "bytes": 1179,
+        "sha256": "890f0e59fff37790719fb34892cc550b28de456d41fa012c4037494288b7fe9f"
+      }
+    },
+    "finish": {
+      "state": {
+        "path": ".artifacts/associated-owned-types/native-blockread-asset-rebuild-proposal/finish-runs/finish-reference-catalogue-second/candidate-state.json",
+        "bytes": 66508,
+        "sha256": "a8e9bb7bb6d56bddca62bdbd4d1209d2f3ccdadfb024eda73d6582606aa975f5"
+      },
+      "summary": {
+        "path": ".artifacts/associated-owned-types/native-blockread-asset-rebuild-proposal/finish-runs/finish-reference-catalogue-second/summary.json",
+        "bytes": 201009,
+        "sha256": "f31fbd399ed2ceb48c9088020799560e4f5c18506d561c4acf2b7b50e69b137b"
+      },
+      "original_terminal": {
+        "path": ".artifacts/associated-owned-types/native-blockread-asset-rebuild-proposal/finish-reference-catalogue-second-outer-terminal.json",
+        "bytes": 1183,
+        "sha256": "71270a5751d363884e5c15906ea817089d6b90b6ac0315161733c8c9bb89336a"
+      }
+    },
+    "runtime": {
+      "proof_state": {
+        "path": ".artifacts/associated-owned-types/native-blockread-asset-proof-phase-cli-successor01/runs/runtime-reference-catalogue-first/proof-state.json",
+        "bytes": 363744,
+        "sha256": "46ffbc3901ec76f98cc2335ae757598f502db4cb5ce9261ea75c9a1049e390ad"
+      },
+      "summary": {
+        "path": ".artifacts/associated-owned-types/native-blockread-asset-proof-phase-cli-successor01/runs/runtime-reference-catalogue-first/summary.json",
+        "bytes": 63990,
+        "sha256": "ac90ae30d016a102f671b55dbfd8412ce1c7ed74a7e7d3e8771fc826d1ccde4e"
+      },
+      "terminal": {
+        "path": ".artifacts/associated-owned-types/native-blockread-asset-proof-phase-cli-successor01/runtime-reference-catalogue-first-outer-terminal.json",
+        "bytes": 5063,
+        "sha256": "665c9052aab8b2dc4665d9d638fe35cb7d0d9c0795fc2e492bfe3846ea495af2"
+      },
+      "config": {
+        "path": ".artifacts/associated-owned-types/native-blockread-runtime-binding-phase-successor01/bound/runtime-reference-catalogue-first/runtime90-config.json",
+        "bytes": 11800,
+        "sha256": "07821d900445bd19904bdda0978d0e3cbf112b8c7bf91d8673f0ee58eaae8db5"
+      },
+      "independent_authentication": {
+        "path": ".artifacts/associated-owned-types/reviews/native-blockread-runtime-reference-catalogue-first/authentication.json",
+        "bytes": 14677,
+        "sha256": "dde9b1acb8148f6c419e9f260134507cb924848c59f021183fe3aa53ce9a6ff3"
+      }
+    },
+    "finish_independent_authentication": {
+      "path": ".artifacts/associated-owned-types/native-blockread-asset-rebuild-proposal/finish-reference-catalogue-second-independent-authentication-extraction.json",
+      "bytes": 12142,
+      "sha256": "3b97de8d4e79d8bf89884cdc910807db2c2f96734027291dbb0fbeaea1d9c4fb"
+    }
+  },
+  "cli": {
+    "prefix": {
+      "path": ".artifacts/associated-owned-types/build/selected-reference-catalogue-first-cli.json",
+      "bytes": 3722,
+      "sha256": "af144453197c091d4ebc88647df79d271bd5e01d8f0c5a407e1ba34fe08351a6"
+    },
+    "finish": {
+      "path": ".artifacts/associated-owned-types/build/selected-reference-catalogue-optimized-cli.json",
+      "bytes": 3767,
+      "sha256": "a5fd92fc897c3a42f9118cc76db8326af440a7bca244a9b7703977523acaba3f"
+    },
+    "runtime": {
+      "path": ".artifacts/associated-owned-types/build/selected-reference-catalogue-optimized-cli.json",
+      "bytes": 3767,
+      "sha256": "a5fd92fc897c3a42f9118cc76db8326af440a7bca244a9b7703977523acaba3f"
+    },
+    "profiles": {
+      "prefix": {
+        "opt_level": "0",
+        "debuginfo": 2,
+        "debug_assertions": true,
+        "overflow_checks": true,
+        "test": false
+      },
+      "finish": {
+        "opt_level": "2",
+        "debuginfo": "line-tables-only",
+        "debug_assertions": true,
+        "overflow_checks": true,
+        "test": false
+      },
+      "runtime": {
+        "opt_level": "2",
+        "debuginfo": "line-tables-only",
+        "debug_assertions": true,
+        "overflow_checks": true,
+        "test": false
+      }
+    }
+  },
+  "archives": [
+    {
+      "role": "finish-work",
+      "original": "/tmp/lkjscript-native-blockread-finish-ZOdKFS",
+      "copied": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-work",
+      "files": 1159,
+      "bytes": 291870437,
+      "inventory": {
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-work.json",
+        "bytes": 507914,
+        "sha256": "ae096f730e7caaa206f0da2c18c4ade5504c289a11148d3f55ccd8f956da7948"
+      }
+    },
+    {
+      "role": "finish-evidence",
+      "original": "/home/coder/workspace/lkjscript-associated-admission-20261011/.artifacts/associated-owned-types/native-blockread-asset-rebuild-proposal/finish-runs/finish-reference-catalogue-second",
+      "copied": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-evidence",
+      "files": 8,
+      "bytes": 1522385,
+      "inventory": {
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-finish-evidence.json",
+        "bytes": 3578,
+        "sha256": "cf90fca796fc422ad50487a5b5d8e2223f4e50c81c6623432fc9da60ff41e007"
+      }
+    },
+    {
+      "role": "prefix-work",
+      "original": "/tmp/lkjscript-native-blockread-prefix-kGKDDC",
+      "copied": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/prefix-work",
+      "files": 524,
+      "bytes": 719311428,
+      "inventory": {
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-prefix-work.json",
+        "bytes": 228934,
+        "sha256": "28fa27cda43d05eb311bb23d665a1cb6a93454ec136225eb97b248944b70f249"
+      }
+    },
+    {
+      "role": "prefix-evidence",
+      "original": "/home/coder/workspace/lkjscript-associated-admission-20261011/.artifacts/associated-owned-types/native-blockread-asset-rebuild-proposal/prefix-runs/prefix-reference-catalogue-first",
+      "copied": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/prefix-evidence",
+      "files": 5,
+      "bytes": 4013797,
+      "inventory": {
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive-prefix-evidence.json",
+        "bytes": 2355,
+        "sha256": "c5085b55b5a5e758f624397ae80c7101d29d731dbf41c9341213a4c4a87ab32e"
+      }
+    }
+  ],
+  "supplier_exports": {
+    "standard": {
+      "package": "pkg_10000000000000000000000000000001",
+      "semantic_revision": "rev_6818785d8919028a69659b24df495b2d7a42f2676a95fd1aa0ae143a32623013",
+      "package_revision": "package_revision_3a0f78fdb296b222dc03b1ef01219534c049ae0081362a0004654c78fd88ac73",
+      "transport": "package_transport_47b5ebc559df9de48f3a858f2184de93d00c2de44e36bd18a9ed5058b1a748d4",
+      "original_export": {
+        "text": "result status=success command=package.builtin.export\npackage id=pkg_10000000000000000000000000000001 revision=rev_6818785d8919028a69659b24df495b2d7a42f2676a95fd1aa0ae143a32623013 package-revision=package_revision_3a0f78fdb296b222dc03b1ef01219534c049ae0081362a0004654c78fd88ac73 transport=package_transport_47b5ebc559df9de48f3a858f2184de93d00c2de44e36bd18a9ed5058b1a748d4 artifact-manifest=artifact_manifest_d90abfc30dd70ef9f00e89c099d885a4a91d3891daae43b67e4f802cc8007b8c artifact-bundle=artifact_bundle_5d3e7bf359c3867ebf86fa7d9f29ef7acc4c00c93a6d5026f5ddc0b6218e2d80\noutput kind=transport path=/tmp/lkjscript-native-blockread-prefix-kGKDDC/exports/standard.lkjp bytes=1063499 digest=package_transport_47b5ebc559df9de48f3a858f2184de93d00c2de44e36bd18a9ed5058b1a748d4 visibility=created durability=synchronized stage-cleanup=removed\n",
+        "command": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000000.command.json",
+          "bytes": 936,
+          "sha256": "fa2871b96787faf2ee6f7d14623394d887e61053009451a77cd4c64cb641b6fb"
+        },
+        "stdout": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000000.stdout",
+          "bytes": 833,
+          "sha256": "16a6c9bac4665f4aaf72a6abe42562c28238ec8cfdd268b8e41ee4c9503810af"
+        },
+        "stderr": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000000.stderr",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      "bytes": {
+        "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/standard.lkjp",
+        "bytes": 1063499,
+        "sha256": "657252859228a84fbf4742bd6999f1b327252d313e84264d14bd830a58537cf3"
+      }
+    },
+    "indexed-data": {
+      "package": "pkg_64743b873112737840db706fc6107a1b",
+      "semantic_revision": "rev_d864fa67e16414bb09a7e5675d2c5393113fa55e02eafcd9fae4b90332b7a99b",
+      "package_revision": "package_revision_2c36949e181a68d10a70ad4dd65367457d365709c6bf29796e1f8889632c7499",
+      "transport": "package_transport_9d6ca6faaf8d95c0ea60af9cef06c13b5af3b2211a64abecd9440051b7e2e93f",
+      "original_export": {
+        "text": "result status=success command=package.current.export\npackage id=pkg_64743b873112737840db706fc6107a1b revision=rev_d864fa67e16414bb09a7e5675d2c5393113fa55e02eafcd9fae4b90332b7a99b package-revision=package_revision_2c36949e181a68d10a70ad4dd65367457d365709c6bf29796e1f8889632c7499 transport=package_transport_9d6ca6faaf8d95c0ea60af9cef06c13b5af3b2211a64abecd9440051b7e2e93f owners=20 types=18\noutput kind=transport path=/tmp/lkjscript-native-blockread-prefix-kGKDDC/exports/indexed-data.lkjp bytes=1102815 digest=package_transport_9d6ca6faaf8d95c0ea60af9cef06c13b5af3b2211a64abecd9440051b7e2e93f visibility=created durability=synchronized stage-cleanup=removed\n",
+        "command": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000013.command.json",
+          "bytes": 1023,
+          "sha256": "c810624185b03909495af1544345747547102b1b9443e506ce283b48771f8072"
+        },
+        "stdout": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000013.stdout",
+          "bytes": 658,
+          "sha256": "627c77b604e4ba5e1f121f5b7d9d16794f4fed9f3cd4beb6c221a6d83e374d91"
+        },
+        "stderr": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000013.stderr",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      "bytes": {
+        "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/indexed-data.lkjp",
+        "bytes": 1102815,
+        "sha256": "85f542bcef2bbc45c88a3362f148020dc5d8b2185e380d510c395d78a8b9a04d"
+      }
+    },
+    "stage-core": {
+      "package": "pkg_7f2c7a229f1a9f475f0b208e6a40a323",
+      "semantic_revision": "rev_4193cfe71b510e868d0417a4ef0c066d031d221236168328ae31106961ff8f7a",
+      "package_revision": "package_revision_521276aa5c4c2a495ea5c89553ebe1c076cc1763ab155859fab94ed35bd592f6",
+      "transport": "package_transport_161054afedadfbe76760ab85ae109d04543a90f46b97f6ae973554d33498a8a7",
+      "original_export": {
+        "text": "result status=success command=package.current.export\npackage id=pkg_7f2c7a229f1a9f475f0b208e6a40a323 revision=rev_4193cfe71b510e868d0417a4ef0c066d031d221236168328ae31106961ff8f7a package-revision=package_revision_521276aa5c4c2a495ea5c89553ebe1c076cc1763ab155859fab94ed35bd592f6 transport=package_transport_161054afedadfbe76760ab85ae109d04543a90f46b97f6ae973554d33498a8a7 owners=6 types=8\noutput kind=transport path=/tmp/lkjscript-native-blockread-prefix-kGKDDC/exports/stage-core.lkjp bytes=1269450 digest=package_transport_161054afedadfbe76760ab85ae109d04543a90f46b97f6ae973554d33498a8a7 visibility=created durability=synchronized stage-cleanup=removed\n",
+        "command": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000063.command.json",
+          "bytes": 1020,
+          "sha256": "9e9908e5cabdede22215a3d5d3ec1f0e0288b288ce01e3a95a390af8d749c029"
+        },
+        "stdout": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000063.stdout",
+          "bytes": 654,
+          "sha256": "331ebc31024c98da08ca587e8c86f83622e9be620ae578d7049becfe037f447f"
+        },
+        "stderr": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000063.stderr",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      "bytes": {
+        "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/stage-core.lkjp",
+        "bytes": 1269450,
+        "sha256": "8f1d2d837363cb869350086ba19b7c6d6e3a50f3a0199142cb2ef500a0391677"
+      }
+    },
+    "indexed-flat": {
+      "package": "pkg_83566b3778f52f9d2c248e0bc66613ac",
+      "semantic_revision": "rev_7306413523a0008c2611b96ebb1bfa25bcb572ba98324b92e4ed73315d1d5585",
+      "package_revision": "package_revision_34eea10b2a511d185665a5f78be5c909c3b8052b0515bbb631c8e0529d2cda08",
+      "transport": "package_transport_3d6a09205062a9fa9ef9a797ff90cbe1ff726a7f63bee85c7eb74c93395b7dc6",
+      "original_export": {
+        "text": "result status=success command=package.current.export\npackage id=pkg_83566b3778f52f9d2c248e0bc66613ac revision=rev_7306413523a0008c2611b96ebb1bfa25bcb572ba98324b92e4ed73315d1d5585 package-revision=package_revision_34eea10b2a511d185665a5f78be5c909c3b8052b0515bbb631c8e0529d2cda08 transport=package_transport_3d6a09205062a9fa9ef9a797ff90cbe1ff726a7f63bee85c7eb74c93395b7dc6 owners=17 types=13\noutput kind=transport path=/tmp/lkjscript-native-blockread-prefix-kGKDDC/exports/indexed-flat.lkjp bytes=1124797 digest=package_transport_3d6a09205062a9fa9ef9a797ff90cbe1ff726a7f63bee85c7eb74c93395b7dc6 visibility=created durability=synchronized stage-cleanup=removed\n",
+        "command": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000079.command.json",
+          "bytes": 1023,
+          "sha256": "f6da1f6c3efa0d2224628f18785ce0d2ed4d2e6bd4e2b8c303a224383133b664"
+        },
+        "stdout": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000079.stdout",
+          "bytes": 658,
+          "sha256": "881b3f6a32bf1daedaf7a9d25670519b4915ce1614fe01f9a659778521f417e7"
+        },
+        "stderr": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000079.stderr",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      "bytes": {
+        "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/indexed-flat.lkjp",
+        "bytes": 1124797,
+        "sha256": "263e7768066429852f321efd9c0065d9316f382b6ee02225979edfc603dee451"
+      }
+    },
+    "indexed-chunked": {
+      "package": "pkg_0dba40dfd321184dd3f5f962c65f062b",
+      "semantic_revision": "rev_1b5ad4e4882b27e0b4837d5887f146d896ed6ff4d6a59b22b8d95dd63fd092a3",
+      "package_revision": "package_revision_0c38d2e66fe8e4031286805bd2ebea4cab989f52ea2ddd62dcb40a2dea5bf8db",
+      "transport": "package_transport_2d895bebb5ac92828a175e16c58d3f2e05703e1a893ad8575a06285671022b9f",
+      "original_export": {
+        "text": "result status=success command=package.current.export\npackage id=pkg_0dba40dfd321184dd3f5f962c65f062b revision=rev_1b5ad4e4882b27e0b4837d5887f146d896ed6ff4d6a59b22b8d95dd63fd092a3 package-revision=package_revision_0c38d2e66fe8e4031286805bd2ebea4cab989f52ea2ddd62dcb40a2dea5bf8db transport=package_transport_2d895bebb5ac92828a175e16c58d3f2e05703e1a893ad8575a06285671022b9f owners=46 types=34\noutput kind=transport path=/tmp/lkjscript-native-blockread-prefix-kGKDDC/exports/indexed-chunked.lkjp bytes=1184123 digest=package_transport_2d895bebb5ac92828a175e16c58d3f2e05703e1a893ad8575a06285671022b9f visibility=created durability=synchronized stage-cleanup=removed\n",
+        "command": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000095.command.json",
+          "bytes": 1029,
+          "sha256": "be1f27f4a8aaa70e60686bd6db09619b80da39806e589dad343736611ba16edc"
+        },
+        "stdout": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000095.stdout",
+          "bytes": 661,
+          "sha256": "1766ad7abc373a4f3c9fd85a2db324e97fec243bb9d22f116042072e4ec83f65"
+        },
+        "stderr": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000095.stderr",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      "bytes": {
+        "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/indexed-chunked.lkjp",
+        "bytes": 1184123,
+        "sha256": "d361a5e16232f8c69ba52e12e02d1cdd3f67ba69809f631738e1e3452a71874f"
+      }
+    },
+    "plan-stages": {
+      "package": "pkg_7f2c7a229f1a9f475f0b208e6a40a323",
+      "semantic_revision": "rev_85655ff3e1737abd1783e1b6b4d4c9f643957e09777d73ce074cd4537a57723f",
+      "package_revision": "package_revision_868454cb96f9ac3d915b725bd0627450d762dd73b4204ed88649b6cb03d3691e",
+      "transport": "package_transport_891037780d82e3b8071af4fc89449a48106d4f80a24ddeef5f147e2fde43208f",
+      "original_export": {
+        "text": "result status=success command=package.current.export\npackage id=pkg_7f2c7a229f1a9f475f0b208e6a40a323 revision=rev_85655ff3e1737abd1783e1b6b4d4c9f643957e09777d73ce074cd4537a57723f package-revision=package_revision_868454cb96f9ac3d915b725bd0627450d762dd73b4204ed88649b6cb03d3691e transport=package_transport_891037780d82e3b8071af4fc89449a48106d4f80a24ddeef5f147e2fde43208f owners=10 types=8\noutput kind=transport path=/tmp/lkjscript-native-blockread-prefix-kGKDDC/exports/plan-stages.lkjp bytes=1322514 digest=package_transport_891037780d82e3b8071af4fc89449a48106d4f80a24ddeef5f147e2fde43208f visibility=created durability=synchronized stage-cleanup=removed\n",
+        "command": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000140.command.json",
+          "bytes": 1021,
+          "sha256": "69f902a3f17bedfeb76b6d9f3c9cd214e9dcb4aaaa3eea07051f8ab36658b6f6"
+        },
+        "stdout": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000140.stdout",
+          "bytes": 656,
+          "sha256": "f8e72f901fbfcfdc396dca4506d66a2c063057f1dea8a1ff70a52e6e960403a7"
+        },
+        "stderr": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000140.stderr",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      "bytes": {
+        "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/plan-stages.lkjp",
+        "bytes": 1322514,
+        "sha256": "c93437573375cee2e6d52c564c5022a17dc9cc46cfa9fb82ec32b131c8e596fa"
+      }
+    },
+    "worklists": {
+      "package": "pkg_0715b5ff15f245ce3bb0f8bfc254e338",
+      "semantic_revision": "rev_84760db0d7abed3d1f9bd1913bdbd437a6dd3ae12b23a3c8169b66d93f89095c",
+      "package_revision": "package_revision_71cd8f1565b53eb9cdef6cf9135c9afe96efec194d844cfc5848103695dde06b",
+      "transport": "package_transport_49f38978f78765c312b261cbcaf6fe9f78af9a338fe957a4aedaf61671f16c46",
+      "original_export": {
+        "text": "result status=success command=package.current.export\npackage id=pkg_0715b5ff15f245ce3bb0f8bfc254e338 revision=rev_84760db0d7abed3d1f9bd1913bdbd437a6dd3ae12b23a3c8169b66d93f89095c package-revision=package_revision_71cd8f1565b53eb9cdef6cf9135c9afe96efec194d844cfc5848103695dde06b transport=package_transport_49f38978f78765c312b261cbcaf6fe9f78af9a338fe957a4aedaf61671f16c46 owners=31 types=34\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/worklists.lkjp bytes=1137905 digest=package_transport_49f38978f78765c312b261cbcaf6fe9f78af9a338fe957a4aedaf61671f16c46 visibility=created durability=synchronized stage-cleanup=removed\n",
+        "command": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000012.command.json",
+          "bytes": 1019,
+          "sha256": "ce0db7e3370c428abb06c21303b823db7384140d3b33fb26d09f562483fc9803"
+        },
+        "stdout": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000012.stdout",
+          "bytes": 655,
+          "sha256": "5eff8fbbf670426c45539c607dba346cef535b7b892a47437ba4fdb287791a0d"
+        },
+        "stderr": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000012.stderr",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      "bytes": {
+        "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/worklists.lkjp",
+        "bytes": 1137905,
+        "sha256": "3de7697bd8cceb4335aa9a6dc9794bf311233b5a1f43b5f1a39de71ed743008a"
+      }
+    },
+    "carriers": {
+      "package": "pkg_da6c35a66052e6eb317abd2a0ad0c8ff",
+      "semantic_revision": "rev_2236b425c4eece9590ff8096b3fcaf4a67461b3047b93c92e5251948f701e980",
+      "package_revision": "package_revision_754a9ae4f2bd2f80ef62dddfb678ef75391df722e21283b7d7b17ae008142a9f",
+      "transport": "package_transport_c69299c22db72d09bef63c36986489dc3374995e913fc0de2bbb2c0532702526",
+      "original_export": {
+        "text": "result status=success command=package.current.export\npackage id=pkg_da6c35a66052e6eb317abd2a0ad0c8ff revision=rev_2236b425c4eece9590ff8096b3fcaf4a67461b3047b93c92e5251948f701e980 package-revision=package_revision_754a9ae4f2bd2f80ef62dddfb678ef75391df722e21283b7d7b17ae008142a9f transport=package_transport_c69299c22db72d09bef63c36986489dc3374995e913fc0de2bbb2c0532702526 owners=50 types=17\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/carriers.lkjp bytes=1182408 digest=package_transport_c69299c22db72d09bef63c36986489dc3374995e913fc0de2bbb2c0532702526 visibility=created durability=synchronized stage-cleanup=removed\n",
+        "command": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000028.command.json",
+          "bytes": 1017,
+          "sha256": "81628554737db9bbeb225c6ae49ad308d83dcc6e256d7e81242aec419390f6fd"
+        },
+        "stdout": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000028.stdout",
+          "bytes": 654,
+          "sha256": "6cdc4eac124dcadde0e602a915fe8e7ed7ee11fa9ddfc645259d2820f1118bc2"
+        },
+        "stderr": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000028.stderr",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      "bytes": {
+        "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/carriers.lkjp",
+        "bytes": 1182408,
+        "sha256": "2530f54cc5cb97664f90fe7d731884cda5ad3cad8c942ff5fed21a12101f1ed6"
+      }
+    },
+    "verifier": {
+      "package": "pkg_cd6a4dc19d5bdd6eec42eca1054df235",
+      "semantic_revision": "rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299",
+      "package_revision": "package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f",
+      "transport": "package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d",
+      "original_export": {
+        "text": "result status=success command=package.current.export\npackage id=pkg_cd6a4dc19d5bdd6eec42eca1054df235 revision=rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299 package-revision=package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f transport=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d owners=76 types=33\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp bytes=1703584 digest=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d visibility=created durability=synchronized stage-cleanup=removed\n",
+        "command": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.command.json",
+          "bytes": 1017,
+          "sha256": "54cec645e513ef4b69e561245877752984f9e8806d7862f838d54012e89d2bcb"
+        },
+        "stdout": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stdout",
+          "bytes": 654,
+          "sha256": "394f2b99656ece6f5c33e350aa545eb2c0dd836be97f1fbd002dcc8bbb1ee1c2"
+        },
+        "stderr": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stderr",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      "bytes": {
+        "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+        "bytes": 1703584,
+        "sha256": "aef4731c18085fada916d92336d1be7273407082a8262bf2da7da4a1b4e6ac94"
+      }
+    },
+    "planner": {
+      "package": "pkg_e3f8cd073b6666a47808b3bc43721c8e",
+      "semantic_revision": "rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758",
+      "package_revision": "package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99",
+      "transport": "package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e",
+      "original_export": {
+        "text": "result status=success command=package.current.export\npackage id=pkg_e3f8cd073b6666a47808b3bc43721c8e revision=rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758 package-revision=package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99 transport=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e owners=86 types=37\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp bytes=2128604 digest=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e visibility=created durability=synchronized stage-cleanup=removed\n",
+        "command": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.command.json",
+          "bytes": 1015,
+          "sha256": "ad06b5f38e29f8a91062c208cd0a58bf2172c1a00089efb4b1e226eb9ddd224b"
+        },
+        "stdout": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stdout",
+          "bytes": 653,
+          "sha256": "6bba03ac12dc719c5d0d8a0696808e9c3ab4d6800c3cda310d8b990be20af95c"
+        },
+        "stderr": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stderr",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      "bytes": {
+        "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp",
+        "bytes": 2128604,
+        "sha256": "5e4eab186909820d814a654c006e692b32fb189c783826a6859a08e9490594d2"
+      }
+    }
+  },
+  "exact_public_queries": {
+    "manifest": {
+      "path": ".artifacts/associated-owned-types/native-blockread-asset-rebuild-proposal/finish-runs/finish-reference-catalogue-second/exact-query-manifest.json",
+      "bytes": 28150,
+      "sha256": "d0461e1f2f75568b7727a53adae5288ae20e30dbdb31bd1d3f58523c85ad78f4"
+    },
+    "bound_proposals": {
+      "original": ".artifacts/associated-owned-types/native-blockread-asset-rebuild-proposal/finish-runs/finish-reference-catalogue-second/exact-bound-proposals.json",
+      "archive": {
+        "path": "/tmp/lkjscript-native-blockread-proof-r0ZZ3E/archive/finish-evidence/exact-bound-proposals.json",
+        "bytes": 83824,
+        "sha256": "1c54ff1a5a35324f4ca412c795a0a9968167af39f90edcbd34ae2f1cf6bc99ee"
+      }
+    },
+    "queried_owners": [
+      {
+        "alias": "$PlannerOutcome",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp",
+          "package": "pkg_e3f8cd073b6666a47808b3bc43721c8e",
+          "semantic": "rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758",
+          "revision": "package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99",
+          "transport": "package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp",
+            "bytes": 2128604,
+            "sha256": "5e4eab186909820d814a654c006e692b32fb189c783826a6859a08e9490594d2"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_e3f8cd073b6666a47808b3bc43721c8e revision=rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758 package-revision=package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99 transport=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e owners=86 types=37\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp bytes=2128604 digest=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.command.json",
+              "bytes": 1015,
+              "sha256": "ad06b5f38e29f8a91062c208cd0a58bf2172c1a00089efb4b1e226eb9ddd224b"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stdout",
+              "bytes": 653,
+              "sha256": "6bba03ac12dc719c5d0d8a0696808e9c3ab4d6800c3cda310d8b990be20af95c"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "variant",
+          "id": "decl_2292f70242696cbcbc226ae72fca0d65",
+          "name": "Outcome",
+          "parent": "package",
+          "reference": "pkg_e3f8cd073b6666a47808b3bc43721c8e/decl_2292f70242696cbcbc226ae72fca0d65"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000212.stdout",
+          "bytes": 1309,
+          "sha256": "b108126a1502222b25eaffd70386759e19d1764b094ef4277248158849411cc8"
+        }
+      },
+      {
+        "alias": "$PlannerFlat",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp",
+          "package": "pkg_e3f8cd073b6666a47808b3bc43721c8e",
+          "semantic": "rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758",
+          "revision": "package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99",
+          "transport": "package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp",
+            "bytes": 2128604,
+            "sha256": "5e4eab186909820d814a654c006e692b32fb189c783826a6859a08e9490594d2"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_e3f8cd073b6666a47808b3bc43721c8e revision=rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758 package-revision=package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99 transport=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e owners=86 types=37\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp bytes=2128604 digest=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.command.json",
+              "bytes": 1015,
+              "sha256": "ad06b5f38e29f8a91062c208cd0a58bf2172c1a00089efb4b1e226eb9ddd224b"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stdout",
+              "bytes": 653,
+              "sha256": "6bba03ac12dc719c5d0d8a0696808e9c3ab4d6800c3cda310d8b990be20af95c"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "pure_function",
+          "id": "decl_29aabc00bad80ae090b2532a62458475",
+          "name": "flat",
+          "parent": "package",
+          "reference": "pkg_e3f8cd073b6666a47808b3bc43721c8e/decl_29aabc00bad80ae090b2532a62458475"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000214.stdout",
+          "bytes": 1670,
+          "sha256": "753786c6a54a3e9401c3984761f68827ae715fde0d2aa61dde0c9f2f17a175bf"
+        }
+      },
+      {
+        "alias": "$PlannerChunked",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp",
+          "package": "pkg_e3f8cd073b6666a47808b3bc43721c8e",
+          "semantic": "rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758",
+          "revision": "package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99",
+          "transport": "package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp",
+            "bytes": 2128604,
+            "sha256": "5e4eab186909820d814a654c006e692b32fb189c783826a6859a08e9490594d2"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_e3f8cd073b6666a47808b3bc43721c8e revision=rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758 package-revision=package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99 transport=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e owners=86 types=37\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp bytes=2128604 digest=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.command.json",
+              "bytes": 1015,
+              "sha256": "ad06b5f38e29f8a91062c208cd0a58bf2172c1a00089efb4b1e226eb9ddd224b"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stdout",
+              "bytes": 653,
+              "sha256": "6bba03ac12dc719c5d0d8a0696808e9c3ab4d6800c3cda310d8b990be20af95c"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "pure_function",
+          "id": "decl_1480e97e94dbcac6b953a3f0192ea183",
+          "name": "chunked",
+          "parent": "package",
+          "reference": "pkg_e3f8cd073b6666a47808b3bc43721c8e/decl_1480e97e94dbcac6b953a3f0192ea183"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000216.stdout",
+          "bytes": 1685,
+          "sha256": "a5660ea2a7e679fa6c4a7497131c355ce5da73850a539a746b0c58620b8048cd"
+        }
+      },
+      {
+        "alias": "$PlannerStorageFlatFlat",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp",
+          "package": "pkg_e3f8cd073b6666a47808b3bc43721c8e",
+          "semantic": "rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758",
+          "revision": "package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99",
+          "transport": "package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp",
+            "bytes": 2128604,
+            "sha256": "5e4eab186909820d814a654c006e692b32fb189c783826a6859a08e9490594d2"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_e3f8cd073b6666a47808b3bc43721c8e revision=rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758 package-revision=package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99 transport=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e owners=86 types=37\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp bytes=2128604 digest=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.command.json",
+              "bytes": 1015,
+              "sha256": "ad06b5f38e29f8a91062c208cd0a58bf2172c1a00089efb4b1e226eb9ddd224b"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stdout",
+              "bytes": 653,
+              "sha256": "6bba03ac12dc719c5d0d8a0696808e9c3ab4d6800c3cda310d8b990be20af95c"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "pure_function",
+          "id": "decl_402032a83897a36033f0ae101c4367f5",
+          "name": "storage-flat-flat",
+          "parent": "package",
+          "reference": "pkg_e3f8cd073b6666a47808b3bc43721c8e/decl_402032a83897a36033f0ae101c4367f5"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000218.stdout",
+          "bytes": 1168,
+          "sha256": "8b90acd2d9965001280b264fc5b289f1fd3a93a033477cc0eb51308ab74d20d1"
+        }
+      },
+      {
+        "alias": "$PlannerStorageFlatChunked",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp",
+          "package": "pkg_e3f8cd073b6666a47808b3bc43721c8e",
+          "semantic": "rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758",
+          "revision": "package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99",
+          "transport": "package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp",
+            "bytes": 2128604,
+            "sha256": "5e4eab186909820d814a654c006e692b32fb189c783826a6859a08e9490594d2"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_e3f8cd073b6666a47808b3bc43721c8e revision=rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758 package-revision=package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99 transport=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e owners=86 types=37\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp bytes=2128604 digest=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.command.json",
+              "bytes": 1015,
+              "sha256": "ad06b5f38e29f8a91062c208cd0a58bf2172c1a00089efb4b1e226eb9ddd224b"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stdout",
+              "bytes": 653,
+              "sha256": "6bba03ac12dc719c5d0d8a0696808e9c3ab4d6800c3cda310d8b990be20af95c"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "pure_function",
+          "id": "decl_dde3ea09a2c2b7509724fe3f1f53492f",
+          "name": "storage-flat-chunked",
+          "parent": "package",
+          "reference": "pkg_e3f8cd073b6666a47808b3bc43721c8e/decl_dde3ea09a2c2b7509724fe3f1f53492f"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000220.stdout",
+          "bytes": 1174,
+          "sha256": "fac0a91ab1f1ff4158469c8af578c3fd7cabc96c54ad5405f70ca65d2d2acd97"
+        }
+      },
+      {
+        "alias": "$PlannerStorageChunkedFlat",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp",
+          "package": "pkg_e3f8cd073b6666a47808b3bc43721c8e",
+          "semantic": "rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758",
+          "revision": "package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99",
+          "transport": "package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp",
+            "bytes": 2128604,
+            "sha256": "5e4eab186909820d814a654c006e692b32fb189c783826a6859a08e9490594d2"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_e3f8cd073b6666a47808b3bc43721c8e revision=rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758 package-revision=package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99 transport=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e owners=86 types=37\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp bytes=2128604 digest=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.command.json",
+              "bytes": 1015,
+              "sha256": "ad06b5f38e29f8a91062c208cd0a58bf2172c1a00089efb4b1e226eb9ddd224b"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stdout",
+              "bytes": 653,
+              "sha256": "6bba03ac12dc719c5d0d8a0696808e9c3ab4d6800c3cda310d8b990be20af95c"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "pure_function",
+          "id": "decl_caf1d40a91b0a014322e98074fc57829",
+          "name": "storage-chunked-flat",
+          "parent": "package",
+          "reference": "pkg_e3f8cd073b6666a47808b3bc43721c8e/decl_caf1d40a91b0a014322e98074fc57829"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000222.stdout",
+          "bytes": 1174,
+          "sha256": "c4cd222d897331982fa3011038293763b6fb97f78f7ba4b8d6cdb57b72003d46"
+        }
+      },
+      {
+        "alias": "$PlannerStorageChunkedChunked",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp",
+          "package": "pkg_e3f8cd073b6666a47808b3bc43721c8e",
+          "semantic": "rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758",
+          "revision": "package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99",
+          "transport": "package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp",
+            "bytes": 2128604,
+            "sha256": "5e4eab186909820d814a654c006e692b32fb189c783826a6859a08e9490594d2"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_e3f8cd073b6666a47808b3bc43721c8e revision=rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758 package-revision=package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99 transport=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e owners=86 types=37\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp bytes=2128604 digest=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.command.json",
+              "bytes": 1015,
+              "sha256": "ad06b5f38e29f8a91062c208cd0a58bf2172c1a00089efb4b1e226eb9ddd224b"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stdout",
+              "bytes": 653,
+              "sha256": "6bba03ac12dc719c5d0d8a0696808e9c3ab4d6800c3cda310d8b990be20af95c"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "pure_function",
+          "id": "decl_114b9f14614ec74011def88c7ec5b31a",
+          "name": "storage-chunked-chunked",
+          "parent": "package",
+          "reference": "pkg_e3f8cd073b6666a47808b3bc43721c8e/decl_114b9f14614ec74011def88c7ec5b31a"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000224.stdout",
+          "bytes": 1180,
+          "sha256": "81a5ea23f6cd9242baac91d40965f54044eeec9b76bcf2226ae32268b281fc6a"
+        }
+      },
+      {
+        "alias": "$PlannerValid",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp",
+          "package": "pkg_e3f8cd073b6666a47808b3bc43721c8e",
+          "semantic": "rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758",
+          "revision": "package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99",
+          "transport": "package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp",
+            "bytes": 2128604,
+            "sha256": "5e4eab186909820d814a654c006e692b32fb189c783826a6859a08e9490594d2"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_e3f8cd073b6666a47808b3bc43721c8e revision=rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758 package-revision=package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99 transport=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e owners=86 types=37\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp bytes=2128604 digest=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.command.json",
+              "bytes": 1015,
+              "sha256": "ad06b5f38e29f8a91062c208cd0a58bf2172c1a00089efb4b1e226eb9ddd224b"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stdout",
+              "bytes": 653,
+              "sha256": "6bba03ac12dc719c5d0d8a0696808e9c3ab4d6800c3cda310d8b990be20af95c"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "case",
+          "id": "case_52bd3713c60829b4a6f606a548afe6ad",
+          "name": "valid",
+          "parent": "decl_2292f70242696cbcbc226ae72fca0d65",
+          "reference": "pkg_e3f8cd073b6666a47808b3bc43721c8e/case_52bd3713c60829b4a6f606a548afe6ad"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000225.stdout",
+          "bytes": 988,
+          "sha256": "2ef50583b7f7d0f4f9f364535aa8695a9fe4de231cc3383a16ac658f1665942c"
+        }
+      },
+      {
+        "alias": "$PlannerInvalid",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp",
+          "package": "pkg_e3f8cd073b6666a47808b3bc43721c8e",
+          "semantic": "rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758",
+          "revision": "package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99",
+          "transport": "package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp",
+            "bytes": 2128604,
+            "sha256": "5e4eab186909820d814a654c006e692b32fb189c783826a6859a08e9490594d2"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_e3f8cd073b6666a47808b3bc43721c8e revision=rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758 package-revision=package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99 transport=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e owners=86 types=37\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp bytes=2128604 digest=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.command.json",
+              "bytes": 1015,
+              "sha256": "ad06b5f38e29f8a91062c208cd0a58bf2172c1a00089efb4b1e226eb9ddd224b"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stdout",
+              "bytes": 653,
+              "sha256": "6bba03ac12dc719c5d0d8a0696808e9c3ab4d6800c3cda310d8b990be20af95c"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "case",
+          "id": "case_2c1a8ff99404dc28365c2a1086d4479d",
+          "name": "invalid",
+          "parent": "decl_2292f70242696cbcbc226ae72fca0d65",
+          "reference": "pkg_e3f8cd073b6666a47808b3bc43721c8e/case_2c1a8ff99404dc28365c2a1086d4479d"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000226.stdout",
+          "bytes": 990,
+          "sha256": "81d8252f45074e1410a81d4b1c286e326c36299ccba81cf117bf129c1b480f87"
+        }
+      },
+      {
+        "alias": "$PlannerCapacity",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp",
+          "package": "pkg_e3f8cd073b6666a47808b3bc43721c8e",
+          "semantic": "rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758",
+          "revision": "package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99",
+          "transport": "package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp",
+            "bytes": 2128604,
+            "sha256": "5e4eab186909820d814a654c006e692b32fb189c783826a6859a08e9490594d2"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_e3f8cd073b6666a47808b3bc43721c8e revision=rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758 package-revision=package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99 transport=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e owners=86 types=37\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp bytes=2128604 digest=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.command.json",
+              "bytes": 1015,
+              "sha256": "ad06b5f38e29f8a91062c208cd0a58bf2172c1a00089efb4b1e226eb9ddd224b"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stdout",
+              "bytes": 653,
+              "sha256": "6bba03ac12dc719c5d0d8a0696808e9c3ab4d6800c3cda310d8b990be20af95c"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "case",
+          "id": "case_b7fc1eda3d35b0ee44b3ed0925616abb",
+          "name": "capacity",
+          "parent": "decl_2292f70242696cbcbc226ae72fca0d65",
+          "reference": "pkg_e3f8cd073b6666a47808b3bc43721c8e/case_b7fc1eda3d35b0ee44b3ed0925616abb"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000227.stdout",
+          "bytes": 991,
+          "sha256": "aa7157a35c95428bbe78fb4af7aa1ebb5705ed68d962d6ef023f6d7dae6bc9fa"
+        }
+      },
+      {
+        "alias": "$PlannerInconsistent",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp",
+          "package": "pkg_e3f8cd073b6666a47808b3bc43721c8e",
+          "semantic": "rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758",
+          "revision": "package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99",
+          "transport": "package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp",
+            "bytes": 2128604,
+            "sha256": "5e4eab186909820d814a654c006e692b32fb189c783826a6859a08e9490594d2"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_e3f8cd073b6666a47808b3bc43721c8e revision=rev_239528157d16db913e3a39084d68e550db66434a2342a09433d4ab1b7c95a758 package-revision=package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99 transport=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e owners=86 types=37\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/planner.lkjp bytes=2128604 digest=package_transport_1a7b99fb92e5606294cf2619c53eb6400b979fa2c8165facaa5399a617093b3e visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.command.json",
+              "bytes": 1015,
+              "sha256": "ad06b5f38e29f8a91062c208cd0a58bf2172c1a00089efb4b1e226eb9ddd224b"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stdout",
+              "bytes": 653,
+              "sha256": "6bba03ac12dc719c5d0d8a0696808e9c3ab4d6800c3cda310d8b990be20af95c"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000181.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "case",
+          "id": "case_ca4ceb4065a197e7c095ff00befb3cb6",
+          "name": "inconsistent",
+          "parent": "decl_2292f70242696cbcbc226ae72fca0d65",
+          "reference": "pkg_e3f8cd073b6666a47808b3bc43721c8e/case_ca4ceb4065a197e7c095ff00befb3cb6"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000228.stdout",
+          "bytes": 995,
+          "sha256": "93551e6fa4b663cdecc4ddba24dacb287bba339f957b4a70e71a5a8bfb3469f9"
+        }
+      },
+      {
+        "alias": "$CheckerVerification",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+          "package": "pkg_cd6a4dc19d5bdd6eec42eca1054df235",
+          "semantic": "rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299",
+          "revision": "package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f",
+          "transport": "package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+            "bytes": 1703584,
+            "sha256": "aef4731c18085fada916d92336d1be7273407082a8262bf2da7da4a1b4e6ac94"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_cd6a4dc19d5bdd6eec42eca1054df235 revision=rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299 package-revision=package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f transport=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d owners=76 types=33\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp bytes=1703584 digest=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.command.json",
+              "bytes": 1017,
+              "sha256": "54cec645e513ef4b69e561245877752984f9e8806d7862f838d54012e89d2bcb"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stdout",
+              "bytes": 654,
+              "sha256": "394f2b99656ece6f5c33e350aa545eb2c0dd836be97f1fbd002dcc8bbb1ee1c2"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "variant",
+          "id": "decl_7e23eca4d9e3947b5afa3aca6a9261ba",
+          "name": "Verification",
+          "parent": "package",
+          "reference": "pkg_cd6a4dc19d5bdd6eec42eca1054df235/decl_7e23eca4d9e3947b5afa3aca6a9261ba"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000231.stdout",
+          "bytes": 969,
+          "sha256": "359ef731679a124b499fcab0d3a342789662bfd4b25720372f63a6103de1a285"
+        }
+      },
+      {
+        "alias": "$CheckerClaim",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+          "package": "pkg_cd6a4dc19d5bdd6eec42eca1054df235",
+          "semantic": "rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299",
+          "revision": "package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f",
+          "transport": "package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+            "bytes": 1703584,
+            "sha256": "aef4731c18085fada916d92336d1be7273407082a8262bf2da7da4a1b4e6ac94"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_cd6a4dc19d5bdd6eec42eca1054df235 revision=rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299 package-revision=package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f transport=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d owners=76 types=33\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp bytes=1703584 digest=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.command.json",
+              "bytes": 1017,
+              "sha256": "54cec645e513ef4b69e561245877752984f9e8806d7862f838d54012e89d2bcb"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stdout",
+              "bytes": 654,
+              "sha256": "394f2b99656ece6f5c33e350aa545eb2c0dd836be97f1fbd002dcc8bbb1ee1c2"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "variant",
+          "id": "decl_2199957fe4252d194483e1ee1b6efda1",
+          "name": "ClaimedDependencyOutcome",
+          "parent": "package",
+          "reference": "pkg_cd6a4dc19d5bdd6eec42eca1054df235/decl_2199957fe4252d194483e1ee1b6efda1"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000233.stdout",
+          "bytes": 981,
+          "sha256": "2ee99fba6a213fc0e5e413fde4332b66289faf0e6243bf1b87c48a1b0481c8ad"
+        }
+      },
+      {
+        "alias": "$CheckerOutcomeVerification",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+          "package": "pkg_cd6a4dc19d5bdd6eec42eca1054df235",
+          "semantic": "rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299",
+          "revision": "package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f",
+          "transport": "package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+            "bytes": 1703584,
+            "sha256": "aef4731c18085fada916d92336d1be7273407082a8262bf2da7da4a1b4e6ac94"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_cd6a4dc19d5bdd6eec42eca1054df235 revision=rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299 package-revision=package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f transport=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d owners=76 types=33\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp bytes=1703584 digest=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.command.json",
+              "bytes": 1017,
+              "sha256": "54cec645e513ef4b69e561245877752984f9e8806d7862f838d54012e89d2bcb"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stdout",
+              "bytes": 654,
+              "sha256": "394f2b99656ece6f5c33e350aa545eb2c0dd836be97f1fbd002dcc8bbb1ee1c2"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "variant",
+          "id": "decl_f3726942d9d013a54210288ae98ca5c6",
+          "name": "OutcomeVerification",
+          "parent": "package",
+          "reference": "pkg_cd6a4dc19d5bdd6eec42eca1054df235/decl_f3726942d9d013a54210288ae98ca5c6"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000235.stdout",
+          "bytes": 976,
+          "sha256": "746c6246df146b8527a2ed2d0e0ed91d2c97ca925037ef6112bd1a6750dc87cf"
+        }
+      },
+      {
+        "alias": "$CheckerVerifyPlan",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+          "package": "pkg_cd6a4dc19d5bdd6eec42eca1054df235",
+          "semantic": "rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299",
+          "revision": "package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f",
+          "transport": "package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+            "bytes": 1703584,
+            "sha256": "aef4731c18085fada916d92336d1be7273407082a8262bf2da7da4a1b4e6ac94"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_cd6a4dc19d5bdd6eec42eca1054df235 revision=rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299 package-revision=package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f transport=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d owners=76 types=33\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp bytes=1703584 digest=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.command.json",
+              "bytes": 1017,
+              "sha256": "54cec645e513ef4b69e561245877752984f9e8806d7862f838d54012e89d2bcb"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stdout",
+              "bytes": 654,
+              "sha256": "394f2b99656ece6f5c33e350aa545eb2c0dd836be97f1fbd002dcc8bbb1ee1c2"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "pure_function",
+          "id": "decl_008a730bdb3b70d48037af697e1445dc",
+          "name": "verify-dependency-plan",
+          "parent": "package",
+          "reference": "pkg_cd6a4dc19d5bdd6eec42eca1054df235/decl_008a730bdb3b70d48037af697e1445dc"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000237.stdout",
+          "bytes": 985,
+          "sha256": "a664f86cf81115051c582d38c40cfb6cf7f0efd08e24611a67eee9c55d601b61"
+        }
+      },
+      {
+        "alias": "$CheckerVerifyOutcome",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+          "package": "pkg_cd6a4dc19d5bdd6eec42eca1054df235",
+          "semantic": "rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299",
+          "revision": "package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f",
+          "transport": "package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+            "bytes": 1703584,
+            "sha256": "aef4731c18085fada916d92336d1be7273407082a8262bf2da7da4a1b4e6ac94"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_cd6a4dc19d5bdd6eec42eca1054df235 revision=rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299 package-revision=package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f transport=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d owners=76 types=33\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp bytes=1703584 digest=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.command.json",
+              "bytes": 1017,
+              "sha256": "54cec645e513ef4b69e561245877752984f9e8806d7862f838d54012e89d2bcb"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stdout",
+              "bytes": 654,
+              "sha256": "394f2b99656ece6f5c33e350aa545eb2c0dd836be97f1fbd002dcc8bbb1ee1c2"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "pure_function",
+          "id": "decl_6ed840b6231161fc16ea34f2b67cf835",
+          "name": "verify-dependency-outcome",
+          "parent": "package",
+          "reference": "pkg_cd6a4dc19d5bdd6eec42eca1054df235/decl_6ed840b6231161fc16ea34f2b67cf835"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000239.stdout",
+          "bytes": 988,
+          "sha256": "5414ec781b15b566ee215ea32da8c92fd98ddac1d169a8ff150cdbebc571abcc"
+        }
+      },
+      {
+        "alias": "$CheckerVerificationVerified",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+          "package": "pkg_cd6a4dc19d5bdd6eec42eca1054df235",
+          "semantic": "rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299",
+          "revision": "package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f",
+          "transport": "package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+            "bytes": 1703584,
+            "sha256": "aef4731c18085fada916d92336d1be7273407082a8262bf2da7da4a1b4e6ac94"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_cd6a4dc19d5bdd6eec42eca1054df235 revision=rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299 package-revision=package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f transport=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d owners=76 types=33\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp bytes=1703584 digest=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.command.json",
+              "bytes": 1017,
+              "sha256": "54cec645e513ef4b69e561245877752984f9e8806d7862f838d54012e89d2bcb"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stdout",
+              "bytes": 654,
+              "sha256": "394f2b99656ece6f5c33e350aa545eb2c0dd836be97f1fbd002dcc8bbb1ee1c2"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "case",
+          "id": "case_28582b52f595dc51f5fe5f87f413ea97",
+          "name": "verified",
+          "parent": "decl_7e23eca4d9e3947b5afa3aca6a9261ba",
+          "reference": "pkg_cd6a4dc19d5bdd6eec42eca1054df235/case_28582b52f595dc51f5fe5f87f413ea97"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000240.stdout",
+          "bytes": 992,
+          "sha256": "a93b3ee08ccb229a7715bffbf0248d35805e3bd5077fd930856a47157f2027ed"
+        }
+      },
+      {
+        "alias": "$CheckerVerificationRejected",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+          "package": "pkg_cd6a4dc19d5bdd6eec42eca1054df235",
+          "semantic": "rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299",
+          "revision": "package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f",
+          "transport": "package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+            "bytes": 1703584,
+            "sha256": "aef4731c18085fada916d92336d1be7273407082a8262bf2da7da4a1b4e6ac94"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_cd6a4dc19d5bdd6eec42eca1054df235 revision=rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299 package-revision=package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f transport=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d owners=76 types=33\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp bytes=1703584 digest=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.command.json",
+              "bytes": 1017,
+              "sha256": "54cec645e513ef4b69e561245877752984f9e8806d7862f838d54012e89d2bcb"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stdout",
+              "bytes": 654,
+              "sha256": "394f2b99656ece6f5c33e350aa545eb2c0dd836be97f1fbd002dcc8bbb1ee1c2"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "case",
+          "id": "case_0f389ebcb5983992a2cf20653c8a715f",
+          "name": "rejected",
+          "parent": "decl_7e23eca4d9e3947b5afa3aca6a9261ba",
+          "reference": "pkg_cd6a4dc19d5bdd6eec42eca1054df235/case_0f389ebcb5983992a2cf20653c8a715f"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000241.stdout",
+          "bytes": 992,
+          "sha256": "667f2cccf8956f848afb0ecd6557b0c6606c9a2503710bb7e752d652b555a1ac"
+        }
+      },
+      {
+        "alias": "$CheckerVerificationInvalid",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+          "package": "pkg_cd6a4dc19d5bdd6eec42eca1054df235",
+          "semantic": "rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299",
+          "revision": "package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f",
+          "transport": "package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+            "bytes": 1703584,
+            "sha256": "aef4731c18085fada916d92336d1be7273407082a8262bf2da7da4a1b4e6ac94"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_cd6a4dc19d5bdd6eec42eca1054df235 revision=rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299 package-revision=package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f transport=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d owners=76 types=33\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp bytes=1703584 digest=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.command.json",
+              "bytes": 1017,
+              "sha256": "54cec645e513ef4b69e561245877752984f9e8806d7862f838d54012e89d2bcb"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stdout",
+              "bytes": 654,
+              "sha256": "394f2b99656ece6f5c33e350aa545eb2c0dd836be97f1fbd002dcc8bbb1ee1c2"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "case",
+          "id": "case_d4ef85a0240c3a7dba058d4ab7f45517",
+          "name": "invalid",
+          "parent": "decl_7e23eca4d9e3947b5afa3aca6a9261ba",
+          "reference": "pkg_cd6a4dc19d5bdd6eec42eca1054df235/case_d4ef85a0240c3a7dba058d4ab7f45517"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000242.stdout",
+          "bytes": 991,
+          "sha256": "c5b5f9d62163c1d7663416858d2b4a2f34a070833492da20ac0dbf1c8158fb8f"
+        }
+      },
+      {
+        "alias": "$CheckerVerificationCapacity",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+          "package": "pkg_cd6a4dc19d5bdd6eec42eca1054df235",
+          "semantic": "rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299",
+          "revision": "package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f",
+          "transport": "package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+            "bytes": 1703584,
+            "sha256": "aef4731c18085fada916d92336d1be7273407082a8262bf2da7da4a1b4e6ac94"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_cd6a4dc19d5bdd6eec42eca1054df235 revision=rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299 package-revision=package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f transport=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d owners=76 types=33\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp bytes=1703584 digest=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.command.json",
+              "bytes": 1017,
+              "sha256": "54cec645e513ef4b69e561245877752984f9e8806d7862f838d54012e89d2bcb"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stdout",
+              "bytes": 654,
+              "sha256": "394f2b99656ece6f5c33e350aa545eb2c0dd836be97f1fbd002dcc8bbb1ee1c2"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "case",
+          "id": "case_26d29945303c095270a1d968aaa6a54e",
+          "name": "capacity",
+          "parent": "decl_7e23eca4d9e3947b5afa3aca6a9261ba",
+          "reference": "pkg_cd6a4dc19d5bdd6eec42eca1054df235/case_26d29945303c095270a1d968aaa6a54e"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000243.stdout",
+          "bytes": 992,
+          "sha256": "eea7d73b41b71438037e1e5ab0b450eb3b30875528dc9fc91067ea8bcfca2edb"
+        }
+      },
+      {
+        "alias": "$CheckerClaimValid",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+          "package": "pkg_cd6a4dc19d5bdd6eec42eca1054df235",
+          "semantic": "rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299",
+          "revision": "package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f",
+          "transport": "package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+            "bytes": 1703584,
+            "sha256": "aef4731c18085fada916d92336d1be7273407082a8262bf2da7da4a1b4e6ac94"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_cd6a4dc19d5bdd6eec42eca1054df235 revision=rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299 package-revision=package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f transport=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d owners=76 types=33\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp bytes=1703584 digest=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.command.json",
+              "bytes": 1017,
+              "sha256": "54cec645e513ef4b69e561245877752984f9e8806d7862f838d54012e89d2bcb"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stdout",
+              "bytes": 654,
+              "sha256": "394f2b99656ece6f5c33e350aa545eb2c0dd836be97f1fbd002dcc8bbb1ee1c2"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "case",
+          "id": "case_3a3c602d494cb2f3c852d93bae96e9c8",
+          "name": "valid",
+          "parent": "decl_2199957fe4252d194483e1ee1b6efda1",
+          "reference": "pkg_cd6a4dc19d5bdd6eec42eca1054df235/case_3a3c602d494cb2f3c852d93bae96e9c8"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000244.stdout",
+          "bytes": 989,
+          "sha256": "558be8daf9d9f9440d5237d12e175aef4ad9f861786525decb652bb168c8f93e"
+        }
+      },
+      {
+        "alias": "$CheckerClaimInvalid",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+          "package": "pkg_cd6a4dc19d5bdd6eec42eca1054df235",
+          "semantic": "rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299",
+          "revision": "package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f",
+          "transport": "package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+            "bytes": 1703584,
+            "sha256": "aef4731c18085fada916d92336d1be7273407082a8262bf2da7da4a1b4e6ac94"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_cd6a4dc19d5bdd6eec42eca1054df235 revision=rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299 package-revision=package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f transport=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d owners=76 types=33\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp bytes=1703584 digest=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.command.json",
+              "bytes": 1017,
+              "sha256": "54cec645e513ef4b69e561245877752984f9e8806d7862f838d54012e89d2bcb"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stdout",
+              "bytes": 654,
+              "sha256": "394f2b99656ece6f5c33e350aa545eb2c0dd836be97f1fbd002dcc8bbb1ee1c2"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "case",
+          "id": "case_a5e6a459e8998d365e9d4cc1ff105e96",
+          "name": "invalid",
+          "parent": "decl_2199957fe4252d194483e1ee1b6efda1",
+          "reference": "pkg_cd6a4dc19d5bdd6eec42eca1054df235/case_a5e6a459e8998d365e9d4cc1ff105e96"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000245.stdout",
+          "bytes": 991,
+          "sha256": "9e91646c949132d83bd375c9e89ab2e1b79726f2fdc8806727a8b9bcceede8da"
+        }
+      },
+      {
+        "alias": "$CheckerClaimCapacity",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+          "package": "pkg_cd6a4dc19d5bdd6eec42eca1054df235",
+          "semantic": "rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299",
+          "revision": "package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f",
+          "transport": "package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+            "bytes": 1703584,
+            "sha256": "aef4731c18085fada916d92336d1be7273407082a8262bf2da7da4a1b4e6ac94"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_cd6a4dc19d5bdd6eec42eca1054df235 revision=rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299 package-revision=package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f transport=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d owners=76 types=33\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp bytes=1703584 digest=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.command.json",
+              "bytes": 1017,
+              "sha256": "54cec645e513ef4b69e561245877752984f9e8806d7862f838d54012e89d2bcb"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stdout",
+              "bytes": 654,
+              "sha256": "394f2b99656ece6f5c33e350aa545eb2c0dd836be97f1fbd002dcc8bbb1ee1c2"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "case",
+          "id": "case_7474babf42cd8f0607e02a4084a57f5b",
+          "name": "capacity",
+          "parent": "decl_2199957fe4252d194483e1ee1b6efda1",
+          "reference": "pkg_cd6a4dc19d5bdd6eec42eca1054df235/case_7474babf42cd8f0607e02a4084a57f5b"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000246.stdout",
+          "bytes": 992,
+          "sha256": "f4e313a82a9797aa1eb81816465061d16ef24ebf9b221aa7e309cfba15088da5"
+        }
+      },
+      {
+        "alias": "$CheckerOutcomeVerified",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+          "package": "pkg_cd6a4dc19d5bdd6eec42eca1054df235",
+          "semantic": "rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299",
+          "revision": "package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f",
+          "transport": "package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+            "bytes": 1703584,
+            "sha256": "aef4731c18085fada916d92336d1be7273407082a8262bf2da7da4a1b4e6ac94"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_cd6a4dc19d5bdd6eec42eca1054df235 revision=rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299 package-revision=package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f transport=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d owners=76 types=33\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp bytes=1703584 digest=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.command.json",
+              "bytes": 1017,
+              "sha256": "54cec645e513ef4b69e561245877752984f9e8806d7862f838d54012e89d2bcb"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stdout",
+              "bytes": 654,
+              "sha256": "394f2b99656ece6f5c33e350aa545eb2c0dd836be97f1fbd002dcc8bbb1ee1c2"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "case",
+          "id": "case_0aa3509a2faac4a9002f415676e9311a",
+          "name": "verified",
+          "parent": "decl_f3726942d9d013a54210288ae98ca5c6",
+          "reference": "pkg_cd6a4dc19d5bdd6eec42eca1054df235/case_0aa3509a2faac4a9002f415676e9311a"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000247.stdout",
+          "bytes": 992,
+          "sha256": "b425891adabc7d1f66f651866e7b5683abe1ee7763735e73c2202c9277940412"
+        }
+      },
+      {
+        "alias": "$CheckerOutcomeRejected",
+        "identity": {
+          "file": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+          "package": "pkg_cd6a4dc19d5bdd6eec42eca1054df235",
+          "semantic": "rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299",
+          "revision": "package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f",
+          "transport": "package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d",
+          "bytes": {
+            "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp",
+            "bytes": 1703584,
+            "sha256": "aef4731c18085fada916d92336d1be7273407082a8262bf2da7da4a1b4e6ac94"
+          },
+          "original": {
+            "text": "result status=success command=package.current.export\npackage id=pkg_cd6a4dc19d5bdd6eec42eca1054df235 revision=rev_cec212f2dec413425a021342d288266fbd23f8d439c48a8e8221c8d3aab86299 package-revision=package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f transport=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d owners=76 types=33\noutput kind=transport path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports/verifier.lkjp bytes=1703584 digest=package_transport_78f679de1f286ddbe1e9805035d169d750d556cce9d295ca2d5e8582b891151d visibility=created durability=synchronized stage-cleanup=removed\n",
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.command.json",
+              "bytes": 1017,
+              "sha256": "54cec645e513ef4b69e561245877752984f9e8806d7862f838d54012e89d2bcb"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stdout",
+              "bytes": 654,
+              "sha256": "394f2b99656ece6f5c33e350aa545eb2c0dd836be97f1fbd002dcc8bbb1ee1c2"
+            },
+            "stderr": {
+              "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000091.stderr",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        "owner": {
+          "kind": "case",
+          "id": "case_3c6311effa755eb676daf1267ed77f0b",
+          "name": "rejected",
+          "parent": "decl_f3726942d9d013a54210288ae98ca5c6",
+          "reference": "pkg_cd6a4dc19d5bdd6eec42eca1054df235/case_3c6311effa755eb676daf1267ed77f0b"
+        },
+        "original_query": {
+          "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000248.stdout",
+          "bytes": 992,
+          "sha256": "c9b784cbad4510a2d6205e80d8c2dd8ea8fffb5b0a9ded2be0bacb8717bd35f3"
+        }
+      }
+    ],
+    "bindings": "reference.package as=$planner package=pkg_e3f8cd073b6666a47808b3bc43721c8e package-revision=package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99\nreference.owner as=$PlannerOutcome package=$planner class=declaration owner=decl_2292f70242696cbcbc226ae72fca0d65\nreference.owner as=$PlannerFlat package=$planner class=declaration owner=decl_29aabc00bad80ae090b2532a62458475\nreference.owner as=$PlannerChunked package=$planner class=declaration owner=decl_1480e97e94dbcac6b953a3f0192ea183\nreference.owner as=$PlannerStorageFlatFlat package=$planner class=declaration owner=decl_402032a83897a36033f0ae101c4367f5\nreference.owner as=$PlannerStorageFlatChunked package=$planner class=declaration owner=decl_dde3ea09a2c2b7509724fe3f1f53492f\nreference.owner as=$PlannerStorageChunkedFlat package=$planner class=declaration owner=decl_caf1d40a91b0a014322e98074fc57829\nreference.owner as=$PlannerStorageChunkedChunked package=$planner class=declaration owner=decl_114b9f14614ec74011def88c7ec5b31a\nreference.owner as=$PlannerValid package=$planner class=case parent=$PlannerOutcome name=valid\nreference.owner as=$PlannerInvalid package=$planner class=case parent=$PlannerOutcome name=invalid\nreference.owner as=$PlannerCapacity package=$planner class=case parent=$PlannerOutcome name=capacity\nreference.owner as=$PlannerInconsistent package=$planner class=case parent=$PlannerOutcome name=inconsistent\nreference.package as=$checker package=pkg_cd6a4dc19d5bdd6eec42eca1054df235 package-revision=package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f\nreference.owner as=$CheckerVerification package=$checker class=declaration owner=decl_7e23eca4d9e3947b5afa3aca6a9261ba\nreference.owner as=$CheckerClaim package=$checker class=declaration owner=decl_2199957fe4252d194483e1ee1b6efda1\nreference.owner as=$CheckerOutcomeVerification package=$checker class=declaration owner=decl_f3726942d9d013a54210288ae98ca5c6\nreference.owner as=$CheckerVerifyPlan package=$checker class=declaration owner=decl_008a730bdb3b70d48037af697e1445dc\nreference.owner as=$CheckerVerifyOutcome package=$checker class=declaration owner=decl_6ed840b6231161fc16ea34f2b67cf835\nreference.owner as=$CheckerVerificationVerified package=$checker class=case parent=$CheckerVerification name=verified\nreference.owner as=$CheckerVerificationRejected package=$checker class=case parent=$CheckerVerification name=rejected\nreference.owner as=$CheckerVerificationInvalid package=$checker class=case parent=$CheckerVerification name=invalid\nreference.owner as=$CheckerVerificationCapacity package=$checker class=case parent=$CheckerVerification name=capacity\nreference.owner as=$CheckerClaimValid package=$checker class=case parent=$CheckerClaim name=valid\nreference.owner as=$CheckerClaimInvalid package=$checker class=case parent=$CheckerClaim name=invalid\nreference.owner as=$CheckerClaimCapacity package=$checker class=case parent=$CheckerClaim name=capacity\nreference.owner as=$CheckerOutcomeVerified package=$checker class=case parent=$CheckerOutcomeVerification name=verified\nreference.owner as=$CheckerOutcomeRejected package=$checker class=case parent=$CheckerOutcomeVerification name=rejected\n"
+  },
+  "canonical_target_route": {
+    "record": {
+      "path": ".artifacts/associated-owned-types/native-blockread-asset-rebuild-proposal/finish-runs/finish-reference-catalogue-second/canonical-target-route.json",
+      "bytes": 21494,
+      "sha256": "a7380acef975326e5b46a4052a4d9b759089657245647942f8dd817cc24e8731"
+    },
+    "entry": "package-plan::plan",
+    "target": "verified-plan::storage-flat-flat",
+    "entry_owner": "decl_931dc1755e4964ff0ff994c03a91f4c3",
+    "checked_owner": "decl_496c959723c51cfb0f1cceaa6101e6b8",
+    "exact_call_target": "pkg_0c1e214f0a914c2a1ee89e97ef9731db/decl_496c959723c51cfb0f1cceaa6101e6b8",
+    "entry_function": {
+      "text": "result status=success command=query.find\nproject path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/native-package-plan name=native-package-plan repository=repo_b9cab24155816538398b153170cb3442 package=pkg_0c1e214f0a914c2a1ee89e97ef9731db\nrevision observed=rev_27a05feb4f7e2d119385e72c09b1cba0ab65f91a6e88a91bb1252516c3596530\nquery operation=find digest=query_2e35eb5835e8c07d24eb34d95e8e0b63208bb4fd7a9bdd1f66970981ae596dc2\nowner id=decl_931dc1755e4964ff0ff994c03a91f4c3 kind=pure_function named=true name=plan class=declaration parent=mod_d527c931102a827d36df564ab83745c1\nsummary returned=1 visited=1 match=true\nwork map-pages-read=5 map-bytes-read=9952 map-entries-visited=146 catalog-lookups=7 store-objects-read=7 store-bytes-read=10205 canonical-records-decoded=2 witness-records-decoded=1 rendered-output-bytes=907\nschema capabilities=7ce76a90baa441caabdadcae2184ea07de584070a94333b89f9c841db3825631\n",
+      "command": {
+        "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000278.command.json",
+        "bytes": 978,
+        "sha256": "94468195ecce27264c7879f001afcb18aea3d5c3070a15b9354766eeae3040a6"
+      },
+      "stdout": {
+        "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000278.stdout",
+        "bytes": 907,
+        "sha256": "dcdc0a930733a227bb7619d83766daddcae266bcb67b49ebf7295bf599e78c48"
+      },
+      "stderr": {
+        "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000278.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "entry_definition": {
+      "text": "result status=success command=inspect.owner.definition\nproject name=native-package-plan repository=repo_b9cab24155816538398b153170cb3442 package=pkg_0c1e214f0a914c2a1ee89e97ef9731db\nrevision observed=rev_27a05feb4f7e2d119385e72c09b1cba0ab65f91a6e88a91bb1252516c3596530\nprojection detail=definition contract=lkjscript-function-definition-projection-21 version=21 function=decl_931dc1755e4964ff0ff994c03a91f4c3 kind=pure_function digest=definition_295decdfde9d673c726083c485dcc99ce42f14fb2bdffb065d94920722d98e76 ordering=header-contract-structural-preorder-reference-fact-v1 total-records=17 contract-records=2 body-records=2 reference-records=8 fact-records=4 structural-edges=4 reference-edges=8 fact-reads=4 maximum-depth=1 logical-bytes=7475 validator=validator_contract_ea8c20af48782006db98956f90c3a19916b130571f6837f4f8c8414ba3bb3ea4 certificate=validation_certificate_1bbe326bf9b65abd3271843cf2822ffa0e8520121a5711f3c2093411ff808cc5\npage start=0 end=17 returned=17 complete=true first-section=header last-section=fact\ndefinition.header repository=repo_b9cab24155816538398b153170cb3442 package=pkg_0c1e214f0a914c2a1ee89e97ef9731db revision=rev_27a05feb4f7e2d119385e72c09b1cba0ab65f91a6e88a91bb1252516c3596530 function=decl_931dc1755e4964ff0ff994c03a91f4c3 contract=lkjscript-function-definition-projection-21 ordering=header-contract-structural-preorder-reference-fact-v1\ndefinition.function id=decl_931dc1755e4964ff0ff994c03a91f4c3 kind=pure_function module=pkg_0c1e214f0a914c2a1ee89e97ef9731db/mod_d527c931102a827d36df564ab83745c1 name=plan visibility=public type-parameters=0 effect-parameters=0 effect-row-parameters=0 requirement-parameters=0 implementation-parameters=0 parameters=1 result=type_object_87bcda87fa5502a68c173567c693e1ee41db043e703f0a23d51e0d06a648391d result-mode=value borrow-from=- effect=pure requirements=0 body=expr_f89a89e979f2b26f1f91cf46e1d5fa3a\ndefinition.parameter id=param_2d73ee4a6aae7eb05394ac69f545b0bd parent=decl_931dc1755e4964ff0ff994c03a91f4c3 index=0 name=proposal type=type_object_30cd7aee1a2d1b0b64723ef0a2c59e81faeb6afc8127682b829577e34f6b8360 use=unrestricted requirement=none\ndefinition.expression id=expr_f89a89e979f2b26f1f91cf46e1d5fa3a parent=decl_931dc1755e4964ff0ff994c03a91f4c3 slot=function_body index=0 depth=0 form=call function=pkg_0c1e214f0a914c2a1ee89e97ef9731db/decl_496c959723c51cfb0f1cceaa6101e6b8 type-arguments=0 effect-arguments=0 arguments=1 requirement-arguments=0\ndefinition.expression id=expr_e6cd598328ef9934c46eef3e0c09e152 parent=expr_f89a89e979f2b26f1f91cf46e1d5fa3a slot=call_argument index=0 depth=1 form=local value=pkg_0c1e214f0a914c2a1ee89e97ef9731db/param_2d73ee4a6aae7eb05394ac69f545b0bd\ndefinition.reference index=0 role=call_function ordinal=0 source=pkg_0c1e214f0a914c2a1ee89e97ef9731db/expr_f89a89e979f2b26f1f91cf46e1d5fa3a target-kind=declaration target=pkg_0c1e214f0a914c2a1ee89e97ef9731db/decl_496c959723c51cfb0f1cceaa6101e6b8\ndefinition.reference index=1 role=expression_child ordinal=0 source=pkg_0c1e214f0a914c2a1ee89e97ef9731db/expr_f89a89e979f2b26f1f91cf46e1d5fa3a target-kind=expression target=pkg_0c1e214f0a914c2a1ee89e97ef9731db/expr_e6cd598328ef9934c46eef3e0c09e152\ndefinition.reference index=2 role=function_body ordinal=0 source=pkg_0c1e214f0a914c2a1ee89e97ef9731db/decl_931dc1755e4964ff0ff994c03a91f4c3 target-kind=expression target=pkg_0c1e214f0a914c2a1ee89e97ef9731db/expr_f89a89e979f2b26f1f91cf46e1d5fa3a\ndefinition.reference index=3 role=function_module ordinal=0 source=pkg_0c1e214f0a914c2a1ee89e97ef9731db/decl_931dc1755e4964ff0ff994c03a91f4c3 target-kind=module target=pkg_0c1e214f0a914c2a1ee89e97ef9731db/mod_d527c931102a827d36df564ab83745c1\ndefinition.reference index=4 role=function_parameter ordinal=0 source=pkg_0c1e214f0a914c2a1ee89e97ef9731db/decl_931dc1755e4964ff0ff994c03a91f4c3 target-kind=parameter target=pkg_0c1e214f0a914c2a1ee89e97ef9731db/param_2d73ee4a6aae7eb05394ac69f545b0bd\ndefinition.reference index=5 role=function_result ordinal=0 source=pkg_0c1e214f0a914c2a1ee89e97ef9731db/decl_931dc1755e4964ff0ff994c03a91f4c3 target-kind=type target=type_object_87bcda87fa5502a68c173567c693e1ee41db043e703f0a23d51e0d06a648391d\ndefinition.reference index=6 role=local_value ordinal=0 source=pkg_0c1e214f0a914c2a1ee89e97ef9731db/expr_e6cd598328ef9934c46eef3e0c09e152 target-kind=function_parameter target=pkg_0c1e214f0a914c2a1ee89e97ef9731db/param_2d73ee4a6aae7eb05394ac69f545b0bd\ndefinition.reference index=7 role=parameter_type ordinal=0 source=pkg_0c1e214f0a914c2a1ee89e97ef9731db/param_2d73ee4a6aae7eb05394ac69f545b0bd target-kind=type target=type_object_30cd7aee1a2d1b0b64723ef0a2c59e81faeb6afc8127682b829577e34f6b8360\ndefinition.fact index=0 owner=decl_931dc1755e4964ff0ff994c03a91f4c3 kind=pure_function record=owner_object_1f7829e03875f435c1be0ae68eb134d7b2ed14a74960a3939193cbe054163898 summary=owner_summary_5f6d2710700f70b3ad02f0578dfb629360af2edcd35ec9eaa67e47114a94268c semantic-interface=semantic_167164ebc2557e355ed505d10f267aaf67079ceb28ff4421f13fd0edf560a204 implementation=semantic_d5dd238d053704fb4bf7e4d84134aeffd93c58df601ec13c167e3e0ca8dc1bde type=semantic_ded866fffc39785d70191c1e61cd1d2db84b9e3da7d5381a8709ede7a9b645fa effect=semantic_05b398ec0c44f97827c7ca1e54f686723f58e28248f2ed125951a57889fbecdf capability=semantic_bfcd685f1cf9bd1ded623e14651cb0b8fb01cba28faada5d4865ad30a01a9521 relations=semantic_608f9cfcea2b9b1d51e4648dd3f42d230c857563e3c5d50b6148189647c9c90a presentation=semantic_b8a348ca0a7d8a3d20a51fca705a189bf59ac0fddd0b0d018586747e2adaa151 test=absent validation-dependencies=semantic_8c113b7f1f768195301c4e5457b6e8e9ca9f19eb09810b953e1d6d26bc9e7806\ndefinition.fact index=1 owner=param_2d73ee4a6aae7eb05394ac69f545b0bd kind=parameter record=owner_object_727bfcc566804adf76878e9a7941842bc0b879796f89925806447cc4ba639049 summary=owner_summary_8e33f58498f25c1d0d158bd4f0babf18999524bedaba5af68062fef83918887e semantic-interface=semantic_1295a58dfb183bef391655281c81bac68646f4d547c7381a5ab866857bc50d52 implementation=semantic_3aafd86c9cd36b5f3ba0c0d3fe549a2d9333c5359b31580cf6b6f5b0695031a8 type=semantic_66161f4a899bb9495fbfcb3701f27c2b48280d696a15ca391877ae8115ab4a8d effect=semantic_fdb2005f21233da27be0cd08a264bebc90c4bef12ba04010b0aebe5fbac64988 capability=semantic_276599ecd059f3811645298e692cef12a0b48293871ef771a34a9f086add4c44 relations=semantic_493a8c337012ae0b9548af7d1f6e5d28d87eb1cb2e5d2737010dcb628bedd009 presentation=semantic_fe375225aaaac3e4b89027e217c4fad5f7436f49656a2fe7fb4a9cf6738937db test=absent validation-dependencies=semantic_24c9d70179f11105aa04228c346f6d605146bfa1766d2462595357383405216e\ndefinition.fact index=2 owner=expr_f89a89e979f2b26f1f91cf46e1d5fa3a kind=expression record=owner_object_beed524eed0150c1a8c3beb513a501c686bb3ca79ecb9f7dd02d23ca480e25d0 summary=owner_summary_440ab59b2697a36c16a5c0eaab3c83a03a3760a7af53b69606a48eae888bed60 semantic-interface=semantic_db73195031ec551da4cae64cb01685c470abec8b2a7feeb27785bcb20305da68 implementation=semantic_fcdad00cd71e673859f2fc46bbee49a505e77c878149a57a9ed06a520141554e type=semantic_0a9aa78b4ddb2a160e9ca7460a12edb8a8cf0cc5ad893b20e31f12450591c19e effect=semantic_01f4162e5afa35c0404c33133278f6d07d5de6a97c8013fec2d0026384d3d219 capability=semantic_f7174ca6478f38e6dba020150183f8d1ed4f35ef52cb39a4e56d820566b773b4 relations=semantic_f157024665bfd01787973d450a00a292ac38c4d9c631065ee69c77ab0cfcc059 presentation=semantic_8222906e376ad53dfac6b433bd2803cb2b4c6faab1e5ac60438bfd005ab95174 test=absent validation-dependencies=semantic_50881f8339c458e2b15046943b2934ebea2d78085e8ef71b83ced0ec98d420dd\ndefinition.fact index=3 owner=expr_e6cd598328ef9934c46eef3e0c09e152 kind=expression record=owner_object_65524b1fd5b21eed1d9bb6465d4cea374a94461567c7f8965da0efe4a08b4b4e summary=owner_summary_522af1146cdaf848d7cbfe30cbbb1497dae2fff4bfa08d367c3506aacda3c2fe semantic-interface=semantic_7ad2ac007f69e33fdae46f7a83d5ace07795db6c36e26d8f46373796d27d7c09 implementation=semantic_98f6d31fd4f2f726d69b407339c5f534013130e0e74c935506b48914f86d824c type=semantic_22a3bc2ace340dc86f42e3bdffc7e0131985031e17195fcfbda1a9d044b3fe1c effect=semantic_002dab663e553fc8fb274d10f0110fc868badfa2f1301e6efa92fcf662d83d71 capability=semantic_8747f21def72e228a43b9b8b28a35f84960c1dc759a6e3eb6410ce8b62018420 relations=semantic_e6e2bce6d96faa0c82de8e4a25114a61417741496cdb7a42ef1f5d1f0da0a34c presentation=semantic_8222906e376ad53dfac6b433bd2803cb2b4c6faab1e5ac60438bfd005ab95174 test=absent validation-dependencies=semantic_99ee1036964107d38611a5337a15030a0069e5dfec84e562805fbefea447e246\nwork map-pages-read=30 map-bytes-read=118919 map-entries-visited=234 catalog-lookups=38 store-objects-read=38 store-bytes-read=120906 canonical-records-decoded=4 witness-records-decoded=8 fact-reads=4 rendered-records=24 rendered-output-bytes=8832\nschema capabilities=7ce76a90baa441caabdadcae2184ea07de584070a94333b89f9c841db3825631\n",
+      "command": {
+        "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000279.command.json",
+        "bytes": 1048,
+        "sha256": "c353d8863bbada439d243be36e3a01845e6f2f5a089649429ad5910eb6ec55e4"
+      },
+      "stdout": {
+        "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000279.stdout",
+        "bytes": 8832,
+        "sha256": "51c9d0a8b8bbcf182c8c9aa6169df0a0a6468b8c57664b46cc3224b7af7c7388"
+      },
+      "stderr": {
+        "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000279.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "checked_flat_flat": {
+      "text": "result status=success command=query.find\nproject path=/tmp/lkjscript-native-blockread-finish-ZOdKFS/native-package-plan name=native-package-plan repository=repo_b9cab24155816538398b153170cb3442 package=pkg_0c1e214f0a914c2a1ee89e97ef9731db\nrevision observed=rev_304f6713e5514f7baa44bef7781cc273538bfd2c64dc41ebb27fe2633decd2c4\nquery operation=find digest=query_3cdf6d1b46786215eb982f426603825de39a1d840d6f430b0068c0f37d6c2e52\nowner id=decl_496c959723c51cfb0f1cceaa6101e6b8 kind=pure_function named=true name=storage-flat-flat class=declaration parent=mod_71d8c3417f6908ba5f6e58b745feeb52\nsummary returned=1 visited=1 match=true\nwork map-pages-read=5 map-bytes-read=9406 map-entries-visited=135 catalog-lookups=7 store-objects-read=7 store-bytes-read=9673 canonical-records-decoded=2 witness-records-decoded=1 rendered-output-bytes=919\nschema capabilities=7ce76a90baa441caabdadcae2184ea07de584070a94333b89f9c841db3825631\n",
+      "command": {
+        "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000256.command.json",
+        "bytes": 991,
+        "sha256": "a0a8eb3a1f993f7390f28056860eeaa86b768e7392c69d8d69c5b28e7422031c"
+      },
+      "stdout": {
+        "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000256.stdout",
+        "bytes": 919,
+        "sha256": "6dcdd24cd6037d9afcd4d7fa2e662e2da797901a3e9e78798fd5e02ce0f6ef7e"
+      },
+      "stderr": {
+        "path": "/tmp/lkjscript-native-blockread-finish-ZOdKFS/cli-evidence/00000256.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    }
+  },
+  "stage_core": {
+    "package": "pkg_7f2c7a229f1a9f475f0b208e6a40a323",
+    "early_core": {
+      "file": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/exports/stage-core.lkjp",
+      "package": "pkg_7f2c7a229f1a9f475f0b208e6a40a323",
+      "semantic": "rev_4193cfe71b510e868d0417a4ef0c066d031d221236168328ae31106961ff8f7a",
+      "revision": "package_revision_521276aa5c4c2a495ea5c89553ebe1c076cc1763ab155859fab94ed35bd592f6",
+      "transport": "package_transport_161054afedadfbe76760ab85ae109d04543a90f46b97f6ae973554d33498a8a7",
+      "original": {
+        "text": "result status=success command=package.current.export\npackage id=pkg_7f2c7a229f1a9f475f0b208e6a40a323 revision=rev_4193cfe71b510e868d0417a4ef0c066d031d221236168328ae31106961ff8f7a package-revision=package_revision_521276aa5c4c2a495ea5c89553ebe1c076cc1763ab155859fab94ed35bd592f6 transport=package_transport_161054afedadfbe76760ab85ae109d04543a90f46b97f6ae973554d33498a8a7 owners=6 types=8\noutput kind=transport path=/tmp/lkjscript-native-blockread-prefix-kGKDDC/exports/stage-core.lkjp bytes=1269450 digest=package_transport_161054afedadfbe76760ab85ae109d04543a90f46b97f6ae973554d33498a8a7 visibility=created durability=synchronized stage-cleanup=removed\n",
+        "command": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000063.command.json",
+          "bytes": 1020,
+          "sha256": "9e9908e5cabdede22215a3d5d3ec1f0e0288b288ce01e3a95a390af8d749c029"
+        },
+        "stdout": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000063.stdout",
+          "bytes": 654,
+          "sha256": "331ebc31024c98da08ca587e8c86f83622e9be620ae578d7049becfe037f447f"
+        },
+        "stderr": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000063.stderr",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      "bytes": {
+        "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/exports/stage-core.lkjp",
+        "bytes": 1269450,
+        "sha256": "8f1d2d837363cb869350086ba19b7c6d6e3a50f3a0199142cb2ef500a0391677"
+      }
+    },
+    "final_stage": {
+      "file": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/exports/plan-stages.lkjp",
+      "package": "pkg_7f2c7a229f1a9f475f0b208e6a40a323",
+      "semantic": "rev_85655ff3e1737abd1783e1b6b4d4c9f643957e09777d73ce074cd4537a57723f",
+      "revision": "package_revision_868454cb96f9ac3d915b725bd0627450d762dd73b4204ed88649b6cb03d3691e",
+      "transport": "package_transport_891037780d82e3b8071af4fc89449a48106d4f80a24ddeef5f147e2fde43208f",
+      "original": {
+        "text": "result status=success command=package.current.export\npackage id=pkg_7f2c7a229f1a9f475f0b208e6a40a323 revision=rev_85655ff3e1737abd1783e1b6b4d4c9f643957e09777d73ce074cd4537a57723f package-revision=package_revision_868454cb96f9ac3d915b725bd0627450d762dd73b4204ed88649b6cb03d3691e transport=package_transport_891037780d82e3b8071af4fc89449a48106d4f80a24ddeef5f147e2fde43208f owners=10 types=8\noutput kind=transport path=/tmp/lkjscript-native-blockread-prefix-kGKDDC/exports/plan-stages.lkjp bytes=1322514 digest=package_transport_891037780d82e3b8071af4fc89449a48106d4f80a24ddeef5f147e2fde43208f visibility=created durability=synchronized stage-cleanup=removed\n",
+        "command": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000140.command.json",
+          "bytes": 1021,
+          "sha256": "69f902a3f17bedfeb76b6d9f3c9cd214e9dcb4aaaa3eea07051f8ab36658b6f6"
+        },
+        "stdout": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000140.stdout",
+          "bytes": 656,
+          "sha256": "f8e72f901fbfcfdc396dca4506d66a2c063057f1dea8a1ff70a52e6e960403a7"
+        },
+        "stderr": {
+          "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000140.stderr",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      "bytes": {
+        "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/exports/plan-stages.lkjp",
+        "bytes": 1322514,
+        "sha256": "c93437573375cee2e6d52c564c5022a17dc9cc46cfa9fb82ec32b131c8e596fa"
+      }
+    },
+    "actual_core_before_suppliers": true,
+    "complete11_generic_definitions_unchanged": [
+      {
+        "name": "refused",
+        "id": "decl_24be1a590672d9199e205eab89c73efa",
+        "owner_record": "owner_object_7a414880dbacef88e344213efc7d48625774e720d2181efc4c153ee7991bae97",
+        "exact_definition_records_sha256": "aef962dd0cc8611a6d8a6f164af2f716de91ed17332f1ed6e00c65e573a2f507",
+        "record_count": 11,
+        "before_query": {
+          "command": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000030.command.json",
+            "bytes": 971,
+            "sha256": "c7bd23fa95737af276d716cb6072a675b6a8204f33e81380bc4bc32fb84c9b59"
+          },
+          "stdout": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000030.stdout",
+            "bytes": 893,
+            "sha256": "0a199ae2e0edb3234f1ed9219706cc3bacd4c442fb1af61ef53a28ab8c059fde"
+          }
+        },
+        "after_query": {
+          "command": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000102.command.json",
+            "bytes": 971,
+            "sha256": "ad0774165701a63def92911de9a20ef0c7d5a9e85fb831ddbb0145da45c53fa9"
+          },
+          "stdout": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000102.stdout",
+            "bytes": 893,
+            "sha256": "52110013f97d8c832f7a7937c89a835424774b7712c984e0624fcc0182d6e93d"
+          }
+        },
+        "before_pages": [
+          {
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000032.command.json",
+              "bytes": 1038,
+              "sha256": "f78141bffd989d7e28ff4e5738217fcd97f25ff1a8264e3a7dc3472b128b9812"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000032.stdout",
+              "bytes": 8507,
+              "sha256": "9d9baf6ed7af940edacb0ced177bdb72e328708610b80969cec4bc93e5cab7d6"
+            }
+          }
+        ],
+        "after_pages": [
+          {
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000104.command.json",
+              "bytes": 1038,
+              "sha256": "102ae3a17bb5ce1a0e8dc8e66503b3cc438f6167f9255e06c4a45d0dae09000b"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000104.stdout",
+              "bytes": 8507,
+              "sha256": "89109d9436c80fb2df3910e446bb66d6aeb6ec6352c32b5a20854d4039fc72d9"
+            }
+          }
+        ]
+      },
+      {
+        "name": "make",
+        "id": "decl_aba06b61db253add1621a6204b10244b",
+        "owner_record": "owner_object_f40e60146c48b1e17ad83dfa4e62f9948cc40bf87e21e4282ca7076082d1e38e",
+        "exact_definition_records_sha256": "753be47c927d0515a653be312baf61257263f8aa37b406c6e83d8fc76f8130fa",
+        "record_count": 45,
+        "before_query": {
+          "command": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000033.command.json",
+            "bytes": 968,
+            "sha256": "62e5ecb7ad25dd97a0ac9a5e646110bc5b910d73893c035d29c92ab4a6c9b49d"
+          },
+          "stdout": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000033.stdout",
+            "bytes": 890,
+            "sha256": "01558cfe488014c1ea9e41734c662b93451e1da3b5f00e9281331249b473a499"
+          }
+        },
+        "after_query": {
+          "command": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000105.command.json",
+            "bytes": 968,
+            "sha256": "6b12f4f221583540a2601f53d4a5569590b86ba26d1e5bc43feb708be8a6e2b3"
+          },
+          "stdout": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000105.stdout",
+            "bytes": 890,
+            "sha256": "dacd43ce41795ddaed52e87c06d3628ba7f4d24cbfeaba31165b5495c001683f"
+          }
+        },
+        "before_pages": [
+          {
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000035.command.json",
+              "bytes": 1038,
+              "sha256": "f00169d26e3c4ca2941474d75d648f5e5887f46cff7ba64544b7619f2ee82289"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000035.stdout",
+              "bytes": 26758,
+              "sha256": "0496ee8bb37046fea3b70649810e1caed479ffcb94082c41ee27aad15e63a76c"
+            }
+          }
+        ],
+        "after_pages": [
+          {
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000107.command.json",
+              "bytes": 1038,
+              "sha256": "ddbafb61da68678cc5d437317cfa18c1fc1ab8beecd2349e87e35db1568e504b"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000107.stdout",
+              "bytes": 26759,
+              "sha256": "70ca9aa972a9043e486e1fcf98f5d5787c97159d8561d9c2999559b5cae9e0a6"
+            }
+          }
+        ]
+      },
+      {
+        "name": "initialize",
+        "id": "decl_76e8d38598d744b107b52a35a8938885",
+        "owner_record": "owner_object_51c64270195675e7728c3de4da57ccf175fa35f90c34f85ee517e595967530d2",
+        "exact_definition_records_sha256": "e6a8c5c048b1b406cd70c0ab227d87946bef900ddb6028801147fbce8543d38b",
+        "record_count": 194,
+        "before_query": {
+          "command": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000036.command.json",
+            "bytes": 974,
+            "sha256": "01f27bb8942525abb80d1c6638168cabe97b3f98fa9fb691805e3d3854164cbe"
+          },
+          "stdout": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000036.stdout",
+            "bytes": 896,
+            "sha256": "4782e10e64c34fdda48ca0d45cab307cdccd838ebd32740e1510a0d1875a2fed"
+          }
+        },
+        "after_query": {
+          "command": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000108.command.json",
+            "bytes": 974,
+            "sha256": "80db96cd7753d7aa873806da8ce20484b558bec0c3f1979b39ecc07d3abe1d2f"
+          },
+          "stdout": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000108.stdout",
+            "bytes": 896,
+            "sha256": "904391bda129f15245fcf484cf59c45a7a412770a5b83329754b2cbe3691bd3a"
+          }
+        },
+        "before_pages": [
+          {
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000038.command.json",
+              "bytes": 1038,
+              "sha256": "d8c5a43ba9b9ef549bd4f7612051b4788d70fc13a73912a2a45bb9f89c439951"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000038.stdout",
+              "bytes": 105106,
+              "sha256": "fe021e7c31976dcc0a907f89351e16bbc1e9e3b0b89c4245b8190609500f042e"
+            }
+          }
+        ],
+        "after_pages": [
+          {
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000110.command.json",
+              "bytes": 1038,
+              "sha256": "786fd405dab5bf66d002382dca7d0ac6db8bf9e9dd35f8bdf1cbf2b1d7e2d503"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000110.stdout",
+              "bytes": 105106,
+              "sha256": "a50c2f12ab0b147e7d98e092366955c49578fa1b3c05802da240ef5bcb8af4f6"
+            }
+          }
+        ]
+      },
+      {
+        "name": "update-one",
+        "id": "decl_6d8f5e6b64c52f2d1ec1630f4098c5e1",
+        "owner_record": "owner_object_afda0bacf215b9cc5ac6d5d76a765be67eb03237b3d6af4471dfb7bfd7236b26",
+        "exact_definition_records_sha256": "12e8389fa0a9568b0241748de826fedaeb376737f27898db7118c9c63e5446d6",
+        "record_count": 197,
+        "before_query": {
+          "command": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000039.command.json",
+            "bytes": 974,
+            "sha256": "f324cc304af37e1168ae548a40c5b18ee36b7f0ecec4ba487e63d89b512fe235"
+          },
+          "stdout": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000039.stdout",
+            "bytes": 896,
+            "sha256": "b108bf98fa25b6b5c75e97b6a7c20d49406107abd666974f0073589ec199f2c3"
+          }
+        },
+        "after_query": {
+          "command": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000111.command.json",
+            "bytes": 974,
+            "sha256": "3cd458c1533c63b1b6c3726bdcb57bfdc86b3ff0ac9a52fb78ada797384cbcc5"
+          },
+          "stdout": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000111.stdout",
+            "bytes": 896,
+            "sha256": "aac23f06f0fd768843b92a2546497a983a37c4827276cc6629e620b224d1a2b8"
+          }
+        },
+        "before_pages": [
+          {
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000041.command.json",
+              "bytes": 1038,
+              "sha256": "baf37fba0e5ada50486a60a17f48eabcebfc6dd81fad3cedc910380fa4f9bef9"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000041.stdout",
+              "bytes": 111456,
+              "sha256": "a9bb917316b2b6b8b0e4eae6cc649ed7acaf6f91ff86b8ca8c51aca1ead2c81a"
+            }
+          }
+        ],
+        "after_pages": [
+          {
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000113.command.json",
+              "bytes": 1038,
+              "sha256": "4501da2bab3d0539158cb69d57b7972bb41f5ea871201473f94253a58b947efa"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000113.stdout",
+              "bytes": 111456,
+              "sha256": "8539c2c520f17a13406e4117ed6dadf5d6f82ac344afe2d82623a69d3dea9e4e"
+            }
+          }
+        ]
+      },
+      {
+        "name": "release-one",
+        "id": "decl_116f0f8a70d8c26a6f7b7221c2650be7",
+        "owner_record": "owner_object_ead6b7b3a16aacb6d291f0f2e635e47849c84a6b32057abcc1f79a87ea1f180a",
+        "exact_definition_records_sha256": "fa6ec5a75fa86c152d000a5613a889680181722fb61d716fb26929908f4258cc",
+        "record_count": 184,
+        "before_query": {
+          "command": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000042.command.json",
+            "bytes": 975,
+            "sha256": "438181ba80c4dc3a61e775bfcc0a01cbf93e09d4701a1ad7ed7510fbc57e553a"
+          },
+          "stdout": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000042.stdout",
+            "bytes": 897,
+            "sha256": "d6dfc14b3c5196cba4d397003308b34edea806191b1ef414fd8df3d14872779d"
+          }
+        },
+        "after_query": {
+          "command": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000114.command.json",
+            "bytes": 975,
+            "sha256": "0d214608ce67d18381ce63cb773fa18e3b569ff7e8ad808625ff4b4d45482b25"
+          },
+          "stdout": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000114.stdout",
+            "bytes": 897,
+            "sha256": "bc304e7e99209214b935c352b3175d2bca4b3b8ca0a26f14dfd4f58ab56e6dbf"
+          }
+        },
+        "before_pages": [
+          {
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000044.command.json",
+              "bytes": 1038,
+              "sha256": "7a31d2643bd07344268e4f1cfdc86e9576020044f8a0b5aebaba65d5da02da78"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000044.stdout",
+              "bytes": 102587,
+              "sha256": "765fe8a52ca2401a7efe00b9cdea5ddd1e3431b9c1ba1ce429eb8e223b05fa2a"
+            }
+          }
+        ],
+        "after_pages": [
+          {
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000116.command.json",
+              "bytes": 1038,
+              "sha256": "7465d15ad1bd215cc4b7fe5a64ac9746cb99128fe10a957d27c801975d511f36"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000116.stdout",
+              "bytes": 102587,
+              "sha256": "8ff30d12ab70138b28be470e29ddcef81186dbff8ff184380f3aeac4d8d56e17"
+            }
+          }
+        ]
+      },
+      {
+        "name": "release",
+        "id": "decl_4f76721de11079bc7dacb1775afdfc6f",
+        "owner_record": "owner_object_d49b1116e311ec72b8baae17454441cebe3bca5e4b0bf698bcc8f71387f7efc3",
+        "exact_definition_records_sha256": "badb385be8df7a5272c0e45dcadd599ea71282ea171fa634fe3f8284ff810f7f",
+        "record_count": 122,
+        "before_query": {
+          "command": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000045.command.json",
+            "bytes": 971,
+            "sha256": "fbe1de37d862dfbe98e7a6b3334cb2f9a7440206d8953a8c5ceda6309b9982aa"
+          },
+          "stdout": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000045.stdout",
+            "bytes": 893,
+            "sha256": "1d108293fdc5f999f919aaa5a652b2b966c2ecdf583f7b45234e80cc145bfc1e"
+          }
+        },
+        "after_query": {
+          "command": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000117.command.json",
+            "bytes": 971,
+            "sha256": "706b9240bc6a461845871a7ca1e09e2af76cff1f0f8274342d7d737f1b84999a"
+          },
+          "stdout": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000117.stdout",
+            "bytes": 893,
+            "sha256": "6a2fdd1f3f9fb99c65fb349e0d2d27c36a62156527b263d02366038cf25164d3"
+          }
+        },
+        "before_pages": [
+          {
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000047.command.json",
+              "bytes": 1038,
+              "sha256": "eee4391f44f92acec29c3088147dd041dc47822b32d46627fb87f3b152c81e67"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000047.stdout",
+              "bytes": 68009,
+              "sha256": "dd7b7537bc7783e677c00df42244d43c4091c2f3c82ee642a52204e485d795b0"
+            }
+          }
+        ],
+        "after_pages": [
+          {
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000119.command.json",
+              "bytes": 1038,
+              "sha256": "f0f9c01148c592f8ba28a9826bc4b1310d4ba22137c3a1ba4493e8871e055f58"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000119.stdout",
+              "bytes": 68009,
+              "sha256": "83421bd999c07e9b26465aa0e52f22459f004ae6b997e0db5b042189acde8b34"
+            }
+          }
+        ]
+      },
+      {
+        "name": "ready",
+        "id": "decl_e918cba8a841b99444beba16cfe4a62b",
+        "owner_record": "owner_object_a67c8ce2d8eb3f6018c41be01ea63aa35072d6a0699c3a63e126ded8f53af53e",
+        "exact_definition_records_sha256": "c8db03f467a91ce8f7093c98432f08f42a11ff28e608c594a21ec8495941536d",
+        "record_count": 113,
+        "before_query": {
+          "command": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000048.command.json",
+            "bytes": 969,
+            "sha256": "8769d461a40fa70b08cbeffec4d592d1e8cc8b11e3eed8f891df5d84ac76e8b8"
+          },
+          "stdout": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000048.stdout",
+            "bytes": 891,
+            "sha256": "af20e78e3fd6967c2fed09e27cc6e202784436e944b45b2a2b2350921b34cc48"
+          }
+        },
+        "after_query": {
+          "command": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000120.command.json",
+            "bytes": 969,
+            "sha256": "60a83711e9a9c4265653c399aee50a6365ab5dfe7ef731a0e5ff4344a6884d18"
+          },
+          "stdout": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000120.stdout",
+            "bytes": 891,
+            "sha256": "2ba88ee1ed292ac6113b480f520e49d5b65ac8666c428196f31b10f3f222ebce"
+          }
+        },
+        "before_pages": [
+          {
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000050.command.json",
+              "bytes": 1038,
+              "sha256": "941975f8ffd254f080c06038062117e8e7889c6bb9852e78a8e38d2f61faa1a3"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000050.stdout",
+              "bytes": 65658,
+              "sha256": "303e7215c998128ca7a7a5a57fca91165fb5c6a83d5b2185268b9a35acb0578b"
+            }
+          }
+        ],
+        "after_pages": [
+          {
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000122.command.json",
+              "bytes": 1038,
+              "sha256": "0e635a7106ba9e1c7f171564a780e998f6cac781892c1d52c67778f8185a6a55"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000122.stdout",
+              "bytes": 65658,
+              "sha256": "fa2aff9dd6349c5fca542634258605a26b4d721e92fd97b3c40eab60d83de82c"
+            }
+          }
+        ]
+      },
+      {
+        "name": "materialize-block",
+        "id": "decl_cdf9b908a384e76c34f54a79cc863b3a",
+        "owner_record": "owner_object_79682fcee31b296bcfd1632bfeeba481e7fadf3d2895415e03de7404b53c0438",
+        "exact_definition_records_sha256": "afda6fb5300dc34b262cec8e991fa81264542be76444932f26c9761f0433fdbe",
+        "record_count": 142,
+        "before_query": {
+          "command": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000051.command.json",
+            "bytes": 981,
+            "sha256": "05753778bf823f07ad7c6d4db507b0320e03bd51968d71b911b42800e0127a0d"
+          },
+          "stdout": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000051.stdout",
+            "bytes": 903,
+            "sha256": "278de8420b1f2acf3f3e231259d85353fc0615c510e38b5157345efe5eddd4d8"
+          }
+        },
+        "after_query": {
+          "command": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000123.command.json",
+            "bytes": 981,
+            "sha256": "ae02d04427a8c35af571e56391b064843ff6c55295c24a23595e2019f27b475b"
+          },
+          "stdout": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000123.stdout",
+            "bytes": 903,
+            "sha256": "76963b20ec91340b6929497c44bcad6e9c63caf542fd3113779b4634b0f68ccf"
+          }
+        },
+        "before_pages": [
+          {
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000053.command.json",
+              "bytes": 1038,
+              "sha256": "5eb423fbb41c5ea7ed9a2b007a01a1638340438458d3c7e5cad7e2a04d59a7eb"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000053.stdout",
+              "bytes": 81336,
+              "sha256": "271a35e625b67e7790268d7f45592e954bdeb24f8287a91e727abda97005a7a1"
+            }
+          }
+        ],
+        "after_pages": [
+          {
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000125.command.json",
+              "bytes": 1038,
+              "sha256": "01d229bf7b1d3b111945ac11149226b8c2a5a16034bd1fab8d06dcd64854e707"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000125.stdout",
+              "bytes": 81336,
+              "sha256": "92d64f8b705ff00382641e8bf2a67f5b667bc7439e785dc0e51e667cd52ffdf8"
+            }
+          }
+        ]
+      },
+      {
+        "name": "materialize",
+        "id": "decl_838cb5013007452d6628b6da99250664",
+        "owner_record": "owner_object_0a9e40d63866a4277e312ca114d7fda5f323109ff82b0804cda9c37f74e24f75",
+        "exact_definition_records_sha256": "9d2e00937fb9cf0499b0a6f24759ca974579b0b8b21eb38a9db303686ef0ebff",
+        "record_count": 150,
+        "before_query": {
+          "command": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000054.command.json",
+            "bytes": 975,
+            "sha256": "3fb3164dd1aaeb433a6946b6786dfb159f2ab8011363cda1eed0a72ffc5aed23"
+          },
+          "stdout": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000054.stdout",
+            "bytes": 897,
+            "sha256": "2676fe1e3f030eb10fda530066e8bab25b94ac0fd0cf360f7d04924e587af2ee"
+          }
+        },
+        "after_query": {
+          "command": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000126.command.json",
+            "bytes": 975,
+            "sha256": "8c49b1ec060bbc118aaf9e900fa800af234d7b0d5fe56b6a924e5edfebc7e611"
+          },
+          "stdout": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000126.stdout",
+            "bytes": 897,
+            "sha256": "eda25b4e45dd3629d91be5e0c8be0f28d4ef233d5618da5eb893911c0a34e02e"
+          }
+        },
+        "before_pages": [
+          {
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000056.command.json",
+              "bytes": 1038,
+              "sha256": "55057924b3248daf42d8ab1b1d1b2f33b9ef33e8874de78159d06c87b4579a26"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000056.stdout",
+              "bytes": 84358,
+              "sha256": "92c8b04874dfa0bd75d702abefaca1c4a7cc8ecaaf47012e5fadee4db98cc592"
+            }
+          }
+        ],
+        "after_pages": [
+          {
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000128.command.json",
+              "bytes": 1038,
+              "sha256": "eafbe3f70a9850b054f98951a9ec236b41e999ebe5a719893c12a22bf99c0d34"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000128.stdout",
+              "bytes": 84358,
+              "sha256": "611299bb90ec60ab3d624e85841d48e4fcd695000437d964d8ca92ab5091d81f"
+            }
+          }
+        ]
+      },
+      {
+        "name": "visit",
+        "id": "decl_2e9e029a80b2f7928fea69e964335605",
+        "owner_record": "owner_object_42bf6e390d1eb36e9c4275f3d3b5980074b0831f27c1b2d660e6bc741fe9f1e8",
+        "exact_definition_records_sha256": "4f8e04e39c86f90c89b22b1726dd8cf642e1963f42973c6656078c9bd6c67802",
+        "record_count": 335,
+        "before_query": {
+          "command": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000057.command.json",
+            "bytes": 969,
+            "sha256": "6637d923c18075e8b8b2e0e2abb96b8576b44f08b9570421dfe2235419d1658f"
+          },
+          "stdout": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000057.stdout",
+            "bytes": 891,
+            "sha256": "1ea9ebc7b89d12fdc96fa6cbfe6b6026973ff44b7da9dd85ff5d810397f09904"
+          }
+        },
+        "after_query": {
+          "command": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000129.command.json",
+            "bytes": 969,
+            "sha256": "9571d312c6259a8a0ad1a30e86c4b303bf205239d5a55b235869b93a18f0d081"
+          },
+          "stdout": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000129.stdout",
+            "bytes": 891,
+            "sha256": "c2754c49294a3c156f54ea5b1cef5ebbd228ad73f44b4146cd10ad5d613aeb03"
+          }
+        },
+        "before_pages": [
+          {
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000059.command.json",
+              "bytes": 1038,
+              "sha256": "2ad31fa4b63b943d5d484b3e487ff3d8c4dbe2805fb410ff30b34b8ca182078d"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000059.stdout",
+              "bytes": 177731,
+              "sha256": "7af876ba3a83577195a7335809cb518f4421b1af220b0450185b8409c6bbc0ba"
+            }
+          }
+        ],
+        "after_pages": [
+          {
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000131.command.json",
+              "bytes": 1038,
+              "sha256": "e2f7c793dd874ef32692b0371597d84d66aa5e02e4bef107c2c7dbcdd3ff4bc0"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000131.stdout",
+              "bytes": 177731,
+              "sha256": "007afb6d7f153aab12b21353258252beb03959ef1ce49f941205a18c2563d9fa"
+            }
+          }
+        ]
+      },
+      {
+        "name": "assign-with-storage",
+        "id": "decl_173e168d357fd7fa5cbeff475c75b074",
+        "owner_record": "owner_object_1b78cfcd91cd052cf837f7cf8d78c9caf18c7121fcc79f4da8af1b31da2446e4",
+        "exact_definition_records_sha256": "6ff9bb5619eb64bc649110126dff535dc5d3b890d8bf284058ab8b2627645f9f",
+        "record_count": 141,
+        "before_query": {
+          "command": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000060.command.json",
+            "bytes": 983,
+            "sha256": "763b0f9c09edaa4f540b0cb73382c80cc2b6da84995219b9a4fd7e019bbc0ac9"
+          },
+          "stdout": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000060.stdout",
+            "bytes": 905,
+            "sha256": "8db039d5a3813b52aa41342f4d70ee367e449a4f81bc4c83f2caaa20783cc419"
+          }
+        },
+        "after_query": {
+          "command": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000132.command.json",
+            "bytes": 983,
+            "sha256": "5dea8deb04871730d52e5d3d5037f4dbe266a0ecb315df71076e01163653ef5d"
+          },
+          "stdout": {
+            "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000132.stdout",
+            "bytes": 905,
+            "sha256": "baf9056719ded7c02017ee9697a4ee56d632a5b8b57379eefebffded49366a85"
+          }
+        },
+        "before_pages": [
+          {
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000062.command.json",
+              "bytes": 1038,
+              "sha256": "2919b6b0c48e122f895bff36b70714364473e1b5cbba5706a4dfd641d063dc40"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000062.stdout",
+              "bytes": 70340,
+              "sha256": "e420fabb1dbf3782be463a6b37ead2f6b431172d456b850046700b2114f62b7d"
+            }
+          }
+        ],
+        "after_pages": [
+          {
+            "command": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000134.command.json",
+              "bytes": 1038,
+              "sha256": "6a5085e9229f014067659c70f3f304700d879ea152aeb5411f326ba8d5dd3264"
+            },
+            "stdout": {
+              "path": "/tmp/lkjscript-native-blockread-prefix-kGKDDC/cli-evidence/00000134.stdout",
+              "bytes": 70340,
+              "sha256": "7b92a1c3577a51509dfd67cec254b495797f3e25a4cfbfefc9b44f5c502c7242"
+            }
+          }
+        ]
+      }
+    ],
+    "early_transport_is_provenance_only": true
+  },
+  "checks": {
+    "checker": {
+      "passed": "127",
+      "failed": "0",
+      "differential": "equal",
+      "production-instructions": "14658",
+      "reference-expressions": "8371"
+    },
+    "planner": {
+      "passed": "149",
+      "failed": "0",
+      "differential": "equal",
+      "production-instructions": "96199",
+      "reference-expressions": "51000"
+    },
+    "checked_consumer": {
+      "passed": "175",
+      "failed": "0",
+      "differential": "equal",
+      "production-instructions": "113385",
+      "reference-expressions": "61338"
+    },
+    "final": {
+      "passed": "176",
+      "failed": "0",
+      "differential": "equal",
+      "production-instructions": "114391",
+      "reference-expressions": "61975"
+    }
+  },
+  "runtime_scope": {
+    "counts": {
+      "attached_project_differential": 30,
+      "attached_exact_artifact_production": 30,
+      "detached_exact_artifact_production": 30
+    },
+    "complete_results": 90,
+    "targets": 5,
+    "literal_cases": 6,
+    "result_bytes_compared": 99690,
+    "production_cleanup": "Artifact phases expose zero live-after, remaining tasks, cleanup failures, active dispatches and workers.",
+    "reference_cleanup": "not exposed by project-run CLI; separate maintained library evidence required",
+    "attached_project_cleanup": "Not exposed by project-run CLI.",
+    "detachment": {
+      "exact_finish_owned_paths": [
+        "/tmp/lkjscript-native-blockread-finish-ZOdKFS/carriers",
+        "/tmp/lkjscript-native-blockread-finish-ZOdKFS/clean-consumer",
+        "/tmp/lkjscript-native-blockread-finish-ZOdKFS/exports",
+        "/tmp/lkjscript-native-blockread-finish-ZOdKFS/native-package-plan",
+        "/tmp/lkjscript-native-blockread-finish-ZOdKFS/planner",
+        "/tmp/lkjscript-native-blockread-finish-ZOdKFS/verifier",
+        "/tmp/lkjscript-native-blockread-finish-ZOdKFS/worklists"
+      ],
+      "currently_absent": true,
+      "archive_completed_before_first_detached_command": true,
+      "isolated_CWD_HOME_TMPDIR": true,
+      "successful_prefix_originals_retained": true,
+      "historical_copies_globally_absent": false
+    }
+  },
+  "historical": {
+    "old51": {
+      "path": ".artifacts/associated-owned-types/maintained-originals-before-blockread-20261012T0601/inventory.json",
+      "bytes": 33944,
+      "sha256": "cbd8d997773d8a3ef42438f96e74da02f0f9f6df59470f747ffd0277cbb232f5"
+    },
+    "old51_review": {
+      "path": ".artifacts/associated-owned-types/reviews/maintained-old51-before-blockread-native-review/review.json",
+      "bytes": 27446,
+      "sha256": "38d754c3104d70b3b24b6c620b33a0a527154f3775da58a3d78f583a74ca1c38"
+    },
+    "old_asset_sha256": "0115358c9dc9c9a91d0bac7755b619a12f36ca9b5e90b69d649639c8ccdb3a54",
+    "old_asset_bytes": 3371783,
+    "root25_requests_retained": true,
+    "refused_checked_consumer": "tools/native-package-plan/requests/checked-consumer.lkjc",
+    "history_is_not_current_authoring_input": true
+  },
+  "selection_scope": "Authenticated candidate/adoption proof. Staging only; installed rebuild, final embedding, fresh full29, normal mainline and finalized-byte release remain subsequent independent obligations."
+}

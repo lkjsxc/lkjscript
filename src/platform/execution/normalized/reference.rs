@@ -49,7 +49,10 @@ mod checked_intrinsics;
 mod prerequisite_tests;
 #[path = "reference_parallel.rs"]
 mod structured;
-use associated_runtime::{CanonicalApplication, CanonicalSelection};
+use associated_runtime::{CanonicalApplication, CanonicalInvocation, CanonicalSelection};
+#[cfg(test)]
+#[path = "reference_associated_invoke_tests.rs"]
+mod associated_invoke_tests;
 #[cfg(test)]
 #[path = "reference_associated_runtime_tests.rs"]
 mod associated_runtime_tests;
@@ -716,6 +719,14 @@ struct ReferenceApplication<'a> {
     effects: &'a [EffectRow],
     requirements: &'a [RequirementOperand],
     implementations: &'a [AppliedReferenceImplementation],
+}
+
+// An Invoke evaluator alone supplies this route. The seal is a local input to
+// admission, never ambient state or part of the admitted callee's execution.
+#[derive(Clone, Copy)]
+enum ReferenceCallRoute<'a> {
+    Direct,
+    Invocation(Option<&'a CanonicalInvocation>),
 }
 
 struct ReferenceState<'a> {
@@ -1909,6 +1920,25 @@ impl ReferenceState<'_> {
         requirement_arguments: &[RequirementOperand],
         arguments: Vec<CheckedValue>,
     ) -> Result<CheckedValue, ExecutionError> {
+        self.call_declaration_on_route(
+            reference,
+            type_arguments,
+            effect_arguments,
+            requirement_arguments,
+            arguments,
+            ReferenceCallRoute::Direct,
+        )
+    }
+
+    fn call_declaration_on_route(
+        &mut self,
+        reference: DeclarationReference,
+        type_arguments: &[TypeObjectDigest],
+        effect_arguments: &[EffectRow],
+        requirement_arguments: &[RequirementOperand],
+        arguments: Vec<CheckedValue>,
+        route: ReferenceCallRoute<'_>,
+    ) -> Result<CheckedValue, ExecutionError> {
         self.control.check()?;
         self.require_owning_result(reference)?;
         let type_arguments = self.resolve_type_arguments(type_arguments)?;
@@ -1933,6 +1963,7 @@ impl ReferenceState<'_> {
             &effect_arguments,
             &requirement_arguments,
             arguments,
+            route,
         );
         let result = loop {
             match step {
@@ -1957,23 +1988,40 @@ impl ReferenceState<'_> {
         effect_arguments: &[EffectRow],
         requirement_arguments: &[RequirementOperand],
         arguments: Vec<CheckedValue>,
+        route: ReferenceCallRoute<'_>,
     ) -> Result<ReferenceStep, ExecutionError> {
         self.control.check()?;
         (|| {
             let declaration = self.declaration(reference)?;
             match declaration.payload {
                 DeclarationPayload::Function(function) => {
-                    let target = self.admit_graph_call(
+                    let target = self.admit_graph_call_with_implementations_on_route(
                         reference,
                         function,
-                        type_arguments,
-                        effect_arguments,
-                        requirement_arguments,
                         arguments,
+                        ReferenceApplication {
+                            types: type_arguments,
+                            effects: effect_arguments,
+                            requirements: requirement_arguments,
+                            implementations: &[],
+                        },
+                        route,
                     )?;
                     self.enter_graph_call(target, false)
                 }
                 DeclarationPayload::External(external) => {
+                    // The external route must obey the same exact call-site
+                    // authority before either an intrinsic or host callback.
+                    self.canonical_application_on_route(
+                        reference,
+                        ReferenceApplication {
+                            types: type_arguments,
+                            effects: effect_arguments,
+                            requirements: requirement_arguments,
+                            implementations: &[],
+                        },
+                        route,
+                    )?;
                     self.count_call(arguments.len())?;
                     let parameters = self.parameters(reference.package, &external.parameters)?;
                     for ty in type_arguments {
@@ -2094,34 +2142,29 @@ impl ReferenceState<'_> {
         Ok(())
     }
 
-    fn admit_graph_call(
+    fn admit_graph_call_with_implementations(
         &mut self,
         declaration: DeclarationReference,
         function: FunctionDeclaration,
-        types: &[TypeObjectDigest],
-        effects: &[EffectRow],
-        requirements: &[RequirementOperand],
         arguments: Vec<CheckedValue>,
+        application: ReferenceApplication<'_>,
     ) -> Result<AdmittedGraphCall, ExecutionError> {
-        self.admit_graph_call_with_implementations(
+        self.admit_graph_call_with_implementations_on_route(
             declaration,
             function,
             arguments,
-            ReferenceApplication {
-                types,
-                effects,
-                requirements,
-                implementations: &[],
-            },
+            application,
+            ReferenceCallRoute::Direct,
         )
     }
 
-    fn admit_graph_call_with_implementations(
+    fn admit_graph_call_with_implementations_on_route(
         &mut self,
         declaration: DeclarationReference,
         mut function: FunctionDeclaration,
         arguments: Vec<CheckedValue>,
         application: ReferenceApplication<'_>,
+        route: ReferenceCallRoute<'_>,
     ) -> Result<AdmittedGraphCall, ExecutionError> {
         let ReferenceApplication {
             types,
@@ -2169,7 +2212,7 @@ impl ReferenceState<'_> {
             self.admit_task_row(&row)?;
             Some(row)
         };
-        let associated = self.canonical_application(
+        let associated = self.canonical_application_on_route(
             declaration,
             ReferenceApplication {
                 types,
@@ -2177,6 +2220,7 @@ impl ReferenceState<'_> {
                 requirements,
                 implementations: supplied,
             },
+            route,
         )?;
         let mut parameters = self.parameters(declaration.package, &function.parameters)?;
         if let Some(application) = &associated {
@@ -2760,6 +2804,7 @@ impl ReferenceState<'_> {
                     );
                 }
                 ExpressionOperation::Invoke { callee, arguments } => {
+                    let invocation = self.admit_canonical_invocation(callee, &arguments)?;
                     let callee = self.evaluate(callee, locals)?;
                     let arguments = self.evaluate_many(&arguments, locals)?;
                     let (
@@ -2769,13 +2814,17 @@ impl ReferenceState<'_> {
                         requirement_arguments,
                         arguments,
                     ) = self.callable_arguments(callee, arguments)?;
-                    return self.tail_step(
+                    return self.tail_step_on_route(
                         declaration,
-                        &type_arguments,
-                        &effect_arguments,
-                        &requirement_arguments,
+                        ReferenceApplication {
+                            types: &type_arguments,
+                            effects: &effect_arguments,
+                            requirements: &requirement_arguments,
+                            implementations: &[],
+                        },
                         arguments,
                         locals,
+                        ReferenceCallRoute::Invocation(invocation.as_ref()),
                     );
                 }
                 operation => {
@@ -2799,28 +2848,55 @@ impl ReferenceState<'_> {
         arguments: Vec<CheckedValue>,
         locals: &BTreeMap<LocalValueReference, CheckedValue>,
     ) -> Result<ReferenceStep, ExecutionError> {
+        self.tail_step_on_route(
+            declaration,
+            ReferenceApplication {
+                types,
+                effects: effect_arguments,
+                requirements: requirement_arguments,
+                implementations: &[],
+            },
+            arguments,
+            locals,
+            ReferenceCallRoute::Direct,
+        )
+    }
+
+    fn tail_step_on_route(
+        &mut self,
+        declaration: DeclarationReference,
+        application: ReferenceApplication<'_>,
+        arguments: Vec<CheckedValue>,
+        locals: &BTreeMap<LocalValueReference, CheckedValue>,
+        route: ReferenceCallRoute<'_>,
+    ) -> Result<ReferenceStep, ExecutionError> {
         self.require_owning_result(declaration)?;
         let callable = self.declaration(declaration)?;
         if let DeclarationPayload::Function(function) = callable.payload {
-            let types = self.resolve_type_arguments(types)?;
-            let effects = self.resolve_effect_arguments(effect_arguments)?;
-            let requirements = self.resolve_requirement_arguments(requirement_arguments)?;
-            let target = self.admit_graph_call(
+            let types = self.resolve_type_arguments(application.types)?;
+            let effects = self.resolve_effect_arguments(application.effects)?;
+            let requirements = self.resolve_requirement_arguments(application.requirements)?;
+            let target = self.admit_graph_call_with_implementations_on_route(
                 declaration,
                 function,
-                &types,
-                &effects,
-                &requirements,
                 arguments,
+                ReferenceApplication {
+                    types: &types,
+                    effects: &effects,
+                    requirements: &requirements,
+                    implementations: &[],
+                },
+                route,
             )?;
             self.transfer_graph_call(target, locals)
         } else {
-            self.call_declaration(
+            self.call_declaration_on_route(
                 declaration,
-                types,
-                effect_arguments,
-                requirement_arguments,
+                application.types,
+                application.effects,
+                application.requirements,
                 arguments,
+                route,
             )
             .map(ReferenceStep::Value)
         }
@@ -2944,6 +3020,7 @@ impl ReferenceState<'_> {
                     (self.active_package, OwnerKey::Expression(expression)),
                     record.contract_version,
                 )?;
+                self.check_canonical_expression_route(expression, &record.operation)?;
                 Ok(record.operation)
             }
             Some(_) => Err(reference_error(
@@ -3709,8 +3786,10 @@ impl ReferenceState<'_> {
                         "resource-bearing task functions can be used only by direct named call",
                     ));
                 }
-                let type_arguments = self.resolve_type_arguments(&type_arguments)?.into();
-                let effect_arguments = self.resolve_effect_arguments(&effect_arguments)?.into();
+                let type_arguments: Arc<[TypeObjectDigest]> =
+                    self.resolve_type_arguments(&type_arguments)?.into();
+                let effect_arguments: Arc<[EffectRow]> =
+                    self.resolve_effect_arguments(&effect_arguments)?.into();
                 let requirement_arguments =
                     self.resolve_requirement_arguments(&requirement_arguments)?;
                 self.requirement_bindings(
@@ -3718,7 +3797,16 @@ impl ReferenceState<'_> {
                     &signature.requirement_parameters,
                     &requirement_arguments,
                 )?;
-                let requirement_arguments = requirement_arguments.into();
+                let requirement_arguments: Arc<[RequirementOperand]> = requirement_arguments.into();
+                self.canonical_application(
+                    function,
+                    ReferenceApplication {
+                        types: &type_arguments,
+                        effects: &effect_arguments,
+                        requirements: &requirement_arguments,
+                        implementations: &[],
+                    },
+                )?;
                 self.schema
                     .functions
                     .binary_search(&function)
@@ -3747,6 +3835,7 @@ impl ReferenceState<'_> {
                 self.bind_expression(callee, arguments, locals)
             }
             ExpressionOperation::Invoke { callee, arguments } => {
+                let invocation = self.admit_canonical_invocation(callee, &arguments)?;
                 let callee = self.evaluate(callee, locals)?;
                 let arguments = self.evaluate_many(&arguments, locals)?;
                 let (
@@ -3756,12 +3845,13 @@ impl ReferenceState<'_> {
                     requirement_arguments,
                     arguments,
                 ) = self.callable_arguments(callee, arguments)?;
-                self.call_declaration(
+                self.call_declaration_on_route(
                     declaration,
                     &type_arguments,
                     &effect_arguments,
                     &requirement_arguments,
                     arguments,
+                    ReferenceCallRoute::Invocation(invocation.as_ref()),
                 )
             }
             ExpressionOperation::Record {

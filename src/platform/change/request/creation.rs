@@ -220,8 +220,8 @@ pub(super) mod owned;
 #[cfg(test)]
 mod record_order_tests;
 pub use owned::{
-    AuthoredImplementationOperand, AuthoredImplementationParameter, AuthoredOwnedMethod,
-    AuthoredOwnedMethodImplementation,
+    AuthoredAssociatedTypeBinding, AuthoredAssociatedTypeMember, AuthoredImplementationOperand,
+    AuthoredImplementationParameter, AuthoredOwnedMethod, AuthoredOwnedMethodImplementation,
 };
 
 pub use declarations::{
@@ -252,8 +252,8 @@ use crate::platform::kernel::{
     StructuralTypeField, TextValue, TypeForm, TypeObject, TypeObjectDigest, TypeParameterRecord,
 };
 use crate::platform::semantic_id::{
-    BindingId, CaseId, DeclarationId, FieldId, OperationId, ParameterId, RequirementId,
-    TypeParameterId,
+    AssociatedTypeMemberId, BindingId, CaseId, DeclarationId, FieldId, ImplementationParameterId,
+    OperationId, ParameterId, RequirementId, TypeParameterId,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -317,6 +317,16 @@ pub enum AuthoredFunctionEffect {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredType {
+    AssociatedContractMember {
+        contract: AuthoredDeclarationReference,
+        member: AssociatedTypeMemberId,
+    },
+    AssociatedWitnessProjection {
+        scope: AuthoredDeclarationReference,
+        parameter: ImplementationParameterId,
+        contract: AuthoredDeclarationReference,
+        member: AssociatedTypeMemberId,
+    },
     OwnedSequence {
         item: Box<AuthoredType>,
     },
@@ -1134,6 +1144,23 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         authored: &AuthoredType,
     ) -> Result<TypeObjectDigest, Diagnostic> {
         let form = match authored {
+            AuthoredType::AssociatedContractMember { contract, member } => {
+                TypeForm::AssociatedContractMember {
+                    contract: self.lower_declaration_reference(contract)?,
+                    member: *member,
+                }
+            }
+            AuthoredType::AssociatedWitnessProjection {
+                scope,
+                parameter,
+                contract,
+                member,
+            } => TypeForm::AssociatedWitnessProjection {
+                scope: self.lower_declaration_reference(scope)?,
+                parameter: *parameter,
+                contract: self.lower_declaration_reference(contract)?,
+                member: *member,
+            },
             AuthoredType::Unit {} => TypeForm::Unit,
             AuthoredType::Bool {} => TypeForm::Bool,
             AuthoredType::I64 {} => TypeForm::I64,
@@ -1379,6 +1406,10 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             .work
             .effect_normalization_steps
             .checked_add(steps)
+            .ok_or_else(overflow)?;
+        self.work
+            .effect_normalization_steps
+            .checked_add(self.work.associated_inventory_steps)
             .ok_or_else(overflow)?;
         self.check_budget("effect row normalization before allocation")
     }

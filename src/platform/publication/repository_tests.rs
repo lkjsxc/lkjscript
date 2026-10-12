@@ -6171,7 +6171,7 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                             result: Box::new(AuthoredType::Unit {}),
                         },
                         implementation: AuthoredPortImplementation::Expression {
-                            expression: AuthoredExpression {
+                            expression: Box::new(AuthoredExpression {
                                 symbol: Some("$port_expression".to_owned()),
                                 operation: AuthoredExpressionOperation::FunctionValue {
                                     requirement_arguments: Vec::new(),
@@ -6179,7 +6179,7 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                                     function: local_declaration("$entry"),
                                     type_arguments: Vec::new(),
                                 },
-                            },
+                            }),
                         },
                     },
                 ],

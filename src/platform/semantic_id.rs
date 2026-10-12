@@ -176,7 +176,7 @@ macro_rules! semantic_id {
             where
                 S: Serializer,
             {
-                serializer.serialize_str(&self.to_string())
+                serialize_prefixed_hex(Self::PREFIX, &self.bytes(), serializer)
             }
         }
 
@@ -318,7 +318,7 @@ impl Serialize for RevisionId {
     where
         S: Serializer,
     {
-        serializer.serialize_str(&self.to_string())
+        serialize_prefixed_hex(Self::PREFIX, &self.0, serializer)
     }
 }
 
@@ -379,6 +379,37 @@ pub(crate) fn encode_hex(bytes: &[u8]) -> String {
     output
 }
 
+/// Keep identifier serialization borrowed until the serializer accepts its bytes.
+/// Canonical admission counters must not allocate a Display string before their
+/// first work/storage check. All current 16/32-byte IDs fit this fixed stack buffer.
+pub(crate) fn serialize_prefixed_hex<S: Serializer>(
+    prefix: &str,
+    bytes: &[u8],
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut text = [0_u8; 128];
+    let length = bytes
+        .len()
+        .checked_mul(2)
+        .and_then(|length| length.checked_add(prefix.len()))
+        .filter(|length| *length <= text.len())
+        .ok_or_else(|| {
+            <S::Error as serde::ser::Error>::custom("identifier exceeds its stack encoding bound")
+        })?;
+    text[..prefix.len()].copy_from_slice(prefix.as_bytes());
+    for (byte, pair) in bytes
+        .iter()
+        .zip(text[prefix.len()..length].as_chunks_mut::<2>().0.iter_mut())
+    {
+        pair[0] = DIGITS[(byte >> 4) as usize];
+        pair[1] = DIGITS[(byte & 0x0f) as usize];
+    }
+    let text =
+        std::str::from_utf8(&text[..length]).map_err(<S::Error as serde::ser::Error>::custom)?;
+    serializer.serialize_str(text)
+}
+
 fn identity_error(class: DiagnosticClass, code: &str, message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(class, code, message)
 }
@@ -386,6 +417,41 @@ fn identity_error(class: DiagnosticClass, code: &str, message: impl Into<String>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn canonical_identifier_serialization_preserves_literal_bytes() {
+        use crate::platform::kernel::{PackageId, PackageTransportDigest, TypeObjectDigest};
+
+        let short = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+        let long = [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+            24, 25, 26, 27, 28, 29, 30, 31,
+        ];
+        for (actual, expected) in [
+            (
+                serde_json::to_string(&AssociatedTypeMemberId::from_bytes(short).expect("member")),
+                "\"assoc_type_000102030405060708090a0b0c0d0e0f\"",
+            ),
+            (
+                serde_json::to_string(&PackageId::from_bytes(short).expect("package")),
+                "\"pkg_000102030405060708090a0b0c0d0e0f\"",
+            ),
+            (
+                serde_json::to_string(&RevisionId::from_digest(long)),
+                "\"rev_000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f\"",
+            ),
+            (
+                serde_json::to_string(&TypeObjectDigest::from_bytes(long)),
+                "\"type_object_000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f\"",
+            ),
+            (
+                serde_json::to_string(&PackageTransportDigest::from_bytes([255; 32])),
+                "\"package_transport_ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"",
+            ),
+        ] {
+            assert_eq!(actual.expect("canonical JSON string"), expected);
+        }
+    }
 
     #[test]
     fn domains_are_explicit_and_migration_is_deterministic() {

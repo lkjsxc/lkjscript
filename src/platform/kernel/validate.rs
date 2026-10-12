@@ -119,6 +119,7 @@ pub(crate) fn validate_full_checked(
         diagnostics: Vec::new(),
         work: 0,
         maximum_work: maximum_work.min(MAXIMUM_VALIDATION_WORK),
+        associated_admission: super::owned_associated::OwnedAssociatedAdmission::new(),
         relations: Vec::new(),
         expression_parents: BTreeMap::new(),
         expression_root_owners: BTreeMap::new(),
@@ -156,6 +157,7 @@ struct FullValidator<'a> {
     diagnostics: Vec<Diagnostic>,
     work: usize,
     maximum_work: usize,
+    associated_admission: super::owned_associated::OwnedAssociatedAdmission,
     relations: Vec<RelationEdge>,
     expression_parents: BTreeMap<ExpressionId, Vec<ExpressionParent>>,
     expression_root_owners: BTreeMap<ExpressionId, OwnerKey>,
@@ -359,42 +361,6 @@ impl FullValidator<'_> {
 
     fn validate(&mut self) {
         self.validate_root_and_records();
-        if self
-            .snapshot
-            .dependency_types
-            .values()
-            .any(|ty| ty.form.is_associated())
-            || self
-                .snapshot
-                .dependency_interfaces
-                .values()
-                .any(|interface| {
-                    interface.values().any(|record| match record {
-                        PackageInterfaceRecord::Declaration(declaration) => {
-                            match &declaration.payload {
-                                PackageInterfaceDeclarationPayload::OwnedContract(contract) => {
-                                    !contract.associated_types.is_empty()
-                                }
-                                PackageInterfaceDeclarationPayload::OwnedImplementation(
-                                    implementation,
-                                ) => !implementation.associated_types.is_empty(),
-                                _ => false,
-                            }
-                        }
-                        _ => false,
-                    })
-                })
-        {
-            self.diagnostics
-                .push(super::owned_associated_wire::unsupported_semantics());
-        }
-        if self
-            .diagnostics
-            .iter()
-            .any(|error| error.code == "owned_associated_semantics_unsupported")
-        {
-            return;
-        }
         if self.exhausted() {
             return;
         }
@@ -483,10 +449,6 @@ impl FullValidator<'_> {
                 return;
             }
             self.capture(record.validate_local());
-            if matches!(record, OwnerRecord::Declaration(d) if d.payload.has_associated_types()) {
-                self.diagnostics
-                    .push(super::owned_associated_wire::unsupported_semantics());
-            }
             if record.header().contract_version
                 == super::contract::PREDECESSOR_GRAPH_CONTRACT_VERSION
                 && super::wire14::OwnerRecord14::try_from(record.clone()).is_err()
@@ -515,10 +477,6 @@ impl FullValidator<'_> {
         for (digest, object) in &self.snapshot.types {
             if !self.consume_work() {
                 return;
-            }
-            if object.form.is_associated() {
-                self.diagnostics
-                    .push(super::owned_associated_wire::unsupported_semantics());
             }
             if self.snapshot.root.graph_contract_version < 25
                 && matches!(object.form, TypeForm::OwnedSequence { .. })
@@ -1748,8 +1706,18 @@ impl FullValidator<'_> {
                 return;
             }
             match record {
-                OwnerRecord::Parameter(parameter) => {
-                    if super::memory::direct(self.snapshot, parameter.ty).unwrap_or(false) {
+                OwnerRecord::Parameter(ref parameter) => {
+                    let owned = match self.parameter_owns_storage(owner, &record) {
+                        Ok(owned) => owned,
+                        Err(error) => {
+                            self.diagnostics.push(error);
+                            if self.exhausted() {
+                                return;
+                            }
+                            continue;
+                        }
+                    };
+                    if owned {
                         continue;
                     }
                     let contains = self.type_contains_resource(parameter.ty);
@@ -3434,6 +3402,62 @@ impl FullValidator<'_> {
         true
     }
 
+    fn parameter_owns_storage(
+        &mut self,
+        key: OwnerKey,
+        record: &OwnerRecord,
+    ) -> Result<bool, Diagnostic> {
+        let OwnerRecord::Parameter(parameter) = record else {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Corrupt,
+                "kernel_full_parameter_shape",
+                "parameter storage admission requires an exact parameter owner",
+            ));
+        };
+        if record.header().owner != key
+            || !matches!(key, OwnerKey::Parameter(_))
+            || record.header().kind != OwnerKind::Parameter
+        {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Corrupt,
+                "kernel_full_parameter_shape",
+                "parameter storage admission has a mismatched canonical owner",
+            ));
+        }
+        let work = std::cell::Cell::new(self.work);
+        let interrupted = std::cell::Cell::new(false);
+        let result = (|| {
+            let checkpoint = || {
+                if let Err(error) = (self.read.checkpoint)() {
+                    interrupted.set(true);
+                    return Err(error);
+                }
+                let next = work.get().checked_add(1).ok_or_else(full_work_exhausted)?;
+                work.set(next);
+                if next > self.maximum_work {
+                    return Err(full_work_exhausted());
+                }
+                Ok(())
+            };
+            let read = super::infer::CheckedExpressionRead {
+                read: self.snapshot,
+                checkpoint: &checkpoint,
+            };
+            let occurrence =
+                super::memory::owner_occurrence(&read, key, record)?.ok_or_else(|| {
+                    Diagnostic::new(
+                        DiagnosticClass::Corrupt,
+                        "kernel_full_parameter_shape",
+                        "parameter storage admission has no canonical occurrence context",
+                    )
+                })?;
+            super::memory::direct_at(&read, parameter.ty, occurrence, &self.associated_admission)
+        })();
+        self.work = work.get();
+        self.interrupted |= interrupted.get();
+        result
+    }
+
     fn exhausted(&self) -> bool {
         self.work > self.maximum_work || self.interrupted
     }
@@ -3443,3 +3467,15 @@ impl FullValidator<'_> {
             .push(Diagnostic::new(DiagnosticClass::Semantic, code, message));
     }
 }
+
+fn full_work_exhausted() -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticClass::Resource,
+        "kernel_full_work",
+        "full validation exhausted its explicit work budget",
+    )
+}
+
+#[cfg(test)]
+#[path = "associated_parameter_shape_tests.rs"]
+mod associated_parameter_shape_tests;

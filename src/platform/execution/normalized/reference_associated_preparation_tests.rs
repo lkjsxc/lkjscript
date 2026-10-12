@@ -1,5 +1,5 @@
 //! Canonical expected meaning is derived without producer selections or lookup.
-//! These are private preparation checks; the global associated admission gate stays on.
+//! These private canonical fixtures grant no production source or artifact admission seal.
 use super::*;
 use crate::platform::execution::normalized::prepare::{
     NormalizedAssociatedTypeBinding, NormalizedCode, NormalizedFunction, NormalizedFunctionBody,
@@ -11,6 +11,9 @@ use crate::platform::kernel::{
     OwnerHeader, OwnerKind, StructuralTypeField, TypeParameterRecord,
 };
 use crate::platform::semantic_id::{DeclarationId, ParameterId, TypeParameterId};
+
+#[path = "reference_associated_signature_tests.rs"]
+mod scoped_signatures;
 
 const SEED: &[u8] = b"canonical-associated-preparation";
 const SOURCE: &str = r#"
@@ -725,7 +728,87 @@ fn canonical_associated_preparation_has_exact_capacity_and_cancelled_retry_bound
     )
     .unwrap();
     assert_eq!((retry.steps, retry.bytes), (healthy.steps, healthy.bytes));
-    assert!(crate::platform::execution::normalized::reference_schema::NormalizedReferenceSchema::independently_admit_witness_source(&fixture.source).is_err());
+    // This fixture entry bypasses production source admission. Successful completion
+    // must retain the independent symbolic proof; it grants no source or artifact seal.
+    let completed = super::super::super::reference_schema::NormalizedReferenceSchema::independently_admit_witness_source(&fixture.source).unwrap();
+    assert_eq!(completed.source_admission_steps, 0);
+    let proof = completed.associated_proof().unwrap();
+    assert!(proof.types.is_empty());
+    assert!(proof.applications.is_empty());
+    assert!(proof.selections.is_empty());
+    assert!(proof.methods.is_empty());
+    assert!(proof.executables.is_empty());
+    assert_eq!(
+        proof.symbolic.keys().copied().collect::<BTreeSet<_>>(),
+        BTreeSet::from([fixture.consumer, fixture.reader])
+    );
+    let consumer = &proof.symbolic[&fixture.consumer];
+    assert_eq!(
+        consumer.parameters,
+        [(fixture.projection, ParameterUse::Borrow)]
+    );
+    assert_eq!(consumer.result, fixture.projection);
+    assert_eq!(consumer.result_borrow, Some(0));
+    assert!(!consumer.is_task);
+    assert!(consumer.requires_associated_generation);
+    assert_eq!(consumer.effect, EffectRow::default());
+    let control = ExecutionControl::uncancelled();
+    let contract = proof.contract_template(fixture.contract, &control).unwrap();
+    let method = contract.methods[0].id;
+    let contract_result = contract.methods[0].result;
+    assert!(matches!(
+        completed.types[&contract_result].form,
+        TypeForm::AssociatedContractMember { contract, member }
+            if contract == fixture.contract && member == fixture.member
+    ));
+    assert_eq!(proof.contract_methods.len(), 1);
+    let signature = &proof.contract_methods[&(fixture.contract, method)];
+    assert_eq!(
+        signature.parameters,
+        [(contract_result, ParameterUse::Borrow)]
+    );
+    assert_eq!(signature.result, contract_result);
+    assert_eq!(signature.result_borrow, Some(0));
+    assert!(!signature.is_task);
+    assert!(signature.requires_associated_generation);
+    assert_eq!(proof.symbolic_mappings.len(), 3);
+    for (index, expected) in [fixture.cell, fixture.block, fixture.cell]
+        .into_iter()
+        .enumerate()
+    {
+        let target = proof
+            .symbolic_mapping(fixture.implementations[index], method, &control)
+            .unwrap();
+        assert_eq!(target.function, Some(fixture.reader));
+        assert_eq!(target.types, [expected]);
+        assert!(target.witnesses.is_empty());
+        assert_eq!(
+            target.signature.parameters,
+            [(expected, ParameterUse::Borrow)]
+        );
+        assert_eq!(target.signature.result, expected);
+        assert_eq!(target.signature.result_borrow, Some(0));
+        assert!(!target.signature.is_task);
+        assert_eq!(target.signature.effect, EffectRow::default());
+    }
+    assert!(completed.types.contains_key(&fixture.cell));
+    assert!(completed.types.contains_key(&fixture.block));
+    assert!(completed.transferable_types.contains(&fixture.block));
+    assert!(completed.shareable_types.contains(&fixture.block));
+    for raw in [fixture.projection, contract_result] {
+        assert!(proof.raw_templates.contains(&raw));
+        for property in [
+            &completed.buffer_free_types,
+            &completed.capture_safe_types,
+            &completed.transferable_types,
+            &completed.shareable_types,
+            &completed.ordinary_types,
+            &completed.comparable_types,
+            &completed.application_free_types,
+        ] {
+            assert!(!property.contains(&raw));
+        }
+    }
 }
 
 #[test]
@@ -1067,7 +1150,24 @@ fn canonical_associated_schema_private_core_moves_types_and_excludes_raw_ancesto
     assert!(schema.application_free_types.contains(&ordinary_callable));
     assert!(schema.transferable_types.contains(&fixture.block));
     assert!(schema.shareable_types.contains(&fixture.block));
-    assert_eq!(super::super::super::reference_schema::NormalizedReferenceSchema::independently_admit_witness_source(&fixture.source).unwrap_err().code, "owned_associated_semantics_unsupported");
+    // This cfg(test) entry completes the independent schema while bypassing full source
+    // admission. It grants no artifact seal and must preserve every raw property exclusion.
+    let completed = super::super::super::reference_schema::NormalizedReferenceSchema::independently_admit_witness_source(&fixture.source).unwrap();
+    assert!(completed.associated_proof().unwrap().types.is_empty());
+    assert!(completed.types.contains_key(&fixture.block));
+    for raw in [fixture.projection, raw_function, raw_task, raw_list] {
+        for property in [
+            &completed.buffer_free_types,
+            &completed.capture_safe_types,
+            &completed.transferable_types,
+            &completed.shareable_types,
+            &completed.ordinary_types,
+            &completed.comparable_types,
+            &completed.application_free_types,
+        ] {
+            assert!(!property.contains(&raw));
+        }
+    }
     for checks in [0, 20] {
         let proof = prove(&fixture, &[0, 1, 2], Limits::default(), &control).unwrap();
         assert_eq!(
@@ -1298,4 +1398,261 @@ fn canonical_associated_schema_checks_unselected_owned_bindings_and_growth_befor
     let error = super::super::super::reference_schema::NormalizedReferenceSchema::independently_admit_witness_source(&fixture.source).unwrap_err();
     assert_eq!(error.class, ExecutionFailureClass::Trap);
     assert_eq!(error.code, "kernel_associated_reference_growth");
+}
+
+pub(in super::super::super) struct InvokeFixture {
+    pub(in super::super::super) fixture: Fixture,
+    pub(in super::super::super) caller: DeclarationReference,
+    pub(in super::super::super) target: DeclarationReference,
+    pub(in super::super::super) invocation: ExpressionId,
+    pub(in super::super::super) callee: ExpressionId,
+    pub(in super::super::super) argument: ExpressionId,
+    pub(in super::super::super) second_argument: ExpressionId,
+}
+
+pub(in super::super::super) fn invoke_fixture() -> InvokeFixture {
+    use crate::platform::kernel::{ExpressionRecord, ParameterRecord};
+
+    // Canonical source only: no producer catalogue, target table or private schema
+    // success is supplied by this shared preparation/runtime fixture builder.
+    let mut fixture = make_fixture();
+    let scalar = add(&mut fixture.source, TypeForm::I64);
+    let target = DeclarationReference {
+        package: fixture.reader.package,
+        declaration: DeclarationId::migrate(SEED, 11_000),
+    };
+    let caller = DeclarationReference {
+        package: fixture.reader.package,
+        declaration: DeclarationId::migrate(SEED, 11_001),
+    };
+    let parameter = ParameterId::migrate(SEED, 11_000);
+    let second_parameter = ParameterId::migrate(SEED, 11_001);
+    let local = ExpressionId::migrate(SEED, 11_000);
+    let callee = ExpressionId::migrate(SEED, 11_001);
+    let argument = ExpressionId::migrate(SEED, 11_002);
+    let second_argument = ExpressionId::migrate(SEED, 11_004);
+    let invocation = ExpressionId::migrate(SEED, 11_003);
+    let OwnerRecord::Declaration(mut declaration) =
+        fixture.source.owners[&OwnerKey::Declaration(fixture.reader.declaration)].clone()
+    else {
+        unreachable!()
+    };
+    let DeclarationPayload::Function(function) = &mut declaration.payload else {
+        unreachable!()
+    };
+    function.type_parameters.clear();
+    function.parameters = vec![parameter, second_parameter];
+    function.result = scalar;
+    function.result_borrow = None;
+    function.body = local;
+    declaration.header = OwnerHeader::new(
+        OwnerKey::Declaration(target.declaration),
+        OwnerKind::PureFunction,
+    );
+    declaration.name = name("indirectTarget");
+    fixture.source.owners.insert(
+        OwnerKey::Declaration(target.declaration),
+        OwnerRecord::Declaration(declaration.clone()),
+    );
+    fixture.source.owners.insert(
+        OwnerKey::Parameter(parameter),
+        OwnerRecord::Parameter(ParameterRecord {
+            header: OwnerHeader::new(OwnerKey::Parameter(parameter), OwnerKind::Parameter),
+            parent: ParameterParent::Function(target.declaration),
+            name: name("value"),
+            ty: scalar,
+            use_mode: ParameterUse::Unrestricted,
+            resource_requirement: None,
+        }),
+    );
+    fixture.source.owners.insert(
+        OwnerKey::Parameter(second_parameter),
+        OwnerRecord::Parameter(ParameterRecord {
+            header: OwnerHeader::new(OwnerKey::Parameter(second_parameter), OwnerKind::Parameter),
+            parent: ParameterParent::Function(target.declaration),
+            name: name("second"),
+            ty: scalar,
+            use_mode: ParameterUse::Unrestricted,
+            resource_requirement: None,
+        }),
+    );
+    for (id, operation) in [
+        (
+            local,
+            ExpressionOperation::Local {
+                value: LocalValueReference::FunctionParameter(parameter),
+            },
+        ),
+        (
+            callee,
+            ExpressionOperation::FunctionValue {
+                function: target,
+                type_arguments: vec![],
+                effect_arguments: vec![],
+                requirement_arguments: vec![],
+            },
+        ),
+        (argument, ExpressionOperation::I64 { value: 17 }),
+        (second_argument, ExpressionOperation::I64 { value: 42 }),
+        (
+            invocation,
+            ExpressionOperation::Invoke {
+                callee,
+                arguments: vec![argument, second_argument],
+            },
+        ),
+    ] {
+        fixture.source.owners.insert(
+            OwnerKey::Expression(id),
+            OwnerRecord::Expression(ExpressionRecord::new(id, operation).unwrap()),
+        );
+    }
+    let DeclarationPayload::Function(function) = &mut declaration.payload else {
+        unreachable!()
+    };
+    function.parameters.clear();
+    function.body = invocation;
+    declaration.header = OwnerHeader::new(
+        OwnerKey::Declaration(caller.declaration),
+        OwnerKind::PureFunction,
+    );
+    declaration.name = name("indirectCaller");
+    fixture.source.owners.insert(
+        OwnerKey::Declaration(caller.declaration),
+        OwnerRecord::Declaration(declaration),
+    );
+    InvokeFixture {
+        fixture,
+        caller,
+        target,
+        invocation,
+        callee,
+        argument,
+        second_argument,
+    }
+}
+
+#[test]
+fn canonical_associated_preparation_seals_indirect_invocations_and_callable_targets() {
+    let case = invoke_fixture();
+    let control = ExecutionControl::uncancelled();
+    let healthy = prove(&case.fixture, &[], Limits::default(), &control).unwrap();
+    let application = healthy
+        .applications
+        .keys()
+        .find(|application| application.function == case.caller)
+        .unwrap();
+    let invocation = healthy
+        .invocation(application, case.invocation, &control)
+        .unwrap();
+    assert_eq!(invocation.callee, case.callee);
+    assert_eq!(invocation.arguments, [case.argument, case.second_argument]);
+    assert_eq!(
+        healthy.symbolic[&case.caller].invocations[&case.invocation],
+        Invocation {
+            callee: case.callee,
+            arguments: vec![case.argument, case.second_argument],
+        }
+    );
+    let target = healthy
+        .call_target(application, case.callee, &control)
+        .unwrap();
+    assert_eq!(target.function, case.target);
+    assert!(target.types.is_empty());
+    assert!(target.witnesses.is_empty());
+    assert!(
+        healthy
+            .call_target(application, case.invocation, &control)
+            .is_err()
+    );
+    assert!(
+        healthy
+            .invocation(target, case.invocation, &control)
+            .is_err()
+    );
+    assert_eq!(
+        healthy
+            .invocation(
+                application,
+                case.invocation,
+                &ExecutionControl::cancel_after_checks(0)
+            )
+            .unwrap_err()
+            .class,
+        ExecutionFailureClass::Cancelled
+    );
+
+    for corruption in 0..4 {
+        let mut proof = prove(&case.fixture, &[], Limits::default(), &control).unwrap();
+        let application = proof
+            .applications
+            .keys()
+            .find(|application| application.function == case.caller)
+            .unwrap()
+            .clone();
+        let target = proof
+            .call_target(&application, case.callee, &control)
+            .unwrap()
+            .clone();
+        let function = proof.applications.get_mut(&application).unwrap();
+        match corruption {
+            0 => {
+                function
+                    .invocations
+                    .get_mut(&case.invocation)
+                    .unwrap()
+                    .callee = ExpressionId::migrate(SEED, 12_000);
+            }
+            1 => {
+                function
+                    .invocations
+                    .get_mut(&case.invocation)
+                    .unwrap()
+                    .arguments[0] = ExpressionId::migrate(SEED, 12_000);
+            }
+            2 => {
+                function.targets.insert(case.invocation, target);
+            }
+            _ => {
+                function
+                    .occurrences
+                    .remove(&OwnerKey::Expression(case.invocation));
+            }
+        }
+        assert_eq!(
+            proof.closed(Limits::default(), &control).unwrap_err().code,
+            "reference_associated_preparation",
+            "corruption {corruption}"
+        );
+    }
+    for limits in [
+        Limits {
+            steps: healthy.steps - 1,
+            bytes: healthy.bytes,
+        },
+        Limits {
+            steps: healthy.steps,
+            bytes: healthy.bytes - 1,
+        },
+    ] {
+        assert_eq!(
+            prove(&case.fixture, &[], limits, &control)
+                .unwrap_err()
+                .class,
+            ExecutionFailureClass::Resource
+        );
+    }
+    let exact = prove(
+        &case.fixture,
+        &[],
+        Limits {
+            steps: healthy.steps,
+            bytes: healthy.bytes,
+        },
+        &control,
+    )
+    .unwrap();
+    assert_eq!((exact.steps, exact.bytes), (healthy.steps, healthy.bytes));
+    let retry = prove(&case.fixture, &[], Limits::default(), &control).unwrap();
+    assert_eq!((retry.steps, retry.bytes), (healthy.steps, healthy.bytes));
 }

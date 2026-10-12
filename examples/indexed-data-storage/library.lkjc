@@ -18,6 +18,23 @@ declarations.begin
         (returns (owned-product (field rest Self) (field value Item))) (effect pure))
       (method method_a1000000000000000000000000000006 discard
         (parameters (Self consume)) (returns Unit) (effect pure)))
+    (owned-contract create BlockRead (visibility public)
+      (self Self) (type-parameter create Self (constraint owned))
+      (type-parameter create Item (constraint transferable))
+      (associated-type assoc_type_a3000000000000000000000000000001 Block (bound owned))
+      (method method_a3000000000000000000000000000001 block-count
+        (parameters (Self borrow)) (returns I64) (effect pure))
+      (method method_a3000000000000000000000000000002 block-at
+        (parameters (I64 unrestricted) (Self borrow))
+        (returns (associated-contract-member BlockRead assoc_type_a3000000000000000000000000000001)
+          (borrow-from 1)) (effect pure))
+      (method method_a3000000000000000000000000000003 block-length
+        (parameters ((associated-contract-member BlockRead assoc_type_a3000000000000000000000000000001) borrow))
+        (returns I64) (effect pure))
+      (method method_a3000000000000000000000000000004 block-get
+        (parameters (I64 unrestricted)
+          ((associated-contract-member BlockRead assoc_type_a3000000000000000000000000000001) borrow))
+        (returns Item) (effect pure)))
     (function create build-loop (visibility private) (effect pure)
       (type-parameter create T (constraint transferable))
       (type-parameter create W (constraint owned))

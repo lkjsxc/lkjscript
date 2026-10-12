@@ -172,6 +172,9 @@ struct Context {
 struct Adapter<'a, 'b> {
     budget: &'a model::Budget<'b>,
     sources: BTreeMap<PackageId, &'a KernelSnapshot>,
+    // Raw exact closure inventory, independent of producer selections. Vectors
+    // retain declaration traversal order, including private and unused schemes.
+    implementations_by_contract: BTreeMap<DeclarationReference, Vec<DeclarationReference>>,
     ids: BTreeMap<DefinitionIdentity, model::Definition>,
     member_ids: BTreeMap<(DeclarationReference, AssociatedTypeMemberId), model::Member>,
     witness_ids: BTreeMap<(DeclarationReference, ImplementationParameterId), usize>,
@@ -196,6 +199,7 @@ impl CanonicalProgram {
         let mut adapter = Adapter {
             budget,
             sources: BTreeMap::new(),
+            implementations_by_contract: BTreeMap::new(),
             ids: BTreeMap::new(),
             member_ids: BTreeMap::new(),
             witness_ids: BTreeMap::new(),
@@ -366,6 +370,20 @@ impl Adapter<'_, '_> {
                 .definitions
                 .insert(id, DefinitionIdentity::Declaration(reference));
             let declaration = self.declaration(reference)?;
+            if let DeclarationPayload::OwnedImplementation(implementation) = &declaration.payload {
+                if !self
+                    .implementations_by_contract
+                    .contains_key(&implementation.contract)
+                {
+                    self.budget
+                        .reserve::<(DeclarationReference, Vec<DeclarationReference>)>(1)?;
+                }
+                self.budget.reserve::<DeclarationReference>(1)?;
+                self.implementations_by_contract
+                    .entry(implementation.contract)
+                    .or_default()
+                    .push(reference);
+            }
             self.parameters(reference)?;
             let witnesses = self.witnesses(reference)?;
             self.budget
@@ -1523,14 +1541,20 @@ impl Adapter<'_, '_> {
                 }
                 // Exact method alternatives use raw scheme inventories, not a
                 // producer's selected-shape relation or normalized method table.
-                for implementation in self.declarations()? {
+                for implementation in self
+                    .implementations_by_contract
+                    .get(&contract)
+                    .into_iter()
+                    .flatten()
+                {
+                    self.budget.tick()?;
                     let DeclarationPayload::OwnedImplementation(record) =
-                        self.declaration(implementation)?.payload
+                        self.declaration(*implementation)?.payload
                     else {
-                        continue;
+                        return Err(model::Refusal::Inventory);
                     };
                     if record.contract != contract {
-                        continue;
+                        return Err(model::Refusal::ForeignContract);
                     }
                     self.budget.reserve::<model::Call>(1)?;
                     self.budget
@@ -1548,7 +1572,7 @@ impl Adapter<'_, '_> {
                     calls.push(model::Call {
                         target: self
                             .ids
-                            .get(&DefinitionIdentity::MethodMapping(implementation, method))
+                            .get(&DefinitionIdentity::MethodMapping(*implementation, method))
                             .copied()
                             .ok_or(model::Refusal::Inventory)?,
                         arguments: (0..record.type_parameters.len())
@@ -1568,7 +1592,7 @@ impl Adapter<'_, '_> {
                             })
                             .collect(),
                         kind: model::CallKind::SelectedMethodEntry,
-                        method_guard: Some((path.root, self.id(implementation)?)),
+                        method_guard: Some((path.root, self.id(*implementation)?)),
                         untaken: false,
                         phantom: false,
                     });

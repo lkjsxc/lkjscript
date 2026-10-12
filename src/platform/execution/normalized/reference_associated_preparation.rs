@@ -1,7 +1,8 @@
 //! Independent closed application derivation from canonical snapshots.
 //! Prepared member arrays, type lookup, and production substitution are never
 //! inputs to this derivation. This is preparation correspondence, not an ownership
-//! or finite-growth admission token; full reference schema admission still refuses.
+//! or finite-growth admission token; complete schema proof and source/artifact admission
+//! are separate boundaries.
 
 use super::super::reference_effects;
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
@@ -36,6 +37,23 @@ pub(in super::super) struct Application {
     pub requirements: Vec<RequirementReference>,
 }
 
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in super::super) enum ReadContext {
+    Application(Application),
+    Symbolic(DeclarationReference),
+    Executable((PackageId, OwnerKey)),
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub(in super::super) struct ScopedSignature {
+    pub parameters: Vec<(TypeObjectDigest, ParameterUse)>,
+    pub result: TypeObjectDigest,
+    pub result_borrow: Option<u32>,
+    pub effect: EffectRow,
+    pub is_task: bool,
+    pub requires_associated_generation: bool,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(in super::super) struct Member {
     pub member: AssociatedTypeMemberId,
@@ -65,8 +83,16 @@ pub(in super::super) struct Selection {
     pub members: Vec<Member>,
 }
 
+#[derive(Debug, Eq, PartialEq)]
+pub(in super::super) struct Invocation {
+    pub callee: ExpressionId,
+    pub arguments: Vec<ExpressionId>,
+}
+
 #[derive(Debug)]
 pub(in super::super) struct Function {
+    pub is_task: bool,
+    pub requires_associated_generation: bool,
     pub implementation_templates: Vec<ImplementationParameter>,
     pub parameters: Vec<(TypeObjectDigest, ParameterUse)>,
     pub result: TypeObjectDigest,
@@ -74,17 +100,21 @@ pub(in super::super) struct Function {
     pub effect: EffectRow,
     pub roots: BTreeMap<(OwnerKey, TypeObjectDigest), TypeObjectDigest>,
     pub targets: BTreeMap<ExpressionId, Application>,
+    pub invocations: BTreeMap<ExpressionId, Invocation>,
     pub occurrences: BTreeMap<OwnerKey, u16>,
     pub symbolic_targets: BTreeMap<ExpressionId, SymbolicTarget>,
+    pub associated_targets: BTreeSet<ExpressionId>,
 }
 
-// One body traversal populates these four parts of the same canonical function
+// One body traversal populates these parts of the same canonical function
 // inventory. Group their borrows without allocating or changing source custody.
 struct BodyOutputs<'a> {
     roots: &'a mut BTreeMap<(OwnerKey, TypeObjectDigest), TypeObjectDigest>,
     targets: &'a mut BTreeMap<ExpressionId, Application>,
+    invocations: &'a mut BTreeMap<ExpressionId, Invocation>,
     occurrences: &'a mut BTreeMap<OwnerKey, u16>,
     symbolic_targets: &'a mut BTreeMap<ExpressionId, SymbolicTarget>,
+    associated_targets: &'a mut BTreeSet<ExpressionId>,
 }
 
 #[derive(Debug)]
@@ -108,6 +138,7 @@ pub(in super::super) enum SymbolicSelectionSource {
 
 #[derive(Debug)]
 pub(in super::super) struct SymbolicTarget {
+    pub signature: ScopedSignature,
     pub function: Option<DeclarationReference>,
     pub method: Option<(DeclarationReference, MethodId)>,
     pub types: Vec<TypeObjectDigest>,
@@ -129,12 +160,14 @@ pub(in super::super) struct Proof {
         crate::platform::kernel::OwnedMethodImplementation,
     >,
     pub symbolic: BTreeMap<DeclarationReference, Function>,
+    pub symbolic_mappings: BTreeMap<(DeclarationReference, MethodId), SymbolicTarget>,
     pub contract_methods: BTreeMap<(DeclarationReference, MethodId), Function>,
     pub executables: BTreeMap<(PackageId, OwnerKey), Function>,
     selection_index: SelectionIndex,
     type_identities: BTreeSet<TypeObjectDigest>,
     pub raw_templates: BTreeSet<TypeObjectDigest>,
-    symbolic_formals: BTreeSet<(DeclarationReference, ImplementationParameterId)>,
+    symbolic_formals:
+        BTreeMap<(DeclarationReference, ImplementationParameterId), ImplementationParameter>,
     #[cfg(test)]
     pub flow_work: crate::platform::kernel::associated_flow_canonical_reference::ReferenceFlowWork,
     pub steps: usize,
@@ -217,6 +250,16 @@ impl Budget<'_> {
         self.reserve::<RequirementOperand>(row.requirements.len())?;
         self.reserve::<EffectParameterReference>(row.parameters.len())
     }
+
+    fn validate_row(&mut self, row: &EffectRow) -> Result<(), ExecutionError> {
+        for _ in &row.requirements {
+            self.tick()?;
+        }
+        for _ in &row.parameters {
+            self.tick()?;
+        }
+        row.validate().map_err(|_| reject())
+    }
 }
 
 #[derive(Default)]
@@ -229,6 +272,9 @@ struct Environment {
     ordinary: Ordinary,
     witnesses: Witnesses,
     symbolic_witnesses: BTreeMap<ImplementationParameterId, Arc<SymbolicSelection>>,
+    symbolic_contract: Option<Arc<SymbolicSelection>>,
+    symbolic_effects: BTreeMap<EffectParameterReference, EffectRow>,
+    symbolic_requirements: BTreeMap<RequirementParameterReference, RequirementOperand>,
     contract: Option<Arc<Selection>>,
     effects: reference_effects::Bindings,
     requirements: reference_effects::RequirementBindings,
@@ -259,7 +305,9 @@ struct Derivation<'a> {
         crate::platform::kernel::OwnedMethodImplementation,
     >,
     symbolic: BTreeMap<DeclarationReference, Function>,
-    symbolic_formals: BTreeSet<(DeclarationReference, ImplementationParameterId)>,
+    symbolic_mappings: BTreeMap<(DeclarationReference, MethodId), SymbolicTarget>,
+    symbolic_formals:
+        BTreeMap<(DeclarationReference, ImplementationParameterId), ImplementationParameter>,
     contract_methods: BTreeMap<(DeclarationReference, MethodId), Function>,
     executables: BTreeMap<(PackageId, OwnerKey), Function>,
     #[cfg(test)]
@@ -305,7 +353,8 @@ impl<'a> Derivation<'a> {
             implementation_inventory: BTreeSet::new(),
             mapping_templates: BTreeMap::new(),
             symbolic: BTreeMap::new(),
-            symbolic_formals: BTreeSet::new(),
+            symbolic_mappings: BTreeMap::new(),
+            symbolic_formals: BTreeMap::new(),
             contract_methods: BTreeMap::new(),
             executables: BTreeMap::new(),
             #[cfg(test)]
@@ -453,13 +502,17 @@ impl<'a> Derivation<'a> {
                 else {
                     return Err(reject());
                 };
-                if owner.declaration != scope.declaration
-                    || !self
-                        .declaration(scope, None)?
-                        .payload
-                        .type_parameters()
-                        .contains(&parameter)
+                let mut present = 0;
+                for id in self
+                    .declaration(scope, None)?
+                    .payload
+                    .type_parameters()
+                    .iter()
                 {
+                    self.budget.tick()?;
+                    present += usize::from(*id == parameter);
+                }
+                if owner.declaration != scope.declaration || present != 1 {
                     return Err(reject());
                 }
                 // Actuals are complete caller values; do not traverse them under
@@ -483,17 +536,21 @@ impl<'a> Derivation<'a> {
                     }
                     _ => return Err(reject()),
                 };
-                if inventory
-                    .iter()
-                    .filter(|formal| formal.id == parameter && formal.contract == contract)
-                    .count()
-                    != 1
-                {
+                let mut present = 0;
+                for formal in inventory {
+                    self.budget.tick()?;
+                    present += usize::from(formal.id == parameter && formal.contract == contract);
+                }
+                if present != 1 {
                     return Err(reject());
                 }
-                if env.symbolic && env.symbolic_witnesses.contains_key(&parameter) {
+                if env.symbolic {
                     self.associated_bound(ty)?;
-                    return Ok(ty);
+                    return self.symbolic_member(
+                        env.symbolic_witnesses.get(&parameter).ok_or_else(reject)?,
+                        contract,
+                        member,
+                    );
                 }
                 let selection = env.witnesses.get(&parameter).ok_or_else(reject)?;
                 return self.member(selection, contract, member);
@@ -505,6 +562,9 @@ impl<'a> Derivation<'a> {
                 self.current(contract, env.generation)?;
                 if env.symbolic {
                     self.associated_bound(ty)?;
+                    if let Some(selected) = &env.symbolic_contract {
+                        return self.symbolic_member(selected, contract, member);
+                    }
                     return Ok(ty);
                 }
                 return self.member(env.contract.as_ref().ok_or_else(reject)?, contract, member);
@@ -729,12 +789,11 @@ impl<'a> Derivation<'a> {
         scope: DeclarationReference,
         formals: &[ImplementationParameter],
         supplied: &[Arc<Selection>],
-        env: &Environment,
-    ) -> Result<Witnesses, ExecutionError> {
-        if formals.len() != supplied.len() {
+        env: &mut Environment,
+    ) -> Result<(), ExecutionError> {
+        if formals.len() != supplied.len() || !env.witnesses.is_empty() {
             return Err(reject());
         }
-        let mut result = BTreeMap::new();
         let mut names = BTreeSet::new();
         for (formal, selected) in formals.iter().zip(supplied) {
             self.budget.tick()?;
@@ -751,8 +810,21 @@ impl<'a> Derivation<'a> {
             if owner.declaration != scope.declaration
                 || !owner.constraints.has_owned()
                 || names.contains(&formal.name)
-                || result.contains_key(&formal.id)
-                || self.ty(formal.self_type, env, 0)? != selected.self_type
+                || env.witnesses.contains_key(&formal.id)
+            {
+                return Err(reject());
+            }
+            self.budget
+                .node::<(ImplementationParameterId, Arc<Selection>)>()?;
+            self.budget.node::<&crate::platform::kernel::Name>()?;
+            names.insert(&formal.name);
+            env.witnesses.insert(formal.id, Arc::clone(selected));
+        }
+        // Formal arguments may refer to their own or a later supplied witness's member.
+        // Every selected value was closed in the caller before entering this environment.
+        for (formal, selected) in formals.iter().zip(supplied) {
+            self.budget.tick()?;
+            if self.ty(formal.self_type, env, 0)? != selected.self_type
                 || formal.contract != selected.contract
                 || formal.type_arguments.len() != selected.contract_actuals.len()
             {
@@ -763,13 +835,8 @@ impl<'a> Derivation<'a> {
                     return Err(reject());
                 }
             }
-            self.budget
-                .node::<(ImplementationParameterId, Arc<Selection>)>()?;
-            self.budget.node::<&crate::platform::kernel::Name>()?;
-            names.insert(&formal.name);
-            result.insert(formal.id, Arc::clone(selected));
         }
-        Ok(result)
+        Ok(())
     }
 
     fn operand(
@@ -875,11 +942,11 @@ impl<'a> Derivation<'a> {
             ordinary: self.ordinary(*implementation, &scheme.type_parameters, &actuals)?,
             ..Environment::default()
         };
-        env.witnesses = self.witness_bindings(
+        self.witness_bindings(
             *implementation,
             &scheme.implementation_parameters,
             &prerequisites,
-            &env,
+            &mut env,
         )?;
         let self_type = self.ty(scheme.self_type, &env, 0)?;
         if !self.classify(self_type, false, 0, &mut BTreeSet::new())? {
@@ -1396,8 +1463,7 @@ impl<'a> Derivation<'a> {
             .iter()
             .map(|id| self.selections.get(*id).cloned().ok_or_else(reject))
             .collect::<Result<Vec<_>, _>>()?;
-        env.witnesses =
-            self.witness_bindings(application.function, implementations, &supplied, &env)?;
+        self.witness_bindings(application.function, implementations, &supplied, &mut env)?;
         Ok(env)
     }
 
@@ -1519,7 +1585,9 @@ impl<'a> Derivation<'a> {
             })
             .transpose()?;
         let mut targets = BTreeMap::new();
+        let mut invocations = BTreeMap::new();
         let mut symbolic_targets = BTreeMap::new();
+        let mut associated_targets = BTreeSet::new();
         if let Some(body) = body {
             self.body(
                 application.function.package,
@@ -1528,12 +1596,16 @@ impl<'a> Derivation<'a> {
                 BodyOutputs {
                     roots: &mut roots,
                     targets: &mut targets,
+                    invocations: &mut invocations,
                     occurrences: &mut occurrences,
                     symbolic_targets: &mut symbolic_targets,
+                    associated_targets: &mut associated_targets,
                 },
             )?;
         }
         Ok(Function {
+            is_task: matches!(&owner.payload, DeclarationPayload::Function(function) if matches!(function.effect, crate::platform::kernel::FunctionEffect::Task { .. })),
+            requires_associated_generation: self.associated_function(application.function)?,
             implementation_templates: self.implementation_templates(application.function)?,
             parameters: actual_parameters,
             result,
@@ -1541,8 +1613,10 @@ impl<'a> Derivation<'a> {
             effect,
             roots,
             targets,
+            invocations,
             occurrences,
             symbolic_targets,
+            associated_targets,
         })
     }
 
@@ -1556,8 +1630,10 @@ impl<'a> Derivation<'a> {
         let BodyOutputs {
             roots,
             targets,
+            invocations,
             occurrences,
             symbolic_targets,
+            associated_targets,
         } = outputs;
         env.source_package = Some(package);
         self.budget.reserve::<ExpressionId>(1)?;
@@ -1576,6 +1652,25 @@ impl<'a> Derivation<'a> {
                 return Err(reject());
             };
             env.generation = record.contract_version;
+            if let ExpressionOperation::Invoke { callee, arguments } = &record.operation {
+                self.budget.node::<(ExpressionId, Invocation)>()?;
+                self.budget.reserve::<ExpressionId>(arguments.len())?;
+                for _ in arguments {
+                    self.budget.tick()?;
+                }
+                if invocations
+                    .insert(
+                        id,
+                        Invocation {
+                            callee: *callee,
+                            arguments: arguments.clone(),
+                        },
+                    )
+                    .is_some()
+                {
+                    return Err(reject());
+                }
+            }
             self.budget
                 .reserve::<TypeObjectDigest>(record.type_roots().len())?;
             for ty in record.type_roots() {
@@ -1687,6 +1782,12 @@ impl<'a> Derivation<'a> {
                 None
             };
             if let Some(target) = symbolic {
+                if target.signature.requires_associated_generation
+                    && !associated_targets.contains(&id)
+                {
+                    self.budget.node::<ExpressionId>()?;
+                    associated_targets.insert(id);
+                }
                 self.budget.node::<(ExpressionId, SymbolicTarget)>()?;
                 symbolic_targets.insert(id, target);
             }
@@ -1742,11 +1843,16 @@ impl<'a> Derivation<'a> {
                 _ => None,
             };
             if let Some(target) = target {
-                if self.associated_function(target.function)?
+                let associated = self.associated_operation(&record.operation, target.function)?;
+                if associated
                     && record.contract_version
                         != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
                 {
                     return Err(reject());
+                }
+                if associated && !associated_targets.contains(&id) {
+                    self.budget.node::<ExpressionId>()?;
+                    associated_targets.insert(id);
                 }
                 self.budget.node::<(ExpressionId, Application)>()?;
                 self.charge_application(&target)?;
@@ -1929,11 +2035,11 @@ impl<'a> Derivation<'a> {
             )?,
             ..Environment::default()
         };
-        env.witnesses = self.witness_bindings(
+        self.witness_bindings(
             selected.implementation,
             &scheme.implementation_parameters,
             &selected.prerequisites,
-            &env,
+            &mut env,
         )?;
         let target = self.call(
             mapping.function,
@@ -1999,6 +2105,13 @@ impl<'a> Derivation<'a> {
         }
         let mut target_env = self.environment(target)?;
         if expected != self.ty(function.result, &target_env, 0)?
+            || matches!(
+                method.effect,
+                crate::platform::kernel::FunctionEffect::Task { .. }
+            ) != matches!(
+                function.effect,
+                crate::platform::kernel::FunctionEffect::Task { .. }
+            )
             || self.row(&method.effect.row(), &env)?
                 != self.row(&function.effect.row(), &target_env)?
             || function
@@ -2121,6 +2234,7 @@ impl<'a> Derivation<'a> {
             implementation_inventory: self.implementation_inventory,
             mapping_templates: self.mapping_templates,
             symbolic: self.symbolic,
+            symbolic_mappings: self.symbolic_mappings,
             contract_methods: self.contract_methods,
             executables: self.executables,
             selection_index,
@@ -2213,6 +2327,8 @@ impl Proof {
             {
                 return Err(reject());
             }
+            self.associated_occurrences(function, &mut budget)?;
+            self.invocation_inventory(function, &mut budget)?;
         }
         for ((selection, _), target) in &self.methods {
             budget.tick()?;
@@ -2227,6 +2343,8 @@ impl Proof {
             .chain(self.executables.values())
         {
             budget.tick()?;
+            self.associated_occurrences(function, &mut budget)?;
+            self.invocation_inventory(function, &mut budget)?;
             if !self.contains_type(&function.result)
                 || function
                     .result_borrow
@@ -2268,6 +2386,7 @@ impl Proof {
                 {
                     return Err(reject());
                 }
+                self.scoped_signature(&target.signature, &mut budget)?;
                 for ty in &target.types {
                     budget.tick()?;
                     if !self.contains_type(ty) {
@@ -2279,7 +2398,7 @@ impl Proof {
                 }
                 for row in &target.effects {
                     budget.tick()?;
-                    row.validate().map_err(|_| reject())?;
+                    budget.validate_row(row)?;
                 }
                 for requirement in &target.requirements {
                     budget.tick()?;
@@ -2295,7 +2414,115 @@ impl Proof {
                 }
             }
         }
+        for ((implementation, method), target) in &self.symbolic_mappings {
+            budget.tick()?;
+            if !self.implementation_inventory.contains(implementation)
+                || !self
+                    .mapping_templates
+                    .contains_key(&(*implementation, *method))
+                || !target
+                    .function
+                    .is_some_and(|function| self.symbolic.contains_key(&function))
+                || target.method.is_some()
+            {
+                return Err(reject());
+            }
+            self.scoped_signature(&target.signature, &mut budget)?;
+            for ty in &target.types {
+                budget.tick()?;
+                if !self.contains_type(ty) {
+                    return Err(reject());
+                }
+            }
+            for selected in &target.witnesses {
+                self.symbolic_selection(selected, &mut budget, 0)?;
+            }
+            for row in &target.effects {
+                budget.tick()?;
+                budget.validate_row(row)?;
+            }
+            for _ in &target.requirements {
+                budget.tick()?;
+            }
+        }
         self.steps = budget.steps;
+        Ok(())
+    }
+
+    fn scoped_signature(
+        &self,
+        signature: &ScopedSignature,
+        budget: &mut Budget<'_>,
+    ) -> Result<(), ExecutionError> {
+        budget.tick()?;
+        if !self.contains_type(&signature.result) {
+            return Err(reject());
+        }
+        for (ty, _) in &signature.parameters {
+            budget.tick()?;
+            if !self.contains_type(ty) {
+                return Err(reject());
+            }
+        }
+        budget.validate_row(&signature.effect)?;
+        if let Some(position) = signature.result_borrow {
+            let parameter = signature
+                .parameters
+                .get(position as usize)
+                .ok_or_else(reject)?;
+            if signature.is_task || parameter.1 != ParameterUse::Borrow {
+                return Err(reject());
+            }
+        }
+        Ok(())
+    }
+
+    fn invocation_inventory(
+        &self,
+        function: &Function,
+        budget: &mut Budget<'_>,
+    ) -> Result<(), ExecutionError> {
+        for (expression, invocation) in &function.invocations {
+            budget.tick()?;
+            if !function
+                .occurrences
+                .contains_key(&OwnerKey::Expression(*expression))
+                || !function
+                    .occurrences
+                    .contains_key(&OwnerKey::Expression(invocation.callee))
+                || function.targets.contains_key(expression)
+                || function.symbolic_targets.contains_key(expression)
+            {
+                return Err(reject());
+            }
+            for argument in &invocation.arguments {
+                budget.tick()?;
+                if !function
+                    .occurrences
+                    .contains_key(&OwnerKey::Expression(*argument))
+                {
+                    return Err(reject());
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn associated_occurrences(
+        &self,
+        function: &Function,
+        budget: &mut Budget<'_>,
+    ) -> Result<(), ExecutionError> {
+        for id in &function.associated_targets {
+            budget.tick()?;
+            if function.occurrences.get(&OwnerKey::Expression(*id))
+                != Some(&crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
+                || (!function.targets.contains_key(id)
+                    && !function.symbolic_targets.contains_key(id))
+            {
+                return Err(reject());
+            }
+        }
         Ok(())
     }
 
@@ -2319,7 +2546,17 @@ impl Proof {
         }
         match &selection.source {
             SymbolicSelectionSource::Parameter(scope, parameter) => {
-                if !self.symbolic_formals.contains(&(*scope, *parameter)) {
+                let formal = self
+                    .symbolic_formals
+                    .get(&(*scope, *parameter))
+                    .ok_or_else(reject)?;
+                for _ in &formal.type_arguments {
+                    budget.tick()?;
+                }
+                if formal.contract != selection.contract
+                    || formal.self_type != selection.self_type
+                    || formal.type_arguments != selection.arguments
+                {
                     return Err(reject());
                 }
             }
@@ -2437,6 +2674,9 @@ mod context;
 
 #[path = "reference_associated_inventory.rs"]
 mod inventory;
+
+#[path = "reference_associated_signatures.rs"]
+mod signatures;
 
 pub(in super::super) fn derive<'a>(
     snapshots: &[&'a KernelSnapshot],
@@ -2577,8 +2817,8 @@ pub(in super::super) fn derive<'a>(
     derivation.finish()
 }
 
-/// Called by full canonical reference completion even while its final associated
-/// schema gate remains closed. Complete stored inventories are never skipped by
+/// Called by complete canonical reference schema construction. Complete stored
+/// inventories are never skipped by
 /// an empty executable entry set or by a member not being requested.
 pub(super) fn check_inventory(
     snapshots: &[&KernelSnapshot],
@@ -2595,6 +2835,6 @@ mod tests;
 #[cfg(test)]
 pub(in super::super) mod test_support {
     pub(in super::super::super) use super::tests::{
-        Fixture, base_source, make_fixture, operand, prove,
+        Fixture, InvokeFixture, base_source, invoke_fixture, make_fixture, operand, prove,
     };
 }

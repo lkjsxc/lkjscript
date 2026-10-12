@@ -12,17 +12,40 @@ valid, invalid or capacity claim. A failed check becomes `inconsistent`; it cann
 expose an unchecked successful plan. Integer and Boolean stage storage both select
 Flat, and the worklist selects FlatCells.
 
-`requests/` retains literal proposal provenance, including each original base
-revision and exact supplier binding. `entrypoint.lkjc` is the entrypoint declaration
-body; `compiler-entrypoint.lkjc` is its actually admitted request. These requests
-are proposals, not a synchronized second source. Edit accepted meaning with public
-canonical drafts and rebuild the artifact after applying a reviewed change.
+The maintained BlockRead implementation keeps the actual `storage-flat-flat` native
+entry and forwards `indexed-flat::Blocks<I64>` beside its integer IndexedData
+witness. Its levels map uses the shared scoped block traversal described by the
+[planner](../../examples/dependency-plan/README.md), preserving ascending positions
+and omission of zero levels. All four public integer/Boolean storage choices use
+the same materializer. The generic stage core is authored before its independent
+storage suppliers, then receives the default Flat wrapper.
 
-`checked-consumer-exact.lkjc` binds the intended public planner declarations by
-their queried exact owners. The exported package contains multiple declarations
-named `Outcome`, `flat` and `chunked`, so name lookup alone cannot select them.
-The refused `checked-consumer.lkjc` proposal and its original diagnostic remain
-retained provenance; it never published an accepted revision.
+`requests/blockread-adoption/prefix/` and `requests/blockread-adoption/finish/`
+retain the current admitted literal requests, original base revisions and exact
+supplier bindings. Prefix requests author the generic stage core before its
+independent storage suppliers, then append the explicit default Flat wrapper.
+Finish requests author/export the checker before the producer and bind the
+checked consumer to queried exact declarations. These requests are provenance;
+the accepted editable project remains the program-meaning authority. The
+[current provenance](requests/blockread-adoption/provenance.json) binds all 27
+requests, exact suppliers, accepted project and public proof.
+
+The selected asset is **3,710,645 bytes**, SHA-256
+`5bd6a9568d59df598d1f0a3a7b5538036697db9d04355753f042fe61103bad7d`.
+Its original, rebuilt and clean-consumer builds are byte-identical. The accepted
+project HEAD file is bound by SHA-256
+`526434a7451d263e204f33cc8273e1b414dc430b4a23e677e04af5bb403970fb`.
+[Status](../../docs/status.md) binds the exact public author/build/runtime proof
+and the remaining integrated-source and finalized-byte acceptance.
+
+The original **25** files directly under `requests/` remain historical provenance
+for the preceding asset. They include the original `entrypoint.lkjc` declaration
+body and admitted `compiler-entrypoint.lkjc`. The historical admitted
+`checked-consumer-exact.lkjc` uses queried exact owners because exported names
+`Outcome`, `flat` and `chunked` are ambiguous. The original refused
+`checked-consumer.lkjc` and its diagnostic remain preserved; that proposal never
+published an accepted revision. Edit current meaning with public canonical drafts
+and rebuild after applying a reviewed change.
 
 ```sh
 lkjscript --project tools/native-package-plan/project check
@@ -34,9 +57,14 @@ lkjscript --project tools/native-package-plan/project change draft \
 An untouched draft plans unchanged. A maintained rebuild must match the selected
 artifact's exact bytes while the accepted project and suppliers remain unchanged.
 No external semantic generator, graph writer or host-produced plan participates.
-Supplier projects, requests, exports and original operation logs remain in the
-owned development evidence root `.artifacts/native-package-planner/native-asset-first/`.
-That evidence is separate from fresh source acceptance and finalized distribution.
+Current authoring evidence is indexed under
+`.artifacts/associated-owned-types/native-blockread-asset-rebuild-proposal/`.
+The runtime proof archives retain the supplier projects and exports; current
+provenance binds their exact archive locations and inventories.
+The prior supplier proof remains under
+`.artifacts/native-package-planner/native-asset-first/`. Historical asset identities
+and measured costs do not attest the replacement's cost. Fresh integrated-source
+acceptance and finalized distribution remain separate.
 
 The target takes one ordinary Proposal positional argument:
 

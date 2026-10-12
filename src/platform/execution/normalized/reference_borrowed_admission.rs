@@ -12,6 +12,9 @@ use crate::platform::semantic_id::{BindingId, ExpressionId};
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
+#[path = "reference_borrowed_associated_inventory.rs"]
+mod associated_inventory;
+
 fn reject() -> ExecutionError {
     ExecutionError::new(
         ExecutionFailureClass::Infrastructure,
@@ -46,6 +49,8 @@ struct Signature {
     parameters: Vec<(TypeObjectDigest, ParameterUse)>,
     result: TypeObjectDigest,
     source: Option<usize>,
+    is_task: bool,
+    requires_associated_generation: bool,
 }
 
 struct Loan {
@@ -54,7 +59,10 @@ struct Loan {
     ty: TypeObjectDigest,
 }
 
-pub(super) fn inventory(closure: &mut Closure<'_>) -> Result<(), ExecutionError> {
+pub(super) fn inventory(closure: &mut Closure<'_, '_>) -> Result<(), ExecutionError> {
+    if let Some(proof) = closure.associated_proof.clone() {
+        return associated_inventory::inventory(closure, &proof);
+    }
     // Check the complete metadata inventory. An unused implementation can still
     // counterfeit a result relationship that a later consumer would trust.
     allocate::<&crate::platform::kernel::KernelSnapshot>(
@@ -364,7 +372,7 @@ pub(super) fn inventory(closure: &mut Closure<'_>) -> Result<(), ExecutionError>
 }
 
 pub(super) fn body(
-    closure: &mut Closure<'_>,
+    closure: &mut Closure<'_, '_>,
     package: PackageId,
     root: ExpressionId,
     types: &Bindings,
@@ -376,6 +384,11 @@ pub(super) fn body(
         types,
         scope,
     };
+    if let Some(scope) = scope {
+        checker
+            .closure
+            .occurrence_at(scope.package, OwnerKey::Declaration(scope.declaration))?;
+    }
     let returns_read = if let Some(scope) = scope {
         let OwnerRecord::Declaration(owner) = checker
             .closure
@@ -483,14 +496,14 @@ pub(super) fn body(
     Ok(())
 }
 
-struct Checker<'a, 'b> {
-    closure: &'a mut Closure<'b>,
+struct Checker<'a, 'source, 'types> {
+    closure: &'a mut Closure<'source, 'types>,
     package: PackageId,
     types: &'a Bindings,
     scope: Option<DeclarationReference>,
 }
 
-impl Checker<'_, '_> {
+impl Checker<'_, '_, '_> {
     fn type_at(
         &mut self,
         owner: OwnerKey,
@@ -590,6 +603,8 @@ impl Checker<'_, '_> {
                 }
                 ExpressionOperation::Let { bindings, .. } => {
                     for binding in bindings {
+                        self.closure
+                            .occurrence_at(self.package, OwnerKey::Binding(*binding))?;
                         let OwnerRecord::Binding(binding) = self
                             .closure
                             .owner(self.package, OwnerKey::Binding(*binding))?
@@ -687,24 +702,13 @@ impl Checker<'_, '_> {
     }
 
     fn operation(&mut self, id: ExpressionId) -> Result<&ExpressionOperation, ExecutionError> {
+        self.closure
+            .occurrence_at(self.package, OwnerKey::Expression(id))?;
         let OwnerRecord::Expression(owner) =
             self.closure.owner(self.package, OwnerKey::Expression(id))?
         else {
             return Err(reject());
         };
-        if let (Some(proof), Some(application)) = (
-            &self.closure.associated_proof,
-            &self.closure.associated_application,
-        ) && proof
-            .context(application, self.closure.control)?
-            .occurrence(
-                (self.package, OwnerKey::Expression(id)),
-                self.closure.control,
-            )?
-            != owner.contract_version
-        {
-            return Err(reject());
-        }
         Ok(&owner.operation)
     }
 
@@ -812,6 +816,8 @@ impl Checker<'_, '_> {
         locals: &mut Locals,
         source: Option<LocalValueReference>,
     ) -> Result<(), ExecutionError> {
+        self.closure
+            .occurrence_at(self.package, OwnerKey::Binding(id))?;
         let OwnerRecord::Binding(binding) =
             self.closure.owner(self.package, OwnerKey::Binding(id))?
         else {
@@ -926,37 +932,55 @@ impl Checker<'_, '_> {
             .owner(self.package, OwnerKey::Expression(id))?
             .header()
             .contract_version;
-        if let (Some(proof), Some(application)) = (
-            &self.closure.associated_proof,
-            &self.closure.associated_application,
-        ) {
-            let proof = std::sync::Arc::clone(proof);
-            if proof
-                .context(application, self.closure.control)?
-                .occurrence(
-                    (self.package, OwnerKey::Expression(id)),
-                    self.closure.control,
-                )?
-                != generation
-            {
-                return Err(reject());
-            }
-            if let Some(target) = proof
-                .application(application, self.closure.control)?
-                .targets
-                .get(&id)
-            {
+        if let Some(proof) = self.closure.associated_proof.clone() {
+            self.closure
+                .occurrence_at(self.package, OwnerKey::Expression(id))?;
+            let context = self
+                .closure
+                .associated_context
+                .as_ref()
+                .ok_or_else(reject)?;
+            let source = proof.read_function(context, self.closure.control)?;
+            let signature = if let Some(target) = source.targets.get(&id) {
                 let closed = proof.application(target, self.closure.control)?;
                 allocate::<(TypeObjectDigest, ParameterUse)>(
                     &mut self.closure.allocated,
                     closed.parameters.len(),
                 )?;
-                return Ok(Signature {
+                Signature {
                     parameters: closed.parameters.clone(),
                     result: closed.result,
                     source: closed.result_borrow.map(|source| source as usize),
-                });
+                    is_task: closed.is_task,
+                    requires_associated_generation: closed.requires_associated_generation
+                        || source.associated_targets.contains(&id),
+                }
+            } else {
+                let scoped = &source
+                    .symbolic_targets
+                    .get(&id)
+                    .ok_or_else(reject)?
+                    .signature;
+                allocate::<(TypeObjectDigest, ParameterUse)>(
+                    &mut self.closure.allocated,
+                    scoped.parameters.len(),
+                )?;
+                Signature {
+                    parameters: scoped.parameters.clone(),
+                    result: scoped.result,
+                    source: scoped.result_borrow.map(|source| source as usize),
+                    is_task: scoped.is_task,
+                    requires_associated_generation: scoped.requires_associated_generation
+                        || source.associated_targets.contains(&id),
+                }
+            };
+            if (signature.requires_associated_generation
+                && generation != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
+                || (signature.source.is_some() && signature.is_task)
+            {
+                return Err(reject());
             }
+            return Ok(signature);
         }
         match call {
             ExpressionOperation::Call {
@@ -981,18 +1005,20 @@ impl Checker<'_, '_> {
                 else {
                     return Err(reject());
                 };
-                let (parameters, formal_types, result, source) = match &owner.payload {
+                let (parameters, formal_types, result, source, is_task) = match &owner.payload {
                     DeclarationPayload::Function(signature) => (
                         &signature.parameters,
                         &signature.type_parameters,
                         signature.result,
                         signature.result_borrow,
+                        !matches!(signature.effect, FunctionEffect::Pure),
                     ),
                     DeclarationPayload::External(signature) => (
                         &signature.parameters,
                         &signature.type_parameters,
                         signature.result,
                         None,
+                        false,
                     ),
                     _ => return Err(reject()),
                 };
@@ -1039,6 +1065,8 @@ impl Checker<'_, '_> {
                     parameters: instantiated,
                     result: self.closure.identity(result, &substitutions, 0)?,
                     source,
+                    is_task,
+                    requires_associated_generation: false,
                 })
             }
             ExpressionOperation::MethodCall {
@@ -1104,6 +1132,8 @@ impl Checker<'_, '_> {
                     parameters,
                     result: self.closure.identity(method.result, &substitutions, 0)?,
                     source: method.result_borrow.map(|position| position as usize),
+                    is_task: !matches!(method.effect, FunctionEffect::Pure),
+                    requires_associated_generation: false,
                 })
             }
             _ => Err(reject()),
@@ -1284,7 +1314,18 @@ impl Checker<'_, '_> {
             } => {
                 let invocation = self.operation(call)?.clone();
                 let signature = self.signature(call, &invocation)?;
-                if signature.source.is_none() || !self.owned(signature.result)? {
+                let OwnerRecord::Expression(wrapper) =
+                    self.closure.owner(self.package, OwnerKey::Expression(id))?
+                else {
+                    return Err(reject());
+                };
+                if signature.source.is_none()
+                    || signature.is_task
+                    || (signature.requires_associated_generation
+                        && wrapper.contract_version
+                            != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
+                    || !self.owned(signature.result)?
+                {
                     return Err(reject());
                 }
                 let arguments = match invocation {
@@ -1843,6 +1884,11 @@ impl Checker<'_, '_> {
                     return Err(reject());
                 }
                 let mut parameters = Vec::new();
+                let mut requires_associated_generation = self
+                    .closure
+                    .associated_proof
+                    .as_ref()
+                    .is_some_and(|proof| proof.raw_templates.contains(&operation.result));
                 allocate::<(TypeObjectDigest, ParameterUse)>(
                     &mut self.closure.allocated,
                     operation.parameters.len(),
@@ -1854,6 +1900,11 @@ impl Checker<'_, '_> {
                     else {
                         return Err(reject());
                     };
+                    requires_associated_generation |= self
+                        .closure
+                        .associated_proof
+                        .as_ref()
+                        .is_some_and(|proof| proof.raw_templates.contains(&parameter.ty));
                     parameters.push((parameter.ty, parameter.use_mode));
                 }
                 self.arguments(
@@ -1861,6 +1912,10 @@ impl Checker<'_, '_> {
                         parameters,
                         result: operation.result,
                         source: None,
+                        // Capability invocation is inherently effectful; operations have no
+                        // callable effect row from which to infer purity.
+                        is_task: true,
+                        requires_associated_generation,
                     },
                     &arguments,
                     locals,

@@ -1,0 +1,313 @@
+request base=rev_217dffca54bc664c84f1673e1ef60aa9ff8b6d3b6cb66dd874e58788d6c58bb5
+add.dependency package=pkg_10000000000000000000000000000001 semantic-revision=rev_6818785d8919028a69659b24df495b2d7a42f2676a95fd1aa0ae143a32623013 package-revision=package_revision_3a0f78fdb296b222dc03b1ef01219534c049ae0081362a0004654c78fd88ac73
+add.dependency package=pkg_64743b873112737840db706fc6107a1b semantic-revision=rev_d864fa67e16414bb09a7e5675d2c5393113fa55e02eafcd9fae4b90332b7a99b package-revision=package_revision_2c36949e181a68d10a70ad4dd65367457d365709c6bf29796e1f8889632c7499
+declarations.begin
+(units (use indexed-data pkg_64743b873112737840db706fc6107a1b package_revision_2c36949e181a68d10a70ad4dd65367457d365709c6bf29796e1f8889632c7499))
+declarations.end
+declarations.begin
+(units
+  (use std builtin)
+  (module create plan-stages
+    (type-alias Positions (map I64 I64))
+    (type-alias MaterializedBlock (record (offset I64) (output Positions)))
+    (type-alias Links (map I64 (list I64)))
+    (owned-record create State (visibility private)
+      (type-parameter create Ints (constraint owned))
+      (type-parameter create Flags (constraint owned))
+      (field create levels (type Ints)) (field create queue (type Ints))
+      (field create remaining (type Ints)) (field create seen (type Flags))
+      (field create valid (type Bool)))
+    (type-alias Traversal (record (complete Bool) (levels Positions)))
+
+    (function create refused (visibility private) (effect pure) (returns Traversal)
+      (body (record structural (field complete (bool false)) (field levels (map I64 I64)))))
+    (function create make (visibility private) (effect pure)
+      (type-parameter create Ints (constraint owned))
+      (type-parameter create Flags (constraint owned))
+      (parameter create valid (type Bool))
+      (parameter create remaining (type Ints) (use consume))
+      (parameter create levels (type Ints) (use consume))
+      (parameter create seen (type Flags) (use consume))
+      (parameter create queue (type Ints) (use consume)) (returns (State Ints Flags))
+      (body (pack-owned (type (State Ints Flags))
+        (field remaining (local remaining)) (field levels (local levels))
+        (field seen (local seen)) (field queue (local queue)) (field valid (local valid)))))
+
+    ; Missing counters mean zero; unrelated map keys do not become components.
+    (function create initialize (visibility private) (effect pure)
+      (type-parameter create Ints (constraint owned))
+      (type-parameter create Flags (constraint owned))
+      (implementation-parameter implparam_a2000000000000000000000000000003 ints indexed-data::IndexedData Ints (types I64))
+      (implementation-parameter implparam_a2000000000000000000000000000004 flags indexed-data::IndexedData Flags (types Bool))
+      (parameter create count (type I64)) (parameter create offset (type I64))
+      (parameter create counters (type Positions))
+      (parameter create remaining (type Ints) (use consume))
+      (parameter create levels (type Ints) (use consume))
+      (parameter create seen (type Flags) (use consume))
+      (parameter create queue (type Ints) (use consume)) (returns (State Ints Flags))
+      (body (if (call std::less (local offset) (local count))
+        (let
+          (binding pending (type I64)
+            (call std::map-get-or (types I64 I64) (local counters) (local offset) (i64 0)))
+          (binding remaining (type Ints)
+            (method-call parameter@initialize@implparam_a2000000000000000000000000000003
+            indexed-data::IndexedData method_a1000000000000000000000000000003 (local pending) (local remaining)))
+          (binding levels (type Ints) (method-call parameter@initialize@implparam_a2000000000000000000000000000003
+            indexed-data::IndexedData method_a1000000000000000000000000000003 (i64 0) (local levels)))
+          (binding seen (type Flags) (method-call parameter@initialize@implparam_a2000000000000000000000000000004
+            indexed-data::IndexedData method_a1000000000000000000000000000003 (bool false) (local seen)))
+          (binding queue (type Ints) (if (call std::less (i64 0) (local pending))
+            (local queue) (method-call parameter@initialize@implparam_a2000000000000000000000000000003
+            indexed-data::IndexedData method_a1000000000000000000000000000003 (local offset) (local queue))))
+          (in (implementation-call initialize (types Ints Flags)
+            (implementations parameter@initialize@implparam_a2000000000000000000000000000003
+              parameter@initialize@implparam_a2000000000000000000000000000004) (local count) (call std::add (local offset) (i64 1)) (local counters)
+            (local remaining) (local levels) (local seen) (local queue))))
+        (call make (types Ints Flags) (bool true) (local remaining) (local levels) (local seen) (local queue)))))
+
+    ; A checked scalar replacement returns the updated vector and old value.
+    (function create update-one (visibility private) (effect pure)
+      (type-parameter create Ints (constraint owned))
+      (type-parameter create Flags (constraint owned))
+      (implementation-parameter implparam_a2000000000000000000000000000005 ints indexed-data::IndexedData Ints (types I64))
+      (parameter create user (type I64)) (parameter create before (type I64))
+      (parameter create level (type I64))
+      (parameter create remaining (type Ints) (use consume))
+      (parameter create levels (type Ints) (use consume))
+      (parameter create seen (type Flags) (use consume))
+      (parameter create queue (type Ints) (use consume)) (returns (State Ints Flags))
+      (body (let
+        (binding pending (type I64) (call std::subtract (local before) (i64 1)))
+        (binding previous (type I64)
+          (method-call parameter@update-one@implparam_a2000000000000000000000000000005
+            indexed-data::IndexedData method_a1000000000000000000000000000004 (local user) (local levels)))
+        (binding next-level (type I64) (call std::add (local level) (i64 1)))
+        (binding changed (type (owned-product (field rest Ints) (field value I64)))
+          (method-call parameter@update-one@implparam_a2000000000000000000000000000005
+            indexed-data::IndexedData method_a1000000000000000000000000000005 (local user) (local pending) (local remaining)))
+        (in (unpack-owned (type (owned-product (field rest Ints) (field value I64))) (local changed)
+          (field rest (binding remaining (type Ints)))
+          (field value (binding old-count (type I64)))
+          (in (let (binding changed (type (owned-product (field rest Ints) (field value I64)))
+            (method-call parameter@update-one@implparam_a2000000000000000000000000000005
+            indexed-data::IndexedData method_a1000000000000000000000000000005 (local user)
+              (if (call std::less (local previous) (local next-level))
+                (local next-level) (local previous)) (local levels)))
+            (in (unpack-owned (type (owned-product (field rest Ints) (field value I64))) (local changed)
+              (field rest (binding levels (type Ints)))
+              (field value (binding old-level (type I64)))
+              (in (let (binding queue (type Ints) (if (call std::less (i64 0) (local pending))
+                (local queue) (method-call parameter@update-one@implparam_a2000000000000000000000000000005
+            indexed-data::IndexedData method_a1000000000000000000000000000003 (local user) (local queue))))
+                (in (call make (types Ints Flags) (bool true) (local remaining) (local levels) (local seen) (local queue))))))))))))))
+    (function create release-one (visibility private) (effect pure)
+      (type-parameter create Ints (constraint owned))
+      (type-parameter create Flags (constraint owned))
+      (implementation-parameter implparam_a2000000000000000000000000000007 ints indexed-data::IndexedData Ints (types I64))
+      (parameter create count (type I64)) (parameter create user (type I64))
+      (parameter create level (type I64))
+      (parameter create state (type (State Ints Flags)) (use consume)) (returns (State Ints Flags))
+      (body (unpack-owned (type (State Ints Flags)) (local state)
+        (field levels (binding levels (type Ints)))
+        (field queue (binding queue (type Ints)))
+        (field remaining (binding remaining (type Ints)))
+        (field seen (binding seen (type Flags)))
+        (field valid (binding valid (type Bool)))
+        (in (if (call std::less (local user) (i64 0))
+          (call make (types Ints Flags) (bool false) (local remaining) (local levels) (local seen) (local queue))
+          (if (call std::less (local user) (local count))
+            (let (binding before (type I64)
+              (method-call parameter@release-one@implparam_a2000000000000000000000000000007
+            indexed-data::IndexedData method_a1000000000000000000000000000004 (local user) (local remaining)))
+              (in (if (call std::less (i64 0) (local before))
+                (implementation-call update-one (types Ints Flags)
+            (implementations parameter@release-one@implparam_a2000000000000000000000000000007) (local user) (local before) (local level)
+                  (local remaining) (local levels) (local seen) (local queue))
+                (call make (types Ints Flags) (bool false) (local remaining) (local levels) (local seen) (local queue)))))
+            (call make (types Ints Flags) (bool false) (local remaining) (local levels) (local seen) (local queue))))))))
+    ; Append a component only when its last distinct dependency finishes.
+    (function create release (visibility private) (effect pure)
+      (type-parameter create Ints (constraint owned))
+      (type-parameter create Flags (constraint owned))
+      (implementation-parameter implparam_a2000000000000000000000000000009 ints indexed-data::IndexedData Ints (types I64))
+      (parameter create count (type I64))
+      (parameter create users (type (list I64))) (parameter create offset (type I64))
+      (parameter create level (type I64))
+      (parameter create state (type (State Ints Flags)) (use consume)) (returns (State Ints Flags))
+      (body (if (field (local state) State::valid)
+        (if (call std::less (local offset) (call std::list-length (types I64) (local users)))
+          (let
+            (binding user (type I64) (call std::list-get (types I64) (local users) (local offset)))
+            (binding next (type (State Ints Flags)) (implementation-call release-one (types Ints Flags)
+            (implementations parameter@release@implparam_a2000000000000000000000000000009) (local count) (local user) (local level) (local state)))
+            (in (implementation-call release (types Ints Flags)
+            (implementations parameter@release@implparam_a2000000000000000000000000000009) (local count) (local users)
+              (call std::add (local offset) (i64 1)) (local level) (local next))))
+          (local state))
+        (local state))))
+
+    (function create ready (visibility private) (effect pure)
+      (type-parameter create Ints (constraint owned))
+      (type-parameter create Flags (constraint owned))
+      (implementation-parameter implparam_a200000000000000000000000000000b ints indexed-data::IndexedData Ints (types I64))
+      (implementation-parameter implparam_a200000000000000000000000000000c flags indexed-data::IndexedData Flags (types Bool))
+      (parameter create current (type I64)) (parameter create count (type I64))
+      (parameter create remaining (type Ints) (use borrow))
+      (parameter create seen (type Flags) (use borrow)) (returns Bool)
+      (body (if (call std::less (local current) (i64 0)) (bool false)
+        (if (call std::less (local current) (local count))
+          (if (method-call parameter@ready@implparam_a200000000000000000000000000000c
+            indexed-data::IndexedData method_a1000000000000000000000000000004 (local current) (local seen)) (bool false)
+            (let (binding pending (type I64)
+              (method-call parameter@ready@implparam_a200000000000000000000000000000b
+            indexed-data::IndexedData method_a1000000000000000000000000000004 (local current) (local remaining)))
+              (in (if (call std::less (local pending) (i64 0)) (bool false)
+                (if (call std::less (i64 0) (local pending)) (bool false) (bool true))))))
+          (bool false)))))
+    ; Dependency-free levels remain absent from the original sparse result map.
+    (function create materialize-block (visibility private) (effect pure)
+      (type-parameter create Ints (constraint owned))
+      (implementation-parameter implparam_a5000000000000000000000000000001 reader indexed-data::BlockRead Ints (types I64))
+      (parameter create count (type I64)) (parameter create offset (type I64))
+      (parameter create index (type I64)) (parameter create length (type I64))
+      (parameter create output (type Positions))
+      (parameter create block (type (associated-witness-projection materialize-block implparam_a5000000000000000000000000000001
+        indexed-data::BlockRead assoc_type_a3000000000000000000000000000001)) (use borrow))
+      (returns MaterializedBlock)
+      (body (if (call std::less (local offset) (local count))
+        (if (call std::less (local index) (local length))
+          (let (binding level (type I64)
+            (method-call parameter@materialize-block@implparam_a5000000000000000000000000000001
+              indexed-data::BlockRead method_a3000000000000000000000000000004 (local index) (local block)))
+            (in (implementation-call materialize-block (types Ints)
+              (implementations parameter@materialize-block@implparam_a5000000000000000000000000000001)
+              (local count) (call std::add (local offset) (i64 1))
+              (call std::add (local index) (i64 1)) (local length)
+              (if (call std::less (i64 0) (local level))
+                (call std::map-insert (types I64 I64) (local output) (local offset) (local level))
+                (local output)) (local block))))
+          (record structural (field offset (local offset)) (field output (local output))))
+        (record structural (field offset (local offset)) (field output (local output))))))
+    ; End the block loan before advancing to the next block.
+    (function create materialize (visibility private) (effect pure)
+      (type-parameter create Ints (constraint owned))
+      (implementation-parameter implparam_a5000000000000000000000000000002 reader indexed-data::BlockRead Ints (types I64))
+      (parameter create count (type I64)) (parameter create blocks (type I64))
+      (parameter create block-index (type I64)) (parameter create offset (type I64))
+      (parameter create output (type Positions))
+      (parameter create levels (type Ints) (use borrow)) (returns Positions)
+      (body (if (call std::less (local offset) (local count))
+        (if (call std::less (local block-index) (local blocks))
+          (let (binding next (type MaterializedBlock)
+            (borrow-call
+              (method-call parameter@materialize@implparam_a5000000000000000000000000000002
+                indexed-data::BlockRead method_a3000000000000000000000000000002 (local block-index) (local levels))
+              (binding block (type (associated-witness-projection materialize implparam_a5000000000000000000000000000002
+                indexed-data::BlockRead assoc_type_a3000000000000000000000000000001)))
+              (in (let (binding length (type I64)
+                (method-call parameter@materialize@implparam_a5000000000000000000000000000002
+                  indexed-data::BlockRead method_a3000000000000000000000000000003 (local block)))
+                (in (implementation-call materialize-block (types Ints)
+                  (implementations parameter@materialize@implparam_a5000000000000000000000000000002)
+                  (local count) (local offset) (i64 0) (local length) (local output) (local block)))))))
+            (in (implementation-call materialize (types Ints)
+              (implementations parameter@materialize@implparam_a5000000000000000000000000000002)
+              (local count) (local blocks) (call std::add (local block-index) (i64 1))
+              (field (local next) (name offset)) (field (local next) (name output)) (local levels))))
+          (local output))
+        (local output))))
+    (function create visit (visibility private) (effect pure)
+      (type-parameter create Ints (constraint owned))
+      (type-parameter create Flags (constraint owned))
+      (implementation-parameter implparam_a200000000000000000000000000000f ints indexed-data::IndexedData Ints (types I64))
+      (implementation-parameter implparam_a2000000000000000000000000000010 flags indexed-data::IndexedData Flags (types Bool))
+      (implementation-parameter implparam_a5000000000000000000000000000003 reader indexed-data::BlockRead Ints (types I64))
+      (parameter create count (type I64)) (parameter create dependents (type Links))
+      (parameter create head (type I64))
+      (parameter create state (type (State Ints Flags)) (use consume)) (returns Traversal)
+      (body (unpack-owned (type (State Ints Flags)) (local state)
+        (field levels (binding levels (type Ints)))
+        (field queue (binding queue (type Ints)))
+        (field remaining (binding remaining (type Ints)))
+        (field seen (binding seen (type Flags)))
+        (field valid (binding valid (type Bool)))
+        (in (if (local valid)
+          (if (call std::less (local head) (method-call parameter@visit@implparam_a200000000000000000000000000000f
+            indexed-data::IndexedData method_a1000000000000000000000000000002 (local queue)))
+            (if (call std::less (local head) (local count))
+              (let (binding current (type I64)
+                (method-call parameter@visit@implparam_a200000000000000000000000000000f
+            indexed-data::IndexedData method_a1000000000000000000000000000004 (local head) (local queue)))
+                (in (if (implementation-call ready (types Ints Flags)
+            (implementations parameter@visit@implparam_a200000000000000000000000000000f
+              parameter@visit@implparam_a2000000000000000000000000000010) (local current) (local count) (local remaining) (local seen))
+                  (let
+                    (binding level (type I64)
+                      (method-call parameter@visit@implparam_a200000000000000000000000000000f
+            indexed-data::IndexedData method_a1000000000000000000000000000004 (local current) (local levels)))
+                    (binding users (type (list I64))
+                      (call std::map-get-or (types I64 (list I64)) (local dependents) (local current) (list I64)))
+                    (binding changed (type (owned-product (field rest Flags) (field value Bool)))
+                      (method-call parameter@visit@implparam_a2000000000000000000000000000010
+            indexed-data::IndexedData method_a1000000000000000000000000000005 (local current) (bool true) (local seen)))
+                    (in (unpack-owned (type (owned-product (field rest Flags) (field value Bool))) (local changed)
+                      (field rest (binding seen (type Flags))) (field value (binding previous (type Bool)))
+                      (in (let
+                        (binding next (type (State Ints Flags))
+                          (call make (types Ints Flags) (bool true) (local remaining) (local levels) (local seen) (local queue)))
+                        (binding next (type (State Ints Flags)) (implementation-call release (types Ints Flags)
+            (implementations parameter@visit@implparam_a200000000000000000000000000000f) (local count) (local users) (i64 0) (local level) (local next)))
+                        (in (implementation-call visit (types Ints Flags)
+            (implementations parameter@visit@implparam_a200000000000000000000000000000f
+              parameter@visit@implparam_a2000000000000000000000000000010
+              parameter@visit@implparam_a5000000000000000000000000000003) (local count) (local dependents)
+                          (call std::add (local head) (i64 1)) (local next))))))))
+                  (call refused))))
+              (call refused))
+            (if (call std::less (local head) (local count)) (call refused)
+              (record structural (field complete (bool true))
+                (field levels (implementation-call materialize (types Ints)
+                  (implementations parameter@visit@implparam_a5000000000000000000000000000003) (local count)
+                  (method-call parameter@visit@implparam_a5000000000000000000000000000003 indexed-data::BlockRead method_a3000000000000000000000000000001 (local levels))
+                  (i64 0) (i64 0) (map I64 I64) (local levels))))))
+          (call refused))))))
+    (function create assign-with-storage (visibility public) (effect pure)
+      (type-parameter create Ints (constraint owned))
+      (type-parameter create Flags (constraint owned))
+      (implementation-parameter implparam_a2000000000000000000000000000011 ints indexed-data::IndexedData Ints (types I64))
+      (implementation-parameter implparam_a2000000000000000000000000000012 flags indexed-data::IndexedData Flags (types Bool))
+      (implementation-parameter implparam_a5000000000000000000000000000004 reader indexed-data::BlockRead Ints (types I64))
+      (parameter create count (type I64)) (parameter create dependents (type Links))
+      (parameter create remaining (type Positions)) (returns Traversal)
+      (body (if (call std::less (local count) (i64 0)) (call refused)
+        (let
+          (binding counters (type Ints) (method-call parameter@assign-with-storage@implparam_a2000000000000000000000000000011
+            indexed-data::IndexedData method_a1000000000000000000000000000001))
+          (binding levels (type Ints) (method-call parameter@assign-with-storage@implparam_a2000000000000000000000000000011
+            indexed-data::IndexedData method_a1000000000000000000000000000001))
+          (binding seen (type Flags) (method-call parameter@assign-with-storage@implparam_a2000000000000000000000000000012
+            indexed-data::IndexedData method_a1000000000000000000000000000001))
+          (binding queue (type Ints) (method-call parameter@assign-with-storage@implparam_a2000000000000000000000000000011
+            indexed-data::IndexedData method_a1000000000000000000000000000001))
+          (binding state (type (State Ints Flags)) (implementation-call initialize (types Ints Flags)
+            (implementations parameter@assign-with-storage@implparam_a2000000000000000000000000000011
+              parameter@assign-with-storage@implparam_a2000000000000000000000000000012) (local count) (i64 0) (local remaining)
+            (local counters) (local levels) (local seen) (local queue)))
+          (in (implementation-call visit (types Ints Flags)
+            (implementations parameter@assign-with-storage@implparam_a2000000000000000000000000000011
+              parameter@assign-with-storage@implparam_a2000000000000000000000000000012
+              parameter@assign-with-storage@implparam_a5000000000000000000000000000004) (local count) (local dependents) (i64 0) (local state)))))))
+
+    
+
+    ; Internal-construction adversaries, not accepted proposal variants.
+    
+    
+    
+    
+    
+    
+    
+    
+    ))
+declarations.end

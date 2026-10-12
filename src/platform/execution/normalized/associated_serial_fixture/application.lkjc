@@ -1,0 +1,53 @@
+declarations.begin
+(units
+  (module create associated-serial-app
+    (type-alias Observation (record (first I64) (second I64)))
+    (owned-implementation create HiddenChunked (visibility private)
+      (type-parameter create T (constraint transferable))
+      (contract blockread-consumer::BlockRead) (self (blockread-chunked::ChunkStorage T)) (types T)
+      (associated-type assoc_type_c7000000000000000000000000000001 (blockread-chunked::ChunkBlock T))
+      (associated-type assoc_type_c7000000000000000000000000000002 ByteBuffer)
+      (method method_c7000000000000000000000000000001 blockread-chunked::block-count (types T))
+      (method method_c7000000000000000000000000000002 blockread-chunked::block-at (types T))
+      (method method_c7000000000000000000000000000003 blockread-chunked::block-length (types T))
+      (method method_c7000000000000000000000000000004 blockread-chunked::block-get (types T)))
+    (function create block-size (visibility private) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_c7000000000000000000000000000005 reader blockread-consumer::BlockRead W (types I64))
+      (parameter create block
+        (type (associated-witness-projection block-size implparam_c7000000000000000000000000000005
+          blockread-consumer::BlockRead assoc_type_c7000000000000000000000000000001)) (use borrow))
+      (returns I64)
+      (body (method-call parameter@block-size@implparam_c7000000000000000000000000000005
+        blockread-consumer::BlockRead method_c7000000000000000000000000000003 (local block))))
+    (function create main (visibility public) (effect pure)
+      (parameter create input (type (list I64))) (returns Observation)
+      (body (let
+        (binding storage (type (blockread-chunked::ChunkStorage I64))
+          (call blockread-chunked::build (types I64) (local input)))
+        (binding first (type I64)
+          (borrow-call
+            (implementation-call blockread-consumer::forward-block
+              (types I64 (blockread-chunked::ChunkStorage I64))
+              (implementations (implementation blockread-chunked::Chunked (types I64)))
+              (i64 0) (local storage))
+            (binding view (type (blockread-chunked::ChunkBlock I64)))
+            (in (implementation-call block-size (types (blockread-chunked::ChunkStorage I64))
+              (implementations (implementation blockread-chunked::Chunked (types I64))) (local view)))))
+        (binding second (type I64)
+          (borrow-call
+            (implementation-call blockread-consumer::forward-block
+              (types I64 (blockread-chunked::ChunkStorage I64))
+              (implementations (implementation blockread-chunked::Chunked (types I64)))
+              (i64 0) (local storage))
+            (binding view (type (blockread-chunked::ChunkBlock I64)))
+            (in (implementation-call block-size (types (blockread-chunked::ChunkStorage I64))
+              (implementations (implementation blockread-chunked::Chunked (types I64))) (local view)))))
+        (in (sequence
+          (call blockread-consumer::discard (types (blockread-chunked::ChunkStorage I64)) (local storage))
+          (record structural (field first (local first)) (field second (local second))))))))
+    (component create command (visibility private)
+      (port create main (type (function ((list I64)) Observation)) (function main))))
+  (target create associated-serial (component associated-serial-app::command)
+    (runner command) (port associated-serial-app::command::main)))
+declarations.end

@@ -16,6 +16,169 @@ const SEED: &[u8] = b"canonical-independent-associated-flow";
 #[path = "associated_flow_canonical_family_tests.rs"]
 mod families;
 
+fn repeated_method_registry(expanding: bool) -> (Fixture, usize) {
+    let mut fixture = recurrence(expanding, false, false);
+    let unit = ty(&mut fixture.source, TypeForm::Unit);
+    let parameter = ParameterId::migrate(SEED, 60_000);
+    fixture.source.owners.insert(
+        OwnerKey::Parameter(parameter),
+        OwnerRecord::Parameter(ParameterRecord {
+            header: OwnerHeader::new(OwnerKey::Parameter(parameter), OwnerKind::Parameter),
+            parent: ParameterParent::Function(fixture.function.declaration),
+            name: name("source"),
+            ty: fixture.formal,
+            use_mode: ParameterUse::Borrow,
+            resource_requirement: None,
+        }),
+    );
+    let local = expression(
+        &mut fixture.source,
+        60_000,
+        ExpressionOperation::Local {
+            value: LocalValueReference::FunctionParameter(parameter),
+        },
+    );
+    let method = {
+        let OwnerRecord::Declaration(declaration) =
+            &fixture.source.owners[&OwnerKey::Declaration(fixture.contract.declaration)]
+        else {
+            unreachable!()
+        };
+        let DeclarationPayload::OwnedContract(contract) = &declaration.payload else {
+            unreachable!()
+        };
+        contract.methods[0].id
+    };
+    let sites = 128;
+    let mut body = Vec::new();
+    for ordinal in 0..sites {
+        body.push(expression(
+            &mut fixture.source,
+            60_001 + ordinal as u64,
+            ExpressionOperation::MethodCall {
+                witness: ImplementationOperand::Parameter {
+                    scope: fixture.function,
+                    parameter: fixture.witness,
+                },
+                contract: fixture.contract,
+                method,
+                arguments: vec![local],
+            },
+        ));
+    }
+    let OwnerRecord::Expression(call) = fixture
+        .source
+        .owners
+        .get_mut(&OwnerKey::Expression(fixture.recursive_call))
+        .unwrap()
+    else {
+        unreachable!()
+    };
+    let ExpressionOperation::ImplementationCall { arguments, .. } = &mut call.operation else {
+        unreachable!()
+    };
+    arguments.push(local);
+    body.push(fixture.recursive_call);
+    let body = expression(
+        &mut fixture.source,
+        61_000,
+        ExpressionOperation::Sequence { items: body },
+    );
+    let OwnerRecord::Declaration(function_record) = fixture
+        .source
+        .owners
+        .get_mut(&OwnerKey::Declaration(fixture.function.declaration))
+        .unwrap()
+    else {
+        unreachable!()
+    };
+    let DeclarationPayload::Function(function) = &mut function_record.payload else {
+        unreachable!()
+    };
+    function.parameters = vec![parameter];
+    function.body = body;
+    // Complete raw closure admission still visits every uncalled declaration.
+    // They contribute no method alternative, type slot, or recursive dependency.
+    for ordinal in 0..512 {
+        let body = expression(
+            &mut fixture.source,
+            50_000 + ordinal,
+            ExpressionOperation::Unit {},
+        );
+        let reference = declaration(
+            &mut fixture.source,
+            40_000 + ordinal,
+            DeclarationPayload::Function(FunctionDeclaration {
+                type_parameters: vec![],
+                implementation_parameters: vec![],
+                requirement_parameters: vec![],
+                effect_parameters: vec![],
+                parameters: vec![],
+                result: unit,
+                result_borrow: None,
+                effect: FunctionEffect::Pure,
+                body,
+            }),
+        );
+        let OwnerRecord::Declaration(record) = fixture
+            .source
+            .owners
+            .get_mut(&OwnerKey::Declaration(reference.declaration))
+            .unwrap()
+        else {
+            unreachable!()
+        };
+        record.name = name(&format!(
+            "unrelated_method_registry_{ordinal:04}_{}",
+            "x".repeat(64)
+        ));
+    }
+    (fixture, sites)
+}
+
+#[test]
+fn canonical_repeated_methods_admit_large_unrelated_registry_without_relaxing_growth() {
+    let maximum_bytes = 64 * 1_048_576;
+    for expanding in [false, true] {
+        let (fixture, sites) = repeated_method_registry(expanding);
+        // Literal lower bound for the removed all-declaration scan: every site
+        // cloned every declaration before filtering. Even omitting its vectors
+        // and every other admission cost already exceeds the unchanged64MiB cap.
+        let one_scan: usize = fixture
+            .source
+            .owners
+            .values()
+            .filter_map(|owner| match owner {
+                OwnerRecord::Declaration(record) => Some(
+                    2 * serde_json::to_vec(record).unwrap().len()
+                        + std::mem::size_of::<DeclarationRecord>(),
+                ),
+                _ => None,
+            })
+            .sum();
+        assert!(sites * one_scan > maximum_bytes);
+        let mut work = 0;
+        let result = associated_flow_canonical_reference::validate(
+            &[&fixture.source],
+            &crate::platform::execution::ExecutionControl::uncancelled(),
+            &mut work,
+            contract::MAXIMUM_VALIDATION_WORK,
+        );
+        if expanding {
+            let error = result.expect_err("actual positive associated recurrence must refuse");
+            assert_eq!(
+                error.class,
+                crate::platform::diagnostic::DiagnosticClass::Semantic
+            );
+            assert_eq!(error.code, "kernel_associated_reference_growth");
+        } else {
+            let proof = result.expect("irrelevant registry scans must not consume the growth cap");
+            assert!(proof.metadata_bytes > 0 && proof.metadata_bytes <= maximum_bytes);
+        }
+        assert!(work > 0);
+    }
+}
+
 pub(super) struct Fixture {
     pub source: KernelSnapshot,
     pub entry: CanonicalEntry,

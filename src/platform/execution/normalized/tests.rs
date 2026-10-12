@@ -3,6 +3,12 @@
 #[path = "recursive_tests.rs"]
 mod recursive_tests;
 
+#[path = "associated_serial_artifact_tests.rs"]
+pub(in crate::platform) mod associated_serial_artifact_tests;
+
+#[path = "associated_parallel_artifact_tests.rs"]
+mod associated_parallel_artifact_tests;
+
 #[path = "runner_pure_artifact_tests.rs"]
 mod pure_artifact_runner_tests;
 

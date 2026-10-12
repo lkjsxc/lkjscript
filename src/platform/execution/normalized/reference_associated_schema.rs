@@ -197,16 +197,49 @@ fn capacity() -> ExecutionError {
 pub(super) fn core(
     schema: &mut NormalizedReferenceSchema,
     snapshots: &[&KernelSnapshot],
+    proof: associated_preparation::Proof,
+    control: &crate::platform::execution::ExecutionControl,
+) -> Result<(), ExecutionError> {
+    core_with_limits(
+        schema,
+        snapshots,
+        proof,
+        associated_preparation::Limits::default(),
+        control,
+    )
+}
+
+pub(super) fn core_with_limits(
+    schema: &mut NormalizedReferenceSchema,
+    snapshots: &[&KernelSnapshot],
     mut proof: associated_preparation::Proof,
+    limits: associated_preparation::Limits,
     control: &crate::platform::execution::ExecutionControl,
 ) -> Result<(), ExecutionError> {
     control.check()?;
+    // A single initial debit preserves the existing shared finite helpers. All
+    // later phases see the same remaining allowance, including the proof costs.
+    let work_debit = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK
+        .checked_sub(
+            limits
+                .steps
+                .min(crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK),
+        )
+        .ok_or_else(capacity)?;
+    let bytes_debit = MAXIMUM_METADATA_BYTES
+        .checked_sub(limits.bytes.min(MAXIMUM_METADATA_BYTES))
+        .ok_or_else(capacity)?;
     let mut visits = usize::try_from(schema.source_admission_steps)
         .map_err(|_| capacity())?
         .checked_add(proof.steps)
+        .and_then(|n| n.checked_add(work_debit))
         .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
         .ok_or_else(capacity)?;
-    let mut bytes = proof.bytes;
+    let mut bytes = proof
+        .bytes
+        .checked_add(bytes_debit)
+        .filter(|n| *n <= MAXIMUM_METADATA_BYTES)
+        .ok_or_else(capacity)?;
     // A complete object inventory has one owner. The retained proof stores only
     // immutable identities and source/application metadata after this move.
     for (ty, object) in &schema.types {
@@ -235,7 +268,7 @@ pub(super) fn core(
     }
     let mut closure = Closure {
         associated_proof: Some(Arc::clone(&proof)),
-        associated_application: None,
+        associated_context: None,
         parallel_targets: BTreeSet::new(),
         constrained_applications: BTreeSet::new(),
         symbolic: false,
@@ -254,6 +287,7 @@ pub(super) fn core(
         interned_witnesses: BTreeMap::new(),
     };
     closure.owned_records()?;
+    borrowed_admission::inventory(&mut closure)?;
     for application in proof.applications.keys() {
         closure.tick()?;
         let OwnerRecord::Declaration(owner) = closure.owner(
@@ -286,7 +320,9 @@ pub(super) fn core(
             &mut closure.allocated,
             application.requirements.len(),
         )?;
-        closure.associated_application = Some(application.clone());
+        closure.associated_context = Some(associated_preparation::ReadContext::Application(
+            application.clone(),
+        ));
         let mut bindings = BTreeMap::new();
         for (formal, actual) in function.type_parameters.iter().zip(&application.types) {
             closure.tick()?;
@@ -301,7 +337,53 @@ pub(super) fn core(
             Some(application.function),
         )?;
     }
-    closure.associated_application = None;
+    for scope in proof.symbolic.keys() {
+        closure.tick()?;
+        let OwnerRecord::Declaration(owner) =
+            closure.owner(scope.package, OwnerKey::Declaration(scope.declaration))?
+        else {
+            return Err(failure());
+        };
+        let DeclarationPayload::Function(function) = &owner.payload else {
+            continue;
+        };
+        closure.associated_context = Some(associated_preparation::ReadContext::Symbolic(*scope));
+        closure.symbolic = true;
+        borrowed_admission::body(
+            &mut closure,
+            scope.package,
+            function.body,
+            &Bindings::new(),
+            Some(*scope),
+        )?;
+    }
+    closure.symbolic = false;
+    for (package, owner) in proof.executables.keys() {
+        closure.tick()?;
+        closure.associated_context = Some(associated_preparation::ReadContext::Executable((
+            *package, *owner,
+        )));
+        closure.occurrence_at(*package, *owner)?;
+        let record = closure.owner(*package, *owner)?;
+        let root_count = match record {
+            OwnerRecord::Declaration(owner) => match owner.payload {
+                DeclarationPayload::Function(_) | DeclarationPayload::Constant { .. } => 1,
+                DeclarationPayload::Test { .. } => 2,
+                _ => 0,
+            },
+            OwnerRecord::Binding(owner) => usize::from(owner.value.is_some()),
+            OwnerRecord::Port(owner) => usize::from(matches!(
+                owner.implementation,
+                crate::platform::kernel::PortImplementation::Expression(_)
+            )),
+            _ => 0,
+        };
+        allocate::<ExpressionId>(&mut closure.allocated, root_count)?;
+        for root in record.expression_roots() {
+            borrowed_admission::body(&mut closure, *package, root, &Bindings::new(), None)?;
+        }
+    }
+    closure.associated_context = None;
     closure.nominals(
         &mut schema.records,
         &mut schema.variants,
@@ -329,8 +411,23 @@ pub(super) fn core(
         }
         schema.affine_variants.push(affine);
     }
+    let permissions = associated_permissions::collect(
+        &proof,
+        &closure.snapshots,
+        closure.types,
+        &mut associated_permissions::Meter {
+            visits: &mut closure.visits,
+            bytes: &mut closure.allocated,
+            control,
+        },
+    )?;
+    let nominal_constraints = std::mem::take(&mut closure.constrained_applications);
+    // Canonical snapshot references have a separate lifetime from the mutable type map.
+    // Retain the existing source index while ending that type borrow before property passes.
+    let package_index = std::mem::take(&mut closure.snapshots);
     visits = closure.visits;
     bytes = closure.allocated;
+    drop(closure);
     schema.buffer_free_types = property_types(
         schema,
         &mut visits,
@@ -370,9 +467,24 @@ pub(super) fn core(
         control,
         Retention::NoApplication,
     )?;
+    associated_permissions::discharge(
+        schema,
+        &proof,
+        &package_index,
+        permissions,
+        nominal_constraints,
+        &mut associated_permissions::Meter {
+            visits: &mut visits,
+            bytes: &mut bytes,
+            control,
+        },
+    )
+    .map_err(|error| at_stage(error, "associated permission discharge"))?;
     schema.type_derivation_steps = (visits as u64)
+        .checked_sub(work_debit as u64)
+        .ok_or_else(capacity)?
         .checked_sub(schema.source_admission_steps)
         .ok_or_else(capacity)?;
-    schema.type_metadata_bytes = bytes as u64;
+    schema.type_metadata_bytes = bytes.checked_sub(bytes_debit).ok_or_else(capacity)? as u64;
     Ok(())
 }

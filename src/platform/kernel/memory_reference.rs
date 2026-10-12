@@ -278,13 +278,8 @@ impl Oracle<'_> {
             self.foreign(declaration.package, key)?
                 .header()
                 .contract_version
-                .min(
-                    self.0
-                        .dependencies
-                        .get(&declaration.package)?
-                        .graph_contract_version,
-                )
         };
+        // Selection encoding does not limit the selected declaration's features.
         Some(self.0.root.graph_contract_version.min(generation))
     }
     fn buffer(&self, t: TypeObjectDigest) -> bool {
@@ -2493,6 +2488,11 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
     // Imported parameter identities live in their declaration's package. Check
     // every exported template, even when no root expression calls it.
     for (package, dependency) in &snapshot.dependencies {
+        if dependency.package != *package
+            || !contract::supported_graph_contract(dependency.graph_contract_version)
+        {
+            return false;
+        }
         let Some(interface) = snapshot
             .dependency_interfaces
             .get(&dependency.package_revision)
@@ -2503,7 +2503,6 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
             let generation = snapshot
                 .root
                 .graph_contract_version
-                .min(dependency.graph_contract_version)
                 .min(owner.header().contract_version);
             if generation < 30
                 && matches!(owner, PackageInterfaceRecord::TypeParameter(p)

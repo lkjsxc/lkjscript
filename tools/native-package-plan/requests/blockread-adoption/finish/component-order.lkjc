@@ -1,0 +1,152 @@
+request base=rev_e6a1b4733c96efb037f1a2c3d2acb3728f5de440cbf0cfadc81c6b5fae14a380
+declarations.begin
+(units (use owned-worklists pkg_0715b5ff15f245ce3bb0f8bfc254e338 package_revision_71cd8f1565b53eb9cdef6cf9135c9afe96efec194d844cfc5848103695dde06b))
+declarations.end
+declarations.begin
+(units (use worklist-carriers pkg_da6c35a66052e6eb317abd2a0ad0c8ff package_revision_754a9ae4f2bd2f80ef62dddfb678ef75391df722e21283b7d7b17ae008142a9f))
+declarations.end
+declarations.begin
+(units (use indexed-data pkg_64743b873112737840db706fc6107a1b package_revision_2c36949e181a68d10a70ad4dd65367457d365709c6bf29796e1f8889632c7499))
+declarations.end
+declarations.begin
+(units (use indexed-flat pkg_83566b3778f52f9d2c248e0bc66613ac package_revision_34eea10b2a511d185665a5f78be5c909c3b8052b0515bbb631c8e0529d2cda08))
+declarations.end
+declarations.begin
+(units (use indexed-chunked pkg_0dba40dfd321184dd3f5f962c65f062b package_revision_0c38d2e66fe8e4031286805bd2ebea4cab989f52ea2ddd62dcb40a2dea5bf8db))
+declarations.end
+declarations.begin
+(units (use plan-stages pkg_7f2c7a229f1a9f475f0b208e6a40a323 package_revision_868454cb96f9ac3d915b725bd0627450d762dd73b4204ed88649b6cb03d3691e))
+declarations.end
+declarations.begin
+(units
+  (use std builtin)
+  (module create component-order
+    (type-alias Node (record (id I64) (successors (list I64))))
+    (type-alias Positions (map I64 I64))
+    (type-alias Seen (map I64 Bool))
+
+    ; Frames contain bounded node positions, never arithmetic on authored IDs.
+    ; [0,n) enters a node; [n,2n) finishes it after its descendants.
+    (function create queue (visibility private) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_c8010000000000000000000000000001
+        work owned-worklists::Worklist W (types OwnedI64Cell))
+      (parameter create ids (type (list I64))) (parameter create offset (type I64))
+      (parameter create positions (type Positions))
+      (parameter create work (type W) (use consume)) (returns W)
+      (body (if (call std::less (local offset) (call std::list-length (types I64) (local ids)))
+        (let
+          (binding id (type I64) (call std::list-get (types I64) (local ids) (local offset)))
+          (binding position (type I64)
+            (call std::map-get-or (types I64 I64) (local positions) (local id) (i64 -1)))
+          (binding frame (type OwnedI64Cell) (call worklist-carriers::cell-create (local position)))
+          (binding next (type W)
+            (method-call parameter@queue@implparam_c8010000000000000000000000000001
+              owned-worklists::Worklist method_88000000000000000000000000000013
+              (local frame) (local work)))
+          (in (implementation-call queue (types W)
+            (implementations parameter@queue@implparam_c8010000000000000000000000000001)
+            (local ids) (call std::add (local offset) (i64 1)) (local positions) (local next))))
+        (local work))))
+
+    ; Mark on entry, not while scheduling siblings: an edge between pending
+    ; siblings must still become a DFS tree edge before a finish event is emitted.
+    (function create walk (visibility private) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_c8010000000000000000000000000002
+        work owned-worklists::Worklist W (types OwnedI64Cell))
+      (parameter create nodes (type (list Node))) (parameter create positions (type Positions))
+      (parameter create seen (type Seen)) (parameter create order (type (list I64)))
+      (parameter create work (type W) (use consume))
+      (returns (owned-product (field work W) (field seen Seen) (field order (list I64))))
+      (body (let (binding outcome
+        (type (owned-choice (case empty W)
+          (case item (owned-product (field rest W) (field value OwnedI64Cell)))))
+        (method-call parameter@walk@implparam_c8010000000000000000000000000002
+          owned-worklists::Worklist method_88000000000000000000000000000014 (local work)))
+        (in (match-owned (type (owned-choice (case empty W)
+          (case item (owned-product (field rest W) (field value OwnedI64Cell))))) (local outcome)
+          (case empty (binding rest (type W))
+            (in (pack-owned (type (owned-product (field work W) (field seen Seen) (field order (list I64))))
+              (field work (local rest)) (field seen (local seen)) (field order (local order)))))
+          (case item (binding item (type (owned-product (field rest W) (field value OwnedI64Cell))))
+            (in (unpack-owned (type (owned-product (field rest W) (field value OwnedI64Cell))) (local item)
+              (field rest (binding rest (type W))) (field value (binding frame (type OwnedI64Cell)))
+              (in (let
+                (binding event (type I64) (call worklist-carriers::cell-finish (local frame)))
+                (binding size (type I64) (call std::list-length (types Node) (local nodes)))
+                (in (if (call std::less (local event) (local size))
+                  (if (call std::map-get-or (types I64 Bool) (local seen) (local event) (bool false))
+                    (implementation-call walk (types W)
+                      (implementations parameter@walk@implparam_c8010000000000000000000000000002)
+                      (local nodes) (local positions) (local seen) (local order) (local rest))
+                    (let
+                      (binding node (type Node) (call std::list-get (types Node) (local nodes) (local event)))
+                      (binding finish (type OwnedI64Cell)
+                        (call worklist-carriers::cell-create (call std::add (local size) (local event))))
+                      (binding pending (type W)
+                        (method-call parameter@walk@implparam_c8010000000000000000000000000002
+                          owned-worklists::Worklist method_88000000000000000000000000000013
+                          (local finish) (local rest)))
+                      (binding next (type W) (implementation-call queue (types W)
+                        (implementations parameter@walk@implparam_c8010000000000000000000000000002)
+                        (field (local node) (name successors)) (i64 0) (local positions) (local pending)))
+                      (in (implementation-call walk (types W)
+                        (implementations parameter@walk@implparam_c8010000000000000000000000000002)
+                        (local nodes) (local positions)
+                        (call std::map-insert (types I64 Bool) (local seen) (local event) (bool true))
+                        (local order) (local next)))))
+                  (implementation-call walk (types W)
+                    (implementations parameter@walk@implparam_c8010000000000000000000000000002)
+                    (local nodes) (local positions) (local seen)
+                    (call std::list-append (types I64) (local order)
+                      (call std::subtract (local event) (local size)))
+                    (local rest))))))))))))))
+
+    (function create forest (visibility private) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_c8010000000000000000000000000003
+        work owned-worklists::Worklist W (types OwnedI64Cell))
+      (parameter create nodes (type (list Node))) (parameter create positions (type Positions))
+      (parameter create offset (type I64)) (parameter create seen (type Seen))
+      (parameter create order (type (list I64))) (parameter create work (type W) (use consume))
+      (returns (list I64))
+      (body (if (call std::less (local offset) (call std::list-length (types Node) (local nodes)))
+        (if (call std::map-get-or (types I64 Bool) (local seen) (local offset) (bool false))
+          (implementation-call forest (types W)
+            (implementations parameter@forest@implparam_c8010000000000000000000000000003)
+            (local nodes) (local positions) (call std::add (local offset) (i64 1))
+            (local seen) (local order) (local work))
+          (let
+            (binding frame (type OwnedI64Cell) (call worklist-carriers::cell-create (local offset)))
+            (binding pending (type W)
+              (method-call parameter@forest@implparam_c8010000000000000000000000000003
+                owned-worklists::Worklist method_88000000000000000000000000000013
+                (local frame) (local work)))
+            (binding visited (type (owned-product (field work W) (field seen Seen) (field order (list I64))))
+              (implementation-call walk (types W)
+                (implementations parameter@forest@implparam_c8010000000000000000000000000003)
+                (local nodes) (local positions) (local seen) (local order) (local pending)))
+            (in (unpack-owned (type (owned-product (field work W) (field seen Seen) (field order (list I64))))
+              (local visited) (field work (binding work (type W)))
+              (field seen (binding seen (type Seen))) (field order (binding order (type (list I64))))
+              (in (implementation-call forest (types W)
+                (implementations parameter@forest@implparam_c8010000000000000000000000000003)
+                (local nodes) (local positions) (call std::add (local offset) (i64 1))
+                (local seen) (local order) (local work)))))))
+        (local order))))
+
+    ; Internal companion API: the application validates the complete graph first.
+    (function create finish (visibility public) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_c8010000000000000000000000000004
+        work owned-worklists::Worklist W (types OwnedI64Cell))
+      (parameter create nodes (type (list Node))) (parameter create positions (type Positions))
+      (returns (list I64))
+      (body (let (binding work (type W)
+        (method-call parameter@finish@implparam_c8010000000000000000000000000004
+          owned-worklists::Worklist method_88000000000000000000000000000011))
+        (in (implementation-call forest (types W)
+          (implementations parameter@finish@implparam_c8010000000000000000000000000004)
+          (local nodes) (local positions) (i64 0) (map I64 Bool) (list I64) (local work))))))))
+declarations.end

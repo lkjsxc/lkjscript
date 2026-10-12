@@ -660,7 +660,7 @@ fn replace_shared_owner(
     altered
 }
 
-fn retain_live_map_pages(altered: &mut LoadedArtifact) {
+pub(super) fn retain_live_map_pages(altered: &mut LoadedArtifact) {
     let mut pages = MemoryPageStore::default();
     for package in &altered.manifest.packages {
         let compilation = CompilationManifest::decode(

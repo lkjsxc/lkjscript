@@ -1,8 +1,8 @@
 # Witness-selected associated owned types
 
-Status: selected specification; **implementation and acceptance pending**.
-This specifies the next language increment, not a capability of an accepted
-executable. [Status](../status.md) owns implementation availability and acceptance.
+Status: selected specification, implemented in the isolated **0.1.95** development
+checkout. Integrated-source acceptance, mainline delivery and finalized-byte
+acceptance remain pending. [Status](../status.md) owns exact availability and proof.
 Existing [owned contracts](owned-contract-parameters.md),
 [implementation schemes](generic-owned-implementations.md) and
 [borrowed results](owned-read-results.md) retain their rules except where extended
@@ -137,7 +137,11 @@ Flat exposes its complete owned-sequence Item as one block. Chunked actually own
 nominal ChunkBlock<Item> descendants; their declaration may be public while field
 layout remains module-private. Borrowing selects existing descendants rather than
 manufacturing reference wrappers. Generic consumers use reader methods without
-gaining representation access.
+gaining representation access. The maintained literal owner is
+[associated-blockread](../../examples/associated-blockread/README.md). Its exact
+source-matched final-byte requirement belongs to
+[verification](verification.md#associated-owned-blockread-and-final-byte-coverage);
+source-only behavior does not attest released executable bytes.
 
 Maintained adoption replaces repeated element reads in the dependency planner's
 stage materialization with scoped block traversal, preserving ascending global
@@ -158,12 +162,49 @@ escaping composite views and new recursive nominal Owned layouts are also exclud
 
 ## Canonical capability and independent admission
 
+The selected native authoring syntax retains the complete inline inventory on
+each contract or implementation. Contract clauses use
+`(associated-type assoc_type_HEX NAME (bound owned))`; implementation clauses use
+`(associated-type assoc_type_HEX TYPE)`. Contract members preserve authored order.
+Implementation bindings lower into strict member-identity order, rejecting
+duplicates before normalization can erase them. Create and Set both supply the
+complete inventory; an empty inventory replaces the old inventory with empty
+data. Complete candidate admission decides whether that removal is coherent.
+
+The two authored type forms are
+`(associated-contract-member CONTRACT assoc_type_HEX)` and
+`(associated-witness-projection SCOPE implparam_HEX CONTRACT assoc_type_HEX)`.
+Declaration aliases resolve through existing exact-reference rules; every member
+and lexical witness coordinate remains explicit. Native draft/readback retains
+those coordinates, stable IDs, complete inventories and unused binding RHS types.
+The compact counterparts are `owned.associated-member`,
+`owned.associated-binding`, `type.associated-contract-member` and
+`type.associated-witness-projection`; their fields belong to the maintained
+discovery registry. Parsing a proposal does not establish semantic admission.
+
+Feature-bearing authored intent selects `LKJACR38`. Nonempty inventories select
+operation tags 100/101 for Create contract/implementation and 102/103 for Set;
+these encode all current fields and the complete inventory. The two authored type
+forms use tags 25/26. Empty inventories with ordinary types keep their existing
+operation tags, traversal and commitment bytes; no empty extension list is
+appended to the frozen encoding.
+
 The separate reader capability is lkjscript-owned-associated-types-1, version 1.
 Its supported profile combines the frozen Graph33, Interface21, CompilerUnit33,
 Bytecode27, Artifact40 and Manifest3 base with the added object contracts below.
 Advertisement is discovery, not proof. Every owner/interface consumer of either
 new type form requires Graph33 under complete closure admission, including nested
 and unused digest references; a newer referenced object does not upgrade its owner.
+
+A DependencyRecord's graph generation describes the binding's encoding, not an
+associated capability grant or the selected supplier's semantic generation. A
+supported earlier dependency encoding may select a current supplier through the
+same exact package, semantic-revision and package-revision bindings. Complete
+associated admission checks the actual consuming owners and interfaces, associated
+supplier owners and their containing semantic revision generations, and exact
+contract/member/witness identities. Merely naming an associated contract in a
+descriptor without consuming a new type form does not itself require Graph33 at
+that naming owner.
 
 | Object | Extension magic | Checksum domain |
 | --- | --- | --- |
@@ -208,9 +249,16 @@ stored hidden projections, invalid unused bindings and missing/extra imported
 objects reject. Inventory-only changes invalidate the appropriate summaries and
 downstream reuse. Integrity hashes cannot authorize unsupported semantics.
 
-Validator39 adds witness_selected_owned_associated_types version1 while retaining
-Witness9/Summary11 encoding; old validator seals are not current proof. Public
-authoring/discovery selects compact41/authored38. The unchanged genuine embedded
+Validator39 sealed the earlier associated inventory at
+witness_selected_owned_associated_types version1. Validator40 renews that feature
+at version2 for complete associated semantic admission while retaining
+Graph33/Witness9/Summary11 encodings and their digest domains. A supported
+Validator39 envelope still authenticates historical acceptance; its seal is not
+current proof. Current repository contexts, artifact admission and incremental
+witness reuse require the renewed validator digest. Revalidation rebuilds proof
+without changing accepted HEAD or canonical meaning, and complete source import
+rebuilds its witness independently. Public authoring/discovery selects
+compact41/authored38. The unchanged genuine embedded
 planner must first load through independent artifact admission, then support
 ordinary public rebuilding of feature-bearing assets. No header patch, proof
 relabeling, skipped admission or host-planning fallback is allowed. Feature-free

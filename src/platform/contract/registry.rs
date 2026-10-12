@@ -855,7 +855,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         },
         ContractDescriptor {
             key: ContractKey::OwnedAssociatedTypes,
-            name: "associated owned type codec foundation; semantic admission unsupported",
+            name: "contextual associated Owned members and witness projections",
             identity: super::super::kernel::contract::OWNED_ASSOCIATED_CONTRACT_IDENTITY,
             version: super::super::kernel::contract::OWNED_ASSOCIATED_CONTRACT_VERSION,
             stability: CURRENT,
@@ -1044,7 +1044,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
                 "LKJACR14", "LKJACR15", "LKJACR16", "LKJACR17", "LKJACR18", "LKJACR19", "LKJACR20",
                 "LKJACR21", "LKJACR22", "LKJACR23", "LKJACR24", "LKJACR25", "LKJACR26", "LKJACR27",
                 "LKJACR28", "LKJACR29", "LKJACR30", "LKJACR31", "LKJACR32", "LKJACR33", "LKJACR34",
-                "LKJACR35", "LKJACR36", "LKJACR37", "LKJABG01",
+                "LKJACR35", "LKJACR36", "LKJACR37", "LKJACR38", "LKJABG01",
             ],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
@@ -3276,6 +3276,30 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Source,
             "A flat fragment repeats one child index.",
             "Use each zero-based child index once.",
+        ),
+        diagnostic(
+            "change_associated_bound",
+            DiagnosticClass::Source,
+            "An authored associated member omits or changes its explicit Owned bound.",
+            "Use bound=owned with distinct member IDs and names; supply complete inventories in exact Graph33/interface21 contexts.",
+        ),
+        diagnostic(
+            "change_authored_associated_member_duplicate",
+            DiagnosticClass::Semantic,
+            "An associated member inventory repeats an identity or name.",
+            "Provide distinct member IDs and names in complete authored order.",
+        ),
+        diagnostic(
+            "change_authored_associated_binding_duplicate",
+            DiagnosticClass::Semantic,
+            "An implementation binding inventory repeats an associated member identity.",
+            "Provide each member binding once; duplicate intent is never erased.",
+        ),
+        diagnostic(
+            "change_authored_associated_capacity",
+            DiagnosticClass::Resource,
+            "Associated inventory traversal, allocation or accounting exceeds its bounded admission.",
+            "Reduce the complete inventory or supply an explicit sufficient change budget within canonical limits.",
         ),
         diagnostic(
             "change_edge_index_order",
@@ -7157,6 +7181,16 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             }
             structural_expression_records(&mut records)?;
             native_declaration_records(&mut records)?;
+            records.push(compact_record(
+                "change.proposal-feature",
+                &[
+                    ("name", "owned-associated-types".to_owned()),
+                    ("syntax", "owned.associated-member;owned.associated-binding;type.associated-contract-member;type.associated-witness-projection".to_owned()),
+                    ("parsing", "supported-complete-proposal".to_owned()),
+                    ("semantic-admission", "supported-contextual-complete-closure".to_owned()),
+                    ("publication", "requires-complete-candidate-validation".to_owned()),
+                ],
+            )?);
             for descriptor in LOGICAL_PLAN_RECORD_DESCRIPTORS {
                 records.push(compact_record(
                     "change.plan-record",
@@ -8808,13 +8842,33 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         ),
         (
             "owned-contract",
-            "(owned-contract MODE BINDING (visibility public|private) (self SELF) (type-parameter MODE SELF (constraint owned)) (type-parameter MODE ITEM (constraint owned|transferable|capture-safe transferable))... (method method_HEX NAME (parameters (TYPE unrestricted|borrow|consume)...) (returns TYPE [(borrow-from ZERO_BASED_PARAMETER_POSITION)]) [(effect pure|(task (requirement REQUIREMENT)...))])...)",
+            "(owned-contract MODE BINDING (visibility public|private) (self SELF) (type-parameter MODE SELF (constraint owned)) (type-parameter MODE ITEM (constraint owned|transferable|capture-safe transferable))... (associated-type assoc_type_HEX NAME (bound owned))... (method method_HEX NAME (parameters (TYPE unrestricted|borrow|consume)...) (returns TYPE [(borrow-from ZERO_BASED_PARAMETER_POSITION)]) [(effect pure|(task (requirement REQUIREMENT)...))])...)",
             "Nominal pure or closed-effect task methods with exact Owned Self and ordered additional Owned or ordinary Transferable parameters. Every ordinary actual, including phantom arguments, must be complete first-order data and satisfy its exact bounds; a transferable owner is not ordinary data. Ordinary arguments are unrestricted and precede owned borrow/consume arguments. Ordinary results are immutable values; borrowed results require an owned result tied to an exact borrowed source. Mixed declarations require Graph 33.",
         ),
         (
             "owned-implementation",
-            "(owned-implementation MODE BINDING (visibility public|private) (type-parameter MODE PARAMETER (constraint owned|owned transferable|owned shareable|owned transferable shareable|transferable|capture-safe transferable))... (implementation-parameter implparam_HEX NAME CONTRACT SELF_TYPE [(types TYPE...)])... (contract DECLARATION) (self TYPE) [(types TYPE...)] (method method_HEX FUNCTION [(types TYPE...)] [(implementations OPERAND...)])...)",
+            "(owned-implementation MODE BINDING (visibility public|private) (type-parameter MODE PARAMETER (constraint owned|owned transferable|owned shareable|owned transferable shareable|transferable|capture-safe transferable))... (implementation-parameter implparam_HEX NAME CONTRACT SELF_TYPE [(types TYPE...)])... (contract DECLARATION) (self TYPE) [(types TYPE...)] (associated-type assoc_type_HEX TYPE)... (method method_HEX FUNCTION [(types TYPE...)] [(implementations OPERAND...)])...)",
             "Ordered owned and ordinary transferable type parameters and prerequisites apply explicitly with exact declared category and bounds, including unused arguments. Every method maps to an exact visible graph function with identical substituted signature, use modes, borrowed provenance, callable kind and closed effect row. Mappings forward direct same-scheme prerequisites or select parameter-free concrete witness trees. Complete applications retain every nested witness identity and grant no effects; mixed declarations require Graph 33.",
+        ),
+        (
+            "associated-member",
+            "(associated-type assoc_type_HEX NAME (bound owned))",
+            "Complete authored-order contract member inventory with distinct exact IDs and names and explicit Owned bounds. Each signature occurrence requires its exact contract owner and Graph33/interface21 profile. No Transferable, Shareable or capture bound is implied.",
+        ),
+        (
+            "associated-binding",
+            "(associated-type assoc_type_HEX TYPE)",
+            "Complete implementation binding inventory, including unused members. Bindings retain intent order and lower in strict member-ID order without duplicate erasure. Each projection-free RHS independently proves Owned in the exact implementation parameter context; the selected Graph33/interface21 closure checks contract and member correspondence.",
+        ),
+        (
+            "associated-contract-member",
+            "(associated-contract-member CONTRACT assoc_type_HEX)",
+            "Exact package-qualified contract/member authority, valid only in that contract's signatures under its actual Graph33 owner/interface21 profile. No witness or scope is inferred. The member bound proves Owned only.",
+        ),
+        (
+            "associated-witness-projection",
+            "(associated-witness-projection SCOPE implparam_HEX CONTRACT assoc_type_HEX)",
+            "Exact function or OwnedImplementation lexical scope, witness parameter, package-qualified contract/member and actual Graph33 owner/interface21 profile. Equal Self types or outputs confer no witness authority; external projections are forbidden. Complete selected bindings and prerequisites are validated; Owned implies no transfer, sharing or capture rights.",
         ),
         (
             "implementation-parameter",
@@ -8848,7 +8902,7 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         ),
         (
             "types",
-            "Unit|Bool|I64|F64|Text|Bytes|StaticText|Secret|ByteBuffer|OwnedI64Cell|NAME|(NAME TYPE...)|(list TYPE)|(map TYPE TYPE)|(result TYPE TYPE)|(option TYPE)|(stream TYPE)|(record (NAME TYPE)...)|(owned-product (field NAME TYPE)...)|(owned-choice (case NAME TYPE)...)|(owned-sequence TYPE)|(function (TYPE...) TYPE)|(task-function (TYPE...) TYPE ROW)|(resource INTERFACE)|(parameter-type EXACT_PARAMETER)",
+            "Unit|Bool|I64|F64|Text|Bytes|StaticText|Secret|ByteBuffer|OwnedI64Cell|NAME|(NAME TYPE...)|(list TYPE)|(map TYPE TYPE)|(result TYPE TYPE)|(option TYPE)|(stream TYPE)|(record (NAME TYPE)...)|(owned-product (field NAME TYPE)...)|(owned-choice (case NAME TYPE)...)|(owned-sequence TYPE)|(function (TYPE...) TYPE)|(task-function (TYPE...) TYPE ROW)|(resource INTERFACE)|(parameter-type EXACT_PARAMETER)|(associated-contract-member CONTRACT assoc_type_HEX)|(associated-witness-projection SCOPE implparam_HEX CONTRACT assoc_type_HEX)",
             "Inline composition; (type-alias NAME TYPE) is scoped notation and is admitted even when unused.",
         ),
         (

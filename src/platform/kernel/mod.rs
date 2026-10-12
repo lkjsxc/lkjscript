@@ -85,9 +85,10 @@ pub use id::{
 };
 pub use implementation::ImplementationName;
 pub(crate) use infer::{
-    ExpressionRead, ExpressionValidationExhaustion, ExpressionValidationLimits,
-    infer_function_expression_type, infer_function_expression_type_object,
-    validate_expression_roots, validate_expression_roots_with_limits,
+    CheckedExpressionRead, ExpressionRead, ExpressionValidationExhaustion,
+    ExpressionValidationLimits, infer_function_expression_type,
+    infer_function_expression_type_object, validate_expression_roots,
+    validate_expression_roots_with_limits,
 };
 pub use interface::*;
 pub use name::Name;

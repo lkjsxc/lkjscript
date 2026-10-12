@@ -259,6 +259,9 @@ struct UnitBuilder<'a, B: ?Sized> {
 struct DerivedTypeAdmission {
     bytes: usize,
     maximum_bytes: usize,
+    // Shared across every child in this unit, including unused witness metadata.
+    parallel: crate::platform::kernel::owned_associated::OwnedAssociatedAdmission,
+    parallel_steps: Cell<usize>,
 }
 
 impl Default for DerivedTypeAdmission {
@@ -266,6 +269,8 @@ impl Default for DerivedTypeAdmission {
         Self {
             bytes: 0,
             maximum_bytes: 64 * 1_048_576,
+            parallel: crate::platform::kernel::owned_associated::OwnedAssociatedAdmission::new(),
+            parallel_steps: Cell::new(0),
         }
     }
 }
@@ -276,6 +281,10 @@ mod parallel_lower;
 #[cfg(test)]
 #[path = "derived_type_admission_tests.rs"]
 mod derived_type_admission_tests;
+
+#[cfg(test)]
+#[path = "parallel_associated_lower_tests.rs"]
+mod parallel_associated_lower_tests;
 
 /// Exact point reads needed for expression lowering. Artifact admission supplies these from its
 /// independently admitted canonical closure, without a repository or a producer's witness.
@@ -414,6 +423,7 @@ struct CodeExpressionRead<'a, B: ?Sized> {
     derived: &'a BTreeMap<ObjectKey, Vec<u8>>,
     work: RefCell<CanonicalReadWork>,
     owners: Cell<u64>,
+    parallel_steps: Option<&'a Cell<usize>>,
 }
 
 impl<B: CodeRead + ?Sized> crate::platform::kernel::ExpressionRead for CodeExpressionRead<'_, B> {
@@ -473,6 +483,9 @@ impl<B: CodeRead + ?Sized> crate::platform::kernel::ExpressionRead for CodeExpre
     }
 
     fn validation_work(&self) -> Result<(), Diagnostic> {
+        if let Some(steps) = self.parallel_steps {
+            parallel_lower::proof_step(steps)?;
+        }
         self.canonical.code_step()
     }
 }
@@ -505,127 +518,210 @@ pub(super) fn reconstruct_parallel_result_types<B: CanonicalBaseRead + ?Sized>(
     unit: &CompilationUnit,
     remaining: &mut usize,
 ) -> Result<(BTreeMap<ObjectKey, Vec<u8>>, CanonicalReadWork), Diagnostic> {
-    let mut builder = UnitBuilder {
-        canonical: read,
-        package: unit.source.package,
-        scope: match unit.source.owner {
-            OwnerKey::Declaration(declaration) => Some(declaration),
-            _ => None,
-        },
-        tables: TablesBuilder::default(),
-        derived_type_objects: BTreeMap::new(),
-        derived_type_admission: DerivedTypeAdmission::default(),
-        work: CompilationWork::default(),
-    };
-    // Nominal applications can synthesize nested field substitutions even when their
-    // bytecode only names the outer record. Carry that complete derived type closure.
-    for ty in &unit.tables.types {
-        read.validation_checkpoint()?;
-        *remaining = remaining.checked_sub(1).ok_or_else(|| {
-            compiler_error(
-                DiagnosticClass::Resource,
-                "compiler_owned_record_type_limit",
-                "owned record type reconstruction exceeds the existing validation work bound",
-            )
-        })?;
-        let object = builder.with_expression_read(|read| read.type_object(*ty))?;
-        if object.is_some_and(|object| {
-            matches!(
-                object.form,
-                TypeForm::Named { .. } | TypeForm::Applied { .. }
-            )
-        }) {
-            let package = builder.package;
-            if builder.with_expression_read(|read| {
-                crate::platform::kernel::owned_record::is_owned(read, package, *ty)
-            })? {
-                builder.owned_record_fields(*ty, false)?;
-            }
-        }
+    if unit.source.package != read.package_id() {
+        return Err(compiler_corrupt(
+            "compiler_parallel_source",
+            "cached unit belongs to a different canonical package",
+        ));
     }
-    let mut reconstruct = |code: &CompiledCode| -> Result<(), Diagnostic> {
-        for instruction in &code.instructions {
-            read.validation_checkpoint()?;
-            *remaining = remaining.checked_sub(1).ok_or_else(|| {
-                compiler_error(
-                    DiagnosticClass::Resource,
-                    "compiler_parallel_result_type_limit",
-                    "parallel type reconstruction exceeds the existing validation work bound",
-                )
-            })?;
-            let CompiledInstruction::Parallel {
-                left,
-                left_types,
-                right,
-                right_types,
-                result_type,
-                ..
-            } = instruction
-            else {
+    let allowance = Cell::new(*remaining);
+    let result = (|| {
+        let read = parallel_lower::ReconstructionRead {
+            source: read,
+            remaining: &allowance,
+        };
+        // Reserve every copied table entry before constructing the indexed tables.
+        // Instruction/owner/type walks then debit the same borrowed allowance.
+        for count in [
+            unit.tables.declarations.len(),
+            unit.tables.fields.len(),
+            unit.tables.cases.len(),
+            unit.tables.requirements.len(),
+            unit.tables.operations.len(),
+            unit.tables.ports.len(),
+            unit.tables.types.len(),
+            unit.tables.structural_names.len(),
+            unit.tables.texts.len(),
+        ] {
+            read.reserve(count)?;
+        }
+        let mut builder = UnitBuilder {
+            canonical: &read,
+            package: unit.source.package,
+            scope: match unit.source.owner {
+                OwnerKey::Declaration(declaration) => Some(declaration),
+                _ => None,
+            },
+            tables: TablesBuilder::from_tables(&unit.tables),
+            derived_type_objects: BTreeMap::new(),
+            derived_type_admission: DerivedTypeAdmission::default(),
+            work: CompilationWork::default(),
+        };
+        // Re-lower exact canonical roots, not cached instruction declarations. This
+        // recovers both child expressions, their own headers, the wrapper header,
+        // all witness operands and the original lexical owner without fabricated
+        // generations. compile_code does not enter this reconstruction path.
+        let record =
+            builder.required_owner(unit.source.owner, "cached unit canonical source is absent")?;
+        let mut check =
+            |root, parameters: &[ParameterId], actual: &CompiledCode| -> Result<(), Diagnostic> {
+                read.reserve(parameters.len())?;
+                let expected = builder.compile_code(root, parameters)?;
+                if expected != *actual {
+                    return Err(compiler_corrupt(
+                        "compiler_parallel_control_meaning",
+                        "cached code differs from its exact canonical source applications",
+                    ));
+                }
+                Ok(())
+            };
+        match (&unit.payload, record) {
+            (CompilationPayload::Function { code, .. }, OwnerRecord::Declaration(record)) => {
+                let DeclarationPayload::Function(function) = record.payload else {
+                    return Err(reconstruction_source());
+                };
+                check(function.body, &function.parameters, code)?;
+            }
+            (CompilationPayload::Constant { code, .. }, OwnerRecord::Declaration(record)) => {
+                let DeclarationPayload::Constant { value, .. } = record.payload else {
+                    return Err(reconstruction_source());
+                };
+                check(value, &[], code)?;
+            }
+            (
+                CompilationPayload::Test {
+                    actual, expected, ..
+                },
+                OwnerRecord::Declaration(record),
+            ) => {
+                let DeclarationPayload::Test {
+                    actual: root,
+                    expected: expected_root,
+                    ..
+                } = record.payload
+                else {
+                    return Err(reconstruction_source());
+                };
+                check(root, &[], actual)?;
+                check(expected_root, &[], expected)?;
+            }
+            (CompilationPayload::Component { ports, .. }, OwnerRecord::Declaration(record)) => {
+                if !matches!(record.payload, DeclarationPayload::Component { .. }) {
+                    return Err(reconstruction_source());
+                }
+                // Release the closure borrow for exact canonical port reads.
+                for port in ports {
+                    let CompiledPortImplementation::Expression(actual) = &port.implementation
+                    else {
+                        continue;
+                    };
+                    let reference = unit
+                        .tables
+                        .ports
+                        .get(port.port as usize)
+                        .ok_or_else(reconstruction_source)?;
+                    if reference.package != unit.source.package {
+                        return Err(reconstruction_source());
+                    }
+                    let Some(OwnerRecord::Port(record)) =
+                        read.code_owner(OwnerKey::Port(reference.port))?.value
+                    else {
+                        return Err(reconstruction_source());
+                    };
+                    let PortImplementation::Expression(root) = record.implementation else {
+                        return Err(reconstruction_source());
+                    };
+                    check(root, &[], actual)?;
+                }
+            }
+            (
+                CompilationPayload::Function { .. }
+                | CompilationPayload::Constant { .. }
+                | CompilationPayload::Test { .. }
+                | CompilationPayload::Component { .. },
+                _,
+            ) => return Err(reconstruction_source()),
+            _ => {}
+        }
+        // A nominal can occur only inside a table root's syntactic children.
+        // Recreate all reachable nominal fields before the strict cached-table
+        // walk, whose reverse order may encounter a derived field first. Parallel
+        // roots have already been recovered by canonical re-lowering above.
+        read.reserve(unit.tables.types.len())?;
+        builder
+            .derived_type_admission
+            .parallel
+            .reserve::<TypeObjectDigest>(unit.tables.types.len())?;
+        let mut pending = unit.tables.types.clone();
+        let mut seen = BTreeSet::new();
+        while let Some(ty) = pending.pop() {
+            // Charge duplicate and missing attempts too. A missing root is never
+            // marked seen: a later reachable layout can derive and requeue it.
+            read.reserve(1)?;
+            if seen.contains(&ty) {
+                continue;
+            }
+            let Some(object) = builder.with_expression_read(|read| read.type_object(ty))? else {
                 continue;
             };
-            let target = |index: u32| {
-                unit.tables
-                    .declarations
-                    .get(index as usize)
-                    .copied()
-                    .ok_or_else(|| {
-                        compiler_corrupt(
-                            "compiler_parallel_function",
-                            "missing parallel child relocation",
-                        )
-                    })
-            };
-            let types = |indexes: &[u32]| {
-                indexes
-                    .iter()
-                    .map(|i| {
-                        unit.tables.types.get(*i as usize).copied().ok_or_else(|| {
-                            compiler_corrupt(
-                                "compiler_parallel_type",
-                                "missing child type relocation",
-                            )
-                        })
-                    })
-                    .collect::<Result<Vec<_>, _>>()
-            };
-            let left = builder.parallel_function_result(target(*left)?, &types(left_types)?)?;
-            let right = builder.parallel_function_result(target(*right)?, &types(right_types)?)?;
-            let expected = builder.parallel_result_type(left, right)?;
-            if unit.tables.types.get(*result_type as usize)
-                != builder.tables.types.values.get(expected as usize)
-            {
-                return Err(compiler_corrupt(
-                    "compiler_parallel_result_type",
-                    "parallel result operand differs from exact canonical child signatures",
+            if seen.len() >= MAXIMUM_COMPILER_UNIT_ITEMS {
+                return Err(compiler_error(
+                    DiagnosticClass::Resource,
+                    "compiler_owned_record_type_limit",
+                    "owned record type closure exceeds the compiler-unit bound",
                 ));
             }
-        }
-        Ok(())
-    };
-    match &unit.payload {
-        CompilationPayload::Function { code, .. } | CompilationPayload::Constant { code, .. } => {
-            reconstruct(code)?
-        }
-        CompilationPayload::Test {
-            actual, expected, ..
-        } => {
-            reconstruct(actual)?;
-            reconstruct(expected)?;
-        }
-        CompilationPayload::Component { ports, .. } => {
-            for port in ports {
-                if let CompiledPortImplementation::Expression(code) = &port.implementation {
-                    reconstruct(code)?;
+            read.reserve(1)?;
+            builder
+                .derived_type_admission
+                .parallel
+                .reserve::<TypeObjectDigest>(1)?;
+            seen.insert(ty);
+            let children = object.child_type_count();
+            read.reserve(children)?;
+            // Reserve both the transient child vector and the pending entries
+            // before child_types allocates or the worklist grows.
+            builder
+                .derived_type_admission
+                .parallel
+                .reserve::<TypeObjectDigest>(children)?;
+            builder
+                .derived_type_admission
+                .parallel
+                .reserve::<TypeObjectDigest>(children)?;
+            pending.extend(object.child_types());
+            if matches!(
+                object.form,
+                TypeForm::Named { .. } | TypeForm::Applied { .. }
+            ) {
+                let package = builder.package;
+                if builder.with_expression_read(|read| {
+                    crate::platform::kernel::owned_record::is_owned(read, package, ty)
+                })? {
+                    let fields = builder.owned_record_fields(ty, false)?;
+                    read.reserve(fields.len())?;
+                    builder
+                        .derived_type_admission
+                        .parallel
+                        .reserve::<TypeObjectDigest>(fields.len())?;
+                    pending.extend(fields.into_iter().map(|(_, ty)| ty));
                 }
             }
         }
-        _ => {}
-    }
-    // Closed parallel children may introduce a nominal application absent from
-    // canonical storage; complete its field substitutions after recreating it.
-    builder.complete_owned_record_type_closure()?;
-    Ok((builder.derived_type_objects, builder.work.canonical))
+        // The seed pass defers absent derived entries, never admits them. Every
+        // cached table root must now resolve through the complete strict closure.
+        builder.complete_owned_record_type_closure()?;
+        Ok((builder.derived_type_objects, builder.work.canonical))
+    })();
+    *remaining = allowance.get();
+    result
+}
+
+fn reconstruction_source() -> Diagnostic {
+    compiler_corrupt(
+        "compiler_parallel_source",
+        "cached executable has no exact canonical payload root",
+    )
 }
 
 impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
@@ -1379,6 +1475,7 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
             derived: &self.derived_type_objects,
             work: RefCell::new(CanonicalReadWork::default()),
             owners: Cell::new(0),
+            parallel_steps: None,
         };
         let result = operation(&read);
         self.work.canonical.add(read.work.into_inner());
@@ -1965,40 +2062,10 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
         &mut self,
         left: TypeObjectDigest,
         right: TypeObjectDigest,
+        owned: bool,
     ) -> Result<u32, Diagnostic> {
-        let mut owned = false;
-        for ty in [left, right] {
-            self.canonical.code_step()?;
-            let object = self.parallel_type(ty)?;
-            owned |= match object.form {
-                TypeForm::ByteBuffer
-                | TypeForm::OwnedI64Cell
-                | TypeForm::OwnedProduct { .. }
-                | TypeForm::OwnedChoice { .. }
-                | TypeForm::OwnedSequence { .. } => true,
-                TypeForm::TypeParameter { parameter } => {
-                    let OwnerRecord::TypeParameter(record) = self.required_owner(
-                        OwnerKey::TypeParameter(parameter),
-                        "parallel result type parameter",
-                    )?
-                    else {
-                        return Err(compiler_corrupt(
-                            "compiler_parallel_result_type",
-                            "parallel result parameter has another canonical owner kind",
-                        ));
-                    };
-                    if Some(record.declaration) != self.scope {
-                        return Err(compiler_corrupt(
-                            "compiler_parallel_result_type",
-                            "parallel result parameter is outside its exact caller scope",
-                        ));
-                    }
-                    record.constraints.has_owned()
-                }
-                TypeForm::Named { .. } | TypeForm::Applied { .. } => self.owned_local_type(ty)?,
-                _ => false,
-            };
-        }
+        // The exact canonical child admission proves category and transferability;
+        // a type-form catch-all must not classify an associated member as ordinary.
         self.canonical.code_step()?;
         if self.derived_type_objects.len() >= MAXIMUM_COMPILER_UNIT_ITEMS {
             return Err(compiler_error(
@@ -2104,8 +2171,13 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         depth: usize,
         use_mode: ParameterUse,
     ) -> Result<(), Diagnostic> {
-        let operation = self.begin_expression(expression, depth)?;
-        let result = self.operation(operation, depth + 1, use_mode);
+        let record = self.begin_expression(expression, depth)?;
+        let result = self.operation(
+            record.operation,
+            record.contract_version,
+            depth + 1,
+            use_mode,
+        );
         self.active.remove(&expression);
         result
     }
@@ -2114,7 +2186,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         &mut self,
         expression: ExpressionId,
         depth: usize,
-    ) -> Result<ExpressionOperation, Diagnostic> {
+    ) -> Result<ExpressionRecord, Diagnostic> {
         if depth > crate::platform::kernel::contract::MAXIMUM_EXPRESSION_DEPTH {
             return Err(compiler_error(
                 DiagnosticClass::Resource,
@@ -2144,21 +2216,21 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
             OwnerKey::Expression(expression),
             "compiled expression is missing from canonical authority",
         )?;
-        let OwnerRecord::Expression(ExpressionRecord { id, operation, .. }) = record else {
+        let OwnerRecord::Expression(record) = record else {
             self.active.remove(&expression);
             return Err(compiler_corrupt(
                 "compiler_expression_kind",
                 "expression identity names another canonical owner kind",
             ));
         };
-        if id != expression {
+        if record.id != expression {
             self.active.remove(&expression);
             return Err(compiler_corrupt(
                 "compiler_expression_identity",
                 "expression record identity changed during exact lowering",
             ));
         }
-        Ok(operation)
+        Ok(record)
     }
 
     /// Traverse the canonical child Call exactly once, but evaluate only its
@@ -2167,10 +2239,11 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         &mut self,
         expression: ExpressionId,
         depth: usize,
+        wrapper_generation: u16,
     ) -> Result<parallel_lower::Child, Diagnostic> {
-        let operation = self.begin_expression(expression, depth)?;
+        let record = self.begin_expression(expression, depth)?;
         let result = (|| {
-            let (function, arguments, type_arguments, implementations) = match operation {
+            let (function, arguments, type_arguments, implementations) = match record.operation {
                 ExpressionOperation::Call {
                     function,
                     arguments,
@@ -2197,10 +2270,15 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     ));
                 }
             };
-            let uses = self.unit.function_parameter_uses(function)?;
-            let result = self
+            let admitted = self
                 .unit
-                .parallel_function_result(function, &type_arguments)?;
+                .parallel_call_contract(expression, wrapper_generation)?;
+            if admitted.function != function || admitted.arguments != arguments {
+                return Err(compiler_corrupt(
+                    "compiler_parallel_call",
+                    "parallel child canonical identity changed during lowering",
+                ));
+            }
             let types = type_arguments
                 .into_iter()
                 .map(|ty| self.unit.tables.ty(ty))
@@ -2208,7 +2286,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
             for operand in &implementations {
                 self.unit.implementation_operand(operand)?;
             }
-            if uses.len() != arguments.len() {
+            if admitted.parameters.len() != arguments.len() {
                 return Err(compiler_corrupt(
                     "compiler_parallel_call",
                     "parallel child arity differs from its exact signature",
@@ -2216,13 +2294,14 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
             }
             let function = self.unit.tables.declaration(function)?;
             let count = u32_count("parallel child arguments", arguments.len())?;
-            for (argument, use_mode) in arguments.into_iter().zip(uses) {
-                self.expression_with_use(argument, depth + 1, use_mode)?;
+            for (argument, parameter) in arguments.into_iter().zip(admitted.parameters) {
+                self.expression_with_use(argument, depth + 1, parameter.use_mode)?;
             }
             Ok(parallel_lower::Child {
                 function,
                 arguments: count,
-                result,
+                result: admitted.result,
+                result_owned: admitted.result_owned,
                 types,
                 implementations,
             })
@@ -2234,6 +2313,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
     fn operation(
         &mut self,
         operation: ExpressionOperation,
+        consumer_generation: u16,
         depth: usize,
         use_mode: ParameterUse,
     ) -> Result<(), Diagnostic> {
@@ -2657,9 +2737,13 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 };
             }
             ExpressionOperation::Parallel { left, right } => {
-                let left = self.parallel_call(left, depth)?;
-                let right = self.parallel_call(right, depth)?;
-                let result_type = self.unit.parallel_result_type(left.result, right.result)?;
+                let left = self.parallel_call(left, depth, consumer_generation)?;
+                let right = self.parallel_call(right, depth, consumer_generation)?;
+                let result_type = self.unit.parallel_result_type(
+                    left.result,
+                    right.result,
+                    left.result_owned || right.result_owned,
+                )?;
                 self.push(CompiledInstruction::Parallel {
                     left: left.function,
                     left_arguments: left.arguments,
@@ -3465,9 +3549,9 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         expected: TypeObjectDigest,
         depth: usize,
     ) -> Result<u32, Diagnostic> {
-        let operation = self.begin_expression(expression, depth)?;
+        let record = self.begin_expression(expression, depth)?;
         let result = (|| {
-            let ExpressionOperation::Local { value } = operation else {
+            let ExpressionOperation::Local { value } = record.operation else {
                 return Err(compiler_corrupt(
                     "compiler_borrow_source",
                     "lexical read source must be an exact live local",

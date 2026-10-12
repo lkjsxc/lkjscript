@@ -1,0 +1,10 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create blockread-private-field
+    (function create invalid (visibility private) (effect pure)
+      (parameter create block (type (blockread-chunked::ChunkBlock I64)) (use borrow)) (returns I64)
+      (body (borrow-owned-field (type (blockread-chunked::ChunkBlock I64)) (local block)
+        (field items (binding items (type (owned-sequence I64))))
+        (in (call std::data-sequence-length (types I64) (local items))))))))
+declarations.end

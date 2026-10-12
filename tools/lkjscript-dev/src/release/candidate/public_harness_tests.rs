@@ -1,7 +1,8 @@
 use super::*;
 use std::os::unix::fs::PermissionsExt;
 
-const OWNERSHIP_CASES: [&str; 18] = [
+const OWNERSHIP_CASES: [&str; 19] = [
+    "native_declarations::native_associated_blockread::native_associated_blockread_consumer_first_four_literals_three_targets_and_detached_bytes",
     "native_declarations::native_indexed_data::native_indexed_data_separate_packages_snapshots_forwarded_witnesses_and_detached_execution",
     "native_declarations::native_indexed_data::native_indexed_data_rejects_wrong_categories_modes_scopes_and_phantom_actuals",
     "native_declarations::native_indexed_data::native_indexed_data_traps_refusals_cleanup_and_recovery",
@@ -37,7 +38,7 @@ fn success() -> String {
         .map(|line| line.strip_suffix(": test").unwrap())
         .filter(|name| *name != "unrelated")
         .collect::<Vec<_>>();
-    assert_eq!(names.len(), 37);
+    assert_eq!(names.len(), 38);
     let mut output = format!("\nrunning {} tests\n", names.len());
     for name in &names {
         output.push_str(&format!("test {name} ... ok\n"));
@@ -79,7 +80,7 @@ fn harness(root: &Path, output: &str, exit: i32) -> PathBuf {
     let path = root.join("fixture-harness");
     let listing = listing();
     let script = format!(
-        "#!/bin/sh\nset -eu\n[ \"$PATH\" = '' ]\n[ \"$HOME\" = \"$PWD/home\" ]\n[ \"$TMPDIR\" = \"$PWD/tmp\" ]\n[ -z \"${{CARGO_HOME+x}}\" ]\n[ -z \"${{GH_TOKEN+x}}\" ]\n[ -z \"${{GITHUB_TOKEN+x}}\" ]\n[ -f \"$LKJSCRIPT_RELEASE_CANDIDATE\" ]\nif [ \"$1\" = '--list' ]; then\nprintf '%s' '{listing}'\nelse\n[ \"$1\" = '--exact' ]\n[ \"$2\" = '--test-threads=1' ]\n[ \"$3\" = '--color=never' ]\n[ \"$#\" = 40 ]\nprintf '%s' '{output}'\nexit {exit}\nfi\n"
+        "#!/bin/sh\nset -eu\n[ \"$PATH\" = '' ]\n[ \"$HOME\" = \"$PWD/home\" ]\n[ \"$TMPDIR\" = \"$PWD/tmp\" ]\n[ -z \"${{CARGO_HOME+x}}\" ]\n[ -z \"${{GH_TOKEN+x}}\" ]\n[ -z \"${{GITHUB_TOKEN+x}}\" ]\n[ -f \"$LKJSCRIPT_RELEASE_CANDIDATE\" ]\nif [ \"$1\" = '--list' ]; then\nprintf '%s' '{listing}'\nelse\n[ \"$1\" = '--exact' ]\n[ \"$2\" = '--test-threads=2' ]\n[ \"$3\" = '--color=never' ]\n[ \"$#\" = 41 ]\nprintf '%s' '{output}'\nexit {exit}\nfi\n"
     );
     fs::write(&path, script).unwrap();
     fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
@@ -98,8 +99,14 @@ fn native_runner_uses_closed_environment_exact_inventory_and_retained_processes(
         .unwrap();
     assert_eq!(
         runner.receipt.inventory.as_ref().unwrap().selected.len(),
-        37
+        38
     );
+    assert!(runner.receipt.inventory.as_ref().unwrap().selected.contains(
+        "native_declarations::native_associated_blockread::native_associated_blockread_consumer_first_four_literals_three_targets_and_detached_bytes"
+    ));
+    assert!(runner.receipt.phases[1].command.iter().any(|argument| argument ==
+        "native_declarations::native_associated_blockread::native_associated_blockread_consumer_first_four_literals_three_targets_and_detached_bytes"
+    ));
     assert_eq!(runner.receipt.phases.len(), 2);
     assert!(
         runner
@@ -114,7 +121,7 @@ fn native_runner_uses_closed_environment_exact_inventory_and_retained_processes(
         serde_json::from_slice(&fs::read(root.path().join("receipt.json")).unwrap()).unwrap();
     assert_eq!(
         record["inventory"]["selected"].as_array().unwrap().len(),
-        37
+        38
     );
     assert!(root.path().join("inventory.stdout.log").is_file());
     assert!(root.path().join("execute.stderr.log").is_file());
@@ -143,6 +150,39 @@ fn native_runner_rejects_failing_process_or_ignored_cases_even_with_a_zero_exit(
         assert!(!runner.receipt.cleanup_complete);
         assert_eq!(
             fs::read_to_string(root.path().join("execute.stdout.log")).unwrap(),
+            output
+        );
+    }
+}
+
+#[test]
+fn native_runner_requires_associated_blockread_outcome_before_accepting_zero_exit() {
+    let complete = success();
+    let record = "test native_declarations::native_associated_blockread::native_associated_blockread_consumer_first_four_literals_three_targets_and_detached_bytes ... ok\n";
+    assert_eq!(complete.matches(record).count(), 1);
+    for output in [
+        complete.replace(record, ""),
+        complete.replace(record, &record.replace(" ... ok", " ... ignored")),
+        complete.replace(record, &record.replace(" ... ok", " ... FAILED")),
+        complete.clone() + record,
+    ] {
+        let root = tempfile::tempdir().expect("associated harness evidence");
+        let work = tempfile::tempdir().expect("associated harness work");
+        let executable = harness(root.path(), &output, 0);
+        let control = process::ProcessControl::default();
+        let mut runner = runner(root.path(), &control);
+        assert!(
+            runner
+                .evaluate(&executable, &root.path().join("candidate"), work.path())
+                .is_err()
+        );
+        assert_eq!(runner.receipt.phases.len(), 2);
+        assert_eq!(runner.receipt.phases[1].process.exit_code, Some(0));
+        assert_ne!(runner.receipt.status, "passed");
+        assert!(!runner.receipt.cleanup_complete);
+        assert_eq!(
+            fs::read_to_string(root.path().join("execute.stdout.log"))
+                .expect("original outcome log"),
             output
         );
     }

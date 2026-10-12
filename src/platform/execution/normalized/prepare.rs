@@ -38,14 +38,18 @@ type TargetMap = BTreeMap<(PackageId, TargetId), NormalizedTarget>;
 type RootTargetNames = BTreeMap<Name, TargetId>;
 type RuntimeOwnerMap = BTreeMap<(PackageId, OwnerKey), OwnerRecord>;
 
+#[path = "prepared_signature_owned.rs"]
+mod signature_owned;
+
 struct LoadedCompilationInputs {
     units: BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
     manifests: BTreeMap<PackageId, CompilationManifest>,
 }
 
-struct FunctionValidationInputs<'a> {
+struct FunctionValidationInputs<'a, 'control> {
     types: &'a BTreeMap<TypeObjectDigest, TypeObject>,
     requirements: &'a [NormalizedRequirement],
+    proof: &'a mut super::prepared_types::Budget<'control>,
 }
 
 struct TargetPreparationInputs<'a> {
@@ -939,19 +943,23 @@ impl NormalizedProgram {
             .into();
         let requirements = prepare_requirements(&units, &indexes, &runtime_owners)?;
         let operations = prepare_operations(&indexes, &runtime_owners)?;
-        let function_validation = FunctionValidationInputs {
-            types: &types,
-            requirements: &requirements,
+        let mut type_work = super::prepared_types::Budget::new(control);
+        let functions = {
+            let mut function_validation = FunctionValidationInputs {
+                types: &types,
+                requirements: &requirements,
+                proof: &mut type_work,
+            };
+            prepare_functions(
+                &artifact,
+                &units,
+                &indexes,
+                &runtime_owners,
+                &mut function_validation,
+                &mut text_cache,
+                &mut work,
+            )?
         };
-        let functions = prepare_functions(
-            &artifact,
-            &units,
-            &indexes,
-            &runtime_owners,
-            &function_validation,
-            &mut text_cache,
-            &mut work,
-        )?;
         validate_resource_calls(&functions)?;
         let (components, ports) = prepare_components(
             &artifact,
@@ -1024,7 +1032,7 @@ impl NormalizedProgram {
             &mut program,
             &units,
             &runtime_owners,
-            control,
+            &mut type_work,
         )?;
         validate_borrowed_result_calls(&program)?;
         super::session::validate_program_interactive_targets(&program)?;
@@ -1727,7 +1735,7 @@ fn prepare_functions(
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
     indexes: &RuntimeIndexes,
     runtime_owners: &RuntimeOwnerMap,
-    validation: &FunctionValidationInputs<'_>,
+    validation: &mut FunctionValidationInputs<'_, '_>,
     text_cache: &mut BTreeMap<BlobObjectDigest, Arc<str>>,
     work: &mut NormalizedPreparationWork,
 ) -> Result<Vec<NormalizedFunction>, Diagnostic> {
@@ -1801,18 +1809,6 @@ fn prepare_functions(
             }
         };
         let parameter_count = u32_index(parameters.len(), "function parameter count")?;
-        validate_normalized_resource_signature(
-            *declaration,
-            &type_parameters,
-            &parameters,
-            result,
-            &task_requirements,
-            &body,
-            units,
-            runtime_owners,
-            validation.types,
-            validation.requirements,
-        )?;
         let canonical = artifact.reference_owner(
             declaration.package,
             OwnerKey::Declaration(declaration.declaration),
@@ -1876,6 +1872,19 @@ fn prepare_functions(
                 ));
             }
         };
+        validate_normalized_resource_signature(
+            *declaration,
+            &type_parameters,
+            &parameters,
+            result,
+            &task_requirements,
+            &body,
+            units,
+            runtime_owners,
+            validation.types,
+            validation.requirements,
+            validation.proof,
+        )?;
         let (requirement_parameters, effect_parameters, effect) = match &unit.payload {
             CompilationPayload::Function { signature, .. }
             | CompilationPayload::External { signature, .. } => (
@@ -2069,8 +2078,26 @@ fn validate_normalized_resource_signature(
     owners: &RuntimeOwnerMap,
     types: &BTreeMap<TypeObjectDigest, TypeObject>,
     requirements: &[NormalizedRequirement],
+    proof: &mut super::prepared_types::Budget<'_>,
 ) -> Result<(), Diagnostic> {
-    let is_memory = |ty| -> Result<bool, Diagnostic> {
+    // Retain each parameter's category under its own exact occurrence, rather
+    // than revalidating associated inventories during the later phase checks.
+    proof.step()?;
+    proof.reserve::<bool>(parameters.len())?;
+    let mut parameter_memory = Vec::with_capacity(parameters.len());
+    let context = signature_owned::Context {
+        declaration,
+        parameters,
+        result,
+        units,
+        owners,
+        types,
+    };
+    let is_memory = |ty,
+                     parameter,
+                     proof: &mut super::prepared_types::Budget<'_>|
+     -> Result<bool, Diagnostic> {
+        proof.step()?;
         Ok(match types.get(&ty).map(|t| &t.form) {
             Some(
                 TypeForm::ByteBuffer
@@ -2079,6 +2106,10 @@ fn validate_normalized_resource_signature(
                 | TypeForm::OwnedChoice { .. }
                 | TypeForm::OwnedSequence { .. },
             ) => true,
+            Some(
+                TypeForm::AssociatedContractMember { .. }
+                | TypeForm::AssociatedWitnessProjection { .. },
+            ) => context.owned(ty, parameter, proof)?,
             Some(TypeForm::TypeParameter { parameter }) => {
                 matches!(exact_runtime_owner(owners, declaration.package, OwnerKey::TypeParameter(*parameter), "owned signature type parameter")?, OwnerRecord::TypeParameter(p) if p.constraints.has_owned())
             }
@@ -2092,6 +2123,7 @@ fn validate_normalized_resource_signature(
         })
     };
     let mut direct = Vec::new();
+    let mut memory = false;
     for (index, parameter) in parameters.iter().enumerate() {
         let form = types.get(&parameter.ty).ok_or_else(|| {
             runtime_corrupt(
@@ -2099,8 +2131,11 @@ fn validate_normalized_resource_signature(
                 "function parameter type is absent from the prepared type closure",
             )
         })?;
+        let owned = is_memory(parameter.ty, Some(parameter.parameter), proof)?;
+        parameter_memory.push(owned);
+        memory |= owned;
         match &form.form {
-            _ if is_memory(parameter.ty)? => {
+            _ if owned => {
                 if parameter.resource_requirement.is_some()
                     || parameter.use_mode == ParameterUse::Unrestricted
                     || !matches!(
@@ -2142,10 +2177,7 @@ fn validate_normalized_resource_signature(
             }
         }
     }
-    let mut memory = is_memory(result)?;
-    for p in parameters {
-        memory |= is_memory(p.ty)?;
-    }
+    memory |= is_memory(result, None, proof)?;
     if memory {
         let OwnerRecord::Declaration(record) = exact_runtime_owner(
             owners,
@@ -2176,8 +2208,9 @@ fn validate_normalized_resource_signature(
             ));
         }
         let mut phase = 0;
-        for p in parameters {
-            let next = if is_memory(p.ty)? {
+        for (p, owned) in parameters.iter().zip(&parameter_memory) {
+            proof.step()?;
+            let next = if *owned {
                 1
             } else if matches!(
                 types.get(&p.ty).map(|t| &t.form),

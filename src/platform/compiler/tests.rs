@@ -1,5 +1,8 @@
 //! Focused normalized compiler-unit tests.
 
+#[path = "associated_serial_admission_tests.rs"]
+mod associated_serial_admission_tests;
+
 #[path = "nominal_session_tests.rs"]
 mod nominal_session_tests;
 

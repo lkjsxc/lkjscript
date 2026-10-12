@@ -63,7 +63,11 @@ macro_rules! kernel_digest {
             where
                 S: Serializer,
             {
-                serializer.serialize_str(&self.to_string())
+                crate::platform::semantic_id::serialize_prefixed_hex(
+                    Self::PREFIX,
+                    &self.0,
+                    serializer,
+                )
             }
         }
 

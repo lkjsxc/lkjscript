@@ -1,0 +1,119 @@
+request base=rev_68c33303d61066098d369edf751b6b63f18da0fa4a87beb28cf34f4e728025f4
+add.dependency package=pkg_10000000000000000000000000000001 semantic-revision=rev_6818785d8919028a69659b24df495b2d7a42f2676a95fd1aa0ae143a32623013 package-revision=package_revision_3a0f78fdb296b222dc03b1ef01219534c049ae0081362a0004654c78fd88ac73
+declarations.begin
+(units
+  (use std builtin)
+  (module create indexed-data
+    (owned-contract create IndexedData (visibility public)
+      (self Self) (type-parameter create Self (constraint owned))
+      (type-parameter create Item (constraint transferable))
+      (method method_a1000000000000000000000000000001 empty
+        (parameters) (returns Self) (effect pure))
+      (method method_a1000000000000000000000000000002 length
+        (parameters (Self borrow)) (returns I64) (effect pure))
+      (method method_a1000000000000000000000000000003 push
+        (parameters (Item unrestricted) (Self consume)) (returns Self) (effect pure))
+      (method method_a1000000000000000000000000000004 get
+        (parameters (I64 unrestricted) (Self borrow)) (returns Item) (effect pure))
+      (method method_a1000000000000000000000000000005 replace
+        (parameters (I64 unrestricted) (Item unrestricted) (Self consume))
+        (returns (owned-product (field rest Self) (field value Item))) (effect pure))
+      (method method_a1000000000000000000000000000006 discard
+        (parameters (Self consume)) (returns Unit) (effect pure)))
+    (owned-contract create BlockRead (visibility public)
+      (self Self) (type-parameter create Self (constraint owned))
+      (type-parameter create Item (constraint transferable))
+      (associated-type assoc_type_a3000000000000000000000000000001 Block (bound owned))
+      (method method_a3000000000000000000000000000001 block-count
+        (parameters (Self borrow)) (returns I64) (effect pure))
+      (method method_a3000000000000000000000000000002 block-at
+        (parameters (I64 unrestricted) (Self borrow))
+        (returns (associated-contract-member BlockRead assoc_type_a3000000000000000000000000000001)
+          (borrow-from 1)) (effect pure))
+      (method method_a3000000000000000000000000000003 block-length
+        (parameters ((associated-contract-member BlockRead assoc_type_a3000000000000000000000000000001) borrow))
+        (returns I64) (effect pure))
+      (method method_a3000000000000000000000000000004 block-get
+        (parameters (I64 unrestricted)
+          ((associated-contract-member BlockRead assoc_type_a3000000000000000000000000000001) borrow))
+        (returns Item) (effect pure)))
+    (function create build-loop (visibility private) (effect pure)
+      (type-parameter create T (constraint transferable))
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_a1000000000000000000000000000001 storage IndexedData W (types T))
+      (parameter create input (type (list T))) (parameter create offset (type I64))
+      (parameter create storage (type W) (use consume)) (returns W)
+      (body (if (call std::less (local offset) (call std::list-length (types T) (local input)))
+        (let (binding next (type W)
+          (method-call parameter@build-loop@implparam_a1000000000000000000000000000001
+            IndexedData method_a1000000000000000000000000000003
+            (call std::list-get (types T) (local input) (local offset)) (local storage)))
+          (in (implementation-call build-loop (types T W)
+            (implementations parameter@build-loop@implparam_a1000000000000000000000000000001)
+            (local input) (call std::add (local offset) (i64 1)) (local next))))
+        (local storage))))
+    (function create build (visibility public) (effect pure)
+      (type-parameter create T (constraint transferable))
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_a1000000000000000000000000000002 storage IndexedData W (types T))
+      (parameter create input (type (list T))) (returns W)
+      (body (let (binding storage (type W)
+        (method-call parameter@build@implparam_a1000000000000000000000000000002
+          IndexedData method_a1000000000000000000000000000001))
+        (in (implementation-call build-loop (types T W)
+          (implementations parameter@build@implparam_a1000000000000000000000000000002)
+          (local input) (i64 0) (local storage))))))
+    (function create read-loop (visibility private) (effect pure)
+      (type-parameter create T (constraint transferable))
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_a1000000000000000000000000000003 storage IndexedData W (types T))
+      (parameter create offset (type I64)) (parameter create output (type (list T)))
+      (parameter create storage (type W) (use borrow)) (returns (list T))
+      (body (if (call std::less (local offset)
+        (method-call parameter@read-loop@implparam_a1000000000000000000000000000003
+          IndexedData method_a1000000000000000000000000000002 (local storage)))
+        (implementation-call read-loop (types T W)
+          (implementations parameter@read-loop@implparam_a1000000000000000000000000000003)
+          (call std::add (local offset) (i64 1))
+          (call std::list-append (types T) (local output)
+            (method-call parameter@read-loop@implparam_a1000000000000000000000000000003
+              IndexedData method_a1000000000000000000000000000004 (local offset) (local storage)))
+          (local storage))
+        (local output))))
+    (function create snapshot (visibility public) (effect pure)
+      (type-parameter create T (constraint transferable))
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_a1000000000000000000000000000004 storage IndexedData W (types T))
+      (parameter create storage (type W) (use borrow)) (returns (list T))
+      (body (implementation-call read-loop (types T W)
+        (implementations parameter@snapshot@implparam_a1000000000000000000000000000004)
+        (i64 0) (list T) (local storage))))
+    (function create exercise (visibility public) (effect pure)
+      (type-parameter create T (constraint transferable))
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_a1000000000000000000000000000005 storage IndexedData W (types T))
+      (parameter create input (type (list T))) (parameter create index (type I64))
+      (parameter create replacement (type T))
+      (returns (record (before (list T)) (displaced T) (after (list T)) (length I64)))
+      (body (let
+        (binding storage (type W) (implementation-call build (types T W)
+          (implementations parameter@exercise@implparam_a1000000000000000000000000000005) (local input)))
+        (binding before (type (list T)) (implementation-call snapshot (types T W)
+          (implementations parameter@exercise@implparam_a1000000000000000000000000000005) (local storage)))
+        (binding changed (type (owned-product (field rest W) (field value T)))
+          (method-call parameter@exercise@implparam_a1000000000000000000000000000005
+            IndexedData method_a1000000000000000000000000000005 (local index) (local replacement) (local storage)))
+        (in (unpack-owned (type (owned-product (field rest W) (field value T))) (local changed)
+          (field rest (binding storage (type W))) (field value (binding displaced (type T)))
+          (in (let
+            (binding after (type (list T)) (implementation-call snapshot (types T W)
+              (implementations parameter@exercise@implparam_a1000000000000000000000000000005) (local storage)))
+            (binding length (type I64)
+              (method-call parameter@exercise@implparam_a1000000000000000000000000000005
+                IndexedData method_a1000000000000000000000000000002 (local storage)))
+            (in (sequence
+              (method-call parameter@exercise@implparam_a1000000000000000000000000000005
+                IndexedData method_a1000000000000000000000000000006 (local storage))
+              (record structural (field before (local before)) (field displaced (local displaced))
+                (field after (local after)) (field length (local length))))))))))))))
+declarations.end

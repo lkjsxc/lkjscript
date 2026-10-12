@@ -212,7 +212,10 @@ fn historical_acceptance_retains_identity_but_requires_rebuilt_current_proof() {
     let initial = prepare_initial_publication(&logical, &store, None).unwrap();
     install(&mut store, &initial.publication);
     let mut old = initial.witness.manifest.clone();
-    old.validator_contract = ValidatorContractDigest::from_bytes([0x5a; 32]);
+    old.validator_contract =
+        "validator_contract_c3c9a4a3504b3d2f6a54d6d0b352b4e9c2fc620c62fa6172c5b30f4219d48034"
+            .parse::<ValidatorContractDigest>()
+            .unwrap();
     // Independent neutral rehash models historical acceptance, not current semantic proof.
     old.certificate = ValidationCertificateDigest::of(
         &bincode::encode_to_vec(

@@ -7,8 +7,13 @@ mod work;
 #[path = "affine_budget_tests.rs"]
 mod budget_tests;
 
+#[cfg(test)]
+#[path = "affine_associated_shape_tests.rs"]
+mod associated_shape_tests;
+
 use super::contract::MAXIMUM_EXPRESSION_DEPTH;
 use super::infer::{ExpressionRead, ExpressionValidationExhaustion, ExpressionValidationLimits};
+use super::owned_associated::{OwnedAssociatedAdmission, OwnedTypeOccurrence};
 use super::{
     BindingKind, BindingRecord, CaseRecord, DeclarationPayload, DeclarationReference,
     ExpressionOperation, FunctionDeclaration, FunctionEffect, LocalValueReference, OperationRecord,
@@ -99,6 +104,7 @@ pub(crate) fn validate_affine_roots_with_limits<R: ExpressionRead>(
         read: &read,
         work: &work,
         current_function: None,
+        associated_admission: OwnedAssociatedAdmission::new(),
     };
     for owner in roots {
         let record = match validator.read.owner(owner) {
@@ -109,8 +115,9 @@ pub(crate) fn validate_affine_roots_with_limits<R: ExpressionRead>(
                 continue;
             }
         };
-        if let Err(diagnostic) = super::memory::validate_owner(&read, owner, &record)
-            .and_then(|()| validator.validate_owner_shape(owner, &record))
+        if let Err(diagnostic) =
+            super::memory::validate_owner_at(&read, owner, &record, &validator.associated_admission)
+                .and_then(|()| validator.validate_owner_shape(owner, &record))
         {
             push_diagnostic(diagnostics, diagnostic, limits.maximum_diagnostics)?;
             continue;
@@ -165,6 +172,7 @@ struct AffineValidator<'a, 'b, R: ?Sized> {
     read: &'a R,
     work: &'b work::Meter<'b>,
     current_function: Option<DeclarationId>,
+    associated_admission: OwnedAssociatedAdmission,
 }
 
 impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
@@ -202,7 +210,30 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
     ) -> Result<(), Diagnostic> {
         match record {
             OwnerRecord::Parameter(parameter) => {
-                if super::memory::direct(self.read, parameter.ty)? {
+                if record.header().owner != owner
+                    || !matches!(owner, OwnerKey::Parameter(_))
+                    || record.header().kind != super::OwnerKind::Parameter
+                {
+                    return Err(owner_affine_error(
+                        "kernel_affine_parameter_shape",
+                        owner,
+                        "parameter shape requires its exact canonical owner and kind",
+                    ));
+                }
+                let occurrence = super::memory::owner_occurrence(self.read, owner, record)?
+                    .ok_or_else(|| {
+                        owner_affine_error(
+                            "kernel_affine_parameter_shape",
+                            owner,
+                            "parameter shape requires an exact occurrence context",
+                        )
+                    })?;
+                if super::memory::direct_at(
+                    self.read,
+                    parameter.ty,
+                    occurrence,
+                    &self.associated_admission,
+                )? {
                     return Ok(());
                 }
                 let resource = self.resource_type(parameter.ty)?;
@@ -1613,7 +1644,10 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
         let mut resources = Vec::new();
         for parameter in function.parameters.iter().copied() {
             let record = self.parameter(reference.package, parameter)?;
-            if record.parent != super::ParameterParent::Function(reference.declaration) {
+            if record.header.owner != OwnerKey::Parameter(parameter)
+                || record.header.kind != super::OwnerKind::Parameter
+                || record.parent != super::ParameterParent::Function(reference.declaration)
+            {
                 return Err(owner_affine_error(
                     "kernel_affine_function_parameter_parent",
                     OwnerKey::Parameter(parameter),
@@ -1659,7 +1693,16 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                     ));
                 }
                 None => {
-                    if super::memory::direct_in(self.read, reference.package, record.ty)? {
+                    let occurrence = OwnedTypeOccurrence::authored(
+                        Some(reference),
+                        record.header.contract_version,
+                    );
+                    if super::memory::direct_at(
+                        self.read,
+                        record.ty,
+                        occurrence,
+                        &self.associated_admission,
+                    )? {
                         continue;
                     }
                     if !resources.is_empty() {

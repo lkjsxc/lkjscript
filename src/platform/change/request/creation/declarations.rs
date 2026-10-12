@@ -52,7 +52,7 @@ pub struct AuthoredRequirement {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredPortImplementation {
     Expression {
-        expression: AuthoredExpression,
+        expression: Box<AuthoredExpression>,
     },
     Function {
         function: AuthoredDeclarationReference,

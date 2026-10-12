@@ -1,0 +1,12 @@
+declarations.begin
+(units
+  (module create blockread-escape
+    (function create invalid (visibility private) (effect pure)
+      (parameter create input (type (list I64))) (returns (owned-sequence I64))
+      (body (let (binding storage (type (owned-sequence I64))
+        (call blockread-flat::build (types I64) (local input)))
+        (in (borrow-call
+          (implementation-call blockread-consumer::forward-block (types I64 (owned-sequence I64))
+            (implementations (implementation blockread-flat::Flat (types I64))) (i64 0) (local storage))
+          (binding block (type (owned-sequence I64))) (in (local block)))))))))
+declarations.end

@@ -1,0 +1,38 @@
+declarations.begin
+(units
+  (module create associated-parallel-consumer
+    (owned-contract create Take (visibility public)
+      (self Self) (type-parameter create Self (constraint owned))
+      (associated-type assoc_type_c9000000000000000000000000000001 Out (bound owned))
+      (method method_c9000000000000000000000000000001 take
+        (parameters (Bool unrestricted) (I64 unrestricted) (Self consume))
+        (returns (associated-contract-member Take assoc_type_c9000000000000000000000000000001))
+        (effect pure))
+      (method method_c9000000000000000000000000000002 inspect
+        (parameters (Bool unrestricted) (I64 unrestricted)
+          ((associated-contract-member Take assoc_type_c9000000000000000000000000000001) borrow))
+        (returns I64) (effect pure)))
+    (function create take (visibility public) (effect (task))
+      (type-parameter create S (constraint owned))
+      (implementation-parameter implparam_c9000000000000000000000000000001 selected Take S)
+      (parameter create fail (type Bool))
+      (parameter create rounds (type I64))
+      (parameter create source (type S) (use consume))
+      (returns (associated-witness-projection take implparam_c9000000000000000000000000000001
+        Take assoc_type_c9000000000000000000000000000001))
+      (body (method-call parameter@take@implparam_c9000000000000000000000000000001
+        Take method_c9000000000000000000000000000001
+        (local fail) (local rounds) (local source))))
+    (function create inspect (visibility public) (effect (task))
+      (type-parameter create S (constraint owned))
+      (implementation-parameter implparam_c9000000000000000000000000000002 selected Take S)
+      (parameter create fail (type Bool))
+      (parameter create rounds (type I64))
+      (parameter create block
+        (type (associated-witness-projection inspect implparam_c9000000000000000000000000000002
+          Take assoc_type_c9000000000000000000000000000001)) (use borrow))
+      (returns I64)
+      (body (method-call parameter@inspect@implparam_c9000000000000000000000000000002
+        Take method_c9000000000000000000000000000002
+        (local fail) (local rounds) (local block))))))
+declarations.end

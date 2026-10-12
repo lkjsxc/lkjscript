@@ -4,6 +4,8 @@ use super::native_owned_worklists::{deployment, rejected, standard, unchanged};
 use super::*;
 use serde_json::json;
 use std::cell::Cell;
+use std::io::Write;
+use std::time::{Duration, Instant};
 
 const LIBRARY: &str = include_str!("../../examples/indexed-data-storage/library.lkjc");
 const FLAT: &str = include_str!("../../examples/indexed-data-storage/flat.lkjc");
@@ -11,7 +13,8 @@ const CHUNKED: &str = include_str!("../../examples/indexed-data-storage/chunked.
 const FORWARD: &str = include_str!("../../examples/indexed-data-storage/forward.lkjc");
 const APPLICATION: &str = include_str!("../../examples/indexed-data-storage/application.lkjc");
 const COSTS: &str = include_str!("../../examples/indexed-data-storage/costs.lkjc");
-const TARGETS: [&str; 13] = [
+const BLOCKREAD: &str = include_str!("../../examples/indexed-data-storage/blockread.lkjc");
+const TARGETS: [&str; 15] = [
     "indexed-integers",
     "indexed-scalar-flat",
     "indexed-scalar-chunked",
@@ -25,7 +28,124 @@ const TARGETS: [&str; 13] = [
     "indexed-cost-direct",
     "indexed-cost-flat",
     "indexed-cost-chunked",
+    "indexed-blocks-flat",
+    "indexed-blocks-chunked",
 ];
+
+// Diagnostic output for one long-running matrix, not a runtime or operation quota.
+// Other IndexedData tests construct Packages through the default-off stage().
+struct MatrixProgress {
+    started: Instant,
+    records: Cell<usize>,
+}
+
+impl MatrixProgress {
+    fn new() -> Self {
+        let progress = Self {
+            started: Instant::now(),
+            records: Cell::new(0),
+        };
+        progress.emit(json!({"event":"matrix-start"}));
+        progress
+    }
+
+    fn emit(&self, mut record: Value) {
+        const MAXIMUM_RECORDS: usize = 650;
+        const MAXIMUM_RECORD_BYTES: usize = 1024;
+        let ordinal = self.records.get();
+        assert!(ordinal < MAXIMUM_RECORDS, "bounded matrix progress records");
+        self.records.set(ordinal + 1);
+        record["version"] = json!(1);
+        record["record"] = json!(ordinal);
+        record["elapsed_ms"] = json!(milliseconds(self.started.elapsed()));
+        let line = format!("indexed-data-progress {record}\n");
+        assert!(
+            line.len() <= MAXIMUM_RECORD_BYTES,
+            "bounded matrix progress record bytes"
+        );
+        // Print macros are captured by libtest until a case finishes. Direct locked
+        // stderr writes reach the checker log even if this case later times out.
+        let mut stderr = std::io::stderr().lock();
+        stderr.write_all(line.as_bytes()).unwrap();
+        stderr.flush().unwrap();
+    }
+
+    fn stage(&self, stage: &'static str) -> StageProgress<'_> {
+        self.emit(json!({"event":"stage-start","stage":stage}));
+        StageProgress {
+            progress: self,
+            stage,
+            started: Instant::now(),
+        }
+    }
+
+    fn run(&self, serial: usize, target: &str, input: &Value, detached: bool) -> RunProgress<'_> {
+        let bytes = input.to_string();
+        let identity = json!({
+            "serial":serial,
+            "target":target,
+            "lane":if detached {"detached"} else {"attached"},
+            "input_bytes":bytes.len(),
+            "input_blake3":blake3::hash(bytes.as_bytes()).to_hex().to_string(),
+        });
+        let mut record = identity.clone();
+        record["event"] = json!("run-start");
+        self.emit(record);
+        RunProgress {
+            progress: self,
+            identity,
+            started: Instant::now(),
+        }
+    }
+}
+
+fn milliseconds(duration: Duration) -> u64 {
+    u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
+}
+
+struct StageProgress<'a> {
+    progress: &'a MatrixProgress,
+    stage: &'static str,
+    started: Instant,
+}
+
+impl StageProgress<'_> {
+    fn complete(self) {
+        self.progress.emit(json!({
+            "event":"stage-complete",
+            "stage":self.stage,
+            "duration_ms":milliseconds(self.started.elapsed()),
+        }));
+    }
+}
+
+fn start_stage<'a>(
+    progress: Option<&'a MatrixProgress>,
+    stage: &'static str,
+) -> Option<StageProgress<'a>> {
+    progress.map(|progress| progress.stage(stage))
+}
+
+fn complete_stage(stage: Option<StageProgress<'_>>) {
+    if let Some(stage) = stage {
+        stage.complete();
+    }
+}
+
+struct RunProgress<'a> {
+    progress: &'a MatrixProgress,
+    identity: Value,
+    started: Instant,
+}
+
+impl RunProgress<'_> {
+    fn complete(self) {
+        let mut record = self.identity;
+        record["event"] = json!("run-complete");
+        record["duration_ms"] = json!(milliseconds(self.started.elapsed()));
+        self.progress.emit(record);
+    }
+}
 
 fn native() -> Native {
     native_template("command")
@@ -83,10 +203,16 @@ struct Packages {
     standards: Vec<PathBuf>,
     identities: Vec<(PathBuf, blake3::Hash)>,
     serial: Cell<usize>,
+    progress: Option<MatrixProgress>,
 }
 
 impl Packages {
     fn stage() -> Self {
+        Self::stage_with_progress(None)
+    }
+
+    fn stage_with_progress(progress: Option<MatrixProgress>) -> Self {
+        let phase = start_stage(progress.as_ref(), "supplier-indexed-data");
         let library = native_template("minimal");
         let supplier = standard(&library);
         accept(
@@ -112,6 +238,7 @@ impl Packages {
             );
         }
         let generic = export(&library);
+        complete_stage(phase);
         let mut authors = vec![library];
         let mut exports = vec![generic];
         let mut standards = vec![supplier.path];
@@ -120,6 +247,7 @@ impl Packages {
             ("indexed-chunked", CHUNKED),
             ("indexed-forward", FORWARD),
         ] {
+            let phase = start_stage(progress.as_ref(), module);
             let package = native_template("minimal");
             let supplier = standard(&package);
             stage(&package, &exports[0]);
@@ -139,11 +267,14 @@ impl Packages {
             exports.push(export(&package));
             authors.push(package);
             standards.push(supplier.path);
+            complete_stage(phase);
         }
+        let phase = start_stage(progress.as_ref(), "consumer-template-and-imports");
         let consumer = native();
         for package in &exports {
             stage(&consumer, package);
         }
+        complete_stage(phase);
         let mut this = Self {
             authors,
             consumer,
@@ -151,7 +282,9 @@ impl Packages {
             standards,
             identities: vec![],
             serial: Cell::new(0),
+            progress,
         };
+        let phase = start_stage(this.progress.as_ref(), "consumer-author-and-check");
         accept(
             &this.consumer,
             "application",
@@ -167,9 +300,18 @@ impl Packages {
         assert!(!draft.contains("(field chunks ") && !draft.contains("(field size "));
         accept(&this.consumer, "costs", &this.source(COSTS));
         unchanged(&this.consumer, "indexed-cost");
+        accept(&this.consumer, "blockread", &this.source(BLOCKREAD));
+        let draft = unchanged(&this.consumer, "indexed-blockread");
+        assert!(draft.contains("associated-witness-projection"));
+        assert!(draft.contains("assoc_type_a3000000000000000000000000000001"));
+        assert!(!draft.contains("(field chunks ") && !draft.contains("(field items "));
+        complete_stage(phase);
+        let phase = start_stage(this.progress.as_ref(), "consumer-build-first");
         let artifact = this.consumer.root.path().join("indexed-data.lkja");
         this.consumer
             .cli(&["build", "--output", path(&artifact)], true);
+        complete_stage(phase);
+        let phase = start_stage(this.progress.as_ref(), "consumer-build-second-and-equality");
         let second = this.consumer.root.path().join("indexed-data-second.lkja");
         this.consumer
             .cli(&["build", "--output", path(&second)], true);
@@ -177,6 +319,8 @@ impl Packages {
             std::fs::read(&artifact).unwrap(),
             std::fs::read(second).unwrap()
         );
+        complete_stage(phase);
+        let phase = start_stage(this.progress.as_ref(), "deployment-and-identity-inventory");
         let mut paths = vec![this.consumer.executable.clone(), artifact];
         paths.extend(this.authors.iter().map(|author| author.executable.clone()));
         paths.extend(
@@ -191,6 +335,7 @@ impl Packages {
                 (file, digest)
             })
             .collect();
+        complete_stage(phase);
         this
     }
 
@@ -320,11 +465,20 @@ impl Packages {
             &format!("expected-{}.json", self.serial.get()),
             &expected.to_string(),
         );
+        let progress = self
+            .progress
+            .as_ref()
+            .map(|progress| progress.run(self.serial.get(), target, input, detached));
         assert_eq!(
             &self.run(target, input, detached, true).unwrap(),
             expected,
             "{target}, detached={detached}"
         );
+        // Completion follows the existing input checks, differential/cleanup
+        // assertions, child/pipe joins and full independently expected result.
+        if let Some(progress) = progress {
+            progress.complete();
+        }
     }
 }
 
@@ -413,10 +567,67 @@ fn item_expected(value: &Value) -> Value {
 
 #[test]
 fn native_indexed_data_separate_packages_snapshots_forwarded_witnesses_and_detached_execution() {
-    let packages = Packages::stage();
+    let packages = Packages::stage_with_progress(Some(MatrixProgress::new()));
     for detached in [false, true] {
+        let lane = start_stage(
+            packages.progress.as_ref(),
+            if detached { "detached" } else { "attached" },
+        );
         if detached {
+            let phase = start_stage(packages.progress.as_ref(), "remove-authoring-source");
             packages.detach();
+            complete_stage(phase);
+        }
+        for length in [0, 1, 31, 32, 33, 64, 65] {
+            let values: Vec<i64> = (0..length).map(|n| n as i64 - 17).collect();
+            let mut positions = if length == 0 {
+                vec![0]
+            } else {
+                [0, 31, 32, length - 1]
+                    .into_iter()
+                    .filter(|index| *index < length)
+                    .collect::<Vec<_>>()
+            };
+            positions.sort_unstable();
+            positions.dedup();
+            for index in positions {
+                let mut after = values.clone();
+                let displaced = if length == 0 {
+                    0
+                } else {
+                    let previous = after[index];
+                    after[index] = 99;
+                    previous
+                };
+                for (target, chunked) in [
+                    ("indexed-blocks-flat", false),
+                    ("indexed-blocks-chunked", true),
+                ] {
+                    let lengths = if chunked {
+                        // Independent scalar partition; no product storage metadata.
+                        let mut remaining = length;
+                        let mut lengths = Vec::new();
+                        while remaining != 0 {
+                            let block = remaining.min(32);
+                            lengths.push(block);
+                            remaining -= block;
+                        }
+                        lengths
+                    } else if length == 0 {
+                        vec![]
+                    } else {
+                        vec![length]
+                    };
+                    let expected = json!({
+                        "before":{"values":values,"lengths":lengths},
+                        "after":{"values":after,"lengths":lengths},
+                        "displaced":displaced,"replaced":length != 0,"length":length,
+                    });
+                    // Each command rebuilds its own storage from the original input.
+                    // Loans close before replace and before final ancestor destruction.
+                    packages.expected(target, &json!([values, index, 99]), &expected, detached);
+                }
+            }
         }
         for length in [1, 31, 32, 33, 64, 65, 257, 1024] {
             let values: Vec<Value> = (0..length).map(|n| json!(n as i64 - 17)).collect();
@@ -520,7 +731,21 @@ fn native_indexed_data_separate_packages_snapshots_forwarded_witnesses_and_detac
             }
         }
         packages.verify_identity();
+        complete_stage(lane);
     }
+    assert_eq!(packages.serial.get(), 310, "complete expanded matrix runs");
+    let progress = packages.progress.as_ref().unwrap();
+    assert_eq!(
+        progress.records.get(),
+        645,
+        "paired stages and runs before completion"
+    );
+    progress.emit(json!({"event":"matrix-complete","runs":packages.serial.get()}));
+    assert_eq!(
+        progress.records.get(),
+        646,
+        "complete expanded progress transcript"
+    );
 }
 
 #[test]

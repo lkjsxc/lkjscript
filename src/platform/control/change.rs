@@ -9,6 +9,8 @@ mod literal_edit;
 pub(crate) use draft::render as render_native_draft;
 pub(crate) use draft_selection::NativeDraftSelection;
 #[cfg(test)]
+mod associated_authoring_tests;
+#[cfg(test)]
 mod borrowed_result_tests;
 #[cfg(test)]
 mod commitment_tests;
@@ -31,8 +33,9 @@ use references::ReferenceLookup;
 
 use super::{CompactField, CompactRecord, parse_records};
 use crate::platform::change::{
-    AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference, AuthoredChange,
-    AuthoredChangeSet, AuthoredDeclarationReference, AuthoredDeletePolicy, AuthoredEffectParameter,
+    AuthoredAssociatedTypeBinding, AuthoredAssociatedTypeMember, AuthoredBindingDefinition,
+    AuthoredCase, AuthoredCaseReference, AuthoredChange, AuthoredChangeSet,
+    AuthoredDeclarationReference, AuthoredDeletePolicy, AuthoredEffectParameter,
     AuthoredEffectParameterReference, AuthoredEffectRow, AuthoredExpression,
     AuthoredExpressionOperation, AuthoredField, AuthoredFieldReference, AuthoredFieldSelector,
     AuthoredFunctionEffect, AuthoredImplementationOperand, AuthoredImplementationParameter,
@@ -47,8 +50,9 @@ use crate::platform::change::{
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass, SourceLocation};
 use crate::platform::kernel::{
-    DeclarationVisibility, ExternalVisibility, HttpRouteSelector, Idempotency, ImplementationName,
-    Name, NamespaceClass, OwnerKey, PackageId, PackageRevisionDigest, ParameterUse, ResourceUnit,
+    AssociatedTypeBound, DeclarationVisibility, ExternalVisibility, HttpRouteSelector, Idempotency,
+    ImplementationName, Name, NamespaceClass, OwnerKey, PackageId, PackageRevisionDigest,
+    ParameterUse, ResourceUnit,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::publication::{PublicationOptions, idempotency_key_is_valid};
@@ -60,10 +64,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-40";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 40;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-37";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 37;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-41";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 41;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-38";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 38;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -1715,6 +1719,8 @@ pub const COMPACT_TYPE_FORMS: &[&str] = &[
     "stream",
     "function",
     "task-function",
+    "associated-contract-member",
+    "associated-witness-projection",
 ];
 pub(crate) const COMPACT_EFFECT_FORMS: &[&str] = &["row"];
 pub(crate) const COMPACT_EFFECT_FORM_FIELDS: &[CompactFormField] = &[CompactFormField {
@@ -1776,6 +1782,54 @@ pub(crate) struct CompactFormField {
 }
 
 pub(crate) const COMPACT_TYPE_FORM_FIELDS: &[CompactFormField] = &[
+    CompactFormField {
+        form: "associated-contract-member",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "associated-contract-member",
+        name: "contract",
+        required: true,
+        syntax: "declaration-reference",
+    },
+    CompactFormField {
+        form: "associated-contract-member",
+        name: "member",
+        required: true,
+        syntax: "assoc_type_ID",
+    },
+    CompactFormField {
+        form: "associated-witness-projection",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "associated-witness-projection",
+        name: "scope",
+        required: true,
+        syntax: "declaration-reference",
+    },
+    CompactFormField {
+        form: "associated-witness-projection",
+        name: "parameter",
+        required: true,
+        syntax: "implparam_ID",
+    },
+    CompactFormField {
+        form: "associated-witness-projection",
+        name: "contract",
+        required: true,
+        syntax: "declaration-reference",
+    },
+    CompactFormField {
+        form: "associated-witness-projection",
+        name: "member",
+        required: true,
+        syntax: "assoc_type_ID",
+    },
     CompactFormField {
         form: "owned-sequence",
         name: "as",
@@ -3028,6 +3082,74 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
         ],
     },
     CompactEdgeDescriptor {
+        name: "owned.associated-member",
+        parent: "owned-contract",
+        child: "associated-owned-member",
+        fields: &[
+            CompactFormField {
+                form: "owned.associated-member",
+                name: "parent",
+                required: true,
+                syntax: "$NAME|%NAME",
+            },
+            CompactFormField {
+                form: "owned.associated-member",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "owned.associated-member",
+                name: "id",
+                required: true,
+                syntax: "assoc_type_ID",
+            },
+            CompactFormField {
+                form: "owned.associated-member",
+                name: "name",
+                required: true,
+                syntax: "name",
+            },
+            CompactFormField {
+                form: "owned.associated-member",
+                name: "bound",
+                required: true,
+                syntax: "owned",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
+        name: "owned.associated-binding",
+        parent: "owned-implementation",
+        child: "associated-owned-binding",
+        fields: &[
+            CompactFormField {
+                form: "owned.associated-binding",
+                name: "parent",
+                required: true,
+                syntax: "$NAME|%NAME",
+            },
+            CompactFormField {
+                form: "owned.associated-binding",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "owned.associated-binding",
+                name: "member",
+                required: true,
+                syntax: "assoc_type_ID",
+            },
+            CompactFormField {
+                form: "owned.associated-binding",
+                name: "type",
+                required: true,
+                syntax: "type-reference",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
         name: "owned.implementation-parameter",
         parent: "owned-implementation",
         child: "type-parameter",
@@ -4064,6 +4186,13 @@ impl Decoder {
                 "owned.contract-parameter" | "owned.implementation-parameter" => {
                     self.insert_indexed_record_edge(record, &["parent", "index", "parameter"])?
                 }
+                "owned.associated-member" => self.insert_indexed_record_edge(
+                    record,
+                    &["parent", "index", "id", "name", "bound"],
+                )?,
+                "owned.associated-binding" => {
+                    self.insert_indexed_record_edge(record, &["parent", "index", "member", "type"])?
+                }
                 "owned.type-argument" => {
                     self.insert_indexed_record_edge(record, &["parent", "index", "type"])?
                 }
@@ -4609,6 +4738,26 @@ impl Decoder {
             }),
             CompactChangeOperation::CreateOwnedContract => {
                 let parent = symbol(record, "as")?;
+                let associated_types = self
+                    .ordered_record_edges("owned.associated-member", &parent)?
+                    .iter()
+                    .map(|edge| {
+                        let member = &edge.record;
+                        if required(member, "bound")? != "owned" {
+                            return Err(field_error(
+                                member,
+                                "bound",
+                                "change_associated_bound",
+                                "associated members require the explicit Owned bound",
+                            ));
+                        }
+                        Ok(AuthoredAssociatedTypeMember {
+                            id: parse_field(member, "id")?,
+                            name: parse_name(member, "name")?,
+                            bound: AssociatedTypeBound::Owned,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, Diagnostic>>()?;
                 let type_parameters = self
                     .ordered_record_edges("owned.contract-parameter", &parent)?
                     .iter()
@@ -4648,10 +4797,21 @@ impl Decoder {
                     self_type: self.decode_type(required(record, "self")?)?,
                     type_parameters,
                     methods,
+                    associated_types,
                 })
             }
             CompactChangeOperation::CreateOwnedImplementation => {
                 let parent = symbol(record, "as")?;
+                let associated_types = self
+                    .ordered_record_edges("owned.associated-binding", &parent)?
+                    .iter()
+                    .map(|edge| {
+                        Ok(AuthoredAssociatedTypeBinding {
+                            member: parse_field(&edge.record, "member")?,
+                            ty: self.decode_type(required(&edge.record, "type")?)?,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, Diagnostic>>()?;
                 let type_parameters = self
                     .ordered_record_edges("owned.implementation-parameter", &parent)?
                     .iter()
@@ -4688,6 +4848,7 @@ impl Decoder {
                     self_type: self.decode_type(required(record, "self")?)?,
                     type_arguments,
                     methods,
+                    associated_types,
                 })
             }
             CompactChangeOperation::SetImplementations => {
@@ -4962,7 +5123,7 @@ impl Decoder {
                             function: self.parse_declaration_reference(record, "function")?,
                         },
                         (None, Some(value)) => AuthoredPortImplementation::Expression {
-                            expression: self.decode_expression(value)?,
+                            expression: Box::new(self.decode_expression(value)?),
                         },
                         _ => {
                             return Err(record_error(
@@ -5312,6 +5473,22 @@ impl Decoder {
                 check_fields(&record, &["as", "declaration"])?;
                 AuthoredType::Named {
                     declaration: self.parse_declaration_reference(&record, "declaration")?,
+                }
+            }
+            "type.associated-contract-member" => {
+                check_fields(&record, &["as", "contract", "member"])?;
+                AuthoredType::AssociatedContractMember {
+                    contract: self.parse_declaration_reference(&record, "contract")?,
+                    member: parse_field(&record, "member")?,
+                }
+            }
+            "type.associated-witness-projection" => {
+                check_fields(&record, &["as", "scope", "parameter", "contract", "member"])?;
+                AuthoredType::AssociatedWitnessProjection {
+                    scope: self.parse_declaration_reference(&record, "scope")?,
+                    parameter: parse_field(&record, "parameter")?,
+                    contract: self.parse_declaration_reference(&record, "contract")?,
+                    member: parse_field(&record, "member")?,
                 }
             }
             "type.application" => {
@@ -6366,6 +6543,8 @@ fn commitment_codec_identity(intent: &[u8]) -> &'static str {
         "lkjscript-authored-change-codec-35"
     } else if intent.starts_with(b"LKJACR36") {
         "lkjscript-authored-change-codec-36"
+    } else if intent.starts_with(b"LKJACR37") {
+        "lkjscript-authored-change-codec-37"
     } else {
         // Retain the existing fallback; do not infer identities from unknown/future magics.
         AUTHORED_CHANGE_CODEC_IDENTITY

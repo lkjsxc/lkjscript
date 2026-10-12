@@ -57,12 +57,16 @@ impl Binary64 {
 
     /// Ryu supplies shortest round-trip finite digits; representation identity never uses text.
     pub fn to_text(self) -> String {
+        self.borrowed_text(&mut ryu::Buffer::new()).to_owned()
+    }
+
+    fn borrowed_text(self, buffer: &mut ryu::Buffer) -> &str {
         match self.0 {
-            CANONICAL_NAN_BITS => "nan".to_owned(),
-            0x7ff0_0000_0000_0000 => "inf".to_owned(),
-            0xfff0_0000_0000_0000 => "-inf".to_owned(),
-            0x8000_0000_0000_0000 => "-0.0".to_owned(),
-            _ => ryu::Buffer::new().format_finite(self.to_float()).to_owned(),
+            CANONICAL_NAN_BITS => "nan",
+            0x7ff0_0000_0000_0000 => "inf",
+            0xfff0_0000_0000_0000 => "-inf",
+            0x8000_0000_0000_0000 => "-0.0",
+            _ => buffer.format_finite(self.to_float()),
         }
     }
 }
@@ -123,7 +127,9 @@ impl fmt::Display for Binary64 {
 
 impl Serialize for Binary64 {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.to_text())
+        // A bounded canonical counting writer must see the bytes before any
+        // temporary text allocation. Finite digits live in Ryu's stack buffer.
+        serializer.serialize_str(self.borrowed_text(&mut ryu::Buffer::new()))
     }
 }
 
@@ -153,6 +159,31 @@ bincode::impl_borrow_decode!(Binary64);
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn binary64_json_serialization_preserves_literal_spelling() {
+        for (bits, expected) in [
+            (0, "\"0.0\""),
+            (0x8000_0000_0000_0000, "\"-0.0\""),
+            (1, "\"5e-324\""),
+            (0x0010_0000_0000_0000, "\"2.2250738585072014e-308\""),
+            (0x3ff0_0000_0000_0000, "\"1.0\""),
+            (0x7fef_ffff_ffff_ffff, "\"1.7976931348623157e308\""),
+            (0x7ff0_0000_0000_0000, "\"inf\""),
+            (0xfff0_0000_0000_0000, "\"-inf\""),
+            (CANONICAL_NAN_BITS, "\"nan\""),
+        ] {
+            let value = Binary64::from_bits(bits).expect("canonical bits");
+            assert_eq!(
+                serde_json::to_string(&value).expect("JSON string"),
+                expected
+            );
+            assert_eq!(
+                serde_json::from_str::<Binary64>(expected).expect("literal JSON"),
+                value
+            );
+        }
+    }
 
     #[test]
     fn binary64_representation_is_fixed_little_endian_and_strict() {

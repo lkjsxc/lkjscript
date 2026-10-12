@@ -21,13 +21,17 @@ impl Derivation<'_> {
                     }
                     _ => return Err(reject()),
                 };
-                let mut selected = parameters
-                    .iter()
-                    .filter(|formal| formal.id == parameter && formal.contract == contract);
-                let formal = selected.next().ok_or_else(reject)?;
-                if selected.next().is_some() {
-                    return Err(reject());
+                let mut found = None;
+                for formal in parameters {
+                    self.budget.tick()?;
+                    if formal.id == parameter
+                        && formal.contract == contract
+                        && found.replace(formal).is_some()
+                    {
+                        return Err(reject());
+                    }
                 }
+                let formal = found.ok_or_else(reject)?;
                 let TypeForm::TypeParameter { parameter } =
                     self.types.get(&formal.self_type).ok_or_else(reject)?.form
                 else {
@@ -54,18 +58,17 @@ impl Derivation<'_> {
         let DeclarationPayload::OwnedContract(contract) = &owner.payload else {
             return Err(reject());
         };
-        if contract
-            .associated_types
-            .iter()
-            .filter(|candidate| {
-                candidate.id == member && candidate.bound == AssociatedTypeBound::Owned
-            })
-            .count()
-            != 1
-        {
-            return Err(reject());
+        let mut found = false;
+        for candidate in &contract.associated_types {
+            self.budget.tick()?;
+            if candidate.id == member && candidate.bound == AssociatedTypeBound::Owned {
+                if found {
+                    return Err(reject());
+                }
+                found = true;
+            }
         }
-        Ok(())
+        if found { Ok(()) } else { Err(reject()) }
     }
 
     pub(super) fn symbolic_row(
@@ -73,9 +76,11 @@ impl Derivation<'_> {
         row: &EffectRow,
         env: &Environment,
     ) -> Result<EffectRow, ExecutionError> {
-        row.validate().map_err(|_| reject())?;
-        self.budget.row(row)?;
+        self.budget.validate_row(row)?;
+        let mut requirements = BTreeSet::new();
+        let mut parameters = BTreeSet::new();
         for reference in &row.parameters {
+            self.budget.tick()?;
             let scope = env.scope.ok_or_else(reject)?;
             if reference.package != scope.package {
                 return Err(reject());
@@ -91,28 +96,59 @@ impl Derivation<'_> {
             else {
                 return Err(reject());
             };
-            if owner.declaration != scope.declaration
-                || function
-                    .effect_parameters
-                    .iter()
-                    .filter(|id| **id == reference.parameter)
-                    .count()
-                    != 1
-            {
+            let mut found = 0;
+            for id in &function.effect_parameters {
+                self.budget.tick()?;
+                found += usize::from(*id == reference.parameter);
+            }
+            if owner.declaration != scope.declaration || found != 1 {
                 return Err(reject());
+            }
+            if let Some(actual) = env.symbolic_effects.get(reference) {
+                // Supplied rows were already closed in their original caller context.
+                // Insert their atoms without interpreting them in this callee scope.
+                self.budget.validate_row(actual)?;
+                for requirement in &actual.requirements {
+                    self.budget.tick()?;
+                    if !requirements.contains(requirement) {
+                        self.budget.node::<RequirementOperand>()?;
+                        requirements.insert(*requirement);
+                    }
+                }
+                for parameter in &actual.parameters {
+                    self.budget.tick()?;
+                    if !parameters.contains(parameter) {
+                        self.budget.node::<EffectParameterReference>()?;
+                        parameters.insert(*parameter);
+                    }
+                }
+            } else if !parameters.contains(reference) {
+                self.budget.node::<EffectParameterReference>()?;
+                parameters.insert(*reference);
             }
         }
         for operand in &row.requirements {
-            self.symbolic_requirement(*operand, env)?;
+            let operand = self.symbolic_requirement(*operand, env)?;
+            if !requirements.contains(&operand) {
+                self.budget.node::<RequirementOperand>()?;
+                requirements.insert(operand);
+            }
         }
-        Ok(row.clone())
+        self.budget
+            .reserve::<RequirementOperand>(requirements.len())?;
+        self.budget
+            .reserve::<EffectParameterReference>(parameters.len())?;
+        Ok(EffectRow {
+            requirements: requirements.into_iter().collect(),
+            parameters: parameters.into_iter().collect(),
+        })
     }
 
     fn symbolic_requirement(
         &mut self,
         operand: RequirementOperand,
         env: &Environment,
-    ) -> Result<(), ExecutionError> {
+    ) -> Result<RequirementOperand, ExecutionError> {
         self.budget.tick()?;
         match operand {
             RequirementOperand::Concrete(reference) => {
@@ -143,19 +179,20 @@ impl Derivation<'_> {
                 else {
                     return Err(reject());
                 };
-                if owner.declaration != scope.declaration
-                    || function
-                        .requirement_parameters
-                        .iter()
-                        .filter(|id| **id == reference.parameter)
-                        .count()
-                        != 1
-                {
+                let mut found = 0;
+                for id in &function.requirement_parameters {
+                    self.budget.tick()?;
+                    found += usize::from(*id == reference.parameter);
+                }
+                if owner.declaration != scope.declaration || found != 1 {
                     return Err(reject());
+                }
+                if let Some(actual) = env.symbolic_requirements.get(&reference) {
+                    return Ok(*actual);
                 }
             }
         }
-        Ok(())
+        Ok(operand)
     }
 
     fn symbolic_environment(
@@ -214,10 +251,27 @@ impl Derivation<'_> {
             if contract.type_parameters.len() != formal.type_arguments.len() {
                 return Err(reject());
             }
-            if !self.symbolic_formals.contains(&(scope, formal.id)) {
+            if let Some(previous) = self.symbolic_formals.get(&(scope, formal.id)) {
+                self.budget.tick()?;
+                for _ in &formal.type_arguments {
+                    self.budget.tick()?;
+                }
+                for _ in formal.name.as_str().bytes() {
+                    self.budget.tick()?;
+                }
+                if previous != formal {
+                    return Err(reject());
+                }
+            } else {
+                self.budget.node::<(
+                    (DeclarationReference, ImplementationParameterId),
+                    ImplementationParameter,
+                )>()?;
+                self.budget.reserve::<u8>(formal.name.as_str().len())?;
                 self.budget
-                    .node::<(DeclarationReference, ImplementationParameterId)>()?;
-                self.symbolic_formals.insert((scope, formal.id));
+                    .reserve::<TypeObjectDigest>(formal.type_arguments.len())?;
+                self.symbolic_formals
+                    .insert((scope, formal.id), formal.clone());
             }
             self.budget
                 .reserve::<TypeObjectDigest>(formal.type_arguments.len())?;
@@ -296,13 +350,39 @@ impl Derivation<'_> {
             return Err(reject());
         }
         let env = self.symbolic_environment(scope)?;
+        self.budget
+            .reserve::<TypeObjectDigest>(scheme.type_parameters.len())?;
+        self.budget
+            .reserve::<ImplementationOperand>(scheme.implementation_parameters.len())?;
+        let mut actuals = Vec::new();
+        for id in &scheme.type_parameters {
+            self.budget.tick()?;
+            actuals.push(*env.ordinary.get(id).ok_or_else(reject)?);
+        }
+        let mut prerequisites = Vec::new();
+        for formal in &scheme.implementation_parameters {
+            self.budget.tick()?;
+            prerequisites.push(ImplementationOperand::Parameter {
+                scope,
+                parameter: formal.id,
+            });
+        }
+        let selected = self.symbolic_operand(
+            &ImplementationOperand::Concrete {
+                implementation: scope,
+                type_arguments: actuals,
+                implementations: prerequisites,
+            },
+            &env,
+            0,
+        )?;
         for mapping in &scheme.methods {
-            if contract
-                .methods
-                .iter()
-                .filter(|method| method.id == mapping.method)
-                .count()
-                != 1
+            let mut count = 0;
+            for method in &contract.methods {
+                self.budget.tick()?;
+                count += usize::from(method.id == mapping.method);
+            }
+            if count != 1
                 || self
                     .mapping_templates
                     .contains_key(&(scope, mapping.method))
@@ -338,7 +418,18 @@ impl Derivation<'_> {
                 requirement_arguments: Vec::new(),
                 arguments: Vec::new(),
             };
-            self.symbolic_target(&operation, &env)?.ok_or_else(reject)?;
+            let target = self.symbolic_target(&operation, &env)?.ok_or_else(reject)?;
+            let expected = self.scoped_method_signature(&selected, mapping.method)?;
+            self.compare_scoped_method(&expected, &target)?;
+            self.budget
+                .node::<((DeclarationReference, MethodId), SymbolicTarget)>()?;
+            if self
+                .symbolic_mappings
+                .insert((scope, mapping.method), target)
+                .is_some()
+            {
+                return Err(reject());
+            }
             self.budget.node::<(
                 (DeclarationReference, MethodId),
                 crate::platform::kernel::OwnedMethodImplementation,
@@ -451,16 +542,25 @@ impl Derivation<'_> {
             }
             if let Some(position) = method.result_borrow {
                 let parameter = parameters.get(position as usize).ok_or_else(reject)?;
-                if parameter.1 != ParameterUse::Borrow || parameter.0 != result {
+                if parameter.1 != ParameterUse::Borrow {
                     return Err(reject());
                 }
             }
             let effect = self.row(&method.effect.row(), &env)?;
+            let mut requires_associated_generation = self.associated_type(method.result, 0)?;
+            for parameter in &method.parameters {
+                requires_associated_generation |= self.associated_type(parameter.ty, 0)?;
+            }
             self.budget
                 .node::<((DeclarationReference, MethodId), Function)>()?;
             self.contract_methods.insert(
                 (scope, method.id),
                 Function {
+                    is_task: matches!(
+                        method.effect,
+                        crate::platform::kernel::FunctionEffect::Task { .. }
+                    ),
+                    requires_associated_generation,
                     implementation_templates: Vec::new(),
                     parameters,
                     result,
@@ -468,8 +568,10 @@ impl Derivation<'_> {
                     effect,
                     roots,
                     targets: BTreeMap::new(),
+                    invocations: BTreeMap::new(),
                     occurrences,
                     symbolic_targets: BTreeMap::new(),
+                    associated_targets: BTreeSet::new(),
                 },
             );
         }
@@ -555,7 +657,9 @@ impl Derivation<'_> {
             })
             .transpose()?;
         let mut targets = BTreeMap::new();
+        let mut invocations = BTreeMap::new();
         let mut symbolic_targets = BTreeMap::new();
+        let mut associated_targets = BTreeSet::new();
         if let Some(body) = body {
             self.body(
                 scope.package,
@@ -564,16 +668,21 @@ impl Derivation<'_> {
                 BodyOutputs {
                     roots: &mut roots,
                     targets: &mut targets,
+                    invocations: &mut invocations,
                     occurrences: &mut occurrences,
                     symbolic_targets: &mut symbolic_targets,
+                    associated_targets: &mut associated_targets,
                 },
             )?;
         }
         self.budget.node::<(DeclarationReference, Function)>()?;
         let implementation_templates = self.implementation_templates(scope)?;
+        let requires_associated_generation = self.associated_function(scope)?;
         self.symbolic.insert(
             scope,
             Function {
+                is_task: matches!(&owner.payload, DeclarationPayload::Function(function) if matches!(function.effect, crate::platform::kernel::FunctionEffect::Task { .. })),
+                requires_associated_generation,
                 implementation_templates,
                 parameters: actual_parameters,
                 result,
@@ -581,10 +690,68 @@ impl Derivation<'_> {
                 effect,
                 roots,
                 targets,
+                invocations,
                 occurrences,
                 symbolic_targets,
+                associated_targets,
             },
         );
+        Ok(())
+    }
+
+    fn symbolic_witness_bindings(
+        &mut self,
+        scope: DeclarationReference,
+        formals: &[ImplementationParameter],
+        supplied: &[Arc<SymbolicSelection>],
+        env: &mut Environment,
+    ) -> Result<(), ExecutionError> {
+        if formals.len() != supplied.len() || !env.symbolic_witnesses.is_empty() {
+            return Err(reject());
+        }
+        let mut names = BTreeSet::new();
+        for (formal, selected) in formals.iter().zip(supplied) {
+            self.budget.tick()?;
+            let TypeForm::TypeParameter { parameter } =
+                self.types.get(&formal.self_type).ok_or_else(reject)?.form
+            else {
+                return Err(reject());
+            };
+            let OwnerRecord::TypeParameter(owner) =
+                self.owner(scope.package, OwnerKey::TypeParameter(parameter))?
+            else {
+                return Err(reject());
+            };
+            if owner.declaration != scope.declaration
+                || !owner.constraints.has_owned()
+                || names.contains(&formal.name)
+                || env.symbolic_witnesses.contains_key(&formal.id)
+            {
+                return Err(reject());
+            }
+            self.budget
+                .node::<(ImplementationParameterId, Arc<SymbolicSelection>)>()?;
+            self.budget.node::<&crate::platform::kernel::Name>()?;
+            names.insert(&formal.name);
+            env.symbolic_witnesses
+                .insert(formal.id, Arc::clone(selected));
+        }
+        // Insert complete caller selections before interpreting any callee formal argument.
+        // Their original Parameter coordinates and closed concrete members remain opaque.
+        for (formal, selected) in formals.iter().zip(supplied) {
+            self.budget.tick()?;
+            if selected.contract != formal.contract
+                || selected.self_type != self.ty(formal.self_type, env, 0)?
+                || selected.arguments.len() != formal.type_arguments.len()
+            {
+                return Err(reject());
+            }
+            for (expected, actual) in formal.type_arguments.iter().zip(&selected.arguments) {
+                if self.ty(*expected, env, 0)? != *actual {
+                    return Err(reject());
+                }
+            }
+        }
         Ok(())
     }
 
@@ -661,33 +828,15 @@ impl Derivation<'_> {
                 self.budget
                     .reserve::<Arc<SymbolicSelection>>(implementations.len())?;
                 let mut prerequisites = Vec::new();
-                for (formal, operand) in
-                    scheme.implementation_parameters.iter().zip(implementations)
-                {
-                    let selected = self.symbolic_operand(operand, env, depth + 1)?;
-                    if selected.contract != formal.contract
-                        || selected.self_type != self.ty(formal.self_type, &selected_env, 0)?
-                        || selected.arguments.len() != formal.type_arguments.len()
-                    {
-                        return Err(reject());
-                    }
-                    for (expected, actual) in formal.type_arguments.iter().zip(&selected.arguments)
-                    {
-                        if self.ty(*expected, &selected_env, 0)? != *actual {
-                            return Err(reject());
-                        }
-                    }
-                    self.budget
-                        .node::<(ImplementationParameterId, Arc<SymbolicSelection>)>()?;
-                    if selected_env
-                        .symbolic_witnesses
-                        .insert(formal.id, Arc::clone(&selected))
-                        .is_some()
-                    {
-                        return Err(reject());
-                    }
-                    prerequisites.push(selected);
+                for operand in implementations {
+                    prerequisites.push(self.symbolic_operand(operand, env, depth + 1)?);
                 }
+                self.symbolic_witness_bindings(
+                    *implementation,
+                    &scheme.implementation_parameters,
+                    &prerequisites,
+                    &mut selected_env,
+                )?;
                 let self_type = self.ty(scheme.self_type, &selected_env, 0)?;
                 self.budget
                     .reserve::<TypeObjectDigest>(scheme.type_arguments.len())?;
@@ -780,20 +929,18 @@ impl Derivation<'_> {
                     *contract,
                     env.scope.map(|scope| scope.package).or(env.source_package),
                 )?;
-                let DeclarationPayload::OwnedContract(contract) = &owner.payload else {
+                let DeclarationPayload::OwnedContract(_) = &owner.payload else {
                     return Err(reject());
                 };
-                if contract
-                    .methods
-                    .iter()
-                    .filter(|candidate| candidate.id == *method)
-                    .count()
-                    != 1
+                let signature = self.scoped_method_signature(&selected, *method)?;
+                if signature.requires_associated_generation
+                    && env.generation != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
                 {
                     return Err(reject());
                 }
                 self.budget.reserve::<Arc<SymbolicSelection>>(1)?;
                 return Ok(Some(SymbolicTarget {
+                    signature,
                     function: None,
                     method: Some((selected.contract, *method)),
                     types: Vec::new(),
@@ -861,47 +1008,82 @@ impl Derivation<'_> {
         self.budget
             .reserve::<Arc<SymbolicSelection>>(implementations.len())?;
         let mut supplied = Vec::new();
-        for (formal, operand) in witnesses.iter().zip(implementations) {
-            let selected = self.symbolic_operand(operand, env, 0)?;
-            if selected.contract != formal.contract
-                || selected.self_type != self.ty(formal.self_type, &target_env, 0)?
-                || selected.arguments.len() != formal.type_arguments.len()
-            {
-                return Err(reject());
-            }
-            for (expected, actual) in formal.type_arguments.iter().zip(&selected.arguments) {
-                if self.ty(*expected, &target_env, 0)? != *actual {
-                    return Err(reject());
-                }
-            }
-            self.budget
-                .node::<(ImplementationParameterId, Arc<SymbolicSelection>)>()?;
-            if target_env
-                .symbolic_witnesses
-                .insert(formal.id, Arc::clone(&selected))
-                .is_some()
-            {
-                return Err(reject());
-            }
-            supplied.push(selected);
+        for operand in implementations {
+            supplied.push(self.symbolic_operand(operand, env, 0)?);
         }
+        self.symbolic_witness_bindings(function, witnesses, &supplied, &mut target_env)?;
         self.budget.reserve::<EffectRow>(effects.len())?;
         let effects = effects
             .iter()
             .map(|row| self.row(row, env))
             .collect::<Result<Vec<_>, _>>()?;
+        if let DeclarationPayload::Function(declaration) = &owner.payload {
+            for (id, row) in declaration.effect_parameters.iter().zip(&effects) {
+                self.budget.tick()?;
+                self.budget
+                    .node::<(EffectParameterReference, EffectRow)>()?;
+                self.budget.row(row)?;
+                if target_env
+                    .symbolic_effects
+                    .insert(
+                        EffectParameterReference {
+                            package: function.package,
+                            parameter: *id,
+                        },
+                        row.clone(),
+                    )
+                    .is_some()
+                {
+                    return Err(reject());
+                }
+            }
+        }
         self.budget
             .reserve::<RequirementOperand>(requirements.len())?;
+        let mut closed_requirements = Vec::new();
         for operand in requirements {
-            self.symbolic_requirement(*operand, env)?;
+            closed_requirements.push(self.symbolic_requirement(*operand, env)?);
+        }
+        if let DeclarationPayload::Function(declaration) = &owner.payload {
+            for (id, actual) in declaration
+                .requirement_parameters
+                .iter()
+                .zip(&closed_requirements)
+            {
+                self.budget.tick()?;
+                self.budget
+                    .node::<(RequirementParameterReference, RequirementOperand)>()?;
+                if target_env
+                    .symbolic_requirements
+                    .insert(
+                        RequirementParameterReference {
+                            package: function.package,
+                            parameter: *id,
+                        },
+                        *actual,
+                    )
+                    .is_some()
+                {
+                    return Err(reject());
+                }
+            }
+        }
+        let mut signature = self.scoped_signature(function, &mut target_env)?;
+        signature.requires_associated_generation |=
+            self.associated_operation(operation, function)?;
+        if signature.requires_associated_generation
+            && env.generation != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+        {
+            return Err(reject());
         }
         Ok(Some(SymbolicTarget {
+            signature,
             function: Some(function),
             method: None,
             types: actuals,
             witnesses: supplied,
             effects,
-            requirements: requirements.to_vec(),
+            requirements: closed_requirements,
         }))
     }
 
@@ -968,7 +1150,9 @@ impl Derivation<'_> {
             env.generation = declaration.header.contract_version;
         }
         let mut targets = BTreeMap::new();
+        let mut invocations = BTreeMap::new();
         let mut symbolic_targets = BTreeMap::new();
+        let mut associated_targets = BTreeSet::new();
         self.budget
             .reserve::<ExpressionId>(owner.expression_roots().len())?;
         for root in owner.expression_roots() {
@@ -979,8 +1163,10 @@ impl Derivation<'_> {
                 BodyOutputs {
                     roots: &mut roots,
                     targets: &mut targets,
+                    invocations: &mut invocations,
                     occurrences: &mut occurrences,
                     symbolic_targets: &mut symbolic_targets,
+                    associated_targets: &mut associated_targets,
                 },
             )?;
         }
@@ -989,6 +1175,8 @@ impl Derivation<'_> {
         self.executables.insert(
             (package, key),
             Function {
+                is_task: false,
+                requires_associated_generation: false,
                 implementation_templates: Vec::new(),
                 parameters: Vec::new(),
                 result,
@@ -996,8 +1184,10 @@ impl Derivation<'_> {
                 effect: EffectRow::default(),
                 roots,
                 targets,
+                invocations,
                 occurrences,
                 symbolic_targets,
+                associated_targets,
             },
         );
         Ok(())

@@ -16,6 +16,10 @@ const INTENT_MAGIC: [u8; 8] = *b"LKJACR14";
 const BUDGET_MAGIC: [u8; 8] = *b"LKJABG01";
 const MAXIMUM_BUDGET_BYTES: usize = 1_024;
 
+#[cfg(test)]
+#[path = "associated_codec_tests.rs"]
+mod associated_codec_tests;
+
 pub(super) fn encode_authored_intent(
     request: &AuthoredChangeSet,
     definitions: &BTreeMap<String, SymbolDefinition>,
@@ -138,6 +142,7 @@ struct Writer {
     borrowed_result_extension: bool,
     generic_implementation_extension: bool,
     implementation_prerequisite_extension: bool,
+    associated_extension: bool,
 }
 
 impl Writer {
@@ -169,11 +174,14 @@ impl Writer {
             borrowed_result_extension: false,
             generic_implementation_extension: false,
             implementation_prerequisite_extension: false,
+            associated_extension: false,
         }
     }
 
     fn finish(mut self) -> Vec<u8> {
-        if self.storage_contract_extension
+        if self.associated_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+            self.bytes[..8].copy_from_slice(b"LKJACR38");
+        } else if self.storage_contract_extension
             && self.ordinary_constraint_extension
             && self.bytes.starts_with(&INTENT_MAGIC)
         {
@@ -588,6 +596,7 @@ impl Writer {
                 self_type,
                 type_parameters,
                 methods,
+                associated_types,
             } => {
                 self.owned_extension = true;
                 self.storage_contract_extension = true;
@@ -598,7 +607,11 @@ impl Writer {
                 self.task_method_extension |= task_methods;
                 let borrowed_results = methods.iter().any(|m| m.result_borrow.is_some());
                 self.borrowed_result_extension |= borrowed_results;
-                self.tag(if borrowed_results {
+                let associated = !associated_types.is_empty();
+                self.associated_extension |= associated;
+                self.tag(if associated {
+                    100
+                } else if borrowed_results {
                     93
                 } else if !type_parameters.is_empty() {
                     88
@@ -612,7 +625,7 @@ impl Writer {
                 self.name(name)?;
                 self.visibility(*visibility)?;
                 self.authored_type(self_type, definitions, 1)?;
-                if borrowed_results || !type_parameters.is_empty() {
+                if associated || borrowed_results || !type_parameters.is_empty() {
                     self.list(type_parameters, |w, p| {
                         w.type_parameter_reference(p, definitions)
                     })?;
@@ -625,15 +638,21 @@ impl Writer {
                         w.parameter_use(*mode)
                     })?;
                     w.authored_type(&m.result, definitions, 1)?;
-                    if borrowed_results {
+                    if associated || borrowed_results {
                         w.optional(m.result_borrow.as_ref(), |w, p| w.u64(u64::from(*p)))?;
                     }
-                    if borrowed_results || task_methods || !type_parameters.is_empty() {
+                    if associated || borrowed_results || task_methods || !type_parameters.is_empty()
+                    {
                         w.function_effect(&m.effect, definitions)
                     } else {
                         Ok(())
                     }
-                })
+                })?;
+                if associated {
+                    self.associated_members(associated_types)
+                } else {
+                    Ok(())
+                }
             }
             AuthoredChange::CreateOwnedImplementation {
                 symbol,
@@ -646,6 +665,7 @@ impl Writer {
                 self_type,
                 type_arguments,
                 methods,
+                associated_types,
             } => {
                 self.owned_extension = true;
                 self.storage_contract_extension = true;
@@ -657,7 +677,11 @@ impl Writer {
                     || !type_parameters.is_empty()
                     || methods.iter().any(|m| !m.type_arguments.is_empty());
                 self.generic_implementation_extension |= generic;
-                self.tag(if prerequisites {
+                let associated = !associated_types.is_empty();
+                self.associated_extension |= associated;
+                self.tag(if associated {
+                    101
+                } else if prerequisites {
                     97
                 } else if generic {
                     95
@@ -671,39 +695,45 @@ impl Writer {
                 self.name(name)?;
                 self.visibility(*visibility)?;
                 self.declaration_reference(contract, definitions)?;
-                if generic {
+                if associated || generic {
                     self.list(type_parameters, |w, p| {
                         w.type_parameter_reference(p, definitions)
                     })?;
                 }
-                if prerequisites {
+                if associated || prerequisites {
                     self.implementation_parameters(implementation_parameters, definitions)?;
                 }
                 self.authored_type(self_type, definitions, 1)?;
-                if generic || !type_arguments.is_empty() {
+                if associated || generic || !type_arguments.is_empty() {
                     self.list(type_arguments, |w, ty| w.authored_type(ty, definitions, 1))?;
                 }
                 self.list(methods, |w, mapping| {
                     w.raw(&mapping.method.bytes())?;
                     w.declaration_reference(&mapping.function, definitions)?;
-                    if generic {
+                    if associated || generic {
                         w.list(&mapping.type_arguments, |w, ty| {
                             w.authored_type(ty, definitions, 1)
                         })?;
                     }
-                    if prerequisites {
+                    if associated || prerequisites {
                         w.list(&mapping.implementations, |w, operand| {
                             w.implementation_operand(operand, definitions)
                         })?;
                     }
                     Ok(())
-                })
+                })?;
+                if associated {
+                    self.associated_bindings(associated_types, definitions)
+                } else {
+                    Ok(())
+                }
             }
             AuthoredChange::SetOwnedContract {
                 declaration,
                 self_type,
                 type_parameters,
                 methods,
+                associated_types,
             } => {
                 self.owned_extension = true;
                 self.storage_contract_extension = true;
@@ -714,7 +744,11 @@ impl Writer {
                 self.task_method_extension |= task_methods;
                 let borrowed_results = methods.iter().any(|m| m.result_borrow.is_some());
                 self.borrowed_result_extension |= borrowed_results;
-                self.tag(if borrowed_results {
+                let associated = !associated_types.is_empty();
+                self.associated_extension |= associated;
+                self.tag(if associated {
+                    102
+                } else if borrowed_results {
                     94
                 } else if !type_parameters.is_empty() {
                     90
@@ -725,7 +759,7 @@ impl Writer {
                 })?;
                 self.declaration_selector(declaration, definitions)?;
                 self.authored_type(self_type, definitions, 1)?;
-                if borrowed_results || !type_parameters.is_empty() {
+                if associated || borrowed_results || !type_parameters.is_empty() {
                     self.list(type_parameters, |w, p| {
                         w.type_parameter_reference(p, definitions)
                     })?;
@@ -738,15 +772,21 @@ impl Writer {
                         w.parameter_use(*mode)
                     })?;
                     w.authored_type(&m.result, definitions, 1)?;
-                    if borrowed_results {
+                    if associated || borrowed_results {
                         w.optional(m.result_borrow.as_ref(), |w, p| w.u64(u64::from(*p)))?;
                     }
-                    if borrowed_results || task_methods || !type_parameters.is_empty() {
+                    if associated || borrowed_results || task_methods || !type_parameters.is_empty()
+                    {
                         w.function_effect(&m.effect, definitions)
                     } else {
                         Ok(())
                     }
-                })
+                })?;
+                if associated {
+                    self.associated_members(associated_types)
+                } else {
+                    Ok(())
+                }
             }
             AuthoredChange::SetOwnedImplementation {
                 declaration,
@@ -756,6 +796,7 @@ impl Writer {
                 self_type,
                 type_arguments,
                 methods,
+                associated_types,
             } => {
                 self.owned_extension = true;
                 self.storage_contract_extension = true;
@@ -767,7 +808,11 @@ impl Writer {
                     || !type_parameters.is_empty()
                     || methods.iter().any(|m| !m.type_arguments.is_empty());
                 self.generic_implementation_extension |= generic;
-                self.tag(if prerequisites {
+                let associated = !associated_types.is_empty();
+                self.associated_extension |= associated;
+                self.tag(if associated {
+                    103
+                } else if prerequisites {
                     98
                 } else if generic {
                     96
@@ -778,33 +823,38 @@ impl Writer {
                 })?;
                 self.declaration_selector(declaration, definitions)?;
                 self.declaration_reference(contract, definitions)?;
-                if generic {
+                if associated || generic {
                     self.list(type_parameters, |w, p| {
                         w.type_parameter_reference(p, definitions)
                     })?;
                 }
-                if prerequisites {
+                if associated || prerequisites {
                     self.implementation_parameters(implementation_parameters, definitions)?;
                 }
                 self.authored_type(self_type, definitions, 1)?;
-                if generic || !type_arguments.is_empty() {
+                if associated || generic || !type_arguments.is_empty() {
                     self.list(type_arguments, |w, ty| w.authored_type(ty, definitions, 1))?;
                 }
                 self.list(methods, |w, mapping| {
                     w.raw(&mapping.method.bytes())?;
                     w.declaration_reference(&mapping.function, definitions)?;
-                    if generic {
+                    if associated || generic {
                         w.list(&mapping.type_arguments, |w, ty| {
                             w.authored_type(ty, definitions, 1)
                         })?;
                     }
-                    if prerequisites {
+                    if associated || prerequisites {
                         w.list(&mapping.implementations, |w, operand| {
                             w.implementation_operand(operand, definitions)
                         })?;
                     }
                     Ok(())
-                })
+                })?;
+                if associated {
+                    self.associated_bindings(associated_types, definitions)
+                } else {
+                    Ok(())
+                }
             }
             AuthoredChange::SetImplementationParameters {
                 declaration,
@@ -1632,6 +1682,42 @@ impl Writer {
         }
     }
 
+    fn associated_members(
+        &mut self,
+        members: &[AuthoredAssociatedTypeMember],
+    ) -> Result<(), Diagnostic> {
+        self.associated_inventory_count(members.len())?;
+        self.list(members, |writer, member| {
+            writer.raw(&member.id.bytes())?;
+            writer.name(&member.name)?;
+            writer.tag(match member.bound {
+                crate::platform::kernel::AssociatedTypeBound::Owned => 1,
+            })
+        })
+    }
+
+    fn associated_bindings(
+        &mut self,
+        bindings: &[AuthoredAssociatedTypeBinding],
+        definitions: &BTreeMap<String, SymbolDefinition>,
+    ) -> Result<(), Diagnostic> {
+        self.associated_inventory_count(bindings.len())?;
+        self.list(bindings, |writer, binding| {
+            writer.raw(&binding.member.bytes())?;
+            writer.authored_type(&binding.ty, definitions, 1)
+        })
+    }
+
+    fn associated_inventory_count(&self, count: usize) -> Result<(), Diagnostic> {
+        if count > crate::platform::kernel::contract::MAXIMUM_CHILDREN {
+            return Err(codec_error(
+                "change_authored_associated_capacity",
+                "associated inventory exceeds the canonical child limit",
+            ));
+        }
+        Ok(())
+    }
+
     fn authored_type(
         &mut self,
         value: &AuthoredType,
@@ -1680,6 +1766,25 @@ impl Writer {
             }
             let next = depth + 1;
             match value {
+                AuthoredType::AssociatedContractMember { contract, member } => {
+                    self.associated_extension = true;
+                    self.tag(25)?;
+                    self.declaration_reference(contract, definitions)?;
+                    self.raw(&member.bytes())?;
+                }
+                AuthoredType::AssociatedWitnessProjection {
+                    scope,
+                    parameter,
+                    contract,
+                    member,
+                } => {
+                    self.associated_extension = true;
+                    self.tag(26)?;
+                    self.declaration_reference(scope, definitions)?;
+                    self.raw(&parameter.bytes())?;
+                    self.declaration_reference(contract, definitions)?;
+                    self.raw(&member.bytes())?;
+                }
                 AuthoredType::Unit {} => self.tag(1)?,
                 AuthoredType::Bool {} => self.tag(2)?,
                 AuthoredType::I64 {} => self.tag(3)?,
@@ -2968,6 +3073,7 @@ mod tests {
                         parameter: parameter("$self"),
                     },
                     type_parameters: vec![parameter("$phantom")],
+                    associated_types: vec![],
                     methods: vec![AuthoredOwnedMethod {
                         id: crate::platform::semantic_id::MethodId::migrate(b"mixed-codec", 0),
                         name: Name::new("seven").unwrap(),

@@ -2650,3 +2650,32 @@ boundaries, multi-field nominal extraction and execution after deleting source
 projects/transports. Malformed nested and unused input, traps, finite resource
 refusal and recovery remain required. Finalized executable acceptance and public
 publication remain separate from these source and development-host observations.
+
+## Associated Owned BlockRead and final-byte coverage
+
+Final-candidate generation 11 requires the exact namespace
+`native_declarations::native_associated_blockread::` and its full identity:
+
+`native_declarations::native_associated_blockread::native_associated_blockread_consumer_first_four_literals_three_targets_and_detached_bytes`
+
+The public witness exports its generic contract/consumer before two independent
+flat and private nominal suppliers exist. Actual package exports/imports,
+draft/replan and whole artifact byte equality preserve exact witness authority.
+Four handwritten cases by three targets execute attached and detached for
+24 complete-result comparisons. Protected ancestor consumption, borrowed-owner
+escape and private foreign-field access refuse without changing accepted meaning.
+Detached execution retains joined cleanup and no live handles or capability calls.
+
+Require the exact case before execution and select every present/future test in
+that namespace. Missing, namespace/suffix-substituted or duplicate inventory
+entries reject. Every selected test must report one passing outcome; unrun,
+ignored, failed, duplicate or substituted outcomes reject even with exit0 and a
+forged complete summary. All earlier mandatory families remain required.
+
+`lkjscript-final-candidate-acceptance-11` pairs only with
+`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-11`.
+Reject predecessor generation 10 and mixed pairs at both terminal and
+authenticated controller admission, retaining historical receipts unchanged.
+This renews required coverage, not graph/artifact/receipt encoding. Source
+acceptance, actual finalized-byte acceptance and public publication remain
+separate; a development-host case does not prove distributed bytes.

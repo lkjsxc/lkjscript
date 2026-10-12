@@ -1,4 +1,4 @@
-//! Private canonical-context consumer tests. Public associated admission stays refused.
+//! Private canonical-context consumer tests; source/artifact admission is proved separately.
 use super::super::reference_types::associated_preparation::{Limits, test_support};
 use super::super::tests::FaultedReferenceRead;
 use super::*;
@@ -99,12 +99,19 @@ fn read_application(
 #[test]
 fn reference_associated_runtime_reads_distinct_witness_outputs_and_releases_source_loans() {
     let (fixture, schema) = fixture();
+    // The witness helper bypasses full source loading. A completed canonical schema is
+    // independent metadata, not an associated artifact seal or this fixture's value origin.
+    let completed =
+        NormalizedReferenceSchema::independently_admit_witness_source(&fixture.source).unwrap();
+    let scoped = &completed.associated_proof().unwrap().symbolic[&fixture.consumer];
     assert_eq!(
-        NormalizedReferenceSchema::independently_admit_witness_source(&fixture.source)
-            .unwrap_err()
-            .code,
-        "owned_associated_semantics_unsupported"
+        scoped.parameters,
+        [(fixture.projection, ParameterUse::Borrow)]
     );
+    assert_eq!(scoped.result, fixture.projection);
+    assert!(!completed.ordinary_types.contains(&fixture.projection));
+    assert!(!completed.transferable_types.contains(&fixture.projection));
+    assert!(!completed.shareable_types.contains(&fixture.projection));
     let reader = FaultedReferenceRead {
         source: &fixture.source,
         schema,

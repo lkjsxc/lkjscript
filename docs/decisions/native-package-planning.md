@@ -143,7 +143,10 @@ corrected run uses canonical relative paths and the same accepted source roots.
 
 ## Thin consumer experiment and asset selection
 
-Keep the current production asset. The [thin-consumer experiment](../../.artifacts/native-package-planner/thin-consumer-experiment/summary.json)
+The 0.1.94 thin-consumer decision retained its existing production asset. The
+later maintained BlockRead replacement is a separate language-adoption change;
+it does not select the thin variant or renew the costs below. The
+[thin-consumer experiment](../../.artifacts/native-package-planner/thin-consumer-experiment/summary.json)
 passes **156** native checks and **16** matched functional runs with complete
 results and joined cleanup. It reduces compiler units **575 → 543** and artifact
 bytes **3,371,783 → 3,272,121**, without replacing the production supplier.

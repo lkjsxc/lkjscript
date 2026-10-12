@@ -53,7 +53,8 @@ case matching `native_owned_`, `native_byte_buffer_`, `native_byte_ranges_`,
 `native_declarations::native_owned_fifo::` and
 `native_declarations::native_data_sequences::` and
 `native_declarations::native_owned_nominals::` and
-`native_declarations::native_indexed_data::` families, plus the exact
+`native_declarations::native_indexed_data::` and
+`native_declarations::native_associated_blockread::` families, plus the exact
 `copied_binary_authors_builds_and_serves_interactive_topology_from_minimal` case.
 The Map family must include the exact
 `native_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment`
@@ -85,24 +86,42 @@ substitute for final-byte acceptance. Normal promotion and anonymous acquisition
 still use the unchanged assets and existing authority; no credentials, protections,
 immutable tags or prior assets are changed.
 
-`lkjscript-final-candidate-acceptance-10` and workload
-`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-10`
+`lkjscript-final-candidate-acceptance-11` and workload
+`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-11`
 require the complete Map matrix, the exact native-fold, incremental-compiler,
 FIFO, generalized-sequence, nominal-owned-record and mixed indexed-storage behavior witnesses and native-public proof in addition
 to all previous source, six target-owner, two userland and installation boundaries.
 Generation 10 additionally requires maintained native package-planner source,
-exact artifact regeneration and copied-product compiler adoption witnesses. The current
-controller rejects predecessor contracts, predecessor workloads and mixed generations
+exact artifact regeneration and copied-product compiler adoption witnesses.
+Generation 11 additionally requires the exact consumer-first associated Owned
+BlockRead case and every present/future test in its namespace. Its four literal
+cases, three targets and attached/detached executions retain 24 complete-result
+comparisons and three rejected authored proposals; see the
+[maintained example](../examples/associated-blockread/README.md).
+The current controller rejects predecessor contracts, predecessor workloads and mixed generations
 rather than relabelling them. Their original contracts and evidence remain historical facts;
 a corrected successor requires a fresh producer. In particular, producer 37046478616
 accepted the earlier 0.1.68 source without the joined-deadline repair and is superseded,
 not a candidate to promote after the repair.
 
-The serial native-public aggregate has a 120-minute execution allowance; its
-separate harness build allowance remains 30 minutes. The authenticated v0.1.91
-producer completed 42 of 96 cases successfully before its former 30-minute
-execution allowance expired. The successor retains every case, exact outcome
-admission and joined-cleanup requirement. That failed producer is not promotable.
+The native-public aggregate uses exactly two test workers and retains a
+120-minute execution allowance; its separate harness build allowance remains
+30 minutes. The [authenticated v0.1.94 producer 38173532140/1](https://github.com/lkjsxc/lkjscript/actions/runs/38173532140)
+exhausted serial execution after **78/102** passing cases, with 24 incomplete and
+no observed test failure. The active unfinished case subsequently passed a
+local one-case replay using the exact retained harness and finalized CLI
+in **17.91 seconds**; this does not establish hosted timing, the remaining
+inventory or candidate acceptance. The underlying hosted noncompletion cause
+remains unknown.
+
+The bounded scheduling experiment retains every case, exact outcome admission
+and joined-cleanup requirement. Exact selected-name libtest long-running notices
+have no pass credit; every unique passing case and the complete exact summary
+remain required. Receipt commands bind the fixed worker selection. The .94
+scheduling correction retained acceptance/workload generation 10. The additional
+associated coverage above selects generation 11; neither change relabels failed
+originals or proves that hosted execution will finish within its unchanged
+allowance. Failed producers remain unpromotable.
 
 [Current status](status.md) owns the exact public/latest selection. A pending
 successor producer is release-only waiting; accepted source can proceed to main.
@@ -210,10 +229,14 @@ never equivalent proof. The [verification specification](spec/verification.md) o
 Source-only probes embedded in behavioral owners remain owned by those original readers; the target
 verifier is source-built. Necessary reference/unit work and host-verifier configurations are not
 second distributable product builds. Workloads and assertions remain unchanged. The complete
-`workspace_tests` aggregate has a **7,200-second** allowance; the generic **3,600-second** gate
+`workspace_tests` aggregate has a **9,600-second** diagnostic allowance; the generic **3,600-second** gate
 default and other owner deadlines retain their existing selections. The hosted candidate job has a
 finite **360-minute** outer allowance for cold source verification, construction and required
 finalized-byte acceptance. Source checking has no shorter aggregate timeout around its gates.
+The failed v0.1.94 producer exhausted its former 7,200-second workspace allowance with one
+public case unfinished. The increased allowance is a bounded experiment, not a proven remedy.
+Combining observed source overhead with the v0.1.92 final phases leaves about 20 minutes under
+the outer allowance; those historical timings do not guarantee that the successor fits.
 The target supervisor retains its existing finite owner allowance; no completed broad owner is
 replayed merely because bytes crossed a job boundary.
 

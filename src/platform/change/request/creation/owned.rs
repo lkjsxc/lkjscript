@@ -1,10 +1,28 @@
 //! Public typed intent for first-order owned contracts. Canonical admission remains mandatory.
 use super::*;
 use crate::platform::kernel::{
-    ImplementationOperand, ImplementationParameter, OwnedContract, OwnedImplementation,
-    OwnedMethod, OwnedMethodImplementation, OwnedMethodParameter,
+    AssociatedTypeBinding, AssociatedTypeBound, AssociatedTypeMember, ImplementationOperand,
+    ImplementationParameter, OwnedContract, OwnedImplementation, OwnedMethod,
+    OwnedMethodImplementation, OwnedMethodParameter,
 };
-use crate::platform::semantic_id::{ImplementationParameterId, MethodId};
+use crate::platform::semantic_id::{AssociatedTypeMemberId, ImplementationParameterId, MethodId};
+
+#[cfg(test)]
+#[path = "associated_authoring_tests.rs"]
+mod associated_authoring_tests;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AuthoredAssociatedTypeMember {
+    pub id: AssociatedTypeMemberId,
+    pub name: Name,
+    pub bound: AssociatedTypeBound,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AuthoredAssociatedTypeBinding {
+    pub member: AssociatedTypeMemberId,
+    pub ty: AuthoredType,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthoredOwnedMethod {
@@ -44,12 +62,63 @@ pub enum AuthoredImplementationOperand {
 }
 
 impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer<'_, B, W> {
+    fn admit_associated_inventory(&mut self, count: usize) -> Result<(), Diagnostic> {
+        if count == 0 {
+            return Ok(());
+        }
+        self.base.validation_checkpoint()?;
+        if count > crate::platform::kernel::contract::MAXIMUM_CHILDREN {
+            return Err(request_error(
+                DiagnosticClass::Resource,
+                "change_authored_associated_capacity",
+                "associated inventory exceeds the canonical child limit",
+            ));
+        }
+        let count = u64::try_from(count).map_err(|_| associated_capacity())?;
+        let steps = count
+            .checked_mul(u64::from(count.checked_ilog2().unwrap_or(0)) + 2)
+            .ok_or_else(associated_capacity)?;
+        self.work.associated_inventory_steps = self
+            .work
+            .associated_inventory_steps
+            .checked_add(steps)
+            .ok_or_else(associated_capacity)?;
+        self.work
+            .associated_inventory_steps
+            .checked_add(self.work.effect_normalization_steps)
+            .ok_or_else(associated_capacity)?;
+        self.check_budget("associated inventory before allocation")
+    }
+
     fn owned_contract_value(
         &mut self,
         self_type: &AuthoredType,
         type_parameters: &[AuthoredTypeParameterReference],
         methods: &[AuthoredOwnedMethod],
+        associated_types: &[AuthoredAssociatedTypeMember],
     ) -> Result<OwnedContract, Diagnostic> {
+        self.admit_associated_inventory(associated_types.len())?;
+        let mut members = Vec::new();
+        members
+            .try_reserve_exact(associated_types.len())
+            .map_err(|_| associated_capacity())?;
+        let mut ids = std::collections::BTreeSet::new();
+        let mut names = std::collections::BTreeSet::new();
+        for member in associated_types {
+            self.base.validation_checkpoint()?;
+            if !ids.insert(member.id) || !names.insert(&member.name) {
+                return Err(request_error(
+                    DiagnosticClass::Semantic,
+                    "change_authored_associated_member_duplicate",
+                    "associated member identities and names must be distinct",
+                ));
+            }
+            members.push(AssociatedTypeMember {
+                id: member.id,
+                name: member.name.clone(),
+                bound: member.bound,
+            });
+        }
         let AuthoredType::TypeParameter { parameter } = self_type else {
             return Err(request_error(
                 DiagnosticClass::Semantic,
@@ -84,9 +153,13 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
             self_parameter,
             type_parameters,
             methods: lowered,
-            associated_types: Vec::new(),
+            associated_types: members,
         })
     }
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "one complete implementation proposal owns these closed fields"
+    )]
     fn owned_implementation_value(
         &mut self,
         contract: &AuthoredDeclarationReference,
@@ -95,7 +168,35 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
         self_type: &AuthoredType,
         type_arguments: &[AuthoredType],
         methods: &[AuthoredOwnedMethodImplementation],
+        associated_types: &[AuthoredAssociatedTypeBinding],
     ) -> Result<OwnedImplementation, Diagnostic> {
+        self.admit_associated_inventory(associated_types.len())?;
+        let mut bindings = Vec::new();
+        bindings
+            .try_reserve_exact(associated_types.len())
+            .map_err(|_| associated_capacity())?;
+        for binding in associated_types {
+            self.base.validation_checkpoint()?;
+            bindings.push(AssociatedTypeBinding {
+                member: binding.member,
+                ty: self.lower_type(&binding.ty)?,
+            });
+        }
+        if !bindings.is_empty() {
+            self.base.validation_checkpoint()?;
+            bindings.sort_unstable_by_key(|binding| binding.member);
+            self.base.validation_checkpoint()?;
+        }
+        if bindings
+            .windows(2)
+            .any(|pair| pair[0].member == pair[1].member)
+        {
+            return Err(request_error(
+                DiagnosticClass::Semantic,
+                "change_authored_associated_binding_duplicate",
+                "associated binding identities must be distinct",
+            ));
+        }
         let contract = self.lower_declaration_reference(contract)?;
         let type_parameters = type_parameters
             .iter()
@@ -133,7 +234,7 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
             self_type,
             type_arguments,
             methods: lowered,
-            associated_types: Vec::new(),
+            associated_types: bindings,
         })
     }
     pub(super) fn lower_implementation_operand(
@@ -188,6 +289,14 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
     }
 }
 
+fn associated_capacity() -> Diagnostic {
+    request_error(
+        DiagnosticClass::Resource,
+        "change_authored_associated_capacity",
+        "associated inventory accounting or allocation exhausted",
+    )
+}
+
 pub(in crate::platform::change::request) fn collect(
     change: &super::super::AuthoredChange,
     definitions: &mut SymbolDefinitions,
@@ -225,10 +334,16 @@ pub(in crate::platform::change::request) fn lower<
             self_type,
             type_parameters,
             methods,
+            associated_types,
         } => {
             let declaration = lowerer.declaration_symbol(symbol)?;
             let module = lowerer.resolve_module(module)?;
-            let value = lowerer.owned_contract_value(self_type, type_parameters, methods)?;
+            let value = lowerer.owned_contract_value(
+                self_type,
+                type_parameters,
+                methods,
+                associated_types,
+            )?;
             lowerer.insert_created(OwnerRecord::Declaration(DeclarationRecord {
                 header: OwnerHeader::new(
                     OwnerKey::Declaration(declaration),
@@ -251,6 +366,7 @@ pub(in crate::platform::change::request) fn lower<
             self_type,
             type_arguments,
             methods,
+            associated_types,
         } => {
             let declaration = lowerer.declaration_symbol(symbol)?;
             let module = lowerer.resolve_module(module)?;
@@ -261,6 +377,7 @@ pub(in crate::platform::change::request) fn lower<
                 self_type,
                 type_arguments,
                 methods,
+                associated_types,
             )?;
             lowerer.insert_created(OwnerRecord::Declaration(DeclarationRecord {
                 header: OwnerHeader::new(
@@ -278,9 +395,15 @@ pub(in crate::platform::change::request) fn lower<
             self_type,
             type_parameters,
             methods,
+            associated_types,
         } => {
             let declaration = lowerer.resolve_declaration(declaration)?;
-            let value = lowerer.owned_contract_value(self_type, type_parameters, methods)?;
+            let value = lowerer.owned_contract_value(
+                self_type,
+                type_parameters,
+                methods,
+                associated_types,
+            )?;
             let OwnerRecord::Declaration(d) =
                 lowerer.candidate_mut(OwnerKey::Declaration(declaration))?
             else {
@@ -308,6 +431,7 @@ pub(in crate::platform::change::request) fn lower<
             self_type,
             type_arguments,
             methods,
+            associated_types,
         } => {
             let declaration = lowerer.resolve_declaration(declaration)?;
             let value = lowerer.owned_implementation_value(
@@ -317,6 +441,7 @@ pub(in crate::platform::change::request) fn lower<
                 self_type,
                 type_arguments,
                 methods,
+                associated_types,
             )?;
             let OwnerRecord::Declaration(d) =
                 lowerer.candidate_mut(OwnerKey::Declaration(declaration))?

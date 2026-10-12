@@ -22,6 +22,9 @@ mod nominals;
 #[path = "public_inventory_storage.rs"]
 mod storage;
 
+#[path = "public_inventory_associated.rs"]
+mod associated;
+
 const FAMILIES: [&str; 6] = [
     "native_owned_",
     "native_byte_buffer_",
@@ -145,6 +148,7 @@ pub(super) fn inventory(output: &str) -> Result<Inventory, DevError> {
     sequences::admit(&all)?;
     nominals::admit(&all)?;
     storage::admit(&all)?;
+    associated::admit(&all)?;
     let selected = all
         .iter()
         .filter(|name| {
@@ -156,6 +160,7 @@ pub(super) fn inventory(output: &str) -> Result<Inventory, DevError> {
                 || sequences::selected(name)
                 || nominals::selected(name)
                 || storage::selected(name)
+                || associated::selected(name)
                 || *name == TOPOLOGY
         })
         .cloned()
@@ -165,6 +170,7 @@ pub(super) fn inventory(output: &str) -> Result<Inventory, DevError> {
 
 pub(super) fn passed(output: &str, inventory: &Inventory) -> Result<(), DevError> {
     let mut observed = BTreeSet::new();
+    let mut notices = BTreeSet::new();
     let mut summaries = 0;
     let mut headers = 0;
     let count = inventory.selected.len();
@@ -185,6 +191,20 @@ pub(super) fn passed(output: &str, inventory: &Inventory) -> Result<(), DevError
                 "public harness counts contain missing, failed or ignored cases",
             )?;
             summaries += 1;
+        } else if let Some(name) = line
+            .strip_prefix("test ")
+            .and_then(|line| line.strip_suffix(" has been running for over 60 seconds"))
+        {
+            // Libtest notices are observations only. They never count as a
+            // completed test or replace the required full passing summary.
+            require(
+                headers == 1
+                    && summaries == 0
+                    && inventory.selected.contains(name)
+                    && !observed.contains(name)
+                    && notices.insert(name.to_owned()),
+                "public harness long-running notice is not one pending selected test",
+            )?;
         } else if let Some(name) = line
             .strip_prefix("test ")
             .and_then(|line| line.strip_suffix(" ... ok"))
@@ -236,3 +256,7 @@ mod nominal_tests;
 #[cfg(test)]
 #[path = "public_inventory_storage_tests.rs"]
 mod storage_tests;
+
+#[cfg(test)]
+#[path = "public_inventory_associated_tests.rs"]
+mod associated_tests;

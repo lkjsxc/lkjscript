@@ -4,7 +4,8 @@ use crate::platform::compiler::{CompilationPayload, CompilationUnit, Compilation
 use crate::platform::diagnostic::DiagnosticClass;
 use crate::platform::package_interface::{PackageInterfaceOwner, PackageInterfaceOwnerDigest};
 use crate::platform::semantic_id::{
-    AssociatedTypeMemberId, DeclarationId, ImplementationParameterId,
+    AssociatedTypeMemberId, DeclarationId, ExpressionId, ImplementationParameterId, ParameterId,
+    TypeParameterId,
 };
 use crate::platform::storage::object::{ObjectDomain, ObjectKey};
 
@@ -455,57 +456,321 @@ fn independent_literal_historical_nested_payloads_preserve_empty_inventories() {
     }
 }
 
-#[test]
-fn codec_foundation_cannot_admit_associated_meaning_before_semantic_integration() {
-    let base = super::tests::witness_snapshot();
-    let mut local = base.clone();
-    let mut owner = base_owner(false);
-    extend(&mut owner);
-    local.owners.insert(owner.owner(), owner.clone());
-    assert!(
-        validate_full(&local)
-            .unwrap_err()
-            .iter()
-            .any(|error| error.code == "owned_associated_semantics_unsupported")
-    );
-    let mut imported = base.clone();
-    let interface = PackageInterfaceRecord::project_public(&owner)
-        .unwrap()
-        .unwrap();
-    imported.dependency_interfaces.insert(
-        PackageRevisionDigest::from_bytes([91; 32]),
-        std::sync::Arc::new(std::collections::BTreeMap::from([(
-            owner.owner(),
-            interface,
-        )])),
-    );
-    assert!(
-        validate_full(&imported)
-            .unwrap_err()
-            .iter()
-            .any(|error| error.code == "owned_associated_semantics_unsupported")
-    );
-    let form = TypeForm::AssociatedContractMember {
-        contract: DeclarationReference {
-            package: base.root.package_id,
-            declaration: DeclarationId::from_bytes([2; 16]).unwrap(),
-        },
-        member: member().id,
+/// Complete raw logical input for semantic occurrence controls. This is a
+/// FullValidator fixture; literal transport/owner/unit bytes above are untouched.
+fn codec_occurrence_snapshot() -> (
+    KernelSnapshot,
+    DeclarationReference,
+    DeclarationReference,
+    OwnerKey,
+) {
+    let mut snapshot = super::tests::witness_snapshot();
+    let seed = b"codec-associated-real-occurrences";
+    let module = snapshot
+        .owners
+        .keys()
+        .find_map(|owner| match owner {
+            OwnerKey::Module(id) => Some(*id),
+            _ => None,
+        })
+        .expect("existing module");
+    let contract_id = DeclarationId::migrate(seed, 0);
+    let scope_id = DeclarationId::migrate(seed, 1);
+    let contract = DeclarationReference {
+        package: snapshot.root.package_id,
+        declaration: contract_id,
     };
-    let object = TypeObject::new(form).unwrap();
-    let digest = encode_type_object(&object).unwrap().0;
-    for dependency in [false, true] {
-        let mut snapshot = base.clone();
-        if dependency {
-            snapshot.dependency_types.insert(digest, object.clone());
-        } else {
-            snapshot.types.insert(digest, object.clone());
-        }
-        assert!(
-            validate_full(&snapshot)
-                .unwrap_err()
-                .iter()
-                .any(|error| error.code == "owned_associated_semantics_unsupported")
+    let scope = DeclarationReference {
+        package: snapshot.root.package_id,
+        declaration: scope_id,
+    };
+    let contract_self = TypeParameterId::migrate(seed, 0);
+    let caller_self = TypeParameterId::migrate(seed, 1);
+    for (parameter, declaration) in [(contract_self, contract_id), (caller_self, scope_id)] {
+        snapshot.owners.insert(
+            OwnerKey::TypeParameter(parameter),
+            OwnerRecord::TypeParameter(TypeParameterRecord {
+                header: OwnerHeader::new(
+                    OwnerKey::TypeParameter(parameter),
+                    OwnerKind::TypeParameter,
+                ),
+                declaration,
+                name: Name::new("Self").expect("name"),
+                constraints: TypeParameterConstraints::Owned,
+            }),
         );
+    }
+    let mut intern = |form| {
+        let object = TypeObject::new(form).expect("canonical fixture type");
+        let digest = encode_type_object(&object)
+            .expect("canonical fixture bytes")
+            .0;
+        snapshot.types.insert(digest, object);
+        digest
+    };
+    let self_type = intern(TypeForm::TypeParameter {
+        parameter: caller_self,
+    });
+    let scalar = intern(TypeForm::I64);
+    let witness = ImplementationParameterId::migrate(seed, 0);
+    let projection = intern(TypeForm::AssociatedWitnessProjection {
+        scope,
+        parameter: witness,
+        contract,
+        member: member().id,
+    });
+    snapshot.owners.insert(
+        OwnerKey::Declaration(contract_id),
+        OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(OwnerKey::Declaration(contract_id), OwnerKind::OwnedContract),
+            module,
+            name: Name::new("CodecOccurrenceContract").expect("name"),
+            visibility: DeclarationVisibility::Public,
+            payload: DeclarationPayload::OwnedContract(OwnedContract {
+                self_parameter: contract_self,
+                type_parameters: vec![],
+                associated_types: vec![member()],
+                methods: vec![OwnedMethod {
+                    id: crate::platform::semantic_id::MethodId::migrate(seed, 0),
+                    name: Name::new("inspect").expect("name"),
+                    parameters: vec![OwnedMethodParameter {
+                        ty: scalar,
+                        use_mode: ParameterUse::Unrestricted,
+                    }],
+                    result: scalar,
+                    result_borrow: None,
+                    effect: FunctionEffect::Pure,
+                }],
+            }),
+        }),
+    );
+    let parameter_id = ParameterId::migrate(seed, 0);
+    let parameter = OwnerKey::Parameter(parameter_id);
+    snapshot.owners.insert(
+        parameter,
+        OwnerRecord::Parameter(ParameterRecord {
+            header: OwnerHeader::new(parameter, OwnerKind::Parameter),
+            parent: ParameterParent::Function(scope_id),
+            name: Name::new("value").expect("name"),
+            ty: projection,
+            use_mode: ParameterUse::Consume,
+            resource_requirement: None,
+        }),
+    );
+    let body = ExpressionId::migrate(seed, 0);
+    snapshot.owners.insert(
+        OwnerKey::Expression(body),
+        OwnerRecord::Expression(
+            ExpressionRecord::new(
+                body,
+                ExpressionOperation::Local {
+                    value: LocalValueReference::FunctionParameter(parameter_id),
+                },
+            )
+            .expect("canonical local"),
+        ),
+    );
+    snapshot.owners.insert(
+        OwnerKey::Declaration(scope_id),
+        OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(OwnerKey::Declaration(scope_id), OwnerKind::PureFunction),
+            module,
+            name: Name::new("codecOccurrenceForward").expect("name"),
+            visibility: DeclarationVisibility::Private,
+            payload: DeclarationPayload::Function(FunctionDeclaration {
+                type_parameters: vec![caller_self],
+                implementation_parameters: vec![ImplementationParameter {
+                    id: witness,
+                    name: Name::new("output").expect("name"),
+                    contract,
+                    self_type,
+                    type_arguments: vec![],
+                }],
+                requirement_parameters: vec![],
+                effect_parameters: vec![],
+                parameters: vec![parameter_id],
+                result: projection,
+                result_borrow: None,
+                effect: FunctionEffect::Pure,
+                body,
+            }),
+        }),
+    );
+    // FullValidator consumes complete logical records; persistent-map integrity
+    // remains the repository's job. Keep the actual logical inventory count exact.
+    let root = snapshot.root.owners;
+    snapshot.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
+        root.page(),
+        u64::try_from(snapshot.owners.len()).expect("bounded fixture inventory"),
+        root.content(),
+    );
+    (snapshot, scope, contract, parameter)
+}
+
+#[test]
+fn codec_associated_envelopes_require_exact_occurrence_scope_and_owner_generation() {
+    let (base, scope, contract, parameter) = codec_occurrence_snapshot();
+    validate_full(&base).expect("healthy exact current occurrence is complete");
+    for mutation in 0..5 {
+        let mut snapshot = base.clone();
+        if mutation == 0 {
+            let OwnerRecord::Parameter(record) =
+                snapshot.owners.get_mut(&parameter).expect("parameter")
+            else {
+                panic!("parameter");
+            };
+            record.header.contract_version = 32;
+        } else if mutation == 1 {
+            let OwnerRecord::Declaration(record) = snapshot
+                .owners
+                .get_mut(&OwnerKey::Declaration(scope.declaration))
+                .expect("function")
+            else {
+                panic!("function");
+            };
+            record.header.contract_version = 32;
+        } else {
+            let original_result = match snapshot
+                .owners
+                .get(&OwnerKey::Declaration(scope.declaration))
+                .expect("function")
+            {
+                OwnerRecord::Declaration(function) => match &function.payload {
+                    DeclarationPayload::Function(signature) => signature.result,
+                    _ => panic!("signature"),
+                },
+                _ => panic!("function"),
+            };
+            let mut form = snapshot.types[&original_result].form.clone();
+            if mutation == 2 {
+                let TypeForm::AssociatedWitnessProjection { scope, .. } = &mut form else {
+                    panic!("projection");
+                };
+                *scope = contract;
+            } else if mutation == 3 {
+                form = TypeForm::AssociatedContractMember {
+                    contract,
+                    member: member().id,
+                };
+            } else {
+                let foreign = DeclarationReference {
+                    package: PackageId::from_bytes([92; 16]).expect("foreign package"),
+                    declaration: contract.declaration,
+                };
+                let TypeForm::AssociatedWitnessProjection {
+                    contract: projected_contract,
+                    ..
+                } = &mut form
+                else {
+                    panic!("projection");
+                };
+                *projected_contract = foreign;
+                let OwnerRecord::Declaration(function) = snapshot
+                    .owners
+                    .get_mut(&OwnerKey::Declaration(scope.declaration))
+                    .expect("function")
+                else {
+                    panic!("function");
+                };
+                let DeclarationPayload::Function(signature) = &mut function.payload else {
+                    panic!("signature");
+                };
+                signature.implementation_parameters[0].contract = foreign;
+                // A cached exact-looking interface supplies no authored edge.
+                // The form is genuinely consumed by the local parameter/result.
+                let imported = PackageInterfaceRecord::project_public(
+                    snapshot
+                        .owners
+                        .get(&OwnerKey::Declaration(contract.declaration))
+                        .expect("contract"),
+                )
+                .expect("public projection")
+                .expect("public contract");
+                snapshot.dependency_interfaces.insert(
+                    PackageRevisionDigest::from_bytes([93; 32]),
+                    std::sync::Arc::new(std::collections::BTreeMap::from([(
+                        OwnerKey::Declaration(contract.declaration),
+                        imported,
+                    )])),
+                );
+                assert!(!snapshot.dependencies.contains_key(&foreign.package));
+            }
+            let object = TypeObject::new(form).expect("canonical mutant type");
+            let digest = encode_type_object(&object)
+                .expect("canonical mutant bytes")
+                .0;
+            snapshot.types.insert(digest, object);
+            let OwnerRecord::Parameter(record) =
+                snapshot.owners.get_mut(&parameter).expect("parameter")
+            else {
+                panic!("parameter");
+            };
+            record.ty = digest;
+            let OwnerRecord::Declaration(function) = snapshot
+                .owners
+                .get_mut(&OwnerKey::Declaration(scope.declaration))
+                .expect("function")
+            else {
+                panic!("function");
+            };
+            let DeclarationPayload::Function(signature) = &mut function.payload else {
+                panic!("signature");
+            };
+            signature.result = digest;
+            assert_ne!(
+                digest, original_result,
+                "each form mutant changes its digest"
+            );
+            assert!(
+                snapshot
+                    .owners
+                    .values()
+                    .all(|owner| { !owner.type_roots().contains(&original_result) }),
+                "the replaced projection has no remaining owner roots",
+            );
+            assert!(
+                snapshot
+                    .types
+                    .values()
+                    .all(|object| { !object.child_types().contains(&original_result) }),
+                "the replaced projection has no remaining child roots",
+            );
+            snapshot
+                .types
+                .remove(&original_result)
+                .expect("remove only the obsolete original projection");
+        }
+        let errors =
+            validate_full(&snapshot).expect_err("encoding cannot grant occurrence authority");
+        let code = if mutation < 2 {
+            "kernel_owned_associated_generation"
+        } else if mutation == 4 {
+            // Exact authored closure authority is checked before member lookup.
+            "kernel_owned_contract"
+        } else {
+            "kernel_owned_associated"
+        };
+        let expected_message =
+            (mutation == 4).then_some("owned reference is outside the declared package closure");
+        assert!(
+            errors.iter().any(|error| {
+                error.class == DiagnosticClass::Semantic
+                    && error.code == code
+                    && expected_message.is_none_or(|message| error.message == message)
+            }),
+            "{mutation}: {errors:#?}",
+        );
+        assert!(
+            errors
+                .iter()
+                .all(|error| error.code != "owned_associated_semantics_unsupported")
+        );
+        assert!(errors.iter().all(|error| !matches!(
+            error.code.as_str(),
+            "kernel_full_map_count"
+                | "kernel_full_owner_key"
+                | "kernel_full_owner_parent"
+                | "kernel_full_type_unreachable"
+        )));
     }
 }

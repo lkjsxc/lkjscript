@@ -200,6 +200,7 @@ fn phantom_owned_parameter_deletion_requires_complete_application_repair_and_ret
         changes,
     };
     let implementation_repair = AuthoredChange::SetOwnedImplementation {
+        associated_types: Vec::new(),
         implementation_parameters: Vec::new(),
         declaration: DeclarationSelector::Id {
             declaration: ids.implementation,

@@ -1,0 +1,97 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create blockread-consumer
+    (owned-contract create BlockRead (visibility public)
+      (self Self) (type-parameter create Self (constraint owned))
+      (type-parameter create Item (constraint transferable))
+      (associated-type assoc_type_c7000000000000000000000000000001 Block (bound owned))
+      (method method_c7000000000000000000000000000001 block-count
+        (parameters (Self borrow)) (returns I64) (effect pure))
+      (method method_c7000000000000000000000000000002 block-at
+        (parameters (I64 unrestricted) (Self borrow))
+        (returns (associated-contract-member BlockRead assoc_type_c7000000000000000000000000000001)
+          (borrow-from 1)) (effect pure))
+      (method method_c7000000000000000000000000000003 block-length
+        (parameters ((associated-contract-member BlockRead assoc_type_c7000000000000000000000000000001) borrow))
+        (returns I64) (effect pure))
+      (method method_c7000000000000000000000000000004 block-get
+        (parameters (I64 unrestricted)
+          ((associated-contract-member BlockRead assoc_type_c7000000000000000000000000000001) borrow))
+        (returns Item) (effect pure)))
+    (function create forward-block (visibility public) (effect pure)
+      (type-parameter create T (constraint transferable))
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_c7000000000000000000000000000001 reader BlockRead W (types T))
+      (parameter create index (type I64))
+      (parameter create storage (type W) (use borrow))
+      (returns (associated-witness-projection forward-block implparam_c7000000000000000000000000000001
+        BlockRead assoc_type_c7000000000000000000000000000001) (borrow-from storage))
+      (body (borrow-call
+        (method-call parameter@forward-block@implparam_c7000000000000000000000000000001
+          BlockRead method_c7000000000000000000000000000002 (local index) (local storage))
+        (binding view (type (associated-witness-projection forward-block
+          implparam_c7000000000000000000000000000001 BlockRead assoc_type_c7000000000000000000000000000001)))
+        (in (local view)))))
+    (function create collect-block (visibility private) (effect pure)
+      (type-parameter create T (constraint transferable))
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_c7000000000000000000000000000002 reader BlockRead W (types T))
+      (parameter create offset (type I64)) (parameter create output (type (list T)))
+      (parameter create block (type (associated-witness-projection collect-block
+        implparam_c7000000000000000000000000000002 BlockRead assoc_type_c7000000000000000000000000000001)) (use borrow))
+      (returns (list T))
+      (body (if (call std::less (local offset)
+        (method-call parameter@collect-block@implparam_c7000000000000000000000000000002
+          BlockRead method_c7000000000000000000000000000003 (local block)))
+        (implementation-call collect-block (types T W)
+          (implementations parameter@collect-block@implparam_c7000000000000000000000000000002)
+          (call std::add (local offset) (i64 1))
+          (call std::list-append (types T) (local output)
+            (method-call parameter@collect-block@implparam_c7000000000000000000000000000002
+              BlockRead method_c7000000000000000000000000000004 (local offset) (local block)))
+          (local block))
+        (local output))))
+    (function create scan (visibility private) (effect pure)
+      (type-parameter create T (constraint transferable))
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_c7000000000000000000000000000003 reader BlockRead W (types T))
+      (parameter create index (type I64)) (parameter create output (type (list T)))
+      (parameter create storage (type W) (use borrow)) (returns (list T))
+      (body (if (call std::less (local index)
+        (method-call parameter@scan@implparam_c7000000000000000000000000000003
+          BlockRead method_c7000000000000000000000000000001 (local storage)))
+        (let (binding next (type (list T))
+          (borrow-call
+            (implementation-call forward-block (types T W)
+              (implementations parameter@scan@implparam_c7000000000000000000000000000003)
+              (local index) (local storage))
+            (binding block (type (associated-witness-projection scan implparam_c7000000000000000000000000000003
+              BlockRead assoc_type_c7000000000000000000000000000001)))
+            (in (implementation-call collect-block (types T W)
+              (implementations parameter@scan@implparam_c7000000000000000000000000000003)
+              (i64 0) (local output) (local block)))))
+          (in (implementation-call scan (types T W)
+            (implementations parameter@scan@implparam_c7000000000000000000000000000003)
+            (call std::add (local index) (i64 1)) (local next) (local storage))))
+        (local output))))
+    (function create discard (visibility public) (effect pure)
+      (type-parameter create W (constraint owned))
+      (parameter create storage (type W) (use consume)) (returns Unit) (body (unit)))
+    (function create scan-and-finish (visibility public) (effect pure)
+      (type-parameter create T (constraint transferable))
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_c7000000000000000000000000000004 reader BlockRead W (types T))
+      (parameter create storage (type W) (use consume))
+      (returns (record (blocks I64) (values (list T))))
+      (body (let
+        (binding blocks (type I64)
+          (method-call parameter@scan-and-finish@implparam_c7000000000000000000000000000004
+            BlockRead method_c7000000000000000000000000000001 (local storage)))
+        (binding values (type (list T))
+          (implementation-call scan (types T W)
+            (implementations parameter@scan-and-finish@implparam_c7000000000000000000000000000004)
+            (i64 0) (list T) (local storage)))
+        (in (sequence (call discard (types W) (local storage))
+          (record structural (field blocks (local blocks)) (field values (local values))))))))))
+declarations.end

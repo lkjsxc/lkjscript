@@ -55,6 +55,32 @@ impl Native {
                 .env("PATH", ""),
         )
         .unwrap();
+        // Each Native owns this disposable directory. Retain the actual public
+        // command response before status assertions, including expected failures.
+        static COMMAND_SERIAL: std::sync::atomic::AtomicUsize =
+            std::sync::atomic::AtomicUsize::new(0);
+        let serial = COMMAND_SERIAL.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let evidence = self.root.path().join("cli-evidence");
+        std::fs::create_dir_all(&evidence).unwrap();
+        let stem = format!("{serial:08}");
+        std::fs::write(evidence.join(format!("{stem}.stdout")), &output.stdout).unwrap();
+        std::fs::write(evidence.join(format!("{stem}.stderr")), &output.stderr).unwrap();
+        std::fs::write(
+            evidence.join(format!("{stem}.command.json")),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "executable": self.executable,
+                "directory": self.root.path(),
+                "arguments": command.get_args()
+                    .map(|argument| argument.to_str().expect("UTF-8 public test argument"))
+                    .collect::<Vec<_>>(),
+                "environment_cleared": true,
+                "environment": {"PATH": ""},
+                "status": output.status.code(),
+                "expected_success": success,
+            }))
+            .unwrap(),
+        )
+        .unwrap();
         assert_eq!(
             output.status.success(),
             success,
@@ -1675,6 +1701,9 @@ mod native_data_sequences;
 
 #[path = "native_indexed_data.rs"]
 mod native_indexed_data;
+
+#[path = "native_associated_blockread.rs"]
+mod native_associated_blockread;
 #[path = "native_owned_borrows.rs"]
 mod native_owned_borrows;
 #[path = "native_owned_compact_proof.rs"]

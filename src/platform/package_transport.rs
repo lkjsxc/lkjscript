@@ -772,7 +772,7 @@ fn validate_package_transport_closure_planned<S: ImmutableObjectStore + ?Sized>(
             visit(crate::platform::package_interface::interface_owner_validation_visits(owner))?;
         }
     }
-    validate_interface_dependencies(revisions, &interfaces)?;
+    validate_interface_dependencies(revisions, &interfaces, visit)?;
     let (root_transport_digest, root_transport) =
         transports.remove(&root_revision).ok_or_else(|| {
             package_error(
@@ -982,6 +982,7 @@ fn validate_revision_edges(
 fn validate_interface_dependencies(
     revisions: &BTreeMap<PackageRevisionDigest, PackageRevision>,
     interfaces: &BTreeMap<PackageRevisionDigest, PackageInterfaceValidation>,
+    visit: &mut dyn FnMut(u64) -> Result<(), Diagnostic>,
 ) -> Result<(), Diagnostic> {
     let closure = PackageInterfaceClosure {
         packages: revisions
@@ -989,7 +990,60 @@ fn validate_interface_dependencies(
             .map(|(digest, revision)| (revision.package, *digest))
             .collect(),
         interfaces,
+        revisions,
     };
+    let mut associated =
+        crate::platform::package_interface::AssociatedInterfaceAdmission::new(visit);
+    // Feature-free callers retain their existing descriptor visit admissions. Discovery is
+    // cancellation-aware without changing that legacy allowance; demanded associated analysis
+    // charges every observed discovery visit to its shared proof ledger before further growth.
+    let mut associated_present = false;
+    let mut discovery_visits = 0_usize;
+    'discovery: for interface in interfaces.values() {
+        for object in interface.type_objects.values() {
+            associated.checkpoint()?;
+            discovery_visits = discovery_visits.checked_add(1).ok_or_else(|| {
+                package_error(
+                    DiagnosticClass::Resource,
+                    "package_transport_associated_work",
+                    "associated discovery count overflow",
+                )
+            })?;
+            if object.form.is_associated() {
+                associated_present = true;
+                break 'discovery;
+            }
+        }
+        for owner in interface.owners.values() {
+            associated.checkpoint()?;
+            discovery_visits = discovery_visits.checked_add(1).ok_or_else(|| {
+                package_error(
+                    DiagnosticClass::Resource,
+                    "package_transport_associated_work",
+                    "associated discovery count overflow",
+                )
+            })?;
+            let present = match &owner.record {
+                PackageInterfaceRecord::Declaration(declaration) => match &declaration.payload {
+                    PackageInterfaceDeclarationPayload::OwnedContract(contract) => {
+                        !contract.associated_types.is_empty()
+                    }
+                    PackageInterfaceDeclarationPayload::OwnedImplementation(implementation) => {
+                        !implementation.associated_types.is_empty()
+                    }
+                    _ => false,
+                },
+                _ => false,
+            };
+            if present {
+                associated_present = true;
+                break 'discovery;
+            }
+        }
+    }
+    if associated_present {
+        associated.charge(discovery_visits)?;
+    }
     for (digest, revision) in revisions {
         let interface = interfaces.get(digest).ok_or_else(|| {
             package_error(
@@ -998,6 +1052,9 @@ fn validate_interface_dependencies(
                 "validated package closure lost one package-interface result",
             )
         })?;
+        if associated_present {
+            closure.validate_associated_occurrences(revision, interface, &mut associated)?;
+        }
         for ty in interface.type_objects.values() {
             if revision.graph_contract_version < 25
                 && matches!(ty.form, TypeForm::OwnedSequence { .. })
@@ -1097,9 +1154,17 @@ fn validate_interface_dependencies(
                                             "borrowed method source position is absent",
                                         )
                                     })?;
-                                if !closure.owned_type(revision, source.ty)?
-                                    || !closure.owned_type(revision, method.result)?
-                                {
+                                if !closure.owned_type_at(
+                                    revision,
+                                    owner.owner(),
+                                    source.ty,
+                                    &mut associated,
+                                )? || !closure.owned_type_at(
+                                    revision,
+                                    owner.owner(),
+                                    method.result,
+                                    &mut associated,
+                                )? {
                                     return Err(package_error(
                                         DiagnosticClass::Semantic,
                                         "package_transport_interface_borrow_result",
@@ -1138,9 +1203,17 @@ fn validate_interface_dependencies(
                                     "borrowed function source parameter is absent",
                                 )
                             })?;
-                        if !closure.owned_type(revision, source.ty)?
-                            || !closure.owned_type(revision, signature.result)?
-                        {
+                        if !closure.owned_type_at(
+                            revision,
+                            source.header.owner,
+                            source.ty,
+                            &mut associated,
+                        )? || !closure.owned_type_at(
+                            revision,
+                            owner.owner(),
+                            signature.result,
+                            &mut associated,
+                        )? {
                             return Err(package_error(
                                 DiagnosticClass::Semantic,
                                 "package_transport_interface_borrow_result",
@@ -1271,15 +1344,236 @@ pub(crate) fn validate_package_interface_closure(
     revisions: &BTreeMap<PackageRevisionDigest, PackageRevision>,
     interfaces: &BTreeMap<PackageRevisionDigest, PackageInterfaceValidation>,
 ) -> Result<(), Diagnostic> {
-    validate_interface_dependencies(revisions, interfaces)
+    // This legacy structural entry has no caller allowance. The new associated proof still
+    // enforces its own finite work/storage bound; metered transport admission shares visits.
+    validate_interface_dependencies(revisions, interfaces, &mut |_| Ok(()))
 }
 
 struct PackageInterfaceClosure<'a> {
     packages: BTreeMap<PackageId, PackageRevisionDigest>,
     interfaces: &'a BTreeMap<PackageRevisionDigest, PackageInterfaceValidation>,
+    revisions: &'a BTreeMap<PackageRevisionDigest, PackageRevision>,
 }
 
 impl<'a> PackageInterfaceClosure<'a> {
+    fn associated_owner(
+        &self,
+        source: &PackageRevision,
+        reference: crate::platform::kernel::DeclarationReference,
+    ) -> Result<&'a crate::platform::package_interface::PackageInterfaceOwner, Diagnostic> {
+        let version = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+        if source.revision.graph_contract_version != version {
+            return Err(associated_transport_error(
+                "associated consuming semantic revision requires exact Graph33",
+            ));
+        }
+        let target_digest = if reference.package == source.package {
+            self.packages
+                .get(&source.package)
+                .copied()
+                .ok_or_else(|| associated_transport_error("associated source revision is absent"))?
+        } else {
+            let dependency = source
+                .dependencies
+                .binary_search_by_key(&reference.package, |dependency| dependency.package)
+                .ok()
+                .map(|index| &source.dependencies[index])
+                .ok_or_else(|| {
+                    associated_transport_error(
+                        "associated contract is outside the authored direct dependencies",
+                    )
+                })?;
+            dependency.package_revision
+        };
+        let target = self
+            .revisions
+            .get(&target_digest)
+            .ok_or_else(|| associated_transport_error("associated selected revision is absent"))?;
+        if target.package != reference.package || target.revision.graph_contract_version != version
+        {
+            return Err(associated_transport_error(
+                "associated selected declaration semantic revision requires exact Graph33",
+            ));
+        }
+        self.require_owner(
+            source,
+            reference.package,
+            OwnerKey::Declaration(reference.declaration),
+            &[OwnerKind::OwnedContract],
+            "associated contract authority",
+        )
+    }
+
+    /// Complete descriptive occurrence/binding proof. Executable canonical source is still
+    /// independently admitted by source::admit, and the blanket feature gates stay closed.
+    fn validate_associated_occurrences(
+        &self,
+        revision: &PackageRevision,
+        interface: &'a PackageInterfaceValidation,
+        admission: &mut crate::platform::package_interface::AssociatedInterfaceAdmission<'_>,
+    ) -> Result<(), Diagnostic> {
+        // Avoid new traversals for feature-free interfaces. An implementation whose foreign
+        // contract has members is checked below even if its own omitted inventory is empty.
+        let mut projected = false;
+        for object in interface.type_objects.values() {
+            admission.step()?;
+            if object.form.is_associated() {
+                projected = true;
+                break;
+            }
+        }
+        for (key, owner) in &interface.owners {
+            admission.step()?;
+            let mut resolve = |reference| self.associated_owner(revision, reference).map(Some);
+            if let PackageInterfaceRecord::Declaration(declaration) = &owner.record {
+                match &declaration.payload {
+                    PackageInterfaceDeclarationPayload::OwnedContract(contract) => {
+                        for member in &contract.associated_types {
+                            admission.validate_form(revision.package, *key,
+                                &TypeForm::AssociatedContractMember {
+                                    contract: crate::platform::kernel::DeclarationReference { package: revision.package, declaration: match key { OwnerKey::Declaration(id) => *id, _ => return Err(associated_transport_error("associated contract has a foreign identity kind")) } },
+                                    member: member.id,
+                                }, &interface.owners, &interface.type_objects, &mut resolve)?;
+                        }
+                        if !contract.associated_types.is_empty()
+                            && revision.revision.graph_contract_version
+                                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+                        {
+                            return Err(associated_transport_error(
+                                "associated contract revision requires exact Graph33",
+                            ));
+                        }
+                    }
+                    PackageInterfaceDeclarationPayload::OwnedImplementation(implementation) => {
+                        let target = self.require_owner(
+                            revision,
+                            implementation.contract.package,
+                            OwnerKey::Declaration(implementation.contract.declaration),
+                            &[OwnerKind::OwnedContract],
+                            "associated binding contract",
+                        )?;
+                        let PackageInterfaceRecord::Declaration(contract) = &target.record else {
+                            return Err(associated_transport_error(
+                                "associated binding contract requires public declaration authority",
+                            ));
+                        };
+                        let PackageInterfaceDeclarationPayload::OwnedContract(contract) =
+                            &contract.payload
+                        else {
+                            return Err(associated_transport_error(
+                                "associated binding target is not an OwnedContract",
+                            ));
+                        };
+                        if !implementation.associated_types.is_empty()
+                            || !contract.associated_types.is_empty()
+                        {
+                            self.associated_owner(revision, implementation.contract)?;
+                            admission.current(owner, *key)?;
+                            admission.current(
+                                target,
+                                OwnerKey::Declaration(implementation.contract.declaration),
+                            )?;
+                            if implementation.associated_types.len()
+                                != contract.associated_types.len()
+                            {
+                                return Err(associated_transport_error(
+                                    "associated bindings do not cover the complete contract inventory",
+                                ));
+                            }
+                            let mut previous = None;
+                            for binding in &implementation.associated_types {
+                                admission.step()?;
+                                if previous.is_some_and(|member| member >= binding.member) {
+                                    return Err(associated_transport_error(
+                                        "associated bindings are not in strict member-ID order",
+                                    ));
+                                }
+                                previous = Some(binding.member);
+                                let mut found = false;
+                                for member in &contract.associated_types {
+                                    admission.step()?;
+                                    found |= member.id == binding.member;
+                                }
+                                if !found {
+                                    return Err(associated_transport_error(
+                                        "binding names no exact contract member",
+                                    ));
+                                }
+                                if admission.validate_occurrences(
+                                    revision.package,
+                                    *key,
+                                    &[binding.ty],
+                                    true,
+                                    &interface.owners,
+                                    &interface.type_objects,
+                                    &mut resolve,
+                                )? {
+                                    return Err(associated_transport_error(
+                                        "stored binding cannot retain a deferred projection",
+                                    ));
+                                }
+                                if !self.owned_type(revision, binding.ty)? {
+                                    return Err(associated_transport_error(
+                                        "associated binding RHS lacks an Owned bound",
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            if projected {
+                admission.reserve_roots(owner)?;
+                let roots = owner.type_roots();
+                if admission.validate_occurrences(
+                    revision.package,
+                    *key,
+                    &roots,
+                    false,
+                    &interface.owners,
+                    &interface.type_objects,
+                    &mut resolve,
+                )? {
+                    return Err(associated_transport_error(
+                        "exact interface closure left foreign member authority unresolved",
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn owned_type_at(
+        &self,
+        source: &PackageRevision,
+        owner: OwnerKey,
+        ty: crate::platform::kernel::TypeObjectDigest,
+        admission: &mut crate::platform::package_interface::AssociatedInterfaceAdmission<'_>,
+    ) -> Result<bool, Diagnostic> {
+        let interface = self
+            .packages
+            .get(&source.package)
+            .and_then(|digest| self.interfaces.get(digest))
+            .ok_or_else(|| associated_transport_error("associated source interface is absent"))?;
+        let object = interface
+            .type_objects
+            .get(&ty)
+            .ok_or_else(|| associated_transport_error("associated signature type is absent"))?;
+        if !object.form.is_associated() {
+            return self.owned_type(source, ty);
+        }
+        let mut resolve = |reference| self.associated_owner(source, reference).map(Some);
+        Ok(admission.validate_form(
+            source.package,
+            owner,
+            &object.form,
+            &interface.owners,
+            &interface.type_objects,
+            &mut resolve,
+        )? == crate::platform::package_interface::AssociatedInterfaceProof::Owned)
+    }
+
     fn owned_type(
         &self,
         source: &PackageRevision,
@@ -1398,6 +1692,14 @@ impl<'a> PackageInterfaceClosure<'a> {
         }
         Ok(value)
     }
+}
+
+fn associated_transport_error(message: &str) -> Diagnostic {
+    package_error(
+        DiagnosticClass::Semantic,
+        "package_transport_associated_authority",
+        message,
+    )
 }
 
 fn reject_dependency_cycle(

@@ -224,6 +224,29 @@ fn associated_memory_closure_checks_imported_selection_and_owner_authority() {
         PackageInterfaceRecord::Parameter(imported_parameter.clone()),
     );
     Resolver::new(&f.source).admit_canonical_closure().unwrap();
+    assert!(accepts(&f.source));
+    let mut older_encoding = f.source.clone();
+    let mut older_selection = selection.clone();
+    older_selection.graph_contract_version = 32;
+    let (digest, bytes) = encode_dependency(&older_selection).unwrap();
+    let decoded = decode_dependency(&bytes, &package, digest).unwrap();
+    assert_eq!(decoded, older_selection);
+    older_encoding.dependencies.insert(package, decoded);
+    // This is a supported selection encoding for the same exact interface;
+    // current foreign owners retain their own associated feature allowance.
+    Resolver::new(&older_encoding)
+        .admit_canonical_closure()
+        .unwrap();
+    assert!(accepts(&older_encoding));
+    let mut unsupported_encoding = f.source.clone();
+    unsupported_encoding
+        .dependencies
+        .get_mut(&package)
+        .unwrap()
+        .graph_contract_version = 34;
+    // Encoding validity is a whole-oracle boundary, not a supplier-generation
+    // allowance inferred by the associated occurrence resolver.
+    assert!(!accepts(&unsupported_encoding));
     let mut orphan = f.source.clone();
     let orphan_id = ParameterId::migrate(SEED, 91);
     let mut orphan_parameter = imported_parameter;
@@ -238,17 +261,7 @@ fn associated_memory_closure_checks_imported_selection_and_owner_authority() {
         Err(Failure::Authority)
     );
     for generation in [32, 34] {
-        let mut old_selection = f.source.clone();
-        old_selection
-            .dependencies
-            .get_mut(&package)
-            .unwrap()
-            .graph_contract_version = generation;
-        assert_eq!(
-            Resolver::new(&old_selection).admit_canonical_closure(),
-            Err(Failure::Generation)
-        );
-        let mut old_owner = f.source.clone();
+        let mut old_owner = older_encoding.clone();
         let records =
             std::sync::Arc::make_mut(old_owner.dependency_interfaces.get_mut(&revision).unwrap());
         let Some(PackageInterfaceRecord::Declaration(d)) =
@@ -261,6 +274,7 @@ fn associated_memory_closure_checks_imported_selection_and_owner_authority() {
             Resolver::new(&old_owner).admit_canonical_closure(),
             Err(Failure::Generation)
         );
+        assert!(!accepts(&old_owner));
     }
     let mut property_only = f.source.clone();
     property_only.dependencies.remove(&package);
@@ -271,6 +285,7 @@ fn associated_memory_closure_checks_imported_selection_and_owner_authority() {
         Resolver::new(&property_only).admit_canonical_closure(),
         Err(Failure::Authority)
     );
+    assert!(!accepts(&property_only));
 }
 
 #[test]

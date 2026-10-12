@@ -1,0 +1,18 @@
+declarations.begin
+(units
+  (module create associated-parallel-negative
+    (function create unresolved (visibility private) (effect (task))
+      (type-parameter create S (constraint owned))
+      (implementation-parameter implparam_c9000000000000000000000000000003 selected associated-parallel-consumer::Take S)
+      (parameter create block
+        (type (associated-witness-projection unresolved implparam_c9000000000000000000000000000003
+          associated-parallel-consumer::Take assoc_type_c9000000000000000000000000000001)) (use borrow))
+      (returns (record (left I64) (right I64)))
+      (body (parallel
+        (implementation-call associated-parallel-consumer::inspect (types S)
+          (implementations parameter@unresolved@implparam_c9000000000000000000000000000003)
+          (bool false) (i64 0) (local block))
+        (implementation-call associated-parallel-consumer::inspect (types S)
+          (implementations parameter@unresolved@implparam_c9000000000000000000000000000003)
+          (bool false) (i64 0) (local block)))))))
+declarations.end

@@ -34,6 +34,7 @@ declarations.begin
         work owned-worklists::Worklist W (types OwnedI64Cell))
       (implementation-parameter implparam_a3000000000000000000000000000001 ints indexed-data::IndexedData Ints (types I64))
       (implementation-parameter implparam_a3000000000000000000000000000002 flags indexed-data::IndexedData Flags (types Bool))
+      (implementation-parameter implparam_a5000000000000000000000000000005 reader indexed-data::BlockRead Ints (types I64))
       (parameter create proposal (type Proposal)) (returns Outcome)
       (body (match (implementation-call dependency-components::analyze (types W)
         (implementations parameter@analyze-with-storage@implparam_a3000000000000000000000000000003)
@@ -49,7 +50,8 @@ declarations.begin
               (field (local proposal) (name nodes)) (local components)))
             (binding traversal (type Traversal) (implementation-call plan-stages::assign-with-storage (types Ints Flags)
               (implementations parameter@analyze-with-storage@implparam_a3000000000000000000000000000001
-                parameter@analyze-with-storage@implparam_a3000000000000000000000000000002)
+                parameter@analyze-with-storage@implparam_a3000000000000000000000000000002
+              parameter@analyze-with-storage@implparam_a5000000000000000000000000000005)
               (call std::list-length (types Component) (local components))
               (field (local graph) (name dependents)) (field (local graph) (name remaining))))
             (in (if (field (local traversal) (name complete))
@@ -70,7 +72,8 @@ declarations.begin
         (types W (owned-sequence I64) (owned-sequence Bool))
         (implementations parameter@analyze@implparam_ca030000000000000000000000000001
           (implementation indexed-flat::Flat (types I64))
-          (implementation indexed-flat::Flat (types Bool))) (local proposal))))
+          (implementation indexed-flat::Flat (types Bool))
+              (implementation indexed-flat::Blocks (types I64))) (local proposal))))
     (function create flat (visibility public) (effect pure)
       (parameter create proposal (type Proposal)) (returns Outcome)
       (body (implementation-call analyze (types Flat)
@@ -85,28 +88,32 @@ declarations.begin
         (types Flat (owned-sequence I64) (owned-sequence Bool))
         (implementations concrete@worklist-carriers::FlatCells
           (implementation indexed-flat::Flat (types I64))
-          (implementation indexed-flat::Flat (types Bool))) (local proposal))))
+          (implementation indexed-flat::Flat (types Bool))
+              (implementation indexed-flat::Blocks (types I64))) (local proposal))))
     (function create storage-flat-chunked (visibility public) (effect pure)
       (parameter create proposal (type Proposal)) (returns Outcome)
       (body (implementation-call analyze-with-storage
         (types Flat (owned-sequence I64) (indexed-chunked::Chunk32 Bool))
         (implementations concrete@worklist-carriers::FlatCells
           (implementation indexed-flat::Flat (types I64))
-          (implementation indexed-chunked::Chunked (types Bool))) (local proposal))))
+          (implementation indexed-chunked::Chunked (types Bool))
+              (implementation indexed-flat::Blocks (types I64))) (local proposal))))
     (function create storage-chunked-flat (visibility public) (effect pure)
       (parameter create proposal (type Proposal)) (returns Outcome)
       (body (implementation-call analyze-with-storage
         (types Flat (indexed-chunked::Chunk32 I64) (owned-sequence Bool))
         (implementations concrete@worklist-carriers::FlatCells
           (implementation indexed-chunked::Chunked (types I64))
-          (implementation indexed-flat::Flat (types Bool))) (local proposal))))
+          (implementation indexed-flat::Flat (types Bool))
+              (implementation indexed-chunked::Blocks (types I64))) (local proposal))))
     (function create storage-chunked-chunked (visibility public) (effect pure)
       (parameter create proposal (type Proposal)) (returns Outcome)
       (body (implementation-call analyze-with-storage
         (types Flat (indexed-chunked::Chunk32 I64) (indexed-chunked::Chunk32 Bool))
         (implementations concrete@worklist-carriers::FlatCells
           (implementation indexed-chunked::Chunked (types I64))
-          (implementation indexed-chunked::Chunked (types Bool))) (local proposal))))
+          (implementation indexed-chunked::Chunked (types Bool))
+              (implementation indexed-chunked::Blocks (types I64))) (local proposal))))
     (function create example (visibility private) (effect pure) (returns Proposal)
       (body (record structural (field roots (list I64 (i64 10)))
         (field nodes (list Node

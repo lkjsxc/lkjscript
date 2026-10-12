@@ -227,6 +227,7 @@ fn historical_generations_18_through_24_keep_original_commitment_goldens() {
     );
     assert_golden(
         AuthoredChange::SetOwnedContract {
+            associated_types: Vec::new(),
             declaration: declaration(),
             type_parameters: Vec::new(),
             self_type: AuthoredType::TypeParameter {

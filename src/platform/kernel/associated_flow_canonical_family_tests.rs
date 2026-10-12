@@ -1200,3 +1200,262 @@ fn canonical_mixed_member_ordinary_mutual_cycles_match_independent_decisions() {
     }
     assert_bad_projection_scope(&mutual(Binding::Alias, false, false));
 }
+
+// The discarded function value is the sole f -> g edge. The existing mutual
+// fixture supplies only g -> f; replace its f -> g call instead of adding a
+// second route that could conceal missed function-value demand.
+fn discarded_function_value(binding: Binding) -> Family {
+    let mut family = mutual(binding, false, false);
+    let relay = family.relay.unwrap();
+    let OwnerRecord::Declaration(record) = family
+        .common
+        .source
+        .owners
+        .get_mut(&OwnerKey::Declaration(relay.declaration))
+        .unwrap()
+    else {
+        unreachable!()
+    };
+    let DeclarationPayload::Function(function) = &mut record.payload else {
+        unreachable!()
+    };
+    // FunctionValue cannot carry lexical implementation parameters. The relay
+    // already reconstructs a closed Plain operand from its ordinary actuals.
+    function.implementation_parameters.clear();
+    family
+        .witness_inventories
+        .retain(|(scope, _)| *scope != relay);
+    let OwnerRecord::Expression(record) = family
+        .common
+        .source
+        .owners
+        .get_mut(&OwnerKey::Expression(family.expression))
+        .unwrap()
+    else {
+        unreachable!()
+    };
+    let ExpressionOperation::ImplementationCall {
+        function,
+        type_arguments,
+        ..
+    } = record.operation.clone()
+    else {
+        unreachable!()
+    };
+    assert_eq!(function, relay);
+    record.operation = ExpressionOperation::FunctionValue {
+        function,
+        type_arguments,
+        effect_arguments: vec![],
+        requirement_arguments: vec![],
+    };
+    let unit = expression(
+        &mut family.common.source,
+        1101,
+        ExpressionOperation::Unit {},
+    );
+    let body = expression(
+        &mut family.common.source,
+        1102,
+        ExpressionOperation::Sequence {
+            items: vec![family.expression, unit],
+        },
+    );
+    let OwnerRecord::Declaration(record) = family
+        .common
+        .source
+        .owners
+        .get_mut(&OwnerKey::Declaration(family.function.declaration))
+        .unwrap()
+    else {
+        unreachable!()
+    };
+    let DeclarationPayload::Function(function) = &mut record.payload else {
+        unreachable!()
+    };
+    function.body = body;
+    family
+}
+
+// The entry remains Noop<Cell>. The unused Relay mapping and its generic target
+// still form a complete-source cycle: g<Self,U> -> Relay<Plain<Self,U>>.step
+// -> g<Self,Reader.Out>. The mapping supplies the only return edge and the only
+// associated output actual; no direct recursive function call exists.
+fn unused_mapping(binding: Binding) -> Family {
+    let mut common = common(binding);
+    let relay_contract = reference(&common.source, 120);
+    let wrapper = reference(&common.source, 121);
+    let relay = reference(&common.source, 122);
+    let noop = reference(&common.source, 102);
+    let (contract_self, _) = formal(&mut common.source, relay_contract, 1200);
+    let (wrapper_self, wrapper_self_ty) = formal(&mut common.source, wrapper, 1210);
+    let (relay_self, relay_self_ty) = formal(&mut common.source, relay, 1220);
+    let (relay_u, relay_u_ty) = formal(&mut common.source, relay, 1221);
+    declaration(
+        &mut common.source,
+        120,
+        DeclarationPayload::OwnedContract(OwnedContract {
+            self_parameter: contract_self,
+            type_parameters: vec![],
+            methods: vec![OwnedMethod {
+                id: common.method,
+                name: name("step"),
+                parameters: vec![],
+                result: common.unit,
+                result_borrow: None,
+                effect: FunctionEffect::Pure,
+            }],
+            associated_types: vec![],
+        }),
+    );
+    let reader = witness(1210, common.contract, wrapper_self_ty);
+    let output = projection(&mut common, wrapper, reader.id);
+    declaration(
+        &mut common.source,
+        121,
+        DeclarationPayload::OwnedImplementation(OwnedImplementation {
+            type_parameters: vec![wrapper_self],
+            implementation_parameters: vec![reader.clone()],
+            contract: relay_contract,
+            self_type: wrapper_self_ty,
+            type_arguments: vec![],
+            methods: vec![OwnedMethodImplementation {
+                method: common.method,
+                function: relay,
+                type_arguments: vec![wrapper_self_ty, output],
+                implementations: vec![],
+            }],
+            associated_types: vec![],
+        }),
+    );
+    let selected_reader = leaf(&common, relay_self_ty, relay_u_ty);
+    let body = expression(
+        &mut common.source,
+        1220,
+        ExpressionOperation::MethodCall {
+            witness: ImplementationOperand::Concrete {
+                implementation: wrapper,
+                type_arguments: vec![relay_self_ty],
+                implementations: vec![selected_reader],
+            },
+            contract: relay_contract,
+            method: common.method,
+            arguments: vec![],
+        },
+    );
+    function(
+        &mut common.source,
+        122,
+        vec![relay_self, relay_u],
+        vec![],
+        common.unit,
+        body,
+    );
+    let entry = CanonicalEntry {
+        function: noop,
+        arguments: vec![common.cell],
+        implementations: vec![],
+    };
+    Family {
+        common,
+        entry,
+        function: noop,
+        relay: Some(relay),
+        wrapper: Some(wrapper),
+        projection: output,
+        expression: body,
+        witness_inventories: vec![(wrapper, vec![reader.id])],
+    }
+}
+
+#[test]
+fn canonical_discarded_function_value_is_the_decisive_associated_growth_edge() {
+    for (binding, finite) in [(Binding::Alias, true), (Binding::Sequence, false)] {
+        let mut family = discarded_function_value(binding);
+        let program = read(&family);
+        let from = program.definition(family.function).unwrap();
+        let relay = program.definition(family.relay.unwrap()).unwrap();
+        let calls = &program.program.functions[&from].calls;
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].kind, model::CallKind::FunctionValue);
+        assert_eq!(calls[0].target, relay);
+        assert!(matches!(
+            calls[0].arguments[1],
+            model::Term::Projection { .. }
+        ));
+        let returns = &program.program.functions[&relay].calls;
+        assert_eq!(returns.len(), 1);
+        assert_eq!(returns[0].kind, model::CallKind::Function);
+        assert_eq!(returns[0].target, from);
+        assert_decision(&family, &program, finite);
+
+        // Removing only the discarded value removes the cycle. A missed value
+        // must therefore change the expanding verdict, rather than be masked.
+        let OwnerRecord::Expression(record) = family
+            .common
+            .source
+            .owners
+            .get_mut(&OwnerKey::Expression(family.expression))
+            .unwrap()
+        else {
+            unreachable!()
+        };
+        record.operation = ExpressionOperation::Unit {};
+        let control = read(&family);
+        assert!(control.program.functions[&from].calls.is_empty());
+        assert_decision(&family, &control, true);
+    }
+}
+
+#[test]
+fn canonical_unused_method_mapping_is_the_decisive_associated_growth_edge() {
+    for (binding, finite) in [(Binding::Alias, true), (Binding::Sequence, false)] {
+        let mut family = unused_mapping(binding);
+        let program = read(&family);
+        let wrapper = family.wrapper.unwrap();
+        let mapping = *program
+            .definitions
+            .iter()
+            .find_map(|(id, identity)| {
+                (*identity == DefinitionIdentity::MethodMapping(wrapper, family.common.method))
+                    .then_some(id)
+            })
+            .unwrap();
+        let relay = program.definition(family.relay.unwrap()).unwrap();
+        let calls = &program.program.functions[&mapping].calls;
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].kind, model::CallKind::UnusedMapping);
+        assert_eq!(calls[0].target, relay);
+        assert!(matches!(
+            calls[0].arguments[1],
+            model::Term::Projection { .. }
+        ));
+        let returns = &program.program.functions[&relay].calls;
+        assert_eq!(returns.len(), 1);
+        assert_eq!(returns[0].kind, model::CallKind::Function);
+        assert_eq!(returns[0].target, mapping);
+        let entry = program.program.entries[0].clone();
+        assert!(program.program.functions[&entry.function].calls.is_empty());
+        // Even the expanding program has a one-state executable entry closure.
+        // Its unrelated finite prefix cannot discharge complete source growth.
+        assert_closure(&program, BTreeSet::from([entry]), 1);
+        assert_decision(&family, &program, finite);
+
+        // Keep the mapping and method cycle, but reset its output actual to a
+        // constant. This removes only the binding-dependent positive recurrence.
+        let OwnerRecord::Declaration(record) = family
+            .common
+            .source
+            .owners
+            .get_mut(&OwnerKey::Declaration(wrapper.declaration))
+            .unwrap()
+        else {
+            unreachable!()
+        };
+        let DeclarationPayload::OwnedImplementation(implementation) = &mut record.payload else {
+            unreachable!()
+        };
+        implementation.methods[0].type_arguments[1] = family.common.cell;
+        assert_decision(&family, &read(&family), true);
+    }
+}

@@ -10,6 +10,10 @@ use crate::platform::publication::{RepositoryDefinitionReader, RepositoryView};
 #[path = "sequence_reentry_tests.rs"]
 mod sequence_reentry_tests;
 
+#[cfg(test)]
+#[path = "associated_readback_tests.rs"]
+mod associated_readback_tests;
+
 pub(super) struct Reader<'a> {
     pub view: &'a RepositoryView,
     pub reader: RepositoryDefinitionReader<'a>,
@@ -21,6 +25,8 @@ pub(super) struct Reader<'a> {
     remaining_type_nodes: u64,
     control: ExecutionControl,
     intent_reads: Option<AuthoredReadFootprint>,
+    #[cfg(test)]
+    raw_lowered_candidate_types: BTreeMap<TypeObjectDigest, k::TypeObject>,
 }
 
 pub(super) fn error(message: impl Into<String>) -> Diagnostic {
@@ -40,7 +46,23 @@ impl<'a> Reader<'a> {
             remaining_type_nodes: crate::platform::change::MAXIMUM_CHANGE_AUTHORED_TYPE_NODES,
             control,
             intent_reads: None,
+            #[cfg(test)]
+            raw_lowered_candidate_types: BTreeMap::new(),
         }
+    }
+
+    /// Helper evidence only: this does not admit the candidate or change its bound view.
+    #[cfg(test)]
+    pub fn for_raw_lowered_candidate(
+        view: &'a RepositoryView,
+        control: ExecutionControl,
+        owners: BTreeMap<OwnerKey, OwnerRecord>,
+        types: BTreeMap<TypeObjectDigest, k::TypeObject>,
+    ) -> Self {
+        let mut reader = Self::new(view, control);
+        reader.owners = owners;
+        reader.raw_lowered_candidate_types = types;
+        reader
     }
 
     pub fn for_intent(view: &'a RepositoryView, control: ExecutionControl) -> Self {
@@ -187,16 +209,26 @@ impl<'a> Reader<'a> {
             return Ok(ty.clone());
         }
         let object = self
-            .reader
-            .type_object(digest)?
+            .read_type_object(digest)?
             .ok_or_else(|| error("canonical type object is absent"))?;
         let ty = match object.form {
-            TypeForm::AssociatedContractMember { .. }
-            | TypeForm::AssociatedWitnessProjection { .. } => {
-                return Err(
-                    crate::platform::kernel::owned_associated_wire::unsupported_semantics(),
-                );
+            TypeForm::AssociatedContractMember { contract, member } => {
+                AuthoredType::AssociatedContractMember {
+                    contract: declaration(contract),
+                    member,
+                }
             }
+            TypeForm::AssociatedWitnessProjection {
+                scope,
+                parameter,
+                contract,
+                member,
+            } => AuthoredType::AssociatedWitnessProjection {
+                scope: declaration(scope),
+                parameter,
+                contract: declaration(contract),
+                member,
+            },
             TypeForm::Unit => AuthoredType::Unit {},
             TypeForm::Bool => AuthoredType::Bool {},
             TypeForm::I64 => AuthoredType::I64 {},
@@ -304,6 +336,17 @@ impl<'a> Reader<'a> {
         Ok(ty)
     }
 
+    fn read_type_object(
+        &mut self,
+        digest: TypeObjectDigest,
+    ) -> Result<Option<k::TypeObject>, Diagnostic> {
+        #[cfg(test)]
+        if let Some(object) = self.raw_lowered_candidate_types.get(&digest) {
+            return Ok(Some(object.clone()));
+        }
+        self.reader.type_object(digest)
+    }
+
     fn text(&mut self, text: k::TextValue) -> Result<String, Diagnostic> {
         match text {
             k::TextValue::Inline { text } => Ok(text),
@@ -324,6 +367,76 @@ impl<'a> Reader<'a> {
             OwnerRecord::Binding(record) => Ok(record),
             _ => Err(error("binding identity names another owner kind")),
         }
+    }
+
+    pub fn associated_members(
+        &mut self,
+        members: &[k::AssociatedTypeMember],
+    ) -> Result<Vec<AuthoredAssociatedTypeMember>, Diagnostic> {
+        self.admit_associated_inventory(members.len())?;
+        let mut result = Vec::new();
+        result.try_reserve_exact(members.len()).map_err(|_| {
+            Diagnostic::new(
+                DiagnosticClass::Resource,
+                "change_draft_capacity",
+                "associated member allocation exhausted",
+            )
+        })?;
+        for member in members {
+            self.check()?;
+            result.push(AuthoredAssociatedTypeMember {
+                id: member.id,
+                name: member.name.clone(),
+                bound: member.bound,
+            });
+        }
+        Ok(result)
+    }
+
+    pub fn associated_bindings(
+        &mut self,
+        bindings: &[k::AssociatedTypeBinding],
+    ) -> Result<Vec<AuthoredAssociatedTypeBinding>, Diagnostic> {
+        self.admit_associated_inventory(bindings.len())?;
+        let mut result = Vec::new();
+        result.try_reserve_exact(bindings.len()).map_err(|_| {
+            Diagnostic::new(
+                DiagnosticClass::Resource,
+                "change_draft_capacity",
+                "associated binding allocation exhausted",
+            )
+        })?;
+        for binding in bindings {
+            result.push(AuthoredAssociatedTypeBinding {
+                member: binding.member,
+                ty: self.ty(binding.ty)?,
+            });
+        }
+        Ok(result)
+    }
+
+    fn admit_associated_inventory(&mut self, count: usize) -> Result<(), Diagnostic> {
+        self.check()?;
+        if count > k::contract::MAXIMUM_CHILDREN {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Resource,
+                "change_draft_capacity",
+                "associated inventory exceeds the canonical child limit",
+            ));
+        }
+        let count =
+            u64::try_from(count).map_err(|_| error("associated inventory count overflow"))?;
+        self.remaining_type_nodes =
+            self.remaining_type_nodes
+                .checked_sub(count)
+                .ok_or_else(|| {
+                    Diagnostic::new(
+                        DiagnosticClass::Resource,
+                        "change_draft_capacity",
+                        "associated inventory exceeds complete draft admission",
+                    )
+                })?;
+        Ok(())
     }
 
     pub fn expression(&mut self, id: ExpressionId) -> Result<AuthoredExpression, Diagnostic> {

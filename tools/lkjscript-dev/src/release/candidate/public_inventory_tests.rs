@@ -21,6 +21,7 @@ pub(super) fn listing() -> String {
         "native_declarations::incremental_units::new_port_type_failure_preserves_authority_and_cache_then_recovers: test",
         "native_declarations::incremental_units::native_package_planner_rebuilds_exactly_and_runs_checked_plan_after_source_deletion: test",
         "native_declarations::incremental_units::native_package_planner_compiles_independently_authored_diamond_and_detached_results: test",
+        "native_declarations::native_associated_blockread::native_associated_blockread_consumer_first_four_literals_three_targets_and_detached_bytes: test",
         "unrelated_test: test",
     ]
     .join("\n")
@@ -50,8 +51,8 @@ pub(super) fn success(inventory: &Inventory) -> String {
 #[test]
 fn all_required_families_and_exact_topology_are_selected_without_unrelated_cases() {
     let inventory = inventory(&listing()).unwrap();
-    assert_eq!(inventory.all.len(), 38);
-    assert_eq!(inventory.selected.len(), 37);
+    assert_eq!(inventory.all.len(), 39);
+    assert_eq!(inventory.selected.len(), 38);
     assert!(!inventory.selected.contains("unrelated_test"));
     passed(&success(&inventory), &inventory).unwrap();
 }
@@ -121,7 +122,7 @@ fn required_parallel_namespaces_accept_nested_paths_and_reject_substring_imposto
         "native_declarations::native_parallel_reads::nested::native_parallel_reads_scoped",
     );
     let inventory = inventory(&nested).unwrap();
-    assert_eq!(inventory.selected.len(), 37);
+    assert_eq!(inventory.selected.len(), 38);
     passed(&success(&inventory), &inventory).unwrap();
 }
 
@@ -149,19 +150,19 @@ fn a_successful_exit_or_summary_cannot_hide_unrun_ignored_or_duplicate_tests() {
     let inventory = inventory(&listing()).unwrap();
     let original = success(&inventory);
     for changed in [
-        original.replace("37 passed", "7 passed"),
+        original.replace("38 passed", "7 passed"),
         original.replace("0 ignored", "1 ignored"),
         original.replace("0 failed", "1 failed"),
         original.replace("0 measured", "1 measured"),
         original.replace("1 filtered out", "2 filtered out"),
-        original.replace("running 37 tests", "running 0 tests"),
+        original.replace("running 38 tests", "running 0 tests"),
         original.replacen(" ... ok", " ... ignored", 1),
         original.replacen(" ... ok", " ... FAILED", 1),
         original.lines().filter(|line| !line.starts_with("test buffers::")).collect::<Vec<_>>().join("\n"),
         original.clone() + "test native_declarations::native_owned_products::parallel::native_parallel_joined ... ok\n",
         original.clone() + "test unrelated_test ... ok\n",
         original.clone() + &original,
-        "test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s\n".to_owned(),
+        "test result: ok. 38 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s\n".to_owned(),
     ] {
         assert!(passed(&changed, &inventory).is_err(), "accepted {changed}");
     }
@@ -214,5 +215,64 @@ fn cargo_output_must_bind_one_completed_source_matched_test_executable() {
         "not Cargo JSON".to_owned(),
     ] {
         assert!(cargo_harness(&output, root).is_err(), "accepted {output}");
+    }
+}
+
+#[test]
+fn completion_order_and_selected_long_running_notices_preserve_exact_outcomes() {
+    let inventory = inventory(&listing()).unwrap();
+    let names = inventory.selected.iter().collect::<Vec<_>>();
+    let mut output = format!("running {} tests\n", names.len());
+    output.push_str(&format!(
+        "test {} has been running for over 60 seconds\n",
+        names[0]
+    ));
+    for (index, name) in names.iter().rev().enumerate() {
+        output.push_str(&format!("test {name} ... ok\n"));
+        if index == 0 {
+            output.push_str(&format!(
+                "test {} has been running for over 60 seconds\n",
+                names[1]
+            ));
+        }
+    }
+    output.push_str(&format!(
+        "test result: ok. {} passed; 0 failed; 0 ignored; 0 measured; {} filtered out; finished in 65.00s\n",
+        names.len(), inventory.all.len() - names.len()
+    ));
+    passed(&output, &inventory).unwrap();
+}
+
+#[test]
+fn long_running_notices_never_replace_outcomes_or_grant_foreign_case_credit() {
+    let inventory = inventory(&listing()).unwrap();
+    let name = inventory.selected.first().unwrap();
+    let notice = format!("test {name} has been running for over 60 seconds\n");
+    let header = format!("running {} tests\n", inventory.selected.len());
+    let original = success(&inventory);
+    let missing = original.replace(&format!("test {name} ... ok\n"), "");
+    let valid_prefix = format!("{header}{notice}");
+    for changed in [
+        format!("{notice}{original}"),
+        original.replacen(&header, &format!("{valid_prefix}{notice}"), 1),
+        original.replacen(
+            &header,
+            &format!("{header}test unrelated_test has been running for over 60 seconds\n"),
+            1,
+        ),
+        original.replacen(
+            &format!("test {name} ... ok\n"),
+            &format!("test {name} ... ok\n{notice}"),
+            1,
+        ),
+        format!("{original}{notice}"),
+        missing.replacen(&header, &valid_prefix, 1),
+        original.replacen(
+            &header,
+            &format!("{header}{}", notice.replace("60 seconds", "61 seconds")),
+            1,
+        ),
+    ] {
+        assert!(passed(&changed, &inventory).is_err(), "accepted {changed}");
     }
 }

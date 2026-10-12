@@ -63,8 +63,9 @@ Remaining dependency counts, levels and ready positions use one generic owned
 storage type; visited flags use a separately selected owned storage type.
 `plan-stages::assign-with-storage<Ints, Flags>` requires exact
 `indexed-data::IndexedData<Ints, I64>` and
-`indexed-data::IndexedData<Flags, Bool>` witnesses. The generic traversal calls
-only those declared operations. The original `assign` and component-carrier
+`indexed-data::IndexedData<Flags, Bool>` witnesses. It also forwards an exact
+`indexed-data::BlockRead<Ints, I64>` Reader for stage materialization. The generic
+traversal calls only these declared operations. The original `assign` and component-carrier
 commands select flat storage by default.
 
 The four `storage-INTS-FLAGS` commands independently choose flat owned sequences or
@@ -77,6 +78,17 @@ immutable values; replacement explicitly returns the displaced scalar alongside
 the sequence owner. The final sparse levels map is materialized after traversal,
 with zero-level components omitted. Missing input counters mean zero, and unrelated
 map keys do not introduce components.
+
+Stage materialization now traverses blocks and their items in ascending global
+position order. A scoped borrowed-block call returns only an ordinary offset and
+levels map before advancing to the next block. Zero levels stay omitted. Flat
+integer storage selects `indexed-flat::Blocks<I64>`; Chunk32 integer storage
+selects `indexed-chunked::Blocks<I64>`. The integer/Boolean Flat/Chunk32 choices
+remain independent in all four commands. Random reads and updates retain their
+IndexedData witnesses; equality of storage types does not select a Reader.
+The maintained native planner's stage adoption has separate public author/build
+and attached/detached proof. Renewed execution of the complete public matrix below
+remains pending; [status](../../docs/status.md) binds the actual source and results.
 
 These stages describe graph precedence, not permission to run tasks concurrently.
 They establish neither disjoint memory/effects nor execution or publication grants.

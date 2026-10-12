@@ -12,8 +12,36 @@ pub(crate) fn render(
     maximum: usize,
     control: ExecutionControl,
 ) -> Result<Vec<u8>, Diagnostic> {
+    render_with_reader(view, selected, maximum, Reader::new(view, control))
+}
+
+/// Raw candidate helper evidence only. The view remains an ordinary admitted revision;
+/// neither this renderer nor its seeded Reader admits or publishes associated meaning.
+#[cfg(test)]
+pub(super) fn render_raw_lowered_candidate(
+    view: &RepositoryView,
+    selected: &[NativeDraftSelection],
+    maximum: usize,
+    control: ExecutionControl,
+    owners: BTreeMap<OwnerKey, O>,
+    types: BTreeMap<k::TypeObjectDigest, k::TypeObject>,
+) -> Result<Vec<u8>, Diagnostic> {
+    render_with_reader(
+        view,
+        selected,
+        maximum,
+        Reader::for_raw_lowered_candidate(view, control, owners, types),
+    )
+}
+
+fn render_with_reader(
+    view: &RepositoryView,
+    selected: &[NativeDraftSelection],
+    maximum: usize,
+    reader: Reader<'_>,
+) -> Result<Vec<u8>, Diagnostic> {
     let mut writer = Renderer {
-        reader: Reader::new(view, control),
+        reader,
         aliases: BTreeMap::new(),
         types: Vec::new(),
         references: BTreeMap::new(),
@@ -387,6 +415,20 @@ impl Renderer<'_> {
                 parameter: AuthoredTypeParameterReference::Id { parameter },
             } => format!("(parameter-type {parameter})"),
             T::Named { declaration } => self.declaration(declaration)?,
+            T::AssociatedContractMember { contract, member } => format!(
+                "(associated-contract-member {} {member})",
+                self.declaration(contract)?
+            ),
+            T::AssociatedWitnessProjection {
+                scope,
+                parameter,
+                contract,
+                member,
+            } => format!(
+                "(associated-witness-projection {} {parameter} {} {member})",
+                self.declaration(scope)?,
+                self.declaration(contract)?
+            ),
             T::Applied {
                 declaration,
                 arguments,
@@ -591,6 +633,15 @@ impl Renderer<'_> {
                             },
                         })?;
                         clauses.push(format!("(self {self_type})"));
+                        for member in self.reader.associated_members(&c.associated_types)? {
+                            let bound = match member.bound {
+                                AssociatedTypeBound::Owned => "owned",
+                            };
+                            clauses.push(format!(
+                                "(associated-type {} {} (bound {bound}))",
+                                member.id, member.name
+                            ));
+                        }
                         for method in c.methods {
                             let mut parameters = String::new();
                             for p in method.parameters {
@@ -646,6 +697,13 @@ impl Renderer<'_> {
                         }
                         for parameter in &i.implementation_parameters {
                             clauses.push(self.implementation_parameter(parameter)?);
+                        }
+                        for binding in self.reader.associated_bindings(&i.associated_types)? {
+                            clauses.push(format!(
+                                "(associated-type {} {})",
+                                binding.member,
+                                self.ty(&binding.ty)?
+                            ));
                         }
                         for m in i.methods {
                             let arguments = if m.type_arguments.is_empty() {

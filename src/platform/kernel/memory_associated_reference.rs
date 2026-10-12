@@ -423,16 +423,9 @@ impl<'a> Resolver<'a> {
     fn current(&self, occurrence: Occurrence) -> Result<()> {
         let (package, key) = occurrence.consumer;
         let owner = self.header(package, key, false)?.contract_version;
-        let selected = if package == self.source.root.package_id {
-            self.source.root.graph_contract_version
-        } else {
-            self.source
-                .dependencies
-                .get(&package)
-                .ok_or(Failure::Authority)?
-                .graph_contract_version
-        };
-        if [owner, selected, self.source.root.graph_contract_version]
+        // The exact selected interface supplies the foreign owner above. The
+        // dependency record's generation describes its encoding, not that owner.
+        if [owner, self.source.root.graph_contract_version]
             .into_iter()
             .all(|generation| generation == contract::GRAPH_CONTRACT_VERSION)
         {

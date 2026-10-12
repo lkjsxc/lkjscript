@@ -2299,7 +2299,9 @@ fn declaration_occurrence(
     }
 }
 
-fn owner_occurrence(
+/// Derive type authority from an exact canonical owner, retaining its generation.
+/// Parentless expression/binding records require their containing declaration walk.
+pub(crate) fn owner_occurrence(
     read: &(impl ExpressionRead + ?Sized),
     key: OwnerKey,
     record: &OwnerRecord,

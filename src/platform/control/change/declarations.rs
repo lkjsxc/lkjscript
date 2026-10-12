@@ -785,6 +785,27 @@ impl Lowering<'_> {
         let label = self.allocate('@')?;
         let mut fields = vec![("as", label.clone())];
         let operation = match form.as_str() {
+            "associated-contract-member" => {
+                if args.len() != 2 {
+                    return Err(self.error(
+                        id,
+                        "associated-contract-member requires exact contract and member ID",
+                    ));
+                }
+                fields.push(("contract", self.reference(args[0], scope, "declaration")?));
+                fields.push(("member", self.block.atom(args[1])?.to_owned()));
+                "type.associated-contract-member".into()
+            }
+            "associated-witness-projection" => {
+                if args.len() != 4 {
+                    return Err(self.error(id, "associated-witness-projection requires exact lexical scope, witness parameter, contract and member ID"));
+                }
+                fields.push(("scope", self.reference(args[0], scope, "declaration")?));
+                fields.push(("parameter", self.block.atom(args[1])?.to_owned()));
+                fields.push(("contract", self.reference(args[2], scope, "declaration")?));
+                fields.push(("member", self.block.atom(args[3])?.to_owned()));
+                "type.associated-witness-projection".into()
+            }
             "list" | "option" | "stream" | "owned-sequence" => {
                 if args.len() != 1 {
                     return Err(self.error(id, "type constructor requires one type"));
@@ -1427,7 +1448,7 @@ impl Lowering<'_> {
                 format!("create.{kind}")
             }
             "owned-contract" | "owned-implementation" => {
-                allowed.extend(["self", "method"]);
+                allowed.extend(["self", "method", "associated-type"]);
                 let self_type = self.one(self.required_clause(unit, "self")?)?;
                 let self_type = self.ty(self_type, &scope, 1)?;
                 fields.push(("self", self_type.clone()));
@@ -1520,6 +1541,52 @@ impl Lowering<'_> {
                             ],
                         )?;
                     }
+                }
+                for (index, clause) in unit
+                    .clauses
+                    .iter()
+                    .copied()
+                    .filter(|id| self.block.head(*id) == Some("associated-type"))
+                    .collect::<Vec<_>>()
+                    .iter()
+                    .enumerate()
+                {
+                    let (_, args) = self.parts(*clause)?;
+                    let args = args.to_vec();
+                    let mut fields =
+                        vec![("parent", unit.label.clone()), ("index", index.to_string())];
+                    let operation = if kind == "owned-contract" {
+                        if args.len() != 3 {
+                            return Err(self.error(
+                                *clause,
+                                "associated member requires exact ID, name and (bound owned)",
+                            ));
+                        }
+                        let (bound, values) = self.parts(args[2])?;
+                        if bound != "bound"
+                            || values.len() != 1
+                            || self.block.atom(values[0])? != "owned"
+                        {
+                            return Err(
+                                self.error(args[2], "associated member requires (bound owned)")
+                            );
+                        }
+                        fields.push(("id", self.block.atom(args[0])?.to_owned()));
+                        fields.push(("name", self.block.atom(args[1])?.to_owned()));
+                        fields.push(("bound", "owned".into()));
+                        "owned.associated-member"
+                    } else {
+                        if args.len() != 2 {
+                            return Err(self.error(
+                                *clause,
+                                "associated binding requires exact member ID and type",
+                            ));
+                        }
+                        fields.push(("member", self.block.atom(args[0])?.to_owned()));
+                        fields.push(("type", self.ty(args[1], &scope, 1)?));
+                        "owned.associated-binding"
+                    };
+                    self.record(*clause, operation, fields)?;
                 }
                 for (index, clause) in unit
                     .clauses
@@ -2267,6 +2334,7 @@ pub(super) fn finish(
                 self_type,
                 type_parameters,
                 methods,
+                associated_types,
                 ..
             } => {
                 let declaration = declaration
@@ -2280,6 +2348,7 @@ pub(super) fn finish(
                     self_type,
                     type_parameters,
                     methods,
+                    associated_types,
                 });
             }
             AuthoredChange::CreateOwnedImplementation {
@@ -2290,6 +2359,7 @@ pub(super) fn finish(
                 self_type,
                 type_arguments,
                 methods,
+                associated_types,
                 ..
             } => {
                 let declaration = declaration
@@ -2306,6 +2376,7 @@ pub(super) fn finish(
                     self_type,
                     type_arguments,
                     methods,
+                    associated_types,
                 });
             }
             AuthoredChange::CreateModule { name, .. }
@@ -2541,7 +2612,7 @@ pub(super) fn finish(
                     }
                     crate::platform::kernel::PortImplementation::Expression(old) => {
                         AuthoredPortImplementation::Expression {
-                            expression: reader.expression(old)?,
+                            expression: Box::new(reader.expression(old)?),
                         }
                     }
                 };

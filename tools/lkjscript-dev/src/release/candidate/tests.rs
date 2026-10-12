@@ -50,8 +50,8 @@ fn terminal() -> Terminal {
         source_commit: "1".repeat(40),
         controller_source_commit: "1".repeat(40),
         tag: "v0.1.39".to_owned(),
-        acceptance_contract: "lkjscript-final-candidate-acceptance-10".to_owned(),
-        workload: "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-10"
+        acceptance_contract: "lkjscript-final-candidate-acceptance-11".to_owned(),
+        workload: "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-11"
             .to_owned(),
         target_triple: "x86_64-unknown-linux-musl".to_owned(),
         target_policy_sha256: target::policy_sha256().expect("current target policy"),
@@ -351,11 +351,11 @@ fn candidate_terminal_rejects_pre_native_planner_and_mixed_acceptance_generation
     let current = terminal();
     assert_eq!(
         current.acceptance_contract,
-        "lkjscript-final-candidate-acceptance-10"
+        "lkjscript-final-candidate-acceptance-11"
     );
     assert_eq!(
         current.workload,
-        "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-10"
+        "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-11"
     );
     write_terminal(&path, &current);
     assert!(read_terminal(&path).is_ok());
@@ -395,6 +395,9 @@ fn candidate_terminal_rejects_pre_native_planner_and_mixed_acceptance_generation
         (9, 9),
         (9, 10),
         (10, 9),
+        (10, 10),
+        (10, 11),
+        (11, 10),
     ] {
         let mut predecessor = current.clone();
         predecessor.acceptance_contract =

@@ -90,7 +90,7 @@ fn witness_contract_domains_are_closed_and_unique() {
         ("owner_summary_dimensions", 4),
         ("same_task_owned_transfer", 2),
         ("sealed_owned_i64_cells", 1),
-        ("witness_selected_owned_associated_types", 1),
+        ("witness_selected_owned_associated_types", 2),
     ] {
         assert_eq!(
             contract::VALIDATOR_FEATURES
@@ -197,24 +197,44 @@ fn witness_contract_domains_are_closed_and_unique() {
         digest,
         "validator_contract_e62113a5ebb94b6911c2cbef5e97c37bacd2fc102c72fcdb281f3bce3ad2f9a1"
     );
-    assert_eq!(contract::VALIDATOR_CONTRACT_VERSION, 39);
+    // Complete associated admission cannot reuse the earlier inventory seal.
+    assert_ne!(
+        digest,
+        "validator_contract_c3c9a4a3504b3d2f6a54d6d0b352b4e9c2fc620c62fa6172c5b30f4219d48034"
+    );
+    assert_eq!(contract::VALIDATOR_CONTRACT_VERSION, 40);
     assert_eq!(contract::VALIDATOR_FEATURES.len(), 43);
 }
 
 #[test]
 fn validator_39_contract_digest_matches_frozen_identity() {
-    // Independently reconstructed from the literal Graph 33, Witness 9 and
+    // Historical material independently reconstructed from Graph 33, Witness 9 and
     // Summary 11 identities, 28 owner tags, 12 namespace tags, 38 ordered
     // relation/propagation pairs and 43 ordered feature names/versions.
     // The 1,858-byte material has SHA-256
     // 2d0b71c9bce30883aae3374da27d30dd867c5a64882172f56da820765c7c76f8.
     // Text lengths are u64 little-endian and versions are u16 little-endian;
     // the derived-key BLAKE3 input prefixes its material length as u64 big-endian.
-    // The same independent reconstruction reproduces the frozen Validator 38
-    // predecessor above. The expected identity never comes from the producer.
+    // Preserve this historical golden when current semantic admission advances.
+    assert_eq!(
+        ValidatorContractDigest::of(include_bytes!("fixtures/validator_39_material.bin"))
+            .to_string(),
+        "validator_contract_c3c9a4a3504b3d2f6a54d6d0b352b4e9c2fc620c62fa6172c5b30f4219d48034"
+    );
+}
+
+#[test]
+fn validator_40_contract_digest_matches_frozen_identity() {
+    // Independently reconstructed from literal Graph 33, Witness 9 and Summary
+    // 11 identities, 28 owner tags, 12 namespace tags, 38 ordered relation pairs
+    // and 43 ordered features, with associated semantic admission at version 2.
+    // The 1,858-byte material has SHA-256
+    // e3072ee9d652e1b2b9f55e3fa85827910fb3b0d34862ef953261256a1954840a.
+    // The independent reconstruction also reproduces the frozen Validator 38
+    // and 39 predecessors. This expected identity is not a producer output.
     assert_eq!(
         contract::validator_contract_digest().to_string(),
-        "validator_contract_c3c9a4a3504b3d2f6a54d6d0b352b4e9c2fc620c62fa6172c5b30f4219d48034"
+        "validator_contract_ea8c20af48782006db98956f90c3a19916b130571f6837f4f8c8414ba3bb3ea4"
     );
 }
 

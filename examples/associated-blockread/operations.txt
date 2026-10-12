@@ -1,0 +1,75 @@
+# UNEXECUTED recipe. Resolve every <...> from the recorded public operation.
+# Use an immutable copied CLI and a disposable proof root outside the checkout.
+# Run commands from the named fresh project unless a different cwd is explicit.
+
+<copied CLI> new <consumer project> --template minimal --name blockread-consumer-proof
+<copied CLI> package builtin export --kind transport --output <builtin transport>
+<copied CLI> package dependency stage --transport <builtin transport identity> --input-file <builtin transport>
+<copied CLI> status
+# Write consumer-request.lkjc: queried request base + exact builtin dependency + 01-consumer.lkjc.
+<copied CLI> change plan --input-file <consumer-request.lkjc>
+<copied CLI> change apply --input-file <consumer-request.lkjc> --plan <consumer plan token>
+<copied CLI> check
+<copied CLI> change draft --module blockread-consumer --output <consumer-draft.lkjc>
+<copied CLI> change plan --input-file <consumer-draft.lkjc>
+# Require outcome unchanged and unchanged accepted revision.
+<copied CLI> query find module blockread-consumer
+<copied CLI> query find declaration BlockRead --parent <exact consumer module owner>
+<copied CLI> inspect owner owned_contract <exact BlockRead owner>
+<copied CLI> query find declaration forward-block --parent <exact consumer module owner>
+<copied CLI> inspect owner pure_function <exact forward-block owner>
+<copied CLI> package current export --kind transport --output <consumer transport>
+# Record package id, semantic revision, package-revision and transport identity.
+
+# Create suppliers only after the consumer has been admitted, checked and exported.
+<copied CLI> new <flat project> --template minimal --name blockread-flat-proof
+<copied CLI> package dependency stage --transport <consumer transport identity> --input-file <consumer transport>
+<copied CLI> package dependency stage --transport <builtin transport identity> --input-file <builtin transport>
+<copied CLI> status
+# Write flat-request.lkjc: queried base + exact dependency/use prefix + 02-flat.lkjc.
+<copied CLI> change plan --input-file <flat-request.lkjc>
+<copied CLI> change apply --input-file <flat-request.lkjc> --plan <flat plan token>
+<copied CLI> check
+<copied CLI> change draft --module blockread-flat --output <flat-draft.lkjc>
+<copied CLI> change plan --input-file <flat-draft.lkjc>
+<copied CLI> package current export --kind transport --output <flat transport>
+
+<copied CLI> new <chunked project> --template minimal --name blockread-chunked-proof
+<copied CLI> package dependency stage --transport <consumer transport identity> --input-file <consumer transport>
+<copied CLI> package dependency stage --transport <builtin transport identity> --input-file <builtin transport>
+<copied CLI> status
+# Write chunked-request.lkjc: queried base + exact dependency/use prefix + 03-chunked.lkjc.
+<copied CLI> change plan --input-file <chunked-request.lkjc>
+<copied CLI> change apply --input-file <chunked-request.lkjc> --plan <chunked plan token>
+<copied CLI> check
+<copied CLI> change draft --module blockread-chunked --output <chunked-draft.lkjc>
+<copied CLI> change plan --input-file <chunked-draft.lkjc>
+<copied CLI> package current export --kind transport --output <chunked transport>
+
+<copied CLI> new <application project> --template command --name blockread-application-proof
+<copied CLI> package dependency stage --transport <consumer transport identity> --input-file <consumer transport>
+<copied CLI> package dependency stage --transport <flat transport identity> --input-file <flat transport>
+<copied CLI> package dependency stage --transport <chunked transport identity> --input-file <chunked transport>
+<copied CLI> status
+# Write application-request.lkjc: queried base + three exact dependency/use rows + 04-application.lkjc.
+<copied CLI> change plan --input-file <application-request.lkjc>
+<copied CLI> change apply --input-file <application-request.lkjc> --plan <application plan token>
+<copied CLI> check
+<copied CLI> change draft --module blockread-app --output <application-draft.lkjc>
+<copied CLI> change plan --input-file <application-draft.lkjc>
+<copied CLI> build --output <proof root>/blockread.lkja
+<copied CLI> build --output <proof root>/blockread-second.lkja
+# Require whole artifact equality and immutable copied CLI identity.
+<copied CLI> run blockread --arguments-file <empty.arguments.json> --result-file <empty.attached.result.json>
+<copied CLI> run blockread --arguments-file <one.arguments.json> --result-file <one.attached.result.json>
+<copied CLI> run blockread --arguments-file <three.arguments.json> --result-file <three.attached.result.json>
+<copied CLI> run blockread --arguments-file <thirty-three.arguments.json> --result-file <thirty-three.attached.result.json>
+# Compare complete independent literal expectations and attached differential equality.
+
+# Remove only these proof projects/transports; preserve artifact/CLI/deployment/input evidence.
+# Recheck identities; run outside every source project from the descriptor's proof root.
+<copied CLI> run --deployment <blockread.deployment.json> --arguments-file <empty.arguments.json> --result-file <empty.detached.result.json>
+<copied CLI> run --deployment <blockread.deployment.json> --arguments-file <one.arguments.json> --result-file <one.detached.result.json>
+<copied CLI> run --deployment <blockread.deployment.json> --arguments-file <three.arguments.json> --result-file <three.detached.result.json>
+<copied CLI> run --deployment <blockread.deployment.json> --arguments-file <thirty-three.arguments.json> --result-file <thirty-three.detached.result.json>
+# Require exact outputs, no capability calls/live handles, no remaining tasks/cleanup failures.

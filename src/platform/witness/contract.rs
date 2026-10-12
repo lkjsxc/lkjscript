@@ -7,8 +7,8 @@ pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-9";
 pub const WITNESS_CONTRACT_VERSION: u16 = 9;
 pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-11";
 pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 11;
-pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-39";
-pub const VALIDATOR_CONTRACT_VERSION: u16 = 39;
+pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-40";
+pub const VALIDATOR_CONTRACT_VERSION: u16 = 40;
 
 pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT09";
 pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM16";
@@ -217,7 +217,9 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 43] = [
     },
     ValidatorFeatureDescriptor {
         name: "witness_selected_owned_associated_types",
-        version: 1,
+        // Complete associated semantic admission requires fresh proof after the
+        // earlier codec/preparation inventory; its old seals cannot be reused.
+        version: 2,
     },
 ];
 

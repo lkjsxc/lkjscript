@@ -5,7 +5,47 @@ pub(super) use super::super::reference_types::associated_preparation::{
 };
 use super::*;
 
+// Created only after checking the actual evaluator's Invoke children. Full
+// caller authority survives child evaluation without a mutable ambient flag.
+pub(super) struct CanonicalInvocation {
+    proof: Arc<super::super::reference_types::associated_preparation::Proof>,
+    caller: CanonicalApplication,
+    occurrence: (PackageId, ExpressionId),
+    comparison_work: usize,
+}
+
 impl ReferenceState<'_> {
+    pub(super) fn check_canonical_expression_route(
+        &self,
+        expression: ExpressionId,
+        operation: &ExpressionOperation,
+    ) -> Result<(), ExecutionError> {
+        self.control.check()?;
+        let Some(Some(caller)) = self.associated_applications.last() else {
+            return Ok(());
+        };
+        let proof = self
+            .schema
+            .associated_proof()
+            .ok_or_else(|| reference_type_error("canonical expression route proof is missing"))?;
+        if self.active_package != caller.function.package {
+            return Err(reference_type_error(
+                "canonical expression route escaped its caller package",
+            ));
+        }
+        self.associated_step(1)?;
+        if proof
+            .application(caller, self.control)?
+            .invocations
+            .contains_key(&expression)
+            && !matches!(operation, ExpressionOperation::Invoke { .. })
+        {
+            return Err(reference_type_error(
+                "canonical invocation operation changed before child evaluation",
+            ));
+        }
+        Ok(())
+    }
     pub(super) fn bound_mapping_operands(
         &self,
         operands: &[crate::platform::kernel::ImplementationOperand],
@@ -510,12 +550,242 @@ impl ReferenceState<'_> {
         }
     }
 
+    pub(super) fn check_canonical_invocation(
+        &self,
+        callee: ExpressionId,
+        arguments: &[ExpressionId],
+    ) -> Result<(), ExecutionError> {
+        self.control.check()?;
+        let Some(Some(caller)) = self.associated_applications.last() else {
+            // Existing ordinary contexts retain their checked callable route. They do not
+            // acquire associated application authority from a missing fixed target.
+            return Ok(());
+        };
+        let proof = self
+            .schema
+            .associated_proof()
+            .ok_or_else(|| reference_type_error("active canonical invocation proof is missing"))?;
+        let Some((package, OwnerKey::Expression(expression))) = self.type_occurrence else {
+            return Err(reference_type_error(
+                "canonical invocation occurrence is missing",
+            ));
+        };
+        if package != caller.function.package || self.active_package != caller.function.package {
+            return Err(reference_type_error(
+                "canonical invocation escaped its caller package",
+            ));
+        }
+        self.associated_step(arguments.len().saturating_add(1))?;
+        let expected = proof.invocation(caller, expression, self.control)?;
+        if expected.callee != callee || expected.arguments != arguments {
+            return Err(reference_type_error(
+                "canonical invocation children changed",
+            ));
+        }
+        Ok(())
+    }
+
+    pub(super) fn admit_canonical_invocation(
+        &mut self,
+        callee: ExpressionId,
+        arguments: &[ExpressionId],
+    ) -> Result<Option<CanonicalInvocation>, ExecutionError> {
+        self.check_canonical_invocation(callee, arguments)?;
+        let Some(Some(caller)) = self.associated_applications.last() else {
+            return Ok(None);
+        };
+        self.associated_step(caller.effects.len())?;
+        let atoms = caller.effects.iter().fold(0_usize, |count, row| {
+            count
+                .saturating_add(row.requirements.len())
+                .saturating_add(row.parameters.len())
+        });
+        let (types, witnesses, effects, requirements) = (
+            caller.types.len(),
+            caller.witnesses.len(),
+            caller.effects.len(),
+            caller.requirements.len(),
+        );
+        let comparison_work = types
+            .saturating_add(witnesses)
+            .saturating_add(effects)
+            .saturating_add(requirements)
+            .saturating_add(atoms)
+            .saturating_add(1);
+        self.associated_step(comparison_work)?;
+        self.charge_items(types, std::mem::size_of::<TypeObjectDigest>())?;
+        self.charge_items(witnesses, std::mem::size_of::<usize>())?;
+        self.charge_items(effects, std::mem::size_of::<EffectRow>())?;
+        self.charge_items(atoms, std::mem::size_of::<RequirementOperand>())?;
+        self.charge_items(requirements, std::mem::size_of::<RequirementReference>())?;
+        self.control.check()?;
+        let proof = self
+            .schema
+            .associated_proof()
+            .cloned()
+            .ok_or_else(|| reference_type_error("canonical invocation proof is missing"))?;
+        let caller = self
+            .associated_applications
+            .last()
+            .and_then(Option::as_ref)
+            .ok_or_else(|| reference_type_error("canonical invocation caller is missing"))?
+            .clone();
+        let Some((package, OwnerKey::Expression(expression))) = self.type_occurrence else {
+            return Err(reference_type_error(
+                "canonical invocation occurrence is missing",
+            ));
+        };
+        Ok(Some(CanonicalInvocation {
+            proof,
+            caller,
+            occurrence: (package, expression),
+            comparison_work,
+        }))
+    }
+
+    fn require_indirect_application(
+        &mut self,
+        declaration: DeclarationReference,
+        application: &CanonicalApplication,
+    ) -> Result<(), ExecutionError> {
+        if !application.witnesses.is_empty() {
+            return Err(reference_type_error(
+                "an indirect callable cannot supply witnesses",
+            ));
+        }
+        let proof =
+            self.schema.associated_proof().cloned().ok_or_else(|| {
+                reference_type_error("canonical invocation target proof is missing")
+            })?;
+        let original = proof.read_function(
+            &super::super::reference_types::associated_preparation::ReadContext::Symbolic(
+                declaration,
+            ),
+            self.control,
+        )?;
+        let owner = self.declaration(declaration)?;
+        // Canonical owner reads keep their existing reader accounting. Reserve the
+        // new signature walk and ParameterRecord vector before function_signature
+        // reads parameters or retains that vector, including a changed raw inventory.
+        let (parameters, type_parameters) = match &owner.payload {
+            DeclarationPayload::Function(function) => {
+                (function.parameters.len(), function.type_parameters.len())
+            }
+            DeclarationPayload::External(external) => {
+                (external.parameters.len(), external.type_parameters.len())
+            }
+            _ => {
+                return Err(reference_type_error(
+                    "indirect target is not a canonical callable",
+                ));
+            }
+        };
+        self.associated_step(
+            parameters
+                .saturating_add(type_parameters)
+                .saturating_add(application.types.len())
+                .saturating_add(1),
+        )?;
+        self.charge_items(parameters, std::mem::size_of::<ParameterRecord>())?;
+        let signature = self.function_signature(declaration)?;
+        let expected_kind = match &owner.payload {
+            DeclarationPayload::Function(_) if signature.pure => {
+                crate::platform::kernel::OwnerKind::PureFunction
+            }
+            DeclarationPayload::Function(_) => crate::platform::kernel::OwnerKind::TaskFunction,
+            DeclarationPayload::External(_) => crate::platform::kernel::OwnerKind::External,
+            _ => {
+                return Err(reference_type_error(
+                    "indirect target is not a canonical callable",
+                ));
+            }
+        };
+        let generation = original
+            .occurrences
+            .get(&OwnerKey::Declaration(declaration.declaration))
+            .copied()
+            .ok_or_else(|| {
+                reference_type_error("canonical callable owner occurrence is missing")
+            })?;
+        let effect_items = match &signature.effect {
+            FunctionEffect::Pure => 0,
+            FunctionEffect::Task {
+                requirements,
+                effect_parameters,
+            } => requirements.len().saturating_add(effect_parameters.len()),
+        };
+        // These comparisons are additional to the already reserved signature
+        // read walk. Include both parameter walks and both sides of row equality.
+        self.associated_step(
+            original
+                .parameters
+                .len()
+                .saturating_add(signature.parameters.len())
+                .saturating_add(application.types.len())
+                .saturating_add(original.effect.requirements.len())
+                .saturating_add(original.effect.parameters.len())
+                .saturating_add(effect_items)
+                .saturating_add(1),
+        )?;
+        if original.is_task == signature.pure
+            || !original.implementation_templates.is_empty()
+            || original.result_borrow.is_some()
+            || original.result != signature.result
+            || original.parameters.len() != signature.parameters.len()
+            || original
+                .parameters
+                .iter()
+                .zip(&signature.parameters)
+                .any(|((ty, mode), actual)| *ty != actual.ty || *mode != actual.use_mode)
+            || original.effect != self.declared_row(&signature.effect)?
+            || signature.has_implementations
+            || signature.result_borrow.is_some()
+            || owner.header.owner != OwnerKey::Declaration(declaration.declaration)
+            || owner.header.kind != expected_kind
+            || owner.header.contract_version != generation
+            || !self.schema.buffer_free_types.contains(&signature.result)
+            || signature.parameters.iter().any(|parameter| {
+                parameter.use_mode != ParameterUse::Unrestricted
+                    || parameter.resource_requirement.is_some()
+                    || !self.schema.buffer_free_types.contains(&parameter.ty)
+            })
+            || application
+                .types
+                .iter()
+                .any(|ty| !self.schema.buffer_free_types.contains(ty))
+        {
+            return Err(reference_type_error(
+                "indirect callable changed its canonical ordinary signature boundary",
+            ));
+        }
+        Ok(())
+    }
+
     pub(super) fn canonical_application(
         &mut self,
         declaration: DeclarationReference,
         application: ReferenceApplication<'_>,
     ) -> Result<Option<CanonicalApplication>, ExecutionError> {
+        self.canonical_application_on_route(declaration, application, ReferenceCallRoute::Direct)
+    }
+
+    pub(super) fn canonical_application_on_route(
+        &mut self,
+        declaration: DeclarationReference,
+        application: ReferenceApplication<'_>,
+        route: ReferenceCallRoute<'_>,
+    ) -> Result<Option<CanonicalApplication>, ExecutionError> {
         let Some(proof) = self.schema.associated_proof().cloned() else {
+            if matches!(route, ReferenceCallRoute::Invocation(Some(_)))
+                || self
+                    .associated_applications
+                    .last()
+                    .is_some_and(Option::is_some)
+            {
+                return Err(reference_type_error(
+                    "canonical call route proof is missing",
+                ));
+            }
             return Ok(None);
         };
         let atoms = application.effects.iter().try_fold(0_usize, |count, row| {
@@ -600,16 +870,71 @@ impl ReferenceState<'_> {
                 })
                 .collect::<Result<_, _>>()?,
         };
-        if let (Some(Some(caller)), Some((package, OwnerKey::Expression(expression)))) =
-            (self.associated_applications.last(), self.type_occurrence)
-            && package == caller.function.package
-        {
-            let expected = proof.call_target(caller, expression, self.control)?;
-            if expected != &key {
+        if let Some(Some(caller)) = self.associated_applications.last() {
+            let Some((package, OwnerKey::Expression(expression))) = self.type_occurrence else {
+                return Err(reference_type_error("canonical call occurrence is missing"));
+            };
+            if package != caller.function.package {
                 return Err(reference_type_error(
-                    "call changed its exact canonical application",
+                    "canonical call escaped its caller package",
                 ));
             }
+            match route {
+                ReferenceCallRoute::Invocation(Some(invocation)) => {
+                    self.associated_step(caller.effects.len())?;
+                    let atoms = caller.effects.iter().fold(0_usize, |count, row| {
+                        count
+                            .saturating_add(row.requirements.len())
+                            .saturating_add(row.parameters.len())
+                    });
+                    self.associated_step(
+                        invocation
+                            .comparison_work
+                            .saturating_add(caller.types.len())
+                            .saturating_add(caller.witnesses.len())
+                            .saturating_add(caller.effects.len())
+                            .saturating_add(caller.requirements.len())
+                            .saturating_add(atoms)
+                            .saturating_add(1),
+                    )?;
+                    if !Arc::ptr_eq(&proof, &invocation.proof)
+                        || invocation.caller != *caller
+                        || invocation.occurrence != (package, expression)
+                    {
+                        return Err(reference_type_error(
+                            "canonical invocation route escaped its checked caller",
+                        ));
+                    }
+                    proof.invocation(caller, expression, self.control)?;
+                    self.require_indirect_application(declaration, &key)?;
+                }
+                ReferenceCallRoute::Invocation(None) => {
+                    return Err(reference_type_error(
+                        "canonical invocation route has no checked seal",
+                    ));
+                }
+                ReferenceCallRoute::Direct => {
+                    if proof
+                        .application(caller, self.control)?
+                        .invocations
+                        .contains_key(&expression)
+                    {
+                        return Err(reference_type_error(
+                            "canonical invocation requires its checked evaluator route",
+                        ));
+                    }
+                    let expected = proof.call_target(caller, expression, self.control)?;
+                    if expected != &key {
+                        return Err(reference_type_error(
+                            "call changed its exact canonical application",
+                        ));
+                    }
+                }
+            }
+        } else if matches!(route, ReferenceCallRoute::Invocation(Some(_))) {
+            return Err(reference_type_error(
+                "canonical invocation route lost its active caller",
+            ));
         }
         if proof.applications.contains_key(&key) {
             proof.application(&key, self.control)?;

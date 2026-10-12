@@ -67,14 +67,14 @@ pub(crate) use repair::prepare_repair_analysis;
 #[cfg(test)]
 pub(crate) use request::authored_source_owners;
 pub use request::{
-    AuthoredAnnotationValue, AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference,
-    AuthoredChange, AuthoredChangeSet, AuthoredDeclarationReference, AuthoredDeletePolicy,
-    AuthoredEffectParameter, AuthoredEffectParameterReference, AuthoredEffectRow,
-    AuthoredExistingOwner, AuthoredExpression, AuthoredExpressionOperation, AuthoredField,
-    AuthoredFieldReference, AuthoredFieldSelector, AuthoredFunctionEffect,
-    AuthoredImplementationOperand, AuthoredImplementationParameter, AuthoredLetBinding,
-    AuthoredLiteralUpdate, AuthoredLiteralValue, AuthoredLocalReference, AuthoredLowering,
-    AuthoredLoweringWork, AuthoredMapExpressionEntry, AuthoredMatchExpressionArm,
+    AuthoredAnnotationValue, AuthoredAssociatedTypeBinding, AuthoredAssociatedTypeMember,
+    AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference, AuthoredChange,
+    AuthoredChangeSet, AuthoredDeclarationReference, AuthoredDeletePolicy, AuthoredEffectParameter,
+    AuthoredEffectParameterReference, AuthoredEffectRow, AuthoredExistingOwner, AuthoredExpression,
+    AuthoredExpressionOperation, AuthoredField, AuthoredFieldReference, AuthoredFieldSelector,
+    AuthoredFunctionEffect, AuthoredImplementationOperand, AuthoredImplementationParameter,
+    AuthoredLetBinding, AuthoredLiteralUpdate, AuthoredLiteralValue, AuthoredLocalReference,
+    AuthoredLowering, AuthoredLoweringWork, AuthoredMapExpressionEntry, AuthoredMatchExpressionArm,
     AuthoredOperation, AuthoredOperationReference, AuthoredOwnedMethod,
     AuthoredOwnedMethodImplementation, AuthoredOwnerParent, AuthoredOwnerReferenceSelection,
     AuthoredOwnerReferenceSelector, AuthoredParameter, AuthoredPort, AuthoredPortImplementation,

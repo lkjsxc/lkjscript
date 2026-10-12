@@ -1,0 +1,71 @@
+request base=rev_304f6713e5514f7baa44bef7781cc273538bfd2c64dc41ebb27fe2633decd2c4
+declarations.begin
+(units (use owned-worklists pkg_0715b5ff15f245ce3bb0f8bfc254e338 package_revision_71cd8f1565b53eb9cdef6cf9135c9afe96efec194d844cfc5848103695dde06b))
+declarations.end
+declarations.begin
+(units (use worklist-carriers pkg_da6c35a66052e6eb317abd2a0ad0c8ff package_revision_754a9ae4f2bd2f80ef62dddfb678ef75391df722e21283b7d7b17ae008142a9f))
+declarations.end
+declarations.begin
+(units (use indexed-data pkg_64743b873112737840db706fc6107a1b package_revision_2c36949e181a68d10a70ad4dd65367457d365709c6bf29796e1f8889632c7499))
+declarations.end
+declarations.begin
+(units (use indexed-flat pkg_83566b3778f52f9d2c248e0bc66613ac package_revision_34eea10b2a511d185665a5f78be5c909c3b8052b0515bbb631c8e0529d2cda08))
+declarations.end
+declarations.begin
+(units (use indexed-chunked pkg_0dba40dfd321184dd3f5f962c65f062b package_revision_0c38d2e66fe8e4031286805bd2ebea4cab989f52ea2ddd62dcb40a2dea5bf8db))
+declarations.end
+declarations.begin
+(units (use plan-stages pkg_7f2c7a229f1a9f475f0b208e6a40a323 package_revision_868454cb96f9ac3d915b725bd0627450d762dd73b4204ed88649b6cb03d3691e))
+declarations.end
+declarations.begin
+(units (use dependency-verifier pkg_cd6a4dc19d5bdd6eec42eca1054df235 package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f))
+declarations.end
+declarations.begin
+(units (use dependency-plan pkg_e3f8cd073b6666a47808b3bc43721c8e package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99))
+declarations.end
+reference.package as=$planner package=pkg_e3f8cd073b6666a47808b3bc43721c8e package-revision=package_revision_238a1b9932291f40ecfb2e988b6a129e1e9c9d22d35386e9d7905aab66341d99
+reference.owner as=$PlannerOutcome package=$planner class=declaration owner=decl_2292f70242696cbcbc226ae72fca0d65
+reference.owner as=$PlannerFlat package=$planner class=declaration owner=decl_29aabc00bad80ae090b2532a62458475
+reference.owner as=$PlannerChunked package=$planner class=declaration owner=decl_1480e97e94dbcac6b953a3f0192ea183
+reference.owner as=$PlannerStorageFlatFlat package=$planner class=declaration owner=decl_402032a83897a36033f0ae101c4367f5
+reference.owner as=$PlannerStorageFlatChunked package=$planner class=declaration owner=decl_dde3ea09a2c2b7509724fe3f1f53492f
+reference.owner as=$PlannerStorageChunkedFlat package=$planner class=declaration owner=decl_caf1d40a91b0a014322e98074fc57829
+reference.owner as=$PlannerStorageChunkedChunked package=$planner class=declaration owner=decl_114b9f14614ec74011def88c7ec5b31a
+reference.owner as=$PlannerValid package=$planner class=case parent=$PlannerOutcome name=valid
+reference.owner as=$PlannerInvalid package=$planner class=case parent=$PlannerOutcome name=invalid
+reference.owner as=$PlannerCapacity package=$planner class=case parent=$PlannerOutcome name=capacity
+reference.owner as=$PlannerInconsistent package=$planner class=case parent=$PlannerOutcome name=inconsistent
+reference.package as=$checker package=pkg_cd6a4dc19d5bdd6eec42eca1054df235 package-revision=package_revision_4acf8bc64e99075426e0527a3d955d6dad5ed44ba0d483cf4fd0e6d921f8536f
+reference.owner as=$CheckerVerification package=$checker class=declaration owner=decl_7e23eca4d9e3947b5afa3aca6a9261ba
+reference.owner as=$CheckerClaim package=$checker class=declaration owner=decl_2199957fe4252d194483e1ee1b6efda1
+reference.owner as=$CheckerOutcomeVerification package=$checker class=declaration owner=decl_f3726942d9d013a54210288ae98ca5c6
+reference.owner as=$CheckerVerifyPlan package=$checker class=declaration owner=decl_008a730bdb3b70d48037af697e1445dc
+reference.owner as=$CheckerVerifyOutcome package=$checker class=declaration owner=decl_6ed840b6231161fc16ea34f2b67cf835
+reference.owner as=$CheckerVerificationVerified package=$checker class=case parent=$CheckerVerification name=verified
+reference.owner as=$CheckerVerificationRejected package=$checker class=case parent=$CheckerVerification name=rejected
+reference.owner as=$CheckerVerificationInvalid package=$checker class=case parent=$CheckerVerification name=invalid
+reference.owner as=$CheckerVerificationCapacity package=$checker class=case parent=$CheckerVerification name=capacity
+reference.owner as=$CheckerClaimValid package=$checker class=case parent=$CheckerClaim name=valid
+reference.owner as=$CheckerClaimInvalid package=$checker class=case parent=$CheckerClaim name=invalid
+reference.owner as=$CheckerClaimCapacity package=$checker class=case parent=$CheckerClaim name=capacity
+reference.owner as=$CheckerOutcomeVerified package=$checker class=case parent=$CheckerOutcomeVerification name=verified
+reference.owner as=$CheckerOutcomeRejected package=$checker class=case parent=$CheckerOutcomeVerification name=rejected
+declarations.begin
+(units
+  (module create package-plan
+    (type-alias Node (record (id I64) (successors (list I64))))
+    (type-alias Proposal (record (roots (list I64)) (nodes (list Node))))
+    (type-alias Row (record (members (list I64)) (cyclic Bool) (dependencies (list I64))))
+    (function create plan (visibility public) (effect pure)
+      (parameter create proposal (type Proposal)) (returns $PlannerOutcome)
+      (body (call verified-plan::storage-flat-flat (local proposal))))
+    (test create empty (visibility private)
+      (actual (call plan (record structural (field roots (list I64)) (field nodes (list Node)))))
+      (expected (variant $PlannerValid
+        (record structural (field components (list Row)) (field stages (list (list I64)))
+          (field reachable (list I64)) (field unreachable (list I64))))))
+    (component create command (visibility private)
+      (port create plan (type (function (Proposal) $PlannerOutcome)) (function plan))))
+  (target create package-plan (component package-plan::command)
+    (runner command) (port package-plan::command::plan)))
+declarations.end

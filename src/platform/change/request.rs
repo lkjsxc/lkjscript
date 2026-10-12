@@ -18,18 +18,19 @@ pub use references::{
 };
 
 pub use creation::{
-    AuthoredAnnotationValue, AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference,
-    AuthoredDeclarationReference, AuthoredEffectParameter, AuthoredEffectParameterReference,
-    AuthoredEffectRow, AuthoredExpression, AuthoredExpressionOperation, AuthoredField,
-    AuthoredFieldReference, AuthoredFieldSelector, AuthoredFunctionEffect,
-    AuthoredImplementationOperand, AuthoredImplementationParameter, AuthoredLetBinding,
-    AuthoredLocalReference, AuthoredMapExpressionEntry, AuthoredMatchExpressionArm,
-    AuthoredOperation, AuthoredOperationReference, AuthoredOwnedMethod,
-    AuthoredOwnedMethodImplementation, AuthoredParameter, AuthoredPort, AuthoredPortImplementation,
-    AuthoredPortReference, AuthoredRecordExpressionField, AuthoredRequirement,
-    AuthoredRequirementParameter, AuthoredRequirementReference, AuthoredResourceLimit,
-    AuthoredStructuralTypeField, AuthoredTransactionOutcomeContract, AuthoredType,
-    AuthoredTypeParameter, AuthoredTypeParameterReference,
+    AuthoredAnnotationValue, AuthoredAssociatedTypeBinding, AuthoredAssociatedTypeMember,
+    AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference, AuthoredDeclarationReference,
+    AuthoredEffectParameter, AuthoredEffectParameterReference, AuthoredEffectRow,
+    AuthoredExpression, AuthoredExpressionOperation, AuthoredField, AuthoredFieldReference,
+    AuthoredFieldSelector, AuthoredFunctionEffect, AuthoredImplementationOperand,
+    AuthoredImplementationParameter, AuthoredLetBinding, AuthoredLocalReference,
+    AuthoredMapExpressionEntry, AuthoredMatchExpressionArm, AuthoredOperation,
+    AuthoredOperationReference, AuthoredOwnedMethod, AuthoredOwnedMethodImplementation,
+    AuthoredParameter, AuthoredPort, AuthoredPortImplementation, AuthoredPortReference,
+    AuthoredRecordExpressionField, AuthoredRequirement, AuthoredRequirementParameter,
+    AuthoredRequirementReference, AuthoredResourceLimit, AuthoredStructuralTypeField,
+    AuthoredTransactionOutcomeContract, AuthoredType, AuthoredTypeParameter,
+    AuthoredTypeParameterReference,
 };
 pub use precondition::{
     AuthoredExistingOwner, AuthoredOwnerParent, AuthoredPrecondition, AuthoredSelectedPrecondition,
@@ -77,6 +78,7 @@ pub enum AuthoredChange {
         self_type: AuthoredType,
         type_parameters: Vec<AuthoredTypeParameterReference>,
         methods: Vec<AuthoredOwnedMethod>,
+        associated_types: Vec<AuthoredAssociatedTypeMember>,
     },
     CreateOwnedImplementation {
         symbol: String,
@@ -89,12 +91,14 @@ pub enum AuthoredChange {
         self_type: AuthoredType,
         type_arguments: Vec<AuthoredType>,
         methods: Vec<AuthoredOwnedMethodImplementation>,
+        associated_types: Vec<AuthoredAssociatedTypeBinding>,
     },
     SetOwnedContract {
         declaration: DeclarationSelector,
         self_type: AuthoredType,
         type_parameters: Vec<AuthoredTypeParameterReference>,
         methods: Vec<AuthoredOwnedMethod>,
+        associated_types: Vec<AuthoredAssociatedTypeMember>,
     },
     SetOwnedImplementation {
         declaration: DeclarationSelector,
@@ -104,6 +108,7 @@ pub enum AuthoredChange {
         self_type: AuthoredType,
         type_arguments: Vec<AuthoredType>,
         methods: Vec<AuthoredOwnedMethodImplementation>,
+        associated_types: Vec<AuthoredAssociatedTypeBinding>,
     },
     SetImplementationParameters {
         declaration: DeclarationSelector,
@@ -567,6 +572,8 @@ pub struct AuthoredLoweringWork {
     pub type_nodes_interned: u64,
     /// Effect-row occurrences and canonicalization work, admitted as semantic validation steps.
     pub effect_normalization_steps: u64,
+    /// Associated inventory traversal and canonicalization, admitted before modeled growth.
+    pub associated_inventory_steps: u64,
     pub ownership_steps: u64,
     pub relation_edges_read: u64,
     pub canonical: CanonicalReadWork,
@@ -581,7 +588,9 @@ impl AuthoredLoweringWork {
             allocated_identities: self.allocated_identities,
             authored_type_nodes: self.type_nodes_interned,
             validation: super::budget::ValidationBudgetWork {
-                expression_steps: self.effect_normalization_steps,
+                expression_steps: self
+                    .effect_normalization_steps
+                    .saturating_add(self.associated_inventory_steps),
                 ..Default::default()
             },
             canonical_reads: self.canonical,

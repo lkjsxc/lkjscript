@@ -1143,6 +1143,17 @@ fn add_unused_method(fixture: &mut Fixture) {
 }
 
 fn composed_operand(fixture: &mut Fixture) -> ImplementationOperand {
+    let DeclarationPayload::OwnedContract(contract) =
+        &declaration(&fixture.source, fixture.contract).payload
+    else {
+        unreachable!()
+    };
+    let method = contract
+        .methods
+        .iter()
+        .find(|method| method.name.as_str() == "read")
+        .unwrap()
+        .id;
     let original = declaration(&fixture.source, fixture.implementations[0]).clone();
     let DeclarationPayload::OwnedImplementation(mut scheme) = original.payload else {
         unreachable!()
@@ -1182,7 +1193,12 @@ fn composed_operand(fixture: &mut Fixture) -> ImplementationOperand {
             binding.ty = ty;
         }
     }
-    scheme.methods[0].type_arguments = vec![ty];
+    scheme
+        .methods
+        .iter_mut()
+        .find(|mapping| mapping.method == method)
+        .unwrap()
+        .type_arguments = vec![ty];
     fixture.source.owners.insert(
         OwnerKey::Declaration(reference.declaration),
         OwnerRecord::Declaration(DeclarationRecord {

@@ -1,0 +1,40 @@
+declarations.begin
+(units
+  (module create blockread-consumer
+    (owned-contract create BlockRead (visibility public)
+      (self Self) (type-parameter create Self (constraint owned))
+      (type-parameter create Item (constraint transferable))
+      (associated-type assoc_type_c7000000000000000000000000000001 Block (bound owned))
+      (associated-type assoc_type_c7000000000000000000000000000002 Spare (bound owned))
+      (method method_c7000000000000000000000000000001 block-count
+        (parameters (Self borrow)) (returns I64) (effect pure))
+      (method method_c7000000000000000000000000000002 block-at
+        (parameters (I64 unrestricted) (Self borrow))
+        (returns (associated-contract-member BlockRead assoc_type_c7000000000000000000000000000001)
+          (borrow-from 1)) (effect pure))
+      (method method_c7000000000000000000000000000003 block-length
+        (parameters ((associated-contract-member BlockRead assoc_type_c7000000000000000000000000000001) borrow))
+        (returns I64) (effect pure))
+      (method method_c7000000000000000000000000000004 block-get
+        (parameters (I64 unrestricted)
+          ((associated-contract-member BlockRead assoc_type_c7000000000000000000000000000001) borrow))
+        (returns Item) (effect pure)))
+    (function create forward-block (visibility public) (effect pure)
+      (type-parameter create T (constraint transferable))
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_c7000000000000000000000000000001 reader BlockRead W (types T))
+      (parameter create index (type I64))
+      (parameter create storage (type W) (use borrow))
+      (returns (associated-witness-projection forward-block implparam_c7000000000000000000000000000001
+        BlockRead assoc_type_c7000000000000000000000000000001) (borrow-from storage))
+      (body (borrow-call
+        (method-call parameter@forward-block@implparam_c7000000000000000000000000000001
+          BlockRead method_c7000000000000000000000000000002 (local index) (local storage))
+        (binding view (type (associated-witness-projection forward-block
+          implparam_c7000000000000000000000000000001 BlockRead assoc_type_c7000000000000000000000000000001)))
+        (in (local view)))))
+    (function create discard (visibility public) (effect pure)
+      (type-parameter create W (constraint owned))
+      (parameter create storage (type W) (use consume))
+      (returns Unit) (body (unit)))))
+declarations.end

@@ -45,6 +45,8 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+#[path = "artifact_associated.rs"]
+mod associated_admission;
 #[path = "artifact_code.rs"]
 mod code_admission;
 #[path = "artifact_flow.rs"]
@@ -2707,11 +2709,6 @@ fn trace_object_closure(
                         &mut store_work,
                     )?;
                     let unit = CompilationUnit::decode(&unit_bytes, binding.object.object_key())?;
-                    if matches!(&unit.payload, CompilationPayload::OwnedContract(c) if !c.associated_types.is_empty())
-                        || matches!(&unit.payload, CompilationPayload::OwnedImplementation(i) if !i.associated_types.is_empty())
-                    {
-                        return Err(crate::platform::kernel::owned_associated_wire::unsupported_semantics());
-                    }
                     if unit.key != binding.key
                         || unit.contract_version != compilation.compiler_contract_version
                         || unit.bytecode_contract_version != compilation.bytecode_contract_version
@@ -2823,9 +2820,6 @@ fn trace_object_closure(
             &mut store_work,
         )?;
         let object = decode_type_object(&bytes, digest)?;
-        if object.form.is_associated() {
-            return Err(crate::platform::kernel::owned_associated_wire::unsupported_semantics());
-        }
         if manifest.graph_contract_version < 25
             && matches!(object.form, TypeForm::OwnedSequence { .. })
         {
@@ -3787,6 +3781,7 @@ fn validate_artifact_nominal_meaning(
         .collect::<Result<BTreeMap<_, _>, _>>()?;
     let mut roots = BTreeMap::<PackageId, Vec<OwnerKey>>::new();
     for ((package, owner), unit) in units {
+        let package_roots = roots.entry(*package).or_default();
         if matches!(
             unit.payload,
             CompilationPayload::Record { .. }
@@ -3799,7 +3794,7 @@ fn validate_artifact_nominal_meaning(
                 | CompilationPayload::Constant { .. }
                 | CompilationPayload::Test { .. }
         ) {
-            roots.entry(*package).or_default().push(*owner);
+            package_roots.push(*owner);
         }
     }
     for ((package, owner), record) in runtime {
@@ -3828,6 +3823,13 @@ fn validate_artifact_nominal_meaning(
         affine_roots.entry(*package).or_default().push(*owner);
         roots.entry(*package).or_default();
     }
+    let has_associated_types = associated_admission::contains_associated_types(
+        types,
+        &mut work,
+        crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
+    )?;
+    let associated = crate::platform::kernel::owned_associated::OwnedAssociatedAdmission::new();
+    let mut unit_cursor = units.iter().peekable();
     for (package, roots) in roots {
         let exact = manifest
             .packages
@@ -3856,6 +3858,30 @@ fn validate_artifact_nominal_meaning(
             dependencies: &exact.dependencies,
             representation_packages: &representation_packages,
         };
+        if has_associated_types {
+            let associated_work = std::cell::Cell::new(work);
+            let checkpoint = || {
+                let mut next = associated_work.get();
+                associated_admission::admit_work(
+                    &mut next,
+                    crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
+                )?;
+                associated_work.set(next);
+                Ok(())
+            };
+            let checked = crate::platform::kernel::CheckedExpressionRead {
+                read: &read,
+                checkpoint: &checkpoint,
+            };
+            // Both inventories are package ordered. Visit each unit once without
+            // copying tables or constructing another package-to-unit index.
+            while let Some((_, unit)) =
+                unit_cursor.next_if(|((unit_package, _), _)| *unit_package == package)
+            {
+                associated_admission::validate_unit_types(&checked, unit, &associated)?;
+            }
+            work = associated_work.get();
+        }
         let mut diagnostics = Vec::new();
         let exhausted = crate::platform::kernel::validate_expression_roots_with_limits(
             &read,
@@ -3924,6 +3950,13 @@ fn validate_artifact_nominal_meaning(
                 "artifact affine validation exhausted its existing work budget",
             ));
         }
+    }
+    if has_associated_types && unit_cursor.next().is_some() {
+        return Err(artifact_error(
+            DiagnosticClass::Corrupt,
+            "artifact_associated_owner",
+            "associated table admission omitted a compiler-unit package",
+        ));
     }
     Ok(())
 }

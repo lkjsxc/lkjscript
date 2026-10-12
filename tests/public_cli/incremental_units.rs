@@ -183,7 +183,7 @@ fn native_package_planner_rebuilds_exactly_and_runs_checked_plan_after_source_de
     let tests = compact_record(&checked, "tests");
     assert_eq!(compact_field(tests, "failed"), "0");
     assert_eq!(compact_field(tests, "differential"), "equal");
-    assert_eq!(compact_field(tests, "passed"), "170");
+    assert_eq!(compact_field(tests, "passed"), "176");
     let artifact = public.root.path().join("planner.lkja");
     public.cli(&["build", "--output", path(&artifact)], true);
     assert_eq!(
