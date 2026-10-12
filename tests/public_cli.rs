@@ -1636,6 +1636,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         "implementation_selection",
         "implementation_method",
         "borrow_result_source",
+        "associated_witness_scope_use",
         "http_route_target",
         "http_route_port",
         "requirement_parameter_use",
@@ -1665,7 +1666,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .iter()
             .filter(|record| record.operation == "query.relation-kind")
             .count(),
-        37
+        38
     );
     assert_eq!(
         query
