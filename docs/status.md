@@ -1,28 +1,27 @@
 # Current status
 
 Snapshot: 2026-10-12. Development **0.1.94** implements native package dependency
-planning. Accepted diagnostic source `dbef3042` retains **29/29** fresh full gates
-with stable inputs, zero reuse/unrun and exit 0. Latest hosted producer
-**38173532140/1** on reporting descendant `f772f229` passed **23/23** fresh source
-gates but failed finalized-byte public-harness acceptance. No .94 publication is
-claimed. The fixed two-worker correction passed **30/30** affected developer-library
-tests and strict Clippy locally; fresh full-source and final-byte acceptance remain
-pending.
+planning. The fixed two-worker source `0fbf2796` records **29/29** fresh full
+gates with stable inputs, zero reuse/unrun and original exit 0. Independent
+original-evidence authentication is complete; normal mainline delivery remains
+pending. Latest hosted producer **38173532140/1** on `f772f229` passed **23/23** fresh source gates
+but failed finalized-byte public-harness acceptance. No new candidate acceptance
+or .94 publication is claimed.
 
 ## Selected source and capability
 
 Worktree `/home/coder/workspace/lkjscript-native-package-planner-20261011`, branch
-`work/native-package-planner-20261011`, retains accepted diagnostic source
-`dbef3042457ea9678c20ef4ccb10999082c6a89f`, tree
-`cc7381d47f24ea0522b30dac7d60f19b801bb1fb`. It contains the native planner
-implementation, normal ancestry merge from main, reviewed fixture corrections,
-bounded IndexedData progress observations and a 9,600-second workspace allowance.
-The latest verified mainline delivery selected reporting descendant
-`f772f2294d99177a54fa02ee7229f4e4f5b9d883`.
-The retained full receipt binds `dbef3042`, not the current two-worker correction
-or any subsequent reporting descendant. Preserve the worktrees and ignored original evidence;
-[selection.json](../.artifacts/native-package-planner/selection.json) retains
-earlier executable selections and proof scopes.
+`work/native-package-planner-20261011`, retains tested source
+`0fbf2796a15250bfa4b4638d40fe4c7b0749c3c1`, tree
+`26579b024c69c263a8b328e8f664d594b53b60c1`. It contains the native planner,
+reviewed fixture corrections, bounded IndexedData progress, the 9,600-second
+workspace allowance and fixed two-worker final-public policy with strict selected
+long-running notices. The full receipt binds this exact implementation commit;
+a subsequent status-only reporting descendant is a separate source identity.
+The latest previously verified mainline delivery remains
+`f772f2294d99177a54fa02ee7229f4e4f5b9d883`. Preserve the worktrees and original
+proof scopes; [selection.json](../.artifacts/native-package-planner/selection.json)
+retains current executable selections and historical evidence.
 
 Production logical admission invokes the checked native planner for cycle refusal
 and dependency-first order. Its operation-local private plan passes through
@@ -43,7 +42,31 @@ observation **46** adds invocation-bound planning records; candidate generation
 
 ## Source acceptance and retained evidence
 
-The [diagnostic successor full receipt](../.artifacts/lkjscript-dev/check/1791746533387196262-2779742-0/receipt.json)
+The original full session **81210**, terminal **2bd31e**, exited **0** on tested
+source `0fbf2796`, with unchanged before/after input inventory
+`0c2ae1a9bf4617df69de53d698f7523018d6df8c1ad38d50da177160f36bd4e1`.
+It records **29/29 fresh**, **0 reused**, **0 unrun**, stable inputs and
+**4,607.046912868 seconds**. Original receipt
+`.artifacts/lkjscript-dev/check/1791775574045354563-3409548-0/receipt.json`
+has SHA-256 `64437e1b90da082dfd84003aeb1c1b97f17e54f2679a072a7f49e0dcc57b1875`.
+Workspace tests passed in **2,746.765870864 seconds**: library **1,912 passed /
+8 ignored**, native verifier **10 passed**, public CLI **270 passed / 1 ignored**,
+and developer library **294 passed / 19 ignored**, with no failures.
+
+The existing independent transcript validator, original **9e6538** exit **0**,
+passes **510 records / 242 runs**, **124 attached / 118 detached**, **12 stage
+pairs** and **0 issues** for this run. Its retained summary is
+`.artifacts/native-package-planner/diagnostic-successor/two-worker-full-first-indexed-progress/summary.json`.
+This validates literal input identity and complete progress; it is separate from
+semantic test outcomes. Independent authentication also verifies all 2,175
+inputs, 29 gate fingerprints/outcomes, exact commands, DAG and 58 original logs,
+retained outputs and harnesses against clean source `0c2ae1a9`. Its retained
+receipt is `two-worker-full-first-independent-authentication-1791780841413.json`,
+SHA-256 `4cdda7ef55bf5922d34088a86632ff60b1621a8cde4d7aefa4e972a767ef4c00`.
+Neither this local full result nor the earlier one-case replay proves hosted
+final-byte completion.
+
+The predecessor [diagnostic successor full receipt](../.artifacts/lkjscript-dev/check/1791746533387196262-2779742-0/receipt.json)
 records **29/29** fresh gates, stable inputs and original session **45425** exit
 **0** after **4,751.478972979 seconds**. Receipt SHA-256 is
 `836962af2fe2c773d161ea1ced8957ca12ba14a683cd5d818ee06846d9d83236`.
@@ -134,15 +157,16 @@ unique passing outcome, exact summary, the **7,200-second** public allowance and
 Retained local controls record **30/30** affected developer-library passes (original session **5889**)
 and strict Clippy exit **0** (session **80961**) on stable working input inventory
 `d80244f3fc8ee4d4249a92848cb41a196b44b8642bc13502dfb2bbcecfc9ac9a`.
-These are targeted working-tree proofs; fresh complete acceptance is pending.
+These remain targeted working-tree proofs. The subsequent complete local full
+result binds committed source `0fbf2796` separately; neither proof is relabelled.
 
-Next record and commit the reviewed correction/status inputs, build a new immutable
-verifier and require stable **29/29** fresh full gates. After normal mainline delivery
-and exact source/version/occupancy refresh, one fresh producer must pass **23**
-source gates and all **102** finalized-byte public cases, plus every target,
-userland, installation, original-reader and joined-cleanup obligation. Preserve
-`d01708a2` and `dbef3042` local acceptance and both failed hosted originals separately.
-No two-worker full acceptance, accepted candidate or .94 publication is claimed.
+Next record an accurate status-only reporting descendant and deliver through
+normal mainline integration with protection/ancestry readback. After exact source/version/occupancy
+refresh, one new generation-10 producer must pass **23** fresh source gates and
+all **102** finalized-byte public cases, plus every target, userland, installation,
+original-reader and joined-cleanup obligation. Do not rerun or relabel either failed
+producer. Preserve `d01708a2`, `dbef3042` and `0fbf2796` local results separately.
+No accepted new candidate or .94 publication is claimed.
 
 The generation-9 predecessor lineage is closed. Normal mainline delivery retains
 the accepted ancestry; original checks and remote readback remain in
