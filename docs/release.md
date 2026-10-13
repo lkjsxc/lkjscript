@@ -145,6 +145,16 @@ successor producer is release-only waiting; accepted source can proceed to main.
 
 ## Content and compatibility
 
+Development v0.1.95 adds witness-selected associated Owned members and the
+maintained imported BlockRead consumer. Complete source/interface/artifact
+admission checks unused bindings and exact scopes as well as selected calls.
+Separate associated codec profiles preserve feature-free base bytes; Validator40
+renews complete semantic proof without relabelling historical seals. Borrowed
+results retain existing ReadFrom provenance, and Owned supplies no automatic
+Transfer or Share permission. The [0.1.95 notes](releases/v0.1.95.md) and
+[specification](spec/associated-owned-types.md) own the selected compatibility cut;
+[status](status.md) records actual source, mainline and finalized-byte acceptance.
+
 The owned-result successor, development v0.1.69, extends the same mandatory
 `native_parallel` public-harness family with separate supplier/worker/consumer
 packages, full returned payloads, reviewed edits and source-deleted execution.
