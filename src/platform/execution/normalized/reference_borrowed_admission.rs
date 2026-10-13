@@ -2424,7 +2424,8 @@ declarations.end
     }
 
     #[test]
-    fn independent_mixed_contract_accepts_existing_function_owner_with_new_application_expression() {
+    fn independent_mixed_contract_accepts_existing_function_owner_with_new_application_expression()
+    {
         for generation in [
             crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
             crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
