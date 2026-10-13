@@ -96,7 +96,7 @@ fn fixture(tail: bool) -> test_support::InvokeFixture {
     );
     let target = function(source, case.target);
     target.type_parameters = formals.to_vec();
-    target.result = template;
+    target.result.ty = template;
     let parameters = target.parameters.clone();
     for parameter in parameters {
         let OwnerRecord::Parameter(parameter) = source
@@ -165,6 +165,17 @@ fn fixture(tail: bool) -> test_support::InvokeFixture {
     case
 }
 
+// Synthetic canonical-reader controls only: these edited headers provide no
+// retained transport or artifact acceptance evidence.
+fn fixture_at_generation(tail: bool, generation: u16) -> test_support::InvokeFixture {
+    let mut case = fixture(tail);
+    case.fixture.source.root.graph_contract_version = generation;
+    for owner in case.fixture.source.owners.values_mut() {
+        owner.set_encoding_for_edit(generation);
+    }
+    case
+}
+
 fn schema(case: &test_support::InvokeFixture) -> Arc<NormalizedReferenceSchema> {
     let control = ExecutionControl::uncancelled();
     let proof = test_support::prove(&case.fixture, &[], Limits::default(), &control).unwrap();
@@ -211,68 +222,96 @@ fn healthy(
 
 #[test]
 fn reference_associated_invocations_execute_polymorphic_normal_and_tail_routes() {
-    for tail in [false, true] {
-        let case = fixture(tail);
-        let schema = schema(&case);
-        let proof = schema.associated_proof().unwrap();
-        let caller = proof
-            .applications
-            .keys()
-            .find(|application| application.function == case.caller)
-            .unwrap();
-        let target = proof
-            .call_target(caller, case.callee, &ExecutionControl::uncancelled())
-            .unwrap();
-        assert_eq!(target.types.len(), 2);
-        assert!(target.witnesses.is_empty());
-        assert_ne!(
-            proof.symbolic[&case.target].result,
-            proof
-                .application(target, &ExecutionControl::uncancelled())
-                .unwrap()
-                .result
-        );
-        healthy(&case, &schema, tail);
+    for generation in [
+        crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
+        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+    ] {
+        for tail in [false, true] {
+            let case = fixture_at_generation(tail, generation);
+            let schema = schema(&case);
+            let proof = schema.associated_proof().unwrap();
+            let caller = proof
+                .applications
+                .keys()
+                .find(|application| application.function == case.caller)
+                .unwrap();
+            let target = proof
+                .call_target(caller, case.callee, &ExecutionControl::uncancelled())
+                .unwrap();
+            assert_eq!(target.types.len(), 2);
+            assert!(target.witnesses.is_empty());
+            assert_ne!(
+                proof.symbolic[&case.target].result.ty,
+                proof
+                    .application(target, &ExecutionControl::uncancelled())
+                    .unwrap()
+                    .result
+                    .ty
+            );
+            healthy(&case, &schema, tail);
+        }
     }
 }
 
 #[test]
 fn reference_associated_invocations_reject_changed_ordered_children_and_generations() {
-    for tail in [false, true] {
-        let case = fixture(tail);
-        let schema = schema(&case);
-        healthy(&case, &schema, tail);
-        for mutation in 0..6 {
-            let mut changed = case.fixture.source.clone();
-            let invocation = expression(&mut changed, case.invocation);
-            let ExpressionOperation::Invoke { callee, arguments } = &mut invocation.operation
-            else {
-                unreachable!()
-            };
-            match mutation {
-                0 => *callee = case.argument, // Another present canonical child.
-                1 => {
-                    assert_eq!(arguments, &[case.argument, case.second_argument]);
-                    arguments.swap(0, 1); // Both arguments remain well-typed I64.
-                }
-                2 => invocation.contract_version = 32,
-                3 => invocation.contract_version = 34,
-                4 | 5 => {
-                    let OwnerRecord::Declaration(target) = changed
-                        .owners
-                        .get_mut(&OwnerKey::Declaration(case.target.declaration))
-                        .unwrap()
-                    else {
-                        unreachable!()
-                    };
-                    target.header.contract_version = if mutation == 4 { 32 } else { 34 };
-                }
-                _ => unreachable!(),
-            }
-            let error = run(&case, &changed, Arc::clone(&schema)).unwrap_err();
-            assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
-            assert_eq!(error.code, "normalized_reference_type");
+    for generation in [
+        crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
+        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+    ] {
+        for tail in [false, true] {
+            let case = fixture_at_generation(tail, generation);
+            let schema = schema(&case);
             healthy(&case, &schema, tail);
+            for mutation in 0..8 {
+                let mut changed = case.fixture.source.clone();
+                let other_admitted_generation = if generation
+                    == crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+                {
+                    crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+                } else {
+                    crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+                };
+                assert_ne!(other_admitted_generation, generation);
+                let invocation = expression(&mut changed, case.invocation);
+                let ExpressionOperation::Invoke { callee, arguments } = &mut invocation.operation
+                else {
+                    unreachable!()
+                };
+                match mutation {
+                    0 => *callee = case.argument, // Another present canonical child.
+                    1 => {
+                        assert_eq!(arguments, &[case.argument, case.second_argument]);
+                        arguments.swap(0, 1); // Both arguments remain well-typed I64.
+                    }
+                    2 => invocation.contract_version = 32,
+                    3 => invocation.contract_version = other_admitted_generation,
+                    4 | 5 | 7 => {
+                        let OwnerRecord::Declaration(target) = changed
+                            .owners
+                            .get_mut(&OwnerKey::Declaration(case.target.declaration))
+                            .unwrap()
+                        else {
+                            unreachable!()
+                        };
+                        target.header.contract_version = match mutation {
+                            4 => 32,
+                            5 => other_admitted_generation,
+                            7 => crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION + 1,
+                            _ => unreachable!(),
+                        };
+                    }
+                    6 => {
+                        invocation.contract_version =
+                            crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION + 1
+                    }
+                    _ => unreachable!(),
+                }
+                let error = run(&case, &changed, Arc::clone(&schema)).unwrap_err();
+                assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
+                assert_eq!(error.code, "normalized_reference_type");
+                healthy(&case, &schema, tail);
+            }
         }
     }
 }
@@ -301,7 +340,7 @@ fn add_equal_target(case: &mut test_support::InvokeFixture) -> DeclarationRefere
     };
     function.type_parameters.clear();
     function.parameters = parameters.to_vec();
-    function.result = i64_type;
+    function.result.ty = i64_type;
     function.body = local;
     source.owners.insert(
         OwnerKey::Declaration(target.declaration),
@@ -360,7 +399,7 @@ fn reference_associated_function_values_reject_equal_signature_target_substituti
             .application(target, &ExecutionControl::uncancelled())
             .unwrap();
         assert_eq!(proof.symbolic[&other].parameters, closed.parameters);
-        assert_eq!(proof.symbolic[&other].result, closed.result);
+        assert_eq!(proof.symbolic[&other].result.ty, closed.result.ty);
         healthy(&case, &schema, tail);
         let mut changed = case.fixture.source.clone();
         let ExpressionOperation::FunctionValue {
@@ -389,7 +428,9 @@ fn reference_associated_invocations_preserve_no_witness_and_no_borrow_callable_b
             let mut changed = case.fixture.source.clone();
             if borrow {
                 let target = function(&mut changed, case.target);
-                target.result_borrow = Some(target.parameters[0]);
+                target.result.relation = crate::platform::kernel::ResultRelation::ReadFrom {
+                    source: target.parameters[0],
+                };
             } else {
                 let formals = function(&mut changed, case.fixture.consumer)
                     .implementation_parameters
@@ -516,7 +557,7 @@ fn add_external_target(case: &mut test_support::InvokeFixture) -> DeclarationRef
     let external = ExternalDeclaration {
         type_parameters: function.type_parameters.clone(),
         parameters: function.parameters.clone(),
-        result: function.result,
+        result: function.result.ty,
         implementation: ImplementationName::new("core.i64.add").unwrap(),
     };
     owner.header.kind = OwnerKind::External;
@@ -554,12 +595,14 @@ fn reference_associated_invocations_reject_raw_operation_routes_before_children(
                 effect_arguments: vec![],
                 requirement_arguments: vec![],
                 arguments: vec![case.second_argument, case.argument],
+                read_scope_arguments: Vec::new(),
             },
             ExpressionOperation::FunctionValue {
                 function: case.target,
                 type_arguments: types.clone(),
                 effect_arguments: vec![],
                 requirement_arguments: vec![],
+                read_scope_arguments: Vec::new(),
             },
             ExpressionOperation::Call {
                 function: external,
@@ -567,6 +610,7 @@ fn reference_associated_invocations_reject_raw_operation_routes_before_children(
                 effect_arguments: vec![],
                 requirement_arguments: vec![],
                 arguments: vec![case.second_argument, case.argument],
+                read_scope_arguments: Vec::new(),
             },
         ] {
             let mut changed = case.fixture.source.clone();
@@ -736,6 +780,7 @@ fn reference_associated_invocation_seals_bind_route_scope_proof_and_retention_bu
                         effects: &[],
                         requirements: &[],
                         implementations: &[],
+                        scopes: &[],
                     },
                     route,
                 )?;
@@ -801,6 +846,7 @@ fn reference_associated_invocation_seals_bind_route_scope_proof_and_retention_bu
                     effects: &[],
                     requirements: &[],
                     implementations: &[],
+                    scopes: &[],
                 },
                 ReferenceCallRoute::Invocation(Some(&seal)),
             );

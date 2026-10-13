@@ -370,8 +370,8 @@ fn imported_memory_oracle_rejects_foreign_constraints_modes_and_open_actuals() {
                         let PackageInterfaceDeclarationPayload::Function(f) = &mut d.payload else {
                             unreachable!()
                         };
-                        f.result = result;
-                        f.result_borrow = Some(parameter);
+                        f.result.ty = result;
+                        f.result.relation = ResultRelation::ReadFrom { source: parameter };
                     }
                 }
                 _ => unreachable!(),
@@ -630,7 +630,7 @@ declarations.end"#,
                     let DeclarationPayload::Function(function) = &mut d.payload else {
                         unreachable!()
                     };
-                    function.result = child;
+                    function.result.ty = child;
                 }
                 _ => {}
             }

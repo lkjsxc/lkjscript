@@ -8,6 +8,11 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[path = "value_view_admission.rs"]
+mod view_admission;
+
+pub(super) use view_admission::reject_read_view_type_escape;
+
 #[cfg(test)]
 #[path = "map_key_sharing_tests.rs"]
 mod map_key_sharing_tests;
@@ -93,6 +98,9 @@ pub enum NormalizedRecord {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NormalizedValue {
+    /// Affine descriptor custody. Cloning this raw carrier yields an inert observation;
+    /// independently admitted storage reborrowing is required to obtain another live read.
+    ReadView(super::read_view_storage::ReadView),
     OwnedSequence(super::owned_sequence::OwnedSequence),
     OwnedChoice(super::owned_choice::OwnedChoice),
     OwnedProduct(super::owned_product::OwnedProduct),
@@ -125,6 +133,7 @@ pub enum NormalizedValue {
         type_arguments: Arc<[TypeObjectDigest]>,
         effect_arguments: Arc<[crate::platform::kernel::EffectRow]>,
         requirement_arguments: Arc<[crate::platform::kernel::RequirementOperand]>,
+        read_scope_arguments: Arc<[crate::platform::kernel::ReadScopeArgument]>,
         bound_arguments: Option<Arc<Vec<NormalizedValue>>>,
     },
     Resource(NormalizedResourceHandle),
@@ -140,6 +149,15 @@ pub(super) enum MemoryForm {
 }
 
 impl NormalizedValue {
+    /// Negative boundary guard only. Opaque owner tokens and exact types still require
+    /// their consuming evaluator's independent admission before any value is used.
+    pub fn reject_read_view_escape(
+        &self,
+        control: &crate::platform::execution::ExecutionControl,
+    ) -> Result<(), crate::platform::execution::ExecutionError> {
+        view_admission::reject_read_view_value_escape(self, control)
+    }
+
     pub(super) fn memory_form(&self) -> Option<MemoryForm> {
         match self {
             Self::ByteBuffer(_) => Some(MemoryForm::ByteBuffer),
@@ -273,7 +291,8 @@ impl NormalizedValue {
     #[cfg(test)]
     pub fn is_durable(&self) -> bool {
         match self {
-            Self::OwnedProduct(_)
+            Self::ReadView(_)
+            | Self::OwnedProduct(_)
             | Self::OwnedChoice(_)
             | Self::OwnedSequence(_)
             | Self::OwnedI64Cell(_)
@@ -495,7 +514,8 @@ impl RawValueWork {
                 | NormalizedValue::OwnedI64Cell(_)
                 | NormalizedValue::OwnedProduct(_)
                 | NormalizedValue::OwnedChoice(_)
-                | NormalizedValue::OwnedSequence(_) => return,
+                | NormalizedValue::OwnedSequence(_)
+                | NormalizedValue::ReadView(_) => return,
                 value => {
                     if let Some(previous) = self.current.replace(value) {
                         self.values.push(previous);

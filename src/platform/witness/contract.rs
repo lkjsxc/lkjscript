@@ -3,17 +3,23 @@
 use super::ValidatorContractDigest;
 use crate::platform::kernel::{NamespaceClass, OwnerKind, RelationKind};
 
-pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-9";
-pub const WITNESS_CONTRACT_VERSION: u16 = 9;
-pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-11";
-pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 11;
-pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-40";
-pub const VALIDATOR_CONTRACT_VERSION: u16 = 40;
+pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-10";
+pub const WITNESS_CONTRACT_VERSION: u16 = 10;
+pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-12";
+pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 12;
+pub const PREDECESSOR_OWNER_SUMMARY_CONTRACT_VERSION: u16 = 11;
+pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-41";
+pub const VALIDATOR_CONTRACT_VERSION: u16 = 41;
 
-pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT09";
-pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM16";
-pub const WITNESS_ENVELOPE_DOMAIN: &str = "lkjscript.witness.envelope.v9";
-pub const OWNER_SUMMARY_ENVELOPE_DOMAIN: &str = "lkjscript.owner-summary.envelope.v11";
+pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT10";
+pub const PREDECESSOR_WITNESS_MAGIC: [u8; 8] = *b"LKJWIT09";
+pub const PREDECESSOR_WITNESS_CONTRACT_VERSION: u16 = 9;
+pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM17";
+pub const PREDECESSOR_OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM16";
+pub const WITNESS_ENVELOPE_DOMAIN: &str = "lkjscript.witness.envelope.v10";
+pub const PREDECESSOR_WITNESS_ENVELOPE_DOMAIN: &str = "lkjscript.witness.envelope.v9";
+pub const OWNER_SUMMARY_ENVELOPE_DOMAIN: &str = "lkjscript.owner-summary.envelope.v12";
+pub const PREDECESSOR_OWNER_SUMMARY_ENVELOPE_DOMAIN: &str = "lkjscript.owner-summary.envelope.v11";
 
 pub const VALIDATION_WITNESS_DIGEST_DOMAIN: &str = "lkjscript.validation-witness.v8";
 pub const OWNER_SUMMARY_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.v8";
@@ -45,7 +51,7 @@ pub struct ValidatorFeatureDescriptor {
 
 /// This list is the executable owner for rules that affect acceptance or safe witness reuse.
 /// Changing one rule requires changing its feature version, which changes the validator digest.
-pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 43] = [
+pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 44] = [
     ValidatorFeatureDescriptor {
         name: "opaque_nominal_owned_records",
         version: 1,
@@ -56,7 +62,8 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 43] = [
     },
     ValidatorFeatureDescriptor {
         name: "source_tied_owned_read_results",
-        version: 1,
+        // ReadFrom(view) requires an accessible tagged referent path, never passive custody.
+        version: 2,
     },
     ValidatorFeatureDescriptor {
         name: "parameterized_owned_contracts",
@@ -145,11 +152,11 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 43] = [
     },
     ValidatorFeatureDescriptor {
         name: "single_relation_extractor",
-        version: 6,
+        version: 7,
     },
     ValidatorFeatureDescriptor {
         name: "owner_summary_dimensions",
-        version: 4,
+        version: 5,
     },
     ValidatorFeatureDescriptor {
         name: "declaration_local_aggregation",
@@ -220,6 +227,12 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 43] = [
         // Complete associated semantic admission requires fresh proof after the
         // earlier codec/preparation inventory; its old seals cannot be reused.
         version: 2,
+    },
+    ValidatorFeatureDescriptor {
+        name: "associated_source_tied_read_view_families",
+        // Complete scopes, source/result relations, affine descriptors, declared paths and
+        // unused inventories require current independent admission, including every owner/root.
+        version: 1,
     },
 ];
 

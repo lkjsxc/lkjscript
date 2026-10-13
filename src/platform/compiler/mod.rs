@@ -19,6 +19,7 @@ pub(crate) mod manifest;
 pub(crate) mod unit;
 #[cfg(test)]
 mod wire10;
+mod wire33;
 
 pub(crate) use artifact::{
     ARTIFACT_BUNDLE_CHECKSUM_DOMAIN, ARTIFACT_BUNDLE_DIGEST_DOMAIN, ARTIFACT_BUNDLE_END_MAGIC,
@@ -37,6 +38,7 @@ pub use cache::{
     validate_current_compilation,
 };
 pub(crate) use immutable::compile_immutable;
+pub(crate) use link::link_artifact_with_control;
 pub use link::{ArtifactLinkReceipt, ArtifactLinkWork, link_artifact};
 pub use lower::{CompilationReceipt, CompilationWork, compile_unit};
 pub use manifest::{
@@ -46,7 +48,10 @@ pub use manifest::{
 pub(crate) use manifest::{COMPILATION_MANIFEST_ENVELOPE_DOMAIN, COMPILATION_MANIFEST_MAGIC};
 pub(crate) use unit::{
     ASSOCIATED_UNIT_ENVELOPE_DOMAIN, ASSOCIATED_UNIT_KEY_DOMAIN, COMPILER_UNIT_ENVELOPE_DOMAIN,
-    COMPILER_UNIT_KEY_DOMAIN, COMPILER_UNIT_MAGIC,
+    COMPILER_UNIT_KEY_DOMAIN, COMPILER_UNIT_MAGIC, FROZEN_ASSOCIATED_UNIT_ENVELOPE_DOMAIN,
+    FROZEN_ASSOCIATED_UNIT_KEY_DOMAIN, FROZEN_ASSOCIATED_UNIT_MAGIC,
+    FROZEN_COMPILER_UNIT_ENVELOPE_DOMAIN, FROZEN_COMPILER_UNIT_KEY_DOMAIN,
+    FROZEN_COMPILER_UNIT_MAGIC,
 };
 pub use unit::{
     BYTECODE_CONTRACT_IDENTITY, BYTECODE_CONTRACT_VERSION, COMPILER_UNIT_CONTRACT_IDENTITY,

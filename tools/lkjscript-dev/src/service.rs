@@ -50,7 +50,7 @@ const WORKER_BORROWER_FUNCTION: &str = "decl_08eec4f6b013dea79cfed578f85b7db9";
 const WORKER_QUEUE_REQUIREMENT: &str = "req_0cebded5cb056cda5484e39aa40594ad";
 const SERVICE_ARTIFACT_RELATIVE: &str = "generated/lkjournal.lkja";
 const SERVICE_ARTIFACT_SHA256: &str =
-    "5f24a98db8f37a269eb94c3203c09678af537ae471c1992621d4df976a6c0b71";
+    "c4b845bb015775d00708aaf71690dee785a8f234dbd6f6a1dc75594d1d1375ec";
 const HTTP_REQUEST_TYPE: &str =
     "type_object_b84486b5e78230fd2b9c4bdcedc6f4ee1fb08838bc3b178aab0d3fb5967a6a44";
 const HTTP_RESPONSE_TYPE: &str =
@@ -4732,6 +4732,13 @@ fn inspect_http_route_handler_contract(
     ))?;
     let records = service_compact_records("HTTP route handler definition", &output)?;
     service_require_field(&records, "result", "status", "success")?;
+    service_require_field(
+        &records,
+        "projection",
+        "contract",
+        "lkjscript-function-definition-projection-22",
+    )?;
+    service_require_field(&records, "projection", "version", "22")?;
     service_require_field(&records, "page", "start", "0")?;
     let functions = records
         .iter()
@@ -4814,7 +4821,18 @@ fn inspect_http_route_handler_contract(
         requirements.len() as u64 == requirement_count
             && service_required_field(function_record, "type-parameters")? == "0"
             && service_required_field(function_record, "effect-parameters")? == "0"
-            && service_required_field(function_record, "effect-row-parameters")? == "0",
+            && service_required_field(function_record, "effect-row-parameters")? == "0"
+            && service_required_field(function_record, "read-scope-parameters")? == "0"
+            && service_required_field(function_record, "read-scope-sources")? == "0"
+            && service_required_field(function_record, "result-kind")? == "value"
+            && service_required_field(function_record, "result-source")? == "-"
+            && service_required_field(function_record, "result-scope")? == "-"
+            && !records.iter().any(|record| {
+                matches!(
+                    record.operation.as_str(),
+                    "definition.read-scope-parameter" | "definition.read-scope-source"
+                )
+            }),
         "route_handler_requirements",
         "maintained HTTP task handler did not expose its complete closed effect contract",
     )?;
@@ -5921,6 +5939,16 @@ fn run_maintained_definition_pages(
         )?;
         let projection = service_required_record(&parsed, "projection")?;
         service_require_exact(
+            service_required_field(projection, "contract")?,
+            "lkjscript-function-definition-projection-22",
+            "definition contract",
+        )?;
+        service_require_exact(
+            service_required_field(projection, "version")?,
+            "22",
+            "definition version",
+        )?;
+        service_require_exact(
             service_required_field(projection, "function")?,
             &oracle.function,
             "definition function",
@@ -6101,6 +6129,7 @@ fn compare_maintained_definition(
     projection: &MaintainedDefinitionAssembly,
     oracle: &FunctionDefinitionOracle,
 ) -> Result<(), ServiceFailure> {
+    compare_maintained_definition_contract(&projection.records, oracle)?;
     require(
         projection.revision == oracle.revision
             && projection.body_records == oracle.body_preorder.len() as u64
@@ -6274,6 +6303,171 @@ fn compare_maintained_definition(
     Ok(())
 }
 
+fn compare_maintained_definition_contract(
+    records: &[MaintainedDefinitionRecord],
+    oracle: &FunctionDefinitionOracle,
+) -> Result<(), ServiceFailure> {
+    let functions = records
+        .iter()
+        .filter(|record| record.operation == "definition.function")
+        .collect::<Vec<_>>();
+    let [function] = functions.as_slice() else {
+        return Err(ServiceFailure::failed(
+            "definition_oracle_contract",
+            "maintained definition must expose exactly one function contract",
+        ));
+    };
+    let fields = [
+        "id",
+        "kind",
+        "module",
+        "name",
+        "visibility",
+        "type-parameters",
+        "implementation-parameters",
+        "effect-parameters",
+        "requirement-parameters",
+        "effect-row-parameters",
+        "parameters",
+        "result",
+        "result-kind",
+        "result-source",
+        "result-scope",
+        "read-scope-parameters",
+        "read-scope-sources",
+        "effect",
+        "requirements",
+        "body",
+    ];
+    require(
+        function.fields.len() == fields.len()
+            && fields
+                .iter()
+                .all(|name| function.fields.contains_key(*name))
+            && service_definition_field(function, "id")? == oracle.function
+            && service_definition_field(function, "kind")? == oracle.kind
+            && service_definition_field(function, "name")? == oracle.name
+            && service_definition_field(function, "effect")? == oracle.effect
+            && service_definition_field(function, "result")? == oracle.result_type
+            && service_definition_field(function, "result-kind")? == oracle.result_kind
+            && service_definition_field(function, "result-source")?
+                == oracle.result_source.as_deref().unwrap_or("-")
+            && service_definition_field(function, "result-scope")?
+                == oracle.result_scope.as_deref().unwrap_or("-")
+            && service_definition_field(function, "body")? == oracle.body_root
+            && service_parse_u64(
+                service_definition_field(function, "type-parameters")?,
+                "type parameter count",
+            )? == oracle.type_parameters
+            && service_parse_u64(
+                service_definition_field(function, "parameters")?,
+                "parameter count",
+            )? == oracle.parameters
+            && service_parse_u64(
+                service_definition_field(function, "requirements")?,
+                "requirement count",
+            )? == oracle.requirements
+            && service_parse_u64(
+                service_definition_field(function, "read-scope-parameters")?,
+                "read-scope formal count",
+            )? == oracle.read_scope_parameters.len() as u64
+            && service_parse_u64(
+                service_definition_field(function, "read-scope-sources")?,
+                "read-scope source count",
+            )? == oracle.read_scope_sources.len() as u64,
+        "definition_oracle_contract",
+        "maintained result relation or complete scope counts disagree with typed authority",
+    )?;
+    let parameters = records
+        .iter()
+        .filter(|record| record.operation == "definition.read-scope-parameter")
+        .collect::<Vec<_>>();
+    let sources = records
+        .iter()
+        .filter(|record| record.operation == "definition.read-scope-source")
+        .collect::<Vec<_>>();
+    let arguments = records
+        .iter()
+        .filter(|record| record.operation == "definition.read-scope-argument")
+        .collect::<Vec<_>>();
+    require(
+        parameters.len() == oracle.read_scope_parameters.len()
+            && sources.len() == oracle.read_scope_sources.len()
+            && arguments.len() == oracle.read_scope_arguments.len(),
+        "definition_oracle_scope_count",
+        "maintained definition omitted or duplicated inline read-scope inventory",
+    )?;
+    for (record, expected) in parameters.iter().zip(&oracle.read_scope_parameters) {
+        require(
+            record.fields.len() == 4
+                && service_definition_field(record, "id")? == expected.id
+                && service_definition_field(record, "parent")? == expected.parent
+                && service_parse_u64(
+                    service_definition_field(record, "index")?,
+                    "read-scope formal index",
+                )? == u64::from(expected.index)
+                && service_definition_field(record, "name")? == expected.name,
+            "definition_oracle_scope_parameter",
+            "maintained read-scope formal identity, parent, order, or name disagrees",
+        )?;
+    }
+    for (record, expected) in sources.iter().zip(&oracle.read_scope_sources) {
+        require(
+            record.fields.len() == 4
+                && service_definition_field(record, "parent")? == expected.parent
+                && service_parse_u64(
+                    service_definition_field(record, "index")?,
+                    "read-scope source index",
+                )? == u64::from(expected.index)
+                && service_definition_field(record, "source")? == expected.source
+                && service_definition_field(record, "scope")? == expected.scope,
+            "definition_oracle_scope_source",
+            "maintained read-scope source or full static binder coordinate disagrees",
+        )?;
+    }
+    for (record, expected) in arguments.iter().zip(&oracle.read_scope_arguments) {
+        require(
+            record.fields.len() == 4
+                && service_definition_field(record, "parent")? == expected.parent
+                && service_definition_field(record, "slot")? == expected.slot
+                && service_parse_u64(
+                    service_definition_field(record, "index")?,
+                    "read-scope actual index",
+                )? == u64::from(expected.index)
+                && service_definition_field(record, "scope")? == expected.scope,
+            "definition_oracle_scope_argument",
+            "maintained read-scope actual parent, slot, order, or full binder coordinate disagrees",
+        )?;
+    }
+    for record in records
+        .iter()
+        .filter(|record| record.operation == "definition.expression")
+    {
+        let slot = match service_definition_field(record, "form")? {
+            "call" => "call",
+            "implementation_call" => "implementation-call",
+            "function_value" => "function-value",
+            "method_call" => "method-call",
+            _ => continue,
+        };
+        let parent = service_definition_field(record, "id")?;
+        let count = oracle
+            .read_scope_arguments
+            .iter()
+            .filter(|argument| argument.parent == parent && argument.slot == slot)
+            .count();
+        require(
+            service_parse_u64(
+                service_definition_field(record, "read-scope-arguments")?,
+                "read-scope actual count",
+            )? == count as u64,
+            "definition_oracle_scope_actual_count",
+            "maintained call's complete scope-actual count disagrees with typed authority",
+        )?;
+    }
+    Ok(())
+}
+
 fn service_definition_records(
     parsed: &[CompactRecord],
     output: &[u8],
@@ -6322,7 +6516,7 @@ fn service_definition_records(
 fn service_definition_digest(
     records: &[MaintainedDefinitionRecord],
 ) -> Result<(String, u64), ServiceFailure> {
-    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.function-definition.logical.v3");
+    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.function-definition.logical.v4");
     hasher.update(&(records.len() as u64).to_be_bytes());
     let mut logical_bytes = 0_u64;
     for record in records {
@@ -6330,11 +6524,24 @@ fn service_definition_digest(
             "definition.header" => 1,
             "definition.function"
             | "definition.type-parameter"
+            | "definition.implementation-parameter"
+            | "definition.implementation-type-argument"
+            | "definition.requirement-parameter"
+            | "definition.requirement-parameter-operation"
+            | "definition.effect-parameter"
+            | "definition.read-scope-parameter"
+            | "definition.read-scope-source"
             | "definition.parameter"
             | "definition.requirement"
             | "definition.requirement-operation"
             | "definition.requirement-limit" => 2,
-            "definition.expression" | "definition.binding" | "definition.literal" => 3,
+            "definition.expression"
+            | "definition.binding"
+            | "definition.literal"
+            | "definition.effect-argument"
+            | "definition.implementation-operand"
+            | "definition.implementation-operand-type-argument"
+            | "definition.read-scope-argument" => 3,
             "definition.reference" => 4,
             "definition.fact" => 5,
             operation => {
@@ -6897,6 +7104,72 @@ fn print_summary(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn maintained_definition_binds_complete_result_and_scope_meaning() {
+        let bytes = b"definition.function id=decl_11111111111111111111111111111111 kind=pure_function module=module name=reader visibility=public type-parameters=0 implementation-parameters=0 effect-parameters=0 requirement-parameters=0 effect-row-parameters=0 parameters=1 result=type result-kind=view-from result-source=param_33333333333333333333333333333333 result-scope=parameter:declaration:pkg_77777777777777777777777777777777/decl_11111111111111111111111111111111:read_scope_44444444444444444444444444444444 read-scope-parameters=2 read-scope-sources=1 effect=pure requirements=0 body=expr_55555555555555555555555555555555\n\
+definition.read-scope-parameter id=read_scope_44444444444444444444444444444444 parent=decl_11111111111111111111111111111111 index=0 name=loan\n\
+definition.read-scope-parameter id=read_scope_88888888888888888888888888888888 parent=decl_11111111111111111111111111111111 index=1 name=unused\n\
+definition.read-scope-source parent=decl_11111111111111111111111111111111 index=0 source=param_33333333333333333333333333333333 scope=parameter:declaration:pkg_77777777777777777777777777777777/decl_11111111111111111111111111111111:read_scope_44444444444444444444444444444444\n\
+definition.read-scope-argument parent=expr_55555555555555555555555555555555 slot=call index=0 scope=parameter:associated-binding:pkg_77777777777777777777777777777777/decl_99999999999999999999999999999999:assoc_type_22222222222222222222222222222222:read_scope_44444444444444444444444444444444\n\
+definition.expression id=expr_55555555555555555555555555555555 form=call read-scope-arguments=1\n";
+        let parsed = service_compact_records("scope binding fixture", bytes)
+            .expect("strict literal records");
+        let records = service_definition_records(&parsed, bytes).expect("physical records");
+        let oracle: FunctionDefinitionOracle = serde_json::from_value(serde_json::json!({
+            "repository": "repository", "package": "pkg_77777777777777777777777777777777", "revision": "revision",
+            "function": "decl_11111111111111111111111111111111", "kind": "pure_function", "name": "reader", "effect": "pure",
+            "result_type": "type", "result_kind": "view-from", "result_source": "param_33333333333333333333333333333333",
+            "result_scope": "parameter:declaration:pkg_77777777777777777777777777777777/decl_11111111111111111111111111111111:read_scope_44444444444444444444444444444444",
+            "read_scope_parameters": [
+                {"id": "read_scope_44444444444444444444444444444444", "parent": "decl_11111111111111111111111111111111", "index": 0, "name": "loan"},
+                {"id": "read_scope_88888888888888888888888888888888", "parent": "decl_11111111111111111111111111111111", "index": 1, "name": "unused"}
+            ],
+            "read_scope_sources": [{"parent": "decl_11111111111111111111111111111111", "index": 0, "source": "param_33333333333333333333333333333333", "scope": "parameter:declaration:pkg_77777777777777777777777777777777/decl_11111111111111111111111111111111:read_scope_44444444444444444444444444444444"}],
+            "read_scope_arguments": [{"parent": "expr_55555555555555555555555555555555", "slot": "call", "index": 0, "scope": "parameter:associated-binding:pkg_77777777777777777777777777777777/decl_99999999999999999999999999999999:assoc_type_22222222222222222222222222222222:read_scope_44444444444444444444444444444444"}],
+            "type_parameters": 0, "parameters": 1, "requirements": 0, "body_root": "expr_55555555555555555555555555555555",
+            "contract_owners": [], "body_preorder": [], "relations": [], "capability_calls": [], "matches": [],
+            "structural_edges": 0, "maximum_depth": 0, "owner_order_digest": "owners", "fact_digest": "facts", "relation_digest": "relations", "validator": "validator", "certificate": "certificate"
+        })).expect("independent literal oracle");
+        compare_maintained_definition_contract(&records, &oracle)
+            .expect("complete exact scope binding");
+        service_definition_digest(&records).expect("v4 covers formal, source, and actual records");
+        let mut omitted = records.clone();
+        omitted.remove(2);
+        assert!(compare_maintained_definition_contract(&omitted, &oracle).is_err());
+        for (record_index, field, value) in [
+            (0, "result-kind", "read-from"),
+            (0, "result-source", "param_99999999999999999999999999999999"),
+            (
+                0,
+                "result-scope",
+                "parameter:associated-binding:pkg_77777777777777777777777777777777/decl_11111111111111111111111111111111:assoc_type_22222222222222222222222222222222:read_scope_44444444444444444444444444444444",
+            ),
+            (2, "name", "other-unused-formal"),
+            (3, "source", "param_99999999999999999999999999999999"),
+            (3, "index", "1"),
+            (4, "parent", "expr_99999999999999999999999999999999"),
+            (4, "slot", "method-call"),
+            (
+                4,
+                "scope",
+                "parameter:associated-member:pkg_77777777777777777777777777777777/decl_99999999999999999999999999999999:assoc_type_22222222222222222222222222222222:read_scope_44444444444444444444444444444444",
+            ),
+            (5, "read-scope-arguments", "2"),
+        ] {
+            let mut changed = records.clone();
+            changed[record_index]
+                .fields
+                .insert(field.to_owned(), value.to_owned());
+            assert!(
+                compare_maintained_definition_contract(&changed, &oracle).is_err(),
+                "{field}"
+            );
+        }
+        let mut unknown = records;
+        unknown[4].operation = "definition.future-scope".to_owned();
+        assert!(service_definition_digest(&unknown).is_err());
+    }
 
     #[test]
     fn maintained_service_artifact_matches_its_reviewed_pin() {

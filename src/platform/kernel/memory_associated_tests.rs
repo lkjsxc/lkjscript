@@ -173,9 +173,14 @@ pub(crate) fn fixture(kind: FlowKind) -> Fixture {
                     ty: abstract_member,
                     use_mode: ParameterUse::Borrow,
                 }],
-                result: abstract_member,
-                result_borrow: Some(0),
+                result: crate::platform::kernel::CallableResult {
+                    ty: abstract_member,
+                    relation: crate::platform::kernel::ResultRelation::ReadFrom { source: 0 },
+                },
                 effect: FunctionEffect::Pure,
+
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             }],
         }),
     );
@@ -187,10 +192,15 @@ pub(crate) fn fixture(kind: FlowKind) -> Fixture {
         effect_parameters: vec![],
         type_parameters: vec![],
         parameters: vec![],
-        result: unit,
-        result_borrow: None,
+        result: crate::platform::kernel::CallableResult {
+            ty: unit,
+            relation: crate::platform::kernel::ResultRelation::Value,
+        },
         effect: FunctionEffect::Pure,
         body: placeholder,
+
+        read_scope_parameters: Vec::new(),
+        read_scope_sources: Vec::new(),
     };
     let callee = insert_declaration(
         &mut source,
@@ -245,8 +255,12 @@ pub(crate) fn fixture(kind: FlowKind) -> Fixture {
             },
             type_parameters: vec![callee_type_parameter],
             parameters: vec![callee_parameter],
-            result: callee_result,
-            result_borrow: Some(callee_parameter),
+            result: crate::platform::kernel::CallableResult {
+                ty: callee_result,
+                relation: crate::platform::kernel::ResultRelation::ReadFrom {
+                    source: callee_parameter,
+                },
+            },
             body: callee_body,
             ..bare()
         });
@@ -274,6 +288,8 @@ pub(crate) fn fixture(kind: FlowKind) -> Fixture {
                 arguments: vec![local],
                 effect_arguments: vec![],
                 requirement_arguments: vec![],
+
+                read_scope_arguments: Vec::new(),
             },
             FlowKind::Witness => ExpressionOperation::ImplementationCall {
                 function: callee,
@@ -282,12 +298,16 @@ pub(crate) fn fixture(kind: FlowKind) -> Fixture {
                 arguments: vec![local],
                 effect_arguments: vec![],
                 requirement_arguments: vec![],
+
+                read_scope_arguments: Vec::new(),
             },
             FlowKind::Method => ExpressionOperation::MethodCall {
                 witness: operand,
                 contract,
                 method,
                 arguments: vec![local],
+
+                read_scope_arguments: Vec::new(),
             },
         },
     );
@@ -327,8 +347,10 @@ pub(crate) fn fixture(kind: FlowKind) -> Fixture {
             implementation_parameters: vec![witness(caller_witness, caller_type)],
             type_parameters: vec![caller_type_parameter],
             parameters: vec![first, second],
-            result: caller_projection,
-            result_borrow: Some(first),
+            result: crate::platform::kernel::CallableResult {
+                ty: caller_projection,
+                relation: crate::platform::kernel::ResultRelation::ReadFrom { source: first },
+            },
             body: borrow,
             ..bare()
         });
@@ -367,7 +389,7 @@ fn projected_direct_witness_and_method_borrowed_results_preserve_exact_source() 
         )
         .unwrap();
         assert_eq!(invocation.source, fixture.local);
-        assert_eq!(invocation.source_type, invocation.result);
+        assert_eq!(invocation.source_type, invocation.result.ty);
     }
 }
 
@@ -386,7 +408,9 @@ fn equal_projected_types_cannot_swap_borrowed_result_source() {
         let DeclarationPayload::Function(function) = &mut record.payload else {
             unreachable!()
         };
-        function.result_borrow = Some(fixture.second);
+        function.result.relation = ResultRelation::ReadFrom {
+            source: fixture.second,
+        };
         assert_eq!(
             check_caller(&fixture).unwrap_err().code,
             "kernel_buffer_ownership"

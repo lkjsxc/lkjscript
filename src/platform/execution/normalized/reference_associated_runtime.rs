@@ -340,11 +340,30 @@ impl ReferenceState<'_> {
             .zip(&canonical.members)
         {
             self.control.check()?;
+            let category_matches = match &binding.value {
+                crate::platform::kernel::AssociatedTypeBindingValue::Owned { .. } => {
+                    member.scope_parameter.is_none() && self.schema.is_owned_type(member.ty)
+                }
+                crate::platform::kernel::AssociatedTypeBindingValue::ReadViewFamily {
+                    scope_parameter,
+                    ..
+                } => {
+                    member.scope_parameter
+                        == Some(crate::platform::kernel::ReadScopeReference {
+                            binder: crate::platform::kernel::ReadScopeBinder::AssociatedBinding {
+                                implementation: selected.implementation,
+                                member: binding.member,
+                            },
+                            parameter: scope_parameter.id,
+                        })
+                        && self.schema.is_read_view_type(member.ty)
+                }
+            };
             if binding.member != member.member
-                || binding.ty != member.template
-                || self.contains_associated(binding.ty, 0, &mut 0)?
-                || self.method_type(binding.ty, &bindings)? != member.ty
-                || !self.schema.is_owned_type(member.ty)
+                || binding.ty() != member.template
+                || self.contains_associated(binding.ty(), 0, &mut 0)?
+                || self.method_type(binding.ty(), &bindings)? != member.ty
+                || !category_matches
             {
                 return Err(reference_type_error(
                     "stored member changed its canonical projection-free RHS",
@@ -729,8 +748,8 @@ impl ReferenceState<'_> {
         )?;
         if original.is_task == signature.pure
             || !original.implementation_templates.is_empty()
-            || original.result_borrow.is_some()
-            || original.result != signature.result
+            || original.result.relation.source().copied().is_some()
+            || original.result.ty != signature.result.ty
             || original.parameters.len() != signature.parameters.len()
             || original
                 .parameters
@@ -739,11 +758,11 @@ impl ReferenceState<'_> {
                 .any(|((ty, mode), actual)| *ty != actual.ty || *mode != actual.use_mode)
             || original.effect != self.declared_row(&signature.effect)?
             || signature.has_implementations
-            || signature.result_borrow.is_some()
+            || signature.result.relation.source().copied().is_some()
             || owner.header.owner != OwnerKey::Declaration(declaration.declaration)
             || owner.header.kind != expected_kind
             || owner.header.contract_version != generation
-            || !self.schema.buffer_free_types.contains(&signature.result)
+            || !self.schema.buffer_free_types.contains(&signature.result.ty)
             || signature.parameters.iter().any(|parameter| {
                 parameter.use_mode != ParameterUse::Unrestricted
                     || parameter.resource_requirement.is_some()
@@ -859,6 +878,7 @@ impl ReferenceState<'_> {
             types: application.types.to_vec(),
             witnesses,
             effects: application.effects.to_vec(),
+            read_scope_arguments: application.scopes.to_vec(),
             requirements: application
                 .requirements
                 .iter()

@@ -79,6 +79,8 @@ struct Node {
     types: Vec<CompactField>,
     effects: Vec<CompactField>,
     requirements: Vec<CompactField>,
+    scopes: Vec<ScopeSyntax>,
+    view_scope: Option<ScopeSyntax>,
     implementations: Vec<ImplementationSyntax>,
     witness: Option<ImplementationSyntax>,
     members: Vec<CompactRecord>,
@@ -90,6 +92,11 @@ struct ImplementationSyntax {
     reference: CompactField,
     types: Vec<CompactField>,
     implementations: Vec<ImplementationSyntax>,
+}
+
+struct ScopeSyntax {
+    record: CompactRecord,
+    lexical: Option<AuthoredLocalReference>,
 }
 
 enum Work {
@@ -162,6 +169,8 @@ pub(super) fn layout(
             types: Vec::new(),
             effects: Vec::new(),
             requirements: Vec::new(),
+            scopes: Vec::new(),
+            view_scope: None,
             implementations: Vec::new(),
             witness: None,
             members: Vec::new(),
@@ -261,12 +270,24 @@ pub(super) fn layout(
                 node.witness = Some(witness);
                 node.record.fields.push(block.field(args[1], "contract")?);
                 node.record.fields.push(block.field(args[2], "method")?);
-                node.children.extend_from_slice(&args[3..]);
+                let mut rest = &args[3..];
+                if let Some(id) = rest
+                    .first()
+                    .copied()
+                    .filter(|id| block.head(*id) == Some("scopes"))
+                {
+                    for scope in clause(&block, id, "scopes")? {
+                        node.scopes
+                            .push(scope_syntax(&block, *scope, &environment)?);
+                    }
+                    rest = &rest[1..];
+                }
+                node.children.extend_from_slice(rest);
             }
             "implementation-call" | "call" | "function-value" => {
                 minimum(&block, id, args, 1)?;
                 node.record.fields.push(block.field(args[0], "function")?);
-                let rest = applications(&block, &args[1..], &mut node, true)?;
+                let rest = applications(&block, &args[1..], &mut node, true, &environment)?;
                 if form == "function-value" {
                     arity(&block, id, rest, 0)?;
                 }
@@ -308,6 +329,130 @@ pub(super) fn layout(
                 } else {
                     node.children.extend_from_slice(&args[2..]);
                 }
+            }
+            "view-create" => {
+                minimum(&block, id, args, 4)?;
+                node.record.operation = "expression.read-view-create".into();
+                node.record
+                    .fields
+                    .push(block.field(args[0], "declaration")?);
+                node.types = clause(&block, args[1], "types")?
+                    .iter()
+                    .map(|ty| block.field(*ty, "type"))
+                    .collect::<Result<_, _>>()?;
+                let scopes = clause(&block, args[2], "scope")?;
+                arity(&block, args[2], scopes, 1)?;
+                node.view_scope = Some(scope_syntax(&block, scopes[0], &environment)?);
+                let source = clause(&block, args[3], "source")?;
+                arity(&block, args[3], source, 1)?;
+                node.lexical = Some(local_operand(&block, source[0], &environment, false)?);
+                let mut ids = BTreeSet::new();
+                for field in &args[4..] {
+                    let parts = clause(&block, *field, "field")?;
+                    arity(&block, *field, parts, 2)?;
+                    let id: FieldId = block.atom(parts[0])?.parse()?;
+                    if !ids.insert(id) {
+                        return Err(block.error(
+                            parts[0],
+                            "change_read_view_field_duplicate",
+                            "view construction repeats a field identity",
+                        ));
+                    }
+                    let mut record = member_record(&block, *field);
+                    record.fields.push(block.field(parts[0], "field")?);
+                    node.members.push(record);
+                    node.children.push(parts[1]);
+                }
+            }
+            "view-reborrow" | "view-move" | "view-drop" | "view-data-field" => {
+                arity(
+                    &block,
+                    id,
+                    args,
+                    match form {
+                        "view-reborrow" => 2,
+                        "view-data-field" => 3,
+                        _ => 1,
+                    },
+                )?;
+                node.record.operation = format!(
+                    "expression.read-view-{}",
+                    match form {
+                        "view-reborrow" => "reborrow",
+                        "view-move" => "move",
+                        "view-drop" => "drop",
+                        _ => "data-field",
+                    }
+                );
+                node.lexical = Some(local_operand(&block, args[0], &environment, true)?);
+                if form == "view-reborrow" {
+                    node.view_scope = Some(scope_syntax(&block, args[1], &environment)?);
+                }
+                if form == "view-data-field" {
+                    node.record
+                        .fields
+                        .push(block.field(args[1], "declaration")?);
+                    node.record.fields.push(block.field(args[2], "field")?);
+                }
+            }
+            "view-borrow" | "borrow-view-field" => {
+                let is_field = form == "borrow-view-field";
+                arity(&block, id, args, if is_field { 5 } else { 3 })?;
+                node.record.operation = format!(
+                    "expression.read-view-{}",
+                    if is_field { "borrow-field" } else { "borrow" }
+                );
+                node.lexical = Some(local_operand(&block, args[0], &environment, true)?);
+                if is_field {
+                    node.record
+                        .fields
+                        .push(block.field(args[1], "declaration")?);
+                    node.record.fields.push(block.field(args[2], "field")?);
+                }
+                let binding_index = if is_field { 3 } else { 1 };
+                let (binder, explicit) = binder_alias(
+                    &block,
+                    clause(&block, args[binding_index], "binding")?,
+                    symbols,
+                )?;
+                if !(1..=2).contains(&binder.len()) {
+                    return Err(block.error(
+                        args[binding_index],
+                        "change_read_view_binding",
+                        "view binding requires name and optional type annotation",
+                    ));
+                }
+                let local_name = name(&block, binder[0])?.to_string();
+                let local_symbol = match explicit {
+                    Some(symbol) => symbol,
+                    None => symbols.allocate(&block.syntax[binder[0]].location)?,
+                };
+                let mut record = member_record(&block, args[binding_index]);
+                record.fields.push(block.field(binder[0], "name")?);
+                record.fields.push(CompactField {
+                    name: "as".into(),
+                    value: local_symbol.clone(),
+                    location: record.location.clone(),
+                });
+                if let Some(annotation) = binder.get(1) {
+                    let ty = clause(&block, *annotation, "type")?;
+                    arity(&block, *annotation, ty, 1)?;
+                    record.fields.push(block.field(ty[0], "type")?);
+                }
+                node.members.push(record);
+                let body = clause(&block, args[binding_index + 1], "in")?;
+                arity(&block, args[binding_index + 1], body, 1)?;
+                node.children.push(body[0]);
+                work.push(Work::Leave(local_name.clone()));
+                work.push(Work::Expression {
+                    id: body[0],
+                    depth: depth + 1,
+                });
+                work.push(Work::Enter {
+                    name: local_name,
+                    symbol: local_symbol,
+                });
+                scoped = true;
             }
             "borrow-call" => {
                 arity(&block, id, args, 3)?;
@@ -648,7 +793,7 @@ pub(super) fn layout(
                     &args[1..]
                 } else {
                     node.record.fields.push(block.field(args[0], "type")?);
-                    applications(&block, &args[1..], &mut node, false)?
+                    applications(&block, &args[1..], &mut node, false, &environment)?
                 };
                 for field in fields {
                     let parts = clause(&block, *field, "field")?;
@@ -667,7 +812,7 @@ pub(super) fn layout(
             "variant" => {
                 minimum(&block, id, args, 1)?;
                 node.record.fields.push(block.field(args[0], "case")?);
-                let payload = applications(&block, &args[1..], &mut node, false)?;
+                let payload = applications(&block, &args[1..], &mut node, false, &environment)?;
                 if payload.len() > 1 {
                     return Err(block.error(
                         id,
@@ -923,11 +1068,194 @@ fn minimum(block: &Block, id: usize, args: &[usize], expected: usize) -> Result<
     Ok(())
 }
 
+fn local_operand(
+    block: &Block,
+    id: usize,
+    environment: &BTreeMap<String, Vec<String>>,
+    require_local: bool,
+) -> Result<AuthoredLocalReference, Diagnostic> {
+    let atom = if block.head(id) == Some("local") {
+        let args = clause(block, id, "local")?;
+        arity(block, id, args, 1)?;
+        args[0]
+    } else if require_local {
+        return Err(block.error(
+            id,
+            "change_local_reference",
+            "view operations require (local VALUE)",
+        ));
+    } else {
+        id
+    };
+    let atom = if block.head(atom) == Some("exact") {
+        let args = clause(block, atom, "exact")?;
+        arity(block, atom, args, 1)?;
+        args[0]
+    } else {
+        atom
+    };
+    let value = block.atom(atom)?;
+    if value.starts_with(ParameterId::PREFIX) {
+        return Ok(AuthoredLocalReference::FunctionParameter {
+            parameter: value.parse()?,
+        });
+    }
+    if value.starts_with(BindingId::PREFIX) {
+        return Ok(AuthoredLocalReference::LexicalBinding {
+            binding: value.parse()?,
+        });
+    }
+    if value.starts_with('$') {
+        validate_local_label(&member_record(block, atom), "value", value, '$')?;
+        return Ok(AuthoredLocalReference::Symbol {
+            symbol: value.into(),
+        });
+    }
+    let symbol = environment
+        .get(value)
+        .and_then(|values| values.last())
+        .ok_or_else(|| {
+            block.error(
+                atom,
+                "change_block_local_unbound",
+                format!("lexical local '{value}' is not bound in this block scope"),
+            )
+        })?;
+    Ok(if symbol.starts_with(ParameterId::PREFIX) {
+        AuthoredLocalReference::FunctionParameter {
+            parameter: symbol.parse()?,
+        }
+    } else {
+        AuthoredLocalReference::Symbol {
+            symbol: symbol.clone(),
+        }
+    })
+}
+
+fn scope_syntax(
+    block: &Block,
+    id: usize,
+    environment: &BTreeMap<String, Vec<String>>,
+) -> Result<ScopeSyntax, Diagnostic> {
+    let mut record = member_record(block, id);
+    if matches!(&block.syntax[id].kind, SyntaxKind::Atom { .. }) {
+        record.operation = "scope-fragment".into();
+        record.fields.push(block.field(id, "scope")?);
+        return Ok(ScopeSyntax {
+            record,
+            lexical: None,
+        });
+    }
+    if block.head(id) == Some("lexical-read-scope") {
+        let args = clause(block, id, "lexical-read-scope")?;
+        arity(block, id, args, 2)?;
+        record.operation = "read-scope.lexical-actual".into();
+        record.fields.push(block.field(args[0], "callable")?);
+        let lexical = local_operand(block, args[1], environment, false)?;
+        if matches!(lexical, AuthoredLocalReference::FunctionParameter { .. }) {
+            return Err(block.error(
+                args[1],
+                "change_read_scope_binding",
+                "lexical read scope requires a lexical binding",
+            ));
+        }
+        return Ok(ScopeSyntax {
+            record,
+            lexical: Some(lexical),
+        });
+    }
+    let args = clause(block, id, "read-scope")?;
+    arity(block, id, args, 2)?;
+    let binder = block.list(args[0])?;
+    let kind = binder.first().copied().ok_or_else(|| {
+        block.error(
+            args[0],
+            "change_read_scope_binder",
+            "missing read scope binder",
+        )
+    })?;
+    let kind = block.atom(kind)?;
+    if !matches!(
+        kind,
+        "declaration" | "contract-method" | "associated-member" | "associated-binding"
+    ) || binder.len() != if kind == "declaration" { 2 } else { 3 }
+    {
+        return Err(block.error(
+            args[0],
+            "change_read_scope_binder",
+            "invalid read scope binder coordinates",
+        ));
+    }
+    record.operation = "read-scope.parameter-actual".into();
+    record.fields.push(CompactField {
+        name: "binder-kind".into(),
+        value: kind.into(),
+        location: block.syntax[args[0]].location.clone(),
+    });
+    record.fields.push(block.field(binder[1], "binder")?);
+    if let Some(child) = binder.get(2) {
+        record.fields.push(block.field(
+            *child,
+            if kind == "contract-method" {
+                "method"
+            } else {
+                "member"
+            },
+        )?);
+    }
+    record.fields.push(block.field(args[1], "parameter")?);
+    Ok(ScopeSyntax {
+        record,
+        lexical: None,
+    })
+}
+
+fn lower_scope_syntax(
+    decoder: &mut Decoder,
+    syntax: &ScopeSyntax,
+) -> Result<AuthoredReadScopeArgument, Diagnostic> {
+    let record = &syntax.record;
+    if record.operation == "scope-fragment" {
+        return decoder.decode_read_scope(required(record, "scope")?);
+    }
+    if record.operation == "read-scope.lexical-actual" {
+        return Ok(AuthoredReadScopeArgument::Lexical {
+            callable: decoder.parse_declaration_reference(record, "callable")?,
+            binding: syntax
+                .lexical
+                .clone()
+                .ok_or_else(|| inventory_error(record, "lexical scope binding was lost"))?,
+        });
+    }
+    let declaration = decoder.parse_declaration_reference(record, "binder")?;
+    let binder = match required(record, "binder-kind")? {
+        "declaration" => AuthoredReadScopeBinder::Declaration(declaration),
+        "contract-method" => AuthoredReadScopeBinder::ContractMethod {
+            contract: declaration,
+            method: parse_field(record, "method")?,
+        },
+        "associated-member" => AuthoredReadScopeBinder::AssociatedMember {
+            contract: declaration,
+            member: parse_field(record, "member")?,
+        },
+        "associated-binding" => AuthoredReadScopeBinder::AssociatedBinding {
+            implementation: declaration,
+            member: parse_field(record, "member")?,
+        },
+        _ => return Err(inventory_error(record, "scope binder kind was lost")),
+    };
+    Ok(AuthoredReadScopeArgument::Parameter {
+        binder,
+        parameter: parse_field(record, "parameter")?,
+    })
+}
+
 fn applications<'a>(
     block: &Block,
     args: &'a [usize],
     node: &mut Node,
     callable: bool,
+    environment: &BTreeMap<String, Vec<String>>,
 ) -> Result<&'a [usize], Diagnostic> {
     let mut previous = 0;
     let mut consumed = 0;
@@ -938,12 +1266,20 @@ fn applications<'a>(
             "effects" => 2,
             "requirements" => 3,
             "implementations" => 4,
+            "scopes" => 5,
             _ => break,
         };
         if rank <= previous || (!callable && rank != 1) {
-            return Err(block.error(*id, "change_block_application", "application clauses must occur at most once in types/effects/requirements/implementations order and only where supported"));
+            return Err(block.error(*id, "change_block_application", "application clauses must occur at most once in types/effects/requirements/implementations/scopes order and only where supported"));
         }
         previous = rank;
+        if rank == 5 {
+            for scope in clause(block, *id, head)? {
+                node.scopes.push(scope_syntax(block, *scope, environment)?);
+            }
+            consumed += 1;
+            continue;
+        }
         if rank == 4 {
             for operand in clause(block, *id, head)? {
                 node.implementations.push(implementation_syntax(
@@ -1147,6 +1483,16 @@ fn lower_node(
             )
         })
         .collect::<Result<Vec<_>, _>>()?;
+    let scopes = node
+        .scopes
+        .iter()
+        .map(|scope| lower_scope_syntax(decoder, scope))
+        .collect::<Result<Vec<_>, _>>()?;
+    let view_scope = node
+        .view_scope
+        .as_ref()
+        .map(|scope| lower_scope_syntax(decoder, scope))
+        .transpose()?;
     if !node.implementations.is_empty() && record.operation != "expression.implementation-call" {
         return Err(inventory_error(
             record,
@@ -1155,6 +1501,7 @@ fn lower_node(
     }
     let operation = match record.operation.as_str() {
         "expression.implementation-call" => AuthoredExpressionOperation::ImplementationCall {
+            read_scope_arguments: scopes,
             function: decoder.parse_declaration_reference(record, "function")?,
             type_arguments: types,
             effect_arguments: effects,
@@ -1169,6 +1516,7 @@ fn lower_node(
                 .collect::<Result<_, _>>()?,
         },
         "expression.method-call" => AuthoredExpressionOperation::MethodCall {
+            read_scope_arguments: scopes,
             witness: lower_implementation_syntax(
                 decoder,
                 record,
@@ -1182,6 +1530,87 @@ fn lower_node(
                 .map(|_| child())
                 .collect::<Result<_, _>>()?,
         },
+        "expression.read-view-create" => {
+            let fields = node
+                .members
+                .iter()
+                .map(|record| {
+                    Ok(AuthoredReadViewFieldInitializer {
+                        field: parse_field(record, "field")?,
+                        value: child()?,
+                    })
+                })
+                .collect::<Result<_, Diagnostic>>()?;
+            AuthoredExpressionOperation::CreateReadView {
+                declaration: decoder.parse_declaration_reference(record, "declaration")?,
+                type_arguments: types,
+                read_scope: view_scope
+                    .ok_or_else(|| inventory_error(record, "view scope was lost"))?,
+                source: node
+                    .lexical
+                    .ok_or_else(|| inventory_error(record, "view source was lost"))?,
+                fields,
+            }
+        }
+        "expression.read-view-reborrow" => AuthoredExpressionOperation::ReborrowReadView {
+            value: node
+                .lexical
+                .ok_or_else(|| inventory_error(record, "view local was lost"))?,
+            read_scope: view_scope.ok_or_else(|| inventory_error(record, "view scope was lost"))?,
+        },
+        "expression.read-view-move" => AuthoredExpressionOperation::MoveReadView {
+            value: node
+                .lexical
+                .ok_or_else(|| inventory_error(record, "view local was lost"))?,
+        },
+        "expression.read-view-drop" => AuthoredExpressionOperation::DropReadView {
+            value: node
+                .lexical
+                .ok_or_else(|| inventory_error(record, "view local was lost"))?,
+        },
+        "expression.read-view-data-field" => AuthoredExpressionOperation::ReadViewDataField {
+            value: node
+                .lexical
+                .ok_or_else(|| inventory_error(record, "view local was lost"))?,
+            field: AuthoredReadViewFieldReference {
+                declaration: decoder.parse_declaration_reference(record, "declaration")?,
+                field: parse_field(record, "field")?,
+            },
+        },
+        "expression.read-view-borrow" | "expression.read-view-borrow-field" => {
+            let binding = node
+                .members
+                .first()
+                .ok_or_else(|| inventory_error(record, "view borrow binding was lost"))?;
+            let binding = Box::new(AuthoredBindingDefinition {
+                symbol: symbol_field(binding, "as")?,
+                name: parse_name(binding, "name")?,
+                declared_type: optional(binding, "type")
+                    .map(|ty| decoder.decode_type(ty))
+                    .transpose()?,
+            });
+            let value = node
+                .lexical
+                .ok_or_else(|| inventory_error(record, "view local was lost"))?;
+            let body = Box::new(child()?);
+            if record.operation == "expression.read-view-borrow" {
+                AuthoredExpressionOperation::BorrowReadView {
+                    value,
+                    binding,
+                    body,
+                }
+            } else {
+                AuthoredExpressionOperation::BorrowReadViewField {
+                    value,
+                    field: AuthoredReadViewFieldReference {
+                        declaration: decoder.parse_declaration_reference(record, "declaration")?,
+                        field: parse_field(record, "field")?,
+                    },
+                    binding,
+                    body,
+                }
+            }
+        }
         "expression.unit" => AuthoredExpressionOperation::Unit {},
         "expression.bool" => AuthoredExpressionOperation::Bool {
             value: parse_bool(record, "value")?,
@@ -1222,6 +1651,7 @@ fn lower_node(
             right: Box::new(child()?),
         },
         "expression.call" => AuthoredExpressionOperation::Call {
+            read_scope_arguments: scopes,
             function: decoder.parse_declaration_reference(record, "function")?,
             type_arguments: types,
             effect_arguments: effects,
@@ -1231,6 +1661,7 @@ fn lower_node(
                 .collect::<Result<_, _>>()?,
         },
         "expression.function-value" => AuthoredExpressionOperation::FunctionValue {
+            read_scope_arguments: scopes,
             function: decoder.parse_declaration_reference(record, "function")?,
             type_arguments: types,
             effect_arguments: effects,

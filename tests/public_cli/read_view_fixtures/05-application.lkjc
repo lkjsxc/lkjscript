@@ -1,0 +1,156 @@
+declarations.begin
+(units
+  (module create readview-app
+    (type-alias Input (record (values (list I64)) (chunks (list (list I64)))
+      (start I64) (end I64) (sub_start I64) (sub_end I64)))
+    (type-alias Snapshot (record (length I64) (values (list I64)) (sum I64)))
+    (type-alias Observed (record (snapshot Snapshot) (source_length I64)))
+    (type-alias Reused (record (length I64) (values (list I64)) (sum I64) (drained (list I64))))
+    (type-alias Observation (record (range Snapshot) (subrange Snapshot) (source_length I64)
+      (drained (list I64)) (reused_empty Reused)))
+    (type-alias Result (record (flat Observation) (chunked Observation)))
+    (function create scenario (visibility private) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_d8500000000000000000000000000001 reader readview-consumer::RangeRead W (types I64))
+      (implementation-parameter implparam_d8500000000000000000000000000002 length readview-consumer::SourceLength W)
+      (implementation-parameter implparam_d8500000000000000000000000000003 drain readview-consumer::SourceDrain W)
+      (parameter create input (type Input)) (parameter create incoming (type W) (use consume))
+      (returns Observation (value))
+      (body (let
+        (binding owner (as $scenario-owner) (type W) (local incoming))
+        (binding range-view (as $scenario-range-view)
+          (type (associated-read-view-projection scenario implparam_d8500000000000000000000000000001
+            readview-consumer::RangeRead assoc_type_d8100000000000000000000000000001 (lexical-read-scope scenario $scenario-range-view)))
+          (borrow-call
+            (method-call parameter@scenario@implparam_d8500000000000000000000000000001
+              readview-consumer::RangeRead method_d8100000000000000000000000000001
+              (scopes (lexical-read-scope scenario $scenario-range-view))
+              (field (local input) (name start)) (field (local input) (name end)) (local owner))
+            (binding constructed (type (associated-read-view-projection scenario implparam_d8500000000000000000000000000001
+              readview-consumer::RangeRead assoc_type_d8100000000000000000000000000001 (lexical-read-scope scenario $scenario-range-view))))
+            (in (view-move (local constructed)))))
+        (binding range (type Observed)
+          (implementation-call readview-consumer::observe-view (types W)
+            (implementations parameter@scenario@implparam_d8500000000000000000000000000001
+              parameter@scenario@implparam_d8500000000000000000000000000002)
+            (scopes (lexical-read-scope scenario $scenario-range-view)) (local range-view)))
+        (binding child (as $scenario-child-view)
+          (type (associated-read-view-projection scenario implparam_d8500000000000000000000000000001
+            readview-consumer::RangeRead assoc_type_d8100000000000000000000000000001 (lexical-read-scope scenario $scenario-child-view)))
+          (borrow-call
+            (implementation-call readview-transformer::outer (types W)
+              (implementations parameter@scenario@implparam_d8500000000000000000000000000001)
+              (scopes (lexical-read-scope scenario $scenario-child-view))
+              (field (local input) (name start)) (field (local input) (name end))
+              (field (local input) (name sub_start)) (field (local input) (name sub_end)) (local owner))
+            (binding constructed (type (associated-read-view-projection scenario implparam_d8500000000000000000000000000001
+              readview-consumer::RangeRead assoc_type_d8100000000000000000000000000001 (lexical-read-scope scenario $scenario-child-view))))
+            (in (view-move (local constructed)))))
+        (binding retained (type (associated-read-view-projection scenario implparam_d8500000000000000000000000000001
+          readview-consumer::RangeRead assoc_type_d8100000000000000000000000000001 (lexical-read-scope scenario $scenario-child-view)))
+          (view-reborrow (local child) (lexical-read-scope scenario $scenario-child-view)))
+        (binding subrange (type Observed)
+          (sequence (view-drop (local child))
+            (borrow-call
+              (implementation-call readview-transformer::forward-first (types W)
+                (implementations parameter@scenario@implparam_d8500000000000000000000000000001)
+                (scopes (lexical-read-scope scenario $scenario-child-view)) (local retained) (local retained))
+              (binding alias (type (associated-read-view-projection scenario implparam_d8500000000000000000000000000001
+                readview-consumer::RangeRead assoc_type_d8100000000000000000000000000001 (lexical-read-scope scenario $scenario-child-view))))
+              (in (view-borrow (local alias) (binding read (type (associated-read-view-projection scenario
+                implparam_d8500000000000000000000000000001 readview-consumer::RangeRead
+                assoc_type_d8100000000000000000000000000001 (lexical-read-scope scenario $scenario-child-view))))
+                (in (implementation-call readview-consumer::observe-view (types W)
+                  (implementations parameter@scenario@implparam_d8500000000000000000000000000001
+                    parameter@scenario@implparam_d8500000000000000000000000000002)
+                  (scopes (lexical-read-scope scenario $scenario-child-view)) (local read))))))))
+        (binding drained (type (owned-product (field rest W) (field values (list I64))))
+          (sequence (view-drop (local range-view)) (view-drop (local retained))
+            (method-call parameter@scenario@implparam_d8500000000000000000000000000003
+              readview-consumer::SourceDrain method_d8100000000000000000000000000007 (local owner))))
+        (in (unpack-owned (type (owned-product (field rest W) (field values (list I64)))) (local drained)
+          (field rest (binding rest (as $scenario-rest) (type W))) (field values (binding values (type (list I64))))
+          (in (let
+            (binding empty-view (as $scenario-empty-view)
+              (type (associated-read-view-projection scenario implparam_d8500000000000000000000000000001
+                readview-consumer::RangeRead assoc_type_d8100000000000000000000000000001 (lexical-read-scope scenario $scenario-empty-view)))
+              (borrow-call
+                (method-call parameter@scenario@implparam_d8500000000000000000000000000001
+                  readview-consumer::RangeRead method_d8100000000000000000000000000001
+                  (scopes (lexical-read-scope scenario $scenario-empty-view)) (i64 0) (i64 0) (local rest))
+                (binding constructed (type (associated-read-view-projection scenario implparam_d8500000000000000000000000000001
+                  readview-consumer::RangeRead assoc_type_d8100000000000000000000000000001 (lexical-read-scope scenario $scenario-empty-view))))
+                (in (view-move (local constructed)))))
+            (binding empty (type Observed)
+              (implementation-call readview-consumer::observe-view (types W)
+                (implementations parameter@scenario@implparam_d8500000000000000000000000000001
+                  parameter@scenario@implparam_d8500000000000000000000000000002)
+                (scopes (lexical-read-scope scenario $scenario-empty-view)) (local empty-view)))
+            (binding reused (type (owned-product (field rest W) (field values (list I64))))
+              (sequence (view-drop (local empty-view))
+                (method-call parameter@scenario@implparam_d8500000000000000000000000000003
+                  readview-consumer::SourceDrain method_d8100000000000000000000000000007 (local rest))))
+            (in (unpack-owned (type (owned-product (field rest W) (field values (list I64)))) (local reused)
+              (field rest (binding final_rest (type W))) (field values (binding empty_values (type (list I64))))
+              (in (sequence (call readview-consumer::discard (types W) (local final_rest))
+                (record structural
+                  (field range (field (local range) (name snapshot)))
+                  (field subrange (field (local subrange) (name snapshot)))
+                  (field source_length (field (local range) (name source_length)))
+                  (field drained (local values))
+                  (field reused_empty (record structural
+                    (field length (field (field (local empty) (name snapshot)) (name length)))
+                    (field values (field (field (local empty) (name snapshot)) (name values)))
+                    (field sum (field (field (local empty) (name snapshot)) (name sum)))
+                    (field drained (local empty_values))))))))))))))))
+    (function create flat (visibility public) (effect pure)
+      (parameter create input (type Input)) (returns Observation (value))
+      (body (let (binding owner (type (owned-sequence I64)) (call readview-flat::build (field (local input) (name values))))
+        (in (implementation-call scenario (types (owned-sequence I64))
+          (implementations concrete@readview-flat::Flat concrete@readview-flat::FlatLength concrete@readview-flat::FlatDrain)
+          (local input) (local owner))))))
+    (function create chunked (visibility public) (effect pure)
+      (parameter create input (type Input)) (returns Observation (value))
+      (body (let (binding owner (type readview-chunked::ChunkStorage) (call readview-chunked::build (field (local input) (name chunks))))
+        (in (implementation-call scenario (types readview-chunked::ChunkStorage)
+          (implementations concrete@readview-chunked::Chunked concrete@readview-chunked::ChunkedLength concrete@readview-chunked::ChunkedDrain)
+          (local input) (local owner))))))
+    (function create main (visibility public) (effect pure)
+      (parameter create input (type Input)) (returns Result (value))
+      (body (record structural (field flat (call flat (local input))) (field chunked (call chunked (local input))))))
+    (function create metadata (visibility public) (effect pure)
+      (parameter create input (type Input)) (returns I64 (value))
+      (body (let
+        (binding owner (type (owned-sequence I64)) (call readview-flat::build (field (local input) (name values))))
+        (binding view (as $metadata-view-scope)
+          (type (read-view-application readview-flat::Metadata (types) (lexical-read-scope metadata $metadata-view-scope)))
+          (borrow-call
+            (call readview-flat::make-metadata (scopes (lexical-read-scope metadata $metadata-view-scope)) (local owner))
+            (binding constructed (type (read-view-application readview-flat::Metadata (types) (lexical-read-scope metadata $metadata-view-scope))))
+            (in (view-move (local constructed)))))
+        (in (call readview-flat::metadata-length (scopes (lexical-read-scope metadata $metadata-view-scope)) (local view))))))
+    (function create zero (visibility public) (effect pure)
+      (parameter create input (type Input)) (returns I64 (value))
+      (body (let
+        (binding owner (type (owned-sequence I64)) (call readview-flat::build (field (local input) (name values))))
+        (binding observed (type I64) (call readview-flat::length (local owner)))
+        (binding view (as $zero-view-scope)
+          (type (read-view-application readview-flat::Zero (types) (lexical-read-scope zero $zero-view-scope)))
+          (borrow-call
+            (call readview-flat::make-zero (scopes (lexical-read-scope zero $zero-view-scope)) (local owner))
+            (binding constructed (type (read-view-application readview-flat::Zero (types) (lexical-read-scope zero $zero-view-scope))))
+            (in (view-move (local constructed)))))
+        (in (sequence (view-drop (local view))
+          (sequence (call readview-consumer::discard (types (owned-sequence I64)) (local owner)) (local observed)))))))
+    (component create command (visibility private)
+      (port create main (type (function (Input) Result)) (function main))
+      (port create flat (type (function (Input) Observation)) (function flat))
+      (port create chunked (type (function (Input) Observation)) (function chunked))
+      (port create metadata (type (function (Input) I64)) (function metadata))
+      (port create zero (type (function (Input) I64)) (function zero))))
+  (target create readview (component readview-app::command) (runner command) (port readview-app::command::main))
+  (target create readview-flat (component readview-app::command) (runner command) (port readview-app::command::flat))
+  (target create readview-chunked (component readview-app::command) (runner command) (port readview-app::command::chunked))
+  (target create readview-metadata (component readview-app::command) (runner command) (port readview-app::command::metadata))
+  (target create readview-zero (component readview-app::command) (runner command) (port readview-app::command::zero)))
+declarations.end

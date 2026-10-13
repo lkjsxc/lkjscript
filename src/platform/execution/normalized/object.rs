@@ -4,6 +4,7 @@ use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedC
 use super::prepare::{NormalizedOperation, NormalizedProgram, NormalizedRequirement};
 use super::resource::NormalizedResourceScope;
 use super::value::{NormalizedRecord, NormalizedValue};
+use super::value_schema::NormalizedValueSchema;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::kernel::{
@@ -216,7 +217,11 @@ impl NormalizedCapabilityAdapter for NormalizedObjectStorageAdapter {
     ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
         let possible = policy.external_visibility == ExternalVisibility::Possible;
-        match self.operation(policy)? {
+        let operation = self.operation(policy)?;
+        for argument in &arguments {
+            argument.reject_read_view_escape(control)?;
+        }
+        match operation {
             ObjectOperation::PutNew => {
                 let [
                     NormalizedValue::Text(key),
@@ -482,6 +487,17 @@ fn validate_signature(
     parameters: &[Shape],
     result: Shape,
 ) -> Result<(), Diagnostic> {
+    let control = ExecutionControl::uncancelled();
+    for ty in operation
+        .parameters
+        .iter()
+        .map(|parameter| parameter.ty)
+        .chain(std::iter::once(operation.result))
+    {
+        program
+            .reject_read_view_escape(ty, &control)
+            .map_err(super::runner::execution_diagnostic)?;
+    }
     if operation.parameters.len() != parameters.len()
         || operation
             .parameters

@@ -86,9 +86,13 @@ fn borrowed_result_artifact_rejects_counterfeit_source_and_return_mode() {
             unreachable!()
         };
         match attack {
-            "source" => signature.result_borrow = Some(signature.parameters[1].parameter),
+            "source" => {
+                signature.result.relation = crate::platform::kernel::ResultRelation::ReadFrom {
+                    source: signature.parameters[1].parameter,
+                }
+            }
             "owning-mode" => {
-                signature.result_borrow = None;
+                signature.result.relation = crate::platform::kernel::ResultRelation::Value;
                 *code.instructions.last_mut().unwrap() = CompiledInstruction::Return;
             }
             "owning-return" => *code.instructions.last_mut().unwrap() = CompiledInstruction::Return,

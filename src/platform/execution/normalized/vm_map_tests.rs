@@ -214,6 +214,7 @@ fn maps_reject_final_children_foreign_origins_and_hidden_authority_before_callba
     let (add, _) = external(&program, "core.i64.add", 0, 2);
     let foreign = NormalizedProgram::prepare(program.artifact().clone()).unwrap();
     let callable = |origin| NormalizedValue::Function {
+        read_scope_arguments: Arc::from([]),
         function: FunctionIndex(add.0, origin),
         type_arguments: Arc::from([]),
         effect_arguments: Arc::from([]),
@@ -457,6 +458,7 @@ fn retained_map_captures_are_readmitted_independently_and_host_results_are_compl
     snapshot.types = schema.types.clone();
     let reader = boundary_reader(&snapshot, &schema);
     let capture = |captured| NormalizedValue::Function {
+        read_scope_arguments: Arc::from([]),
         function: length,
         type_arguments: Arc::from([integer, integer]),
         effect_arguments: Arc::from([]),
@@ -743,13 +745,18 @@ fn map_admission_keeps_depth_and_aggregate_item_bounds_in_foreground() {
                     if depth == 255 {
                         assert_eq!(result.value.unwrap(), NormalizedValue::I64(1));
                     } else {
+                        // This overdeep raw value reaches the same complete negative
+                        // view guard before either evaluator's type admission.
+                        let error = result.value.unwrap_err();
                         assert_eq!(
-                            result.value.unwrap_err().code,
-                            if reference {
-                                "normalized_reference_value_depth"
-                            } else {
-                                "normalized_value_depth"
-                            }
+                            error.class,
+                            crate::platform::execution::ExecutionFailureClass::Resource
+                        );
+                        assert_eq!(error.code, "normalized_value_depth");
+                        assert!(
+                            error
+                                .message
+                                .contains("view escape inspection exceeds finite value depth 256")
                         );
                     }
                 }
@@ -773,7 +780,8 @@ fn map_admission_keeps_depth_and_aggregate_item_bounds_in_foreground() {
                     assert_eq!(
                         result.value.is_ok(),
                         success,
-                        "{reference}/{children}: finite ingress is independent of cumulative quotas"
+                        "{reference}/{children}: finite ingress is independent of cumulative quotas; result={:?}",
+                        result.value
                     );
                     if success {
                         assert_eq!(result.value.unwrap(), NormalizedValue::I64(1000));
@@ -920,13 +928,19 @@ fn admitted_deep_maps_keep_semantic_and_observation_comparison_on_a_bounded_stac
                         &ExecutionControl::uncancelled(),
                         None,
                     );
+                    // The complete negative view guard precedes the evaluator's
+                    // raw-type admission. Its depth-256 refusal is now the first
+                    // boundary failure for this depth-257 value in both engines.
+                    let error = excessive.value.unwrap_err();
                     assert_eq!(
-                        excessive.value.unwrap_err().code,
-                        if reference {
-                            "normalized_reference_value_depth"
-                        } else {
-                            "normalized_value_depth"
-                        }
+                        error.class,
+                        crate::platform::execution::ExecutionFailureClass::Resource
+                    );
+                    assert_eq!(error.code, "normalized_value_depth");
+                    assert!(
+                        error
+                            .message
+                            .contains("view escape inspection exceeds finite value depth 256")
                     );
                 }
                 // These exact shapes passed both independent depth-256 admissions.
@@ -941,6 +955,7 @@ fn admitted_deep_maps_keep_semantic_and_observation_comparison_on_a_bounded_stac
             }
 
             let mut late_callable = NormalizedValue::Function {
+                read_scope_arguments: Arc::from([]),
                 function: external(&program, "core.i64.add", 0, 2).0,
                 type_arguments: Arc::from([]),
                 effect_arguments: Arc::from([]),
@@ -1037,11 +1052,20 @@ fn retained_map_state_preserves_exact_logical_storage_and_depth_boundaries() {
                 let excessive_type =
                     internal_type(&mut program, &mut schema, TypeForm::Option { item: ty });
                 let excessive = NormalizedValue::Option(Some(Box::new(value)));
+                // The retained-state probe first performs complete negative view
+                // admission on the exact type and value. This extra wrapper reaches
+                // that depth-256 bound before the retained-state meter starts.
+                let error = probe(&program, &excessive, excessive_type, usize::MAX, usize::MAX)
+                    .unwrap_err();
                 assert_eq!(
-                    probe(&program, &excessive, excessive_type, usize::MAX, usize::MAX)
-                        .unwrap_err()
-                        .code,
-                    "session_state_depth"
+                    error.class,
+                    crate::platform::execution::ExecutionFailureClass::Resource
+                );
+                assert_eq!(error.code, "normalized_value_depth");
+                assert!(
+                    error
+                        .message
+                        .contains("view escape inspection exceeds finite value depth 256")
                 );
                 assert_eq!(
                     probe(&program, &retained, ty, nodes, bytes).unwrap(),

@@ -8,7 +8,7 @@ use crate::platform::kernel::{
     DeclarationPayload, ExpressionOperation, OwnerKey, OwnerRecord, TextValue,
 };
 use crate::platform::semantic_id::ExpressionId;
-use crate::platform::witness::aggregation_children;
+use crate::platform::witness::aggregation_children_with_bindings;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -167,7 +167,15 @@ pub(super) fn lower<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
                 ));
             }
         }
-        let children = aggregation_children(&record)?;
+        let children = aggregation_children_with_bindings(&record, |binding| {
+            match live(lowerer, OwnerKey::Binding(binding))? {
+                OwnerRecord::Binding(record) => Ok(Some(record)),
+                _ => Err(error(
+                    "change_literal_structure",
+                    "function body binding identity selects a foreign owner kind",
+                )),
+            }
+        })?;
         charge(lowerer, children.len())?;
         pending.extend(children.into_iter().map(|(_, child)| child));
     }
@@ -205,6 +213,12 @@ fn live<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         return Err(error(
             "change_literal_created",
             "literal update requires existing accepted identities",
+        ));
+    }
+    if working.deleted {
+        return Err(error(
+            "change_literal_deleted",
+            "literal update requires live accepted identities",
         ));
     }
     lowerer.check_budget("function literal canonical reads")?;

@@ -31,6 +31,8 @@ mod checked;
 use checked::{BorrowResultTarget, BorrowSource, Class, Value as CheckedValue};
 #[path = "vm_intrinsics.rs"]
 mod checked_intrinsics;
+#[path = "vm_read_views.rs"]
+mod read_views;
 #[path = "vm_parallel.rs"]
 mod structured;
 #[path = "vm_transfer.rs"]
@@ -425,6 +427,7 @@ impl<'a> NormalizedVm<'a> {
             remaining_steps: self.policy.instruction_steps,
             stack: Vec::new(),
             frames: Vec::new(),
+            incoming_view_scopes: Vec::new(),
             next_frame: 0,
             next_transaction: 0,
             transactions: BTreeMap::new(),
@@ -537,7 +540,10 @@ impl<'a> NormalizedVm<'a> {
             *observed = Some(machine.observation.clone());
         }
         result.and_then(|value| {
-            if value.class(machine.program, &mut machine.observation.value_work)? == Class::Memory {
+            if matches!(
+                value.class(machine.program, &mut machine.observation.value_work)?,
+                Class::Memory | Class::ReadView
+            ) {
                 return Err(type_error(
                     "ByteBuffer cannot cross a raw result boundary; freeze it",
                 ));
@@ -570,6 +576,11 @@ struct Frame {
     owned_loans: Vec<OwnedLoanScope>,
     pending_borrow_call: Option<PendingBorrowCall>,
     borrow_result_target: Option<BorrowResultTarget>,
+    view_scopes: Vec<read_views::Scope>,
+    view_builders: Vec<read_views::PendingView>,
+    lexical_view_scopes: Vec<crate::platform::kernel::ReadScopeArgument>,
+    application_identity: super::value::ValueOrigin,
+    invocation_identity: super::value::ValueOrigin,
     type_arguments: BTreeMap<TypeParameterId, TypeObjectDigest>,
     stack_base: usize,
 }
@@ -577,12 +588,13 @@ struct Frame {
 struct PendingBorrowCall {
     target: BorrowResultTarget,
     dispatched: bool,
+    guard: Option<CheckedValue>,
 }
 
 struct OwnedLoanScope {
     binding_local: u32,
     stack_base: usize,
-    parent: CheckedValue,
+    parent: Option<CheckedValue>,
 }
 
 impl Frame {
@@ -610,14 +622,19 @@ impl Frame {
 
 impl Drop for Frame {
     fn drop(&mut self) {
+        self.view_builders.clear();
+        drop(self.pending_borrow_call.take());
         self.clear_owned_loans();
         // Drop read parameters before any owning ancestor in this activation.
         for value in &mut self.locals {
-            if value.as_ref().is_some_and(|v| v.raw().memory_is_borrowed()) {
+            if value.as_ref().is_some_and(|v| {
+                v.raw().memory_is_borrowed() || matches!(v.raw(), NormalizedValue::ReadView(_))
+            }) {
                 drop(value.take());
             }
         }
         self.locals.clear();
+        self.view_scopes.clear();
     }
 }
 
@@ -647,11 +664,41 @@ struct Machine<'a> {
     remaining_steps: Option<u64>,
     stack: Vec<CheckedValue>,
     frames: Vec<Frame>,
+    incoming_view_scopes: Vec<read_views::Scope>,
     next_frame: u64,
     next_transaction: u64,
     transactions: BTreeMap<RequirementIndex, ActiveTransaction>,
     calls_by_requirement: BTreeMap<RequirementIndex, u64>,
     observation: NormalizedRunObservation,
+}
+
+fn reserve_execution_allocation(
+    policy: NormalizedRunPolicy,
+    shared_budget: Option<&super::shared_budget::SharedBudget>,
+    observation: &mut NormalizedRunObservation,
+    bytes: u64,
+) -> Result<(), ExecutionError> {
+    if bytes > super::value::MAXIMUM_VALUE_ALLOCATION_BYTES {
+        return Err(resource_error(
+            "normalized_allocation",
+            "one allocation exceeds finite value storage",
+        ));
+    }
+    let next_bytes = crate::platform::execution::cumulative_charge(
+        observation.allocated_bytes,
+        bytes,
+        policy.maximum_allocated_bytes,
+        "normalized_allocation",
+        "execution exhausted its allocation budget",
+    )?;
+    if let Some(budget) = shared_budget {
+        budget.reserve(bytes, 0)?;
+    }
+    observation.allocated_bytes = next_bytes;
+    if bytes != 0 {
+        observation.allocation_charges = observation.allocation_charges.saturating_add(1);
+    }
+    Ok(())
 }
 
 impl Drop for Machine<'_> {
@@ -846,12 +893,16 @@ impl Machine<'_> {
                     left_implementations,
                     right_types,
                     right_implementations,
+                    left_read_scope_arguments,
+                    right_read_scope_arguments,
                     left,
                     left_arguments,
                     right,
                     right_arguments,
                     result_type,
                 } => {
+                    self.validate_call_scope_arguments(left, &left_read_scope_arguments)?;
+                    self.validate_call_scope_arguments(right, &right_read_scope_arguments)?;
                     if !left_implementations.is_empty() || !right_implementations.is_empty() {
                         return Err(type_error("unclosed parallel implementation application"));
                     }
@@ -928,8 +979,14 @@ impl Machine<'_> {
                         .get(source_local as usize)
                         .and_then(Option::as_ref)
                         .ok_or_else(|| type_error("borrowed call source is not live"))?;
-                    source.raw().memory_validate(self.memory_domain, false)?;
-                    if source.raw().memory_form().is_none() {
+                    if let NormalizedValue::ReadView(view) = source.raw() {
+                        view.validate(self.control)?;
+                    } else {
+                        source.raw().memory_validate(self.memory_domain, false)?;
+                    }
+                    if source.raw().memory_form().is_none()
+                        && !matches!(source.raw(), NormalizedValue::ReadView(_))
+                    {
                         return Err(type_error(
                             "borrowed call requires an owning or borrowed source",
                         ));
@@ -941,9 +998,16 @@ impl Machine<'_> {
                         },
                         position: source_position,
                     };
+                    let source_is_view = matches!(source.raw(), NormalizedValue::ReadView(_));
+                    let guard = if source_is_view {
+                        self.borrow_view_local(source_local)?
+                    } else {
+                        self.borrow_owned_source(source_local)?
+                    };
                     self.current_frame_mut()?.pending_borrow_call = Some(PendingBorrowCall {
                         target,
                         dispatched: false,
+                        guard: Some(guard),
                     });
                 }
                 NormalizedInstruction::AdoptBorrowResult {
@@ -953,6 +1017,65 @@ impl Machine<'_> {
                 } => {
                     self.adopt_borrow_result(source_local, binding_local, binding_type)?;
                 }
+                NormalizedInstruction::BeginReadView {
+                    view_type,
+                    source_local,
+                    fields,
+                } => self.begin_read_view(view_type, source_local, fields)?,
+                NormalizedInstruction::BeginReadViewScope { read_scope } => {
+                    self.begin_read_view_scope(read_scope)?
+                }
+                NormalizedInstruction::EndReadViewScope { read_scope } => {
+                    self.end_read_view_scope(read_scope)?
+                }
+                NormalizedInstruction::FinishReadView { view_type, fields } => {
+                    self.finish_read_view(view_type, fields)?
+                }
+                NormalizedInstruction::BorrowReadView {
+                    view_type,
+                    source_local,
+                    binding_local,
+                    binding_type,
+                } => self.borrow_read_view(view_type, source_local, binding_local, binding_type)?,
+                NormalizedInstruction::EndReadViewBorrow { binding_local } => {
+                    self.end_view_borrow(binding_local)?
+                }
+                NormalizedInstruction::ReborrowReadView {
+                    view_type,
+                    source_local,
+                } => self.reborrow_read_view(view_type, source_local)?,
+                NormalizedInstruction::MoveReadView {
+                    view_type,
+                    source_local,
+                } => self.move_read_view(view_type, source_local, false)?,
+                NormalizedInstruction::DropReadView {
+                    view_type,
+                    source_local,
+                } => self.move_read_view(view_type, source_local, true)?,
+                NormalizedInstruction::ReadViewDataField {
+                    view_type,
+                    source_local,
+                    field,
+                } => self.read_view_data_field(view_type, source_local, field)?,
+                NormalizedInstruction::BorrowReadViewField {
+                    view_type,
+                    source_local,
+                    field,
+                    binding_local,
+                    binding_type,
+                } => self.borrow_read_view_field(
+                    view_type,
+                    source_local,
+                    field,
+                    binding_local,
+                    binding_type,
+                )?,
+                NormalizedInstruction::AdoptViewResult {
+                    source_local,
+                    binding_local,
+                    binding_type,
+                } => self.adopt_view_result(source_local, binding_local, binding_type)?,
+                NormalizedInstruction::ReturnView => self.return_view()?,
                 NormalizedInstruction::SequenceEmpty { sequence_type } => {
                     let ty = self.resolve_type_arguments(&[sequence_type])?[0];
                     self.sequence_item_type(ty)?;
@@ -1147,7 +1270,17 @@ impl Machine<'_> {
                         token.borrow_item(self.memory_domain, index, control, &mut |bytes| {
                             self.charge_allocation(bytes)
                         })?;
-                    let child = self.borrowed_product_child(raw, binding_type)?;
+                    let mut child = self.borrowed_product_child(raw, binding_type)?;
+                    child.set_read_path(
+                        self.extended_read_path(
+                            &parent,
+                            super::read_view_storage::ReadPathStep::OwnedIndex {
+                                ty,
+                                index: u64::try_from(index)
+                                    .map_err(|_| type_error("owned sequence index is negative"))?,
+                            },
+                        )?,
+                    );
                     self.start_owned_borrow(binding_local, parent, child)?;
                 }
                 NormalizedInstruction::ChooseOwned { choice_type, case } => {
@@ -1222,7 +1355,11 @@ impl Machine<'_> {
                         control,
                         &mut |bytes| self.charge_allocation(bytes),
                     )?;
-                    let child = self.borrowed_product_child(raw, binding_type)?;
+                    let mut child = self.borrowed_product_child(raw, binding_type)?;
+                    child.set_read_path(self.extended_read_path(
+                        &parent,
+                        super::read_view_storage::ReadPathStep::OwnedSlot { ty, field },
+                    )?);
                     self.start_owned_borrow(binding_local, parent, child)?;
                 }
                 NormalizedInstruction::MatchBorrowedOwned {
@@ -1255,7 +1392,11 @@ impl Machine<'_> {
                     let raw = token.borrow_payload(self.memory_domain, control, &mut |bytes| {
                         self.charge_allocation(bytes)
                     })?;
-                    let child = self.borrowed_product_child(raw, binding_type)?;
+                    let mut child = self.borrowed_product_child(raw, binding_type)?;
+                    child.set_read_path(self.extended_read_path(
+                        &parent,
+                        super::read_view_storage::ReadPathStep::OwnedChoiceSlot { ty, case },
+                    )?);
                     self.start_owned_borrow(arm.binding_local, parent, child)?;
                     self.jump(arm.target)?;
                 }
@@ -1355,8 +1496,10 @@ impl Machine<'_> {
                     effect_arguments,
                     function,
                     type_arguments,
+                    read_scope_arguments,
                     arguments,
                 } => {
+                    self.validate_call_scope_arguments(function, &read_scope_arguments)?;
                     let arguments = self.pop_many(arguments as usize)?;
                     if !effect_arguments.is_empty() || !requirement_arguments.is_empty() {
                         return Err(type_error("effect application requires prepared closure"));
@@ -1373,8 +1516,10 @@ impl Machine<'_> {
                     effect_arguments,
                     function,
                     type_arguments,
+                    read_scope_arguments,
                     arguments,
                 } => {
+                    self.validate_call_scope_arguments(function, &read_scope_arguments)?;
                     if !effect_arguments.is_empty() || !requirement_arguments.is_empty() {
                         return Err(type_error("effect application requires prepared closure"));
                     }
@@ -1391,7 +1536,9 @@ impl Machine<'_> {
                     effect_arguments,
                     function,
                     type_arguments,
+                    read_scope_arguments,
                 } => {
+                    self.validate_call_scope_arguments(function, &read_scope_arguments)?;
                     if !effect_arguments.is_empty() || !requirement_arguments.is_empty() {
                         return Err(type_error("effect application requires prepared closure"));
                     }
@@ -1807,7 +1954,14 @@ impl Machine<'_> {
                             "function returned before borrowed-result adoption",
                         ));
                     }
-                    let result = self.pop()?;
+                    if !self.current_frame()?.view_builders.is_empty()
+                        || !self.current_frame()?.lexical_view_scopes.is_empty()
+                    {
+                        return Err(type_error(
+                            "function returned during read-view construction",
+                        ));
+                    }
+                    let mut result = self.pop()?;
                     let stack_base = self.current_frame()?.stack_base;
                     if self.stack.len() != stack_base {
                         return Err(runtime_error(
@@ -1817,13 +1971,18 @@ impl Machine<'_> {
                     }
                     if let Some(function) = self.current_frame()?.function {
                         let f = &self.program.functions[function.0 as usize];
-                        if f.result_borrow.is_some() {
+                        if f.result.relation.source().copied().is_some() {
                             return Err(type_error(
                                 "borrowed result requires its sealed return path",
                             ));
                         }
+                        if matches!(result.raw(), NormalizedValue::ReadView(_)) {
+                            return Err(type_error(
+                                "read-view result requires its exact ViewFrom return path",
+                            ));
+                        }
                         let memory_form = self.frame_memory_form(
-                            f.result,
+                            f.result.ty,
                             "function result escaped its exact function application",
                         )?;
                         let expected = memory_form.is_some();
@@ -1838,6 +1997,7 @@ impl Machine<'_> {
                                 return Err(type_error("memory result representation mismatch"));
                             }
                             result.raw().memory_validate(self.memory_domain, true)?;
+                            result.clear_owning_memory_placement();
                         }
                     }
                     let frame = self.frames.pop().ok_or_else(|| {
@@ -2305,18 +2465,38 @@ impl Machine<'_> {
             .get(source as usize)
             .and_then(Option::as_ref)
             .ok_or_else(|| type_error("owned borrow source is uninitialized or consumed"))?
-            .borrow_source();
+            .borrow_source()
+            .or(Some(BorrowSource {
+                frame: self.current_frame()?.id,
+                local: source,
+            }));
         if provenance.is_some() {
             self.charge_allocation(CheckedValue::borrow_metadata_allocation_bytes())?;
         }
         let source = self
-            .current_frame()?
+            .frames
+            .last()
+            .ok_or_else(|| {
+                runtime_error(
+                    "normalized_frame_missing",
+                    "normalized execution has no active frame",
+                )
+            })?
             .locals
             .get(source as usize)
             .and_then(Option::as_ref)
             .ok_or_else(|| type_error("owned borrow source is uninitialized or consumed"))?;
         source.raw().memory_validate(self.memory_domain, false)?;
+        source.validate_read_custody(self.control, &mut |bytes| {
+            reserve_execution_allocation(
+                self.policy,
+                self.shared_budget.as_deref(),
+                &mut self.observation,
+                bytes,
+            )
+        })?;
         let mut parent = source.duplicate(ParameterUse::Borrow)?;
+        parent.copy_read_provenance_from(source);
         parent.set_borrow_source(provenance);
         Ok(parent)
     }
@@ -2327,7 +2507,9 @@ impl Machine<'_> {
         parent: CheckedValue,
         mut child: CheckedValue,
     ) -> Result<(), ExecutionError> {
-        if child.raw().memory_form().is_some() {
+        if child.raw().memory_form().is_some()
+            || matches!(child.raw(), NormalizedValue::ReadView(_))
+        {
             if parent.borrow_source().is_some() {
                 self.charge_allocation(child.borrow_metadata_bytes())?;
             }
@@ -2351,7 +2533,7 @@ impl Machine<'_> {
         frame.owned_loans.push(OwnedLoanScope {
             binding_local,
             stack_base,
-            parent,
+            parent: Some(parent),
         });
         *destination = Some(child);
         Ok(())
@@ -2363,9 +2545,13 @@ impl Machine<'_> {
             .function
             .and_then(|index| self.program.functions.get(index.0 as usize))
             .ok_or_else(|| type_error("borrowed result requires an exact graph function"))?;
-        let position = function
-            .result_borrow
-            .ok_or_else(|| type_error("owned read view cannot escape its lexical body"))?;
+        let crate::platform::kernel::ResultRelation::ReadFrom { source: position } =
+            function.result.relation
+        else {
+            return Err(type_error(
+                "owned borrowed result requires its exact ReadFrom relation",
+            ));
+        };
         if !function.graph_function
             || !matches!(
                 function.effect,
@@ -2388,7 +2574,12 @@ impl Machine<'_> {
     fn return_borrowed(&mut self) -> Result<(), ExecutionError> {
         // All fallible validation/reservation precedes extraction. The operand
         // and activation retain custody until there is space for the root guard.
-        let frame = self.current_frame()?;
+        let frame = self.frames.last().ok_or_else(|| {
+            runtime_error(
+                "normalized_frame_missing",
+                "normalized execution has no active frame",
+            )
+        })?;
         if self.stack.len() != frame.stack_base.saturating_add(1)
             || !frame.owned_loans.is_empty()
             || frame.pending_borrow_call.is_some()
@@ -2402,6 +2593,14 @@ impl Machine<'_> {
             .last()
             .ok_or_else(|| type_error("missing borrowed result"))?;
         let position = self.validate_borrowed_return_source(value)?;
+        value.validate_read_custody(self.control, &mut |bytes| {
+            reserve_execution_allocation(
+                self.policy,
+                self.shared_budget.as_deref(),
+                &mut self.observation,
+                bytes,
+            )
+        })?;
         let target = frame
             .borrow_result_target
             .ok_or_else(|| type_error("borrowed result has no lexical caller"))?;
@@ -2415,7 +2614,7 @@ impl Machine<'_> {
             .ok_or_else(|| type_error("borrowed return requires a graph activation"))?;
         let function = &self.program.functions[function_index.0 as usize];
         let expected = self.frame_memory_form(
-            function.result,
+            function.result.ty,
             "borrowed result escaped its exact function application",
         )?;
         if expected.is_none() || value.raw().memory_form() != expected {
@@ -2435,7 +2634,7 @@ impl Machine<'_> {
             .locals
             .get(position as usize)
             .and_then(Option::as_ref)
-            .is_none_or(|source| !source.raw().memory_is_borrowed())
+            .is_none_or(|source| !source.raw().memory_is_borrowed() && !source.is_view_borrowed())
         {
             return Err(type_error(
                 "borrowed return source parameter is not a live read token",
@@ -2503,7 +2702,12 @@ impl Machine<'_> {
                     "borrowed-result adoption reservation failed",
                 )
             })?;
-        let parent = self.borrow_owned_source(source_local)?;
+        let parent = self
+            .current_frame_mut()?
+            .pending_borrow_call
+            .as_mut()
+            .and_then(|pending| pending.guard.take())
+            .ok_or_else(|| type_error("borrowed adoption lost its preprotected source custody"))?;
         let mut child = self.pop()?;
         if child.take_borrow_packet() != Some(target)
             || expected.is_none()
@@ -2537,10 +2741,9 @@ impl Machine<'_> {
             .last()
             .is_some_and(|value| value.raw().memory_is_borrowed());
         let transfer_scope = escaping
-            && self
-                .stack
-                .last()
-                .is_some_and(|value| scope.parent.borrow_source() == value.borrow_source());
+            && self.stack.last().is_some_and(|value| {
+                scope.parent.as_ref().and_then(CheckedValue::borrow_source) == value.borrow_source()
+            });
         if escaping {
             let result = self
                 .stack
@@ -2592,7 +2795,7 @@ impl Machine<'_> {
                 frame
                     .owned_loans
                     .pop()
-                    .map(|scope| scope.parent)
+                    .and_then(|scope| scope.parent)
                     .ok_or_else(|| type_error("missing owned loan scope"))
             })?;
         } else {
@@ -3179,13 +3382,13 @@ impl Machine<'_> {
             .frames
             .last()
             .and_then(|frame| frame.pending_borrow_call.as_ref());
-        match (function.result_borrow, pending) {
+        match (function.result.relation.source().copied(), pending) {
             (Some(position), Some(pending))
                 if !pending.dispatched
                     && pending.target.position == position
                     && arguments.get(position as usize).is_some_and(|argument| {
                         argument.borrow_placement() == Some(pending.target.source)
-                            && argument.raw().memory_is_borrowed()
+                            && (argument.raw().memory_is_borrowed() || argument.is_view_borrowed())
                     })
                     && function.graph_function
                     && matches!(
@@ -3202,13 +3405,25 @@ impl Machine<'_> {
         // A lexical projection retains parent custody even when its source is
         // itself a borrowed parameter. Its cleanup continuation cannot transfer.
         let tail = tail
-            && function.result_borrow.is_none()
+            && function.result.relation.source().copied().is_none()
+            && function.read_scope_sources.is_empty()
             && !self.frames.last().is_some_and(|frame| {
                 frame.function.is_some_and(|index| {
                     self.program.functions[index.0 as usize]
-                        .result_borrow
+                        .result
+                        .relation
+                        .source()
+                        .copied()
                         .is_some()
                 }) || !frame.owned_loans.is_empty()
+                    || !frame.view_builders.is_empty()
+                    || !frame.lexical_view_scopes.is_empty()
+                    || frame.view_scopes.iter().any(|scope| scope.owner.is_some())
+                    || frame
+                        .locals
+                        .iter()
+                        .flatten()
+                        .any(|value| matches!(value.raw(), NormalizedValue::ReadView(_)))
                     || frame
                         .locals
                         .iter()
@@ -3255,7 +3470,7 @@ impl Machine<'_> {
                     )?;
                     self.admit_instantiated(
                         raw,
-                        function.result,
+                        function.result.ty,
                         None,
                         false,
                         &type_arguments_by_parameter,
@@ -3281,6 +3496,64 @@ impl Machine<'_> {
     ) -> Result<(), ExecutionError> {
         let mut uses = BTreeMap::new();
         for (parameter, argument) in function.parameters.iter().zip(arguments) {
+            argument.validate_read_custody(self.control, &mut |bytes| {
+                reserve_execution_allocation(
+                    self.policy,
+                    self.shared_budget.as_deref(),
+                    &mut self.observation,
+                    bytes,
+                )
+            })?;
+            // Ordinary generic composites are admitted as a template plus the
+            // complete actual map; their concrete digest need not be retained.
+            // Only a positive view root requires its exact scoped layout here.
+            let parameter_type = self
+                .program
+                .types
+                .get(&parameter.ty)
+                .ok_or_else(|| type_error("missing exact call parameter type"))?;
+            if parameter_type.form.is_read_view() {
+                let resolved = resolve_runtime_application_type(
+                    self.program,
+                    parameter.ty,
+                    context,
+                    self.control,
+                    "call parameter escaped its exact application",
+                )?;
+                if self.program.read_view_layout(resolved).is_none() {
+                    return Err(type_error("view parameter has no exact scoped layout"));
+                }
+                if parameter.use_mode != ParameterUse::Borrow
+                    || parameter.resource_requirement.is_some()
+                    || !argument.is_view_borrowed()
+                {
+                    return Err(type_error(
+                        "view parameter requires a separately admitted borrowed descriptor",
+                    ));
+                }
+                let NormalizedValue::ReadView(view) = argument.raw() else {
+                    return Err(type_error(
+                        "view parameter has another positive value category",
+                    ));
+                };
+                if view.identity().ty != resolved
+                    || view.identity().program != self.program.value_origin
+                {
+                    return Err(type_error(
+                        "view parameter has another exact type, scope or witness application",
+                    ));
+                }
+                view.validate(self.control)?;
+                continue;
+            }
+            // This negative guard visits the full retained template/layout,
+            // including inactive cases and phantom actuals. Abstract leaves are
+            // still closed by the complete actual and selected-witness checks.
+            super::value_schema::NormalizedValueSchema::reject_read_view_escape(
+                self.program,
+                parameter.ty,
+                self.control,
+            )?;
             let memory_form =
                 if transfer::contains_associated_type(self.program, parameter.ty, self.control)
                     .map_err(|error| {
@@ -3434,7 +3707,10 @@ impl Machine<'_> {
         self.charge_allocation(locals_bytes)?;
         let metadata_bytes = arguments
             .iter()
-            .filter(|argument| argument.raw().memory_form().is_some())
+            .filter(|argument| {
+                argument.raw().memory_form().is_some()
+                    || matches!(argument.raw(), NormalizedValue::ReadView(_))
+            })
             .try_fold(0_u64, |bytes, argument| {
                 bytes.checked_add(argument.borrow_metadata_bytes())
             })
@@ -3448,6 +3724,11 @@ impl Machine<'_> {
             self.charge_allocation(metadata_bytes)?;
         }
         let id = self.next_frame;
+        let view_scopes = if let Some(index) = function {
+            self.bind_call_view_scopes(index, &arguments, id)?
+        } else {
+            Vec::new()
+        };
         self.next_frame = self.next_frame.checked_add(1).ok_or_else(|| {
             resource_error(
                 "normalized_frame_generation",
@@ -3455,8 +3736,33 @@ impl Machine<'_> {
             )
         })?;
         let mut locals = (0..code.local_count).map(|_| None).collect::<Vec<_>>();
+        let application_identity = super::value::ValueOrigin::fresh()
+            .ok_or_else(|| type_error("view application identity exhausted"))?;
+        let invocation_identity = super::value::ValueOrigin::fresh()
+            .ok_or_else(|| type_error("view invocation identity exhausted"))?;
         for (index, mut argument) in arguments.into_iter().enumerate() {
-            if argument.raw().memory_form().is_some() {
+            if let NormalizedValue::ReadView(view) = argument.raw() {
+                let ty = view.identity().ty;
+                self.charge_allocation((2 * std::mem::size_of::<usize>()) as u64)?;
+                let destination = super::read_view_storage::SourceAnchor {
+                    program: self.program.value_origin,
+                    application: application_identity,
+                    invocation: invocation_identity,
+                    coordinate: super::read_view_storage::SourceCoordinate::Parameter(index as u32),
+                    origin: self.memory_domain,
+                    path: Arc::from([]),
+                };
+                let mut rebound = self.lend_read_view(&argument, destination.clone(), ty, false)?;
+                rebound.set_read_path(destination.path);
+                argument = rebound;
+            }
+            if argument.raw().memory_form().is_some()
+                || matches!(argument.raw(), NormalizedValue::ReadView(_))
+            {
+                if argument.raw().memory_form().is_some() {
+                    self.charge_allocation((2 * std::mem::size_of::<usize>()) as u64)?;
+                    argument.set_read_path(Arc::from([]));
+                }
                 argument.set_borrow_source(Some(BorrowSource {
                     frame: id,
                     local: index as u32,
@@ -3466,7 +3772,10 @@ impl Machine<'_> {
         }
         let borrow_result_target = if function.is_some_and(|index| {
             self.program.functions[index.0 as usize]
-                .result_borrow
+                .result
+                .relation
+                .source()
+                .copied()
                 .is_some()
         }) {
             let pending = self
@@ -3495,6 +3804,11 @@ impl Machine<'_> {
             owned_loans: Vec::new(),
             pending_borrow_call: None,
             borrow_result_target,
+            view_scopes,
+            view_builders: Vec::new(),
+            lexical_view_scopes: Vec::new(),
+            application_identity,
+            invocation_identity,
             type_arguments,
             stack_base: self.stack.len(),
         });
@@ -3763,28 +4077,12 @@ impl Machine<'_> {
     }
 
     fn charge_allocation(&mut self, bytes: u64) -> Result<(), ExecutionError> {
-        if bytes > super::value::MAXIMUM_VALUE_ALLOCATION_BYTES {
-            return Err(resource_error(
-                "normalized_allocation",
-                "one allocation exceeds finite value storage",
-            ));
-        }
-        let next_bytes = crate::platform::execution::cumulative_charge(
-            self.observation.allocated_bytes,
+        reserve_execution_allocation(
+            self.policy,
+            self.shared_budget.as_deref(),
+            &mut self.observation,
             bytes,
-            self.policy.maximum_allocated_bytes,
-            "normalized_allocation",
-            "execution exhausted its allocation budget",
-        )?;
-        if let Some(budget) = &self.shared_budget {
-            budget.reserve(bytes, 0)?;
-        }
-        self.observation.allocated_bytes = next_bytes;
-        if bytes != 0 {
-            self.observation.allocation_charges =
-                self.observation.allocation_charges.saturating_add(1);
-        }
-        Ok(())
+        )
     }
 
     fn charge_external_value(&mut self, value: &NormalizedValue) -> Result<(), ExecutionError> {
@@ -3848,10 +4146,20 @@ impl Machine<'_> {
         // forged ordinary move must leave the parent owner in its activation
         // until the lexical child/ancestor loan cleanup has completed.
         let class = source.class(self.program, &mut self.observation.value_work)?;
+        source.validate_read_custody(self.control, &mut |bytes| {
+            reserve_execution_allocation(
+                self.policy,
+                self.shared_budget.as_deref(),
+                &mut self.observation,
+                bytes,
+            )
+        })?;
         let valid = match use_mode {
             ParameterUse::Unrestricted => class == Class::Free,
-            ParameterUse::Borrow => matches!(class, Class::Direct | Class::Memory),
-            ParameterUse::Consume => class != Class::Free,
+            ParameterUse::Borrow => {
+                matches!(class, Class::Direct | Class::Memory | Class::ReadView)
+            }
+            ParameterUse::Consume => class != Class::Free && class != Class::ReadView,
         };
         if !valid || (move_ordinary && class != Class::Free) {
             return Err(runtime_error(
@@ -3864,14 +4172,24 @@ impl Machine<'_> {
                 .raw()
                 .memory_validate(self.memory_domain, use_mode == ParameterUse::Consume)?;
         }
+        if let NormalizedValue::ReadView(view) = source.raw() {
+            view.validate(self.control)?;
+            if use_mode == ParameterUse::Consume && source.is_view_borrowed() {
+                return Err(type_error("borrowed view parameter cannot be consumed"));
+            }
+        }
         if let NormalizedValue::Resource(handle) = source.raw() {
             if use_mode == ParameterUse::Consume {
                 handle.require_owned()?;
             }
             self.resources.validate_admission(*handle, None, None)?;
         }
-        let provenance = source.borrow_source();
-        let memory = source.raw().memory_form().is_some();
+        let provenance = source.borrow_source().or(Some(BorrowSource {
+            frame: self.current_frame()?.id,
+            local,
+        }));
+        let view = class == Class::ReadView;
+        let memory = source.raw().memory_form().is_some() || view;
         let metadata_bytes = if memory {
             if move_ordinary || use_mode == ParameterUse::Consume {
                 source.borrow_metadata_bytes()
@@ -3890,6 +4208,8 @@ impl Machine<'_> {
                 .and_then(|frame| frame.locals.get_mut(local as usize))
                 .and_then(Option::take)
                 .ok_or_else(|| type_error("validated local disappeared"))?
+        } else if view {
+            self.borrow_view_local(local)?
         } else {
             self.current_frame()?
                 .locals
@@ -4176,6 +4496,11 @@ fn value_cost(value: &NormalizedValue) -> Result<(u64, u64), ExecutionError> {
             | NormalizedValue::F64(_)
             | NormalizedValue::Function { .. }
             | NormalizedValue::Resource(_) => {}
+            NormalizedValue::ReadView(_) => {
+                return Err(type_error(
+                    "read view cannot cross an external value boundary",
+                ));
+            }
         }
     }
     Ok((bytes, items))
@@ -5162,6 +5487,10 @@ fn normalized_compare(
         _ if left.memory_form().is_some() || right.memory_form().is_some() => Err(trap_error(
             "normalized_value_not_comparable",
             "owned memory does not support semantic equality",
+        )),
+        (NormalizedValue::ReadView(_), _) | (_, NormalizedValue::ReadView(_)) => Err(trap_error(
+            "normalized_value_not_comparable",
+            "read views do not support semantic equality",
         )),
         (NormalizedValue::Function { .. }, _) | (_, NormalizedValue::Function { .. }) => {
             Err(trap_error(

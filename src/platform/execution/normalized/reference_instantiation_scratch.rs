@@ -34,7 +34,16 @@ impl Scratch<'_> {
         }
         let schema = self.schema;
         let object = schema.types.get(&ty).ok_or_else(capacity)?;
-        let mut payload = 128_u64;
+        let mut payload = if matches!(
+            object.form,
+            TypeForm::ReadViewApplied { .. }
+                | TypeForm::AssociatedReadViewMember { .. }
+                | TypeForm::AssociatedReadViewProjection { .. }
+        ) {
+            1024_u64
+        } else {
+            128_u64
+        };
         match &object.form {
             TypeForm::StructuralRecord { fields }
             | TypeForm::OwnedProduct { fields }
@@ -49,7 +58,7 @@ impl Scratch<'_> {
                     self.walk(field.ty, depth + 1)?;
                 }
             }
-            TypeForm::Applied { arguments, .. } => {
+            TypeForm::Applied { arguments, .. } | TypeForm::ReadViewApplied { arguments, .. } => {
                 self.add((arguments.len() * 2 * std::mem::size_of::<TypeObjectDigest>()) as u64)?;
                 payload = payload
                     .checked_add(
@@ -111,6 +120,8 @@ impl Scratch<'_> {
                 self.walk(*key, depth + 1)?;
                 self.walk(*value, depth + 1)?;
             }
+            TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. } => {}
             // Canonical reference substitution retains atomic digests, including
             // exact parameter bindings, without constructing a type object.
             _ => return Ok(()),

@@ -1,4 +1,5 @@
 //! Frozen package interface generation 11. Variant tags and field order are immutable.
+use super::frozen_read_view_wire as frozen;
 use super::*;
 use crate::platform::semantic_id::*;
 use bincode::{Decode, Encode};
@@ -152,6 +153,9 @@ impl TryFrom<PackageInterfaceDeclarationPayload> for PackageInterfaceDeclaration
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: PackageInterfaceDeclarationPayload) -> Result<Self, Self::Error> {
         Ok(match v {
+            PackageInterfaceDeclarationPayload::ReadView(_) => {
+                return Err(frozen::read_view_extension());
+            }
             PackageInterfaceDeclarationPayload::OwnedRecord { .. } => {
                 return Err(super::owned_record::reject(
                     "nominal owned records require Graph 32",
@@ -197,8 +201,9 @@ impl From<PackageFunctionSignature11> for PackageFunctionSignature {
             effect_parameters: v.effect_parameters,
             type_parameters: v.type_parameters,
             parameters: v.parameters,
-            result: v.result,
-            result_borrow: None,
+            result: frozen::legacy_result(v.result, None),
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
             effect: v.effect,
         }
     }
@@ -206,7 +211,11 @@ impl From<PackageFunctionSignature11> for PackageFunctionSignature {
 impl TryFrom<PackageFunctionSignature> for PackageFunctionSignature11 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: PackageFunctionSignature) -> Result<Self, Self::Error> {
-        if v.result_borrow.is_some() {
+        frozen::require_empty_read_scope(
+            v.read_scope_parameters.is_empty() && v.read_scope_sources.is_empty(),
+        )?;
+        let (result, result_borrow) = frozen::split_result(v.result)?;
+        if result_borrow.is_some() {
             return Err(extension());
         }
         if !v.implementation_parameters.is_empty() {
@@ -217,7 +226,7 @@ impl TryFrom<PackageFunctionSignature> for PackageFunctionSignature11 {
             effect_parameters: v.effect_parameters,
             type_parameters: v.type_parameters,
             parameters: v.parameters,
-            result: v.result,
+            result,
             effect: v.effect,
         })
     }

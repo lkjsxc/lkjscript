@@ -216,6 +216,7 @@ impl CompilationManifest {
                     | (31, 31, 26)
                     | (32, 32, 27)
                     | (33, 33, 27)
+                    | (34, 34, 28)
             )
         {
             return Err(manifest_error(
@@ -302,6 +303,7 @@ mod tests {
             (31, 31, 26),
             (32, 32, 27),
             (33, 33, 27),
+            (34, 34, 28),
         ] {
             manifest.graph_contract_version = graph;
             manifest.compiler_contract_version = compiler;
@@ -327,6 +329,9 @@ mod tests {
             (32, 33, 27),
             (33, 32, 27),
             (33, 33, 26),
+            (34, 33, 28),
+            (33, 34, 28),
+            (34, 34, 27),
         ] {
             manifest.graph_contract_version = graph;
             manifest.compiler_contract_version = compiler;

@@ -14,10 +14,12 @@ use crate::platform::compiler::unit::{
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH;
 use crate::platform::kernel::{
-    BlobObjectDigest, CaseReference, ComparisonPolicy, DeclarationPayload, DeclarationReference,
-    EncodedOwnerKey, ExternalVisibility, FieldReference, FunctionEffect, Idempotency,
-    ImplementationName, Name, OperationReference, OwnerKey, OwnerRecord, PackageId,
-    ParameterParent, ParameterUse, PortReference, RequirementReference, ResourceLimit,
+    BlobObjectDigest, CallableResult, CaseReference, ComparisonPolicy, DeclarationPayload,
+    DeclarationReference, EncodedOwnerKey, ExternalVisibility, FieldReference, FunctionEffect,
+    Idempotency, ImplementationName, Name, OperationReference, OwnerKey, OwnerRecord, PackageId,
+    ParameterParent, ParameterUse, PortReference, ReadScopeArgument, ReadScopeBinder,
+    ReadScopeParameter, ReadScopeReference, ReadScopeSource, ReadViewFieldKind,
+    ReadViewFieldReference, RequirementReference, ResourceLimit, ResultRelation,
     SemanticStateDigest, StructuralTypeField, TypeForm, TypeObject, TypeObjectDigest,
     TypeObjectInterner, decode_type_object, encode_type_object,
 };
@@ -73,6 +75,7 @@ pub struct NormalizedPreparationWork {
     pub instructions: u64,
     pub functions: u64,
     pub record_layouts: u64,
+    pub read_view_layouts: u64,
     pub variant_layouts: u64,
     pub requirements: u64,
     pub operations: u64,
@@ -94,6 +97,60 @@ pub struct NormalizedCode {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NormalizedInstruction {
+    BeginReadViewScope {
+        read_scope: ReadScopeArgument,
+    },
+    EndReadViewScope {
+        read_scope: ReadScopeArgument,
+    },
+    BeginReadView {
+        view_type: TypeObjectDigest,
+        source_local: u32,
+        fields: Arc<[u32]>,
+    },
+    FinishReadView {
+        view_type: TypeObjectDigest,
+        fields: Arc<[u32]>,
+    },
+    BorrowReadView {
+        view_type: TypeObjectDigest,
+        source_local: u32,
+        binding_local: u32,
+        binding_type: TypeObjectDigest,
+    },
+    EndReadViewBorrow {
+        binding_local: u32,
+    },
+    ReborrowReadView {
+        view_type: TypeObjectDigest,
+        source_local: u32,
+    },
+    MoveReadView {
+        view_type: TypeObjectDigest,
+        source_local: u32,
+    },
+    DropReadView {
+        view_type: TypeObjectDigest,
+        source_local: u32,
+    },
+    ReadViewDataField {
+        view_type: TypeObjectDigest,
+        source_local: u32,
+        field: u32,
+    },
+    BorrowReadViewField {
+        view_type: TypeObjectDigest,
+        source_local: u32,
+        field: u32,
+        binding_local: u32,
+        binding_type: TypeObjectDigest,
+    },
+    AdoptViewResult {
+        source_local: u32,
+        binding_local: u32,
+        binding_type: TypeObjectDigest,
+    },
+    ReturnView,
     SequenceEmpty {
         sequence_type: TypeObjectDigest,
     },
@@ -127,6 +184,8 @@ pub enum NormalizedInstruction {
         binding_type: TypeObjectDigest,
     },
     Parallel {
+        left_read_scope_arguments: Arc<[ReadScopeArgument]>,
+        right_read_scope_arguments: Arc<[ReadScopeArgument]>,
         left_types: Arc<[TypeObjectDigest]>,
         left_implementations: Arc<[crate::platform::kernel::ImplementationOperand]>,
         right_types: Arc<[TypeObjectDigest]>,
@@ -179,6 +238,7 @@ pub enum NormalizedInstruction {
         locals: Arc<[u32]>,
     },
     ImplementationCall {
+        read_scope_arguments: Arc<[ReadScopeArgument]>,
         requirement_arguments: Arc<[crate::platform::kernel::RequirementOperand]>,
         effect_arguments: Arc<[crate::platform::kernel::EffectRow]>,
         function: FunctionIndex,
@@ -187,6 +247,7 @@ pub enum NormalizedInstruction {
         arguments: u32,
     },
     MethodCall {
+        read_scope_arguments: Arc<[ReadScopeArgument]>,
         witness: crate::platform::kernel::ImplementationOperand,
         contract: DeclarationReference,
         method: crate::platform::semantic_id::MethodId,
@@ -210,6 +271,7 @@ pub enum NormalizedInstruction {
     JumpIfFalse(u32),
     Jump(u32),
     Call {
+        read_scope_arguments: Arc<[ReadScopeArgument]>,
         requirement_arguments: Arc<[crate::platform::kernel::RequirementOperand]>,
         effect_arguments: Arc<[crate::platform::kernel::EffectRow]>,
         function: FunctionIndex,
@@ -217,6 +279,7 @@ pub enum NormalizedInstruction {
         arguments: u32,
     },
     TailCall {
+        read_scope_arguments: Arc<[ReadScopeArgument]>,
         requirement_arguments: Arc<[crate::platform::kernel::RequirementOperand]>,
         effect_arguments: Arc<[crate::platform::kernel::EffectRow]>,
         function: FunctionIndex,
@@ -224,6 +287,7 @@ pub enum NormalizedInstruction {
         arguments: u32,
     },
     FunctionValue {
+        read_scope_arguments: Arc<[ReadScopeArgument]>,
         requirement_arguments: Arc<[crate::platform::kernel::RequirementOperand]>,
         effect_arguments: Arc<[crate::platform::kernel::EffectRow]>,
         function: FunctionIndex,
@@ -390,6 +454,8 @@ pub struct NormalizedAssociatedTypeBinding {
     pub member: AssociatedTypeMemberId,
     pub template: TypeObjectDigest,
     pub ty: TypeObjectDigest,
+    /// Family binder retained even when no projection mentions this member.
+    pub scope_parameter: Option<ReadScopeParameter>,
 }
 
 #[derive(Clone, Copy)]
@@ -547,6 +613,13 @@ impl<'a> ClosedTypeEnvironment<'a> {
                 parameter,
                 contract,
                 member,
+            }
+            | TypeForm::AssociatedReadViewProjection {
+                scope,
+                parameter,
+                contract,
+                member,
+                ..
             } => {
                 if self.scope != Some(*scope) || self.parameters.len() != self.arguments.len() {
                     return Err(closed_context_error());
@@ -562,18 +635,19 @@ impl<'a> ClosedTypeEnvironment<'a> {
                 }
                 (&self.arguments[position], *contract, *member)
             }
-            TypeForm::AssociatedContractMember { contract, member } => (
+            TypeForm::AssociatedContractMember { contract, member }
+            | TypeForm::AssociatedReadViewMember {
+                contract, member, ..
+            } => (
                 self.contract.ok_or_else(closed_context_error)?,
                 *contract,
                 *member,
             ),
             _ => return Ok(None),
         };
-        if self.generation != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
-            || selected.contract_generation
-                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
-            || selected.implementation_generation
-                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+        if !matches!(self.generation, 33 | 34)
+            || !matches!(selected.contract_generation, 33 | 34)
+            || !matches!(selected.implementation_generation, 33 | 34)
             || selected.contract != contract
         {
             return Err(closed_context_error());
@@ -584,6 +658,22 @@ impl<'a> ClosedTypeEnvironment<'a> {
             .filter(|binding| binding.member == member);
         let binding = matches.next().ok_or_else(closed_context_error)?;
         if matches.next().is_some() {
+            return Err(closed_context_error());
+        }
+        if binding.scope_parameter.is_some()
+            != matches!(
+                form,
+                TypeForm::AssociatedReadViewMember { .. }
+                    | TypeForm::AssociatedReadViewProjection { .. }
+            )
+        {
+            return Err(closed_context_error());
+        }
+        if binding.scope_parameter.is_some()
+            && (self.generation != 34
+                || selected.contract_generation != 34
+                || selected.implementation_generation != 34)
+        {
             return Err(closed_context_error());
         }
         Ok(Some(ClosedAssociatedSelection { selected, binding }))
@@ -624,6 +714,7 @@ impl<'a> PreparedApplicationContext<'a> {
             .get(function.0 as usize)
             .ok_or_else(closed_context_error)?;
         if declaration.type_parameters.len() != ordinary.len()
+            || declaration.read_scope_parameters.len() != declaration.read_scope_arguments.len()
             || (!declaration.type_arguments.is_empty()
                 && declaration.type_arguments.len() != declaration.type_parameters.len())
         {
@@ -675,6 +766,12 @@ impl<'a> PreparedApplicationContext<'a> {
     pub(super) fn environment(&self) -> &ClosedTypeEnvironment<'a> {
         &self.environment
     }
+    pub(super) fn read_scope_parameters(&self) -> &'a [ReadScopeParameter] {
+        &self.program.functions[self.function.0 as usize].read_scope_parameters
+    }
+    pub(super) fn read_scope_arguments(&self) -> &'a [ReadScopeArgument] {
+        &self.program.functions[self.function.0 as usize].read_scope_arguments
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -721,8 +818,10 @@ pub struct NormalizedFunction {
     pub type_parameter_constraints: Arc<[crate::platform::kernel::TypeParameterConstraints]>,
     pub parameter_count: u32,
     pub parameters: Arc<[NormalizedParameter]>,
-    pub result: TypeObjectDigest,
-    pub result_borrow: Option<u32>,
+    pub result: CallableResult<u32>,
+    pub read_scope_parameters: Arc<[ReadScopeParameter]>,
+    pub read_scope_sources: Arc<[ReadScopeSource<u32>]>,
+    pub read_scope_arguments: Arc<[ReadScopeArgument]>,
     pub task_requirements: Arc<[RequirementIndex]>,
     pub body: NormalizedFunctionBody,
 }
@@ -751,6 +850,25 @@ pub struct NormalizedRecordLayout {
     pub type_parameter_constraints: Arc<[crate::platform::kernel::TypeParameterConstraints]>,
     pub arguments: Arc<[TypeObjectDigest]>,
     pub fields: Arc<[NormalizedRecordField]>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedReadViewField {
+    pub reference: ReadViewFieldReference,
+    pub name: Name,
+    pub ty: TypeObjectDigest,
+    pub kind: ReadViewFieldKind,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedReadViewLayout {
+    pub declaration: DeclarationReference,
+    pub type_parameters: Arc<[TypeParameterId]>,
+    pub type_parameter_constraints: Arc<[crate::platform::kernel::TypeParameterConstraints]>,
+    pub arguments: Arc<[TypeObjectDigest]>,
+    pub scope_parameter: ReadScopeParameter,
+    pub read_scope: ReadScopeArgument,
+    pub fields: Arc<[NormalizedReadViewField]>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -865,6 +983,8 @@ pub struct NormalizedProgram {
     #[cfg(test)]
     pub(crate) function_by_declaration: BTreeMap<DeclarationReference, FunctionIndex>,
     pub(crate) records: Arc<[NormalizedRecordLayout]>,
+    pub(crate) read_views: Arc<[NormalizedReadViewLayout]>,
+    pub(super) read_view_instances: BTreeMap<TypeObjectDigest, u32>,
     pub(crate) variants: Arc<[NormalizedVariantLayout]>,
     pub(super) record_instances: BTreeMap<TypeObjectDigest, RecordLayoutIndex>,
     pub(super) owned_record_declarations: BTreeSet<DeclarationReference>,
@@ -927,6 +1047,7 @@ impl NormalizedProgram {
         let mut text_cache = BTreeMap::new();
 
         let records = prepare_records(&units, &indexes, &runtime_owners)?;
+        let read_views = prepare_read_views(&units, &runtime_owners)?;
         let variants = prepare_variants(&units, &indexes, &runtime_owners)?;
         let affine_variants = variants
             .iter()
@@ -983,6 +1104,7 @@ impl NormalizedProgram {
 
         work.functions = functions.len() as u64;
         work.record_layouts = records.len() as u64;
+        work.read_view_layouts = read_views.len() as u64;
         work.variant_layouts = variants.len() as u64;
         work.requirements = requirements.len() as u64;
         work.operations = operations.len() as u64;
@@ -1015,6 +1137,8 @@ impl NormalizedProgram {
             #[cfg(test)]
             function_by_declaration: indexes.functions,
             records: records.into(),
+            read_views: read_views.into(),
+            read_view_instances: BTreeMap::new(),
             record_instances: BTreeMap::new(),
             owned_record_declarations: BTreeSet::new(),
             variant_instances: BTreeMap::new(),
@@ -1076,7 +1200,9 @@ impl NormalizedProgram {
         let next = depth.saturating_add(1);
         let form = match &object.form {
             TypeForm::AssociatedContractMember { .. }
-            | TypeForm::AssociatedWitnessProjection { .. } => return None,
+            | TypeForm::AssociatedWitnessProjection { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. } => return None,
             TypeForm::TypeParameter { parameter } => {
                 let digest = substitutions.get(parameter).copied()?;
                 return self.types.contains_key(&digest).then_some(digest);
@@ -1126,6 +1252,18 @@ impl NormalizedProgram {
                     .iter()
                     .map(|ty| self.substitute_type(*ty, substitutions, next))
                     .collect::<Option<_>>()?,
+            },
+            TypeForm::ReadViewApplied {
+                declaration,
+                arguments,
+                read_scope,
+            } => TypeForm::ReadViewApplied {
+                declaration: *declaration,
+                arguments: arguments
+                    .iter()
+                    .map(|ty| self.substitute_type(*ty, substitutions, next))
+                    .collect::<Option<_>>()?,
+                read_scope: *read_scope,
             },
             TypeForm::List { item } => TypeForm::List {
                 item: self.substitute_type(*item, substitutions, next)?,
@@ -1193,6 +1331,27 @@ impl NormalizedProgram {
         }
     }
 
+    pub(crate) fn read_view_layout(
+        &self,
+        ty: TypeObjectDigest,
+    ) -> Option<&NormalizedReadViewLayout> {
+        let TypeForm::ReadViewApplied {
+            declaration,
+            arguments,
+            read_scope,
+        } = &self.types.get(&ty)?.form
+        else {
+            return None;
+        };
+        let layout = self
+            .read_views
+            .get(*self.read_view_instances.get(&ty)? as usize)?;
+        (layout.declaration == *declaration
+            && layout.arguments.as_ref() == arguments
+            && layout.read_scope == *read_scope)
+            .then_some(layout)
+    }
+
     /// Only an exact prepared nominal application supplies a physical layout.
     pub(super) fn owned_record_layout(
         &self,
@@ -1223,6 +1382,7 @@ struct RuntimeIndexes {
     records: BTreeMap<DeclarationReference, RecordLayoutIndex>,
     variants: BTreeMap<DeclarationReference, VariantLayoutIndex>,
     fields: BTreeMap<FieldReference, (RecordLayoutIndex, u32)>,
+    read_view_fields: BTreeMap<ReadViewFieldReference, u32>,
     cases: BTreeMap<CaseReference, (VariantLayoutIndex, u32)>,
     requirements: BTreeMap<RequirementReference, RequirementIndex>,
     operations: BTreeMap<OperationReference, OperationIndex>,
@@ -1253,7 +1413,8 @@ impl RuntimeIndexes {
             };
             match &unit.payload {
                 CompilationPayload::OwnedContract(_)
-                | CompilationPayload::OwnedImplementation(_) => {}
+                | CompilationPayload::OwnedImplementation(_)
+                | CompilationPayload::ReadView { .. } => {}
                 CompilationPayload::Record { .. } | CompilationPayload::OwnedRecord { .. } => {
                     record_refs.insert(reference);
                 }
@@ -1314,6 +1475,7 @@ impl RuntimeIndexes {
         let components = dense_map(component_refs, ComponentIndex)?;
         let ports = dense_map(port_refs, PortIndex)?;
         let mut fields = BTreeMap::new();
+        let mut read_view_fields = BTreeMap::new();
         let mut cases = BTreeMap::new();
         for ((package, owner), unit) in units {
             let OwnerKey::Declaration(declaration) = owner else {
@@ -1324,6 +1486,27 @@ impl RuntimeIndexes {
                 declaration: *declaration,
             };
             match &unit.payload {
+                CompilationPayload::ReadView {
+                    declaration: view, ..
+                } => {
+                    for (offset, field) in view.fields.iter().enumerate() {
+                        if read_view_fields
+                            .insert(
+                                ReadViewFieldReference {
+                                    declaration,
+                                    field: field.id,
+                                },
+                                u32_index(offset, "read view field offset")?,
+                            )
+                            .is_some()
+                        {
+                            return Err(runtime_corrupt(
+                                "normalized_read_view_field_duplicate",
+                                "inline view field repeats its exact declaration-qualified identity",
+                            ));
+                        }
+                    }
+                }
                 CompilationPayload::Record {
                     fields: layouts, ..
                 }
@@ -1376,6 +1559,7 @@ impl RuntimeIndexes {
             records,
             variants,
             fields,
+            read_view_fields,
             cases,
             requirements,
             operations,
@@ -1593,6 +1777,86 @@ fn prepare_records(
     finish_dense(records, "record layout")
 }
 
+fn prepare_read_views(
+    units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    owners: &RuntimeOwnerMap,
+) -> Result<Vec<NormalizedReadViewLayout>, Diagnostic> {
+    let mut layouts = Vec::new();
+    for ((package, key), unit) in units {
+        let CompilationPayload::ReadView {
+            declaration: definition,
+            type_parameter_constraints,
+        } = &unit.payload
+        else {
+            continue;
+        };
+        let OwnerKey::Declaration(id) = key else {
+            return Err(closed_context_error());
+        };
+        let declaration = DeclarationReference {
+            package: *package,
+            declaration: *id,
+        };
+        let OwnerRecord::Declaration(owner) =
+            exact_runtime_owner(owners, *package, *key, "read view declaration")?
+        else {
+            return Err(closed_context_error());
+        };
+        if !matches!(&owner.payload, DeclarationPayload::ReadView(actual) if actual == definition)
+            || owner.header.contract_version != unit.graph_contract_version
+            || owner.header.contract_version
+                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+            || definition.type_parameters.len() != type_parameter_constraints.len()
+        {
+            return Err(runtime_corrupt(
+                "normalized_read_view_layout",
+                "compiled inline view inventory disagrees with its exact canonical declaration",
+            ));
+        }
+        definition.validate_local_at(declaration)?;
+        for (parameter, constraint) in definition
+            .type_parameters
+            .iter()
+            .zip(type_parameter_constraints)
+        {
+            if !matches!(exact_runtime_owner(owners, *package, OwnerKey::TypeParameter(*parameter), "read view type parameter")?, OwnerRecord::TypeParameter(actual) if actual.declaration == declaration.declaration && actual.constraints == *constraint)
+            {
+                return Err(runtime_corrupt(
+                    "normalized_read_view_constraints",
+                    "inline read view parameter constraints disagree with their exact canonical owners",
+                ));
+            }
+        }
+        let read_scope = ReadScopeArgument::Parameter(ReadScopeReference {
+            binder: ReadScopeBinder::Declaration(declaration),
+            parameter: definition.scope_parameter.id,
+        });
+        let fields = definition
+            .fields
+            .iter()
+            .map(|field| NormalizedReadViewField {
+                reference: ReadViewFieldReference {
+                    declaration,
+                    field: field.id,
+                },
+                name: field.name.clone(),
+                ty: field.ty,
+                kind: field.kind,
+            })
+            .collect::<Vec<_>>();
+        layouts.push(NormalizedReadViewLayout {
+            declaration,
+            type_parameters: definition.type_parameters.clone().into(),
+            type_parameter_constraints: type_parameter_constraints.clone().into(),
+            arguments: Arc::from([]),
+            scope_parameter: definition.scope_parameter.clone(),
+            read_scope,
+            fields: fields.into(),
+        });
+    }
+    Ok(layouts)
+}
+
 fn prepare_variants(
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
     indexes: &RuntimeIndexes,
@@ -1730,6 +1994,17 @@ fn prepare_operations(
     finish_dense(operations, "operation")
 }
 
+// The current artifact seal separately admits the complete producer profile and
+// canonical source. Recompilation may use a newer producer without changing the
+// exact source generation or granting that source newer lexical authority.
+pub(super) fn producer_covers_source_generation(
+    unit: &CompilationUnit,
+    source_generation: u16,
+) -> bool {
+    matches!(unit.graph_contract_version, 33 | 34)
+        && source_generation <= unit.graph_contract_version
+}
+
 fn prepare_functions(
     artifact: &LoadedArtifact,
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
@@ -1763,7 +2038,9 @@ fn prepare_functions(
                     &signature.parameters,
                     indexes,
                 )?,
-                index_copy(&unit.tables.types, signature.result, "external result type")?,
+                signature.result.try_map_type(|ty| {
+                    index_copy(&unit.tables.types, ty, "external result type")
+                })?,
                 translate_requirement_indexes(unit, &signature.task_requirements, indexes)?,
                 NormalizedFunctionBody::External(implementation.clone()),
             ),
@@ -1777,7 +2054,9 @@ fn prepare_functions(
                     &signature.parameters,
                     indexes,
                 )?,
-                index_copy(&unit.tables.types, signature.result, "function result type")?,
+                signature.result.try_map_type(|ty| {
+                    index_copy(&unit.tables.types, ty, "function result type")
+                })?,
                 translate_requirement_indexes(unit, &signature.task_requirements, indexes)?,
                 NormalizedFunctionBody::Code(translate_code(
                     artifact, unit, code, indexes, text_cache, work,
@@ -1787,7 +2066,10 @@ fn prepare_functions(
                 Vec::new(),
                 Vec::new(),
                 Vec::new(),
-                index_copy(&unit.tables.types, *ty, "constant type")?,
+                CallableResult {
+                    ty: index_copy(&unit.tables.types, *ty, "constant type")?,
+                    relation: ResultRelation::Value,
+                },
                 Vec::new(),
                 NormalizedFunctionBody::Code(translate_code(
                     artifact, unit, code, indexes, text_cache, work,
@@ -1795,6 +2077,7 @@ fn prepare_functions(
             ),
             CompilationPayload::OwnedContract(_)
             | CompilationPayload::OwnedImplementation(_)
+            | CompilationPayload::ReadView { .. }
             | CompilationPayload::Record { .. }
             | CompilationPayload::OwnedRecord { .. }
             | CompilationPayload::Variant { .. }
@@ -1821,6 +2104,12 @@ fn prepare_functions(
                 "prepared callable has no exact canonical declaration",
             ));
         };
+        if !producer_covers_source_generation(unit, canonical.header.contract_version) {
+            return Err(runtime_corrupt(
+                "normalized_callable_generation",
+                "compiled callable producer profile cannot represent its exact canonical source generation",
+            ));
+        }
         let graph_function = match (&canonical.payload, &unit.payload) {
             (DeclarationPayload::Function(function), CompilationPayload::Function { .. }) => {
                 let canonical_requirements = match &function.effect {
@@ -1853,7 +2142,8 @@ fn prepare_functions(
                             .map(|parameter| parameter.parameter)
                             .collect::<Vec<_>>()
                     || function.result != result
-                    || function.result_borrow != signature.result_borrow
+                    || function.read_scope_parameters != signature.read_scope_parameters
+                    || function.read_scope_sources != signature.read_scope_sources
                     || canonical_requirements != task_requirements
                 {
                     return Err(runtime_corrupt(
@@ -1876,7 +2166,7 @@ fn prepare_functions(
             *declaration,
             &type_parameters,
             &parameters,
-            result,
+            result.ty,
             &task_requirements,
             &body,
             units,
@@ -1900,23 +2190,37 @@ fn prepare_functions(
             }
             _ => Vec::new(),
         };
-        let result_borrow = match &unit.payload {
-            CompilationPayload::Function { signature, .. } => signature
-                .result_borrow
-                .map(|source| {
-                    parameters
-                        .iter()
-                        .position(|p| p.parameter == source)
-                        .ok_or_else(|| {
-                            runtime_corrupt(
-                                "normalized_result_borrow",
-                                "borrowed result names an absent parameter",
-                            )
-                        })
-                        .and_then(|position| u32_index(position, "borrowed result source position"))
+        let source_position = |source| {
+            parameters
+                .iter()
+                .position(|p| p.parameter == source)
+                .ok_or_else(|| {
+                    runtime_corrupt(
+                        "normalized_result_source",
+                        "source relation names an absent exact parameter",
+                    )
                 })
-                .transpose()?,
-            _ => None,
+                .and_then(|position| u32_index(position, "read result source position"))
+        };
+        let result = result.try_map_source(source_position)?;
+        let (read_scope_parameters, read_scope_sources) = match &unit.payload {
+            CompilationPayload::Function { signature, .. }
+            | CompilationPayload::External { signature, .. } => {
+                let sources = signature
+                    .read_scope_sources
+                    .iter()
+                    .cloned()
+                    .map(|source| source.try_map_source(source_position))
+                    .collect::<Result<Vec<_>, _>>()?;
+                crate::platform::kernel::read_view::validate_read_scope_inventory_at(
+                    ReadScopeBinder::Declaration(*declaration),
+                    &signature.read_scope_parameters,
+                    &sources,
+                    |source| source < parameter_count,
+                )?;
+                (signature.read_scope_parameters.clone(), sources)
+            }
+            _ => (Vec::new(), Vec::new()),
         };
         functions[index.0 as usize] = Some(NormalizedFunction {
             source_generation: canonical.header.contract_version,
@@ -1936,7 +2240,9 @@ fn prepare_functions(
             parameter_count,
             parameters: parameters.into(),
             result,
-            result_borrow,
+            read_scope_parameters: read_scope_parameters.into(),
+            read_scope_sources: read_scope_sources.into(),
+            read_scope_arguments: Arc::from([]),
             task_requirements: task_requirements.into(),
             body,
         });
@@ -2016,12 +2322,13 @@ pub(super) fn derive_tail_dispatch(
     let mut graph = Vec::with_capacity(functions.len());
     for function in functions.iter() {
         work.step()?;
-        graph.push(function.graph_function && function.result_borrow.is_none());
+        graph.push(
+            function.graph_function && matches!(function.result.relation, ResultRelation::Value),
+        );
     }
-    for function in functions
-        .iter_mut()
-        .filter(|function| function.graph_function && function.result_borrow.is_none())
-    {
+    for function in functions.iter_mut().filter(|function| {
+        function.graph_function && matches!(function.result.relation, ResultRelation::Value)
+    }) {
         let NormalizedFunctionBody::Code(code) = &mut function.body else {
             return Err(runtime_corrupt(
                 "normalized_tail_kind",
@@ -2039,6 +2346,7 @@ pub(super) fn derive_tail_dispatch(
             }
             *instruction = match instruction {
                 NormalizedInstruction::Call {
+                    read_scope_arguments,
                     requirement_arguments,
                     effect_arguments,
                     function,
@@ -2046,6 +2354,7 @@ pub(super) fn derive_tail_dispatch(
                     arguments,
                 } if graph.get(function.0 as usize).copied() == Some(true) => {
                     NormalizedInstruction::TailCall {
+                        read_scope_arguments: Arc::clone(read_scope_arguments),
                         requirement_arguments: Arc::clone(requirement_arguments),
                         effect_arguments: Arc::clone(effect_arguments),
                         function: *function,
@@ -2080,11 +2389,11 @@ fn validate_normalized_resource_signature(
     requirements: &[NormalizedRequirement],
     proof: &mut super::prepared_types::Budget<'_>,
 ) -> Result<(), Diagnostic> {
-    // Retain each parameter's category under its own exact occurrence, rather
-    // than revalidating associated inventories during the later phase checks.
+    // Keep affine admission separate from the actual-Owned suffix category.
+    // Borrowed views may intermix with ordinary metadata before that suffix.
     proof.step()?;
     proof.reserve::<bool>(parameters.len())?;
-    let mut parameter_memory = Vec::with_capacity(parameters.len());
+    let mut parameter_owned = Vec::with_capacity(parameters.len());
     let context = signature_owned::Context {
         declaration,
         parameters,
@@ -2106,9 +2415,12 @@ fn validate_normalized_resource_signature(
                 | TypeForm::OwnedChoice { .. }
                 | TypeForm::OwnedSequence { .. },
             ) => true,
+            Some(TypeForm::ReadViewApplied { .. }) => true,
             Some(
                 TypeForm::AssociatedContractMember { .. }
-                | TypeForm::AssociatedWitnessProjection { .. },
+                | TypeForm::AssociatedWitnessProjection { .. }
+                | TypeForm::AssociatedReadViewMember { .. }
+                | TypeForm::AssociatedReadViewProjection { .. },
             ) => context.owned(ty, parameter, proof)?,
             Some(TypeForm::TypeParameter { parameter }) => {
                 matches!(exact_runtime_owner(owners, declaration.package, OwnerKey::TypeParameter(*parameter), "owned signature type parameter")?, OwnerRecord::TypeParameter(p) if p.constraints.has_owned())
@@ -2131,13 +2443,18 @@ fn validate_normalized_resource_signature(
                 "function parameter type is absent from the prepared type closure",
             )
         })?;
-        let owned = is_memory(parameter.ty, Some(parameter.parameter), proof)?;
-        parameter_memory.push(owned);
-        memory |= owned;
+        let affine = is_memory(parameter.ty, Some(parameter.parameter), proof)?;
+        let view = matches!(
+            form.form,
+            TypeForm::ReadViewApplied { .. } | TypeForm::AssociatedReadViewProjection { .. }
+        );
+        parameter_owned.push(affine && !view);
+        memory |= affine;
         match &form.form {
-            _ if owned => {
+            _ if affine => {
                 if parameter.resource_requirement.is_some()
                     || parameter.use_mode == ParameterUse::Unrestricted
+                    || (view && parameter.use_mode != ParameterUse::Borrow)
                     || !matches!(
                         body,
                         NormalizedFunctionBody::Code(_) | NormalizedFunctionBody::External(_)
@@ -2208,7 +2525,7 @@ fn validate_normalized_resource_signature(
             ));
         }
         let mut phase = 0;
-        for (p, owned) in parameters.iter().zip(&parameter_memory) {
+        for (p, owned) in parameters.iter().zip(&parameter_owned) {
             proof.step()?;
             let next = if *owned {
                 1
@@ -2294,7 +2611,7 @@ fn validate_normalized_resource_signature(
     if !function.requirement_parameters.is_empty()
         || function.type_parameters != type_parameters
         || function.parameters != parameter_ids
-        || function.result != result
+        || function.result.ty != result
         || !matches!(
             &function.effect,
             FunctionEffect::Task { effect_parameters: _, requirements: canonical }
@@ -2469,9 +2786,9 @@ fn validate_borrowed_result_calls(program: &NormalizedProgram) -> Result<(), Dia
                     let begin = index
                         .checked_sub(1)
                         .and_then(|previous| code.instructions.get(previous));
-                    match (callable.result_borrow, begin) {
+                    match (callable.result.relation, begin) {
                         (
-                            Some(expected),
+                            ResultRelation::ReadFrom { source: expected },
                             Some(NormalizedInstruction::BeginBorrowCall {
                                 source_position,
                                 source_local,
@@ -2479,19 +2796,33 @@ fn validate_borrowed_result_calls(program: &NormalizedProgram) -> Result<(), Dia
                         ) if expected == *source_position
                             && matches!(code.instructions.get(index + 1), Some(NormalizedInstruction::AdoptBorrowResult { source_local: actual, .. }) if actual == source_local) =>
                             {}
-                        (None, Some(NormalizedInstruction::BeginBorrowCall { .. }))
-                        | (Some(_), _) => {
+                        (
+                            ResultRelation::ViewFrom {
+                                source: expected, ..
+                            },
+                            Some(NormalizedInstruction::BeginBorrowCall {
+                                source_position,
+                                source_local,
+                            }),
+                        ) if expected == *source_position
+                            && matches!(code.instructions.get(index + 1), Some(NormalizedInstruction::AdoptViewResult { source_local: actual, .. }) if actual == source_local) =>
+                            {}
+                        (
+                            ResultRelation::Value,
+                            Some(NormalizedInstruction::BeginBorrowCall { .. }),
+                        )
+                        | (ResultRelation::ReadFrom { .. } | ResultRelation::ViewFrom { .. }, _) => {
                             return Err(runtime_corrupt(
                                 "normalized_borrow_call_mode",
                                 "exact call and lexical handoff disagree on the borrowed result source",
                             ));
                         }
-                        (None, _) => {}
+                        (ResultRelation::Value, _) => {}
                     }
                 }
                 NormalizedInstruction::FunctionValue { function, .. }
                 | NormalizedInstruction::TailCall { function, .. }
-                    if target(*function)?.result_borrow.is_some() =>
+                    if !matches!(target(*function)?.result.relation, ResultRelation::Value) =>
                 {
                     return Err(runtime_corrupt(
                         "normalized_borrow_call_boundary",
@@ -2499,8 +2830,8 @@ fn validate_borrowed_result_calls(program: &NormalizedProgram) -> Result<(), Dia
                     ));
                 }
                 NormalizedInstruction::Parallel { left, right, .. }
-                    if target(*left)?.result_borrow.is_some()
-                        || target(*right)?.result_borrow.is_some() =>
+                    if !matches!(target(*left)?.result.relation, ResultRelation::Value)
+                        || !matches!(target(*right)?.result.relation, ResultRelation::Value) =>
                 {
                     return Err(runtime_corrupt(
                         "normalized_borrow_call_boundary",
@@ -2520,7 +2851,7 @@ fn validate_borrowed_result_calls(program: &NormalizedProgram) -> Result<(), Dia
     for port in program.ports.iter() {
         match &port.entry {
             NormalizedEntryPoint::Function(function)
-                if target(*function)?.result_borrow.is_some() =>
+                if !matches!(target(*function)?.result.relation, ResultRelation::Value) =>
             {
                 return Err(runtime_corrupt(
                     "normalized_borrow_entrypoint",
@@ -3015,7 +3346,8 @@ fn prepare_targets(
                     .parameters
                     .first()
                     .is_none_or(|parameter| parameter.ty != http.request_type)
-                || prepared_function.result != http.response_type
+                || prepared_function.result.ty != http.response_type
+                || !matches!(prepared_function.result.relation, ResultRelation::Value)
                 || route.capture_parameters.len() != captures.len()
             {
                 return Err(runtime_corrupt(
@@ -3266,6 +3598,120 @@ fn translate_code(
     let mut instructions = Vec::with_capacity(code.instructions.len());
     for instruction in &code.instructions {
         let translated = match instruction {
+            CompiledInstruction::BeginReadViewScope { read_scope } => {
+                NormalizedInstruction::BeginReadViewScope {
+                    read_scope: *read_scope,
+                }
+            }
+            CompiledInstruction::EndReadViewScope { read_scope } => {
+                NormalizedInstruction::EndReadViewScope {
+                    read_scope: *read_scope,
+                }
+            }
+            CompiledInstruction::BeginReadView {
+                view_type,
+                source_local,
+                fields,
+            } => NormalizedInstruction::BeginReadView {
+                view_type: index_copy(&unit.tables.types, *view_type, "read view type")?,
+                source_local: *source_local,
+                fields: fields
+                    .iter()
+                    .map(|field| translate_read_view_field(unit, *field, indexes))
+                    .collect::<Result<Vec<_>, _>>()?
+                    .into(),
+            },
+            CompiledInstruction::FinishReadView { view_type, fields } => {
+                NormalizedInstruction::FinishReadView {
+                    view_type: index_copy(&unit.tables.types, *view_type, "read view type")?,
+                    fields: fields
+                        .iter()
+                        .map(|field| translate_read_view_field(unit, *field, indexes))
+                        .collect::<Result<Vec<_>, _>>()?
+                        .into(),
+                }
+            }
+            CompiledInstruction::BorrowReadView {
+                view_type,
+                source_local,
+                binding_local,
+                binding_type,
+            } => NormalizedInstruction::BorrowReadView {
+                view_type: index_copy(&unit.tables.types, *view_type, "read view type")?,
+                source_local: *source_local,
+                binding_local: *binding_local,
+                binding_type: index_copy(
+                    &unit.tables.types,
+                    *binding_type,
+                    "read view borrow type",
+                )?,
+            },
+            CompiledInstruction::EndReadViewBorrow { binding_local } => {
+                NormalizedInstruction::EndReadViewBorrow {
+                    binding_local: *binding_local,
+                }
+            }
+            CompiledInstruction::ReborrowReadView {
+                view_type,
+                source_local,
+            } => NormalizedInstruction::ReborrowReadView {
+                view_type: index_copy(&unit.tables.types, *view_type, "reborrowed view type")?,
+                source_local: *source_local,
+            },
+            CompiledInstruction::MoveReadView {
+                view_type,
+                source_local,
+            } => NormalizedInstruction::MoveReadView {
+                view_type: index_copy(&unit.tables.types, *view_type, "moved view type")?,
+                source_local: *source_local,
+            },
+            CompiledInstruction::DropReadView {
+                view_type,
+                source_local,
+            } => NormalizedInstruction::DropReadView {
+                view_type: index_copy(&unit.tables.types, *view_type, "dropped view type")?,
+                source_local: *source_local,
+            },
+            CompiledInstruction::ReadViewDataField {
+                view_type,
+                source_local,
+                field,
+            } => NormalizedInstruction::ReadViewDataField {
+                view_type: index_copy(&unit.tables.types, *view_type, "view field type")?,
+                source_local: *source_local,
+                field: translate_read_view_field(unit, *field, indexes)?,
+            },
+            CompiledInstruction::BorrowReadViewField {
+                view_type,
+                source_local,
+                field,
+                binding_local,
+                binding_type,
+            } => NormalizedInstruction::BorrowReadViewField {
+                view_type: index_copy(&unit.tables.types, *view_type, "view field type")?,
+                source_local: *source_local,
+                field: translate_read_view_field(unit, *field, indexes)?,
+                binding_local: *binding_local,
+                binding_type: index_copy(
+                    &unit.tables.types,
+                    *binding_type,
+                    "view reference field binding type",
+                )?,
+            },
+            CompiledInstruction::AdoptViewResult {
+                source_local,
+                binding_local,
+                binding_type,
+            } => NormalizedInstruction::AdoptViewResult {
+                source_local: *source_local,
+                binding_local: *binding_local,
+                binding_type: index_copy(
+                    &unit.tables.types,
+                    *binding_type,
+                    "view result binding type",
+                )?,
+            },
+            CompiledInstruction::ReturnView => NormalizedInstruction::ReturnView,
             CompiledInstruction::SequenceEmpty { sequence_type } => {
                 NormalizedInstruction::SequenceEmpty {
                     sequence_type: index_copy(
@@ -3497,6 +3943,7 @@ fn translate_code(
             CompiledInstruction::JumpIfFalse(target) => NormalizedInstruction::JumpIfFalse(*target),
             CompiledInstruction::Jump(target) => NormalizedInstruction::Jump(*target),
             CompiledInstruction::ImplementationCall {
+                read_scope_arguments,
                 requirement_arguments,
                 effect_arguments,
                 function,
@@ -3510,6 +3957,7 @@ fn translate_code(
                     "implementation call target",
                 )?;
                 NormalizedInstruction::ImplementationCall {
+                    read_scope_arguments: read_scope_arguments.clone().into(),
                     requirement_arguments: requirement_arguments.clone().into(),
                     effect_arguments: effect_arguments.clone().into(),
                     function: required_index(
@@ -3527,17 +3975,21 @@ fn translate_code(
                 }
             }
             CompiledInstruction::MethodCall {
+                read_scope_arguments,
                 witness,
                 contract,
                 method,
                 arguments,
             } => NormalizedInstruction::MethodCall {
+                read_scope_arguments: read_scope_arguments.clone().into(),
                 witness: witness.clone(),
                 contract: *contract,
                 method: *method,
                 arguments: *arguments,
             },
             CompiledInstruction::Parallel {
+                left_read_scope_arguments,
+                right_read_scope_arguments,
                 left_types,
                 left_implementations,
                 right_types,
@@ -3551,6 +4003,8 @@ fn translate_code(
                 let left = index_copy(&unit.tables.declarations, *left, "left parallel task")?;
                 let right = index_copy(&unit.tables.declarations, *right, "right parallel task")?;
                 NormalizedInstruction::Parallel {
+                    left_read_scope_arguments: left_read_scope_arguments.clone().into(),
+                    right_read_scope_arguments: right_read_scope_arguments.clone().into(),
                     left_types: left_types
                         .iter()
                         .map(|ty| index_copy(&unit.tables.types, *ty, "parallel left type"))
@@ -3575,6 +4029,7 @@ fn translate_code(
                 }
             }
             CompiledInstruction::Call {
+                read_scope_arguments,
                 requirement_arguments,
                 effect_arguments,
                 function,
@@ -3587,6 +4042,7 @@ fn translate_code(
                     "normalized call target",
                 )?;
                 NormalizedInstruction::Call {
+                    read_scope_arguments: read_scope_arguments.clone().into(),
                     requirement_arguments: requirement_arguments.clone().into(),
                     effect_arguments: effect_arguments.clone().into(),
                     function: required_index(&indexes.functions, declaration, "function")?,
@@ -3601,6 +4057,7 @@ fn translate_code(
                 }
             }
             CompiledInstruction::FunctionValue {
+                read_scope_arguments,
                 requirement_arguments,
                 effect_arguments,
                 function,
@@ -3612,6 +4069,7 @@ fn translate_code(
                     "normalized function value",
                 )?;
                 NormalizedInstruction::FunctionValue {
+                    read_scope_arguments: read_scope_arguments.clone().into(),
                     requirement_arguments: requirement_arguments.clone().into(),
                     effect_arguments: effect_arguments.clone().into(),
                     function: required_index(&indexes.functions, declaration, "function")?,
@@ -3894,6 +4352,23 @@ fn translate_code(
         local_count: code.local_count,
         instructions: instructions.into(),
     })
+}
+
+fn translate_read_view_field(
+    unit: &CompilationUnit,
+    field: u32,
+    indexes: &RuntimeIndexes,
+) -> Result<u32, Diagnostic> {
+    let reference = index_copy(
+        &unit.tables.read_view_fields,
+        field,
+        "read view field reference",
+    )?;
+    required_index(
+        &indexes.read_view_fields,
+        reference,
+        "exact inline read view field",
+    )
 }
 
 fn translate_field(

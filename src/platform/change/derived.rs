@@ -7,7 +7,7 @@ use crate::platform::kernel::{
     extract_owner_relations_with_limit, owner_namespace,
 };
 use crate::platform::witness::{
-    NamespaceKey, OwnershipEntry, OwnershipParent, ownership_contributions,
+    NamespaceKey, OwnershipEntry, OwnershipParent, ownership_contributions_with_bindings,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Debug;
@@ -90,7 +90,19 @@ pub(crate) fn derive_local_delta_with_admission<
                 )
             })?;
             insert_namespace_contribution(&mut before_namespaces, &record)?;
-            insert_ownership_contributions(&mut before_ownership, &record)?;
+            insert_ownership_contributions(
+                &mut before_ownership,
+                &record,
+                |binding| match overlay.base_owner(OwnerKey::Binding(binding))? {
+                    Some(OwnerRecord::Binding(record)) => Ok(Some(record)),
+                    None => Ok(None),
+                    Some(_) => Err(derived_error(
+                        DiagnosticClass::Corrupt,
+                        "change_delta_before_binding",
+                        "canonical binding identity selects a foreign before record",
+                    )),
+                },
+            )?;
             let (relations, examined) = extract_relations(
                 overlay.package_id(),
                 *owner,
@@ -112,7 +124,17 @@ pub(crate) fn derive_local_delta_with_admission<
         }
         if let Some((_, record)) = &edit.after {
             insert_namespace_contribution(&mut after_namespaces, record)?;
-            insert_ownership_contributions(&mut after_ownership, record)?;
+            insert_ownership_contributions(&mut after_ownership, record, |binding| match overlay
+                .owner(OwnerKey::Binding(binding))?
+            {
+                Some(OwnerRecord::Binding(record)) => Ok(Some(record)),
+                None => Ok(None),
+                Some(_) => Err(derived_error(
+                    DiagnosticClass::Corrupt,
+                    "change_delta_after_binding",
+                    "canonical binding identity selects a foreign candidate record",
+                )),
+            })?;
             let (relations, examined) = extract_relations(
                 overlay.package_id(),
                 *owner,
@@ -223,8 +245,12 @@ fn insert_namespace_contribution(
 fn insert_ownership_contributions(
     entries: &mut BTreeMap<OwnerKey, OwnershipEntry>,
     record: &OwnerRecord,
+    binding_record: impl FnMut(
+        crate::platform::semantic_id::BindingId,
+    )
+        -> Result<Option<crate::platform::kernel::BindingRecord>, Diagnostic>,
 ) -> Result<(), Diagnostic> {
-    for (owner, entry) in ownership_contributions(record)? {
+    for (owner, entry) in ownership_contributions_with_bindings(record, binding_record)? {
         if let Some(previous) = entries.insert(owner, entry) {
             return Err(derived_error(
                 DiagnosticClass::Semantic,

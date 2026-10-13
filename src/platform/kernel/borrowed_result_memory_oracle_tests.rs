@@ -221,6 +221,8 @@ fn borrowed_result_oracle_checks_untaken_return_paths_and_rejects_owning_results
         type_arguments: vec![],
         requirement_arguments: vec![],
         effect_arguments: vec![],
+
+        read_scope_arguments: Vec::new(),
     };
     canonical_round_trip(&mut snapshot);
     assert!(
@@ -264,6 +266,8 @@ fn borrowed_result_oracle_rejects_source_consumption_and_forged_owning_bindings(
             type_arguments: vec![],
             requirement_arguments: vec![],
             effect_arguments: vec![],
+
+            read_scope_arguments: Vec::new(),
         },
     );
     let inner = new_expression(
@@ -325,10 +329,10 @@ fn borrowed_result_oracle_checks_unused_method_relations_and_function_metadata()
                 let DeclarationPayload::OwnedContract(c) = payload(&mut snapshot, reader) else {
                     unreachable!()
                 };
-                c.methods[0].result_borrow = if fault == "method-position" {
-                    Some(0)
+                c.methods[0].result.relation = if fault == "method-position" {
+                    ResultRelation::ReadFrom { source: 0 }
                 } else {
-                    None
+                    ResultRelation::Value
                 };
             }
             "consume-source" => {
@@ -346,7 +350,7 @@ fn borrowed_result_oracle_checks_unused_method_relations_and_function_metadata()
                     unreachable!()
                 };
                 match fault {
-                    "function-owning" => f.result_borrow = None,
+                    "function-owning" => f.result.relation = ResultRelation::Value,
                     "task" => {
                         f.effect = FunctionEffect::Task {
                             requirements: vec![],
@@ -354,8 +358,9 @@ fn borrowed_result_oracle_checks_unused_method_relations_and_function_metadata()
                         }
                     }
                     "unknown-source" => {
-                        f.result_borrow =
-                            Some(ParameterId::migrate(b"unknown-borrow-result-source", 0))
+                        f.result.relation = ResultRelation::ReadFrom {
+                            source: ParameterId::migrate(b"unknown-borrow-result-source", 0),
+                        }
                     }
                     _ => unreachable!(),
                 }
@@ -525,7 +530,7 @@ fn borrowed_result_oracle_validates_imported_unused_signature_source_and_generat
             let PackageInterfaceDeclarationPayload::Function(f) = &mut d.payload else {
                 unreachable!()
             };
-            let source = f.result_borrow.unwrap();
+            let source = *f.result.relation.source().unwrap();
             match fault {
                 "missing-formal" => f.parameters.clear(),
                 "generation" => d.header.contract_version = 26,

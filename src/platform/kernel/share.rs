@@ -51,6 +51,11 @@ fn owned_parameter(
                 DeclarationPayload::OwnedRecord {
                     type_parameters, ..
                 } => super::transfer::function_parameter_listed(read, &type_parameters, parameter)?,
+                DeclarationPayload::ReadView(view) => super::transfer::function_parameter_listed(
+                    read,
+                    &view.type_parameters,
+                    parameter,
+                )?,
                 DeclarationPayload::Function(function) => {
                     super::transfer::function_parameter_listed(
                         read,
@@ -80,6 +85,13 @@ fn owned_parameter(
                 PackageInterfaceDeclarationPayload::OwnedRecord {
                     type_parameters, ..
                 } => super::transfer::function_parameter_listed(read, &type_parameters, parameter)?,
+                PackageInterfaceDeclarationPayload::ReadView(view) => {
+                    super::transfer::function_parameter_listed(
+                        read,
+                        &view.type_parameters,
+                        parameter,
+                    )?
+                }
                 PackageInterfaceDeclarationPayload::Function(function) => {
                     super::transfer::function_parameter_listed(
                         read,
@@ -145,6 +157,20 @@ pub(crate) fn admit_at(
         ty,
         occurrence.parameters.scope(),
         Some((occurrence, associated)),
+    )
+}
+
+/// Joined read-view access is proven from its complete accessible reference
+/// inventory and phantom actuals; passive selected-source custody grants nothing.
+pub(crate) fn read_view_at(
+    read: &(impl ExpressionRead + ?Sized),
+    ty: TypeObjectDigest,
+    occurrence: OwnedTypeOccurrence,
+    associated: &OwnedAssociatedAdmission,
+) -> Result<(), Diagnostic> {
+    associated.validate_occurrence_at(read, &[ty], occurrence)?;
+    super::owned_associated::read_view_admission::read_shareable_at(
+        read, ty, occurrence, associated,
     )
 }
 

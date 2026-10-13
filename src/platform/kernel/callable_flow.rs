@@ -1,6 +1,8 @@
 //! Package-local ordinary preflight from explicit, simultaneous parameter flow.
 //! Associated projections and supplier callbacks require the complete composed
 //! admission exported below. Success here alone is not a callable-closure proof.
+//! Read-scope coordinates contribute finite inventory work, never ordinary type
+//! constructor edges or value/custody permission.
 //! No runtime branch, variance, nominal layout or preparation frontier changes this relation.
 
 #[cfg(test)]
@@ -106,6 +108,96 @@ impl<R: ExpressionRead> Flow<'_, R> {
         Ok(index)
     }
 
+    fn scope_arguments(
+        &mut self,
+        arguments: &[super::ReadScopeArgument],
+    ) -> Result<(), Diagnostic> {
+        self.reserve::<super::ReadScopeArgument>(arguments.len())?;
+        // Equal symbolic actuals do not merge their ordered source positions. Their exact
+        // binder, containment and invocation authority are admitted independently.
+        for _ in arguments {
+            self.tick()?;
+        }
+        Ok(())
+    }
+
+    fn scope_inventory<S>(
+        &mut self,
+        parameters: &[super::ReadScopeParameter],
+        sources: &[super::ReadScopeSource<S>],
+    ) -> Result<(), Diagnostic> {
+        self.reserve::<super::ReadScopeParameter>(parameters.len())?;
+        self.reserve::<super::ReadScopeSource<S>>(sources.len())?;
+        for _ in parameters {
+            self.tick()?;
+        }
+        for _ in sources {
+            self.tick()?;
+        }
+        Ok(())
+    }
+
+    fn declaration_scopes(&mut self, payload: &DeclarationPayload) -> Result<(), Diagnostic> {
+        match payload {
+            DeclarationPayload::Function(function) => {
+                self.scope_inventory(
+                    &function.read_scope_parameters,
+                    &function.read_scope_sources,
+                )?;
+                if let super::ResultRelation::ViewFrom { scope, .. } = function.result.relation {
+                    self.scope_arguments(std::slice::from_ref(&scope))?;
+                }
+            }
+            DeclarationPayload::OwnedContract(contract) => {
+                for member in &contract.associated_types {
+                    self.tick()?;
+                    if let super::AssociatedTypeBound::ReadViewFamily { scope_parameter } =
+                        &member.bound
+                    {
+                        self.scope_inventory::<u32>(std::slice::from_ref(scope_parameter), &[])?;
+                    }
+                }
+                for method in &contract.methods {
+                    self.tick()?;
+                    self.scope_inventory(
+                        &method.read_scope_parameters,
+                        &method.read_scope_sources,
+                    )?;
+                    if let super::ResultRelation::ViewFrom { scope, .. } = method.result.relation {
+                        self.scope_arguments(std::slice::from_ref(&scope))?;
+                    }
+                }
+            }
+            DeclarationPayload::OwnedImplementation(implementation) => {
+                for binding in &implementation.associated_types {
+                    self.tick()?;
+                    if let super::AssociatedTypeBindingValue::ReadViewFamily {
+                        scope_parameter,
+                        ..
+                    } = &binding.value
+                    {
+                        self.scope_inventory::<u32>(std::slice::from_ref(scope_parameter), &[])?;
+                    }
+                }
+                for mapping in &implementation.methods {
+                    self.tick()?;
+                    self.scope_arguments(&mapping.read_scope_arguments)?;
+                }
+            }
+            DeclarationPayload::ReadView(view) => {
+                self.scope_inventory::<u32>(std::slice::from_ref(&view.scope_parameter), &[])?;
+                for field in &view.fields {
+                    self.tick()?;
+                    if let super::ReadViewFieldKind::ReadReference { read_scope } = field.kind {
+                        self.scope_arguments(std::slice::from_ref(&read_scope))?;
+                    }
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
     fn application(
         &mut self,
         caller: DeclarationReference,
@@ -113,9 +205,11 @@ impl<R: ExpressionRead> Flow<'_, R> {
         expression: ExpressionId,
         target: DeclarationReference,
         arguments: &[TypeObjectDigest],
+        read_scope_arguments: &[super::ReadScopeArgument],
     ) -> Result<(), Diagnostic> {
         self.tick()?;
         self.observation.applications += 1;
+        self.scope_arguments(read_scope_arguments)?;
         // This declaration-local pass has no complete supplier bodies or downstream witness
         // selections. The mandatory composed source-closure pass at publication, transport and
         // artifact admission closes foreign calls and selected method callbacks independently.
@@ -130,9 +224,12 @@ impl<R: ExpressionRead> Flow<'_, R> {
                 "callable application target is missing",
             ));
         };
-        let target_parameters = match &declaration.payload {
-            DeclarationPayload::Function(function) => &function.type_parameters,
-            DeclarationPayload::External(function) => &function.type_parameters,
+        let (target_parameters, scope_arity) = match &declaration.payload {
+            DeclarationPayload::Function(function) => (
+                &function.type_parameters,
+                function.read_scope_parameters.len(),
+            ),
+            DeclarationPayload::External(function) => (&function.type_parameters, 0),
             _ => {
                 return Err(semantic(
                     "kernel_callable_flow_target",
@@ -144,6 +241,12 @@ impl<R: ExpressionRead> Flow<'_, R> {
             return Err(semantic(
                 "kernel_callable_flow_arity",
                 "callable application requires every ordered ordinary type argument",
+            ));
+        }
+        if scope_arity != read_scope_arguments.len() {
+            return Err(semantic(
+                "kernel_callable_flow_arity",
+                "callable application requires every ordered read-scope argument, including unused formals",
             ));
         }
         for (argument, (ty, target_parameter)) in
@@ -168,6 +271,14 @@ impl<R: ExpressionRead> Flow<'_, R> {
                         "callable application type object is missing",
                     )
                 })?;
+                match &object.form {
+                    TypeForm::ReadViewApplied { read_scope, .. }
+                    | TypeForm::AssociatedReadViewMember { read_scope, .. }
+                    | TypeForm::AssociatedReadViewProjection { read_scope, .. } => {
+                        self.scope_arguments(std::slice::from_ref(read_scope))?;
+                    }
+                    _ => {}
+                }
                 if let TypeForm::TypeParameter { parameter } = object.form {
                     let ordinal = parameters
                         .iter()
@@ -197,14 +308,11 @@ impl<R: ExpressionRead> Flow<'_, R> {
                         argument_type: *ty,
                         path,
                     });
-                } else if matches!(
-                    object.form,
-                    TypeForm::AssociatedContractMember { .. }
-                        | TypeForm::AssociatedWitnessProjection { .. }
-                ) {
+                } else if object.form.is_associated() {
                     // A zero-child associated form has no ordinary dependency to
                     // add here. Its exact member/binding/path relation is admitted
-                    // by the mandatory complete-source composed pass.
+                    // by the mandatory complete-source composed pass, including
+                    // scope substitution for a ReadViewFamily projection.
                 } else {
                     for (index, child) in object.child_types().into_iter().enumerate() {
                         self.tick()?;
@@ -250,6 +358,9 @@ impl<R: ExpressionRead> Flow<'_, R> {
             let Some(OwnerRecord::Declaration(declaration)) = self.read.owner(owner)? else {
                 continue;
             };
+            // Charge complete inline scope inventories before skipping a declaration without
+            // body syntax. Unused methods, bindings, fields and formals remain relevant.
+            self.declaration_scopes(&declaration.payload)?;
             let parameters = declaration.payload.type_parameters().to_vec();
             let mut syntax = declaration.expression_roots();
             if syntax.is_empty() {
@@ -284,6 +395,7 @@ impl<R: ExpressionRead> Flow<'_, R> {
                     ExpressionOperation::ImplementationCall {
                         function,
                         type_arguments,
+                        read_scope_arguments,
                         implementations,
                         requirement_arguments,
                         ..
@@ -308,14 +420,20 @@ impl<R: ExpressionRead> Flow<'_, R> {
                             expression,
                             *function,
                             type_arguments,
+                            read_scope_arguments,
                         )?;
                         if function.package == self.read.package_id() {
                             self.reserve::<OwnerKey>(1)?;
                             pending.insert(OwnerKey::Declaration(function.declaration));
                         }
                     }
-                    ExpressionOperation::MethodCall { witness, .. } => {
+                    ExpressionOperation::MethodCall {
+                        witness,
+                        read_scope_arguments,
+                        ..
+                    } => {
                         self.tick()?;
+                        self.scope_arguments(read_scope_arguments)?;
                         if let super::ImplementationOperand::Concrete { implementation, .. } =
                             witness
                         {
@@ -325,12 +443,14 @@ impl<R: ExpressionRead> Flow<'_, R> {
                     ExpressionOperation::Call {
                         function,
                         type_arguments,
+                        read_scope_arguments,
                         requirement_arguments,
                         ..
                     }
                     | ExpressionOperation::FunctionValue {
                         function,
                         type_arguments,
+                        read_scope_arguments,
                         requirement_arguments,
                         ..
                     } => {
@@ -347,11 +467,16 @@ impl<R: ExpressionRead> Flow<'_, R> {
                             expression,
                             *function,
                             type_arguments,
+                            read_scope_arguments,
                         )?;
                         if function.package == self.read.package_id() {
                             self.reserve::<OwnerKey>(1)?;
                             pending.insert(OwnerKey::Declaration(function.declaration));
                         }
+                    }
+                    ExpressionOperation::CreateReadView { read_scope, .. }
+                    | ExpressionOperation::ReborrowReadView { read_scope, .. } => {
+                        self.scope_arguments(std::slice::from_ref(read_scope))?;
                     }
                     _ => {}
                 }
@@ -414,6 +539,7 @@ impl<R: ExpressionRead> Flow<'_, R> {
         };
         for mapping in methods {
             self.tick()?;
+            self.scope_arguments(&mapping.read_scope_arguments)?;
             if mapping.function.package == self.read.package_id() {
                 self.reserve::<OwnerKey>(1)?;
                 pending.insert(OwnerKey::Declaration(mapping.function.declaration));
@@ -558,4 +684,331 @@ pub(crate) fn validate_callable_flow<R: ExpressionRead>(
     flow.observation.slots = flow.slots.len();
     flow.observation.edges = flow.edges.len();
     Ok(flow.observation)
+}
+
+#[cfg(test)]
+pub(super) mod read_view_tests {
+    use super::*;
+    use crate::platform::kernel::*;
+    use crate::platform::semantic_id::{
+        BindingId, DeclarationId, FieldId, ModuleId, ParameterId, ReadScopeParameterId,
+    };
+
+    const SEED: &[u8] = b"ordinary-read-view-flow-preflight";
+
+    pub(super) struct Read {
+        pub(super) owners: BTreeMap<OwnerKey, OwnerRecord>,
+        pub(super) types: TypeObjectInterner,
+        next_expression: u64,
+        pub(super) parameter_type: TypeObjectDigest,
+    }
+
+    pub(super) fn function() -> DeclarationReference {
+        DeclarationReference {
+            package: PackageId::migrate(SEED, 0),
+            declaration: DeclarationId::migrate(SEED, 0),
+        }
+    }
+
+    pub(super) fn scope() -> ReadScopeArgument {
+        ReadScopeArgument::Parameter(ReadScopeReference {
+            binder: ReadScopeBinder::Declaration(function()),
+            parameter: ReadScopeParameterId::migrate(SEED, 0),
+        })
+    }
+
+    impl ExpressionRead for Read {
+        fn package_id(&self) -> PackageId {
+            function().package
+        }
+
+        fn owner(&self, owner: OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic> {
+            Ok(self.owners.get(&owner).cloned())
+        }
+
+        fn type_object(&self, ty: TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic> {
+            Ok(self.types.get(ty).cloned())
+        }
+
+        fn package_interface_owner(
+            &self,
+            _: PackageId,
+            _: OwnerKey,
+        ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+            Ok(None)
+        }
+
+        fn has_dependency(&self, _: PackageId) -> Result<bool, Diagnostic> {
+            Ok(false)
+        }
+    }
+
+    impl Read {
+        pub(super) fn new() -> Self {
+            let mut types = TypeObjectInterner::default();
+            let parameter = TypeParameterId::migrate(SEED, 0);
+            let parameter_type = types
+                .intern(TypeForm::TypeParameter { parameter })
+                .expect("parameter type");
+            let result = types.intern(TypeForm::I64).expect("result type");
+            let mut read = Self {
+                owners: BTreeMap::new(),
+                types,
+                next_expression: 0,
+                parameter_type,
+            };
+            let body = read.expression(ExpressionOperation::I64 { value: 7 });
+            let parameter_owner = OwnerKey::TypeParameter(parameter);
+            read.owners.insert(
+                parameter_owner,
+                OwnerRecord::TypeParameter(TypeParameterRecord {
+                    header: OwnerHeader::new(parameter_owner, OwnerKind::TypeParameter),
+                    declaration: function().declaration,
+                    name: Name::new("T").expect("parameter name"),
+                    constraints: TypeParameterConstraints::None,
+                }),
+            );
+            let owner = OwnerKey::Declaration(function().declaration);
+            read.owners.insert(
+                owner,
+                OwnerRecord::Declaration(DeclarationRecord {
+                    header: OwnerHeader::new(owner, OwnerKind::PureFunction),
+                    module: ModuleId::migrate(SEED, 0),
+                    name: Name::new("preflight").expect("name"),
+                    visibility: DeclarationVisibility::Private,
+                    payload: DeclarationPayload::Function(FunctionDeclaration {
+                        implementation_parameters: Vec::new(),
+                        requirement_parameters: Vec::new(),
+                        effect_parameters: Vec::new(),
+                        type_parameters: vec![parameter],
+                        parameters: Vec::new(),
+                        result: CallableResult {
+                            ty: result,
+                            relation: ResultRelation::Value,
+                        },
+                        read_scope_parameters: vec![ReadScopeParameter {
+                            id: ReadScopeParameterId::migrate(SEED, 0),
+                            name: Name::new("source").expect("scope name"),
+                        }],
+                        read_scope_sources: Vec::new(),
+                        effect: FunctionEffect::Pure,
+                        body,
+                    }),
+                }),
+            );
+            read
+        }
+
+        pub(super) fn expression(&mut self, operation: ExpressionOperation) -> ExpressionId {
+            let id = ExpressionId::migrate(SEED, self.next_expression);
+            self.next_expression += 1;
+            let record = ExpressionRecord::new(id, operation).expect("expression");
+            self.owners
+                .insert(OwnerKey::Expression(id), OwnerRecord::Expression(record));
+            id
+        }
+
+        pub(super) fn body(&mut self, body: ExpressionId) {
+            let Some(OwnerRecord::Declaration(declaration)) = self
+                .owners
+                .get_mut(&OwnerKey::Declaration(function().declaration))
+            else {
+                panic!("function");
+            };
+            let DeclarationPayload::Function(target) = &mut declaration.payload else {
+                panic!("function payload");
+            };
+            target.body = body;
+        }
+
+        pub(super) fn call(
+            &mut self,
+            kind: u8,
+            ty: TypeObjectDigest,
+            scopes: Vec<ReadScopeArgument>,
+        ) -> ExpressionId {
+            self.expression(match kind {
+                0 => ExpressionOperation::Call {
+                    requirement_arguments: Vec::new(),
+                    effect_arguments: Vec::new(),
+                    function: function(),
+                    type_arguments: vec![ty],
+                    read_scope_arguments: scopes,
+                    arguments: Vec::new(),
+                },
+                1 => ExpressionOperation::FunctionValue {
+                    requirement_arguments: Vec::new(),
+                    effect_arguments: Vec::new(),
+                    function: function(),
+                    type_arguments: vec![ty],
+                    read_scope_arguments: scopes,
+                },
+                _ => ExpressionOperation::ImplementationCall {
+                    requirement_arguments: Vec::new(),
+                    effect_arguments: Vec::new(),
+                    function: function(),
+                    type_arguments: vec![ty],
+                    read_scope_arguments: scopes,
+                    implementations: Vec::new(),
+                    arguments: Vec::new(),
+                },
+            })
+        }
+
+        fn admit(&self) -> Result<CallableFlowWork, Diagnostic> {
+            validate_callable_flow(self, self.owners.keys().copied(), &mut 0, 100_000)
+        }
+    }
+
+    // These fixtures isolate ordinary parameter flow. Success in this pass does not admit
+    // a first-class scoped callable, a view as an ordinary actual, or a source/custody claim.
+    #[test]
+    fn preflight_keeps_unused_scope_formals_in_named_application_arity() {
+        for kind in 0..3 {
+            let mut read = Read::new();
+            let body = read.call(kind, read.parameter_type, Vec::new());
+            read.body(body);
+            let error = read
+                .admit()
+                .expect_err("unused formal still requires an actual");
+            assert_eq!(error.code, "kernel_callable_flow_arity");
+            assert!(error.message.contains("read-scope"));
+
+            if kind != 1 {
+                let body = read.call(kind, read.parameter_type, vec![scope()]);
+                read.body(body);
+                assert!(read.admit().is_ok());
+            }
+        }
+    }
+
+    #[test]
+    fn preflight_follows_phantom_read_view_type_actuals() {
+        let mut read = Read::new();
+        let view = read
+            .types
+            .intern(TypeForm::ReadViewApplied {
+                declaration: DeclarationReference {
+                    package: function().package,
+                    declaration: DeclarationId::migrate(SEED, 1),
+                },
+                arguments: vec![read.parameter_type],
+                read_scope: scope(),
+            })
+            .expect("phantom view application");
+        let body = read.call(0, view, vec![scope()]);
+        read.body(body);
+        assert_eq!(
+            read.admit().expect_err("constructor cycle").code,
+            "kernel_callable_expansion"
+        );
+    }
+
+    #[test]
+    fn preflight_accounts_for_unused_view_inventory_without_body_syntax() {
+        let mut read = Read::new();
+        let declaration = DeclarationId::migrate(SEED, 1);
+        let owner = OwnerKey::Declaration(declaration);
+        let parameter = ReadScopeParameterId::migrate(SEED, 1);
+        let read_scope = ReadScopeArgument::Parameter(ReadScopeReference {
+            binder: ReadScopeBinder::Declaration(DeclarationReference {
+                package: function().package,
+                declaration,
+            }),
+            parameter,
+        });
+        let ty = read.types.intern(TypeForm::OwnedI64Cell).expect("referent");
+        read.owners.insert(
+            owner,
+            OwnerRecord::Declaration(DeclarationRecord {
+                header: OwnerHeader::new(owner, OwnerKind::ReadView),
+                module: ModuleId::migrate(SEED, 0),
+                name: Name::new("unused").expect("view name"),
+                visibility: DeclarationVisibility::Private,
+                payload: DeclarationPayload::ReadView(ReadViewDeclaration {
+                    type_parameters: Vec::new(),
+                    scope_parameter: ReadScopeParameter {
+                        id: parameter,
+                        name: Name::new("source").expect("scope name"),
+                    },
+                    fields: (0..128)
+                        .map(|ordinal| ReadViewField {
+                            id: FieldId::migrate(SEED, ordinal),
+                            name: Name::new(format!("field{ordinal}")).expect("field name"),
+                            ty,
+                            kind: ReadViewFieldKind::ReadReference { read_scope },
+                        })
+                        .collect(),
+                }),
+            }),
+        );
+        let error = validate_callable_flow(&read, read.owners.keys().copied(), &mut 0, 64)
+            .expect_err("unused inline fields remain within work admission");
+        assert_eq!(error.class, DiagnosticClass::Resource);
+        assert_eq!(error.code, "kernel_callable_flow_work");
+    }
+
+    #[test]
+    fn preflight_reads_inactive_view_fields_and_scoped_bodies() {
+        for kind in 0..3 {
+            let mut read = Read::new();
+            let list = read
+                .types
+                .intern(TypeForm::List {
+                    item: read.parameter_type,
+                })
+                .expect("list");
+            let call = read.call(0, list, vec![scope()]);
+            let value = LocalValueReference::FunctionParameter(ParameterId::migrate(SEED, 0));
+            let binding = BindingId::migrate(SEED, 0);
+            let field = ReadViewFieldReference {
+                declaration: DeclarationReference {
+                    package: function().package,
+                    declaration: DeclarationId::migrate(SEED, 1),
+                },
+                field: FieldId::migrate(SEED, 0),
+            };
+            let first_field = read.expression(ExpressionOperation::I64 { value: 7 });
+            let view_syntax = read.expression(match kind {
+                0 => ExpressionOperation::CreateReadView {
+                    declaration: field.declaration,
+                    type_arguments: Vec::new(),
+                    read_scope: scope(),
+                    source: value,
+                    fields: vec![
+                        ReadViewFieldInitializer {
+                            field: field.field,
+                            value: first_field,
+                        },
+                        ReadViewFieldInitializer {
+                            field: FieldId::migrate(SEED, 1),
+                            value: call,
+                        },
+                    ],
+                },
+                1 => ExpressionOperation::BorrowReadView {
+                    value,
+                    binding,
+                    body: call,
+                },
+                _ => ExpressionOperation::BorrowReadViewField {
+                    value,
+                    field,
+                    binding,
+                    body: call,
+                },
+            });
+            let condition = read.expression(ExpressionOperation::Bool { value: true });
+            let body = read.expression(ExpressionOperation::If {
+                condition,
+                when_true: first_field,
+                when_false: view_syntax,
+            });
+            read.body(body);
+            assert_eq!(
+                read.admit().expect_err("inactive syntax is complete").code,
+                "kernel_callable_expansion"
+            );
+        }
+    }
 }

@@ -37,6 +37,7 @@ pub use prepare::{
     PreparedInitialPublication, PreparedPublication, PublicationOptions,
     prepare_change_publication, prepare_initial_publication,
 };
+pub(crate) use read_view::LinkReadReuseObservation;
 pub(crate) use read_view::{
     BuiltPackageRevision, RepositoryDefinitionAdmission, RepositoryDefinitionReader,
     RepositoryQueryAdmission, RepositoryQueryRangeRead, RepositoryRelationQueryRange,

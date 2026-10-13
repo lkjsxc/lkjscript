@@ -8,6 +8,14 @@ mod recovery_lock_tests;
 #[path = "package_plan_control_tests.rs"]
 mod package_plan_control_tests;
 
+#[cfg(test)]
+#[path = "repository_read_view_admission_tests.rs"]
+mod read_view_admission_tests;
+
+#[path = "dependency_source_priority.rs"]
+mod dependency_source_priority;
+use dependency_source_priority::{DependencySourcePriority, DependencySourcePriorityWork};
+
 use super::contract::{HEAD_MAGIC, MAXIMUM_HEAD_BYTES, REVISION_CONTRACT_VERSION};
 use super::idempotency::{
     IdempotencyBinding, advance_idempotency_history, empty_idempotency_history,
@@ -1985,26 +1993,47 @@ fn read_candidate_required<S: ImmutableObjectStore + ?Sized>(
 
 // Count the existing kernel root projection without allocating it. Reserve the complete
 // projection before type_roots clones vectors or either closure inventory grows.
-fn candidate_owner_type_root_count(record: &crate::platform::kernel::OwnerRecord) -> usize {
+fn candidate_owner_type_root_count(
+    record: &crate::platform::kernel::OwnerRecord,
+) -> Result<usize, Diagnostic> {
     use crate::platform::kernel::{DeclarationPayload, ExpressionOperation, OwnerRecord};
-    match record {
+    Ok(match record {
         OwnerRecord::Declaration(record) => match &record.payload {
             DeclarationPayload::External(_) | DeclarationPayload::Constant { .. } => 1,
             DeclarationPayload::OwnedImplementation(implementation) => {
-                implementation.type_arguments.len() + 1
+                let mut count = 1;
+                add_candidate_type_root_count(&mut count, implementation.associated_types.len())?;
+                add_candidate_type_root_count(&mut count, implementation.type_arguments.len())?;
+                for parameter in &implementation.implementation_parameters {
+                    add_candidate_type_root_count(&mut count, 1)?;
+                    add_candidate_type_root_count(&mut count, parameter.type_arguments.len())?;
+                }
+                for method in &implementation.methods {
+                    add_candidate_type_root_count(&mut count, method.type_arguments.len())?;
+                    add_candidate_type_root_count(
+                        &mut count,
+                        candidate_operand_type_root_count(&method.implementations)?,
+                    )?;
+                }
+                count
             }
             DeclarationPayload::Function(function) => {
-                1 + function
-                    .implementation_parameters
-                    .iter()
-                    .map(|parameter| parameter.type_arguments.len() + 1)
-                    .sum::<usize>()
+                let mut count = 1;
+                for parameter in &function.implementation_parameters {
+                    add_candidate_type_root_count(&mut count, 1)?;
+                    add_candidate_type_root_count(&mut count, parameter.type_arguments.len())?;
+                }
+                count
             }
-            DeclarationPayload::OwnedContract(contract) => contract
-                .methods
-                .iter()
-                .map(|method| method.parameters.len() + 1)
-                .sum(),
+            DeclarationPayload::OwnedContract(contract) => {
+                let mut count = 0;
+                for method in &contract.methods {
+                    add_candidate_type_root_count(&mut count, method.parameters.len())?;
+                    add_candidate_type_root_count(&mut count, 1)?;
+                }
+                count
+            }
+            DeclarationPayload::ReadView(view) => view.fields.len(),
             _ => 0,
         },
         OwnerRecord::Field(_)
@@ -2025,20 +2054,99 @@ fn candidate_owner_type_root_count(record: &crate::platform::kernel::OwnerRecord
             | ExpressionOperation::BorrowOwnedItem { .. }
             | ExpressionOperation::PackOwned { .. }
             | ExpressionOperation::UnpackOwned { .. }
+            | ExpressionOperation::PackOwnedRecord { .. }
+            | ExpressionOperation::UnpackOwnedRecord { .. }
+            | ExpressionOperation::BorrowOwnedRecordField { .. }
             | ExpressionOperation::TransactionOutcome { .. }
             | ExpressionOperation::List { .. } => 1,
             ExpressionOperation::SequencePop { .. }
             | ExpressionOperation::SequenceReplace { .. } => 2,
-            ExpressionOperation::ImplementationCall { type_arguments, .. }
-            | ExpressionOperation::Call { type_arguments, .. }
+            ExpressionOperation::ImplementationCall {
+                type_arguments,
+                implementations,
+                ..
+            } => {
+                let mut count = type_arguments.len();
+                add_candidate_type_root_count(
+                    &mut count,
+                    candidate_operand_type_root_count(implementations)?,
+                )?;
+                count
+            }
+            ExpressionOperation::MethodCall { witness, .. } => {
+                candidate_operand_type_root_count(std::slice::from_ref(witness))?
+            }
+            ExpressionOperation::Call { type_arguments, .. }
             | ExpressionOperation::FunctionValue { type_arguments, .. }
+            | ExpressionOperation::CreateReadView { type_arguments, .. }
             | ExpressionOperation::Record { type_arguments, .. }
             | ExpressionOperation::Variant { type_arguments, .. } => type_arguments.len(),
             ExpressionOperation::Map { .. } => 2,
             _ => 0,
         },
         _ => 0,
+    })
+}
+
+fn add_candidate_type_root_count(count: &mut usize, additional: usize) -> Result<(), Diagnostic> {
+    *count = count.checked_add(additional).ok_or_else(|| {
+        repository_error(
+            DiagnosticClass::Resource,
+            "publication_repository_reference_visits_exhausted",
+            "candidate type root projection exceeds its preparation capacity",
+        )
+    })?;
+    Ok(())
+}
+
+fn candidate_operand_type_root_count(
+    operands: &[crate::platform::kernel::ImplementationOperand],
+) -> Result<usize, Diagnostic> {
+    use crate::platform::kernel::{ImplementationOperand, contract::MAXIMUM_TYPE_DEPTH};
+    // The projection's regular witness walker allocates traversal storage. Count with a
+    // fixed stack first, before that walker or the projected root vector is allocated.
+    let mut pending: [&[ImplementationOperand]; MAXIMUM_TYPE_DEPTH + 1] =
+        [&[]; MAXIMUM_TYPE_DEPTH + 1];
+    pending[0] = operands;
+    let mut depth = 0;
+    let mut count = 0;
+    loop {
+        let Some((operand, rest)) = pending[depth].split_first() else {
+            if depth == 0 {
+                return Ok(count);
+            }
+            depth -= 1;
+            continue;
+        };
+        pending[depth] = rest;
+        if let ImplementationOperand::Concrete {
+            type_arguments,
+            implementations,
+            ..
+        } = operand
+        {
+            add_candidate_type_root_count(&mut count, type_arguments.len())?;
+            if !implementations.is_empty() {
+                depth += 1;
+                let slot = pending.get_mut(depth).ok_or_else(|| {
+                    repository_error(
+                        DiagnosticClass::Resource,
+                        "publication_repository_reference_visits_exhausted",
+                        "candidate witness projection exceeds its admitted depth",
+                    )
+                })?;
+                *slot = implementations;
+            }
+        }
     }
+}
+
+fn admit_candidate_owner_type_roots(
+    record: &crate::platform::kernel::OwnerRecord,
+    admission: &CandidateReferenceAdmission,
+) -> Result<Vec<crate::platform::kernel::TypeObjectDigest>, Diagnostic> {
+    admission.admit_visits(candidate_owner_type_root_count(record)?)?;
+    Ok(record.type_roots())
 }
 
 fn verify_candidate_references(
@@ -2179,8 +2287,7 @@ fn verify_candidate_references(
                         &admission,
                     )?;
                     let record = decode_owner(&bytes, owner, binding.kind, binding.object)?;
-                    admission.admit_visits(candidate_owner_type_root_count(&record))?;
-                    types.extend(record.type_roots());
+                    types.extend(admit_candidate_owner_type_roots(&record, &admission)?);
                     // blob_roots has at most one element; reserve that projection before allocation.
                     admission.admit_visits(1)?;
                     for (digest, length) in record.blob_roots() {
@@ -2468,8 +2575,8 @@ pub(super) fn validate_dependency_sources_controlled<S: ImmutableObjectStore + ?
 ) -> Result<u64, Diagnostic> {
     use crate::platform::kernel::{PackageId, decode_dependency, decode_dependency_binding};
     use crate::platform::package_transport::source::{
-        MAXIMUM_VALIDATION_READ_BYTES, MAXIMUM_VALIDATION_VISITS,
-        collect_preplanned_with_budget_and_control, entries, required,
+        MAXIMUM_VALIDATION_READ_BYTES, MAXIMUM_VALIDATION_VISITS, SourceAdmissionSession, entries,
+        required,
     };
     control.check().map_err(execution_diagnostic)?;
     checkpoint()?;
@@ -2503,6 +2610,8 @@ pub(super) fn validate_dependency_sources_controlled<S: ImmutableObjectStore + ?
     let mut pending = std::collections::VecDeque::from(direct.clone());
     let mut union = BTreeMap::new();
     let mut edge_count = direct.len();
+    let mut priority_work = DependencySourcePriorityWork::new(&overlay, checkpoint, control);
+    let mut priority = DependencySourcePriority::new(&direct, &mut priority_work)?;
     while let Some(dependency) = pending.pop_front() {
         checkpoint()?;
         if dependency.package == root.package_id {
@@ -2568,13 +2677,21 @@ pub(super) fn validate_dependency_sources_controlled<S: ImmutableObjectStore + ?
                 "candidate closure exceeds dependency edge admission",
             ));
         }
+        for child in &revision.dependencies {
+            priority.observe_dependency(child, &direct, &mut priority_work)?;
+        }
         pending.extend(revision.dependencies);
         union.insert(dependency.package, dependency);
     }
-    let mut semantic_visits = 0_u64;
+    // Priority is operational only. All original roots remain; only a successfully complete
+    // source admission below can mark any exact revision checked and suppress a later root.
+    let source_order = priority.into_order(&mut priority_work)?;
+    let mut semantic_visits = priority_work.consumed();
     let mut checked = BTreeSet::new();
     let mut snapshots = BTreeMap::new();
-    for dependency in direct {
+    let mut source_admission = SourceAdmissionSession::new(&overlay, control);
+    for index in source_order {
+        let dependency = &direct[index];
         checkpoint()?;
         if checked.contains(&dependency.package_revision) {
             continue;
@@ -2584,7 +2701,7 @@ pub(super) fn validate_dependency_sources_controlled<S: ImmutableObjectStore + ?
             store,
             dependency.package_revision,
             None,
-            Some(&dependency),
+            Some(dependency),
             &mut work,
             control,
         )?;
@@ -2600,9 +2717,10 @@ pub(super) fn validate_dependency_sources_controlled<S: ImmutableObjectStore + ?
                 )
             })?;
         let read_bytes = MAXIMUM_VALIDATION_READ_BYTES - overlay.read_bytes();
-        let admitted = collect_preplanned_with_budget_and_control(
-            &overlay, closure, visits, read_bytes, control,
-        )?;
+        #[cfg(test)]
+        dependency_source_priority::record_collection(dependency.package_revision);
+        let admitted =
+            source_admission.collect_preplanned_with_budget(closure, visits, read_bytes)?;
         semantic_visits = semantic_visits
             .checked_add(admitted.validation_visits - (overlay.visits() - before_reads))
             .ok_or_else(|| {
@@ -2706,7 +2824,7 @@ pub(super) fn logical_dependency_inventory<S: ImmutableObjectStore + ?Sized>(
     Ok(result)
 }
 
-fn read_package_readiness(
+pub(super) fn read_package_readiness(
     root: &Path,
 ) -> Result<crate::platform::package_transport::source::PackageReadiness, Diagnostic> {
     let root = open_directory(root)?;

@@ -332,8 +332,8 @@ declarations.end"#,
         changed.tables.types.remove(index);
         if let CompilationPayload::Function { signature, .. } = &mut changed.payload {
             assert!(signature.parameters.is_empty());
-            assert!(signature.result as usize > index);
-            signature.result -= 1;
+            assert!(signature.result.ty as usize > index);
+            signature.result.ty -= 1;
         }
         // Other units still retain the same type object in the global artifact. Each
         // unit must carry its own full metadata roots instead of relying on that accident.

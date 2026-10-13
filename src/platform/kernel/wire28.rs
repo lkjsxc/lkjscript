@@ -1,6 +1,7 @@
 //! Frozen Graph 28 owner and interface layouts.
 //! Prerequisite applications must never reinterpret original bytes.
 
+use super::frozen_read_view_wire as frozen;
 use super::*;
 use crate::platform::semantic_id::*;
 use bincode::{Decode, Encode};
@@ -15,7 +16,7 @@ pub enum OwnerRecord28 {
     Case(CaseRecord),
     Operation(OperationRecord),
     Parameter(ParameterRecord),
-    Binding(BindingRecord),
+    Binding(frozen::FrozenBindingRecord33),
     Expression(ExpressionRecord28),
     Requirement(RequirementRecord),
     Port(PortRecord),
@@ -179,8 +180,9 @@ impl From<FunctionDeclaration28> for FunctionDeclaration {
             effect_parameters: v.effect_parameters,
             type_parameters: v.type_parameters,
             parameters: v.parameters,
-            result: v.result,
-            result_borrow: v.result_borrow,
+            result: frozen::legacy_result(v.result, v.result_borrow),
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
             effect: v.effect,
             body: v.body,
         }
@@ -190,14 +192,18 @@ impl From<FunctionDeclaration28> for FunctionDeclaration {
 impl TryFrom<FunctionDeclaration> for FunctionDeclaration28 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: FunctionDeclaration) -> Result<Self, Self::Error> {
+        frozen::require_empty_read_scope(
+            v.read_scope_parameters.is_empty() && v.read_scope_sources.is_empty(),
+        )?;
+        let (result, result_borrow) = frozen::split_result(v.result)?;
         Ok(Self {
             implementation_parameters: v.implementation_parameters,
             requirement_parameters: v.requirement_parameters,
             effect_parameters: v.effect_parameters,
             type_parameters: v.type_parameters,
             parameters: v.parameters,
-            result: v.result,
-            result_borrow: v.result_borrow,
+            result,
+            result_borrow,
             effect: v.effect,
             body: v.body,
         })
@@ -233,8 +239,9 @@ impl From<PackageFunctionSignature28> for PackageFunctionSignature {
             effect_parameters: v.effect_parameters,
             type_parameters: v.type_parameters,
             parameters: v.parameters,
-            result: v.result,
-            result_borrow: v.result_borrow,
+            result: frozen::legacy_result(v.result, v.result_borrow),
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
             effect: v.effect,
         }
     }
@@ -243,14 +250,18 @@ impl From<PackageFunctionSignature28> for PackageFunctionSignature {
 impl TryFrom<PackageFunctionSignature> for PackageFunctionSignature28 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: PackageFunctionSignature) -> Result<Self, Self::Error> {
+        frozen::require_empty_read_scope(
+            v.read_scope_parameters.is_empty() && v.read_scope_sources.is_empty(),
+        )?;
+        let (result, result_borrow) = frozen::split_result(v.result)?;
         Ok(Self {
             implementation_parameters: v.implementation_parameters,
             requirement_parameters: v.requirement_parameters,
             effect_parameters: v.effect_parameters,
             type_parameters: v.type_parameters,
             parameters: v.parameters,
-            result: v.result,
-            result_borrow: v.result_borrow,
+            result,
+            result_borrow,
             effect: v.effect,
         })
     }
@@ -294,7 +305,7 @@ impl From<OwnerRecord28> for OwnerRecord {
             OwnerRecord28::Case(v) => Self::Case(v),
             OwnerRecord28::Operation(v) => Self::Operation(v),
             OwnerRecord28::Parameter(v) => Self::Parameter(v),
-            OwnerRecord28::Binding(v) => Self::Binding(v),
+            OwnerRecord28::Binding(v) => Self::Binding(v.into()),
             OwnerRecord28::Expression(v) => Self::Expression(v.into()),
             OwnerRecord28::Requirement(v) => Self::Requirement(v),
             OwnerRecord28::Port(v) => Self::Port(v),
@@ -319,7 +330,7 @@ impl TryFrom<OwnerRecord> for OwnerRecord28 {
             OwnerRecord::Case(v) => Self::Case(v),
             OwnerRecord::Operation(v) => Self::Operation(v),
             OwnerRecord::Parameter(v) => Self::Parameter(v),
-            OwnerRecord::Binding(v) => Self::Binding(v),
+            OwnerRecord::Binding(v) => Self::Binding(v.try_into()?),
             OwnerRecord::Expression(v) => Self::Expression(v.try_into()?),
             OwnerRecord::Requirement(v) => Self::Requirement(v),
             OwnerRecord::Port(v) => Self::Port(v),
@@ -419,6 +430,9 @@ impl TryFrom<DeclarationPayload> for DeclarationPayload28 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: DeclarationPayload) -> Result<Self, Self::Error> {
         Ok(match v {
+            super::DeclarationPayload::ReadView(_) => {
+                return Err(frozen::read_view_extension());
+            }
             super::DeclarationPayload::OwnedRecord { .. } => {
                 return Err(super::owned_record::reject(
                     "nominal owned records require Graph 32",
@@ -506,6 +520,9 @@ impl TryFrom<PackageInterfaceDeclarationPayload> for PackageInterfaceDeclaration
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: PackageInterfaceDeclarationPayload) -> Result<Self, Self::Error> {
         Ok(match v {
+            super::PackageInterfaceDeclarationPayload::ReadView(_) => {
+                return Err(frozen::read_view_extension());
+            }
             super::PackageInterfaceDeclarationPayload::OwnedRecord { .. } => {
                 return Err(super::owned_record::reject(
                     "nominal owned records require Graph 32",
@@ -572,8 +589,9 @@ impl From<OwnedMethod28> for OwnedMethod {
             id: v.id,
             name: v.name,
             parameters: v.parameters,
-            result: v.result,
-            result_borrow: v.result_borrow,
+            result: frozen::legacy_result(v.result, v.result_borrow),
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
             effect: v.effect,
         }
     }
@@ -581,12 +599,16 @@ impl From<OwnedMethod28> for OwnedMethod {
 impl TryFrom<OwnedMethod> for OwnedMethod28 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: OwnedMethod) -> Result<Self, Self::Error> {
+        frozen::require_empty_read_scope(
+            v.read_scope_parameters.is_empty() && v.read_scope_sources.is_empty(),
+        )?;
+        let (result, result_borrow) = frozen::split_result(v.result)?;
         Ok(Self {
             id: v.id,
             name: v.name,
             parameters: v.parameters,
-            result: v.result,
-            result_borrow: v.result_borrow,
+            result,
+            result_borrow,
             effect: v.effect,
         })
     }
@@ -656,6 +678,7 @@ impl TryFrom<OwnedImplementation> for OwnedImplementation28 {
 impl From<OwnedMethodImplementation28> for OwnedMethodImplementation {
     fn from(v: OwnedMethodImplementation28) -> Self {
         Self {
+            read_scope_arguments: Vec::new(),
             method: v.method,
             function: v.function,
             type_arguments: v.type_arguments,
@@ -666,6 +689,7 @@ impl From<OwnedMethodImplementation28> for OwnedMethodImplementation {
 impl TryFrom<OwnedMethodImplementation> for OwnedMethodImplementation28 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: OwnedMethodImplementation) -> Result<Self, Self::Error> {
+        frozen::require_empty_read_scope(v.read_scope_arguments.is_empty())?;
         if !v.implementations.is_empty() {
             return Err(implementation_scheme_extension());
         }
@@ -968,6 +992,7 @@ impl From<ExpressionOperation28> for ExpressionOperation {
                 type_arguments,
                 arguments,
             } => Self::Call {
+                read_scope_arguments: Vec::new(),
                 requirement_arguments,
                 effect_arguments,
                 function,
@@ -980,6 +1005,7 @@ impl From<ExpressionOperation28> for ExpressionOperation {
                 function,
                 type_arguments,
             } => Self::FunctionValue {
+                read_scope_arguments: Vec::new(),
                 requirement_arguments,
                 effect_arguments,
                 function,
@@ -1059,6 +1085,7 @@ impl From<ExpressionOperation28> for ExpressionOperation {
                 implementations,
                 arguments,
             } => Self::ImplementationCall {
+                read_scope_arguments: Vec::new(),
                 requirement_arguments,
                 effect_arguments,
                 function,
@@ -1072,6 +1099,7 @@ impl From<ExpressionOperation28> for ExpressionOperation {
                 method,
                 arguments,
             } => Self::MethodCall {
+                read_scope_arguments: Vec::new(),
                 witness: witness.into(),
                 contract,
                 method,
@@ -1194,6 +1222,15 @@ impl TryFrom<ExpressionOperation> for ExpressionOperation28 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: ExpressionOperation) -> Result<Self, Self::Error> {
         Ok(match v {
+            super::ExpressionOperation::CreateReadView { .. }
+            | super::ExpressionOperation::BorrowReadView { .. }
+            | super::ExpressionOperation::ReborrowReadView { .. }
+            | super::ExpressionOperation::MoveReadView { .. }
+            | super::ExpressionOperation::DropReadView { .. }
+            | super::ExpressionOperation::ReadViewDataField { .. }
+            | super::ExpressionOperation::BorrowReadViewField { .. } => {
+                return Err(frozen::read_view_extension());
+            }
             super::ExpressionOperation::PackOwnedRecord { .. }
             | super::ExpressionOperation::UnpackOwnedRecord { .. }
             | super::ExpressionOperation::BorrowOwnedRecordField { .. } => {
@@ -1224,29 +1261,37 @@ impl TryFrom<ExpressionOperation> for ExpressionOperation28 {
             ExpressionOperation::Let { bindings, body } => Self::Let { bindings, body },
             ExpressionOperation::Sequence { items } => Self::Sequence { items },
             ExpressionOperation::Call {
+                read_scope_arguments,
                 requirement_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
                 arguments,
-            } => Self::Call {
-                requirement_arguments,
-                effect_arguments,
-                function,
-                type_arguments,
-                arguments,
-            },
+            } => {
+                frozen::require_empty_read_scope(read_scope_arguments.is_empty())?;
+                Self::Call {
+                    requirement_arguments,
+                    effect_arguments,
+                    function,
+                    type_arguments,
+                    arguments,
+                }
+            }
             ExpressionOperation::FunctionValue {
+                read_scope_arguments,
                 requirement_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
-            } => Self::FunctionValue {
-                requirement_arguments,
-                effect_arguments,
-                function,
-                type_arguments,
-            },
+            } => {
+                frozen::require_empty_read_scope(read_scope_arguments.is_empty())?;
+                Self::FunctionValue {
+                    requirement_arguments,
+                    effect_arguments,
+                    function,
+                    type_arguments,
+                }
+            }
             ExpressionOperation::Invoke { callee, arguments } => Self::Invoke { callee, arguments },
             ExpressionOperation::Record {
                 nominal_type,
@@ -1312,34 +1357,42 @@ impl TryFrom<ExpressionOperation> for ExpressionOperation28 {
             },
             ExpressionOperation::F64 { value } => Self::F64 { value },
             ExpressionOperation::ImplementationCall {
+                read_scope_arguments,
                 requirement_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
                 implementations,
                 arguments,
-            } => Self::ImplementationCall {
-                requirement_arguments,
-                effect_arguments,
-                function,
-                type_arguments,
-                implementations: implementations
-                    .into_iter()
-                    .map(TryInto::try_into)
-                    .collect::<Result<_, _>>()?,
-                arguments,
-            },
+            } => {
+                frozen::require_empty_read_scope(read_scope_arguments.is_empty())?;
+                Self::ImplementationCall {
+                    requirement_arguments,
+                    effect_arguments,
+                    function,
+                    type_arguments,
+                    implementations: implementations
+                        .into_iter()
+                        .map(TryInto::try_into)
+                        .collect::<Result<_, _>>()?,
+                    arguments,
+                }
+            }
             ExpressionOperation::MethodCall {
+                read_scope_arguments,
                 witness,
                 contract,
                 method,
                 arguments,
-            } => Self::MethodCall {
-                witness: witness.try_into()?,
-                contract,
-                method,
-                arguments,
-            },
+            } => {
+                frozen::require_empty_read_scope(read_scope_arguments.is_empty())?;
+                Self::MethodCall {
+                    witness: witness.try_into()?,
+                    contract,
+                    method,
+                    arguments,
+                }
+            }
             ExpressionOperation::PackOwned {
                 product_type,
                 fields,

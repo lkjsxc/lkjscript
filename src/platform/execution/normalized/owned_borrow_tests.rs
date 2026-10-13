@@ -592,13 +592,25 @@ fn owned_borrow_vm_retains_borrowed_source_frame_on_counterfeit_tail_call() {
     let instructions = Arc::make_mut(&mut code.instructions);
     let mut changed = 0;
     for index in 0..instructions.len().saturating_sub(1) {
+        // Function34 loans close their exact lexical scope before ending custody.
+        // Keep the counterfeit tail inside the live loan, with both cleanup
+        // instructions retained; no unrelated instruction may intervene.
+        let cleanup = if matches!(
+            instructions.get(index + 1),
+            Some(NormalizedInstruction::EndReadViewScope { .. })
+        ) {
+            index + 2
+        } else {
+            index + 1
+        };
         if !matches!(
-            instructions[index + 1],
-            NormalizedInstruction::EndOwnedBorrow { .. }
+            instructions.get(cleanup),
+            Some(NormalizedInstruction::EndOwnedBorrow { .. })
         ) {
             continue;
         }
         if let NormalizedInstruction::Call {
+            read_scope_arguments,
             requirement_arguments,
             effect_arguments,
             function,
@@ -607,6 +619,7 @@ fn owned_borrow_vm_retains_borrowed_source_frame_on_counterfeit_tail_call() {
         } = instructions[index].clone()
         {
             instructions[index] = NormalizedInstruction::TailCall {
+                read_scope_arguments,
                 requirement_arguments,
                 effect_arguments,
                 function,

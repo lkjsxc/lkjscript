@@ -117,7 +117,7 @@ fn parallel_result_admission_checks_unselected_owned_choice_cases() {
     let DeclarationPayload::Function(function) = &mut declaration.payload else {
         panic!("child function");
     };
-    function.result = result;
+    function.result.ty = result;
     assert!(parallel::admit_call(&source, left, None).is_err());
     assert!(!memory_reference::accepts(&source));
 }

@@ -31,8 +31,8 @@ fn parameter_type_record_matches_existing_typed_operation_and_commitment() {
     );
     assert_eq!(decoded.request_commitment, typed.request_commitment);
     let bytes = crate::platform::change::canonical_authored_intent_bytes(&typed.semantic).unwrap();
-    assert_eq!(&bytes[..8], b"LKJACR17");
-    // Frozen authored encoding: header, exact base, empty preconditions, one change, tag 25.
+    assert_eq!(&bytes[..8], b"LKJACR39");
+    // Current authored encoding keeps the exact base, empty preconditions and change tag 25.
     assert_eq!(bytes[56], 25);
 
     let changed = input.replace("type=f64", "type=bool");

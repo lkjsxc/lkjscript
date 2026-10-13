@@ -41,6 +41,15 @@ impl ExpressionRecord {
                 ),
             ));
         }
+        if self.contract_version < super::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+            && (self.operation.is_read_view_operation()
+                || !self.operation.read_scope_arguments().is_empty())
+        {
+            return Err(expression_error(
+                "kernel_read_view_generation",
+                "view operations and scope actuals require Graph 34",
+            ));
+        }
         if self.contract_version < 32
             && matches!(
                 self.operation,
@@ -208,6 +217,152 @@ impl ExpressionRecord {
         expression_children(&self.operation)
     }
 
+    /// Visits immediate syntax in authored order without allocating a child vector.
+    pub(crate) fn visit_children(
+        &self,
+        mut visit: impl FnMut(ExpressionId) -> Result<(), Diagnostic>,
+    ) -> Result<(), Diagnostic> {
+        use ExpressionOperation as E;
+        match &self.operation {
+            E::CreateReadView { fields, .. } => {
+                for field in fields {
+                    visit(field.value)?;
+                }
+            }
+            E::BorrowReadView { body, .. }
+            | E::BorrowReadViewField { body, .. }
+            | E::Let { body, .. }
+            | E::Transaction { body, .. }
+            | E::TransactionOutcome { body, .. } => visit(*body)?,
+            E::BorrowCall { call, body, .. } => {
+                visit(*call)?;
+                visit(*body)?;
+            }
+            E::SequenceLength { source, .. } | E::SequencePop { source, .. } => visit(*source)?,
+            E::SequencePush { value, source, .. } => {
+                visit(*value)?;
+                visit(*source)?;
+            }
+            E::SequenceGet { index, source, .. } => {
+                visit(*index)?;
+                visit(*source)?;
+            }
+            E::SequenceReplace {
+                index,
+                value,
+                source,
+                ..
+            } => {
+                visit(*index)?;
+                visit(*value)?;
+                visit(*source)?;
+            }
+            E::BorrowOwnedItem {
+                index,
+                source,
+                body,
+                ..
+            } => {
+                visit(*index)?;
+                visit(*source)?;
+                visit(*body)?;
+            }
+            E::ChooseOwned { value, .. } | E::Field { value, .. } => visit(*value)?,
+            E::MatchOwned { source, arms, .. } | E::MatchBorrowedOwned { source, arms, .. } => {
+                visit(*source)?;
+                for arm in arms {
+                    visit(arm.body)?;
+                }
+            }
+            E::PackOwned { fields, .. } => {
+                for field in fields {
+                    visit(field.value)?;
+                }
+            }
+            E::PackOwnedRecord { fields, .. } => {
+                for field in fields {
+                    visit(field.value)?;
+                }
+            }
+            E::UnpackOwned { source, body, .. }
+            | E::UnpackOwnedRecord { source, body, .. }
+            | E::BorrowOwnedRecordField { source, body, .. }
+            | E::BorrowOwnedField { source, body, .. } => {
+                visit(*source)?;
+                visit(*body)?;
+            }
+            E::If {
+                condition,
+                when_true,
+                when_false,
+            } => {
+                visit(*condition)?;
+                visit(*when_true)?;
+                visit(*when_false)?;
+            }
+            E::Sequence { items } | E::List { items, .. } => {
+                for item in items {
+                    visit(*item)?;
+                }
+            }
+            E::Parallel { left, right } => {
+                visit(*left)?;
+                visit(*right)?;
+            }
+            E::ImplementationCall { arguments, .. }
+            | E::MethodCall { arguments, .. }
+            | E::Call { arguments, .. }
+            | E::CapabilityCall { arguments, .. } => {
+                for argument in arguments {
+                    visit(*argument)?;
+                }
+            }
+            E::Invoke { callee, arguments } | E::Bind { callee, arguments } => {
+                visit(*callee)?;
+                for argument in arguments {
+                    visit(*argument)?;
+                }
+            }
+            E::Record { fields, .. } => {
+                for field in fields {
+                    visit(field.value)?;
+                }
+            }
+            E::Variant { payload, .. } => {
+                if let Some(payload) = payload {
+                    visit(*payload)?;
+                }
+            }
+            E::Map { entries, .. } => {
+                for entry in entries {
+                    visit(entry.key)?;
+                    visit(entry.value)?;
+                }
+            }
+            E::Match { value, arms } => {
+                visit(*value)?;
+                for arm in arms {
+                    visit(arm.body)?;
+                }
+            }
+            E::Unit {}
+            | E::ReborrowReadView { .. }
+            | E::MoveReadView { .. }
+            | E::DropReadView { .. }
+            | E::ReadViewDataField { .. }
+            | E::SequenceEmpty { .. }
+            | E::Bool { .. }
+            | E::I64 { .. }
+            | E::F64 { .. }
+            | E::Text { .. }
+            | E::StaticText { .. }
+            | E::Local { .. }
+            | E::Constant { .. }
+            | E::FunctionValue { .. } => {}
+        }
+        Ok(())
+    }
+
     pub fn type_roots(&self) -> Vec<TypeObjectDigest> {
         match &self.operation {
             ExpressionOperation::PackOwnedRecord { record_type, .. }
@@ -256,6 +411,7 @@ impl ExpressionRecord {
                 .collect(),
             ExpressionOperation::Call { type_arguments, .. }
             | ExpressionOperation::FunctionValue { type_arguments, .. }
+            | ExpressionOperation::CreateReadView { type_arguments, .. }
             | ExpressionOperation::Record { type_arguments, .. }
             | ExpressionOperation::Variant { type_arguments, .. } => type_arguments.clone(),
             ExpressionOperation::TransactionOutcome { type_argument, .. } => vec![*type_argument],
@@ -309,6 +465,7 @@ pub enum ExpressionOperation {
         effect_arguments: Vec<super::EffectRow>,
         function: DeclarationReference,
         type_arguments: Vec<TypeObjectDigest>,
+        read_scope_arguments: Vec<super::ReadScopeArgument>,
         arguments: Vec<ExpressionId>,
     },
     FunctionValue {
@@ -316,6 +473,7 @@ pub enum ExpressionOperation {
         effect_arguments: Vec<super::EffectRow>,
         function: DeclarationReference,
         type_arguments: Vec<TypeObjectDigest>,
+        read_scope_arguments: Vec<super::ReadScopeArgument>,
     },
     Invoke {
         callee: ExpressionId,
@@ -377,6 +535,7 @@ pub enum ExpressionOperation {
         effect_arguments: Vec<super::EffectRow>,
         function: DeclarationReference,
         type_arguments: Vec<TypeObjectDigest>,
+        read_scope_arguments: Vec<super::ReadScopeArgument>,
         implementations: Vec<super::ImplementationOperand>,
         arguments: Vec<ExpressionId>,
     },
@@ -384,6 +543,7 @@ pub enum ExpressionOperation {
         witness: super::ImplementationOperand,
         contract: DeclarationReference,
         method: crate::platform::semantic_id::MethodId,
+        read_scope_arguments: Vec<super::ReadScopeArgument>,
         arguments: Vec<ExpressionId>,
     },
     PackOwned {
@@ -488,6 +648,76 @@ pub enum ExpressionOperation {
         binding: BindingId,
         body: ExpressionId,
     },
+    /// Protect the designated source before evaluating fields in authored order.
+    CreateReadView {
+        declaration: DeclarationReference,
+        type_arguments: Vec<TypeObjectDigest>,
+        read_scope: super::ReadScopeArgument,
+        source: LocalValueReference,
+        fields: Vec<super::ReadViewFieldInitializer>,
+    },
+    BorrowReadView {
+        value: LocalValueReference,
+        binding: BindingId,
+        body: ExpressionId,
+    },
+    ReborrowReadView {
+        value: LocalValueReference,
+        read_scope: super::ReadScopeArgument,
+    },
+    MoveReadView {
+        value: LocalValueReference,
+    },
+    DropReadView {
+        value: LocalValueReference,
+    },
+    ReadViewDataField {
+        value: LocalValueReference,
+        field: super::ReadViewFieldReference,
+    },
+    BorrowReadViewField {
+        value: LocalValueReference,
+        field: super::ReadViewFieldReference,
+        binding: BindingId,
+        body: ExpressionId,
+    },
+}
+
+impl ExpressionOperation {
+    pub(crate) fn read_scope_arguments(&self) -> &[super::ReadScopeArgument] {
+        match self {
+            Self::Call {
+                read_scope_arguments,
+                ..
+            }
+            | Self::FunctionValue {
+                read_scope_arguments,
+                ..
+            }
+            | Self::ImplementationCall {
+                read_scope_arguments,
+                ..
+            }
+            | Self::MethodCall {
+                read_scope_arguments,
+                ..
+            } => read_scope_arguments,
+            _ => &[],
+        }
+    }
+
+    pub(crate) fn is_read_view_operation(&self) -> bool {
+        matches!(
+            self,
+            Self::CreateReadView { .. }
+                | Self::BorrowReadView { .. }
+                | Self::ReborrowReadView { .. }
+                | Self::MoveReadView { .. }
+                | Self::DropReadView { .. }
+                | Self::ReadViewDataField { .. }
+                | Self::BorrowReadViewField { .. }
+        )
+    }
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
@@ -687,10 +917,26 @@ pub enum ExpressionChildRole {
     OwnedSequenceBody,
     BorrowCallInvocation,
     BorrowCallBody,
+    ReadViewField,
+    ReadViewBody,
 }
 
 fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic> {
+    require_count(
+        "call read-scope arguments",
+        operation.read_scope_arguments().len(),
+        true,
+    )?;
     match operation {
+        ExpressionOperation::CreateReadView {
+            type_arguments,
+            fields,
+            ..
+        } => {
+            require_count("view type arguments", type_arguments.len(), true)?;
+            require_count("view fields", fields.len(), true)?;
+            require_unique("view field", fields.iter().map(|field| field.field))?;
+        }
         ExpressionOperation::PackOwnedRecord { fields, .. } => {
             require_count("owned record fields", fields.len(), true)?;
             require_unique("owned record field", fields.iter().map(|field| field.field))?;
@@ -902,6 +1148,12 @@ fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic>
             require_count("capability arguments", arguments.len(), true)?;
         }
         ExpressionOperation::Unit {}
+        | ExpressionOperation::BorrowReadView { .. }
+        | ExpressionOperation::ReborrowReadView { .. }
+        | ExpressionOperation::MoveReadView { .. }
+        | ExpressionOperation::DropReadView { .. }
+        | ExpressionOperation::ReadViewDataField { .. }
+        | ExpressionOperation::BorrowReadViewField { .. }
         | ExpressionOperation::BorrowCall { .. }
         | ExpressionOperation::BorrowOwnedField { .. }
         | ExpressionOperation::BorrowOwnedRecordField { .. }
@@ -973,6 +1225,20 @@ fn require_unique<T: Ord + Copy>(
 fn expression_children(operation: &ExpressionOperation) -> Vec<ExpressionChild> {
     let mut children = Vec::new();
     match operation {
+        ExpressionOperation::CreateReadView { fields, .. } => {
+            for (ordinal, field) in fields.iter().enumerate() {
+                push_child(
+                    &mut children,
+                    field.value,
+                    ExpressionChildRole::ReadViewField,
+                    u32::try_from(ordinal).unwrap_or(u32::MAX),
+                );
+            }
+        }
+        ExpressionOperation::BorrowReadView { body, .. }
+        | ExpressionOperation::BorrowReadViewField { body, .. } => {
+            push_child(&mut children, *body, ExpressionChildRole::ReadViewBody, 0);
+        }
         ExpressionOperation::BorrowCall { call, body, .. } => {
             push_child(
                 &mut children,
@@ -1234,6 +1500,10 @@ fn expression_children(operation: &ExpressionOperation) -> Vec<ExpressionChild> 
             );
         }
         ExpressionOperation::Unit {}
+        | ExpressionOperation::ReborrowReadView { .. }
+        | ExpressionOperation::MoveReadView { .. }
+        | ExpressionOperation::DropReadView { .. }
+        | ExpressionOperation::ReadViewDataField { .. }
         | ExpressionOperation::SequenceEmpty { .. }
         | ExpressionOperation::Bool { .. }
         | ExpressionOperation::I64 { .. }

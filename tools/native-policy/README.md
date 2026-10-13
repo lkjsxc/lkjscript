@@ -100,7 +100,9 @@ supplier. Rebuild the contributor test executable after replacing the artifact.
 The [current release notes](../../docs/releases/v0.1.92.md) identify the selected
 compatibility boundary; [status](../../docs/status.md) owns actual acceptance.
 
-The current derived bundle uses compiler 33, bytecode 27 and artifact 40:
+The preceding derived bundle used compiler 33, bytecode 27 and artifact 40:
 `artifact_bundle_6efb7a414dc41054c09602618b9b7d2754ce78d53590ddc0846fc0e9eef2b7cf`,
 758,094 bytes. Public check/build preserves the accepted native HEAD and its exact
 supplier; all 62 native and supplier tests agree between the two evaluators.
+
+The .96 compilation refresh selects artifact_bundle_80fc7c3a1aa35da4a96b3480dd55fc31e10ce70d1a93e472d072faa40ac1f958 (758,710 bytes, SHA-256 16b76270e8e38d8758e84e63adfb8c85a598f796f36b5850d83e0bd618e1bef3), using compiler 34, bytecode 28 and artifact 41. Its two public builds are byte-identical and all 62 source/supplier checks report zero failures and differential equality; the [separate rebuild receipt](../../.artifacts/associated-read-views/consumer-assets-installation-proposals/sourcef87c8b-four-families-first/receipt.json) binds their original source f87c8b7fa80e03bb8e3901746aa14a845fc509161916ca07eef92c55d32ed550. Accepted HEAD and exact suppliers remain unchanged. This compilation refresh supplies no final source, release or additional runtime acceptance.

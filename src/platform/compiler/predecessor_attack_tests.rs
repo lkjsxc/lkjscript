@@ -4,6 +4,18 @@ use super::*;
 use crate::platform::kernel::{EncodedOwnerKey, decode_owner_binding};
 use crate::platform::persistent_map::PageStore;
 
+/// The original compiler33 fixture remains a separately pinned historical input.
+/// Re-enveloping it below changes only disposable derived identities.
+pub(super) fn assert_frozen33_fixture_identity(bytes: &[u8], expected_sha256: &str) {
+    use sha2::Digest;
+    assert!(bytes.starts_with(b"LKJART40"));
+    assert_eq!(
+        crate::platform::semantic_id::encode_hex(&sha2::Sha256::digest(bytes)),
+        expected_sha256,
+        "original compiler33 fixture bytes changed"
+    );
+}
+
 pub(crate) fn current_derived_fixture(bytes: &[u8]) -> Vec<u8> {
     current_derived_fixture_from_source(bytes, None)
 }
@@ -18,6 +30,7 @@ fn current_derived_fixture_from_source(
         b"LKJART20" => (*b"LKJAMF20", "lkjscript.artifact-manifest-envelope.v20"),
         b"LKJART21" => (*b"LKJAMF21", "lkjscript.artifact-manifest-envelope.v21"),
         b"LKJART36" => (*b"LKJAMF36", "lkjscript.artifact-manifest-envelope.v36"),
+        b"LKJART40" => (*b"LKJAMF40", "lkjscript.artifact-manifest-envelope.v40"),
         _ => panic!("fixture generation"),
     };
     let number = |at| u64::from_be_bytes(bytes[at..at + 8].try_into().unwrap()) as usize;
@@ -69,15 +82,13 @@ fn current_derived_fixture_from_source(
             .unwrap()
             .into()
         } else if value.starts_with(b"LKJCUN29") {
-            // Decode the frozen predecessor envelope without granting it current
-            // admission. Its source, tables and instructions have the same layout.
-            crate::platform::packed::decode::<CompilationUnit>(
-                &value,
-                *b"LKJCUN29",
-                "lkjscript.compiler-unit-envelope.v29",
-                super::super::unit::MAXIMUM_COMPILER_UNIT_BYTES,
-            )
-            .unwrap()
+            // Compiler29 used the frozen pre-view physical payload. This test-only
+            // reader retains the original profile and supplies only empty new fields.
+            super::super::wire33::decode_ordinary29_for_test(&value).unwrap()
+        } else if value.starts_with(b"LKJCUN33") {
+            // The independently pinned compiler33 fixture is decoded with its own
+            // genuine wire profile before replacing disposable derived envelopes.
+            CompilationUnit::decode(&value, key).unwrap()
         } else {
             let (magic, domain) = match &value[..8] {
                 b"LKJCUN11" => (*b"LKJCUN11", "lkjscript.compiler-unit-envelope.v11"),
@@ -501,9 +512,28 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
         expected_artifacts.push((name, retained, expected, current));
     }
     for (name, retained, expected, current) in expected_artifacts {
+        let expected_sha256 = match name {
+            "requirements" => "3ce273959935acd5818482bdab27cedee9b1d4dcdb86f005ca9dfe09db49fc4c",
+            "transactions" => "01751d0372e738399989e15c3c6b8636506ad48640ecafcd75f4d1d2b2f12531",
+            "participation" => "2afb966c8f539cf6bf1b5eb55063b3ff82d1700d9267d32dea810f7696253988",
+            _ => unreachable!(),
+        };
+        assert_frozen33_fixture_identity(expected, expected_sha256);
+        let frozen = load_artifact(expected)
+            .unwrap_or_else(|error| panic!("{name}: frozen compiler33 admission: {error:?}"));
+        assert_eq!(
+            (
+                frozen.manifest.contract_version,
+                frozen.manifest.graph_contract_version,
+                frozen.manifest.compiler_contract_version,
+                frozen.manifest.bytecode_contract_version,
+            ),
+            (40, 33, 33, 27),
+        );
+        let expected_current = current_derived_fixture(expected);
         assert!(
-            current.as_slice() == expected,
-            "{name}: current derived fixture bytes changed"
+            current == expected_current,
+            "{name}: current source and instructions differ from the pinned compiler33 fixture"
         );
         assert_eq!(
             load_artifact(retained).unwrap_err().code,

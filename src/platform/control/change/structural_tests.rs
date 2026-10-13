@@ -95,7 +95,7 @@ expression.i64 as=$right-input value=-29\n";
         &format!("{header}{block}{declarations}"),
     );
     let bytes = canonical_authored_intent_bytes(&block.semantic).unwrap();
-    assert_eq!(&bytes[..8], b"LKJACR25");
+    assert_eq!(&bytes[..8], b"LKJACR39");
     assert_candidate_pair(&created.repository, &flat, &block);
     for malformed in [
         "(parallel)",
@@ -142,7 +142,7 @@ fn implementation_applications_match_independent_flat_operands_and_retain_order(
     );
     let (_, original) = assert_intent_pair(&flat, &block);
     let bytes = canonical_authored_intent_bytes(&original.semantic).unwrap();
-    assert_eq!(&bytes[..8], b"LKJACR27");
+    assert_eq!(&bytes[..8], b"LKJACR39");
     for changed in [
         block.replace("(effects @First @Empty)", "(effects @Empty @First)"),
         block.replace(
@@ -190,7 +190,7 @@ fn empty_implementation_applications_and_flat_method_calls_preserve_existing_int
     let (_, decoded) = assert_intent_pair(&block, &empty);
     assert_eq!(
         &canonical_authored_intent_bytes(&decoded.semantic).unwrap()[..8],
-        b"LKJACR21"
+        b"LKJACR39"
     );
     let flat = format!(
         "request base={base}\nexpression.method-call as=$body witness=concrete@{function} contract={function} method={method}\nexpression.argument parent=$body index=0 expression=$value\nexpression.i64 as=$value value=42\n{declarations}"

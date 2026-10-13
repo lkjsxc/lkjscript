@@ -36,8 +36,10 @@ impl Encode for Instruction21<'_> {
         if let CompiledInstruction::Parallel {
             left_types,
             left_implementations,
+            left_read_scope_arguments,
             right_types,
             right_implementations,
+            right_read_scope_arguments,
             left,
             left_arguments,
             right,
@@ -45,6 +47,10 @@ impl Encode for Instruction21<'_> {
             result_type,
         } = self.0
         {
+            assert!(
+                left_read_scope_arguments.is_empty() && right_read_scope_arguments.is_empty(),
+                "frozen bytecode21 encoder cannot discard read-scope operands"
+            );
             38_u32.encode(encoder)?;
             left_types.encode(encoder)?;
             left_implementations.encode(encoder)?;
@@ -136,7 +142,7 @@ fn parallel_open_pair_inference_is_preserved_without_any_concrete_caller() {
         let CompilationPayload::Function { signature, .. } = &unit.payload else {
             panic!("function");
         };
-        assert_ne!(unit.tables.types[signature.result as usize], pair);
+        assert_ne!(unit.tables.types[signature.result.ty as usize], pair);
         load_artifact(&effect_tests::replace_unit(&loaded, key, &unit, vec![])).unwrap();
     }
 }

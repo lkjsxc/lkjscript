@@ -97,11 +97,11 @@ Current identity:
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
 - semantic revision: `rev_6818785d8919028a69659b24df495b2d7a42f2676a95fd1aa0ae143a32623013`;
-- package revision: `package_revision_3a0f78fdb296b222dc03b1ef01219534c049ae0081362a0004654c78fd88ac73`;
-- package transport: `package_transport_47b5ebc559df9de48f3a858f2184de93d00c2de44e36bd18a9ed5058b1a748d4`;
-- artifact manifest: `artifact_manifest_d90abfc30dd70ef9f00e89c099d885a4a91d3891daae43b67e4f802cc8007b8c`;
-- artifact bundle: `artifact_bundle_5d3e7bf359c3867ebf86fa7d9f29ef7acc4c00c93a6d5026f5ddc0b6218e2d80`;
-- artifact bundle size: 1,275,854 bytes;
+- package revision: `package_revision_cdf12369ee92d1ac490ab2f13ac3dccaa7ed7a187ed42e784ecb9b091eb19f01`;
+- package transport: `package_transport_be856691be8136690b69c0369e35ab5dcbd7f59ac4730e35c6fd3d8df29ffe95`;
+- artifact manifest: `artifact_manifest_a44449008887afec47433fe219d7566fa6bdbbf80ee550d986233d71b9e4d868`;
+- artifact bundle: `artifact_bundle_fbac7b94dee0a93032ee6374748ebb317de5f682f13516577ce9c7bce880df62`;
+- artifact bundle size: 1,276,861 bytes;
 - 2,800 live semantic owners, 291 compiler units, and 116 graph tests.
 
 The public check passes all 116 tests with zero failures and agreement between
@@ -327,6 +327,12 @@ revision, transport and artifact identities change at their explicit format
 boundaries. Retained consumers preserve their exact historical supplier selections.
 The current public check passes all 116 tests with agreement between production
 and reference execution; source-full and finalized-byte acceptance remain separate.
+
+The read-view contract refresh exports Graph 34/interface 22 and rebuilds the
+derived bundle for compiler 34, bytecode 28 and artifact 41. The accepted semantic
+revision and native standard graphs remain unchanged. Public check passes all
+116 tests with equal production and reference results; existing consumers retain
+their exact supplier selections.
 
 ## Native owned FIFO
 

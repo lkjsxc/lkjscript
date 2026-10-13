@@ -8,7 +8,7 @@ use crate::platform::execution::normalized::{
     prepared_types,
     vm::{NormalizedRunPolicy, NormalizedVm},
 };
-use crate::platform::kernel::{TypeObject, encode_type_object};
+use crate::platform::kernel::{ResultRelation, TypeObject, encode_type_object};
 use crate::platform::semantic_id::AssociatedTypeMemberId;
 use std::sync::{Arc, Mutex};
 
@@ -66,8 +66,8 @@ fn prepared_fixture(task: bool) -> Fixture {
     for function in Arc::make_mut(&mut program.functions) {
         function.parameter_count = 0;
         function.parameters = Arc::from([]);
-        function.result = if task { sequence } else { scalar };
-        function.result_borrow = None;
+        function.result.ty = if task { sequence } else { scalar };
+        function.result.relation = ResultRelation::Value;
         function.effect = if task {
             FunctionEffect::Task {
                 requirements: vec![],
@@ -90,7 +90,7 @@ fn prepared_fixture(task: bool) -> Fixture {
     entry.type_parameter_constraints = Arc::from([]);
     entry.implementation_parameters = Arc::from([]);
     entry.implementation_arguments = Arc::from([]);
-    entry.result = scalar;
+    entry.result.ty = scalar;
     entry.effect = if task {
         FunctionEffect::Task {
             requirements: vec![],
@@ -104,6 +104,7 @@ fn prepared_fixture(task: bool) -> Fixture {
         local_count: 0,
         instructions: Arc::from([
             NormalizedInstruction::Call {
+                read_scope_arguments: Arc::from([]),
                 function: model.left,
                 type_arguments: Arc::clone(
                     &program.functions[model.left.0 as usize].type_arguments,
@@ -114,6 +115,7 @@ fn prepared_fixture(task: bool) -> Fixture {
             },
             NormalizedInstruction::Drop,
             NormalizedInstruction::Call {
+                read_scope_arguments: Arc::from([]),
                 function: model.right,
                 type_arguments: Arc::clone(
                     &program.functions[model.right.0 as usize].type_arguments,
@@ -245,7 +247,7 @@ fn associated_runtime_refuses_each_independent_member_scope_and_origin_corruptio
                     AssociatedTypeMemberId::migrate(b"foreign-runtime-member", 0)
             }),
             4 => mutate_selected(&mut fixture, |node| node.contract = node.implementation),
-            5 => mutate_selected(&mut fixture, |node| node.implementation_generation -= 1),
+            5 => mutate_selected(&mut fixture, |node| node.implementation_generation = 32),
             6 => {
                 let foreign = fixture.program.functions[fixture.left.0 as usize]
                     .implementation_arguments[0]
@@ -262,6 +264,37 @@ fn associated_runtime_refuses_each_independent_member_scope_and_origin_corruptio
             resolve_fixture(&fixture, fixture.left, &control).is_err(),
             "fault {fault}"
         );
+    }
+
+    // These catalog-updated private inputs check each actual supplier generation;
+    // they are not rewritten artifacts or substitute source-admission proofs.
+    let mut fixture = prepared_fixture(false);
+    for (implementation, contract, valid) in [
+        (33, 33, true),
+        (33, 34, true),
+        (34, 33, true),
+        (34, 34, true),
+        (32, 34, false),
+        (34, 32, false),
+        (35, 34, false),
+        (34, 35, false),
+    ] {
+        mutate_selected(&mut fixture, |node| {
+            node.implementation_generation = implementation;
+            node.contract_generation = contract;
+        });
+        let selected =
+            &fixture.program.functions[fixture.left.0 as usize].implementation_arguments[0];
+        let mut nodes = 0;
+        let result = validate_associated_bindings(&fixture.program, selected, &control, &mut nodes);
+        if valid {
+            result.unwrap();
+            assert!(nodes > 0);
+        } else {
+            let error = result.unwrap_err();
+            assert_eq!(error.class, ExecutionFailureClass::Trap);
+            assert_eq!(error.code, "normalized_parallel_transfer");
+        }
     }
 }
 
@@ -327,33 +360,39 @@ fn associated_runtime_hit_work_bound_and_cancellation_preserve_healthy_retry() {
 
 #[test]
 fn associated_runtime_shared_instruction_body_uses_each_active_function_application() {
-    let fixture = prepared_fixture(false);
-    let storage =
-        crate::platform::execution::normalized::owned_product::StorageObservation::start();
-    let (NormalizedFunctionBody::Code(left), NormalizedFunctionBody::Code(right)) = (
-        &fixture.program.functions[0].body,
-        &fixture.program.functions[1].body,
-    ) else {
-        panic!("shared code");
-    };
-    assert!(Arc::ptr_eq(&left.instructions, &right.instructions));
-    let observations = Mutex::new(None);
-    let result = NormalizedVm::for_test(&fixture.program, NormalizedRunPolicy::default())
-        .observing_checked(&observations)
-        .invoke_entry(
-            NormalizedEntryPoint::Function(FunctionIndex(2, fixture.program.value_origin)),
-            vec![],
-            None,
-            &ExecutionControl::uncancelled(),
-        )
-        .unwrap();
-    assert_eq!(result.0, NormalizedValue::I64(7));
-    let observation = observations.into_inner().unwrap().unwrap();
-    assert_eq!(observation.live_call_frames_after, 0);
-    assert_eq!(observation.live_operands_after, 0);
-    assert_eq!(observation.live_handles_after, 0);
-    assert_eq!(storage.created(), 2);
-    assert_eq!(storage.live(), (0, 0));
+    let mut fixture = prepared_fixture(false);
+    for (implementation, contract) in [(33, 33), (33, 34), (34, 33), (34, 34)] {
+        mutate_selected(&mut fixture, |node| {
+            node.implementation_generation = implementation;
+            node.contract_generation = contract;
+        });
+        let storage =
+            crate::platform::execution::normalized::owned_product::StorageObservation::start();
+        let (NormalizedFunctionBody::Code(left), NormalizedFunctionBody::Code(right)) = (
+            &fixture.program.functions[0].body,
+            &fixture.program.functions[1].body,
+        ) else {
+            panic!("shared code");
+        };
+        assert!(Arc::ptr_eq(&left.instructions, &right.instructions));
+        let observations = Mutex::new(None);
+        let result = NormalizedVm::for_test(&fixture.program, NormalizedRunPolicy::default())
+            .observing_checked(&observations)
+            .invoke_entry(
+                NormalizedEntryPoint::Function(FunctionIndex(2, fixture.program.value_origin)),
+                vec![],
+                None,
+                &ExecutionControl::uncancelled(),
+            )
+            .unwrap();
+        assert_eq!(result.0, NormalizedValue::I64(7));
+        let observation = observations.into_inner().unwrap().unwrap();
+        assert_eq!(observation.live_call_frames_after, 0);
+        assert_eq!(observation.live_operands_after, 0);
+        assert_eq!(observation.live_handles_after, 0);
+        assert_eq!(storage.created(), 2);
+        assert_eq!(storage.live(), (0, 0));
+    }
 }
 
 #[test]

@@ -270,7 +270,9 @@ fn generic_implementation_artifact_rejects_changed_mapped_target_and_borrow_sour
     let CompilationPayload::Function { signature, .. } = &mut changed.payload else {
         unreachable!()
     };
-    signature.result_borrow = Some(signature.parameters[1].parameter);
+    signature.result.relation = crate::platform::kernel::ResultRelation::ReadFrom {
+        source: signature.parameters[1].parameter,
+    };
     reject(&loaded, key, &changed, "generic-target-provenance");
 }
 

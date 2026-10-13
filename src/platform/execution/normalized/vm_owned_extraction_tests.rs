@@ -333,6 +333,10 @@ fn consuming_extraction_rejects_result_packets_and_ancestor_guards_but_allows_ow
             position: 0,
         }),
         guards: Vec::new(),
+        view_borrowed: false,
+        path: None,
+        projected: None,
+        next_cleanup: None,
     }));
     assert!(extract(&f, value).is_err());
     let mut value = owner(&f, 2);
@@ -341,6 +345,10 @@ fn consuming_extraction_rejects_result_packets_and_ancestor_guards_but_allows_ow
         placement: Some(source),
         packet: None,
         guards: vec![owner(&f, 3)],
+        view_borrowed: false,
+        path: None,
+        projected: None,
+        next_cleanup: None,
     }));
     assert!(extract(&f, value).is_err());
     assert_eq!(products.live(), (0, 0));
@@ -351,6 +359,10 @@ fn consuming_extraction_rejects_result_packets_and_ancestor_guards_but_allows_ow
         placement: Some(source),
         packet: None,
         guards: Vec::new(),
+        view_borrowed: false,
+        path: None,
+        projected: None,
+        next_cleanup: None,
     }));
     assert!(extract(&f, value).is_ok());
     assert_eq!(products.live(), (0, 0));

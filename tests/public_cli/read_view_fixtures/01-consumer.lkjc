@@ -1,0 +1,135 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create readview-consumer
+    (type-alias Snapshot (record (length I64) (values (list I64)) (sum I64)))
+    (type-alias Observed (record (snapshot Snapshot) (source_length I64)))
+    (owned-contract create RangeRead (visibility public)
+      (self Self) (type-parameter create Self (constraint owned))
+      (type-parameter create Item (constraint transferable))
+      (associated-type assoc_type_d8100000000000000000000000000001 View
+        (read-view-family (scope-parameter read_scope_d8100000000000000000000000000001 s)))
+      (method method_d8100000000000000000000000000001 range
+        (parameters (I64 unrestricted) (I64 unrestricted) (Self borrow))
+        (returns (associated-read-view-member RangeRead assoc_type_d8100000000000000000000000000001
+          (read-scope (contract-method RangeRead method_d8100000000000000000000000000001) read_scope_d8100000000000000000000000000011))
+          (view-from 2 (read-scope (contract-method RangeRead method_d8100000000000000000000000000001) read_scope_d8100000000000000000000000000011)))
+        (effect pure)
+        (scope-parameters (scope-parameter read_scope_d8100000000000000000000000000011 s))
+        (scope-sources (scope-source 2 (read-scope (contract-method RangeRead method_d8100000000000000000000000000001) read_scope_d8100000000000000000000000000011))))
+      (method method_d8100000000000000000000000000002 view-length
+        (parameters ((associated-read-view-member RangeRead assoc_type_d8100000000000000000000000000001
+          (read-scope (contract-method RangeRead method_d8100000000000000000000000000002) read_scope_d8100000000000000000000000000012)) borrow))
+        (returns I64 (value)) (effect pure)
+        (scope-parameters (scope-parameter read_scope_d8100000000000000000000000000012 s))
+        (scope-sources (scope-source 0 (read-scope (contract-method RangeRead method_d8100000000000000000000000000002) read_scope_d8100000000000000000000000000012))))
+      (method method_d8100000000000000000000000000003 view-get
+        (parameters ((associated-read-view-member RangeRead assoc_type_d8100000000000000000000000000001
+          (read-scope (contract-method RangeRead method_d8100000000000000000000000000003) read_scope_d8100000000000000000000000000013)) borrow) (I64 unrestricted))
+        (returns Item (value)) (effect pure)
+        (scope-parameters (scope-parameter read_scope_d8100000000000000000000000000013 s))
+        (scope-sources (scope-source 0 (read-scope (contract-method RangeRead method_d8100000000000000000000000000003) read_scope_d8100000000000000000000000000013))))
+      (method method_d8100000000000000000000000000004 subrange
+        (parameters (I64 unrestricted) (I64 unrestricted) ((associated-read-view-member RangeRead assoc_type_d8100000000000000000000000000001
+          (read-scope (contract-method RangeRead method_d8100000000000000000000000000004) read_scope_d8100000000000000000000000000014)) borrow))
+        (returns (associated-read-view-member RangeRead assoc_type_d8100000000000000000000000000001
+          (read-scope (contract-method RangeRead method_d8100000000000000000000000000004) read_scope_d8100000000000000000000000000014))
+          (view-from 2 (read-scope (contract-method RangeRead method_d8100000000000000000000000000004) read_scope_d8100000000000000000000000000014)))
+        (effect pure)
+        (scope-parameters (scope-parameter read_scope_d8100000000000000000000000000014 s))
+        (scope-sources (scope-source 2 (read-scope (contract-method RangeRead method_d8100000000000000000000000000004) read_scope_d8100000000000000000000000000014))))
+      (method method_d8100000000000000000000000000005 source
+        (parameters ((associated-read-view-member RangeRead assoc_type_d8100000000000000000000000000001
+          (read-scope (contract-method RangeRead method_d8100000000000000000000000000005) read_scope_d8100000000000000000000000000015)) borrow))
+        (returns Self (read-from 0)) (effect pure)
+        (scope-parameters (scope-parameter read_scope_d8100000000000000000000000000015 s))
+        (scope-sources (scope-source 0 (read-scope (contract-method RangeRead method_d8100000000000000000000000000005) read_scope_d8100000000000000000000000000015)))))
+    (owned-contract create SourceLength (visibility public)
+      (self Self) (type-parameter create Self (constraint owned))
+      (method method_d8100000000000000000000000000006 length
+        (parameters (Self borrow)) (returns I64 (value)) (effect pure)))
+    (owned-contract create SourceDrain (visibility public)
+      (self Self) (type-parameter create Self (constraint owned))
+      (method method_d8100000000000000000000000000007 drain
+        (parameters (Self consume))
+        (returns (owned-product (field rest Self) (field values (list I64))) (value)) (effect pure)))
+    (function create source-length (visibility public) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_d8100000000000000000000000000001 length SourceLength W)
+      (parameter create storage (type W) (use borrow)) (returns I64 (value))
+      (body (method-call parameter@source-length@implparam_d8100000000000000000000000000001
+        SourceLength method_d8100000000000000000000000000006 (local storage))))
+    (function create collect-view (visibility private) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_d8100000000000000000000000000002 reader RangeRead W (types I64))
+      (scope-parameter read_scope_d8100000000000000000000000000021 s)
+      (parameter create index (type I64)) (parameter create values (type (list I64)))
+      (parameter create total (type I64))
+      (parameter create view (type (associated-read-view-projection collect-view implparam_d8100000000000000000000000000002
+        RangeRead assoc_type_d8100000000000000000000000000001
+        (read-scope (declaration collect-view) read_scope_d8100000000000000000000000000021))) (use borrow))
+      (scope-source view (read-scope (declaration collect-view) read_scope_d8100000000000000000000000000021))
+      (returns Snapshot (value))
+      (body (if (call std::less (local index)
+        (method-call parameter@collect-view@implparam_d8100000000000000000000000000002 RangeRead method_d8100000000000000000000000000002
+          (scopes (read-scope (declaration collect-view) read_scope_d8100000000000000000000000000021)) (local view)))
+        (let (binding n (type I64)
+          (method-call parameter@collect-view@implparam_d8100000000000000000000000000002 RangeRead method_d8100000000000000000000000000003
+            (scopes (read-scope (declaration collect-view) read_scope_d8100000000000000000000000000021)) (local view) (local index)))
+          (in (implementation-call collect-view (types W)
+            (implementations parameter@collect-view@implparam_d8100000000000000000000000000002)
+            (scopes (read-scope (declaration collect-view) read_scope_d8100000000000000000000000000021))
+            (call std::add (local index) (i64 1))
+            (call std::list-append (types I64) (local values) (local n))
+            (call std::add (local total) (local n)) (local view))))
+        (record structural (field length (local index)) (field values (local values)) (field sum (local total))))))
+    (function create observe-view (visibility public) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_d8100000000000000000000000000003 reader RangeRead W (types I64))
+      (implementation-parameter implparam_d8100000000000000000000000000004 length SourceLength W)
+      (scope-parameter read_scope_d8100000000000000000000000000022 s)
+      (parameter create view (type (associated-read-view-projection observe-view implparam_d8100000000000000000000000000003
+        RangeRead assoc_type_d8100000000000000000000000000001
+        (read-scope (declaration observe-view) read_scope_d8100000000000000000000000000022))) (use borrow))
+      (scope-source view (read-scope (declaration observe-view) read_scope_d8100000000000000000000000000022))
+      (returns Observed (value))
+      (body (let
+        (binding snapshot (type Snapshot)
+          (implementation-call collect-view (types W)
+            (implementations parameter@observe-view@implparam_d8100000000000000000000000000003)
+            (scopes (read-scope (declaration observe-view) read_scope_d8100000000000000000000000000022))
+            (i64 0) (list I64) (i64 0) (local view)))
+        (binding length (type I64)
+          (borrow-call
+            (method-call parameter@observe-view@implparam_d8100000000000000000000000000003 RangeRead method_d8100000000000000000000000000005
+              (scopes (read-scope (declaration observe-view) read_scope_d8100000000000000000000000000022)) (local view))
+            (binding source (type W))
+            (in (implementation-call source-length (types W)
+              (implementations parameter@observe-view@implparam_d8100000000000000000000000000004) (local source)))))
+        (in (record structural (field snapshot (local snapshot)) (field source_length (local length)))))))
+    (function create observe-range (visibility public) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_d8100000000000000000000000000005 reader RangeRead W (types I64))
+      (implementation-parameter implparam_d8100000000000000000000000000006 length SourceLength W)
+      (scope-parameter read_scope_d8100000000000000000000000000023 s)
+      (parameter create start (type I64)) (parameter create end (type I64))
+      (parameter create storage (type W) (use borrow))
+      (scope-source storage (read-scope (declaration observe-range) read_scope_d8100000000000000000000000000023))
+      (returns Observed (value))
+      (body (borrow-call
+        (method-call parameter@observe-range@implparam_d8100000000000000000000000000005 RangeRead method_d8100000000000000000000000000001
+          (scopes (read-scope (declaration observe-range) read_scope_d8100000000000000000000000000023))
+          (local start) (local end) (local storage))
+        (binding view (type (associated-read-view-projection observe-range implparam_d8100000000000000000000000000005 RangeRead
+          assoc_type_d8100000000000000000000000000001 (read-scope (declaration observe-range) read_scope_d8100000000000000000000000000023))))
+        (in (view-borrow (local view) (binding read (type (associated-read-view-projection observe-range
+          implparam_d8100000000000000000000000000005 RangeRead assoc_type_d8100000000000000000000000000001
+          (read-scope (declaration observe-range) read_scope_d8100000000000000000000000000023))))
+          (in (implementation-call observe-view (types W)
+            (implementations parameter@observe-range@implparam_d8100000000000000000000000000005
+              parameter@observe-range@implparam_d8100000000000000000000000000006)
+            (scopes (read-scope (declaration observe-range) read_scope_d8100000000000000000000000000023)) (local read))))))))
+    (function create discard (visibility public) (effect pure)
+      (type-parameter create W (constraint owned))
+      (parameter create storage (type W) (use consume)) (returns Unit (value)) (body (unit)))))
+declarations.end

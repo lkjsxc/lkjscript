@@ -1,5 +1,5 @@
 use super::*;
-use crate::platform::kernel::{FunctionEffect, RelationKind};
+use crate::platform::kernel::{FunctionEffect, RelationKind, ResultRelation};
 use crate::platform::semantic_id::ParameterId;
 
 #[test]
@@ -27,20 +27,20 @@ fn borrowed_result_source_is_an_interface_dependency_not_body_or_presentation() 
         unreachable!()
     };
     function.parameters = vec![first, second];
-    function.result_borrow = None;
+    function.result.relation = ResultRelation::Value;
     let owner = declaration.header.owner;
     let ordinary = local_summary(owner, &OwnerRecord::Declaration(declaration.clone()), None)
         .expect("ordinary summary");
     let DeclarationPayload::Function(function) = &mut declaration.payload else {
         unreachable!()
     };
-    function.result_borrow = Some(first);
+    function.result.relation = ResultRelation::ReadFrom { source: first };
     let borrowed_first = local_summary(owner, &OwnerRecord::Declaration(declaration.clone()), None)
         .expect("first-source summary");
     let DeclarationPayload::Function(function) = &mut declaration.payload else {
         unreachable!()
     };
-    function.result_borrow = Some(second);
+    function.result.relation = ResultRelation::ReadFrom { source: second };
     let record = OwnerRecord::Declaration(declaration);
     let borrowed_second = local_summary(owner, &record, None).expect("second-source summary");
     assert_ne!(

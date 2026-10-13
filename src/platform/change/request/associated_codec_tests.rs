@@ -33,7 +33,9 @@ fn operation(create: bool, contract: bool, associated: bool) -> AuthoredChange {
     let bindings = if associated {
         vec![AuthoredAssociatedTypeBinding {
             member: member().id,
-            ty: AuthoredType::OwnedI64Cell {},
+            value: AuthoredAssociatedTypeBindingValue::Owned {
+                ty: AuthoredType::OwnedI64Cell {},
+            },
         }]
     } else {
         vec![]
@@ -42,14 +44,16 @@ fn operation(create: bool, contract: bool, associated: bool) -> AuthoredChange {
         id: MethodId::migrate(b"associated-intent", 1),
         name: Name::new("read").unwrap(),
         parameters: vec![],
-        result: AuthoredType::I64 {},
-        result_borrow: None,
+        result: AuthoredCallableResult::value(AuthoredType::I64 {}),
+        read_scope_parameters: vec![],
+        read_scope_sources: vec![],
         effect: AuthoredFunctionEffect::Pure {},
     }];
     let mappings = vec![AuthoredOwnedMethodImplementation {
         method: methods[0].id,
         function: declaration(7),
         type_arguments: vec![],
+        read_scope_arguments: vec![],
         implementations: vec![],
     }];
     let self_type = if contract {
@@ -123,23 +127,15 @@ fn encode(change: AuthoredChange) -> Vec<u8> {
 }
 
 fn expected(create: bool, contract: bool, associated: bool) -> Vec<u8> {
-    let mut bytes = if associated {
-        b"LKJACR38".to_vec()
-    } else {
-        b"LKJACR21".to_vec()
-    };
+    let mut bytes = b"LKJACR39".to_vec();
     bytes.extend_from_slice(&[9; 32]);
     count(&mut bytes, 0); // Preconditions.
     count(&mut bytes, 1); // Operations.
-    bytes.push(match (create, contract, associated) {
-        (true, true, false) => 80,
-        (true, false, false) => 81,
-        (false, true, false) => 84,
-        (false, false, false) => 85,
-        (true, true, true) => 100,
-        (true, false, true) => 101,
-        (false, true, true) => 102,
-        (false, false, true) => 103,
+    bytes.push(match (create, contract) {
+        (true, true) => 100,
+        (true, false) => 101,
+        (false, true) => 102,
+        (false, false) => 103,
     });
     if create {
         bytes.push(2); // Declaration symbol kind.
@@ -161,20 +157,18 @@ fn expected(create: bool, contract: bool, associated: bool) -> Vec<u8> {
     if contract {
         bytes.extend_from_slice(&[8, 1]); // Exact Self type parameter.
         bytes.extend_from_slice(&TypeParameterId::migrate(b"associated-intent", 1).bytes());
-        if associated {
-            count(&mut bytes, 0);
-        } // Complete ordinary parameter inventory.
+        count(&mut bytes, 0); // Complete ordinary parameter inventory.
         count(&mut bytes, 1); // Methods.
         bytes.extend_from_slice(&MethodId::migrate(b"associated-intent", 1).bytes());
         count(&mut bytes, 4);
         bytes.extend_from_slice(b"read");
         count(&mut bytes, 0); // Method parameters.
-        bytes.push(3); // I64 result.
+        bytes.extend_from_slice(&[3, 1]); // I64 result; Value relation.
+        count(&mut bytes, 0); // Scope parameter inventory.
+        count(&mut bytes, 0); // Scope source inventory.
+        bytes.push(1); // Pure effect.
+        count(&mut bytes, u64::from(associated));
         if associated {
-            bytes.extend_from_slice(&[0, 1]);
-        } // No borrowed source; Pure effect.
-        if associated {
-            count(&mut bytes, 1);
             bytes.extend_from_slice(&member().id.bytes());
             count(&mut bytes, 3);
             bytes.extend_from_slice(b"Out");
@@ -182,23 +176,20 @@ fn expected(create: bool, contract: bool, associated: bool) -> Vec<u8> {
         }
     } else {
         exact(&mut bytes, 3);
-        if associated {
-            count(&mut bytes, 0);
-            count(&mut bytes, 0);
-        } // Ordinary/prerequisite parameters.
+        count(&mut bytes, 0); // Ordinary parameters.
+        count(&mut bytes, 0); // Prerequisite parameters.
         bytes.push(21); // Self Cell.
-        if associated {
-            count(&mut bytes, 0);
-        } // Contract actuals.
-        count(&mut bytes, 1);
+        count(&mut bytes, 0); // Contract actuals.
+        count(&mut bytes, 1); // Mappings.
         bytes.extend_from_slice(&MethodId::migrate(b"associated-intent", 1).bytes());
         exact(&mut bytes, 7);
+        count(&mut bytes, 0); // Complete mapping ordinary actuals.
+        count(&mut bytes, 0); // Complete mapping scope actuals.
+        count(&mut bytes, 0); // Complete mapping prerequisites.
+        count(&mut bytes, u64::from(associated));
         if associated {
-            count(&mut bytes, 0);
-            count(&mut bytes, 0); // Complete mapping actuals/prerequisites.
-            count(&mut bytes, 1);
             bytes.extend_from_slice(&member().id.bytes());
-            bytes.push(21);
+            bytes.extend_from_slice(&[1, 21]); // Owned binding; Cell.
         }
     }
     bytes
@@ -248,12 +239,12 @@ fn associated_projection_commitment_retains_every_authority_coordinate_and_neste
         let AuthoredChange::SetOwnedContract { methods, .. } = &mut change else {
             unreachable!()
         };
-        methods[0].result = AuthoredType::Option {
+        methods[0].result.ty = AuthoredType::Option {
             item: Box::new(ty.clone()),
         };
         let encoded = encode(change);
-        assert_eq!(&encoded[..8], b"LKJACR38");
-        assert_eq!(encoded[56], 84); // Empty inventory still uses the old operation payload.
+        assert_eq!(&encoded[..8], b"LKJACR39");
+        assert_eq!(encoded[56], 102); // Complete layout also includes the empty member inventory.
     }
     let mut mutations = vec![types[1].clone(); 4];
     if let AuthoredType::AssociatedWitnessProjection { scope, .. } = &mut mutations[0] {

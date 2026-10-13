@@ -114,15 +114,20 @@ impl Read {
             name: Name::new(format!("function-{index}")).unwrap(),
             visibility: DeclarationVisibility::Public,
             payload: DeclarationPayload::Function(FunctionDeclaration {
-                result_borrow: None,
                 implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 effect_parameters: Vec::new(),
                 type_parameters: parameters.iter().map(|(id, _)| parameter(*id)).collect(),
                 parameters: Vec::new(),
-                result,
+                result: crate::platform::kernel::CallableResult {
+                    ty: result,
+                    relation: crate::platform::kernel::ResultRelation::Value,
+                },
                 effect: FunctionEffect::Pure,
                 body: ExpressionId::migrate(SEED, index),
+
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             }),
         }));
         for (id, constraint) in parameters {

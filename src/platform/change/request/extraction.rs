@@ -11,14 +11,14 @@ use crate::platform::contract::{
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::contract::MAXIMUM_NAME_BYTES;
 use crate::platform::kernel::{
-    BindingKind, DeclarationPayload, DeclarationRecord, DeclarationReference, DependencyRecord,
-    EncodedOwnerKey, ExpressionChildRole, ExpressionOperation, ExpressionRead, ExpressionRecord,
-    ExpressionValidationLimits, FunctionDeclaration, FunctionEffect, LocalValueReference, Name,
-    OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, PackageId, PackageInterfaceDeclarationPayload,
-    PackageInterfaceRecord, PackageRevisionDigest, ParameterParent, ParameterRecord, ParameterUse,
-    RequirementReference, TypeForm, TypeObject, TypeObjectDigest, encode_owner,
-    infer_function_expression_type, infer_function_expression_type_object,
-    validate_affine_roots_with_limits,
+    BindingKind, CallableResult, DeclarationPayload, DeclarationRecord, DeclarationReference,
+    DependencyRecord, EncodedOwnerKey, ExpressionChildRole, ExpressionOperation, ExpressionRead,
+    ExpressionRecord, ExpressionValidationLimits, FunctionDeclaration, FunctionEffect,
+    LocalValueReference, Name, OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, PackageId,
+    PackageInterfaceDeclarationPayload, PackageInterfaceRecord, PackageRevisionDigest,
+    ParameterParent, ParameterRecord, ParameterUse, RequirementReference, ResultRelation, TypeForm,
+    TypeObject, TypeObjectDigest, encode_owner, infer_function_expression_type,
+    infer_function_expression_type_object, validate_affine_roots_with_limits,
 };
 use crate::platform::semantic_id::{
     BindingId, DeclarationId, ExpressionId, ParameterId, encode_hex,
@@ -59,6 +59,7 @@ struct BodyInventory {
     local_uses: Vec<LocalUse>,
     seen: BTreeSet<OwnerKey>,
     expression_count: u64,
+    examined_types: BTreeSet<TypeObjectDigest>,
 }
 
 #[derive(Clone)]
@@ -109,10 +110,16 @@ pub(super) fn lower<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
             "extract.function selector does not name a local function declaration",
         ));
     };
-    if function.result_borrow.is_some() {
+    if !matches!(function.result.relation, ResultRelation::Value) {
         return Err(extract_error(
             "change_extract_borrowed_result",
-            "function extraction of borrowed-result functions is unsupported",
+            "function extraction cannot preserve ReadFrom or ViewFrom result source authority",
+        ));
+    }
+    if !function.read_scope_parameters.is_empty() || !function.read_scope_sources.is_empty() {
+        return Err(extract_error(
+            "change_extract_read_scope",
+            "function extraction cannot move complete read scope inventories to a new callable binder",
         ));
     }
     if !function.type_parameters.is_empty()
@@ -387,6 +394,7 @@ pub(super) fn lower<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
                 declaration: helper,
             },
             type_arguments: Vec::new(),
+            read_scope_arguments: Vec::new(),
             arguments: call_arguments,
         },
     )?))?;
@@ -411,8 +419,12 @@ pub(super) fn lower<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
                 .iter()
                 .map(|capture| capture.parameter)
                 .collect(),
-            result,
-            result_borrow: None,
+            result: CallableResult {
+                ty: result,
+                relation: ResultRelation::Value,
+            },
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
             effect: effect.clone(),
             body: selected,
         }),
@@ -505,6 +517,54 @@ fn require_helper_namespace_absent<B: CanonicalBaseRead + ?Sized, W: WitnessBase
     Ok(())
 }
 
+fn reject_scoped_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic> {
+    if operation.is_read_view_operation() || !operation.read_scope_arguments().is_empty() {
+        return Err(extract_error(
+            "change_extract_read_scope",
+            "function extraction cannot rebind read view source and scope authority",
+        ));
+    }
+    Ok(())
+}
+
+fn reject_scoped_type<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+    lowerer: &mut AuthoredLowerer<'_, B, W>,
+    digest: TypeObjectDigest,
+    examined: &mut BTreeSet<TypeObjectDigest>,
+    depth: usize,
+) -> Result<(), Diagnostic> {
+    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+        return Err(extract_resource(
+            "change_extract_type_depth",
+            "extraction type traversal exceeds the structural-depth bound",
+        ));
+    }
+    if !examined.insert(digest) {
+        return Ok(());
+    }
+    let object = lowerer.candidate_type_object(digest)?.ok_or_else(|| {
+        extract_corrupt(
+            "change_extract_type_missing",
+            format!("type object {digest} is missing during extraction scope analysis"),
+        )
+    })?;
+    if matches!(
+        object.form,
+        TypeForm::ReadViewApplied { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. }
+    ) {
+        return Err(extract_error(
+            "change_extract_read_scope",
+            "function extraction cannot move a read view type to a new callable source binder",
+        ));
+    }
+    for child in object.child_types() {
+        reject_scoped_type(lowerer, child, examined, depth.saturating_add(1))?;
+    }
+    lowerer.check_budget("extraction complete type scope analysis")
+}
+
 #[allow(clippy::too_many_arguments)]
 fn walk_expression<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     lowerer: &mut AuthoredLowerer<'_, B, W>,
@@ -562,6 +622,10 @@ fn walk_expression<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     inventory
         .expressions
         .insert(expression, record.operation.clone());
+    reject_scoped_operation(&record.operation)?;
+    for digest in record.type_roots() {
+        reject_scoped_type(lowerer, digest, &mut inventory.examined_types, 0)?;
+    }
     if let ExpressionOperation::Local { value } = record.operation {
         inventory.local_uses.push(LocalUse {
             expression,
@@ -791,12 +855,17 @@ fn walk_binding<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         BindingContainerRole::OwnedUnpack => BindingKind::OwnedUnpack,
         BindingContainerRole::OwnedChoicePayload => BindingKind::OwnedChoicePayload,
         BindingContainerRole::OwnedBorrow => BindingKind::OwnedBorrow,
+        BindingContainerRole::ReadView => BindingKind::ReadView,
+        BindingContainerRole::ReadViewBorrow => BindingKind::ReadViewBorrow,
     };
     if record.kind != expected_kind {
         return Err(extract_corrupt(
             "change_extract_binding_kind",
             "structural binding role disagrees with its canonical binding kind",
         ));
+    }
+    if let Some(ty) = record.declared_type {
+        reject_scoped_type(lowerer, ty, &mut inventory.examined_types, 0)?;
     }
     inventory.owners.push(owner);
     if inside {
@@ -1507,6 +1576,7 @@ fn replace_expression_reference(
     selected: ExpressionId,
     call: ExpressionId,
 ) -> Result<(), Diagnostic> {
+    reject_scoped_operation(operation)?;
     let mut count = 0_u64;
     let mut replace = |value: &mut ExpressionId| {
         if *value == selected {
@@ -1515,6 +1585,18 @@ fn replace_expression_reference(
         }
     };
     match operation {
+        ExpressionOperation::CreateReadView { .. }
+        | ExpressionOperation::BorrowReadView { .. }
+        | ExpressionOperation::ReborrowReadView { .. }
+        | ExpressionOperation::MoveReadView { .. }
+        | ExpressionOperation::DropReadView { .. }
+        | ExpressionOperation::ReadViewDataField { .. }
+        | ExpressionOperation::BorrowReadViewField { .. } => {
+            return Err(extract_error(
+                "change_extract_read_scope",
+                "function extraction cannot rebind read view source and scope authority",
+            ));
+        }
         ExpressionOperation::BorrowCall { .. }
         | ExpressionOperation::BorrowOwnedField { .. }
         | ExpressionOperation::BorrowOwnedRecordField { .. }
@@ -1924,6 +2006,14 @@ fn type_contains_parameter<B: CanonicalBaseRead + ?Sized>(
         )
     })?;
     let result = match object.form {
+        TypeForm::ReadViewApplied { .. }
+        | TypeForm::AssociatedReadViewMember { .. }
+        | TypeForm::AssociatedReadViewProjection { .. } => {
+            return Err(extract_error(
+                "change_extract_read_scope",
+                "function extraction cannot move a read view type to a new callable source binder",
+            ));
+        }
         TypeForm::TypeParameter { .. } => true,
         _ => {
             let mut found = false;

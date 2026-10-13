@@ -311,10 +311,10 @@ fn mixed_contract_oracle_rejects_ordinary_modes_and_forged_borrowed_data_results
             0 => c.methods[0].parameters[0].use_mode = ParameterUse::Consume,
             1 => c.methods[0].parameters.swap(0, 1),
             2 => {
-                c.methods[0].result = data;
-                c.methods[0].result_borrow = Some(1);
+                c.methods[0].result.ty = data;
+                c.methods[0].result.relation = ResultRelation::ReadFrom { source: 1 };
             }
-            _ => c.methods[1].result_borrow = Some(1),
+            _ => c.methods[1].result.relation = ResultRelation::ReadFrom { source: 1 },
         }
         rejected(
             &changed,

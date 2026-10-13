@@ -26,7 +26,19 @@ fn program() -> Arc<NormalizedProgram> {
 }
 
 fn fixture() -> (test_support::Fixture, Arc<NormalizedReferenceSchema>) {
-    let fixture = test_support::make_fixture();
+    fixture_at_generation(crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
+}
+
+// Synthetic canonical-reader matrix; this private helper provides no retained
+// transport or artifact acceptance evidence.
+fn fixture_at_generation(
+    generation: u16,
+) -> (test_support::Fixture, Arc<NormalizedReferenceSchema>) {
+    let mut fixture = test_support::make_fixture();
+    fixture.source.root.graph_contract_version = generation;
+    for owner in fixture.source.owners.values_mut() {
+        owner.set_encoding_for_edit(generation);
+    }
     let control = ExecutionControl::uncancelled();
     let proof = test_support::prove(&fixture, &[0, 1, 2], Limits::default(), &control).unwrap();
     let schema = super::super::reference_types::associated_schema_fixture(
@@ -108,7 +120,7 @@ fn reference_associated_runtime_reads_distinct_witness_outputs_and_releases_sour
         scoped.parameters,
         [(fixture.projection, ParameterUse::Borrow)]
     );
-    assert_eq!(scoped.result, fixture.projection);
+    assert_eq!(scoped.result.ty, fixture.projection);
     assert!(!completed.ordinary_types.contains(&fixture.projection));
     assert!(!completed.transferable_types.contains(&fixture.projection));
     assert!(!completed.shareable_types.contains(&fixture.projection));
@@ -171,98 +183,111 @@ fn reference_associated_runtime_refuses_equal_self_with_another_member_output() 
 
 #[test]
 fn reference_associated_runtime_rechecks_parameter_and_local_generations_on_context_hits() {
-    let (fixture, schema) = fixture();
-    let OwnerRecord::Declaration(declaration) =
-        &fixture.source.owners[&OwnerKey::Declaration(fixture.consumer.declaration)]
-    else {
-        unreachable!()
-    };
-    let DeclarationPayload::Function(function) = &declaration.payload else {
-        unreachable!()
-    };
-    let keys = [
-        OwnerKey::Parameter(function.parameters[0]),
-        OwnerKey::Expression(function.body),
-    ];
-    let program = program();
-    let healthy = FaultedReferenceRead {
-        source: &fixture.source,
-        schema: Arc::clone(&schema),
-    };
-    NormalizedReferenceInterpreter::from_reader(
-        &healthy,
-        &program,
-        NormalizedRunPolicy::foreground(),
-    )
-    .execute(None, &ExecutionControl::uncancelled(), |state| {
-        read_application(state, &fixture, 0, fixture.cell)
-    })
-    .unwrap();
-    for key in keys {
-        for generation in [32, 34] {
-            let mut source = fixture.source.clone();
-            source
-                .owners
-                .get_mut(&key)
-                .unwrap()
-                .set_encoding_for_edit(generation);
-            let reader = FaultedReferenceRead {
-                source: &source,
-                schema: Arc::clone(&schema),
-            };
-            let interpreter = NormalizedReferenceInterpreter::from_reader(
-                &reader,
-                &program,
-                NormalizedRunPolicy::foreground(),
-            );
-            let error = interpreter
-                .execute(None, &ExecutionControl::uncancelled(), |state| {
-                    read_application(state, &fixture, 0, fixture.cell)
-                })
-                .unwrap_err();
-            assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
-        }
-    }
-    for mutation in 0..3 {
-        let mut source = fixture.source.clone();
-        let OwnerRecord::Declaration(owner) = source
-            .owners
-            .get_mut(&OwnerKey::Declaration(fixture.consumer.declaration))
-            .unwrap()
+    for generation in [
+        crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
+        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+    ] {
+        let (fixture, schema) = fixture_at_generation(generation);
+        let OwnerRecord::Declaration(declaration) =
+            &fixture.source.owners[&OwnerKey::Declaration(fixture.consumer.declaration)]
         else {
             unreachable!()
         };
-        let DeclarationPayload::Function(function) = &mut owner.payload else {
+        let DeclarationPayload::Function(function) = &declaration.payload else {
             unreachable!()
         };
-        let formal = &mut function.implementation_parameters[0];
-        match mutation {
-            0 => {
-                formal.id = crate::platform::semantic_id::ImplementationParameterId::migrate(
-                    b"reference-runtime-foreign-formal",
-                    0,
-                )
-            }
-            1 => formal.self_type = fixture.block,
-            2 => formal.type_arguments.push(fixture.cell),
-            _ => unreachable!(),
-        }
-        let reader = FaultedReferenceRead {
-            source: &source,
+        let keys = [
+            OwnerKey::Parameter(function.parameters[0]),
+            OwnerKey::Expression(function.body),
+        ];
+        let program = program();
+        let healthy = FaultedReferenceRead {
+            source: &fixture.source,
             schema: Arc::clone(&schema),
         };
-        let error = NormalizedReferenceInterpreter::from_reader(
-            &reader,
+        NormalizedReferenceInterpreter::from_reader(
+            &healthy,
             &program,
             NormalizedRunPolicy::foreground(),
         )
         .execute(None, &ExecutionControl::uncancelled(), |state| {
             read_application(state, &fixture, 0, fixture.cell)
         })
-        .unwrap_err();
-        assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
-        assert_eq!(error.code, "normalized_reference_type");
-        assert!(error.message.contains("ordered witness formal templates"));
+        .unwrap();
+        for key in keys {
+            for changed_generation in [
+                32,
+                crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
+                crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+                crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION + 1,
+            ] {
+                if changed_generation == generation {
+                    continue;
+                }
+                let mut source = fixture.source.clone();
+                source
+                    .owners
+                    .get_mut(&key)
+                    .unwrap()
+                    .set_encoding_for_edit(changed_generation);
+                let reader = FaultedReferenceRead {
+                    source: &source,
+                    schema: Arc::clone(&schema),
+                };
+                let interpreter = NormalizedReferenceInterpreter::from_reader(
+                    &reader,
+                    &program,
+                    NormalizedRunPolicy::foreground(),
+                );
+                let error = interpreter
+                    .execute(None, &ExecutionControl::uncancelled(), |state| {
+                        read_application(state, &fixture, 0, fixture.cell)
+                    })
+                    .unwrap_err();
+                assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
+            }
+        }
+        for mutation in 0..3 {
+            let mut source = fixture.source.clone();
+            let OwnerRecord::Declaration(owner) = source
+                .owners
+                .get_mut(&OwnerKey::Declaration(fixture.consumer.declaration))
+                .unwrap()
+            else {
+                unreachable!()
+            };
+            let DeclarationPayload::Function(function) = &mut owner.payload else {
+                unreachable!()
+            };
+            let formal = &mut function.implementation_parameters[0];
+            match mutation {
+                0 => {
+                    formal.id = crate::platform::semantic_id::ImplementationParameterId::migrate(
+                        b"reference-runtime-foreign-formal",
+                        0,
+                    )
+                }
+                1 => formal.self_type = fixture.block,
+                2 => formal.type_arguments.push(fixture.cell),
+                _ => unreachable!(),
+            }
+            let reader = FaultedReferenceRead {
+                source: &source,
+                schema: Arc::clone(&schema),
+            };
+            let error = NormalizedReferenceInterpreter::from_reader(
+                &reader,
+                &program,
+                NormalizedRunPolicy::foreground(),
+            )
+            .execute(None, &ExecutionControl::uncancelled(), |state| {
+                read_application(state, &fixture, 0, fixture.cell)
+            })
+            .unwrap_err();
+            assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
+            assert_eq!(error.code, "normalized_reference_type");
+            assert!(error.message.contains("ordered witness formal templates"));
+        }
     }
 }
 

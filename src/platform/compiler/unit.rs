@@ -14,17 +14,26 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-33";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 33;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-27";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 27;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN33";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v33";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v33";
-pub(crate) const ASSOCIATED_UNIT_MAGIC: [u8; 8] = *b"LKJCAU01";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-34";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 34;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-28";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 28;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN34";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v34";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v34";
+pub(crate) const ASSOCIATED_UNIT_MAGIC: [u8; 8] = *b"LKJCAU02";
 pub(crate) const ASSOCIATED_UNIT_ENVELOPE_DOMAIN: &str =
+    "lkjscript.compiler-unit-associated-envelope.v2";
+pub(crate) const ASSOCIATED_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-associated-key.v2";
+pub(crate) const FROZEN_COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN33";
+pub(crate) const FROZEN_COMPILER_UNIT_ENVELOPE_DOMAIN: &str =
+    "lkjscript.compiler-unit-envelope.v33";
+pub(crate) const FROZEN_COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v33";
+pub(crate) const FROZEN_ASSOCIATED_UNIT_MAGIC: [u8; 8] = *b"LKJCAU01";
+pub(crate) const FROZEN_ASSOCIATED_UNIT_ENVELOPE_DOMAIN: &str =
     "lkjscript.compiler-unit-associated-envelope.v1";
-pub(crate) const ASSOCIATED_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-associated-key.v1";
+pub(crate) const FROZEN_ASSOCIATED_UNIT_KEY_DOMAIN: &str =
+    "lkjscript.compiler-unit-associated-key.v1";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -52,10 +61,42 @@ impl CompilationUnitKey {
         optimization: OptimizationPolicy,
         associated_tag: Option<u8>,
     ) -> Result<Self, Diagnostic> {
+        Self::derive_for_profile(
+            source,
+            optimization,
+            COMPILER_UNIT_CONTRACT_VERSION,
+            BYTECODE_CONTRACT_VERSION,
+            crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+            associated_tag,
+        )
+    }
+
+    pub(crate) fn derive_for_profile(
+        source: &CompilationSource,
+        optimization: OptimizationPolicy,
+        compiler_contract_version: u16,
+        bytecode_contract_version: u16,
+        graph_contract_version: u16,
+        associated_tag: Option<u8>,
+    ) -> Result<Self, Diagnostic> {
+        if !matches!(
+            (
+                compiler_contract_version,
+                bytecode_contract_version,
+                graph_contract_version
+            ),
+            (33, 27, 33) | (34, 28, 34)
+        ) {
+            return Err(unit_error(
+                DiagnosticClass::Source,
+                "compiler_unit_contract",
+                "compiler key uses an unsupported exact profile",
+            ));
+        }
         let core = CompilationKeyCore {
-            compiler_contract_version: COMPILER_UNIT_CONTRACT_VERSION,
-            bytecode_contract_version: BYTECODE_CONTRACT_VERSION,
-            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+            compiler_contract_version,
+            bytecode_contract_version,
+            graph_contract_version,
             source: source.clone(),
             optimization,
         };
@@ -86,9 +127,17 @@ impl CompilationUnitKey {
             )
         })?;
         let domain = if associated_tag.is_some() {
-            ASSOCIATED_UNIT_KEY_DOMAIN
+            if compiler_contract_version == 33 {
+                FROZEN_ASSOCIATED_UNIT_KEY_DOMAIN
+            } else {
+                ASSOCIATED_UNIT_KEY_DOMAIN
+            }
         } else {
-            COMPILER_UNIT_KEY_DOMAIN
+            if compiler_contract_version == 33 {
+                FROZEN_COMPILER_UNIT_KEY_DOMAIN
+            } else {
+                COMPILER_UNIT_KEY_DOMAIN
+            }
         };
         let mut hasher = blake3::Hasher::new_derive_key(domain);
         hasher.update(&(bytes.len() as u64).to_be_bytes());
@@ -262,6 +311,7 @@ pub struct CompilationTables {
     pub ports: Vec<PortReference>,
     pub types: Vec<TypeObjectDigest>,
     pub structural_names: Vec<Name>,
+    pub read_view_fields: Vec<crate::platform::kernel::ReadViewFieldReference>,
     pub texts: Vec<CompiledText>,
 }
 
@@ -276,6 +326,10 @@ pub enum CompiledText {
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum CompilationPayload {
+    ReadView {
+        declaration: crate::platform::kernel::ReadViewDeclaration,
+        type_parameter_constraints: Vec<crate::platform::kernel::TypeParameterConstraints>,
+    },
     OwnedContract(crate::platform::kernel::OwnedContract),
     OwnedImplementation(crate::platform::kernel::OwnedImplementation),
     Record {
@@ -343,8 +397,9 @@ pub struct CompiledSignature {
     pub type_parameters: Vec<TypeParameterId>,
     pub type_parameter_constraints: Vec<crate::platform::kernel::TypeParameterConstraints>,
     pub parameters: Vec<CompiledParameter>,
-    pub result: u32,
-    pub result_borrow: Option<ParameterId>,
+    pub result: crate::platform::kernel::CallableResult<ParameterId, u32>,
+    pub read_scope_parameters: Vec<crate::platform::kernel::ReadScopeParameter>,
+    pub read_scope_sources: Vec<crate::platform::kernel::ReadScopeSource<ParameterId>>,
     pub task_requirements: Vec<u32>,
 }
 
@@ -415,12 +470,14 @@ pub enum CompiledInstruction {
         type_arguments: Vec<u32>,
         implementations: Vec<crate::platform::kernel::ImplementationOperand>,
         arguments: u32,
+        read_scope_arguments: Vec<crate::platform::kernel::ReadScopeArgument>,
     },
     MethodCall {
         witness: crate::platform::kernel::ImplementationOperand,
         contract: crate::platform::kernel::DeclarationReference,
         method: crate::platform::semantic_id::MethodId,
         arguments: u32,
+        read_scope_arguments: Vec<crate::platform::kernel::ReadScopeArgument>,
     },
     Unit,
     Bool(bool),
@@ -441,12 +498,14 @@ pub enum CompiledInstruction {
         function: u32,
         type_arguments: Vec<u32>,
         arguments: u32,
+        read_scope_arguments: Vec<crate::platform::kernel::ReadScopeArgument>,
     },
     FunctionValue {
         requirement_arguments: Vec<crate::platform::kernel::RequirementOperand>,
         effect_arguments: Vec<crate::platform::kernel::EffectRow>,
         function: u32,
         type_arguments: Vec<u32>,
+        read_scope_arguments: Vec<crate::platform::kernel::ReadScopeArgument>,
     },
     Invoke {
         arguments: u32,
@@ -539,8 +598,10 @@ pub enum CompiledInstruction {
     Parallel {
         left_types: Vec<u32>,
         left_implementations: Vec<crate::platform::kernel::ImplementationOperand>,
+        left_read_scope_arguments: Vec<crate::platform::kernel::ReadScopeArgument>,
         right_types: Vec<u32>,
         right_implementations: Vec<crate::platform::kernel::ImplementationOperand>,
+        right_read_scope_arguments: Vec<crate::platform::kernel::ReadScopeArgument>,
         left: u32,
         left_arguments: u32,
         right: u32,
@@ -610,6 +671,62 @@ pub enum CompiledInstruction {
         result_type: u32,
         source_local: u32,
     },
+    BeginReadView {
+        view_type: u32,
+        source_local: u32,
+        fields: Vec<u32>,
+    },
+    FinishReadView {
+        view_type: u32,
+        fields: Vec<u32>,
+    },
+    BorrowReadView {
+        view_type: u32,
+        source_local: u32,
+        binding_local: u32,
+        binding_type: u32,
+    },
+    EndReadViewBorrow {
+        binding_local: u32,
+    },
+    ReborrowReadView {
+        view_type: u32,
+        source_local: u32,
+    },
+    MoveReadView {
+        view_type: u32,
+        source_local: u32,
+    },
+    DropReadView {
+        view_type: u32,
+        source_local: u32,
+    },
+    ReadViewDataField {
+        view_type: u32,
+        source_local: u32,
+        field: u32,
+    },
+    BorrowReadViewField {
+        view_type: u32,
+        source_local: u32,
+        field: u32,
+        binding_local: u32,
+        binding_type: u32,
+    },
+    AdoptViewResult {
+        source_local: u32,
+        binding_local: u32,
+        binding_type: u32,
+    },
+    ReturnView,
+    /// Establish a prospective source lifetime before an owning view initializer. This
+    /// grants no access and does not expose the destination local.
+    BeginReadViewScope {
+        read_scope: crate::platform::kernel::ReadScopeArgument,
+    },
+    EndReadViewScope {
+        read_scope: crate::platform::kernel::ReadScopeArgument,
+    },
 }
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
@@ -658,7 +775,9 @@ pub struct CompiledVariantJump {
 impl CompilationUnit {
     pub fn encode(&self) -> Result<(ObjectKey, Vec<u8>), Diagnostic> {
         self.validate()?;
-        let bytes = if associated_unit_body(&self.payload)?.is_some() {
+        let bytes = if self.contract_version == 33 {
+            super::wire33::encode(self)?
+        } else if associated_unit_body(&self.payload)?.is_some() {
             crate::platform::packed::encode(
                 ASSOCIATED_UNIT_MAGIC,
                 ASSOCIATED_UNIT_ENVELOPE_DOMAIN,
@@ -725,7 +844,11 @@ impl CompilationUnit {
                 "predecessor compiler units require rebuilding from canonical meaning",
             ));
         }
-        let unit: Self = if bytes.starts_with(&ASSOCIATED_UNIT_MAGIC) {
+        let unit: Self = if bytes.starts_with(&FROZEN_COMPILER_UNIT_MAGIC)
+            || bytes.starts_with(&FROZEN_ASSOCIATED_UNIT_MAGIC)
+        {
+            super::wire33::decode(bytes)?
+        } else if bytes.starts_with(&ASSOCIATED_UNIT_MAGIC) {
             let wire: AssociatedUnitWire = crate::platform::packed::decode(
                 bytes,
                 ASSOCIATED_UNIT_MAGIC,
@@ -758,11 +881,13 @@ impl CompilationUnit {
             self.contract_version,
             self.bytecode_contract_version,
             self.graph_contract_version,
-        ) != (
-            COMPILER_UNIT_CONTRACT_VERSION,
-            BYTECODE_CONTRACT_VERSION,
-            crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-        ) {
+        ) != (34, 28, 34)
+            && (
+                self.contract_version,
+                self.bytecode_contract_version,
+                self.graph_contract_version,
+            ) != (33, 27, 33)
+        {
             return Err(unit_error(
                 DiagnosticClass::Source,
                 "compiler_unit_contract",
@@ -791,8 +916,14 @@ impl CompilationUnit {
             ));
         }
         let tag = associated_unit_body(&self.payload)?.map(|body| body.tag());
-        let expected_key =
-            CompilationUnitKey::derive_for_tag(&self.source, self.optimization, tag)?;
+        let expected_key = CompilationUnitKey::derive_for_profile(
+            &self.source,
+            self.optimization,
+            self.contract_version,
+            self.bytecode_contract_version,
+            self.graph_contract_version,
+            tag,
+        )?;
         if self.key != expected_key {
             return Err(unit_error(
                 DiagnosticClass::Corrupt,
@@ -816,6 +947,7 @@ impl CompilationTables {
             ("ports", self.ports.len()),
             ("types", self.types.len()),
             ("structural names", self.structural_names.len()),
+            ("read-view fields", self.read_view_fields.len()),
             ("texts", self.texts.len()),
         ] {
             require_item_count(label, length, true)?;
@@ -828,6 +960,18 @@ impl CompilationTables {
         require_unique("port relocation", &self.ports)?;
         require_unique("type relocation", &self.types)?;
         require_unique("structural field name", &self.structural_names)?;
+        require_unique("read-view field relocation", &self.read_view_fields)?;
+        if !self.read_view_fields.is_empty() {
+            let declarations: BTreeSet<_> = self.declarations.iter().copied().collect();
+            for field in &self.read_view_fields {
+                if !declarations.contains(&field.declaration) {
+                    return Err(unit_corrupt(
+                        "compiler_unit_read_view_field",
+                        "inline view field lacks its exact declaration relocation",
+                    ));
+                }
+            }
+        }
         require_unique("text constant", &self.texts)?;
         for text in &self.texts {
             match text {
@@ -864,6 +1008,33 @@ impl CompilationPayload {
         tables: &CompilationTables,
     ) -> Result<(), Diagnostic> {
         match self {
+            Self::ReadView {
+                declaration,
+                type_parameter_constraints,
+            } => {
+                require_kind(source, OwnerKind::ReadView)?;
+                let reference = source_declaration(source)?;
+                declaration.validate_local_at(reference)?;
+                validate_owned_record_parameters(
+                    &declaration.type_parameters,
+                    type_parameter_constraints,
+                )?;
+                let types: BTreeSet<_> = tables.types.iter().copied().collect();
+                let fields: BTreeSet<_> = tables.read_view_fields.iter().copied().collect();
+                for field in &declaration.fields {
+                    if !types.contains(&field.ty)
+                        || !fields.contains(&crate::platform::kernel::ReadViewFieldReference {
+                            declaration: reference,
+                            field: field.id,
+                        })
+                    {
+                        return Err(unit_corrupt(
+                            "compiler_unit_read_view_field",
+                            "complete inline view field inventory is absent from exact relocations",
+                        ));
+                    }
+                }
+            }
             Self::OwnedContract(c) => {
                 require_kind(source, OwnerKind::OwnedContract)?;
                 c.validate_local()?;
@@ -992,7 +1163,7 @@ impl CompilationPayload {
             }
             Self::External { signature, .. } => {
                 require_kind(source, OwnerKind::External)?;
-                signature.validate(tables, source.kind)?;
+                signature.validate(tables, source)?;
             }
             Self::Function { signature, code } => {
                 if !matches!(
@@ -1004,7 +1175,7 @@ impl CompilationPayload {
                         "function payload is bound to another owner kind",
                     ));
                 }
-                signature.validate(tables, source.kind)?;
+                signature.validate(tables, source)?;
                 code.validate(tables)?;
                 let OwnerKey::Declaration(declaration) = source.owner else {
                     return Err(unit_corrupt(
@@ -1021,7 +1192,32 @@ impl CompilationPayload {
                     .iter()
                     .map(|p| p.id)
                     .collect();
+                let scopes: BTreeSet<_> = signature
+                    .read_scope_parameters
+                    .iter()
+                    .map(|p| p.id)
+                    .collect();
                 for instruction in &code.instructions {
+                    for argument in instruction.scope_arguments() {
+                        match *argument {
+                            crate::platform::kernel::ReadScopeArgument::Parameter(reference)
+                                if reference.binder
+                                    == crate::platform::kernel::ReadScopeBinder::Declaration(
+                                        scope,
+                                    )
+                                    && scopes.contains(&reference.parameter) => {}
+                            crate::platform::kernel::ReadScopeArgument::Lexical {
+                                callable,
+                                ..
+                            } if callable == scope => {}
+                            _ => {
+                                return Err(unit_corrupt(
+                                    "compiler_unit_read_scope",
+                                    "call scope actual does not belong to its exact lexical callable inventory",
+                                ));
+                            }
+                        }
+                    }
                     match instruction {
                         CompiledInstruction::ImplementationCall {
                             implementations, ..
@@ -1046,12 +1242,20 @@ impl CompilationPayload {
                         _ => {}
                     }
                 }
-                if signature.result_borrow.is_some()
-                    != matches!(
-                        code.instructions.last(),
+                let return_matches = matches!(
+                    (signature.result.relation, code.instructions.last()),
+                    (
+                        crate::platform::kernel::ResultRelation::Value,
+                        Some(CompiledInstruction::Return)
+                    ) | (
+                        crate::platform::kernel::ResultRelation::ReadFrom { .. },
                         Some(CompiledInstruction::ReturnBorrowed)
+                    ) | (
+                        crate::platform::kernel::ResultRelation::ViewFrom { .. },
+                        Some(CompiledInstruction::ReturnView)
                     )
-                {
+                );
+                if !return_matches {
                     return Err(unit_corrupt(
                         "compiler_unit_result_mode",
                         "compiled return path differs from its signature result mode",
@@ -1298,7 +1502,12 @@ fn validate_compiled_http_routes(
 }
 
 impl CompiledSignature {
-    fn validate(&self, tables: &CompilationTables, kind: OwnerKind) -> Result<(), Diagnostic> {
+    fn validate(
+        &self,
+        tables: &CompilationTables,
+        source: &CompilationSource,
+    ) -> Result<(), Diagnostic> {
+        let kind = source.kind;
         require_item_count(
             "compiled implementation parameters",
             self.implementation_parameters.len(),
@@ -1412,12 +1621,12 @@ impl CompiledSignature {
                 )?;
             }
         }
-        require_index("signature result", self.result, tables.types.len())?;
-        if let Some(source) = self.result_borrow
+        require_index("signature result", self.result.ty, tables.types.len())?;
+        if let Some(source) = self.result.relation.source()
             && (kind != OwnerKind::PureFunction
                 || !matches!(self.effect, crate::platform::kernel::FunctionEffect::Pure)
                 || !self.parameters.iter().any(|p| {
-                    p.parameter == source
+                    p.parameter == *source
                         && p.use_mode == ParameterUse::Borrow
                         && p.resource_requirement.is_none()
                 }))
@@ -1425,6 +1634,43 @@ impl CompiledSignature {
             return Err(unit_corrupt(
                 "compiler_unit_result_borrow",
                 "borrowed results require one exact borrowed parameter of a pure graph function",
+            ));
+        }
+        if kind == OwnerKind::External
+            && (!self.read_scope_parameters.is_empty()
+                || !self.read_scope_sources.is_empty()
+                || !matches!(
+                    self.result.relation,
+                    crate::platform::kernel::ResultRelation::Value
+                ))
+        {
+            return Err(unit_corrupt(
+                "compiler_unit_read_scope",
+                "external signatures cannot carry lexical view scope or loan results",
+            ));
+        }
+        crate::platform::kernel::validate_read_scope_inventory_at(
+            crate::platform::kernel::ReadScopeBinder::Declaration(source_declaration(source)?),
+            &self.read_scope_parameters,
+            &self.read_scope_sources,
+            |id| {
+                self.parameters.iter().any(|p| {
+                    p.parameter == id
+                        && p.use_mode == ParameterUse::Borrow
+                        && p.resource_requirement.is_none()
+                })
+            },
+        )?;
+        if let crate::platform::kernel::ResultRelation::ViewFrom { source, scope } =
+            self.result.relation
+            && !self
+                .read_scope_sources
+                .iter()
+                .any(|r| r.source == source && r.scope == scope)
+        {
+            return Err(unit_corrupt(
+                "compiler_unit_read_scope",
+                "view result must retain its exact declared source and scope relationship",
             ));
         }
         for requirement in &self.task_requirements {
@@ -1586,13 +1832,19 @@ impl CompiledCode {
         require_runtime_count("compiled locals", self.local_count)?;
         if !matches!(
             self.instructions.last(),
-            Some(CompiledInstruction::Return | CompiledInstruction::ReturnBorrowed)
+            Some(
+                CompiledInstruction::Return
+                    | CompiledInstruction::ReturnBorrowed
+                    | CompiledInstruction::ReturnView
+            )
         ) || self.instructions[..instruction_count - 1]
             .iter()
             .any(|instruction| {
                 matches!(
                     instruction,
-                    CompiledInstruction::Return | CompiledInstruction::ReturnBorrowed
+                    CompiledInstruction::Return
+                        | CompiledInstruction::ReturnBorrowed
+                        | CompiledInstruction::ReturnView
                 )
             })
         {
@@ -1604,12 +1856,13 @@ impl CompiledCode {
         // Raw witness operands retain semantic digests rather than dense indexes. Build
         // membership once; per-argument linear scans would multiply hostile table lengths.
         let witness_tables = if self.instructions.iter().any(|instruction| {
-            matches!(
-                instruction,
-                CompiledInstruction::ImplementationCall { .. }
-                    | CompiledInstruction::MethodCall { .. }
-                    | CompiledInstruction::Parallel { .. }
-            )
+            instruction.scope_arguments().next().is_some()
+                || matches!(
+                    instruction,
+                    CompiledInstruction::ImplementationCall { .. }
+                        | CompiledInstruction::MethodCall { .. }
+                        | CompiledInstruction::Parallel { .. }
+                )
         }) {
             WitnessTables {
                 declarations: tables.declarations.iter().copied().collect(),
@@ -1623,17 +1876,62 @@ impl CompiledCode {
         }
         verify_borrow_call_protocol(self)?;
         let depths = verify_stack(self)?;
-        verify_owned_borrow_scopes(self, &depths)
+        verify_owned_borrow_scopes(self, &depths)?;
+        verify_read_view_construction(self, &depths)
     }
 }
 
 impl CompiledInstruction {
+    pub(super) fn scope_arguments(
+        &self,
+    ) -> impl Iterator<Item = &crate::platform::kernel::ReadScopeArgument> {
+        let (left, right): (&[_], &[_]) = match self {
+            Self::Call {
+                read_scope_arguments,
+                ..
+            }
+            | Self::ImplementationCall {
+                read_scope_arguments,
+                ..
+            }
+            | Self::FunctionValue {
+                read_scope_arguments,
+                ..
+            }
+            | Self::MethodCall {
+                read_scope_arguments,
+                ..
+            } => (read_scope_arguments, &[]),
+            Self::Parallel {
+                left_read_scope_arguments,
+                right_read_scope_arguments,
+                ..
+            } => (left_read_scope_arguments, right_read_scope_arguments),
+            Self::BeginReadViewScope { read_scope } | Self::EndReadViewScope { read_scope } => {
+                (std::slice::from_ref(read_scope), &[])
+            }
+            _ => (&[], &[]),
+        };
+        left.iter().chain(right)
+    }
+
     fn validate(
         &self,
         code: &CompiledCode,
         tables: &CompilationTables,
         witness_tables: &WitnessTables,
     ) -> Result<(), Diagnostic> {
+        for argument in self.scope_arguments() {
+            if !witness_tables
+                .declarations
+                .contains(&argument.declaration())
+            {
+                return Err(unit_corrupt(
+                    "compiler_unit_read_scope",
+                    "scope actual lacks its exact owner-qualified declaration relocation",
+                ));
+            }
+        }
         if let Self::ImplementationCall {
             effect_arguments, ..
         }
@@ -1650,6 +1948,96 @@ impl CompiledInstruction {
             }
         }
         match self {
+            Self::BeginReadViewScope { read_scope } | Self::EndReadViewScope { read_scope } => {
+                if !matches!(
+                    read_scope,
+                    crate::platform::kernel::ReadScopeArgument::Lexical { .. }
+                ) {
+                    return Err(unit_corrupt(
+                        "compiler_unit_view_protocol",
+                        "prospective view lifetime requires an exact lexical binding scope",
+                    ));
+                }
+                Ok(())
+            }
+            Self::BeginReadView {
+                view_type,
+                source_local,
+                fields,
+            } => {
+                require_index(
+                    "view source local",
+                    *source_local,
+                    code.local_count as usize,
+                )?;
+                validate_view_layout(*view_type, fields, tables)
+            }
+            Self::FinishReadView { view_type, fields } => {
+                validate_view_layout(*view_type, fields, tables)
+            }
+            Self::BorrowReadView {
+                view_type,
+                source_local,
+                binding_local,
+                binding_type,
+            }
+            | Self::BorrowReadViewField {
+                view_type,
+                source_local,
+                binding_local,
+                binding_type,
+                ..
+            } => {
+                require_index("view type", *view_type, tables.types.len())?;
+                require_index(
+                    "view source local",
+                    *source_local,
+                    code.local_count as usize,
+                )?;
+                require_index("view loan local", *binding_local, code.local_count as usize)?;
+                require_index("view loan type", *binding_type, tables.types.len())?;
+                if source_local == binding_local || *binding_local < code.parameter_count {
+                    return Err(unit_corrupt(
+                        "compiler_unit_borrow_local",
+                        "view loan needs a distinct lexical destination",
+                    ));
+                }
+                if let Self::BorrowReadViewField { field, .. } = self {
+                    require_index("view inline field", *field, tables.read_view_fields.len())?;
+                }
+                Ok(())
+            }
+            Self::ReborrowReadView {
+                view_type,
+                source_local,
+            }
+            | Self::MoveReadView {
+                view_type,
+                source_local,
+            }
+            | Self::DropReadView {
+                view_type,
+                source_local,
+            }
+            | Self::ReadViewDataField {
+                view_type,
+                source_local,
+                ..
+            } => {
+                require_index("view type", *view_type, tables.types.len())?;
+                require_index(
+                    "view source local",
+                    *source_local,
+                    code.local_count as usize,
+                )?;
+                if let Self::ReadViewDataField { field, .. } = self {
+                    require_index("view inline field", *field, tables.read_view_fields.len())?;
+                }
+                Ok(())
+            }
+            Self::EndReadViewBorrow { binding_local } => {
+                require_index("view loan local", *binding_local, code.local_count as usize)
+            }
             Self::SequenceEmpty { sequence_type } => {
                 require_index("owned sequence type", *sequence_type, tables.types.len())
             }
@@ -1807,6 +2195,11 @@ impl CompiledInstruction {
                 source_local,
                 binding_local,
                 binding_type,
+            }
+            | Self::AdoptViewResult {
+                source_local,
+                binding_local,
+                binding_type,
             } => {
                 require_index(
                     "borrowed result source",
@@ -1902,12 +2295,18 @@ impl CompiledInstruction {
             Self::ImplementationCall {
                 requirement_arguments,
                 effect_arguments: _,
+                read_scope_arguments,
                 function,
                 type_arguments,
                 implementations,
                 arguments,
             } => {
                 require_item_count("requirement arguments", requirement_arguments.len(), true)?;
+                require_item_count(
+                    "implementation read scopes",
+                    read_scope_arguments.len(),
+                    true,
+                )?;
                 require_index(
                     "implementation call target",
                     *function,
@@ -1927,9 +2326,11 @@ impl CompiledInstruction {
             Self::MethodCall {
                 witness,
                 contract,
+                read_scope_arguments,
                 arguments,
                 ..
             } => {
+                require_item_count("method read scopes", read_scope_arguments.len(), true)?;
                 validate_implementation_operand(witness, witness_tables)?;
                 if !witness_tables.declarations.contains(contract) {
                     return Err(unit_corrupt(
@@ -1942,14 +2343,19 @@ impl CompiledInstruction {
             Self::Parallel {
                 left_types,
                 left_implementations,
+                left_read_scope_arguments,
                 right_types,
                 right_implementations,
+                right_read_scope_arguments,
                 left,
                 left_arguments,
                 right,
                 right_arguments,
                 result_type,
             } => {
+                for scopes in [left_read_scope_arguments, right_read_scope_arguments] {
+                    require_item_count("parallel read scopes", scopes.len(), true)?;
+                }
                 for types in [left_types, right_types] {
                     require_item_count("parallel types", types.len(), true)?;
                     for ty in types {
@@ -1971,11 +2377,13 @@ impl CompiledInstruction {
             Self::Call {
                 requirement_arguments,
                 effect_arguments: _,
+                read_scope_arguments,
                 function,
                 type_arguments,
                 arguments,
             } => {
                 require_item_count("requirement arguments", requirement_arguments.len(), true)?;
+                require_item_count("call read scopes", read_scope_arguments.len(), true)?;
                 require_runtime_count("call arguments", *arguments)?;
                 require_item_count("call type arguments", type_arguments.len(), true)?;
                 require_index("function relocation", *function, tables.declarations.len())?;
@@ -1987,10 +2395,12 @@ impl CompiledInstruction {
             Self::FunctionValue {
                 requirement_arguments,
                 effect_arguments: _,
+                read_scope_arguments,
                 function,
                 type_arguments,
             } => {
                 require_item_count("requirement arguments", requirement_arguments.len(), true)?;
+                require_item_count("function read scopes", read_scope_arguments.len(), true)?;
                 require_item_count("function type arguments", type_arguments.len(), true)?;
                 require_index("function relocation", *function, tables.declarations.len())?;
                 for ty in type_arguments {
@@ -2179,7 +2589,8 @@ impl CompiledInstruction {
             | Self::F64(_)
             | Self::Drop
             | Self::Return
-            | Self::ReturnBorrowed => Ok(()),
+            | Self::ReturnBorrowed
+            | Self::ReturnView => Ok(()),
         }
     }
 }
@@ -2329,6 +2740,33 @@ fn require_item_count(label: &str, count: usize, allow_zero: bool) -> Result<(),
     Ok(())
 }
 
+fn source_declaration(source: &CompilationSource) -> Result<DeclarationReference, Diagnostic> {
+    match source.owner {
+        OwnerKey::Declaration(declaration) => Ok(DeclarationReference {
+            package: source.package,
+            declaration,
+        }),
+        _ => Err(unit_corrupt(
+            "compiler_unit_scope",
+            "callable or view payload requires its exact declaration owner",
+        )),
+    }
+}
+
+fn validate_view_layout(
+    ty: u32,
+    fields: &[u32],
+    tables: &CompilationTables,
+) -> Result<(), Diagnostic> {
+    require_index("view type", ty, tables.types.len())?;
+    require_item_count("view initializer fields", fields.len(), true)?;
+    require_unique("view initializer field", fields)?;
+    for field in fields {
+        require_index("view inline field", *field, tables.read_view_fields.len())?;
+    }
+    Ok(())
+}
+
 fn require_runtime_count(label: &str, count: u32) -> Result<(), Diagnostic> {
     if count as usize > MAXIMUM_COMPILER_UNIT_ITEMS {
         return Err(unit_error(
@@ -2351,7 +2789,10 @@ fn verify_borrow_call_protocol(code: &CompiledCode) -> Result<(), Diagnostic> {
         let target = target as usize;
         matches!(
             code.instructions.get(target),
-            Some(CompiledInstruction::AdoptBorrowResult { .. })
+            Some(
+                CompiledInstruction::AdoptBorrowResult { .. }
+                    | CompiledInstruction::AdoptViewResult { .. }
+            )
         ) || target.checked_sub(1).is_some_and(|previous| {
             matches!(
                 code.instructions.get(previous),
@@ -2374,12 +2815,13 @@ fn verify_borrow_call_protocol(code: &CompiledCode) -> Result<(), Diagnostic> {
                     _ => return Err(invalid()),
                 };
                 if *source_position >= arguments
-                    || !matches!(code.instructions.get(index + 2), Some(CompiledInstruction::AdoptBorrowResult { source_local: actual, .. }) if actual == source_local)
+                    || !matches!(code.instructions.get(index + 2), Some(CompiledInstruction::AdoptBorrowResult { source_local: actual, .. } | CompiledInstruction::AdoptViewResult { source_local: actual, .. }) if actual == source_local)
                 {
                     return Err(invalid());
                 }
             }
-            CompiledInstruction::AdoptBorrowResult { .. } => {
+            CompiledInstruction::AdoptBorrowResult { .. }
+            | CompiledInstruction::AdoptViewResult { .. } => {
                 if !index.checked_sub(2).is_some_and(|previous| {
                     matches!(
                         code.instructions.get(previous),
@@ -2532,7 +2974,9 @@ fn verify_stack(code: &CompiledCode) -> Result<Vec<usize>, Diagnostic> {
             bindings.push(state);
         }
         match instruction {
-            CompiledInstruction::Return | CompiledInstruction::ReturnBorrowed => {
+            CompiledInstruction::Return
+            | CompiledInstruction::ReturnBorrowed
+            | CompiledInstruction::ReturnView => {
                 if depth != 1 {
                     return Err(unit_corrupt(
                         "compiler_unit_return_stack",
@@ -2604,6 +3048,7 @@ fn verify_owned_borrow_scopes_with_limit(
         source: u32,
         binding: u32,
         entry_depth: usize,
+        view: bool,
     }
     let mut reserve = || {
         remaining = remaining.checked_sub(1).ok_or_else(|| {
@@ -2663,7 +3108,17 @@ fn verify_owned_borrow_scopes_with_limit(
                 source_local,
                 binding_local,
                 ..
-            } => Some((*source_local, *binding_local)),
+            } => Some((*source_local, *binding_local, false)),
+            CompiledInstruction::BorrowReadView {
+                source_local,
+                binding_local,
+                ..
+            }
+            | CompiledInstruction::BorrowReadViewField {
+                source_local,
+                binding_local,
+                ..
+            } => Some((*source_local, *binding_local, true)),
             _ => None,
         };
         // A forged assignment or consuming load cannot destroy any ancestor custody. The
@@ -2690,9 +3145,19 @@ fn verify_owned_borrow_scopes_with_limit(
             | CompiledInstruction::CommitTransaction { binding: local, .. }
             | CompiledInstruction::CommitParameterTransaction { binding: local, .. }
             | CompiledInstruction::CommitTransactionOutcome { binding: local, .. } => Some(*local),
+            CompiledInstruction::AdoptViewResult { binding_local, .. } => Some(*binding_local),
+            _ => None,
+        };
+        // These positive view opcodes act on an owning descriptor handle. Existing
+        // backing leases protect Scope.source independently, including ReadFrom(view).
+        // They still cannot destroy the borrowed destination of any active loan.
+        let changed_handle = match instruction {
+            CompiledInstruction::MoveReadView { source_local, .. }
+            | CompiledInstruction::DropReadView { source_local, .. } => Some(*source_local),
             _ => None,
         };
         if changed.is_some()
+            || changed_handle.is_some()
             || !destinations.is_empty()
             || enters.is_some()
             || sequence_consumes.is_some()
@@ -2709,10 +3174,11 @@ fn verify_owned_borrow_scopes_with_limit(
                     }
                 }
                 if changed.is_some_and(|local| local == scope.source || local == scope.binding)
+                    || changed_handle == Some(scope.binding)
                     || sequence_consumes
                         .is_some_and(|local| local == scope.source || local == scope.binding)
                     || writes_custody
-                    || enters.is_some_and(|(_, binding)| {
+                    || enters.is_some_and(|(_, binding, _)| {
                         binding == scope.source || binding == scope.binding
                     })
                 {
@@ -2724,7 +3190,7 @@ fn verify_owned_borrow_scopes_with_limit(
                 ancestor = scope.parent;
             }
         }
-        if let Some((source, binding)) = enters {
+        if let Some((source, binding, view)) = enters {
             reserve()?;
             require_item_count("lexical loan scope states", scopes.len() + 1, false)?;
             next = Some(scopes.len());
@@ -2733,13 +3199,16 @@ fn verify_owned_borrow_scopes_with_limit(
                 source,
                 binding,
                 entry_depth: depth - stack_effect(instruction)?.0,
+                view,
             });
         }
         match instruction {
-            CompiledInstruction::EndOwnedBorrow { binding_local } => {
+            CompiledInstruction::EndOwnedBorrow { binding_local }
+            | CompiledInstruction::EndReadViewBorrow { binding_local } => {
+                let view = matches!(instruction, CompiledInstruction::EndReadViewBorrow { .. });
                 let scope = active
                     .map(|node| scopes[node])
-                    .filter(|scope| scope.binding == *binding_local)
+                    .filter(|scope| scope.binding == *binding_local && scope.view == view)
                     .ok_or_else(|| {
                         unit_corrupt(
                             "compiler_unit_borrow_end",
@@ -2780,11 +3249,14 @@ fn verify_owned_borrow_scopes_with_limit(
                         source: *source_local,
                         binding: case.binding_local,
                         entry_depth: depth,
+                        view: false,
                     });
                     pending.push((case.target as usize, Some(scope)));
                 }
             }
-            CompiledInstruction::Return | CompiledInstruction::ReturnBorrowed
+            CompiledInstruction::Return
+            | CompiledInstruction::ReturnBorrowed
+            | CompiledInstruction::ReturnView
                 if active.is_some() =>
             {
                 return Err(unit_corrupt(
@@ -2792,7 +3264,9 @@ fn verify_owned_borrow_scopes_with_limit(
                     "compiled return leaves an active lexical loan",
                 ));
             }
-            CompiledInstruction::Return | CompiledInstruction::ReturnBorrowed => {}
+            CompiledInstruction::Return
+            | CompiledInstruction::ReturnBorrowed
+            | CompiledInstruction::ReturnView => {}
             CompiledInstruction::Jump(target) => pending.push((*target as usize, next)),
             CompiledInstruction::JumpIfFalse(target) => {
                 pending.push((*target as usize, next));
@@ -2841,6 +3315,243 @@ fn verify_owned_borrow_scopes_with_limit(
     Ok(())
 }
 
+/// Protect the selected source before any initializer is evaluated. This structural protocol
+/// checks custody and authored field order; canonical occurrence admission separately proves
+/// each initializer's exact accessible path and the complete view declaration inventory.
+fn verify_read_view_construction(code: &CompiledCode, depths: &[usize]) -> Result<(), Diagnostic> {
+    if !code.instructions.iter().any(|i| {
+        matches!(
+            i,
+            CompiledInstruction::BeginReadView { .. }
+                | CompiledInstruction::FinishReadView { .. }
+                | CompiledInstruction::BeginReadViewScope { .. }
+                | CompiledInstruction::EndReadViewScope { .. }
+        )
+    }) {
+        return Ok(());
+    }
+    #[derive(Clone, Copy)]
+    struct Construction {
+        parent: Option<usize>,
+        instruction: usize,
+        source: u32,
+        prefix: usize,
+        lifetime: Option<usize>,
+    }
+    let mut remaining = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
+    let mut tick = || {
+        remaining = remaining.checked_sub(1).ok_or_else(|| {
+            unit_error(
+                DiagnosticClass::Resource,
+                "compiler_unit_view_work",
+                "view construction proof exceeds its finite work allowance",
+            )
+        })?;
+        Ok::<_, Diagnostic>(())
+    };
+    let invalid = || {
+        unit_corrupt(
+            "compiler_unit_view_protocol",
+            "view construction must protect one exact source through all ordered initializers and a matching finish",
+        )
+    };
+    #[derive(Clone, Copy)]
+    struct Lifetime {
+        parent: Option<usize>,
+        scope: crate::platform::kernel::ReadScopeArgument,
+    }
+    tick()?;
+    require_item_count(
+        "view protocol instruction states",
+        code.instructions.len(),
+        false,
+    )?;
+    let mut lifetimes = Vec::<Lifetime>::new();
+    let mut constructions = Vec::<Construction>::new();
+    let mut states = vec![None::<(Option<usize>, Option<usize>)>; code.instructions.len()];
+    let mut pending = vec![(0_usize, None::<usize>, None::<usize>)];
+    while let Some((index, active, lifetime)) = pending.pop() {
+        tick()?;
+        let state = states.get_mut(index).ok_or_else(invalid)?;
+        if let Some(previous) = *state {
+            if previous != (active, lifetime) {
+                return Err(invalid());
+            }
+            continue;
+        }
+        *state = Some((active, lifetime));
+        let instruction = &code.instructions[index];
+        let (consumed, _) = stack_effect(instruction)?;
+        let changed = match instruction {
+            CompiledInstruction::StoreLocal(local)
+            | CompiledInstruction::LoadLocal {
+                local,
+                use_mode: ParameterUse::Consume,
+            }
+            | CompiledInstruction::BeginTransaction { binding: local, .. }
+            | CompiledInstruction::CommitTransaction { binding: local, .. }
+            | CompiledInstruction::BeginParameterTransaction { binding: local, .. }
+            | CompiledInstruction::CommitParameterTransaction { binding: local, .. }
+            | CompiledInstruction::BeginTransactionOutcome { binding: local, .. }
+            | CompiledInstruction::CommitTransactionOutcome { binding: local, .. } => Some(*local),
+            CompiledInstruction::SequencePush { source_local, .. }
+            | CompiledInstruction::SequencePop { source_local, .. }
+            | CompiledInstruction::SequenceReplace { source_local, .. } => Some(*source_local),
+            CompiledInstruction::BorrowOwnedField { binding_local, .. }
+            | CompiledInstruction::BorrowOwnedItem { binding_local, .. }
+            | CompiledInstruction::AdoptBorrowResult { binding_local, .. }
+            | CompiledInstruction::AdoptViewResult { binding_local, .. }
+            | CompiledInstruction::BorrowReadView { binding_local, .. }
+            | CompiledInstruction::BorrowReadViewField { binding_local, .. } => {
+                Some(*binding_local)
+            }
+            CompiledInstruction::EndOwnedBorrow { binding_local }
+            | CompiledInstruction::EndReadViewBorrow { binding_local } => Some(*binding_local),
+            _ => None,
+        };
+        let destinations = match instruction {
+            CompiledInstruction::UnpackOwned { locals, .. } => locals.as_slice(),
+            _ => &[],
+        };
+        let mut ancestor = active;
+        while let Some(c) = ancestor.map(|n| constructions[n]) {
+            tick()?;
+            if depths[index] - consumed < c.prefix || changed == Some(c.source) {
+                return Err(invalid());
+            }
+            for local in destinations {
+                tick()?;
+                if *local == c.source {
+                    return Err(invalid());
+                }
+            }
+            ancestor = c.parent;
+        }
+        let mut next = active;
+        let mut next_lifetime = lifetime;
+        match instruction {
+            CompiledInstruction::BeginReadViewScope { read_scope } => {
+                let mut previous = lifetime;
+                while let Some(l) = previous.map(|n| lifetimes[n]) {
+                    tick()?;
+                    if l.scope == *read_scope {
+                        return Err(invalid());
+                    }
+                    previous = l.parent;
+                }
+                tick()?;
+                require_item_count("view lifetime states", lifetimes.len() + 1, false)?;
+                next_lifetime = Some(lifetimes.len());
+                lifetimes.push(Lifetime {
+                    parent: lifetime,
+                    scope: *read_scope,
+                });
+            }
+            CompiledInstruction::EndReadViewScope { read_scope } => {
+                let mut construction = active;
+                while let Some(c) = construction.map(|n| constructions[n]) {
+                    tick()?;
+                    if c.lifetime == lifetime {
+                        return Err(invalid());
+                    }
+                    construction = c.parent;
+                }
+                let l = lifetime
+                    .map(|n| lifetimes[n])
+                    .filter(|l| l.scope == *read_scope)
+                    .ok_or_else(invalid)?;
+                next_lifetime = l.parent;
+            }
+            CompiledInstruction::BeginReadView { source_local, .. } => {
+                tick()?;
+                require_item_count("view construction states", constructions.len() + 1, false)?;
+                next = Some(constructions.len());
+                constructions.push(Construction {
+                    parent: active,
+                    instruction: index,
+                    source: *source_local,
+                    prefix: depths[index],
+                    lifetime,
+                });
+            }
+            CompiledInstruction::FinishReadView { view_type, fields } => {
+                let c = active.map(|n| constructions[n]).ok_or_else(invalid)?;
+                let CompiledInstruction::BeginReadView {
+                    view_type: expected,
+                    fields: ordered,
+                    ..
+                } = &code.instructions[c.instruction]
+                else {
+                    return Err(invalid());
+                };
+                if expected != view_type
+                    || fields.len() != ordered.len()
+                    || depths[index] != c.prefix + fields.len()
+                {
+                    return Err(invalid());
+                }
+                for (actual, expected) in fields.iter().zip(ordered) {
+                    tick()?;
+                    if actual != expected {
+                        return Err(invalid());
+                    }
+                }
+                next = c.parent;
+            }
+            CompiledInstruction::Return
+            | CompiledInstruction::ReturnBorrowed
+            | CompiledInstruction::ReturnView => {
+                if active.is_some() || lifetime.is_some() {
+                    return Err(invalid());
+                }
+                continue;
+            }
+            _ => {}
+        }
+        match instruction {
+            CompiledInstruction::Jump(target) => {
+                tick()?;
+                require_item_count("view protocol pending states", pending.len() + 1, false)?;
+                pending.push((*target as usize, next, next_lifetime))
+            }
+            CompiledInstruction::JumpIfFalse(target) => {
+                tick()?;
+                tick()?;
+                require_item_count("view protocol pending states", pending.len() + 2, false)?;
+                pending.push((*target as usize, next, next_lifetime));
+                pending.push((index + 1, next, next_lifetime));
+            }
+            CompiledInstruction::MatchOwned { cases, .. } => {
+                for case in cases {
+                    tick()?;
+                    require_item_count("view protocol pending states", pending.len() + 1, false)?;
+                    pending.push((case.target as usize, next, next_lifetime));
+                }
+            }
+            CompiledInstruction::MatchBorrowedOwned { cases, .. } => {
+                for case in cases {
+                    tick()?;
+                    require_item_count("view protocol pending states", pending.len() + 1, false)?;
+                    pending.push((case.target as usize, next, next_lifetime));
+                }
+            }
+            CompiledInstruction::SwitchVariant(arms) => {
+                for arm in arms {
+                    tick()?;
+                    require_item_count("view protocol pending states", pending.len() + 1, false)?;
+                    pending.push((arm.target as usize, next, next_lifetime));
+                }
+            }
+            _ => {
+                tick()?;
+                require_item_count("view protocol pending states", pending.len() + 1, false)?;
+                pending.push((index + 1, next, next_lifetime));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn stack_effect(instruction: &CompiledInstruction) -> Result<(usize, usize), Diagnostic> {
     let count = |value: u32| {
         usize::try_from(value).map_err(|_| {
@@ -2853,7 +3564,19 @@ fn stack_effect(instruction: &CompiledInstruction) -> Result<(usize, usize), Dia
     };
     Ok(match instruction {
         CompiledInstruction::BorrowOwnedItem { .. }
-        | CompiledInstruction::AdoptBorrowResult { .. } => (1, 0),
+        | CompiledInstruction::AdoptBorrowResult { .. }
+        | CompiledInstruction::AdoptViewResult { .. } => (1, 0),
+        CompiledInstruction::FinishReadView { fields, .. } => (fields.len(), 1),
+        CompiledInstruction::ReborrowReadView { .. }
+        | CompiledInstruction::MoveReadView { .. }
+        | CompiledInstruction::DropReadView { .. }
+        | CompiledInstruction::ReadViewDataField { .. } => (0, 1),
+        CompiledInstruction::BeginReadView { .. }
+        | CompiledInstruction::BorrowReadView { .. }
+        | CompiledInstruction::BorrowReadViewField { .. }
+        | CompiledInstruction::EndReadViewBorrow { .. }
+        | CompiledInstruction::BeginReadViewScope { .. }
+        | CompiledInstruction::EndReadViewScope { .. } => (0, 0),
         CompiledInstruction::SequenceEmpty { .. }
         | CompiledInstruction::SequenceLength { .. }
         | CompiledInstruction::SequencePop { .. } => (0, 1),
@@ -2933,7 +3656,9 @@ fn stack_effect(instruction: &CompiledInstruction) -> Result<(usize, usize), Dia
         CompiledInstruction::SwitchVariant(_) => (1, 0),
         CompiledInstruction::Perform { arguments, .. }
         | CompiledInstruction::PerformParameter { arguments, .. } => (count(*arguments)?, 1),
-        CompiledInstruction::Return | CompiledInstruction::ReturnBorrowed => (1, 0),
+        CompiledInstruction::Return
+        | CompiledInstruction::ReturnBorrowed
+        | CompiledInstruction::ReturnView => (1, 0),
     })
 }
 
@@ -2961,6 +3686,10 @@ fn unit_error(
 ) -> Diagnostic {
     Diagnostic::new(class, code, message)
 }
+
+#[cfg(test)]
+#[path = "read_view_unit_tests.rs"]
+mod read_view_tests;
 
 #[cfg(test)]
 mod binding_tests {

@@ -25,6 +25,8 @@ impl Machine<'_> {
     /// of a borrowed-result packet.
     fn prepare_scoped_arguments(
         &mut self,
+        application: &transfer::TaskApplication,
+        destination: super::super::value::ValueOrigin,
         values: Vec<CheckedValue>,
     ) -> Result<Vec<transfer::ScopedArgument>, ExecutionError> {
         self.charge_allocation(super::super::value::collection_storage_bytes(
@@ -34,7 +36,10 @@ impl Machine<'_> {
         )?)?;
         let reads = values
             .iter()
-            .filter(|value| value.raw().memory_is_borrowed())
+            .filter(|value| {
+                value.raw().memory_is_borrowed()
+                    || matches!(value.raw(), NormalizedValue::ReadView(_))
+            })
             .count();
         self.charge_allocation(super::super::value::collection_storage_bytes(
             reads as u64,
@@ -49,12 +54,66 @@ impl Machine<'_> {
                 "structured capture reservation failed",
             )
         })?;
-        for value in values {
-            arguments.push(if value.raw().memory_is_borrowed() {
-                let read = value.raw().memory_borrow()?;
-                transfer::ScopedArgument::Read {
-                    value: read,
+        for (position, value) in values.into_iter().enumerate() {
+            arguments.push(if let NormalizedValue::ReadView(view) = value.raw() {
+                let source = view.source().clone();
+                let anchor = super::super::read_view_storage::SourceAnchor {
+                    program: self.program.value_origin,
+                    application: application.application_identity(),
+                    invocation: destination,
+                    coordinate: super::super::read_view_storage::SourceCoordinate::Parameter(
+                        u32::try_from(position)
+                            .map_err(|_| type_error("structured view position overflow"))?,
+                    ),
+                    origin: destination,
+                    path: Arc::from([]),
+                };
+                let lent = self.lend_read_view(
+                    &value,
+                    anchor,
+                    application.parameter(self.program, position)?,
+                    true,
+                )?;
+                transfer::ScopedArgument::View {
+                    value: lent.into_raw(),
+                    source,
                     custody: transfer::ScopedReadCustody::new(value),
+                }
+            } else if value.raw().memory_is_borrowed() {
+                let read = value.raw().memory_borrow()?;
+                let count = application.read_scope_source_count(position);
+                if count == 0 {
+                    transfer::ScopedArgument::Read {
+                        value: read,
+                        custody: transfer::ScopedReadCustody::new(value),
+                    }
+                } else {
+                    self.charge_allocation(super::super::value::collection_storage_bytes(
+                        count as u64,
+                        std::mem::size_of::<transfer::ScopedReadScope>() as u64,
+                        "normalized_parallel_read_scopes",
+                    )?)?;
+                    let mut scopes = Vec::new();
+                    scopes.try_reserve_exact(count).map_err(|_| {
+                        resource_error(
+                            "normalized_parallel_read_scopes",
+                            "read scope import reservation failed",
+                        )
+                    })?;
+                    let ty = application.parameter(self.program, position)?;
+                    application.visit_read_scope_keys(position, &mut |key| {
+                        let placement = self.owned_read_scope_placement(&value, key)?;
+                        let (lease, lifetime) = self.lend_owned_read_scope(&value, key, ty)?;
+                        scopes.push(transfer::ScopedReadScope::new(
+                            key, lease, placement, lifetime,
+                        )?);
+                        Ok(())
+                    })?;
+                    transfer::ScopedArgument::ReadScoped {
+                        value: read,
+                        custody: transfer::ScopedReadCustody::new(value),
+                        scopes,
+                    }
                 }
             } else {
                 transfer::ScopedArgument::Value(value.into_raw())
@@ -70,7 +129,21 @@ impl Machine<'_> {
         &mut self,
         types: Arc<[TypeObjectDigest]>,
     ) -> Result<Arc<[TypeObjectDigest]>, ExecutionError> {
-        if types.is_empty() || self.current_frame()?.type_arguments.is_empty() {
+        if types.is_empty() {
+            return Ok(types);
+        }
+        let frame = self.current_frame()?;
+        if frame.type_arguments.is_empty()
+            && frame.function.is_none_or(|function| {
+                self.program
+                    .functions
+                    .get(function.0 as usize)
+                    .is_some_and(|function| {
+                        function.read_scope_parameters.is_empty()
+                            && function.implementation_arguments.is_empty()
+                    })
+            })
+        {
             return Ok(types);
         }
         self.charge_allocation(super::super::value::collection_storage_bytes(
@@ -78,10 +151,14 @@ impl Machine<'_> {
             (2 * std::mem::size_of::<TypeObjectDigest>() + 2 * std::mem::size_of::<usize>()) as u64,
             "normalized_parallel_application",
         )?)?;
-        let bindings = &self.current_frame()?.type_arguments;
         types
             .iter()
-            .map(|ty| transfer::resolve_type(self.program, *ty, bindings, self.control))
+            .map(|ty| {
+                self.resolve_frame_type(
+                    *ty,
+                    "parallel child actual escaped its exact caller application",
+                )
+            })
             .collect::<Result<Vec<_>, _>>()
             .map(Into::into)
     }
@@ -206,8 +283,8 @@ impl Machine<'_> {
         let program = self.program;
         let control = self.control;
         let source = self.memory_domain;
-        let left_values = self.prepare_scoped_arguments(left_values)?;
-        let right_values = self.prepare_scoped_arguments(right_values)?;
+        let left_values = self.prepare_scoped_arguments(&left, left_domain, left_values)?;
+        let right_values = self.prepare_scoped_arguments(&right, right_domain, right_values)?;
         let left = transfer::TransferArguments::seal_scoped_applied(
             program,
             source,
@@ -364,6 +441,7 @@ fn child(
         remaining_steps: policy.instruction_steps,
         stack: Vec::new(),
         frames: Vec::new(),
+        incoming_view_scopes: Vec::new(),
         next_frame: 0,
         next_transaction: 0,
         transactions: BTreeMap::new(),
@@ -377,6 +455,40 @@ fn child(
         let (application, values, leases) =
             envelope.adopt_scoped_applied(program, memory_domain, control)?;
         read_leases = leases;
+        let scope_count = read_leases.iter().try_fold(0usize, |count, lease| {
+            count
+                .checked_add(lease.imported_scope_count(&application))
+                .ok_or_else(|| type_error("joined scope import count overflowed"))
+        })?;
+        machine.charge_allocation(super::super::value::collection_storage_bytes(
+            scope_count as u64,
+            std::mem::size_of::<read_views::Scope>() as u64,
+            "normalized_parallel_read_scopes",
+        )?)?;
+        machine
+            .incoming_view_scopes
+            .try_reserve_exact(scope_count)
+            .map_err(|_| {
+                resource_error(
+                    "normalized_parallel_read_scopes",
+                    "child scope import reservation failed",
+                )
+            })?;
+        for lease in &read_leases {
+            lease.visit_imported_scopes(&application, control, &mut |position, key, scope| {
+                machine.incoming_view_scopes.push(read_views::Scope {
+                    key,
+                    root: BorrowSource {
+                        frame: machine.next_frame,
+                        local: u32::try_from(position)
+                            .map_err(|_| type_error("child source position overflowed"))?,
+                    },
+                    lease: scope,
+                    owner: None,
+                });
+                Ok(())
+            })?;
+        }
         let function = application.function();
         let parameters = &program
             .functions
@@ -393,7 +505,12 @@ fn child(
             .zip(parameters.iter())
             .enumerate()
             .map(|(index, (value, _parameter))| {
-                if value.memory_form().is_some() {
+                if matches!(value, NormalizedValue::ReadView(_)) {
+                    let mut checked = CheckedValue::read_view_controlled(program, value, control)?;
+                    machine.charge_allocation(CheckedValue::borrow_metadata_allocation_bytes())?;
+                    checked.set_view_borrowed();
+                    Ok(checked)
+                } else if value.memory_form().is_some() {
                     CheckedValue::memory(program, value)
                 } else {
                     machine.admit(value, application.parameter(program, index)?, None, true)

@@ -62,10 +62,15 @@ impl Source {
                 effect_parameters: Vec::new(),
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: TypeObjectDigest::from_bytes([92; 32]),
-                result_borrow: None,
+                result: crate::platform::kernel::CallableResult {
+                    ty: TypeObjectDigest::from_bytes([92; 32]),
+                    relation: crate::platform::kernel::ResultRelation::Value,
+                },
                 effect: FunctionEffect::Pure,
                 body: ExpressionId::migrate(SEED, 1),
+
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             }),
         };
         self.owners.insert(
@@ -134,5 +139,13 @@ pub(super) fn analysis<'a>(read: &'a Source, work: &'a mut usize) -> Analysis<'a
         slot_owners: Vec::new(),
         edges: Vec::new(),
         associated: associated::State::default(),
+        completed_view_queries: BTreeMap::new(),
+        diagnostic_context: WorkContext {
+            phase: "fixture initialization",
+            owner: None,
+            context: None,
+            expression: None,
+            query: None,
+        },
     }
 }

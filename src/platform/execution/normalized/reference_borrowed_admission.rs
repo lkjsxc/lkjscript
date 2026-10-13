@@ -47,10 +47,10 @@ type Locals = BTreeMap<LocalValueReference, Local>;
 
 struct Signature {
     parameters: Vec<(TypeObjectDigest, ParameterUse)>,
-    result: TypeObjectDigest,
-    source: Option<usize>,
+    result: crate::platform::kernel::CallableResult<usize>,
     is_task: bool,
     requires_associated_generation: bool,
+    requires_read_view_generation: bool,
 }
 
 struct Loan {
@@ -83,7 +83,7 @@ pub(super) fn inventory(closure: &mut Closure<'_, '_>) -> Result<(), ExecutionEr
             match &owner.payload {
                 DeclarationPayload::Function(function) => {
                     if !matches!(function.effect, FunctionEffect::Pure) {
-                        if function.result_borrow.is_some() {
+                        if function.result.relation.source().copied().is_some() {
                             return Err(reject());
                         }
                         for id in &function.parameters {
@@ -150,9 +150,9 @@ pub(super) fn inventory(closure: &mut Closure<'_, '_>) -> Result<(), ExecutionEr
                                 return Err(reject());
                             }
                         }
-                        closure.scoped_type_parameters(method.result, &parameters, 0)?;
-                        closure.owned_witness_type(method.result, Some(reference), 0)?;
-                        if let Some(position) = method.result_borrow {
+                        closure.scoped_type_parameters(method.result.ty, &parameters, 0)?;
+                        closure.owned_witness_type(method.result.ty, Some(reference), 0)?;
+                        if let Some(position) = method.result.relation.source().copied() {
                             let parameter = method
                                 .parameters
                                 .get(position as usize)
@@ -160,7 +160,7 @@ pub(super) fn inventory(closure: &mut Closure<'_, '_>) -> Result<(), ExecutionEr
                             if method.effect != FunctionEffect::Pure
                                 || parameter.use_mode != ParameterUse::Borrow
                                 || !closure.scoped_owned(parameter.ty, Some(reference))?
-                                || !closure.scoped_owned(method.result, Some(reference))?
+                                || !closure.scoped_owned(method.result.ty, Some(reference))?
                             {
                                 return Err(reject());
                             }
@@ -294,20 +294,29 @@ pub(super) fn inventory(closure: &mut Closure<'_, '_>) -> Result<(), ExecutionEr
                                 .collect(),
                             Some(reference),
                         ));
-                        closure.scoped_type_parameters(function.result, &target_parameters, 0)?;
-                        closure.owned_witness_type(function.result, Some(target), 0)?;
+                        closure.scoped_type_parameters(
+                            function.result.ty,
+                            &target_parameters,
+                            0,
+                        )?;
+                        closure.owned_witness_type(function.result.ty, Some(target), 0)?;
                         if function.effect != method.effect
                             || !function.effect_parameters.is_empty()
                             || !function.requirement_parameters.is_empty()
                             || function.implementation_parameters.len()
                                 != mapping.implementations.len()
                             || function.parameters.len() != method.parameters.len()
-                            || function.result_borrow
-                                != method.result_borrow.and_then(|position| {
-                                    function.parameters.get(position as usize).copied()
-                                })
-                            || closure.identity(function.result, &target_types, 0)?
-                                != closure.identity(method.result, &types, 0)?
+                            || function.result.relation.source().copied()
+                                != method
+                                    .result
+                                    .relation
+                                    .source()
+                                    .copied()
+                                    .and_then(|position| {
+                                        function.parameters.get(position as usize).copied()
+                                    })
+                            || closure.identity(function.result.ty, &target_types, 0)?
+                                != closure.identity(method.result.ty, &types, 0)?
                         {
                             return Err(reject());
                         }
@@ -378,6 +387,22 @@ pub(super) fn body(
     types: &Bindings,
     scope: Option<DeclarationReference>,
 ) -> Result<(), ExecutionError> {
+    if let (Some(scope), Some(proof)) = (scope, closure.read_view_proof.as_ref()) {
+        closure.control.check()?;
+        if scope.package == package && proof.admits_function_flow(scope) {
+            let OwnerRecord::Declaration(owner) =
+                closure.owner(package, OwnerKey::Declaration(scope.declaration))?
+            else {
+                return Err(reject());
+            };
+            if matches!(&owner.payload, DeclarationPayload::Function(function) if function.body == root)
+            {
+                // The independently registered proof covers this exact whole raw body,
+                // including owned paths which the legacy checker cannot model as views.
+                return Ok(());
+            }
+        }
+    }
     let mut checker = Checker {
         closure,
         package,
@@ -396,7 +421,7 @@ pub(super) fn body(
         else {
             return Err(reject());
         };
-        matches!(&owner.payload, DeclarationPayload::Function(function) if function.result_borrow.is_some())
+        matches!(&owner.payload, DeclarationPayload::Function(function) if function.result.relation.source().copied().is_some())
     } else {
         false
     };
@@ -416,7 +441,7 @@ pub(super) fn body(
             let result = checker.closure.identity_at(
                 scope.package,
                 OwnerKey::Declaration(scope.declaration),
-                function.result,
+                function.result.ty,
                 types,
                 Some(scope),
             )?;
@@ -431,7 +456,7 @@ pub(super) fn body(
                     return Err(reject());
                 };
                 if parameter.parent != ParameterParent::Function(scope.declaration)
-                    || (function.result_borrow == Some(*id)
+                    || (function.result.relation.source().copied() == Some(*id)
                         && parameter.resource_requirement.is_some())
                 {
                     return Err(reject());
@@ -462,7 +487,7 @@ pub(super) fn body(
                     )?;
                 }
             }
-            if let Some(source) = function.result_borrow {
+            if let Some(source) = function.result.relation.source().copied() {
                 let key = LocalValueReference::FunctionParameter(source);
                 let source_local = locals.get(&key).ok_or_else(reject)?;
                 if function.effect != FunctionEffect::Pure
@@ -519,7 +544,14 @@ impl Checker<'_, '_, '_> {
             self.closure.tick()?;
             let operation = self.operation(id)?.clone();
             match &operation {
-                ExpressionOperation::BorrowCall { .. }
+                ExpressionOperation::CreateReadView { .. }
+                | ExpressionOperation::BorrowReadView { .. }
+                | ExpressionOperation::ReborrowReadView { .. }
+                | ExpressionOperation::MoveReadView { .. }
+                | ExpressionOperation::DropReadView { .. }
+                | ExpressionOperation::ReadViewDataField { .. }
+                | ExpressionOperation::BorrowReadViewField { .. }
+                | ExpressionOperation::BorrowCall { .. }
                 | ExpressionOperation::PackOwnedRecord { .. }
                 | ExpressionOperation::UnpackOwnedRecord { .. }
                 | ExpressionOperation::BorrowOwnedRecordField { .. }
@@ -572,7 +604,7 @@ impl Checker<'_, '_, '_> {
                     else {
                         return Err(reject());
                     };
-                    if matches!(&owner.payload, DeclarationPayload::Function(function) if function.result_borrow.is_some())
+                    if matches!(&owner.payload, DeclarationPayload::Function(function) if function.result.relation.source().copied().is_some())
                     {
                         return Ok(true);
                     }
@@ -595,7 +627,10 @@ impl Checker<'_, '_, '_> {
                         .iter()
                         .find(|candidate| candidate.id == *method)
                         .ok_or_else(reject)?
-                        .result_borrow
+                        .result
+                        .relation
+                        .source()
+                        .copied()
                         .is_some()
                     {
                         return Ok(true);
@@ -647,14 +682,20 @@ impl Checker<'_, '_, '_> {
             | ExpressionOperation::Local { .. }
             | ExpressionOperation::Constant { .. }
             | ExpressionOperation::FunctionValue { .. }
-            | ExpressionOperation::SequenceEmpty { .. } => 0,
+            | ExpressionOperation::SequenceEmpty { .. }
+            | ExpressionOperation::ReborrowReadView { .. }
+            | ExpressionOperation::MoveReadView { .. }
+            | ExpressionOperation::DropReadView { .. }
+            | ExpressionOperation::ReadViewDataField { .. } => 0,
             ExpressionOperation::Let { .. }
             | ExpressionOperation::Field { .. }
             | ExpressionOperation::Transaction { .. }
             | ExpressionOperation::TransactionOutcome { .. }
             | ExpressionOperation::ChooseOwned { .. }
             | ExpressionOperation::SequenceLength { .. }
-            | ExpressionOperation::SequencePop { .. } => 1,
+            | ExpressionOperation::SequencePop { .. }
+            | ExpressionOperation::BorrowReadView { .. }
+            | ExpressionOperation::BorrowReadViewField { .. } => 1,
             ExpressionOperation::BorrowCall { .. }
             | ExpressionOperation::UnpackOwned { .. }
             | ExpressionOperation::BorrowOwnedField { .. }
@@ -683,6 +724,7 @@ impl Checker<'_, '_, '_> {
                 allocate::<ExpressionId>(&mut self.closure.allocated, fields.len())?;
                 fields.len()
             }
+            ExpressionOperation::CreateReadView { fields, .. } => fields.len(),
             ExpressionOperation::PackOwned { fields, .. } => fields.len(),
             ExpressionOperation::PackOwnedRecord { fields, .. } => fields.len(),
             ExpressionOperation::Variant { payload, .. } => usize::from(payload.is_some()),
@@ -949,11 +991,15 @@ impl Checker<'_, '_, '_> {
                 )?;
                 Signature {
                     parameters: closed.parameters.clone(),
-                    result: closed.result,
-                    source: closed.result_borrow.map(|source| source as usize),
+                    result: closed
+                        .result
+                        .try_map_source(|source| Ok(source as usize))
+                        .map_err(|_| reject())?,
                     is_task: closed.is_task,
                     requires_associated_generation: closed.requires_associated_generation
                         || source.associated_targets.contains(&id),
+                    requires_read_view_generation: closed.requires_read_view_generation
+                        || source.read_view_targets.contains(&id),
                 }
             } else {
                 let scoped = &source
@@ -967,16 +1013,24 @@ impl Checker<'_, '_, '_> {
                 )?;
                 Signature {
                     parameters: scoped.parameters.clone(),
-                    result: scoped.result,
-                    source: scoped.result_borrow.map(|source| source as usize),
+                    result: scoped
+                        .result
+                        .try_map_source(|source| Ok(source as usize))
+                        .map_err(|_| reject())?,
                     is_task: scoped.is_task,
                     requires_associated_generation: scoped.requires_associated_generation
                         || source.associated_targets.contains(&id),
+                    requires_read_view_generation: scoped.requires_read_view_generation
+                        || source.read_view_targets.contains(&id),
                 }
             };
-            if (signature.requires_associated_generation
-                && generation != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
-                || (signature.source.is_some() && signature.is_task)
+            if ((signature.requires_associated_generation
+                || signature.requires_read_view_generation)
+                && !super::associated_generation_admitted(
+                    generation,
+                    signature.requires_read_view_generation,
+                ))
+                || (signature.result.relation.source().copied().is_some() && signature.is_task)
             {
                 return Err(reject());
             }
@@ -1009,8 +1063,8 @@ impl Checker<'_, '_, '_> {
                     DeclarationPayload::Function(signature) => (
                         &signature.parameters,
                         &signature.type_parameters,
-                        signature.result,
-                        signature.result_borrow,
+                        signature.result.ty,
+                        signature.result.relation.source().copied(),
                         !matches!(signature.effect, FunctionEffect::Pure),
                     ),
                     DeclarationPayload::External(signature) => (
@@ -1063,10 +1117,33 @@ impl Checker<'_, '_, '_> {
                 }
                 Ok(Signature {
                     parameters: instantiated,
-                    result: self.closure.identity(result, &substitutions, 0)?,
-                    source,
+                    result: crate::platform::kernel::CallableResult {
+                        ty: self.closure.identity(result, &substitutions, 0)?,
+                        relation: match (&owner.payload, source) {
+                            (DeclarationPayload::Function(function), Some(source)) => {
+                                match function.result.relation {
+                                    crate::platform::kernel::ResultRelation::ReadFrom {
+                                        ..
+                                    } => {
+                                        crate::platform::kernel::ResultRelation::ReadFrom { source }
+                                    }
+                                    crate::platform::kernel::ResultRelation::ViewFrom {
+                                        scope,
+                                        ..
+                                    } => crate::platform::kernel::ResultRelation::ViewFrom {
+                                        source,
+                                        scope,
+                                    },
+                                    _ => return Err(reject()),
+                                }
+                            }
+                            (_, None) => crate::platform::kernel::ResultRelation::Value,
+                            _ => return Err(reject()),
+                        },
+                    },
                     is_task,
                     requires_associated_generation: false,
+                    requires_read_view_generation: false,
                 })
             }
             ExpressionOperation::MethodCall {
@@ -1130,10 +1207,17 @@ impl Checker<'_, '_, '_> {
                     .collect::<Result<_, ExecutionError>>()?;
                 Ok(Signature {
                     parameters,
-                    result: self.closure.identity(method.result, &substitutions, 0)?,
-                    source: method.result_borrow.map(|position| position as usize),
+                    result: crate::platform::kernel::CallableResult {
+                        ty: self.closure.identity(method.result.ty, &substitutions, 0)?,
+                        relation: method
+                            .result
+                            .try_map_source(|position| Ok(position as usize))
+                            .map_err(|_| reject())?
+                            .relation,
+                    },
                     is_task: !matches!(method.effect, FunctionEffect::Pure),
                     requires_associated_generation: false,
+                    requires_read_view_generation: false,
                 })
             }
             _ => Err(reject()),
@@ -1176,7 +1260,7 @@ impl Checker<'_, '_, '_> {
                     let guards = self.protect(locals, local)?;
                     allocate::<Vec<LocalValueReference>>(&mut self.closure.allocated, 1)?;
                     retained.push(guards);
-                    if signature.source == Some(position) {
+                    if signature.result.relation.source().copied() == Some(position) {
                         selected = Some(local);
                     }
                 } else if *mode == ParameterUse::Consume {
@@ -1191,7 +1275,7 @@ impl Checker<'_, '_, '_> {
                 self.flow(*argument, locals, Demand::Data, depth + 1)?;
             }
         }
-        if signature.source.is_some() && selected.is_none() {
+        if signature.result.relation.source().copied().is_some() && selected.is_none() {
             return Err(reject());
         }
         Ok((selected, retained))
@@ -1230,6 +1314,20 @@ impl Checker<'_, '_, '_> {
             return Err(reject());
         }
         let result = match operation {
+            ExpressionOperation::CreateReadView { .. }
+            | ExpressionOperation::BorrowReadView { .. }
+            | ExpressionOperation::ReborrowReadView { .. }
+            | ExpressionOperation::MoveReadView { .. }
+            | ExpressionOperation::DropReadView { .. }
+            | ExpressionOperation::ReadViewDataField { .. }
+            | ExpressionOperation::BorrowReadViewField { .. } => {
+                return Err(ExecutionError::new(
+                    ExecutionFailureClass::Infrastructure,
+                    "reference_read_view_flow_context",
+                    "view operation lacks an independently admitted containing callable flow",
+                ));
+            }
+
             ExpressionOperation::Local { value } => {
                 if let Some(local) = locals.get_mut(&value) {
                     if !local.live {
@@ -1319,12 +1417,15 @@ impl Checker<'_, '_, '_> {
                 else {
                     return Err(reject());
                 };
-                if signature.source.is_none()
+                if signature.result.relation.source().copied().is_none()
                     || signature.is_task
-                    || (signature.requires_associated_generation
-                        && wrapper.contract_version
-                            != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
-                    || !self.owned(signature.result)?
+                    || ((signature.requires_associated_generation
+                        || signature.requires_read_view_generation)
+                        && !super::associated_generation_admitted(
+                            wrapper.contract_version,
+                            signature.requires_read_view_generation,
+                        ))
+                    || !self.owned(signature.result.ty)?
                 {
                     return Err(reject());
                 }
@@ -1341,7 +1442,7 @@ impl Checker<'_, '_, '_> {
                     Loan {
                         source,
                         binding,
-                        ty: signature.result,
+                        ty: signature.result.ty,
                     },
                     body,
                     locals,
@@ -1646,7 +1747,7 @@ impl Checker<'_, '_, '_> {
             | ExpressionOperation::ImplementationCall { .. }
             | ExpressionOperation::MethodCall { .. }) => {
                 let signature = self.signature(id, call)?;
-                if signature.source.is_some() {
+                if signature.result.relation.source().copied().is_some() {
                     return Err(reject());
                 }
                 let arguments = match call {
@@ -1656,10 +1757,11 @@ impl Checker<'_, '_, '_> {
                     _ => unreachable!(),
                 };
                 self.arguments(&signature, arguments, locals, depth)?;
-                self.owned(signature.result)?.then_some(signature.result)
+                self.owned(signature.result.ty)?
+                    .then_some(signature.result.ty)
             }
             ref call @ ExpressionOperation::FunctionValue { .. } => {
-                if self.signature(id, call)?.source.is_some() {
+                if self.signature(id, call)?.result.relation.source().is_some() {
                     return Err(reject());
                 }
                 None
@@ -1818,7 +1920,9 @@ impl Checker<'_, '_, '_> {
                 let right_call = self.operation(right)?.clone();
                 let left_signature = self.signature(left, &left_call)?;
                 let right_signature = self.signature(right, &right_call)?;
-                if left_signature.source.is_some() || right_signature.source.is_some() {
+                if left_signature.result.relation.source().copied().is_some()
+                    || right_signature.result.relation.source().copied().is_some()
+                {
                     return Err(reject());
                 }
                 let arguments = |call: &ExpressionOperation| match call {
@@ -1837,8 +1941,8 @@ impl Checker<'_, '_, '_> {
                 for guards in left_loans.into_iter().chain(right_loans).rev() {
                     self.release(locals, guards)?;
                 }
-                let left = left_signature.result;
-                let right = right_signature.result;
+                let left = left_signature.result.ty;
+                let right = right_signature.result.ty;
                 let owned = self.owned(left)? || self.owned(right)?;
                 allocate::<crate::platform::kernel::StructuralTypeField>(
                     &mut self.closure.allocated,
@@ -1889,6 +1993,10 @@ impl Checker<'_, '_, '_> {
                     .associated_proof
                     .as_ref()
                     .is_some_and(|proof| proof.raw_templates.contains(&operation.result));
+                let mut requires_read_view_generation =
+                    self.closure.associated_proof.as_ref().is_some_and(|proof| {
+                        proof.raw_read_view_templates.contains(&operation.result)
+                    });
                 allocate::<(TypeObjectDigest, ParameterUse)>(
                     &mut self.closure.allocated,
                     operation.parameters.len(),
@@ -1905,17 +2013,24 @@ impl Checker<'_, '_, '_> {
                         .associated_proof
                         .as_ref()
                         .is_some_and(|proof| proof.raw_templates.contains(&parameter.ty));
+                    requires_read_view_generation |=
+                        self.closure.associated_proof.as_ref().is_some_and(|proof| {
+                            proof.raw_read_view_templates.contains(&parameter.ty)
+                        });
                     parameters.push((parameter.ty, parameter.use_mode));
                 }
                 self.arguments(
                     &Signature {
                         parameters,
-                        result: operation.result,
-                        source: None,
+                        result: crate::platform::kernel::CallableResult {
+                            ty: operation.result,
+                            relation: crate::platform::kernel::ResultRelation::Value,
+                        },
                         // Capability invocation is inherently effectful; operations have no
                         // callable effect row from which to infer purity.
                         is_task: true,
                         requires_associated_generation,
+                        requires_read_view_generation,
                     },
                     &arguments,
                     locals,
@@ -2309,33 +2424,43 @@ declarations.end
     }
 
     #[test]
-    fn independent_mixed_contract_accepts_existing_function_owner_with_new_application_expression()
-    {
-        let mut snapshot = mixed_source();
-        let scope = reference(&snapshot, "apply");
-        let function = function(&snapshot, "apply");
-        assert!(function.implementation_parameters.is_empty());
-        let OwnerRecord::Expression(expression) = snapshot
-            .owners
-            .get(&OwnerKey::Expression(function.body))
-            .unwrap()
-        else {
-            unreachable!()
-        };
-        assert_eq!(expression.contract_version, 33);
-        let OwnerRecord::Declaration(owner) = snapshot
-            .owners
-            .get_mut(&OwnerKey::Declaration(scope.declaration))
-            .unwrap()
-        else {
-            unreachable!()
-        };
-        owner.header.contract_version = 32;
-        crate::platform::kernel::validate_full(&snapshot).unwrap();
-        assert!(crate::platform::kernel::memory_reference::accepts(
-            &snapshot
-        ));
-        admit(&snapshot).unwrap();
+    fn independent_mixed_contract_accepts_existing_function_owner_with_new_application_expression() {
+        for generation in [
+            crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
+            crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+        ] {
+            let mut snapshot = mixed_source();
+            let scope = reference(&snapshot, "apply");
+            let function = function(&snapshot, "apply");
+            assert!(function.implementation_parameters.is_empty());
+            let body = function.body;
+            let OwnerRecord::Expression(expression) = snapshot
+                .owners
+                .get_mut(&OwnerKey::Expression(body))
+                .unwrap()
+            else {
+                unreachable!()
+            };
+            assert_eq!(
+                expression.contract_version,
+                crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+            );
+            // Explicit synthetic retained-generation and current-expression controls.
+            expression.contract_version = generation;
+            let OwnerRecord::Declaration(owner) = snapshot
+                .owners
+                .get_mut(&OwnerKey::Declaration(scope.declaration))
+                .unwrap()
+            else {
+                unreachable!()
+            };
+            owner.header.contract_version = 32;
+            crate::platform::kernel::validate_full(&snapshot).unwrap();
+            assert!(crate::platform::kernel::memory_reference::accepts(
+                &snapshot
+            ));
+            admit(&snapshot).unwrap();
+        }
     }
 
     #[test]
@@ -2474,7 +2599,10 @@ declarations.end
             match attack {
                 0 => contract.methods[1].parameters[0].use_mode = ParameterUse::Consume,
                 1 => contract.methods[1].parameters.swap(0, 1),
-                _ => contract.methods[1].result_borrow = Some(1),
+                _ => {
+                    contract.methods[1].result.relation =
+                        crate::platform::kernel::ResultRelation::ReadFrom { source: 1 }
+                }
             }
             assert!(
                 admit(&snapshot).is_err(),
@@ -2645,6 +2773,7 @@ declarations.end"#;
                     effect_arguments: vec![],
                     requirement_arguments: vec![],
                     arguments: vec![input],
+                    read_scope_arguments: Vec::new(),
                 },
             );
             match operation(&mut source, body) {
@@ -2679,6 +2808,7 @@ declarations.end"#;
                 effect_arguments: vec![],
                 requirement_arguments: vec![],
                 arguments: vec![input],
+                read_scope_arguments: Vec::new(),
             },
         );
         let ExpressionOperation::SequenceReplace { value, .. } = operation(&mut source, body)
@@ -2708,6 +2838,7 @@ declarations.end"#;
                 effect_arguments: vec![],
                 requirement_arguments: vec![],
                 arguments: vec![input],
+                read_scope_arguments: Vec::new(),
             },
         );
         let ExpressionOperation::SequencePush { value, .. } = operation(&mut source, body) else {
@@ -2741,6 +2872,7 @@ declarations.end"#;
                     effect_arguments: vec![],
                     requirement_arguments: vec![],
                     arguments: vec![input],
+                    read_scope_arguments: Vec::new(),
                 },
             );
             let successor_operation = operation(&mut source, body).clone();
@@ -2864,6 +2996,7 @@ declarations.end
                 effect_arguments: vec![],
                 requirement_arguments: vec![],
                 arguments: vec![source],
+                read_scope_arguments: Vec::new(),
             },
         );
         let ExpressionOperation::Call { arguments, .. } = operation(&mut snapshot, right) else {
@@ -2989,6 +3122,7 @@ declarations.end
                 effect_arguments: vec![],
                 requirement_arguments: vec![],
                 arguments: vec![arguments[0]],
+                read_scope_arguments: Vec::new(),
             },
         );
         let inner = expression(
@@ -3059,6 +3193,7 @@ declarations.end
                 type_arguments: vec![],
                 requirement_arguments: vec![],
                 effect_arguments: vec![],
+                read_scope_arguments: Vec::new(),
             },
         );
         let ExpressionOperation::Sequence { mut items } =
@@ -3089,7 +3224,8 @@ declarations.end
         let DeclarationPayload::OwnedContract(contract) = &mut owner.payload else {
             unreachable!();
         };
-        contract.methods[0].result_borrow = Some(0);
+        contract.methods[0].result.relation =
+            crate::platform::kernel::ResultRelation::ReadFrom { source: 0 };
         assert_eq!(
             admit(&snapshot).unwrap_err().code,
             "reference_borrowed_result_contract"
@@ -3107,7 +3243,7 @@ declarations.end
         let DeclarationPayload::Function(function) = &mut owner.payload else {
             unreachable!();
         };
-        function.result_borrow = None;
+        function.result.relation = crate::platform::kernel::ResultRelation::Value;
         assert_eq!(
             admit(&snapshot).unwrap_err().code,
             "reference_borrowed_result_contract"

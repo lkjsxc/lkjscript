@@ -16,7 +16,7 @@ pub(crate) fn fixture(
     let DeclarationPayload::Function(ref f) = helper.payload else {
         panic!("function")
     };
-    let unit = f.result;
+    let unit = f.result.ty;
     let requirement = f.effect.row().requirements[0];
     let OwnerRecord::Requirement(req) =
         &snapshot.owners[&OwnerKey::Requirement(requirement.concrete().unwrap().requirement)]
@@ -59,6 +59,7 @@ pub(crate) fn fixture(
     let again = expression(
         &mut snapshot,
         ExpressionOperation::Call {
+            read_scope_arguments: Vec::new(),
             requirement_arguments: Vec::new(),
             function: DeclarationReference {
                 package: caller.package,
@@ -119,6 +120,7 @@ pub(crate) fn fixture(
     let call = expression(
         &mut snapshot,
         ExpressionOperation::Call {
+            read_scope_arguments: Vec::new(),
             requirement_arguments: Vec::new(),
             function: DeclarationReference {
                 package: caller.package,

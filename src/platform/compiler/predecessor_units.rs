@@ -17,7 +17,7 @@ pub(super) struct Unit {
     key: CompilationUnitKey,
     source: CompilationSource,
     optimization: OptimizationPolicy,
-    tables: CompilationTables,
+    tables: crate::platform::compiler::wire33::Tables33,
     payload: Payload,
 }
 #[derive(Decode)]
@@ -117,6 +117,7 @@ impl<C> Decode<C> for Instruction {
             10 => Call {
                 requirement_arguments: value!(),
                 effect_arguments: value!(),
+                read_scope_arguments: Vec::new(),
                 function: value!(),
                 type_arguments: value!(),
                 arguments: value!(),
@@ -124,6 +125,7 @@ impl<C> Decode<C> for Instruction {
             11 => FunctionValue {
                 requirement_arguments: value!(),
                 effect_arguments: value!(),
+                read_scope_arguments: Vec::new(),
                 function: value!(),
                 type_arguments: value!(),
             },
@@ -215,8 +217,12 @@ impl Signature {
             type_parameters: self.type_parameters,
             type_parameter_constraints: self.type_parameter_constraints,
             parameters: self.parameters,
-            result: self.result,
-            result_borrow: None,
+            result: CallableResult {
+                ty: self.result,
+                relation: ResultRelation::Value,
+            },
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
             task_requirements: self.task_requirements,
         }
     }
@@ -316,7 +322,7 @@ impl Unit {
             key: self.key,
             source: self.source,
             optimization: self.optimization,
-            tables: self.tables,
+            tables: self.tables.into(),
             payload,
         }
     }

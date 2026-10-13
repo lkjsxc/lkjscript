@@ -100,7 +100,9 @@ fn owned_task_method_unused_contracts_accept_borrow_and_require_closed_rows() {
                     "unrestricted" => {
                         c.methods[0].parameters[0].use_mode = ParameterUse::Unrestricted;
                     }
-                    "borrowed-result" => c.methods[0].result_borrow = Some(0),
+                    "borrowed-result" => {
+                        c.methods[0].result.relation = ResultRelation::ReadFrom { source: 0 }
+                    }
                     "contract-generation" => {
                         d.header.contract_version = contract::SHARE_GRAPH_CONTRACT_VERSION - 1;
                     }

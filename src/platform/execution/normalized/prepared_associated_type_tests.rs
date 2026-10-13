@@ -63,6 +63,7 @@ fn selected(
             member: AssociatedTypeMemberId::migrate(SEED, 0),
             template: ty,
             ty,
+            scope_parameter: None,
         }]),
     })
 }
@@ -95,8 +96,13 @@ fn function(
         type_parameter_constraints: Arc::from([TypeParameterConstraints::Owned]),
         parameter_count: 0,
         parameters: Arc::from([]),
-        result,
-        result_borrow: None,
+        result: crate::platform::kernel::CallableResult {
+            ty: result,
+            relation: crate::platform::kernel::ResultRelation::Value,
+        },
+        read_scope_parameters: Arc::from([]),
+        read_scope_sources: Arc::from([]),
+        read_scope_arguments: Arc::from([]),
         task_requirements: Arc::from([]),
         body: NormalizedFunctionBody::Code(NormalizedCode {
             parameter_count: 0,
@@ -172,6 +178,8 @@ fn associated_preparation_closes_inactive_roots_and_both_parallel_lanes_per_exac
                 }]),
             },
             NormalizedInstruction::Parallel {
+                left_read_scope_arguments: Arc::from([]),
+                right_read_scope_arguments: Arc::from([]),
                 left,
                 right,
                 left_types: Arc::from([projected]),
@@ -183,12 +191,14 @@ fn associated_preparation_closes_inactive_roots_and_both_parallel_lanes_per_exac
                 result_type: product,
             },
             NormalizedInstruction::FunctionValue {
+                read_scope_arguments: Arc::from([]),
                 function: value,
                 type_arguments: Arc::from([choice]),
                 effect_arguments: Arc::from([]),
                 requirement_arguments: Arc::from([]),
             },
             NormalizedInstruction::TailCall {
+                read_scope_arguments: Arc::from([]),
                 function: tail,
                 type_arguments: Arc::from([projected]),
                 arguments: 0,
@@ -209,6 +219,7 @@ fn associated_preparation_closes_inactive_roots_and_both_parallel_lanes_per_exac
             bindings: &ordinary,
             associated: Some(&environment),
             function: Some(index),
+            scopes: None,
         };
         let expected_sequence = add(&mut types, TypeForm::OwnedSequence { item: output });
         let expected_product = add(
@@ -295,6 +306,7 @@ fn associated_preparation_closes_effects_before_members_and_separates_mapping_lo
         bindings: &ordinary,
         associated: Some(&environment),
         function: None,
+        scopes: None,
     };
     let control = ExecutionControl::uncancelled();
     let mut work = Budget::new(&control);

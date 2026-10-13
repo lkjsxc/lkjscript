@@ -20,7 +20,8 @@ use super::super::control::{
     COMPACT_CHANGE_PRECONDITIONS, COMPACT_DECLARATION_VISIBILITIES, COMPACT_DELETE_POLICIES,
     COMPACT_EFFECT_FORM_FIELDS, COMPACT_EFFECT_FORMS, COMPACT_EXPRESSION_FORM_FIELDS,
     COMPACT_EXPRESSION_FORMS, COMPACT_FUNCTION_EFFECTS, COMPACT_NAMESPACE_CLASSES,
-    COMPACT_TYPE_FORM_FIELDS, COMPACT_TYPE_FORMS, CompactChangeFieldForm, CompactChangeOperation,
+    COMPACT_READ_SCOPE_FORM_FIELDS, COMPACT_READ_SCOPE_FORMS, COMPACT_TYPE_FORM_FIELDS,
+    COMPACT_TYPE_FORMS, CompactChangeFieldForm, CompactChangeOperation,
     LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY, LOGICAL_CHANGE_PLAN_CONTRACT_VERSION,
     LOGICAL_PLAN_RECORD_DESCRIPTORS, MAXIMUM_COMPACT_INPUT_BYTES, MAXIMUM_LOGICAL_PLAN_BYTES,
     MAXIMUM_LOGICAL_PLAN_RECORDS, MAXIMUM_STRUCTURAL_SYNTAX_NODES, MAXIMUM_STRUCTURAL_TOKENS,
@@ -105,9 +106,12 @@ use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-25";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 25;
-pub const CLI_CONTRACT_VERSION: u16 = 46;
+#[path = "read_views.rs"]
+mod read_views;
+
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-26";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 26;
+pub const CLI_CONTRACT_VERSION: u16 = 47;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -168,11 +172,11 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
     ),
     (
         "implementation-call",
-        "(implementation-call FUNCTION (types TYPE...) (effects ROW...) (requirements REQUIREMENT...) (implementations OPERAND...) EXPR...)",
+        "(implementation-call FUNCTION [(types TYPE...)] [(effects ROW...)] [(requirements REQUIREMENT...)] [(implementations OPERAND...)] [(scopes SCOPE...)] EXPR...)",
     ),
     (
         "method-call",
-        "(method-call OPERAND CONTRACT method_HEX EXPR...)",
+        "(method-call OPERAND CONTRACT method_HEX [(scopes SCOPE...)] EXPR...)",
     ),
     ("unit", "(unit)"),
     ("bool", "(bool true|false)"),
@@ -223,11 +227,30 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
         "(transaction-outcome REQUIREMENT (types TYPE) (outcome OUTCOME REASON COMMITTED ABORTED CONDITION-FAILED CONFLICT) (binding NAME) BODY)",
     ),
     ("parallel", "(parallel LEFT-CALL RIGHT-CALL)"),
+    (
+        "read-view-create",
+        "(view-create DECLARATION (types TYPE...) (scope SCOPE) (source LOCAL) (field field_HEX EXPR)...)",
+    ),
+    (
+        "read-view-borrow",
+        "(view-borrow (local VIEW) (binding NAME [(type TYPE)]) (in BODY))",
+    ),
+    ("read-view-reborrow", "(view-reborrow (local VIEW) SCOPE)"),
+    ("read-view-move", "(view-move (local VIEW))"),
+    ("read-view-drop", "(view-drop (local VIEW))"),
+    (
+        "read-view-data-field",
+        "(view-data-field (local VIEW) DECLARATION field_HEX)",
+    ),
+    (
+        "read-view-borrow-field",
+        "(borrow-view-field (local VIEW) DECLARATION field_HEX (binding NAME [(type TYPE)]) (in BODY))",
+    ),
 ];
 
 pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
-    "lkjscript-function-definition-projection-21";
-pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 21;
+    "lkjscript-function-definition-projection-22";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 22;
 pub const FUNCTION_DEFINITION_DEFAULT_ITEMS: u64 = 50;
 pub const MAXIMUM_FUNCTION_DEFINITION_ITEMS: u64 = 10_000;
 pub const FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -274,13 +297,13 @@ pub const MAXIMUM_FUNCTION_DEFINITION_STORE_BYTES: u64 = MAXIMUM_FUNCTION_DEFINI
     + MAXIMUM_FUNCTION_DEFINITION_FACT_READS
         * super::super::witness::contract::MAXIMUM_OWNER_SUMMARY_BYTES as u64;
 
-pub(crate) const FUNCTION_DEFINITION_CONTINUATION_MAGIC_TEXT: &str = "LKJICT03";
+pub(crate) const FUNCTION_DEFINITION_CONTINUATION_MAGIC_TEXT: &str = "LKJICT04";
 pub(crate) const FUNCTION_DEFINITION_CONTINUATION_INTEGRITY_DOMAIN: &str =
-    "lkjscript.function-definition.continuation-integrity.v3";
+    "lkjscript.function-definition.continuation-integrity.v4";
 pub(crate) const FUNCTION_DEFINITION_LOGICAL_DIGEST_DOMAIN: &str =
-    "lkjscript.function-definition.logical.v3";
+    "lkjscript.function-definition.logical.v4";
 pub(crate) const FUNCTION_DEFINITION_RECORD_KEY_DOMAIN: &str =
-    "lkjscript.function-definition.record-key.v3";
+    "lkjscript.function-definition.record-key.v4";
 
 pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("result", "status"),
@@ -327,6 +350,20 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("definition.function", "visibility"),
     ("definition.function", "type-parameters"),
     ("definition.function", "implementation-parameters"),
+    ("definition.function", "read-scope-parameters"),
+    ("definition.function", "read-scope-sources"),
+    ("definition.read-scope-parameter", "id"),
+    ("definition.read-scope-parameter", "parent"),
+    ("definition.read-scope-parameter", "index"),
+    ("definition.read-scope-parameter", "name"),
+    ("definition.read-scope-source", "parent"),
+    ("definition.read-scope-source", "index"),
+    ("definition.read-scope-source", "source"),
+    ("definition.read-scope-source", "scope"),
+    ("definition.read-scope-argument", "parent"),
+    ("definition.read-scope-argument", "slot"),
+    ("definition.read-scope-argument", "index"),
+    ("definition.read-scope-argument", "scope"),
     ("definition.implementation-parameter", "id"),
     ("definition.implementation-parameter", "parent"),
     ("definition.implementation-parameter", "index"),
@@ -343,8 +380,9 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("definition.function", "effect-row-parameters"),
     ("definition.function", "parameters"),
     ("definition.function", "result"),
-    ("definition.function", "result-mode"),
-    ("definition.function", "borrow-from"),
+    ("definition.function", "result-kind"),
+    ("definition.function", "result-source"),
+    ("definition.function", "result-scope"),
     ("definition.function", "effect"),
     ("definition.function", "requirements"),
     ("definition.function", "body"),
@@ -399,6 +437,10 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("definition.expression", "label"),
     ("definition.expression", "depth"),
     ("definition.expression", "form"),
+    ("definition.expression", "declaration"),
+    ("definition.expression", "read-scope"),
+    ("definition.expression", "source"),
+    ("definition.expression", "read-scope-arguments"),
     ("definition.expression", "value"),
     ("definition.expression", "text-storage"),
     ("definition.expression", "text-bytes"),
@@ -504,8 +546,8 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("schema", "capabilities"),
 ];
 
-const REGISTRY_DIGEST_DOMAIN: &str = "lkjscript.contract-registry.v8";
-const REGISTRY_SECTION_DIGEST_DOMAIN: &str = "lkjscript.contract-registry-section.v8";
+const REGISTRY_DIGEST_DOMAIN: &str = "lkjscript.contract-registry.v9";
+const REGISTRY_SECTION_DIGEST_DOMAIN: &str = "lkjscript.contract-registry-section.v9";
 const CAPABILITIES_DIGEST_DOMAIN: &str = "lkjscript.public-capabilities";
 
 pub(crate) const MODULE_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.module-object.v2";
@@ -629,6 +671,7 @@ pub enum ContractKey {
     Stream,
     WorkerRunner,
     OwnedAssociatedTypes,
+    AssociatedReadViews,
 }
 
 impl ContractKey {
@@ -640,6 +683,7 @@ impl ContractKey {
             Self::TypeObject => "type_object",
             Self::NominalApplication => "nominal_application",
             Self::OwnedAssociatedTypes => "owned_associated_types",
+            Self::AssociatedReadViews => "associated_read_views",
             Self::ImmutableObjectStore => "immutable_object_store",
             Self::ImmutablePack => "immutable_pack",
             Self::ObjectCatalog => "object_catalog",
@@ -783,7 +827,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         ContractDescriptor {
             key: ContractKey::Cli,
             name: "normalized command line protocol",
-            identity: "lkjscript-cli-34",
+            identity: "lkjscript-cli-47",
             version: CLI_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
@@ -800,10 +844,10 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: PredecessorPolicy::ReadHistorical,
             magic_values: &[
-                "LKJOWN33", "LKJOWN32", "LKJOWN31", "LKJOWN30", "LKJOWN29", "LKJOWN28", "LKJOWN27",
-                "LKJOWN26", "LKJOWN25", "LKJOWN24", "LKJOWN23", "LKJOWN22", "LKJOWN21", "LKJOWN20",
-                "LKJOWN19", "LKJOWN18", "LKJOWN17", "LKJOWN16", "LKJOWN15", "LKJOWN14", "LKJSMR01",
-                "LKJDEP14", "LKJRET14",
+                "LKJOWN34", "LKJOWN33", "LKJOWN32", "LKJOWN31", "LKJOWN30", "LKJOWN29", "LKJOWN28",
+                "LKJOWN27", "LKJOWN26", "LKJOWN25", "LKJOWN24", "LKJOWN23", "LKJOWN22", "LKJOWN21",
+                "LKJOWN20", "LKJOWN19", "LKJOWN18", "LKJOWN17", "LKJOWN16", "LKJOWN15", "LKJOWN14",
+                "LKJSMR01", "LKJDEP14", "LKJRET14",
             ],
             digest_domains: &[
                 super::super::kernel::contract::OWNER_ENVELOPE_DOMAIN,
@@ -865,6 +909,23 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             digest_domains: &[
                 super::super::kernel::contract::OWNED_ASSOCIATED_OWNER_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::OWNED_ASSOCIATED_TYPE_ENVELOPE_DOMAIN,
+                super::super::package_interface::FROZEN_ASSOCIATED_INTERFACE_DOMAIN,
+                super::super::compiler::FROZEN_ASSOCIATED_UNIT_ENVELOPE_DOMAIN,
+                super::super::compiler::FROZEN_ASSOCIATED_UNIT_KEY_DOMAIN,
+            ],
+        },
+        ContractDescriptor {
+            key: ContractKey::AssociatedReadViews,
+            name: "source-tied associated read-view families",
+            identity: super::super::kernel::contract::ASSOCIATED_READ_VIEW_CONTRACT_IDENTITY,
+            version: super::super::kernel::contract::ASSOCIATED_READ_VIEW_CONTRACT_VERSION,
+            stability: CURRENT,
+            authority: ContractAuthority::CanonicalMeaning,
+            predecessor_policy: REJECT,
+            magic_values: &["LKJOAV01", "LKJTAV01", "LKJPAV01", "LKJCAU02"],
+            digest_domains: &[
+                super::super::kernel::contract::ASSOCIATED_READ_VIEW_OWNER_ENVELOPE_DOMAIN,
+                super::super::kernel::contract::ASSOCIATED_READ_VIEW_TYPE_ENVELOPE_DOMAIN,
                 super::super::package_interface::ASSOCIATED_INTERFACE_ENVELOPE_DOMAIN,
                 super::super::compiler::ASSOCIATED_UNIT_ENVELOPE_DOMAIN,
                 super::super::compiler::ASSOCIATED_UNIT_KEY_DOMAIN,
@@ -980,7 +1041,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
-            magic_values: &["LKJSUM16"],
+            magic_values: &["LKJSUM17"],
             digest_domains: &[
                 witness_contract::OWNER_SUMMARY_ENVELOPE_DOMAIN,
                 witness_contract::OWNER_SUMMARY_DIGEST_DOMAIN,
@@ -1003,7 +1064,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
-            magic_values: &["LKJWIT09"],
+            magic_values: &["LKJWIT10"],
             digest_domains: &[
                 witness_contract::WITNESS_ENVELOPE_DOMAIN,
                 witness_contract::VALIDATION_WITNESS_DIGEST_DOMAIN,
@@ -1044,7 +1105,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
                 "LKJACR14", "LKJACR15", "LKJACR16", "LKJACR17", "LKJACR18", "LKJACR19", "LKJACR20",
                 "LKJACR21", "LKJACR22", "LKJACR23", "LKJACR24", "LKJACR25", "LKJACR26", "LKJACR27",
                 "LKJACR28", "LKJACR29", "LKJACR30", "LKJACR31", "LKJACR32", "LKJACR33", "LKJACR34",
-                "LKJACR35", "LKJACR36", "LKJACR37", "LKJACR38", "LKJABG01",
+                "LKJACR35", "LKJACR36", "LKJACR37", "LKJACR38", "LKJACR39", "LKJABG01",
             ],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
@@ -1125,8 +1186,8 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: PredecessorPolicy::ReadHistorical,
             magic_values: &[
-                "LKJPIF21", "LKJPIF20", "LKJPIF19", "LKJPIF18", "LKJPIF17", "LKJPIF16", "LKJPIF15",
-                "LKJPIF14", "LKJPIF13", "LKJPIF12", "LKJPIF11", "LKJPIF10",
+                "LKJPIF22", "LKJPIF21", "LKJPIF20", "LKJPIF19", "LKJPIF18", "LKJPIF17", "LKJPIF16",
+                "LKJPIF15", "LKJPIF14", "LKJPIF13", "LKJPIF12", "LKJPIF11", "LKJPIF10",
             ],
             digest_domains: &[
                 PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
@@ -1191,11 +1252,13 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             version: COMPILER_UNIT_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
-            predecessor_policy: REJECT,
-            magic_values: &["LKJCUN33"],
+            predecessor_policy: PredecessorPolicy::ReadHistorical,
+            magic_values: &["LKJCUN34", "LKJCUN33"],
             digest_domains: &[
                 COMPILER_UNIT_ENVELOPE_DOMAIN,
                 COMPILER_UNIT_KEY_DOMAIN,
+                super::super::compiler::FROZEN_COMPILER_UNIT_ENVELOPE_DOMAIN,
+                super::super::compiler::FROZEN_COMPILER_UNIT_KEY_DOMAIN,
                 storage_contract::COMPILER_UNIT_DIGEST_DOMAIN,
             ],
         },
@@ -1213,8 +1276,8 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             version: ARTIFACT_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
-            predecessor_policy: REJECT,
-            magic_values: &["LKJAMF40"],
+            predecessor_policy: PredecessorPolicy::ReadHistorical,
+            magic_values: &["LKJAMF41", "LKJAMF40"],
             digest_domains: &[
                 ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
                 storage_contract::ARTIFACT_MANIFEST_DIGEST_DOMAIN,
@@ -1227,8 +1290,8 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             version: ARTIFACT_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
-            predecessor_policy: REJECT,
-            magic_values: &["LKJART40", "LKJAEN40"],
+            predecessor_policy: PredecessorPolicy::ReadHistorical,
+            magic_values: &["LKJART41", "LKJAEN41", "LKJART40", "LKJAEN40"],
             digest_domains: &[
                 ARTIFACT_BUNDLE_DIGEST_DOMAIN,
                 ARTIFACT_BUNDLE_CHECKSUM_DOMAIN,
@@ -3280,8 +3343,68 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "change_associated_bound",
             DiagnosticClass::Source,
-            "An authored associated member omits or changes its explicit Owned bound.",
-            "Use bound=owned with distinct member IDs and names; supply complete inventories in exact Graph33/interface21 contexts.",
+            "An authored associated member has an unknown or inconsistent Owned/ReadViewFamily kind.",
+            "Use kind=owned or kind=read-view-family with distinct member IDs and names; only a family supplies its exact scope formal and name. Complete unused inventories are mandatory.",
+        ),
+        diagnostic(
+            "change_field_not_applicable",
+            DiagnosticClass::Source,
+            "A field is forbidden for its selected result, scope, member or view-field kind.",
+            "Supply only that kind's fields; Value has no source/scope, ReadFrom has no scope, and Owned members have no family scope formal.",
+        ),
+        diagnostic(
+            "change_read_scope_undefined",
+            DiagnosticClass::Source,
+            "A referenced read-scope fragment is absent.",
+            "Declare the complete %scope fragment with exact static binder/parameter or callable/binding coordinates, including unused actuals.",
+        ),
+        diagnostic(
+            "change_read_scope_binding",
+            DiagnosticClass::Source,
+            "A lexical read scope names a parameter instead of a lexical binding.",
+            "Use a lexical binding in its exact callable; parameter scope forwarding uses an owner-qualified parameter actual.",
+        ),
+        diagnostic(
+            "change_read_scope_binder",
+            DiagnosticClass::Source,
+            "A read-scope parameter actual has an unknown or inconsistent binder kind.",
+            "Select declaration, contract-method, associated-member or associated-binding with precisely the required method/member coordinate.",
+        ),
+        diagnostic(
+            "change_read_scope_duplicate",
+            DiagnosticClass::Source,
+            "A complete scope-formal inventory repeats an identity or name.",
+            "Provide distinct stable scope IDs and names in complete authored order; an unused formal still participates.",
+        ),
+        diagnostic(
+            "change_associated_binding_kind",
+            DiagnosticClass::Source,
+            "An associated binding has an unknown or inconsistent kind.",
+            "Match the exact member kind; a family requires one scope formal and nominal view template, while Owned bindings have no scope fields.",
+        ),
+        diagnostic(
+            "change_read_view_field_duplicate",
+            DiagnosticClass::Source,
+            "A view declaration or construction repeats a field identity or name.",
+            "Provide each exact declaration-qualified field once in complete authored order.",
+        ),
+        diagnostic(
+            "change_read_view_field_kind",
+            DiagnosticClass::Source,
+            "A view field has an unknown or inconsistent ordinary/read-reference kind.",
+            "Use ordinary immutable Transferable metadata without a scope field, or an explicit read-reference with its exact scope.",
+        ),
+        diagnostic(
+            "change_read_view_binding",
+            DiagnosticClass::Source,
+            "A scoped view borrow does not supply exactly one lexical binding.",
+            "Supply one binding and one body; do not erase or share the scoped binding inventory.",
+        ),
+        diagnostic(
+            "change_result_relation",
+            DiagnosticClass::Source,
+            "An authored callable result selects an unknown relation.",
+            "Select value, read-from with one exact source, or view-from with one exact source and explicit scope; obsolete borrow-from is not an additional authority.",
         ),
         diagnostic(
             "change_authored_associated_member_duplicate",
@@ -5190,6 +5313,66 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Semantic,
             "An expression claims a graph generation that cannot represent its meaning.",
             "Use Graph 17 for F64 literals or Graph 16 and later for transaction outcomes; preserve authentic predecessor bytes.",
+        ),
+        diagnostic(
+            "change_authored_read_scope_binding",
+            DiagnosticClass::Semantic,
+            "A lowered lexical read-scope actual does not name one exact lexical binding.",
+            "Use the exact binding identity in its callable; a named parameter uses declared parameter-scope forwarding.",
+        ),
+        diagnostic(
+            "change_authored_read_scope_duplicate",
+            DiagnosticClass::Semantic,
+            "A lowered scope-formal inventory repeats an identity or name.",
+            "Retain distinct complete scope formals under their exact binder, including unused entries.",
+        ),
+        diagnostic(
+            "change_authored_read_view_field_duplicate",
+            DiagnosticClass::Semantic,
+            "A lowered view inventory repeats a declaration-qualified field identity or name.",
+            "Provide each exact inline field once in complete authored order; duplicates cannot be erased.",
+        ),
+        diagnostic(
+            "change_read_view_kind",
+            DiagnosticClass::Semantic,
+            "An authored view operation or nominal application selects another declaration category.",
+            "Select the exact nominal read_view declaration; ordinary and Owned records are distinct categories and cannot confer view field authority.",
+        ),
+        diagnostic(
+            "kernel_read_view_scope",
+            DiagnosticClass::Semantic,
+            "A read scope does not match its exact declared binder or explicit containment evidence.",
+            "Use the exact owner-qualified scope formal or admitted lexical loan; naming another declaration does not import its scope binders.",
+        ),
+        diagnostic(
+            "kernel_read_view_source",
+            DiagnosticClass::Semantic,
+            "A read-view source relationship does not select one exact admitted borrowed parameter.",
+            "Retain the complete source inventory and explicit source/scope mapping; equal types or scopes cannot substitute another parameter.",
+        ),
+        diagnostic(
+            "kernel_read_view_field",
+            DiagnosticClass::Semantic,
+            "A read-view field has an invalid identity, category, scope or defining-module operation.",
+            "Provide each exact inline field once; ordinary fields contain immutable Transferable data and read references use the declaration's exact scope and admitted referent.",
+        ),
+        diagnostic(
+            "kernel_read_view_result",
+            DiagnosticClass::Semantic,
+            "A callable result has an invalid Value, ReadFrom or ViewFrom source/type/scope relationship.",
+            "Use one explicit result contract; loan results require a pure named callable and exact borrowed source, and ViewFrom requires a selected read-view type and explicit scope.",
+        ),
+        diagnostic(
+            "kernel_read_view_operation",
+            DiagnosticClass::Semantic,
+            "A non-view operation reaches the private read-view operation admission boundary.",
+            "Use the exact typed operation and current reader; this defensive dispatch check grants no new authored operation category.",
+        ),
+        diagnostic(
+            "kernel_read_view_generation",
+            DiagnosticClass::Semantic,
+            "A consuming owner or semantic profile predates the source-tied read-view contract.",
+            "Author the complete occurrence under the selected supported owner/profile; supplier generation alone cannot authorize a consumer and headers must not be patched.",
         ),
         diagnostic(
             "kernel_type_contract",
@@ -7191,6 +7374,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ("publication", "requires-complete-candidate-validation".to_owned()),
                 ],
             )?);
+            read_views::records(&mut records)?;
             for descriptor in LOGICAL_PLAN_RECORD_DESCRIPTORS {
                 records.push(compact_record(
                     "change.plan-record",
@@ -7416,6 +7600,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             for (name, syntax) in [
                 ("request_local_symbol", "$NAME"),
                 ("request_local_type", "@NAME"),
+                ("request_local_read_scope", "%NAME"),
                 ("exact_owner", "DOMAIN_HEX"),
                 ("exact_package", "pkg_HEX"),
                 ("exact_revision", "rev_HEX"),
@@ -7767,6 +7952,13 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 "match_owned",
                 "borrow_owned_field",
                 "match_borrowed_owned",
+                "read_view_create",
+                "read_view_borrow",
+                "read_view_reborrow",
+                "read_view_move",
+                "read_view_drop",
+                "read_view_data_field",
+                "read_view_borrow_field",
             ] {
                 records.push(compact_record(
                     "inspection.definition-expression",
@@ -7919,6 +8111,23 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             }
         }
         RegistrySection::Type => {
+            for form in COMPACT_READ_SCOPE_FORMS {
+                records.push(compact_record(
+                    "read-scope.form",
+                    &[("name", (*form).to_owned())],
+                )?);
+            }
+            for field in COMPACT_READ_SCOPE_FORM_FIELDS {
+                records.push(compact_record(
+                    "read-scope.field",
+                    &[
+                        ("form", field.form.to_owned()),
+                        ("name", field.name.to_owned()),
+                        ("required", field.required.to_string()),
+                        ("syntax", field.syntax.to_owned()),
+                    ],
+                )?);
+            }
             for form in COMPACT_EFFECT_FORMS {
                 records.push(compact_record(
                     "effect.form",
@@ -8766,14 +8975,34 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
             "Intrinsically affine nominal storage, including empty and data-only records. Parameters have Owned or ordinary Transferable constraints. Representation construction, decomposition and reads are restricted to the exact defining module. Named and applied types retain exact declaration identity; representation-only dependency records confer no lookup authority.",
         ),
         (
+            "read-view",
+            "(read-view MODE BINDING (visibility VISIBILITY) (scope-parameter read_scope_HEX NAME) TYPE_PARAMETER... (view-field field_HEX NAME (type TYPE) (ordinary|read-reference SCOPE))...)",
+            "Distinct nominal affine descriptor category with one owner-qualified scope formal and complete ordered inline field inventory. Fields are immutable ordinary Transferable metadata or typed read references at exactly the instantiated declaration scope. Construction and every field operation require the defining module. Empty descriptors still retain an explicit selected-source custody guard; fields and phantom actuals are admitted even when unused.",
+        ),
+        (
+            "read-scope-parameter",
+            "(scope-parameter read_scope_HEX NAME)",
+            "Stable declaration- or exact contract/method/member-qualified scope formal. Named functions and inline methods retain complete ordered inventories; one nominal read-view declaration and each family binding have exactly one scope formal. A scope is not a runtime value or a grant.",
+        ),
+        (
+            "read-scope-source",
+            "(scope-source SOURCE SCOPE)",
+            "Exact borrowed source relationship. Named functions use exact ParameterIds; methods use positions. Forwarding/equality/containment must be explicit, including unused relationships. Equal scopes never merge distinct runtime source-argument anchors.",
+        ),
+        (
+            "read-view-field",
+            "(view-field field_HEX NAME (type TYPE) (ordinary))|(view-field field_HEX NAME (type TYPE) (read-reference SCOPE))",
+            "Inline field identity is qualified by the exact read-view declaration, not a new Field owner. Ordinary metadata conveys no read permission. A read reference carries an independently admitted Owned or read-view referent at the exact declaration scope, and must derive from the designated source's accessible path.",
+        ),
+        (
             "variant",
             "(variant MODE BINDING (visibility VISIBILITY) TYPE_PARAMETER... CASE...)",
             "Cases may contain an explicit payload type.",
         ),
         (
             "function",
-            "(function MODE BINDING (visibility VISIBILITY) TYPE_PARAMETER... EFFECT_PARAMETER... REQUIREMENT_PARAMETER... PARAMETER... (returns TYPE [(borrow-from PARAMETER)]) (effect pure|TASK) (body EXPR))",
-            "Explicit complete signature and structural body. Pure functions may declare a result borrowing an exact borrowed parameter; borrow-call scopes receive that result. Parameter names are lexical locals; no effect inference.",
+            "(function MODE BINDING (visibility VISIBILITY) TYPE_PARAMETER... EFFECT_PARAMETER... REQUIREMENT_PARAMETER... (scope-parameter read_scope_HEX NAME)... (scope-source PARAMETER SCOPE)... PARAMETER... (returns TYPE RESULT_RELATION) (effect pure|TASK) (body EXPR))",
+            "Explicit complete signature and structural body with one Value/ReadFrom/ViewFrom result contract, complete scope inventories and exact source relationships. Only pure named functions may return a source-tied read or view; tasks cannot return either loan form. Parameter names are lexical locals; no effect or scope inference.",
         ),
         (
             "external",
@@ -8842,23 +9071,38 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         ),
         (
             "owned-contract",
-            "(owned-contract MODE BINDING (visibility public|private) (self SELF) (type-parameter MODE SELF (constraint owned)) (type-parameter MODE ITEM (constraint owned|transferable|capture-safe transferable))... (associated-type assoc_type_HEX NAME (bound owned))... (method method_HEX NAME (parameters (TYPE unrestricted|borrow|consume)...) (returns TYPE [(borrow-from ZERO_BASED_PARAMETER_POSITION)]) [(effect pure|(task (requirement REQUIREMENT)...))])...)",
-            "Nominal pure or closed-effect task methods with exact Owned Self and ordered additional Owned or ordinary Transferable parameters. Every ordinary actual, including phantom arguments, must be complete first-order data and satisfy its exact bounds; a transferable owner is not ordinary data. Ordinary arguments are unrestricted and precede owned borrow/consume arguments. Ordinary results are immutable values; borrowed results require an owned result tied to an exact borrowed source. Mixed declarations require Graph 33.",
+            "(owned-contract MODE BINDING (visibility public|private) (self SELF) (type-parameter MODE SELF (constraint owned)) (type-parameter MODE ITEM (constraint owned|transferable|capture-safe transferable))... ASSOCIATED_MEMBER... (method method_HEX NAME (parameters (TYPE unrestricted|borrow|consume)...) (returns TYPE RESULT_RELATION) [(effect pure|(task (requirement REQUIREMENT)...))] [(scope-parameters (scope-parameter read_scope_HEX NAME)...)] [(scope-sources (scope-source ZERO_BASED_PARAMETER_POSITION SCOPE)...)])...)",
+            "Nominal pure or closed-effect task methods with exact Owned Self and ordered additional Owned or ordinary Transferable parameters. Every ordinary actual, including phantom arguments, must be complete first-order data and satisfy its exact bounds; a transferable owner is not ordinary data. Ordinary arguments are unrestricted and precede owned borrow/consume arguments. Value results are ordinary data or independently admitted owners. ReadFrom returns an Owned token from an exact borrowed source; ViewFrom returns a selected read-view handle from an exact borrowed source and explicit scope. View parameters are borrow-only. Complete scope/source/result contracts include unused methods; read-view consumers require Graph34/interface22.",
         ),
         (
             "owned-implementation",
-            "(owned-implementation MODE BINDING (visibility public|private) (type-parameter MODE PARAMETER (constraint owned|owned transferable|owned shareable|owned transferable shareable|transferable|capture-safe transferable))... (implementation-parameter implparam_HEX NAME CONTRACT SELF_TYPE [(types TYPE...)])... (contract DECLARATION) (self TYPE) [(types TYPE...)] (associated-type assoc_type_HEX TYPE)... (method method_HEX FUNCTION [(types TYPE...)] [(implementations OPERAND...)])...)",
-            "Ordered owned and ordinary transferable type parameters and prerequisites apply explicitly with exact declared category and bounds, including unused arguments. Every method maps to an exact visible graph function with identical substituted signature, use modes, borrowed provenance, callable kind and closed effect row. Mappings forward direct same-scheme prerequisites or select parameter-free concrete witness trees. Complete applications retain every nested witness identity and grant no effects; mixed declarations require Graph 33.",
+            "(owned-implementation MODE BINDING (visibility public|private) (type-parameter MODE PARAMETER (constraint owned|owned transferable|owned shareable|owned transferable shareable|transferable|capture-safe transferable))... (implementation-parameter implparam_HEX NAME CONTRACT SELF_TYPE [(types TYPE...)])... (contract DECLARATION) (self TYPE) [(types TYPE...)] ASSOCIATED_BINDING... (method method_HEX FUNCTION [(types TYPE...)] [(implementations OPERAND...)] [(scopes SCOPE...)])...)",
+            "Ordered owned and ordinary transferable type parameters and prerequisites apply explicitly with exact declared category and bounds, including unused arguments. Every method maps to an exact visible graph function with identical substituted signature, use modes, scope/source/result relationships, callable kind and closed effect row. Mappings forward direct same-scheme prerequisites or select parameter-free concrete witness trees. Complete applications retain every nested witness identity and explicit scope argument, including unused mappings; they grant no effects, read paths or lifetime widening.",
         ),
         (
             "associated-member",
-            "(associated-type assoc_type_HEX NAME (bound owned))",
-            "Complete authored-order contract member inventory with distinct exact IDs and names and explicit Owned bounds. Each signature occurrence requires its exact contract owner and Graph33/interface21 profile. No Transferable, Shareable or capture bound is implied.",
+            "(associated-type assoc_type_HEX NAME (bound owned))|(associated-type assoc_type_HEX NAME (read-view-family (scope-parameter read_scope_HEX NAME)))",
+            "Complete authored-order contract member inventory with distinct exact IDs and names. Owned has arity zero; ReadViewFamily has exactly one owner-qualified scope formal. Member kind defines arity. Every signature occurrence retains exact contract/member identity; read-view consumers require the selected Graph34/interface22 profile. Neither kind implies transfer, sharing or capture rights.",
         ),
         (
             "associated-binding",
-            "(associated-type assoc_type_HEX TYPE)",
-            "Complete implementation binding inventory, including unused members. Bindings retain intent order and lower in strict member-ID order without duplicate erasure. Each projection-free RHS independently proves Owned in the exact implementation parameter context; the selected Graph33/interface21 closure checks contract and member correspondence.",
+            "(associated-type assoc_type_HEX TYPE)|(associated-type assoc_type_HEX (read-view-family (scope-parameter read_scope_HEX NAME) TYPE))",
+            "Complete implementation binding inventory, including unused members. Bindings retain intent order and lower in strict member-ID order without duplicate erasure. An Owned RHS independently proves Owned; a ReadViewFamily RHS is a nominal read-view application using exactly its binding scope formal and admitted implementation type formals. Every RHS is projection-free and matches the exact contract/member kind.",
+        ),
+        (
+            "read-view-application",
+            "(read-view-application DECLARATION (types TYPE...) SCOPE)",
+            "Exact nominal read-view declaration, complete ordered type actuals and one static scope actual. Includes phantom actuals. Not ordinary data or Owned; no container, capture, Transferable or first-class callable permission is inferred.",
+        ),
+        (
+            "associated-read-view-member",
+            "(associated-read-view-member CONTRACT assoc_type_HEX SCOPE)",
+            "Arity-one member application in the exact declaring contract signature. Keeps member kind, exact contract/member identity and explicit scope actual; it cannot select an Owned arity-zero member or infer a witness.",
+        ),
+        (
+            "associated-read-view-projection",
+            "(associated-read-view-projection FUNCTION implparam_HEX CONTRACT assoc_type_HEX SCOPE)",
+            "Arity-one application through an exact lexical witness, package-qualified contract/member and scope actual. Retains complete selection/type/prerequisite identity even for phantom actuals. Equal Self/output/scope does not authorize another witness; no external scope or inference.",
         ),
         (
             "associated-contract-member",
@@ -8869,6 +9113,26 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
             "associated-witness-projection",
             "(associated-witness-projection SCOPE implparam_HEX CONTRACT assoc_type_HEX)",
             "Exact function or OwnedImplementation lexical scope, witness parameter, package-qualified contract/member and actual Graph33 owner/interface21 profile. Equal Self types or outputs confer no witness authority; external projections are forbidden. Complete selected bindings and prerequisites are validated; Owned implies no transfer, sharing or capture rights.",
+        ),
+        (
+            "callable-result",
+            "(returns TYPE (value))|(returns TYPE (read-from SOURCE))|(returns TYPE (view-from SOURCE SCOPE))",
+            "One authoritative result contract. Named functions select an exact ParameterId; inline methods select a zero-based parameter position. ReadFrom returns an Owned read token; ViewFrom moves an affine descriptor handle at the explicit scope. Both name exactly one borrowed input and require a pure named callable. Value cannot carry a view or loan; runtime invocation seals never appear in canonical meaning.",
+        ),
+        (
+            "callable-result-notation",
+            "result=TYPE [result-kind=value|read-from|view-from] [result-source=SOURCE] [result-scope=%SCOPE]",
+            "Omitted compact result-kind normalizes to Value and forbids source/scope fields; ReadFrom requires source and forbids scope; ViewFrom requires both. Canonical native rendering always emits value/read-from/view-from. Native borrow-from is only shorthand normalized to the same ReadFrom relation; no result_borrow or competing canonical field survives.",
+        ),
+        (
+            "read-scope-parameter-actual",
+            "(read-scope (declaration DECLARATION|contract-method CONTRACT METHOD|associated-member CONTRACT MEMBER|associated-binding IMPLEMENTATION MEMBER) read_scope_HEX)",
+            "Exact owner-qualified binder and scope parameter; an equal local scope ID in another declaration does not bind this actual. Complete binder inventories and source relationships are admitted even when unused.",
+        ),
+        (
+            "read-scope-lexical-actual",
+            "(lexical-read-scope FUNCTION BINDING)",
+            "Exact callable and lexical loan binding. Forward only an admitted scope or explicitly proved containment; never infer widening, a common root or a union. Fresh invocation and lease identities are runtime evidence, not canonical scope actuals.",
         ),
         (
             "implementation-parameter",
@@ -8902,7 +9166,7 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         ),
         (
             "types",
-            "Unit|Bool|I64|F64|Text|Bytes|StaticText|Secret|ByteBuffer|OwnedI64Cell|NAME|(NAME TYPE...)|(list TYPE)|(map TYPE TYPE)|(result TYPE TYPE)|(option TYPE)|(stream TYPE)|(record (NAME TYPE)...)|(owned-product (field NAME TYPE)...)|(owned-choice (case NAME TYPE)...)|(owned-sequence TYPE)|(function (TYPE...) TYPE)|(task-function (TYPE...) TYPE ROW)|(resource INTERFACE)|(parameter-type EXACT_PARAMETER)|(associated-contract-member CONTRACT assoc_type_HEX)|(associated-witness-projection SCOPE implparam_HEX CONTRACT assoc_type_HEX)",
+            "Unit|Bool|I64|F64|Text|Bytes|StaticText|Secret|ByteBuffer|OwnedI64Cell|NAME|(NAME TYPE...)|(list TYPE)|(map TYPE TYPE)|(result TYPE TYPE)|(option TYPE)|(stream TYPE)|(record (NAME TYPE)...)|(owned-product (field NAME TYPE)...)|(owned-choice (case NAME TYPE)...)|(owned-sequence TYPE)|(function (TYPE...) TYPE)|(task-function (TYPE...) TYPE ROW)|(resource INTERFACE)|(parameter-type EXACT_PARAMETER)|(associated-contract-member CONTRACT assoc_type_HEX)|(associated-witness-projection SCOPE implparam_HEX CONTRACT assoc_type_HEX)|(read-view-application DECLARATION (types TYPE...) SCOPE)|(associated-read-view-member CONTRACT assoc_type_HEX SCOPE)|(associated-read-view-projection FUNCTION implparam_HEX CONTRACT assoc_type_HEX SCOPE)",
             "Inline composition; (type-alias NAME TYPE) is scoped notation and is admitted even when unused.",
         ),
         (
@@ -9026,8 +9290,28 @@ fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String
         ),
         (
             "applications",
-            "[(types TYPE...)] [(effects ROW...)] [(requirements REQUIREMENT...)]",
-            "call and function-value only; at most one clause of each kind in this order before value arguments; omission and explicit empty clauses both mean an empty vector without inference; duplicate, unknown, out-of-order or misplaced clauses reject",
+            "[(types TYPE...)] [(effects ROW...)] [(requirements REQUIREMENT...)] [(implementations OPERAND...)] [(scopes SCOPE...)]",
+            "call, implementation-call and function-value; at most one clause of each kind in this order before value arguments; omission and explicit empty clauses both mean an empty vector without inference; duplicate, unknown, out-of-order or misplaced clauses reject",
+        ),
+        (
+            "method-scope-application",
+            "(method-call OPERAND CONTRACT method_HEX [(scopes SCOPE...)] EXPR...)",
+            "Method calls accept only the optional scopes clause, once before value arguments. Mappings accept types, implementations, scopes in that exact order, each once. Every ordered scope actual, including unused formals, is checked under exact source/caller binders; no scope inference or runtime lease identity enters the application.",
+        ),
+        (
+            "read-view-construction",
+            "(view-create DECLARATION (types TYPE...) (scope SCOPE) (source LOCAL) (field field_HEX EXPR)...)",
+            "Defining-module authority and one exact live selected source are explicit even for zero-field descriptors. Protect that source before evaluating complete fields in authored order. Ordinary metadata is immutable Transferable data; every typed reference must derive from the selected source's admitted readable path at the exact scope. Matching types, scopes or allocation do not prove source lineage.",
+        ),
+        (
+            "read-view-handles",
+            "view-borrow|view-reborrow|view-move|view-drop",
+            "A local view handle has one cleanup owner. Borrow mints a scoped read lease; explicit reborrow creates an independently accounted affine handle at the same or proved narrower source scope. Move and drop apply only to owning local handles and do not consume the Owned source. Derived readers retain immutable backing after a local handle is moved or dropped. Implicit copy, consume-mode view parameters, capture and ordinary storage reject.",
+        ),
+        (
+            "read-view-field-access",
+            "view-data-field|borrow-view-field",
+            "Exact declaration-qualified inline field identity and defining-module authority are rechecked under a short live access guard. Ordinary data exits with value admission; typed references mint sealed Owned or view read leases before the guard closes. Release storage locks before BODY or any helper. Custody-only source/ancestor guards grant no field or ReadFrom path.",
         ),
         (
             "type-application",
@@ -9289,6 +9573,10 @@ fn validate_deployment_schema_inventory() -> Result<(), String> {
 fn validate_compact_form_grammar() -> Result<(), String> {
     unique(COMPACT_TYPE_FORMS.iter().copied(), "compact type form")?;
     unique(
+        COMPACT_READ_SCOPE_FORMS.iter().copied(),
+        "compact read scope form",
+    )?;
+    unique(
         COMPACT_EXPRESSION_FORMS.iter().copied(),
         "compact expression form",
     )?;
@@ -9311,6 +9599,11 @@ fn validate_compact_form_grammar() -> Result<(), String> {
     for (label, forms, fields) in [
         ("type", COMPACT_TYPE_FORMS, COMPACT_TYPE_FORM_FIELDS),
         ("effect", COMPACT_EFFECT_FORMS, COMPACT_EFFECT_FORM_FIELDS),
+        (
+            "read-scope",
+            COMPACT_READ_SCOPE_FORMS,
+            COMPACT_READ_SCOPE_FORM_FIELDS,
+        ),
         (
             "expression",
             COMPACT_EXPRESSION_FORMS,
@@ -9486,8 +9779,12 @@ fn validate_compact_change_inventory(
             ));
         }
         let optional = [
-            ("create.function", "borrow-from"),
-            ("set.function-contract", "borrow-from"),
+            ("create.function", "result-kind"),
+            ("create.function", "result-source"),
+            ("create.function", "result-scope"),
+            ("set.function-contract", "result-kind"),
+            ("set.function-contract", "result-source"),
+            ("set.function-contract", "result-scope"),
             ("reference.package", "source"),
             ("reference.package", "package"),
             ("reference.package", "package-revision"),
@@ -9517,8 +9814,12 @@ fn validate_compact_change_inventory(
         }
     }
     for (operation, name) in [
-        ("create.function", "borrow-from"),
-        ("set.function-contract", "borrow-from"),
+        ("create.function", "result-kind"),
+        ("create.function", "result-source"),
+        ("create.function", "result-scope"),
+        ("set.function-contract", "result-kind"),
+        ("set.function-contract", "result-source"),
+        ("set.function-contract", "result-scope"),
         ("add.case", "payload"),
         ("set.case-payload", "payload"),
         ("add.parameter", "function"),
@@ -9703,9 +10004,9 @@ mod tests {
             .expect("definition projection contract");
         assert_eq!(
             contract.identity,
-            "lkjscript-function-definition-projection-21"
+            "lkjscript-function-definition-projection-22"
         );
-        assert_eq!(contract.version, 21);
+        assert_eq!(contract.version, 22);
         assert_eq!(
             contract_descriptors()
                 .iter()

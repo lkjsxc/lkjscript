@@ -32,6 +32,7 @@ fn fixture(
             self_type: storage_type,
             type_arguments: vec![],
             methods: vec![OwnedMethodImplementation {
+                read_scope_arguments: vec![],
                 method: MethodId::migrate(seed, 0),
                 function: reference,
                 type_arguments: vec![],
@@ -47,8 +48,12 @@ fn fixture(
                 id: MethodId::migrate(seed, 0),
                 name: Name::new("seven").unwrap(),
                 parameters: vec![],
-                result: ty,
-                result_borrow: None,
+                result: CallableResult {
+                    ty,
+                    relation: ResultRelation::Value,
+                },
+                read_scope_parameters: vec![],
+                read_scope_sources: vec![],
                 effect: FunctionEffect::Pure,
             }],
             associated_types: Vec::new(),

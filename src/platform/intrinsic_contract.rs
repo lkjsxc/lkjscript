@@ -642,8 +642,16 @@ fn kernel_type<R: ExpressionRead + ?Sized>(
     let object = read
         .type_object(digest)?
         .ok_or_else(|| signature_error("external type is missing"))?;
+    if depth == 0 {
+        reject_kernel_view_escape(read, digest, work, maximum)?;
+    }
     let mut child = |digest| kernel_type(read, digest, depth + 1, work, maximum);
     Ok(match &object.form {
+        TypeForm::ReadViewApplied { .. }
+        | TypeForm::AssociatedReadViewMember { .. }
+        | TypeForm::AssociatedReadViewProjection { .. } => {
+            return Err(signature_error("external types cannot contain read views"));
+        }
         TypeForm::AssociatedContractMember { .. }
         | TypeForm::AssociatedWitnessProjection { .. } => {
             return Err(crate::platform::kernel::owned_associated_wire::unsupported_semantics());
@@ -706,6 +714,222 @@ fn kernel_type<R: ExpressionRead + ?Sized>(
             Box::new(child(*result)?),
         ),
     })
+}
+
+/// Preserve the intrinsic's existing category contract while refusing a view in
+/// its complete exact closure, including opaque nominal fields and inactive cases.
+/// The negative proof spends the caller's cumulative work and grants no layout or
+/// ordinary-data permission to the intrinsic.
+fn reject_kernel_view_escape<R: ExpressionRead + ?Sized>(
+    read: &R,
+    ty: TypeObjectDigest,
+    work: &mut usize,
+    maximum: usize,
+) -> Result<(), Diagnostic> {
+    use crate::platform::kernel::owned_associated::{
+        AssociatedAdmissionLimits, OwnedAssociatedAdmission, read_view_admission,
+    };
+    let remaining = maximum.checked_sub(*work).ok_or_else(|| {
+        Diagnostic::new(
+            DiagnosticClass::Resource,
+            "kernel_full_work",
+            "intrinsic signature exhausted canonical validation visits",
+        )
+    })?;
+    let admission = OwnedAssociatedAdmission::with_limits(AssociatedAdmissionLimits {
+        maximum_steps: remaining,
+        ..AssociatedAdmissionLimits::default()
+    });
+    let result = read_view_admission::contains(read, ty, &admission);
+    *work = work
+        .checked_add(admission.work().0)
+        .filter(|count| *count <= maximum)
+        .ok_or_else(|| {
+            Diagnostic::new(
+                DiagnosticClass::Resource,
+                "kernel_full_work",
+                "intrinsic signature exhausted canonical validation visits",
+            )
+        })?;
+    if result? {
+        return Err(signature_error("external types cannot contain read views"));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod read_view_boundary_tests {
+    use super::*;
+    use crate::platform::semantic_id::{
+        AssociatedTypeMemberId, CaseId, FieldId, ImplementationParameterId, ModuleId,
+        ReadScopeParameterId,
+    };
+    use std::collections::BTreeMap;
+
+    const SEED: &[u8] = b"intrinsic-view-negative-boundary";
+    struct Read {
+        types: TypeObjectInterner,
+        owners: BTreeMap<OwnerKey, OwnerRecord>,
+    }
+
+    impl ExpressionRead for Read {
+        fn package_id(&self) -> PackageId {
+            PackageId::migrate(SEED, 0)
+        }
+        fn owner(&self, key: OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic> {
+            Ok(self.owners.get(&key).cloned())
+        }
+        fn type_object(&self, digest: TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic> {
+            Ok(self.types.get(digest).cloned())
+        }
+        fn package_interface_owner(
+            &self,
+            _: PackageId,
+            _: OwnerKey,
+        ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+            Ok(None)
+        }
+        fn has_dependency(&self, _: PackageId) -> Result<bool, Diagnostic> {
+            Ok(false)
+        }
+    }
+
+    fn declaration(ordinal: u64) -> DeclarationReference {
+        DeclarationReference {
+            package: PackageId::migrate(SEED, 0),
+            declaration: DeclarationId::migrate(SEED, ordinal),
+        }
+    }
+
+    #[test]
+    fn canonical_intrinsic_views_reject_direct_phantom_and_hidden_inactive_closures() {
+        let mut read = Read {
+            types: TypeObjectInterner::default(),
+            owners: BTreeMap::new(),
+        };
+        let unit = read.types.intern(TypeForm::Unit).unwrap();
+        let scope = ReadScopeArgument::Parameter(ReadScopeReference {
+            binder: ReadScopeBinder::Declaration(declaration(0)),
+            parameter: ReadScopeParameterId::migrate(SEED, 0),
+        });
+        let member = AssociatedTypeMemberId::migrate(SEED, 0);
+        let view = read
+            .types
+            .intern(TypeForm::ReadViewApplied {
+                declaration: declaration(0),
+                arguments: vec![],
+                read_scope: scope,
+            })
+            .unwrap();
+        let associated = read
+            .types
+            .intern(TypeForm::AssociatedReadViewMember {
+                contract: declaration(0),
+                member,
+                read_scope: scope,
+            })
+            .unwrap();
+        let projected = read
+            .types
+            .intern(TypeForm::AssociatedReadViewProjection {
+                scope: declaration(0),
+                parameter: ImplementationParameterId::migrate(SEED, 0),
+                contract: declaration(0),
+                member,
+                read_scope: scope,
+            })
+            .unwrap();
+        let nested = read.types.intern(TypeForm::List { item: view }).unwrap();
+        let field = FieldId::migrate(SEED, 0);
+        read.owners.insert(
+            OwnerKey::Field(field),
+            OwnerRecord::Field(FieldRecord {
+                header: OwnerHeader::new(OwnerKey::Field(field), OwnerKind::Field),
+                declaration: declaration(1).declaration,
+                name: Name::new("hidden").unwrap(),
+                ty: nested,
+            }),
+        );
+        read.owners.insert(
+            OwnerKey::Declaration(declaration(1).declaration),
+            OwnerRecord::Declaration(DeclarationRecord {
+                header: OwnerHeader::new(
+                    OwnerKey::Declaration(declaration(1).declaration),
+                    OwnerKind::Record,
+                ),
+                module: ModuleId::migrate(SEED, 0),
+                name: Name::new("Hidden").unwrap(),
+                visibility: DeclarationVisibility::Private,
+                payload: DeclarationPayload::Record {
+                    type_parameters: vec![],
+                    fields: vec![field],
+                },
+            }),
+        );
+        let hidden = read
+            .types
+            .intern(TypeForm::Named {
+                declaration: declaration(1),
+            })
+            .unwrap();
+        let case = CaseId::migrate(SEED, 0);
+        read.owners.insert(
+            OwnerKey::Case(case),
+            OwnerRecord::Case(CaseRecord {
+                header: OwnerHeader::new(OwnerKey::Case(case), OwnerKind::Case),
+                declaration: declaration(2).declaration,
+                name: Name::new("unused").unwrap(),
+                payload: Some(view),
+            }),
+        );
+        read.owners.insert(
+            OwnerKey::Declaration(declaration(2).declaration),
+            OwnerRecord::Declaration(DeclarationRecord {
+                header: OwnerHeader::new(
+                    OwnerKey::Declaration(declaration(2).declaration),
+                    OwnerKind::Variant,
+                ),
+                module: ModuleId::migrate(SEED, 0),
+                name: Name::new("Choice").unwrap(),
+                visibility: DeclarationVisibility::Private,
+                payload: DeclarationPayload::Variant {
+                    type_parameters: vec![],
+                    cases: vec![case],
+                },
+            }),
+        );
+        let inactive = read
+            .types
+            .intern(TypeForm::Named {
+                declaration: declaration(2),
+            })
+            .unwrap();
+        let phantom = read
+            .types
+            .intern(TypeForm::Applied {
+                declaration: declaration(1),
+                arguments: vec![view],
+            })
+            .unwrap();
+        for root in [
+            view, associated, projected, nested, hidden, inactive, phantom,
+        ] {
+            let mut work = 0;
+            let error = kernel_type(&read, root, 0, &mut work, contract::MAXIMUM_VALIDATION_WORK)
+                .unwrap_err();
+            assert_eq!(error.class, DiagnosticClass::Semantic);
+            assert_eq!(error.code, "intrinsic_signature");
+            assert!(error.message.contains("read views"));
+            assert!(work > 0);
+        }
+        let mut work = 0;
+        assert_eq!(
+            kernel_type(&read, unit, 0, &mut work, contract::MAXIMUM_VALIDATION_WORK).unwrap(),
+            IntrinsicType::Unit
+        );
+        let error = kernel_type(&read, unit, 0, &mut 0, 0).unwrap_err();
+        assert_eq!(error.class, DiagnosticClass::Resource);
+    }
 }
 
 #[cfg(test)]

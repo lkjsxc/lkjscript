@@ -97,6 +97,7 @@ impl<'a, 'e, R: ExpressionRead + ?Sized> EffectAppliedTypes<'a, 'e, R> {
 /// `read`. This is substitution input, not a certificate of callable admission.
 pub(crate) struct AssociatedTypeEnvironment<'a> {
     pub ordinary: &'a BTreeMap<TypeParameterId, TypeObjectDigest>,
+    pub scopes: &'a BTreeMap<ReadScopeReference, ReadScopeArgument>,
     pub source: owned_associated::AssociatedTypeContext,
     pub caller: owned_associated::AssociatedTypeContext,
     pub consumer_generation: u16,
@@ -226,8 +227,10 @@ impl<'a, 'e, R: ExpressionRead + ?Sized> WitnessAppliedTypes<'a, 'e, R> {
         self.derived.reserve_type(&object)?;
         let result = if object.form.is_associated() {
             let selection = match &object.form {
-                TypeForm::AssociatedContractMember { .. } => self.environment.contract_selection,
-                TypeForm::AssociatedWitnessProjection { parameter, .. } => self
+                TypeForm::AssociatedContractMember { .. }
+                | TypeForm::AssociatedReadViewMember { .. } => self.environment.contract_selection,
+                TypeForm::AssociatedWitnessProjection { parameter, .. }
+                | TypeForm::AssociatedReadViewProjection { parameter, .. } => self
                     .environment
                     .implementations
                     .get(parameter)
@@ -270,6 +273,55 @@ impl<'a, 'e, R: ExpressionRead + ?Sized> WitnessAppliedTypes<'a, 'e, R> {
                     self.derived.substitute(template, &bindings, depth + 1)?
                 }
                 owned_associated::AssociatedResolution::Lexical(form) => self.intern(form)?,
+                owned_associated::AssociatedResolution::ReadViewBinding {
+                    template,
+                    bindings,
+                    scope_parameter,
+                    scope,
+                } => {
+                    let scope = self.substitute_scope(scope)?;
+                    let mut scopes = BTreeMap::new();
+                    self.admission
+                        .get()
+                        .reserve::<(ReadScopeReference, ReadScopeArgument)>(1)?;
+                    scopes.insert(scope_parameter, scope);
+                    let mut applied = ScopedAppliedTypes::new(
+                        &self.derived,
+                        &bindings,
+                        &scopes,
+                        self.admission.get(),
+                    );
+                    let result = applied.substitute(template, depth + 1)?;
+                    let types = applied.into_types();
+                    for (digest, object) in types {
+                        self.derived.types.borrow_mut().insert(digest, object);
+                    }
+                    result
+                }
+                owned_associated::AssociatedResolution::ReadViewLexical { form, scope } => {
+                    let scope = self.substitute_scope(scope)?;
+                    let form = match form {
+                        TypeForm::AssociatedReadViewProjection {
+                            scope: owner,
+                            parameter,
+                            contract,
+                            member,
+                            ..
+                        } => TypeForm::AssociatedReadViewProjection {
+                            scope: owner,
+                            parameter,
+                            contract,
+                            member,
+                            read_scope: scope,
+                        },
+                        _ => {
+                            return Err(owned_associated::read_view_admission::reject(
+                                "invalid selected view projection",
+                            ));
+                        }
+                    };
+                    self.intern(form)?
+                }
                 owned_associated::AssociatedResolution::DefinitionTemplate { template, .. } => {
                     // The binding already belongs to the defining implementation.
                     // Contract Self/argument substitutions must not capture it.
@@ -278,7 +330,10 @@ impl<'a, 'e, R: ExpressionRead + ?Sized> WitnessAppliedTypes<'a, 'e, R> {
             }
         } else {
             let mut child = |ty| self.substitute(ty, depth + 1);
-            let form = map_children(object.form, &mut child)?;
+            let mut form = map_children(object.form, &mut child)?;
+            if let TypeForm::ReadViewApplied { read_scope, .. } = &mut form {
+                *read_scope = self.substitute_scope(*read_scope)?;
+            }
             self.intern(form)?
         };
         self.resolved.insert(ty, result);
@@ -290,6 +345,85 @@ impl<'a, 'e, R: ExpressionRead + ?Sized> WitnessAppliedTypes<'a, 'e, R> {
         let object = TypeObject::new(form)?;
         let digest = encode_type_object(&object)?.0;
         self.derived.types.borrow_mut().insert(digest, object);
+        Ok(digest)
+    }
+
+    pub(crate) fn substitute_scope(
+        &self,
+        scope: ReadScopeArgument,
+    ) -> Result<ReadScopeArgument, Diagnostic> {
+        self.admission.get().step(self.derived.read)?;
+        owned_associated::read_view_admission::substitute_scope(scope, self.environment.scopes)
+    }
+}
+
+/// Projection-free nominal/binding templates substitute types and scopes in one
+/// traversal. Caller replacements are terminal leaves, never revisited templates.
+pub(crate) struct ScopedAppliedTypes<'a, R: ?Sized> {
+    derived: AppliedTypes<'a, R>,
+    ordinary: &'a BTreeMap<TypeParameterId, TypeObjectDigest>,
+    scopes: &'a BTreeMap<ReadScopeReference, ReadScopeArgument>,
+    admission: &'a owned_associated::OwnedAssociatedAdmission,
+}
+
+impl<'a, R: ExpressionRead + ?Sized> ScopedAppliedTypes<'a, R> {
+    pub(crate) fn new(
+        read: &'a R,
+        ordinary: &'a BTreeMap<TypeParameterId, TypeObjectDigest>,
+        scopes: &'a BTreeMap<ReadScopeReference, ReadScopeArgument>,
+        admission: &'a owned_associated::OwnedAssociatedAdmission,
+    ) -> Self {
+        Self {
+            derived: AppliedTypes::new(read),
+            ordinary,
+            scopes,
+            admission,
+        }
+    }
+    pub(crate) fn into_types(self) -> BTreeMap<TypeObjectDigest, TypeObject> {
+        self.derived.into_types()
+    }
+    pub(crate) fn substitute(
+        &mut self,
+        ty: TypeObjectDigest,
+        depth: usize,
+    ) -> Result<TypeObjectDigest, Diagnostic> {
+        self.admission.step(self.derived.read)?;
+        if depth > contract::MAXIMUM_TYPE_DEPTH {
+            return Err(storage_exhausted());
+        }
+        if let Some(result) = self.derived.resolved.get(&ty) {
+            return Ok(*result);
+        }
+        let object = self.derived.type_object(ty)?.ok_or_else(|| {
+            owned_associated::read_view_admission::reject("missing scope/type template")
+        })?;
+        if let TypeForm::TypeParameter { parameter } = object.form {
+            return self.ordinary.get(&parameter).copied().ok_or_else(|| {
+                owned_associated::read_view_admission::reject("unbound exact view type parameter")
+            });
+        }
+        if object.form.is_associated() {
+            return Err(owned_associated::read_view_admission::reject(
+                "stored view template contains an associated projection",
+            ));
+        }
+        self.derived.reserve_type(&object)?;
+        self.admission
+            .reserve::<(TypeObjectDigest, TypeObjectDigest)>(1)?;
+        self.admission
+            .reserve::<(TypeObjectDigest, TypeObject)>(1)?;
+        self.admission
+            .reserve::<TypeObjectDigest>(object.child_type_count())?;
+        let mut form = map_children(object.form, &mut |child| self.substitute(child, depth + 1))?;
+        if let TypeForm::ReadViewApplied { read_scope, .. } = &mut form {
+            *read_scope =
+                owned_associated::read_view_admission::substitute_scope(*read_scope, self.scopes)?;
+        }
+        let object = TypeObject::new(form)?;
+        let digest = encode_type_object(&object)?.0;
+        self.derived.types.borrow_mut().insert(digest, object);
+        self.derived.resolved.insert(ty, digest);
         Ok(digest)
     }
 }
@@ -671,6 +805,18 @@ fn map_children(
                 .map(&mut *child)
                 .collect::<Result<_, _>>()?,
         },
+        TypeForm::ReadViewApplied {
+            declaration,
+            arguments,
+            read_scope,
+        } => TypeForm::ReadViewApplied {
+            declaration,
+            arguments: arguments
+                .into_iter()
+                .map(&mut *child)
+                .collect::<Result<_, _>>()?,
+            read_scope,
+        },
         TypeForm::List { item } => TypeForm::List { item: child(item)? },
         TypeForm::OwnedSequence { item } => TypeForm::OwnedSequence { item: child(item)? },
         TypeForm::Map { key, value } => TypeForm::Map {
@@ -703,7 +849,9 @@ fn map_children(
         },
         TypeForm::Stream { item } => TypeForm::Stream { item: child(item)? },
         TypeForm::AssociatedContractMember { .. }
-        | TypeForm::AssociatedWitnessProjection { .. } => {
+        | TypeForm::AssociatedWitnessProjection { .. }
+        | TypeForm::AssociatedReadViewMember { .. }
+        | TypeForm::AssociatedReadViewProjection { .. } => {
             return Err(super::owned_associated_wire::unsupported_semantics());
         }
         TypeForm::TypeParameter { .. } => {

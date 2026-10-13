@@ -1,4 +1,4 @@
-//! Implementation-disjoint evaluator over canonical Graph 14 owner and expression records.
+//! Implementation-disjoint evaluator over canonical owner and expression records.
 
 use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, NormalizedTransactionCompletion,
@@ -18,11 +18,12 @@ use crate::platform::diagnostic::DiagnosticClass;
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::json::JsonLimits;
 use crate::platform::kernel::{
-    BindingKind, BlobObjectDigest, CaseReference, DeclarationPayload, DeclarationReference,
-    EffectParameterReference, EffectRow, ExpressionOperation, FieldReference, FieldSelector,
-    FunctionDeclaration, FunctionEffect, ImplementationName, KernelSnapshot, LocalValueReference,
-    Name, OperationReference, OwnerKey, OwnerRecord, PackageId, ParameterRecord, ParameterUse,
-    PortImplementation, RequirementReference, SemanticStateDigest, TextValue,
+    BindingKind, BlobObjectDigest, CallableResult, CaseReference, DeclarationPayload,
+    DeclarationReference, EffectParameterReference, EffectRow, ExpressionOperation, FieldReference,
+    FieldSelector, FunctionDeclaration, FunctionEffect, ImplementationName, KernelSnapshot,
+    LocalValueReference, Name, OperationReference, OwnerKey, OwnerRecord, PackageId,
+    ParameterRecord, ParameterUse, PortImplementation, ReadScopeArgument, ReadScopeParameter,
+    ReadScopeSource, RequirementReference, ResultRelation, SemanticStateDigest, TextValue,
     TransactionOutcomeContract, TypeForm, TypeObjectDigest,
 };
 use crate::platform::kernel::{RequirementOperand, RequirementParameterReference};
@@ -47,6 +48,10 @@ mod checked_intrinsics;
 #[cfg(test)]
 #[path = "reference_implementation_prerequisite_tests.rs"]
 mod prerequisite_tests;
+#[path = "reference_read_view_admission.rs"]
+pub(super) mod read_view_admission;
+#[path = "reference_read_view_runtime.rs"]
+mod read_views;
 #[path = "reference_parallel.rs"]
 mod structured;
 use associated_runtime::{CanonicalApplication, CanonicalInvocation, CanonicalSelection};
@@ -291,8 +296,9 @@ pub struct ReferenceSignature {
     type_parameters: Vec<TypeParameterId>,
     type_parameter_constraints: Vec<crate::platform::kernel::TypeParameterConstraints>,
     parameters: Vec<ParameterRecord>,
-    result: TypeObjectDigest,
-    result_borrow: Option<ParameterId>,
+    result: CallableResult<ParameterId>,
+    read_scope_parameters: Vec<ReadScopeParameter>,
+    read_scope_sources: Vec<ReadScopeSource<ParameterId>>,
     pure: bool,
 }
 
@@ -592,12 +598,14 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
             lexical_loan_scopes: 0,
             borrow_result_sources: Vec::new(),
             borrow_result_demand: false,
+            read_source_demand: Vec::new(),
             local_counts: Vec::new(),
             next_transaction: 0,
             transactions: BTreeMap::new(),
             calls_by_requirement: BTreeMap::new(),
             implementation_scopes: Vec::new(),
             associated_applications: Vec::new(),
+            read_scope_frames: Vec::new(),
             associated_work: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             type_occurrence: None,
             type_scopes: Vec::new(),
@@ -719,6 +727,7 @@ struct ReferenceApplication<'a> {
     effects: &'a [EffectRow],
     requirements: &'a [RequirementOperand],
     implementations: &'a [AppliedReferenceImplementation],
+    scopes: &'a [ReadScopeArgument],
 }
 
 // An Invoke evaluator alone supplies this route. The seal is a local input to
@@ -751,6 +760,7 @@ struct ReferenceState<'a> {
     lexical_loan_scopes: usize,
     borrow_result_sources: Vec<Option<ParameterId>>,
     borrow_result_demand: bool,
+    read_source_demand: Vec<LocalValueReference>,
     local_counts: Vec<usize>,
     next_transaction: u64,
     transactions: BTreeMap<RequirementReference, ReferenceTransaction>,
@@ -764,6 +774,7 @@ struct ReferenceState<'a> {
     )>,
     type_scopes: Vec<BTreeMap<TypeParameterId, TypeObjectDigest>>,
     associated_applications: Vec<Option<CanonicalApplication>>,
+    read_scope_frames: Vec<read_views::ScopeFrame>,
     associated_work: Arc<std::sync::atomic::AtomicU64>,
     type_occurrence: Option<(PackageId, OwnerKey)>,
     effect_scopes: Vec<super::reference_effects::Bindings>,
@@ -807,6 +818,7 @@ struct AdmittedGraphCall {
     requirements: super::reference_effects::RequirementBindings,
     allowance: Option<EffectRow>,
     arguments: Vec<CheckedValue>,
+    read_scopes: read_views::ScopeFrame,
 }
 
 impl ReferenceState<'_> {
@@ -1176,7 +1188,7 @@ impl ReferenceState<'_> {
             .parameters
             .iter_mut()
             .map(|p| &mut p.ty)
-            .chain(std::iter::once(&mut signature.result))
+            .chain(std::iter::once(&mut signature.result.ty))
         {
             *ty = self
                 .schema
@@ -1768,14 +1780,50 @@ impl ReferenceState<'_> {
                 "loan scope count overflowed",
             )
         })?;
+        let owning_view =
+            matches!(value.raw(), NormalizedValue::ReadView(_)) && !value.is_view_borrowed();
         if value.raw().memory_is_borrowed() {
             value.set_provenance(parent.provenance().ok_or_else(|| {
                 reference_type_error("borrow parent has no canonical local provenance")
             })?);
         }
+        // New view bodies may construct a persistent descriptor from this
+        // lexical descendant before the old return-packet path runs. Make the
+        // actual ancestor loan available to that complete custody flattening.
+        // Historical scope-blind bodies keep their original packet protocol.
+        let view_body = self
+            .read_scope_frames
+            .last()
+            .and_then(read_views::ScopeFrame::declaration)
+            .is_some_and(|callable| {
+                self.schema
+                    .read_view_proof
+                    .as_ref()
+                    .is_some_and(|proof| proof.admits_function_flow(callable))
+            });
+        if view_body && !owning_view {
+            let retained = if matches!(parent.raw(), NormalizedValue::ReadView(_)) {
+                self.borrow_view_argument(parent.provenance().unwrap_or(local), &parent)?
+            } else {
+                parent.duplicate(ParameterUse::Borrow)?
+            };
+            self.charge_allocation(CheckedValue::parent_storage_bytes() as u64)?;
+            value.reserve_parent(&retained)?;
+            value.retain_parent(|| Ok(retained))?;
+        }
+        let read_context = self.begin_lexical_read_context(binding)?;
         locals.insert(local, value);
+        // A successfully adopted affine descriptor already retains all actual
+        // source custody. The lexical lifetime flag supplies validity only;
+        // this temporary caller guard must not survive the descriptor's drop.
+        let parent = if owning_view {
+            drop(parent);
+            None
+        } else {
+            Some(parent)
+        };
         let mut scope = ReferenceLoanScope {
-            parent: Some(parent),
+            parent,
             locals,
             local,
         };
@@ -1783,28 +1831,34 @@ impl ReferenceState<'_> {
         let demand = self.borrow_result_demand;
         let result = self.evaluate_in_context(body, scope.locals, demand).and_then(|mut value| {
             if value.raw().memory_is_borrowed() {
-                let source = self.borrow_result_sources.last().copied().flatten()
-                    .map(LocalValueReference::FunctionParameter);
+                let source = self.read_source_demand.last().copied().or_else(|| self.borrow_result_sources.last().copied().flatten()
+                    .map(LocalValueReference::FunctionParameter));
                 if !demand || source.is_none() || value.provenance() != source {
                     return Err(reference_type_error(
                         "borrowed child escaped its lexical scope without a matching result source",
                     ));
                 }
-                let parent = scope.parent.as_ref().ok_or_else(|| {
-                    reference_type_error("borrow scope lost its custody guard")
-                })?;
-                if parent.provenance() == value.provenance() {
+                if let Some(parent) = scope.parent.as_ref()
+                    && parent.provenance() == value.provenance()
+                {
                     self.charge_allocation(CheckedValue::parent_storage_bytes() as u64)?;
                     value.reserve_parent(parent)?;
                     value.retain_parent(|| scope.parent.take().ok_or_else(|| {
                         reference_type_error("borrow scope custody was already transferred")
                     }))?;
+                } else if scope.parent.is_none() && !owning_view {
+                    return Err(reference_type_error("borrow scope lost its custody guard"));
                 }
             }
             Ok(value)
         });
         self.lexical_loan_scopes -= 1;
         drop(scope);
+        if let Some(key) = read_context
+            && let Some(frame) = self.read_scope_frames.last_mut()
+        {
+            frame.remove_scope(key);
+        }
         result
     }
 
@@ -1920,11 +1974,31 @@ impl ReferenceState<'_> {
         requirement_arguments: &[RequirementOperand],
         arguments: Vec<CheckedValue>,
     ) -> Result<CheckedValue, ExecutionError> {
+        self.call_declaration_scoped(
+            reference,
+            type_arguments,
+            effect_arguments,
+            requirement_arguments,
+            &[],
+            arguments,
+        )
+    }
+
+    fn call_declaration_scoped(
+        &mut self,
+        reference: DeclarationReference,
+        type_arguments: &[TypeObjectDigest],
+        effect_arguments: &[EffectRow],
+        requirement_arguments: &[RequirementOperand],
+        scopes: &[ReadScopeArgument],
+        arguments: Vec<CheckedValue>,
+    ) -> Result<CheckedValue, ExecutionError> {
         self.call_declaration_on_route(
             reference,
             type_arguments,
             effect_arguments,
             requirement_arguments,
+            scopes,
             arguments,
             ReferenceCallRoute::Direct,
         )
@@ -1936,6 +2010,7 @@ impl ReferenceState<'_> {
         type_arguments: &[TypeObjectDigest],
         effect_arguments: &[EffectRow],
         requirement_arguments: &[RequirementOperand],
+        scopes: &[ReadScopeArgument],
         arguments: Vec<CheckedValue>,
         route: ReferenceCallRoute<'_>,
     ) -> Result<CheckedValue, ExecutionError> {
@@ -1944,6 +2019,7 @@ impl ReferenceState<'_> {
         let type_arguments = self.resolve_type_arguments(type_arguments)?;
         let effect_arguments = self.resolve_effect_arguments(effect_arguments)?;
         let requirement_arguments = self.resolve_requirement_arguments(requirement_arguments)?;
+        let scopes = self.resolve_read_scope_arguments(scopes)?;
         if self.call_depth.saturating_add(self.ancestor_depth) >= self.policy.maximum_call_depth {
             return Err(reference_resource(
                 "normalized_reference_call_depth",
@@ -1962,6 +2038,7 @@ impl ReferenceState<'_> {
             &type_arguments,
             &effect_arguments,
             &requirement_arguments,
+            &scopes,
             arguments,
             route,
         );
@@ -1987,6 +2064,7 @@ impl ReferenceState<'_> {
         type_arguments: &[TypeObjectDigest],
         effect_arguments: &[EffectRow],
         requirement_arguments: &[RequirementOperand],
+        scopes: &[ReadScopeArgument],
         arguments: Vec<CheckedValue>,
         route: ReferenceCallRoute<'_>,
     ) -> Result<ReferenceStep, ExecutionError> {
@@ -2004,6 +2082,7 @@ impl ReferenceState<'_> {
                             effects: effect_arguments,
                             requirements: requirement_arguments,
                             implementations: &[],
+                            scopes,
                         },
                         route,
                     )?;
@@ -2019,6 +2098,7 @@ impl ReferenceState<'_> {
                             effects: effect_arguments,
                             requirements: requirement_arguments,
                             implementations: &[],
+                            scopes,
                         },
                         route,
                     )?;
@@ -2042,6 +2122,7 @@ impl ReferenceState<'_> {
                     if type_arguments.len() != external.type_parameters.len()
                         || !effect_arguments.is_empty()
                         || !requirement_arguments.is_empty()
+                        || !scopes.is_empty()
                     {
                         Err(reference_type_error(
                             "external type-argument count disagrees with its exact signature",
@@ -2060,8 +2141,12 @@ impl ReferenceState<'_> {
                                 .type_parameter_constraints(reference, &external.type_parameters)?,
                             type_parameters: external.type_parameters,
                             parameters,
-                            result: external.result,
-                            result_borrow: None,
+                            result: CallableResult {
+                                ty: external.result,
+                                relation: ResultRelation::Value,
+                            },
+                            read_scope_parameters: Vec::new(),
+                            read_scope_sources: Vec::new(),
                             pure: true,
                         };
                         self.observation.external_calls =
@@ -2090,7 +2175,7 @@ impl ReferenceState<'_> {
                                 .copied()
                                 .zip(type_arguments.iter().copied())
                                 .collect();
-                            self.admit_raw(value, signature.result, &bindings, None, false)?
+                            self.admit_raw(value, signature.result.ty, &bindings, None, false)?
                         } else {
                             self.checked_intrinsic(
                                 &signature,
@@ -2162,7 +2247,7 @@ impl ReferenceState<'_> {
         &mut self,
         declaration: DeclarationReference,
         mut function: FunctionDeclaration,
-        arguments: Vec<CheckedValue>,
+        mut arguments: Vec<CheckedValue>,
         application: ReferenceApplication<'_>,
         route: ReferenceCallRoute<'_>,
     ) -> Result<AdmittedGraphCall, ExecutionError> {
@@ -2171,6 +2256,7 @@ impl ReferenceState<'_> {
             effects,
             requirements,
             implementations: supplied,
+            scopes,
         } = application;
         self.control.check()?;
         if arguments.len() != function.parameters.len()
@@ -2219,6 +2305,7 @@ impl ReferenceState<'_> {
                 effects,
                 requirements,
                 implementations: supplied,
+                scopes,
             },
             route,
         )?;
@@ -2231,7 +2318,10 @@ impl ReferenceState<'_> {
             self.associated_step(parameters.len().saturating_add(1))?;
             let closed = proof.application(application, self.control)?;
             let source = function
-                .result_borrow
+                .result
+                .relation
+                .source()
+                .copied()
                 .map(|source| {
                     function
                         .parameters
@@ -2244,8 +2334,48 @@ impl ReferenceState<'_> {
                 || closed.effect.requirements.is_empty() && closed.effect.parameters.is_empty(),
                 |row| &closed.effect == row,
             );
+            let expected_relation = match &function.result.relation {
+                ResultRelation::Value => ResultRelation::Value,
+                ResultRelation::ReadFrom { .. } => ResultRelation::ReadFrom {
+                    source: u32::try_from(
+                        source.ok_or_else(|| reference_type_error("missing read result source"))?,
+                    )
+                    .map_err(|_| reference_type_error("source coordinate overflow"))?,
+                },
+                ResultRelation::ViewFrom { scope, .. } => {
+                    let ReadScopeArgument::Parameter(reference) = scope else {
+                        return Err(reference_type_error(
+                            "canonical named view result lacks a formal scope",
+                        ));
+                    };
+                    let position = function
+                        .read_scope_parameters
+                        .iter()
+                        .position(|formal| {
+                            formal.id == reference.parameter
+                                && reference.binder
+                                    == crate::platform::kernel::ReadScopeBinder::Declaration(
+                                        declaration,
+                                    )
+                        })
+                        .ok_or_else(|| {
+                            reference_type_error("view result uses a foreign scope binder")
+                        })?;
+                    ResultRelation::ViewFrom {
+                        source: u32::try_from(
+                            source.ok_or_else(|| {
+                                reference_type_error("missing view result source")
+                            })?,
+                        )
+                        .map_err(|_| reference_type_error("source coordinate overflow"))?,
+                        scope: *scopes.get(position).ok_or_else(|| {
+                            reference_type_error("view result scope actual is missing")
+                        })?,
+                    }
+                }
+            };
             if closed.parameters.len() != parameters.len()
-                || closed.result_borrow.map(|source| source as usize) != source
+                || closed.result.relation != expected_relation
                 || !effect_matches
             {
                 return Err(reference_type_error("canonical complete signature changed"));
@@ -2288,16 +2418,16 @@ impl ReferenceState<'_> {
                     return Err(reference_type_error("canonical complete parameter changed"));
                 }
             }
-            function.result = proof.closed_root(
+            function.result.ty = proof.closed_root(
                 application,
                 (
                     declaration.package,
                     OwnerKey::Declaration(declaration.declaration),
                 ),
-                function.result,
+                function.result.ty,
                 self.control,
             )?;
-            if function.result != closed.result {
+            if function.result.ty != closed.result.ty {
                 return Err(reference_type_error("canonical complete result changed"));
             }
         }
@@ -2325,7 +2455,7 @@ impl ReferenceState<'_> {
             .copied()
             .zip(types.iter().copied())
             .collect::<BTreeMap<_, _>>();
-        if let Some(source) = function.result_borrow {
+        if let Some(source) = function.result.relation.source().copied() {
             let source = function
                 .parameters
                 .iter()
@@ -2334,12 +2464,31 @@ impl ReferenceState<'_> {
                 .ok_or_else(|| {
                     reference_type_error("borrowed result selects a foreign parameter")
                 })?;
+            let source_view = self.schema.read_view_proof.as_ref().is_some_and(|proof| {
+                proof.prepared_category(source.ty).is_ok_and(|category| {
+                    category == crate::platform::kernel::ValueCategory::ReadView
+                })
+            });
+            let result_view = self.schema.read_view_proof.as_ref().is_some_and(|proof| {
+                proof
+                    .prepared_category(function.result.ty)
+                    .is_ok_and(|category| {
+                        category == crate::platform::kernel::ValueCategory::ReadView
+                    })
+            });
+            let result_owned =
+                direct_memory_type(&self.schema, function.result.ty, &types, self.control)?
+                    .is_some();
             if !matches!(function.effect, FunctionEffect::Pure)
                 || source.use_mode != ParameterUse::Borrow
                 || source.resource_requirement.is_some()
-                || direct_memory_type(&self.schema, source.ty, &types, self.control)?.is_none()
-                || direct_memory_type(&self.schema, function.result, &types, self.control)?
-                    .is_none()
+                || (!source_view
+                    && direct_memory_type(&self.schema, source.ty, &types, self.control)?.is_none())
+                || match function.result.relation {
+                    ResultRelation::ReadFrom { .. } => !result_owned,
+                    ResultRelation::ViewFrom { .. } => !result_view,
+                    ResultRelation::Value => true,
+                }
             {
                 return Err(reference_type_error(
                     "borrowed result requires a pure graph function and exact borrowed memory parameter",
@@ -2371,6 +2520,8 @@ impl ReferenceState<'_> {
                 supplied,
             )?
         };
+        let read_scopes =
+            self.admit_read_scope_frame(declaration, &function, scopes, &mut arguments)?;
         Ok(AdmittedGraphCall {
             associated,
             implementations,
@@ -2381,6 +2532,7 @@ impl ReferenceState<'_> {
             requirements: requirement_scope,
             allowance,
             arguments,
+            read_scopes,
         })
     }
 
@@ -2390,7 +2542,8 @@ impl ReferenceState<'_> {
         tail: bool,
     ) -> Result<ReferenceStep, ExecutionError> {
         self.count_call(target.arguments.len())?;
-        let result_borrow = target.function.result_borrow;
+        self.charge_allocation(std::mem::size_of::<read_views::ScopeFrame>() as u64)?;
+        let result_borrow = target.function.result.relation.source().copied();
         let mut locals = target
             .function
             .parameters
@@ -2398,7 +2551,9 @@ impl ReferenceState<'_> {
             .zip(target.arguments)
             .map(|(parameter, mut value)| {
                 let local = LocalValueReference::FunctionParameter(parameter);
-                if value.raw().memory_is_borrowed() {
+                if value.raw().memory_is_borrowed()
+                    || matches!(value.raw(), NormalizedValue::ReadView(_))
+                {
                     value.set_provenance(local);
                 }
                 (local, value)
@@ -2409,6 +2564,7 @@ impl ReferenceState<'_> {
         self.implementation_scopes
             .push((target.declaration, target.implementations));
         self.associated_applications.push(target.associated);
+        self.read_scope_frames.push(target.read_scopes);
         self.type_scopes.push(target.types);
         self.effect_scopes.push(target.effects);
         self.requirement_scopes.push(target.requirements);
@@ -2429,6 +2585,7 @@ impl ReferenceState<'_> {
         let lexical_loan_scopes = std::mem::replace(&mut self.lexical_loan_scopes, 0);
         self.borrow_result_sources.push(result_borrow);
         let previous_demand = std::mem::replace(&mut self.borrow_result_demand, false);
+        let previous_read_demand = std::mem::take(&mut self.read_source_demand);
         let result = if result_borrow.is_some() {
             self.evaluate_in_context(target.function.body, &mut locals, true)
                 .map(ReferenceStep::Value)
@@ -2437,9 +2594,53 @@ impl ReferenceState<'_> {
         };
         let result = result.and_then(|mut step| {
             if let ReferenceStep::Value(value) = &mut step {
+                if let ResultRelation::ViewFrom { source, scope } = target.function.result.relation
+                {
+                    let source = LocalValueReference::FunctionParameter(source);
+                    let NormalizedValue::ReadView(view) = value.raw() else {
+                        return Err(reference_type_error(
+                            "ViewFrom result is not an affine descriptor handle",
+                        ));
+                    };
+                    let frame = self.read_scope_frames.last().ok_or_else(|| {
+                        reference_type_error("view return lacks its admitted invocation")
+                    })?;
+                    let actual = frame.resolve(scope)?;
+                    let parent = locals.get(&source).ok_or_else(|| {
+                        reference_type_error("selected view-return source is no longer live")
+                    })?;
+                    let expected_anchor = parent.source_anchor().ok_or_else(|| {
+                        reference_type_error("selected source lacks invocation provenance")
+                    })?;
+                    let anchor = value.source_anchor().ok_or_else(|| {
+                        reference_type_error("view return lacks checked source provenance")
+                    })?;
+                    if value.is_view_borrowed()
+                        || value.provenance() != Some(source)
+                        || view.identity().ty != target.function.result.ty
+                        || view.scope()?.key() != actual
+                        || !view.scope()?.same_live_scope(frame.scope(actual)?)
+                        || anchor.program != expected_anchor.program
+                        || anchor.application != expected_anchor.application
+                        || anchor.invocation != expected_anchor.invocation
+                        || anchor.coordinate != expected_anchor.coordinate
+                        || !anchor.path.starts_with(&expected_anchor.path)
+                    {
+                        return Err(reference_type_error(
+                            "view result changes its exact selected source, scope or application",
+                        ));
+                    }
+                    view.validate(self.control)?;
+                    return Ok(step);
+                }
+                if matches!(value.raw(), NormalizedValue::ReadView(_)) {
+                    return Err(reference_type_error(
+                        "affine view escaped through an ordinary value result",
+                    ));
+                }
                 let memory_form = direct_memory_type(
                     &self.schema,
-                    target.function.result,
+                    target.function.result.ty,
                     self.type_scopes
                         .last()
                         .ok_or_else(|| reference_type_error("missing type scope"))?,
@@ -2492,8 +2693,10 @@ impl ReferenceState<'_> {
         self.local_counts.pop();
         self.borrow_result_sources.pop();
         self.borrow_result_demand = previous_demand;
+        self.read_source_demand = previous_read_demand;
         self.implementation_scopes.pop();
         self.associated_applications.pop();
+        self.read_scope_frames.pop();
         self.type_scopes.pop();
         self.effect_scopes.pop();
         self.requirement_scopes.pop();
@@ -2511,6 +2714,31 @@ impl ReferenceState<'_> {
     ) -> Result<(), ExecutionError> {
         let mut resource_seen = false;
         for (index, (parameter, argument)) in parameters.iter().zip(arguments).enumerate() {
+            if let Some(proof) = &self.schema.read_view_proof
+                && proof.prepared_category(parameter.ty)?
+                    == crate::platform::kernel::ValueCategory::ReadView
+            {
+                let NormalizedValue::ReadView(view) = argument.raw() else {
+                    return Err(reference_type_error(
+                        "view parameter received another runtime category",
+                    ));
+                };
+                if resource_seen
+                    || parameter.resource_requirement.is_some()
+                    || parameter.use_mode == ParameterUse::Unrestricted
+                    || argument.ownership(&self.schema, &mut self.observation.value_work)?
+                        != Ownership::ReadView
+                    || view.identity().program != self.schema.value_origin
+                    || view.identity().ty != parameter.ty
+                    || (parameter.use_mode == ParameterUse::Consume && argument.is_view_borrowed())
+                {
+                    return Err(reference_type_error(
+                        "view argument differs from its complete exact affine signature",
+                    ));
+                }
+                view.validate(self.control)?;
+                continue;
+            }
             let memory_form =
                 direct_memory_type(&self.schema, parameter.ty, substitutions, self.control)?;
             if memory_form.is_some() {
@@ -2644,8 +2872,24 @@ impl ReferenceState<'_> {
                     };
                 }
                 ExpressionOperation::Let { bindings, body } => {
+                    let has_view = bindings.iter().try_fold(false, |found, binding| {
+                        Ok::<_, ExecutionError>(found || matches!(self.owner(OwnerKey::Binding(*binding))?, Some(OwnerRecord::Binding(record)) if record.kind == BindingKind::ReadView))
+                    })?;
+                    if has_view {
+                        return self
+                            .evaluate_view_let(bindings, body, locals, false)
+                            .map(ReferenceStep::Value);
+                    }
                     for binding in bindings {
-                        let record = self.binding(binding, BindingKind::Let)?;
+                        let view_binding = matches!(self.owner(OwnerKey::Binding(binding))?, Some(OwnerRecord::Binding(record)) if record.kind == BindingKind::ReadView);
+                        let record = self.binding(
+                            binding,
+                            if view_binding {
+                                BindingKind::ReadView
+                            } else {
+                                BindingKind::Let
+                            },
+                        )?;
                         let value = record.value.ok_or_else(|| {
                             reference_error(
                                 "normalized_reference_let_value",
@@ -2653,6 +2897,30 @@ impl ReferenceState<'_> {
                             )
                         })?;
                         let value = self.evaluate(value, locals)?;
+                        if view_binding {
+                            let NormalizedValue::ReadView(view) = value.raw() else {
+                                return Err(reference_type_error(
+                                    "view Let requires an owning affine descriptor",
+                                ));
+                            };
+                            let declared = record.declared_type.ok_or_else(|| {
+                                reference_type_error("view binding lacks a complete declared type")
+                            })?;
+                            let expected = self.resolve_occurrence_types(
+                                (self.active_package, OwnerKey::Binding(binding)),
+                                &[declared],
+                            )?[0];
+                            if value.is_view_borrowed() || view.identity().ty != expected {
+                                return Err(reference_type_error(
+                                    "view binding changes its affine mode or exact type/scope",
+                                ));
+                            }
+                            view.validate(self.control)?;
+                        } else if matches!(value.raw(), NormalizedValue::ReadView(_)) {
+                            return Err(reference_type_error(
+                                "ordinary binding cannot conceal a view",
+                            ));
+                        }
                         if locals
                             .insert(LocalValueReference::LexicalBinding(binding), value)
                             .is_some()
@@ -2744,6 +3012,7 @@ impl ReferenceState<'_> {
                     expression = body;
                 }
                 ExpressionOperation::ImplementationCall {
+                    read_scope_arguments,
                     function,
                     type_arguments,
                     effect_arguments,
@@ -2754,38 +3023,46 @@ impl ReferenceState<'_> {
                     self.require_owning_result(function)?;
                     let uses = self.function_parameter_uses(function)?;
                     let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
-                    let target = self.witness_call(
+                    let target = self.witness_call_scoped(
                         function,
                         &type_arguments,
                         &effect_arguments,
                         &requirement_arguments,
                         &implementations,
+                        &read_scope_arguments,
                         arguments,
                     )?;
                     return self.transfer_graph_call(target, locals);
                 }
                 ExpressionOperation::MethodCall {
+                    read_scope_arguments,
                     witness,
                     contract,
                     method,
                     arguments,
                 } => {
-                    let (function, types, implementations) =
-                        self.method_target(witness, contract, method)?;
+                    let (function, types, implementations, scopes) = self.method_target_scoped(
+                        witness,
+                        contract,
+                        method,
+                        &read_scope_arguments,
+                    )?;
                     self.require_owning_result(function)?;
                     let uses = self.function_parameter_uses(function)?;
                     let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
-                    let target = self.admit_resolved_witness_call(
+                    let target = self.admit_resolved_witness_call_scoped(
                         function,
                         &types,
                         &[],
                         &[],
                         &implementations,
+                        &scopes,
                         arguments,
                     )?;
                     return self.transfer_graph_call(target, locals);
                 }
                 ExpressionOperation::Call {
+                    read_scope_arguments,
                     requirement_arguments,
                     effect_arguments,
                     function,
@@ -2799,6 +3076,7 @@ impl ReferenceState<'_> {
                         &type_arguments,
                         &effect_arguments,
                         &requirement_arguments,
+                        &read_scope_arguments,
                         arguments,
                         locals,
                     );
@@ -2821,6 +3099,7 @@ impl ReferenceState<'_> {
                             effects: &effect_arguments,
                             requirements: &requirement_arguments,
                             implementations: &[],
+                            scopes: &[],
                         },
                         arguments,
                         locals,
@@ -2845,6 +3124,7 @@ impl ReferenceState<'_> {
         types: &[TypeObjectDigest],
         effect_arguments: &[EffectRow],
         requirement_arguments: &[RequirementOperand],
+        scopes: &[ReadScopeArgument],
         arguments: Vec<CheckedValue>,
         locals: &BTreeMap<LocalValueReference, CheckedValue>,
     ) -> Result<ReferenceStep, ExecutionError> {
@@ -2855,6 +3135,7 @@ impl ReferenceState<'_> {
                 effects: effect_arguments,
                 requirements: requirement_arguments,
                 implementations: &[],
+                scopes,
             },
             arguments,
             locals,
@@ -2876,6 +3157,7 @@ impl ReferenceState<'_> {
             let types = self.resolve_type_arguments(application.types)?;
             let effects = self.resolve_effect_arguments(application.effects)?;
             let requirements = self.resolve_requirement_arguments(application.requirements)?;
+            let scopes = self.resolve_read_scope_arguments(application.scopes)?;
             let target = self.admit_graph_call_with_implementations_on_route(
                 declaration,
                 function,
@@ -2885,6 +3167,7 @@ impl ReferenceState<'_> {
                     effects: &effects,
                     requirements: &requirements,
                     implementations: &[],
+                    scopes: &scopes,
                 },
                 route,
             )?;
@@ -2895,6 +3178,7 @@ impl ReferenceState<'_> {
                 application.types,
                 application.effects,
                 application.requirements,
+                application.scopes,
                 arguments,
                 route,
             )
@@ -2910,7 +3194,7 @@ impl ReferenceState<'_> {
         self.charge_allocation(std::mem::size_of::<AdmittedGraphCall>() as u64)?;
         self.control.check()?;
         if self.lexical_loan_scopes != 0
-            || target.function.result_borrow.is_some()
+            || target.function.result.relation.source().copied().is_some()
             || self
                 .borrow_result_sources
                 .last()
@@ -3049,6 +3333,15 @@ impl ReferenceState<'_> {
                 binding,
                 body,
             } => self.evaluate_borrow_call(call, binding, body, locals),
+            operation @ (ExpressionOperation::CreateReadView { .. }
+            | ExpressionOperation::BorrowReadView { .. }
+            | ExpressionOperation::ReborrowReadView { .. }
+            | ExpressionOperation::MoveReadView { .. }
+            | ExpressionOperation::DropReadView { .. }
+            | ExpressionOperation::ReadViewDataField { .. }
+            | ExpressionOperation::BorrowReadViewField { .. }) => {
+                self.evaluate_read_view_operation(operation, locals)
+            }
             ExpressionOperation::Parallel { left, right } => self.parallel(left, right, locals),
             ExpressionOperation::SequenceEmpty { sequence_type } => {
                 let (ty, _) = self.sequence_item_type(sequence_type)?;
@@ -3269,7 +3562,16 @@ impl ReferenceState<'_> {
                     token.borrow_item(self.memory_domain, index, control, &mut |bytes| {
                         self.charge_allocation(bytes)
                     })?;
-                let child = self.borrowed_product_child(child, item)?;
+                let mut child = self.borrowed_product_child(child, item)?;
+                self.attach_owned_read_path(
+                    &parent,
+                    &mut child,
+                    super::read_view_storage::ReadPathStep::OwnedIndex {
+                        ty,
+                        index: u64::try_from(index)
+                            .map_err(|_| reference_type_error("negative owned index"))?,
+                    },
+                )?;
                 self.evaluate_borrowed_body(parent, binding, child, body, locals)
             }
             ExpressionOperation::BorrowOwnedField {
@@ -3325,7 +3627,17 @@ impl ReferenceState<'_> {
                     token.borrow_field(self.memory_domain, index, control, &mut |bytes| {
                         self.charge_allocation(bytes)
                     })?;
-                let value = self.borrowed_product_child(value, payload_type)?;
+                let mut value = self.borrowed_product_child(value, payload_type)?;
+                self.attach_owned_read_path(
+                    &parent,
+                    &mut value,
+                    super::read_view_storage::ReadPathStep::OwnedSlot {
+                        ty,
+                        field: u32::try_from(index).map_err(|_| {
+                            reference_type_error("owned field coordinate exceeds bound")
+                        })?,
+                    },
+                )?;
                 self.evaluate_borrowed_body(parent, binding, value, body, locals)
             }
             ExpressionOperation::BorrowOwnedRecordField {
@@ -3379,7 +3691,12 @@ impl ReferenceState<'_> {
                     token.borrow_field(self.memory_domain, index, control, &mut |bytes| {
                         self.charge_allocation(bytes)
                     })?;
-                let value = self.borrowed_product_child(value, payload_type)?;
+                let mut value = self.borrowed_product_child(value, payload_type)?;
+                self.attach_owned_read_path(
+                    &parent,
+                    &mut value,
+                    super::read_view_storage::ReadPathStep::OwnedField(field.field),
+                )?;
                 self.evaluate_borrowed_body(parent, binding, value, body, locals)
             }
             ExpressionOperation::MatchBorrowedOwned {
@@ -3447,7 +3764,17 @@ impl ReferenceState<'_> {
                 let value = token.borrow_payload(self.memory_domain, control, &mut |bytes| {
                     self.charge_allocation(bytes)
                 })?;
-                let value = self.borrowed_product_child(value, payload_type)?;
+                let mut value = self.borrowed_product_child(value, payload_type)?;
+                self.attach_owned_read_path(
+                    &parent,
+                    &mut value,
+                    super::read_view_storage::ReadPathStep::OwnedChoiceSlot {
+                        ty,
+                        case: u32::try_from(selected).map_err(|_| {
+                            reference_type_error("owned case coordinate exceeds bound")
+                        })?,
+                    },
+                )?;
                 self.evaluate_borrowed_body(parent, arm.binding, value, arm.body, locals)
             }
             ExpressionOperation::ChooseOwned {
@@ -3580,6 +3907,7 @@ impl ReferenceState<'_> {
                 result
             }
             ExpressionOperation::ImplementationCall {
+                read_scope_arguments,
                 function,
                 type_arguments,
                 effect_arguments,
@@ -3590,33 +3918,36 @@ impl ReferenceState<'_> {
                 self.require_owning_result(function)?;
                 let uses = self.function_parameter_uses(function)?;
                 let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
-                let target = self.witness_call(
+                let target = self.witness_call_scoped(
                     function,
                     &type_arguments,
                     &effect_arguments,
                     &requirement_arguments,
                     &implementations,
+                    &read_scope_arguments,
                     arguments,
                 )?;
                 self.execute_witness_call(target)
             }
             ExpressionOperation::MethodCall {
+                read_scope_arguments,
                 witness,
                 contract,
                 method,
                 arguments,
             } => {
-                let (function, types, implementations) =
-                    self.method_target(witness, contract, method)?;
+                let (function, types, implementations, scopes) =
+                    self.method_target_scoped(witness, contract, method, &read_scope_arguments)?;
                 self.require_owning_result(function)?;
                 let uses = self.function_parameter_uses(function)?;
                 let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
-                let target = self.admit_resolved_witness_call(
+                let target = self.admit_resolved_witness_call_scoped(
                     function,
                     &types,
                     &[],
                     &[],
                     &implementations,
+                    &scopes,
                     arguments,
                 )?;
                 self.execute_witness_call(target)
@@ -3651,12 +3982,13 @@ impl ReferenceState<'_> {
                     )
                 }) {
                     if locals[&value].raw().memory_is_borrowed() {
-                        let source = self
-                            .borrow_result_sources
-                            .last()
-                            .copied()
-                            .flatten()
-                            .map(LocalValueReference::FunctionParameter);
+                        let source = self.read_source_demand.last().copied().or_else(|| {
+                            self.borrow_result_sources
+                                .last()
+                                .copied()
+                                .flatten()
+                                .map(LocalValueReference::FunctionParameter)
+                        });
                         if !demand || source.is_none() || locals[&value].provenance() != source {
                             return Err(reference_type_error(
                                 "borrowed local is outside its matching result context",
@@ -3707,9 +4039,23 @@ impl ReferenceState<'_> {
                 _ => Err(reference_type_error("if condition is not boolean")),
             },
             ExpressionOperation::Let { bindings, body } => {
+                let has_view = bindings.iter().try_fold(false, |found, binding| {
+                    Ok::<_, ExecutionError>(found || matches!(self.owner(OwnerKey::Binding(*binding))?, Some(OwnerRecord::Binding(record)) if record.kind == BindingKind::ReadView))
+                })?;
+                if has_view {
+                    return self.evaluate_view_let(bindings, body, locals, demand);
+                }
                 let mut scoped = Vec::with_capacity(bindings.len());
                 for binding in bindings {
-                    let record = self.binding(binding, BindingKind::Let)?;
+                    let view_binding = matches!(self.owner(OwnerKey::Binding(binding))?, Some(OwnerRecord::Binding(record)) if record.kind == BindingKind::ReadView);
+                    let record = self.binding(
+                        binding,
+                        if view_binding {
+                            BindingKind::ReadView
+                        } else {
+                            BindingKind::Let
+                        },
+                    )?;
                     let value = record.value.ok_or_else(|| {
                         reference_error(
                             "normalized_reference_let_value",
@@ -3717,6 +4063,30 @@ impl ReferenceState<'_> {
                         )
                     })?;
                     let value = self.evaluate(value, locals)?;
+                    if view_binding {
+                        let NormalizedValue::ReadView(view) = value.raw() else {
+                            return Err(reference_type_error(
+                                "view Let requires a positive affine descriptor",
+                            ));
+                        };
+                        let declared = record.declared_type.ok_or_else(|| {
+                            reference_type_error("owning view binding lacks an exact declared type")
+                        })?;
+                        let expected = self.resolve_occurrence_types(
+                            (self.active_package, OwnerKey::Binding(binding)),
+                            &[declared],
+                        )?[0];
+                        if view.identity().ty != expected || value.is_view_borrowed() {
+                            return Err(reference_type_error(
+                                "owning view initializer changes its exact type/scope or owns only a borrow",
+                            ));
+                        }
+                        view.validate(self.control)?;
+                    } else if matches!(value.raw(), NormalizedValue::ReadView(_)) {
+                        return Err(reference_type_error(
+                            "ordinary Let cannot acquire a read-view occurrence",
+                        ));
+                    }
                     let local = LocalValueReference::LexicalBinding(binding);
                     if locals.insert(local, value).is_some() {
                         return Err(reference_error(
@@ -3747,6 +4117,7 @@ impl ReferenceState<'_> {
                 self.evaluate_in_context(*last, locals, demand)
             }
             ExpressionOperation::Call {
+                read_scope_arguments,
                 requirement_arguments,
                 effect_arguments,
                 function,
@@ -3756,22 +4127,28 @@ impl ReferenceState<'_> {
                 self.require_owning_result(function)?;
                 let uses = self.function_parameter_uses(function)?;
                 let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
-                self.call_declaration(
+                self.call_declaration_scoped(
                     function,
                     &type_arguments,
                     &effect_arguments,
                     &requirement_arguments,
+                    &read_scope_arguments,
                     arguments,
                 )
             }
             ExpressionOperation::FunctionValue {
+                read_scope_arguments,
                 requirement_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
             } => {
                 let signature = self.function_signature(function)?;
-                if signature.has_implementations || signature.result_borrow.is_some() {
+                if signature.has_implementations
+                    || signature.result.relation.source().copied().is_some()
+                    || !signature.read_scope_parameters.is_empty()
+                    || !read_scope_arguments.is_empty()
+                {
                     return Err(reference_type_error(
                         "static witness templates cannot become callable values",
                     ));
@@ -3805,6 +4182,7 @@ impl ReferenceState<'_> {
                         effects: &effect_arguments,
                         requirements: &requirement_arguments,
                         implementations: &[],
+                        scopes: &[],
                     },
                 )?;
                 self.schema
@@ -3850,6 +4228,7 @@ impl ReferenceState<'_> {
                     &type_arguments,
                     &effect_arguments,
                     &requirement_arguments,
+                    &[],
                     arguments,
                     ReferenceCallRoute::Invocation(invocation.as_ref()),
                 )
@@ -4091,8 +4470,23 @@ impl ReferenceState<'_> {
             }
         };
         let mut value = if let Some(local) = local {
+            if use_mode == ParameterUse::Borrow
+                && locals
+                    .get(&local)
+                    .is_some_and(|value| matches!(value.raw(), NormalizedValue::ReadView(_)))
+            {
+                return self.borrow_view_argument(local, &locals[&local]);
+            }
             match use_mode {
                 ParameterUse::Consume => {
+                    if locals
+                        .get(&local)
+                        .is_some_and(CheckedValue::is_view_borrowed)
+                    {
+                        return Err(reference_type_error(
+                            "borrowed read-view handle cannot be consumed",
+                        ));
+                    }
                     // Invalid consuming syntax must leave its source in custody
                     // until all lexical child scopes release their loans.
                     if let Some(value) = locals.get(&local)
@@ -4121,7 +4515,10 @@ impl ReferenceState<'_> {
             ParameterUse::Unrestricted => {
                 matches!(ownership, Ownership::Ordinary)
             }
-            ParameterUse::Borrow => matches!(ownership, Ownership::Capability | Ownership::Memory),
+            ParameterUse::Borrow => matches!(
+                ownership,
+                Ownership::Capability | Ownership::Memory | Ownership::ReadView
+            ),
             ParameterUse::Consume => ownership != Ownership::Ordinary,
         };
         if !valid {
@@ -4140,6 +4537,14 @@ impl ReferenceState<'_> {
             value
                 .raw()
                 .memory_validate(self.memory_domain, use_mode == ParameterUse::Consume)?;
+            if use_mode == ParameterUse::Borrow
+                && value.source_anchor().is_none()
+                && let Some(local) = local
+                && let Some(frame) = self.read_scope_frames.last()
+            {
+                let anchor = frame.source_anchor(local, self.memory_domain)?;
+                value.bind_source(anchor, None);
+            }
         }
         if let NormalizedValue::Resource(handle) = value.raw() {
             if use_mode == ParameterUse::Consume {
@@ -4207,7 +4612,8 @@ impl ReferenceState<'_> {
             effect,
             parameters,
             result,
-            result_borrow,
+            read_scope_parameters,
+            read_scope_sources,
             pure,
         ) = match self.declaration(reference)?.payload {
             DeclarationPayload::Function(function) => (
@@ -4218,7 +4624,8 @@ impl ReferenceState<'_> {
                 function.effect.clone(),
                 function.parameters,
                 function.result,
-                function.result_borrow,
+                function.read_scope_parameters,
+                function.read_scope_sources,
                 matches!(function.effect, FunctionEffect::Pure),
             ),
             DeclarationPayload::External(external) => (
@@ -4228,8 +4635,12 @@ impl ReferenceState<'_> {
                 Vec::new(),
                 FunctionEffect::Pure,
                 external.parameters,
-                external.result,
-                None,
+                CallableResult {
+                    ty: external.result,
+                    relation: ResultRelation::Value,
+                },
+                Vec::new(),
+                Vec::new(),
                 true,
             ),
             DeclarationPayload::Constant { .. } => {
@@ -4254,7 +4665,8 @@ impl ReferenceState<'_> {
             type_parameter_constraints,
             parameters: self.parameters(reference.package, &parameters)?,
             result,
-            result_borrow,
+            read_scope_parameters,
+            read_scope_sources,
             pure,
         })
     }
@@ -4264,7 +4676,7 @@ impl ReferenceState<'_> {
         function: DeclarationReference,
     ) -> Result<(), ExecutionError> {
         if matches!(self.declaration(function)?.payload,
-            DeclarationPayload::Function(function) if function.result_borrow.is_some())
+            DeclarationPayload::Function(function) if function.result.relation.source().copied().is_some())
         {
             return Err(reference_type_error(
                 "borrowed-result function requires a lexical borrow-call",
@@ -6213,6 +6625,12 @@ fn reference_compare(
         (NormalizedValue::Map(left), NormalizedValue::Map(right)) => {
             reference_map_compare(left, right, observation)
         }
+        (NormalizedValue::ReadView(_), _) | (_, NormalizedValue::ReadView(_)) => {
+            Err(reference_trap(
+                "normalized_reference_value_not_comparable",
+                "read-view handles do not support semantic equality",
+            ))
+        }
         (NormalizedValue::Function { .. }, _) | (_, NormalizedValue::Function { .. }) => {
             Err(reference_trap(
                 "normalized_reference_value_not_comparable",
@@ -6522,6 +6940,7 @@ fn reference_value_cost(value: &NormalizedValue) -> Result<(u64, u64), Execution
             | NormalizedValue::I64(_)
             | NormalizedValue::F64(_)
             | NormalizedValue::Function { .. }
+            | NormalizedValue::ReadView(_)
             | NormalizedValue::Resource(_) => {}
         }
     }

@@ -65,6 +65,10 @@ pub enum RelationKind {
     ImplementationMethod,
     BorrowResultSource,
     AssociatedWitnessScopeUse,
+    ReadScopeUse,
+    ReadViewSource,
+    ReadViewFieldConstruction,
+    ReadViewFieldAccess,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -81,7 +85,7 @@ pub enum PropagationClass {
 }
 
 impl RelationKind {
-    pub const ALL: [Self; 38] = [
+    pub const ALL: [Self; 42] = [
         Self::DeclarationModule,
         Self::MemberDeclaration,
         Self::ParameterOperation,
@@ -120,6 +124,10 @@ impl RelationKind {
         Self::ImplementationMethod,
         Self::BorrowResultSource,
         Self::AssociatedWitnessScopeUse,
+        Self::ReadScopeUse,
+        Self::ReadViewSource,
+        Self::ReadViewFieldConstruction,
+        Self::ReadViewFieldAccess,
     ];
 
     pub const fn tag(self) -> u8 {
@@ -138,6 +146,10 @@ impl RelationKind {
             Self::ImplementationMethod => 36,
             Self::BorrowResultSource => 37,
             Self::AssociatedWitnessScopeUse => 38,
+            Self::ReadScopeUse => 39,
+            Self::ReadViewSource => 40,
+            Self::ReadViewFieldConstruction => 41,
+            Self::ReadViewFieldAccess => 42,
             Self::NamedTypeUse => 7,
             Self::LocalValueReference => 8,
             Self::ConstantReference => 9,
@@ -185,6 +197,10 @@ impl RelationKind {
             Self::ImplementationMethod => "implementation_method",
             Self::BorrowResultSource => "borrow_result_source",
             Self::AssociatedWitnessScopeUse => "associated_witness_scope_use",
+            Self::ReadScopeUse => "read_scope_use",
+            Self::ReadViewSource => "read_view_source",
+            Self::ReadViewFieldConstruction => "read_view_field_construction",
+            Self::ReadViewFieldAccess => "read_view_field_access",
             Self::NamedTypeUse => "named_type_use",
             Self::LocalValueReference => "local_value_reference",
             Self::ConstantReference => "constant_reference",
@@ -233,6 +249,7 @@ impl RelationKind {
             | Self::ExpressionParent
             | Self::ExpressionRoot => PropagationClass::Ownership,
             Self::OwnedContractUse
+            | Self::ReadScopeUse
             | Self::AssociatedWitnessScopeUse
             | Self::BorrowResultSource
             | Self::RequirementParameterUse
@@ -240,6 +257,9 @@ impl RelationKind {
             | Self::TypeParameterUse
             | Self::NamedTypeUse => PropagationClass::Type,
             Self::LocalValueReference
+            | Self::ReadViewSource
+            | Self::ReadViewFieldConstruction
+            | Self::ReadViewFieldAccess
             | Self::ConstantReference
             | Self::NominalFieldConstruction
             | Self::NominalFieldAccess
@@ -452,6 +472,14 @@ where
                 }
                 DeclarationPayload::OwnedContract(contract) => {
                     for method in &contract.methods {
+                        for scope in &method.read_scope_sources {
+                            scope_edge(edges, source, scope.scope)?;
+                        }
+                        if let super::ResultRelation::ViewFrom { scope, .. } =
+                            method.result.relation
+                        {
+                            scope_edge(edges, source, scope)?;
+                        }
                         extract_effect_relations(source, &method.effect.row(), edges)?;
                         for requirement in method.effect.row().requirements {
                             exact_edge(
@@ -482,6 +510,9 @@ where
                         )?;
                     }
                     for m in &i.methods {
+                        for scope in &m.read_scope_arguments {
+                            scope_edge(edges, source, *scope)?;
+                        }
                         exact_edge(
                             edges,
                             source,
@@ -495,7 +526,21 @@ where
                     }
                 }
                 DeclarationPayload::Function(function) => {
-                    if let Some(parameter) = function.result_borrow {
+                    for scope in &function.read_scope_sources {
+                        scope_edge(edges, source, scope.scope)?;
+                        owner_edge(
+                            edges,
+                            source,
+                            RelationKind::ReadViewSource,
+                            package,
+                            OwnerKey::Parameter(scope.source),
+                        )?;
+                    }
+                    if let super::ResultRelation::ViewFrom { scope, .. } = function.result.relation
+                    {
+                        scope_edge(edges, source, scope)?;
+                    }
+                    if let Some(parameter) = function.result.relation.source().copied() {
                         owner_edge(
                             edges,
                             source,
@@ -527,6 +572,13 @@ where
                                 requirement.package(),
                                 requirement.owner(),
                             )?;
+                        }
+                    }
+                }
+                DeclarationPayload::ReadView(view) => {
+                    for field in &view.fields {
+                        if let super::ReadViewFieldKind::ReadReference { read_scope } = field.kind {
+                            scope_edge(edges, source, read_scope)?;
                         }
                     }
                 }
@@ -823,6 +875,42 @@ where
         }
     }
     match operation {
+        ExpressionOperation::CreateReadView {
+            declaration,
+            read_scope,
+            source: value,
+            ..
+        } => {
+            scope_edge(edges, source, *read_scope)?;
+            local_edge(edges, source, RelationKind::ReadViewSource, *value)?;
+            exact_edge(
+                edges,
+                source,
+                RelationKind::ReadViewFieldConstruction,
+                declaration.package,
+                OwnerKey::Declaration(declaration.declaration),
+            )?;
+        }
+        ExpressionOperation::BorrowReadView { value, .. }
+        | ExpressionOperation::MoveReadView { value }
+        | ExpressionOperation::DropReadView { value } => {
+            local_edge(edges, source, RelationKind::ReadViewSource, *value)?
+        }
+        ExpressionOperation::ReborrowReadView { value, read_scope } => {
+            local_edge(edges, source, RelationKind::ReadViewSource, *value)?;
+            scope_edge(edges, source, *read_scope)?;
+        }
+        ExpressionOperation::ReadViewDataField { value, field }
+        | ExpressionOperation::BorrowReadViewField { value, field, .. } => {
+            local_edge(edges, source, RelationKind::ReadViewSource, *value)?;
+            exact_edge(
+                edges,
+                source,
+                RelationKind::ReadViewFieldAccess,
+                field.declaration.package,
+                OwnerKey::Declaration(field.declaration.declaration),
+            )?;
+        }
         ExpressionOperation::Local { value } => {
             let target = match value {
                 LocalValueReference::FunctionParameter(id)
@@ -1078,6 +1166,68 @@ where
         | ExpressionOperation::BorrowOwnedItem { .. }
         | ExpressionOperation::BorrowCall { .. } => {}
     }
+    if let ExpressionOperation::Call {
+        read_scope_arguments,
+        ..
+    }
+    | ExpressionOperation::ImplementationCall {
+        read_scope_arguments,
+        ..
+    }
+    | ExpressionOperation::FunctionValue {
+        read_scope_arguments,
+        ..
+    }
+    | ExpressionOperation::MethodCall {
+        read_scope_arguments,
+        ..
+    } = operation
+    {
+        for scope in read_scope_arguments {
+            scope_edge(edges, source, *scope)?;
+        }
+    }
+    Ok(())
+}
+
+fn local_edge(
+    edges: &mut RelationCollector,
+    source: ExactOwnerKey,
+    kind: RelationKind,
+    value: LocalValueReference,
+) -> Result<(), Diagnostic> {
+    let target = match value {
+        LocalValueReference::FunctionParameter(id)
+        | LocalValueReference::OperationParameter(id) => OwnerKey::Parameter(id),
+        LocalValueReference::LexicalBinding(id)
+        | LocalValueReference::MatchPayload(id)
+        | LocalValueReference::TransactionBinding(id) => OwnerKey::Binding(id),
+    };
+    owner_edge(edges, source, kind, source.package, target)
+}
+
+fn scope_edge(
+    edges: &mut RelationCollector,
+    source: ExactOwnerKey,
+    scope: super::ReadScopeArgument,
+) -> Result<(), Diagnostic> {
+    let declaration = scope.declaration();
+    exact_edge(
+        edges,
+        source,
+        RelationKind::ReadScopeUse,
+        declaration.package,
+        OwnerKey::Declaration(declaration.declaration),
+    )?;
+    if let super::ReadScopeArgument::Lexical { callable, binding } = scope {
+        exact_edge(
+            edges,
+            source,
+            RelationKind::ReadScopeUse,
+            callable.package,
+            OwnerKey::Binding(binding),
+        )?;
+    }
     Ok(())
 }
 
@@ -1106,6 +1256,57 @@ where
             )
         })?;
         match &object.form {
+            TypeForm::ReadViewApplied {
+                declaration,
+                arguments,
+                read_scope,
+            } => {
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::NamedTypeUse,
+                    declaration.package,
+                    OwnerKey::Declaration(declaration.declaration),
+                )?;
+                scope_edge(edges, source, *read_scope)?;
+                pending.extend(arguments.iter().copied());
+            }
+            TypeForm::AssociatedReadViewMember {
+                contract,
+                read_scope,
+                ..
+            } => {
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::OwnedContractUse,
+                    contract.package,
+                    OwnerKey::Declaration(contract.declaration),
+                )?;
+                scope_edge(edges, source, *read_scope)?;
+            }
+            TypeForm::AssociatedReadViewProjection {
+                scope,
+                contract,
+                read_scope,
+                ..
+            } => {
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::OwnedContractUse,
+                    contract.package,
+                    OwnerKey::Declaration(contract.declaration),
+                )?;
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::AssociatedWitnessScopeUse,
+                    scope.package,
+                    OwnerKey::Declaration(scope.declaration),
+                )?;
+                scope_edge(edges, source, *read_scope)?;
+            }
             TypeForm::AssociatedContractMember { contract, .. } => {
                 exact_edge(
                     edges,

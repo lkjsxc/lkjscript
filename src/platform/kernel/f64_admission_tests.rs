@@ -345,15 +345,20 @@ pub(crate) fn admission_snapshot(
             name: name("ignore"),
             visibility: DeclarationVisibility::Private,
             payload: DeclarationPayload::Function(FunctionDeclaration {
-                result_borrow: None,
                 implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 effect_parameters: Vec::new(),
                 type_parameters: Vec::new(),
                 parameters: vec![unused],
-                result: item,
+                result: crate::platform::kernel::CallableResult {
+                    ty: item,
+                    relation: crate::platform::kernel::ResultRelation::Value,
+                },
                 effect: FunctionEffect::Pure,
                 body,
+
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             }),
         }),
         OwnerRecord::Parameter(ParameterRecord {

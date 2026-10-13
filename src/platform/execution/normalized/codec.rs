@@ -34,9 +34,10 @@ pub(crate) fn decode_typed_with_control(
     limits: JsonLimits,
     control: &ExecutionControl,
 ) -> Result<NormalizedValue, Diagnostic> {
-    checkpoint(control)?;
+    // Refuse the complete type before parsing or materializing untrusted input.
+    require_json_encoding(program, ty, true, limits, control)?;
     let value = decode_application(bytes, limits)?;
-    decode_value_with_control(program, &value, ty, limits, control)
+    from_json(program, &value, ty, limits, "$", 0, control)
 }
 
 pub fn decode_value(
@@ -114,6 +115,9 @@ pub(crate) fn encode_value_with_control(
     limits: JsonLimits,
     control: &ExecutionControl,
 ) -> Result<JsonValue, Diagnostic> {
+    value
+        .reject_read_view_escape(control)
+        .map_err(super::runner::execution_diagnostic)?;
     require_json_encoding(program, ty, false, limits, control)?;
     let mut state = EncodeState {
         limits,
@@ -150,6 +154,11 @@ fn json_form<'a>(
         ));
     }
     match form {
+        TypeForm::ReadViewApplied { .. }
+        | TypeForm::AssociatedReadViewMember { .. }
+        | TypeForm::AssociatedReadViewProjection { .. } => {
+            Err(type_error(path, "read views cannot cross JSON boundaries"))
+        }
         TypeForm::Secret
         | TypeForm::Stream { .. }
         | TypeForm::ByteBuffer
@@ -193,6 +202,9 @@ pub(super) fn require_json_encoding(
     limits: JsonLimits,
     control: &ExecutionControl,
 ) -> Result<(), Diagnostic> {
+    program
+        .reject_read_view_escape(root, control)
+        .map_err(super::runner::execution_diagnostic)?;
     fn charge(work: &mut usize, bytes: &mut usize, size: usize) -> Result<(), Diagnostic> {
         *work = work
             .checked_add(1)
@@ -300,6 +312,11 @@ fn from_json(
     require_depth(limits, path, depth)?;
     let form = json_form(program, ty, true, path)?;
     match form {
+        TypeForm::ReadViewApplied { .. }
+        | TypeForm::AssociatedReadViewMember { .. }
+        | TypeForm::AssociatedReadViewProjection { .. } => {
+            Err(type_error(path, "read views cannot be decoded from JSON"))
+        }
         TypeForm::AssociatedContractMember { .. }
         | TypeForm::AssociatedWitnessProjection { .. } => {
             Err(crate::platform::kernel::owned_associated_wire::unsupported_semantics())
@@ -572,6 +589,12 @@ fn to_json(
         state.require_container_depth(path, depth)?;
     }
     match (value, form) {
+        (
+            _,
+            TypeForm::ReadViewApplied { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. },
+        ) => Err(type_error(path, "read views cannot be encoded as JSON")),
         (NormalizedValue::Unit, TypeForm::Unit) => Ok(JsonValue::Null),
         (NormalizedValue::Bool(value), TypeForm::Bool) => Ok(JsonValue::Bool(*value)),
         (NormalizedValue::I64(value), TypeForm::I64) => Ok(JsonValue::from(*value)),

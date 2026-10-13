@@ -34,9 +34,9 @@ const STANDARD_PACKAGE: &str = "pkg_10000000000000000000000000000001";
 const STANDARD_SEMANTIC_REVISION: &str =
     "rev_6818785d8919028a69659b24df495b2d7a42f2676a95fd1aa0ae143a32623013";
 const STANDARD_PACKAGE_REVISION: &str =
-    "package_revision_3a0f78fdb296b222dc03b1ef01219534c049ae0081362a0004654c78fd88ac73";
+    "package_revision_cdf12369ee92d1ac490ab2f13ac3dccaa7ed7a187ed42e784ecb9b091eb19f01";
 const STANDARD_PACKAGE_TRANSPORT: &str =
-    "package_transport_47b5ebc559df9de48f3a858f2184de93d00c2de44e36bd18a9ed5058b1a748d4";
+    "package_transport_be856691be8136690b69c0369e35ab5dcbd7f59ac4730e35c6fd3d8df29ffe95";
 const COMMAND_TEXT_FROM_STATIC: &str = "text-from-static";
 const COMMAND_TEXT_FROM_STATIC_IMPLEMENTATION: &str = "core.text.from-static";
 const HTTP_BYTES_FROM_TEXT: &str = "bytes-from-text";
@@ -912,6 +912,36 @@ fn builtin_error(
 }
 
 #[cfg(test)]
+pub(crate) fn copy_maintained_repository(source: &std::path::Path, destination: &std::path::Path) {
+    let source_metadata = std::fs::symlink_metadata(source).expect("inspect copied tree source");
+    assert!(
+        source_metadata.is_dir() && !source_metadata.file_type().is_symlink(),
+        "copied tree source must be a regular directory"
+    );
+    std::fs::create_dir(destination).expect("create copied tree destination");
+    let mut entries = std::fs::read_dir(source)
+        .expect("read copied tree source")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("read copied tree entries");
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        let source_path = entry.path();
+        let destination_path = destination.join(entry.file_name());
+        let metadata = std::fs::symlink_metadata(&source_path).expect("inspect copied tree entry");
+        assert!(
+            !metadata.file_type().is_symlink(),
+            "copied maintained authority must not contain symbolic links"
+        );
+        if metadata.is_dir() {
+            copy_maintained_repository(&source_path, &destination_path);
+        } else {
+            assert!(metadata.is_file(), "copied tree entry must be regular");
+            std::fs::copy(&source_path, &destination_path).expect("copy regular tree entry");
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::platform::compiler::{OptimizationPolicy, build_clean, link_artifact};
@@ -1004,7 +1034,10 @@ mod tests {
 
     #[test]
     fn maintained_standard_is_the_byte_owner_of_embedded_assets() {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
+        let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
+        let temporary = tempfile::tempdir().expect("maintained standard copy parent");
+        let root = temporary.path().join("standard");
+        super::copy_maintained_repository(&source, &root);
         let repository = GraphRepository::open(&root).expect("open maintained Graph 10 standard");
         let exported = repository
             .export_package_transport()

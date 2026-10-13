@@ -119,8 +119,11 @@ fn generic_implementation_admits_symbolic_borrowing_and_materializes_nested_appl
         None,
     )
     .unwrap();
-    assert_eq!(applied.method.result, nested);
-    assert_eq!(applied.method.result_borrow, Some(1));
+    assert_eq!(applied.method.result.ty, nested);
+    assert_eq!(
+        applied.method.result.relation,
+        ResultRelation::ReadFrom { source: 1 }
+    );
     assert_eq!(applied.method.parameters[1].use_mode, ParameterUse::Borrow);
     let self_type = applied.method.parameters[1].ty;
     assert!(
@@ -149,8 +152,11 @@ fn generic_implementation_admits_symbolic_borrowing_and_materializes_nested_appl
         None,
     )
     .unwrap();
-    assert_eq!(selected.method.result, buffer);
-    assert_eq!(selected.method.result_borrow, Some(1));
+    assert_eq!(selected.method.result.ty, buffer);
+    assert_eq!(
+        selected.method.result.relation,
+        ResultRelation::ReadFrom { source: 1 }
+    );
 }
 
 #[test]
@@ -297,7 +303,9 @@ fn generic_implementation_checks_stronger_bounds_foreign_owners_and_borrow_sourc
     let DeclarationPayload::Function(f) = &mut d.payload else {
         unreachable!()
     };
-    f.result_borrow = Some(f.parameters[0]);
+    f.result.relation = ResultRelation::ReadFrom {
+        source: f.parameters[0],
+    };
     assert!(owned_contract::validate_implementation_at(&changed, reference, &i).is_err());
 
     let mut changed = original.clone();
@@ -330,6 +338,8 @@ fn generic_implementation_application_roots_retain_unused_arguments() {
             contract: declaration(&source, "Reader"),
             method: METHOD.parse().unwrap(),
             arguments: vec![],
+
+            read_scope_arguments: Vec::new(),
         },
     };
     assert_eq!(expression.type_roots(), vec![cell, buffer]);

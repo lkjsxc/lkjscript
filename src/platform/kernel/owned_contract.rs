@@ -16,7 +16,8 @@ use super::owned_associated::{OwnedAssociatedAdmission, OwnedTypeOccurrence};
 mod associated_application;
 pub(crate) use associated_application::{
     AdmittedFunctionApplication, AdmittedMethodApplication, FunctionArguments,
-    admit_function_application, admit_method_application,
+    admit_function_application, admit_function_application_with_scopes, admit_method_application,
+    admit_method_application_with_scopes,
 };
 
 #[cfg(test)]
@@ -29,6 +30,16 @@ mod mixed_tests;
 
 fn reject(message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Semantic, "kernel_owned_contract", message)
+}
+
+fn reserve_scope_inventory<S>(
+    parameters: &[ReadScopeParameter],
+    sources: &[ReadScopeSource<S>],
+    associated: &OwnedAssociatedAdmission,
+) -> Result<(), Diagnostic> {
+    associated.reserve::<crate::platform::semantic_id::ReadScopeParameterId>(parameters.len())?;
+    associated.reserve::<&Name>(parameters.len())?;
+    associated.reserve::<(S, ReadScopeArgument)>(sources.len())
 }
 fn admit_dependency(
     read: &(impl ExpressionRead + ?Sized),
@@ -58,9 +69,9 @@ pub struct OwnedMethod {
     pub id: MethodId,
     pub name: Name,
     pub parameters: Vec<OwnedMethodParameter>,
-    pub result: TypeObjectDigest,
-    #[serde(default)]
-    pub result_borrow: Option<u32>,
+    pub result: CallableResult<u32>,
+    pub read_scope_parameters: Vec<ReadScopeParameter>,
+    pub read_scope_sources: Vec<ReadScopeSource<u32>>,
     pub effect: FunctionEffect,
 }
 
@@ -92,10 +103,11 @@ pub struct AssociatedTypeMember {
     pub bound: AssociatedTypeBound,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AssociatedTypeBound {
     Owned,
+    ReadViewFamily { scope_parameter: ReadScopeParameter },
 }
 
 impl Encode for AssociatedTypeBound {
@@ -103,7 +115,13 @@ impl Encode for AssociatedTypeBound {
         &self,
         encoder: &mut E,
     ) -> Result<(), bincode::error::EncodeError> {
-        1_u8.encode(encoder)
+        match self {
+            Self::Owned => 1_u8.encode(encoder),
+            Self::ReadViewFamily { scope_parameter } => {
+                2_u8.encode(encoder)?;
+                scope_parameter.encode(encoder)
+            }
+        }
     }
 }
 impl<C> Decode<C> for AssociatedTypeBound {
@@ -112,6 +130,9 @@ impl<C> Decode<C> for AssociatedTypeBound {
     ) -> Result<Self, bincode::error::DecodeError> {
         match u8::decode(decoder)? {
             1 => Ok(Self::Owned),
+            2 => Ok(Self::ReadViewFamily {
+                scope_parameter: ReadScopeParameter::decode(decoder)?,
+            }),
             _ => Err(bincode::error::DecodeError::Other(
                 "unknown associated owned type bound",
             )),
@@ -124,7 +145,47 @@ bincode::impl_borrow_decode!(AssociatedTypeBound);
 #[serde(deny_unknown_fields)]
 pub struct AssociatedTypeBinding {
     pub member: AssociatedTypeMemberId,
-    pub ty: TypeObjectDigest,
+    pub value: AssociatedTypeBindingValue,
+}
+
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum AssociatedTypeBindingValue {
+    Owned {
+        ty: TypeObjectDigest,
+    },
+    ReadViewFamily {
+        scope_parameter: ReadScopeParameter,
+        ty: TypeObjectDigest,
+    },
+}
+
+impl AssociatedTypeBindingValue {
+    pub fn ty(&self) -> TypeObjectDigest {
+        match self {
+            Self::Owned { ty } | Self::ReadViewFamily { ty, .. } => *ty,
+        }
+    }
+    pub fn ty_mut(&mut self) -> &mut TypeObjectDigest {
+        match self {
+            Self::Owned { ty } | Self::ReadViewFamily { ty, .. } => ty,
+        }
+    }
+}
+
+impl AssociatedTypeBinding {
+    pub fn ty(&self) -> TypeObjectDigest {
+        self.value.ty()
+    }
+}
+
+impl AssociatedTypeBound {
+    pub fn scope_arity(&self) -> usize {
+        match self {
+            Self::Owned => 0,
+            Self::ReadViewFamily { .. } => 1,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
@@ -134,6 +195,7 @@ pub struct OwnedMethodImplementation {
     pub function: DeclarationReference,
     pub type_arguments: Vec<TypeObjectDigest>,
     pub implementations: Vec<ImplementationOperand>,
+    pub read_scope_arguments: Vec<ReadScopeArgument>,
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
@@ -208,8 +270,13 @@ impl OwnedContract {
             if !row.is_closed() {
                 return Err(reject("owned methods require closed exact effect rows"));
             }
-            if let Some(position) = method.result_borrow {
-                let source = method.parameters.get(position as usize).ok_or_else(|| {
+            validate_read_scope_inventory(
+                &method.read_scope_parameters,
+                &method.read_scope_sources,
+                |position| (position as usize) < method.parameters.len(),
+            )?;
+            if let Some(position) = method.result.relation.source() {
+                let source = method.parameters.get(*position as usize).ok_or_else(|| {
                     reject("borrowed method result source is outside its parameter inventory")
                 })?;
                 if !matches!(method.effect, FunctionEffect::Pure)
@@ -220,13 +287,16 @@ impl OwnedContract {
                     ));
                 }
             }
+            if let ResultRelation::ViewFrom { scope, .. } = method.result.relation {
+                validate_formal_scope(scope, &method.read_scope_parameters, None)?;
+            }
         }
         Ok(())
     }
     pub(crate) fn type_roots(&self) -> Vec<TypeObjectDigest> {
         self.methods
             .iter()
-            .flat_map(|m| m.parameters.iter().map(|p| p.ty).chain([m.result]))
+            .flat_map(|m| m.parameters.iter().map(|p| p.ty).chain([m.result.ty]))
             .collect()
     }
 }
@@ -286,7 +356,9 @@ impl OwnedImplementation {
             }
         }
         for method in &self.methods {
-            if method.implementations.len() > contract::MAXIMUM_CHILDREN {
+            if method.implementations.len() > contract::MAXIMUM_CHILDREN
+                || method.read_scope_arguments.len() > contract::MAXIMUM_CHILDREN
+            {
                 return Err(reject("mapped prerequisite inventory exceeds its bound"));
             }
             for operand in &method.implementations {
@@ -298,7 +370,7 @@ impl OwnedImplementation {
 
     pub(crate) fn type_roots(&self) -> Vec<TypeObjectDigest> {
         std::iter::once(self.self_type)
-            .chain(self.associated_types.iter().map(|binding| binding.ty))
+            .chain(self.associated_types.iter().map(AssociatedTypeBinding::ty))
             .chain(self.type_arguments.iter().copied())
             .chain(
                 self.implementation_parameters.iter().flat_map(|p| {
@@ -785,7 +857,8 @@ pub(crate) fn optional_function_contract(
                 type_parameters: f.type_parameters,
                 parameters: f.parameters,
                 result: f.result,
-                result_borrow: f.result_borrow,
+                read_scope_parameters: f.read_scope_parameters,
+                read_scope_sources: f.read_scope_sources,
                 effect: f.effect,
             };
             validate_function_borrow_generation(
@@ -882,6 +955,9 @@ pub(crate) fn validate_owned_parameter(
                 DeclarationPayload::OwnedRecord {
                     type_parameters, ..
                 } => super::transfer::function_parameter_listed(read, &type_parameters, id)?,
+                DeclarationPayload::ReadView(view) => {
+                    super::transfer::function_parameter_listed(read, &view.type_parameters, id)?
+                }
                 _ => false,
             },
             _ => false,
@@ -907,6 +983,9 @@ pub(crate) fn validate_owned_parameter(
                 PackageInterfaceDeclarationPayload::OwnedRecord {
                     type_parameters, ..
                 } => super::transfer::function_parameter_listed(read, &type_parameters, id)?,
+                PackageInterfaceDeclarationPayload::ReadView(view) => {
+                    super::transfer::function_parameter_listed(read, &view.type_parameters, id)?
+                }
                 _ => false,
             },
             _ => false,
@@ -1033,6 +1112,15 @@ pub(crate) fn validate_type_argument_constraints(
     ty: TypeObjectDigest,
     scope: Option<DeclarationReference>,
 ) -> Result<(), Diagnostic> {
+    if super::owned_associated::read_view_admission::contains(
+        read,
+        ty,
+        &OwnedAssociatedAdmission::new(),
+    )? {
+        return Err(reject(
+            "read views cannot occur in ordinary or Owned type actuals, including phantom actuals",
+        ));
+    }
     if constraints.has_owned() {
         validate_owned_type(read, ty, scope)?;
     }
@@ -1058,6 +1146,11 @@ pub(crate) fn validate_type_argument_constraints_at(
     associated: &OwnedAssociatedAdmission,
 ) -> Result<(), Diagnostic> {
     associated.validate_occurrence_at(read, &[ty], occurrence)?;
+    if super::owned_associated::read_view_admission::contains(read, ty, associated)? {
+        return Err(reject(
+            "read views cannot occur in ordinary or Owned type actuals, including phantom actuals",
+        ));
+    }
     if constraints.has_owned() {
         validate_owned_type_at(read, ty, occurrence, associated)?;
     } else if super::memory::contains_at(read, ty, occurrence, associated)? {
@@ -1254,7 +1347,7 @@ pub(crate) fn requires_parameterized_generation(
             .parameters
             .iter()
             .map(|p| p.ty)
-            .chain([method.result])
+            .chain([method.result.ty])
         {
             read.validation_work()?;
             if super::memory::direct_in(read, package, ty)?
@@ -1304,17 +1397,30 @@ pub(crate) fn validate_implementation_at(
     reference: DeclarationReference,
     implementation: &OwnedImplementation,
 ) -> Result<(), Diagnostic> {
+    validate_implementation_at_with_admission(
+        read,
+        reference,
+        implementation,
+        &OwnedAssociatedAdmission::new(),
+    )
+}
+
+pub(crate) fn validate_implementation_at_with_admission(
+    read: &(impl ExpressionRead + ?Sized),
+    reference: DeclarationReference,
+    implementation: &OwnedImplementation,
+    associated: &OwnedAssociatedAdmission,
+) -> Result<(), Diagnostic> {
     let types = BTreeMap::new();
     let read = AppliedTypeRead {
         read,
         types: &types,
     };
-    let associated = OwnedAssociatedAdmission::new();
     validate_implementation_scoped(
         &read,
         Some(reference),
         implementation,
-        &mut WitnessAdmission::new(&associated),
+        &mut WitnessAdmission::new(associated),
     )
 }
 
@@ -1385,6 +1491,181 @@ impl<'a> WitnessAdmission<'a> {
     }
 }
 
+// This authenticates relative interface metadata, not complete supplier source.
+// Every accepting publication/load route separately discharges private mapped
+// signature equations against canonical supplier source and exact projection.
+fn validate_imported_definition_identity(
+    read: &dyn ExpressionRead,
+    scope: DeclarationReference,
+    implementation: &OwnedImplementation,
+    associated: &OwnedAssociatedAdmission,
+) -> Result<(), Diagnostic> {
+    associated.step(read)?;
+    admit_dependency(read, scope.package)?;
+    let key = OwnerKey::Declaration(scope.declaration);
+    let Some(PackageInterfaceRecord::Declaration(record)) =
+        read.package_interface_owner(scope.package, key)?
+    else {
+        return Err(reject("missing exact imported implementation descriptor"));
+    };
+    if !contract::supported_graph_contract(record.header.contract_version)
+        || record.header.owner != key
+        || record.header.kind != OwnerKind::OwnedImplementation
+    {
+        return Err(reject(
+            "imported implementation descriptor has a foreign owner identity or kind",
+        ));
+    }
+    let generation = record.header.contract_version;
+    let PackageInterfaceDeclarationPayload::OwnedImplementation(actual) = record.payload else {
+        return Err(reject("missing exact imported implementation descriptor"));
+    };
+    // Charge both complete bounded descriptors before their equality scan,
+    // including nested mapped operands rather than only method identities.
+    for definition in [&actual, implementation] {
+        for _ in &definition.type_parameters {
+            associated.step(read)?;
+        }
+        for _ in &definition.type_arguments {
+            associated.step(read)?;
+        }
+        for binding in &definition.associated_types {
+            associated.step(read)?;
+            if let AssociatedTypeBindingValue::ReadViewFamily {
+                scope_parameter, ..
+            } = &binding.value
+            {
+                for _ in scope_parameter.name.as_str().bytes() {
+                    associated.step(read)?;
+                }
+            }
+        }
+        for parameter in &definition.implementation_parameters {
+            associated.step(read)?;
+            for _ in parameter.name.as_str().bytes() {
+                associated.step(read)?;
+            }
+            for _ in &parameter.type_arguments {
+                associated.step(read)?;
+            }
+        }
+        for method in &definition.methods {
+            associated.step(read)?;
+            for _ in &method.type_arguments {
+                associated.step(read)?;
+            }
+            for _ in &method.read_scope_arguments {
+                associated.step(read)?;
+            }
+            for operand in &method.implementations {
+                admit_operand_metadata(read, operand, associated)?;
+                for node in operand.walk() {
+                    associated.step(read)?;
+                    for _ in node.type_arguments() {
+                        associated.step(read)?;
+                    }
+                }
+            }
+        }
+    }
+    if generation < contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+        && requires_mixed_generation(read, scope, &actual.type_parameters)?
+    {
+        return Err(reject(
+            "imported ordinary implementation schemes require Graph 33",
+        ));
+    }
+    if generation < 29 && actual.requires_prerequisite_generation() {
+        return Err(reject(
+            "imported implementation prerequisites require Graph 29",
+        ));
+    }
+    if actual != *implementation {
+        return Err(reject(
+            "imported implementation descriptor differs from its exact selected inventory",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_deferred_private_method_metadata(
+    read: &dyn ExpressionRead,
+    implementation: &OwnedImplementation,
+    method: &OwnedMethod,
+    target: &OwnedMethodImplementation,
+    occurrence: OwnedTypeOccurrence,
+    admission: &mut WitnessAdmission<'_>,
+) -> Result<(), Diagnostic> {
+    let associated = admission.associated;
+    let binder = ReadScopeBinder::ContractMethod {
+        contract: implementation.contract,
+        method: method.id,
+    };
+    reserve_scope_inventory(
+        &method.read_scope_parameters,
+        &method.read_scope_sources,
+        associated,
+    )?;
+    validate_read_scope_inventory_at(
+        binder,
+        &method.read_scope_parameters,
+        &method.read_scope_sources,
+        |position| (position as usize) < method.parameters.len(),
+    )?;
+    if target.read_scope_arguments.len() != method.read_scope_parameters.len() {
+        return Err(reject(
+            "deferred mapped scopes differ from the exact contract formal inventory",
+        ));
+    }
+    let empty_loans = BTreeSet::new();
+    let authority = super::owned_associated::read_view_admission::ScopeAuthority {
+        binder: Some(binder),
+        lexical: None,
+        live_loans: &empty_loans,
+    };
+    for actual in &target.read_scope_arguments {
+        associated.step(read)?;
+        authority.validate(read, *actual, associated)?;
+    }
+    // Hidden formals' bounds remain a supplier-source obligation. Each written
+    // actual is still an admitted occurrence, including phantom positions.
+    for ty in &target.type_arguments {
+        associated.step(read)?;
+        associated.validate_occurrence_at(read, &[*ty], occurrence)?;
+        if super::owned_associated::read_view_admission::contains(read, *ty, associated)? {
+            return Err(reject(
+                "read views cannot occur in ordinary or Owned type actuals, including phantom actuals",
+            ));
+        }
+    }
+    for operand in &target.implementations {
+        admit_operand_metadata(read, operand, associated)?;
+        for node in operand.walk() {
+            associated.step(read)?;
+            if matches!(operand, ImplementationOperand::Concrete { .. })
+                && matches!(node, ImplementationOperand::Parameter { .. })
+            {
+                return Err(reject(
+                    "mapped concrete applications must contain no lexical witness operands",
+                ));
+            }
+            for ty in node.type_arguments() {
+                associated.step(read)?;
+                associated.validate_occurrence_at(read, &[*ty], occurrence)?;
+                if super::owned_associated::read_view_admission::contains(read, *ty, associated)? {
+                    return Err(reject(
+                        "read views cannot occur in ordinary or Owned type actuals, including phantom actuals",
+                    ));
+                }
+            }
+        }
+        // All exact visible witness/prerequisite relations remain immediate;
+        // only the absent callable's formal-to-actual matching is deferred.
+        witness_contract_scoped(read, operand, occurrence.parameters.scope(), admission)?;
+    }
+    Ok(())
+}
+
 fn validate_implementation_scoped(
     read: &dyn ExpressionRead,
     scope: Option<DeclarationReference>,
@@ -1393,6 +1674,14 @@ fn validate_implementation_scoped(
 ) -> Result<(), Diagnostic> {
     read.validation_work()?;
     if let Some(scope) = scope {
+        if scope.package != read.package_id() {
+            validate_imported_definition_identity(
+                read,
+                scope,
+                implementation,
+                admission.associated,
+            )?;
+        }
         // Definition cycles with closed witness resets can have finite applications.
         // Each active frame still admits all its own maps before it completes.
         if admission.active.contains(&scope) || admission.completed.contains(&scope) {
@@ -1548,8 +1837,41 @@ fn validate_implementation_definition(
             }
         }
         let target = target.ok_or_else(|| reject("wrong implementation method identity"))?;
-        let f = function_contract(read, target.function)?;
+        let f = match optional_function_contract(read, target.function)? {
+            Some(function) => function,
+            None if scope.is_some_and(|owner| {
+                owner.package != read.package_id() && owner.package == target.function.package
+            }) && {
+                admission.associated.step(read)?;
+                read.package_interface_owner(
+                    target.function.package,
+                    OwnerKey::Declaration(target.function.declaration),
+                )?
+                .is_none()
+            } =>
+            {
+                // Only the supplier's own absent private target is relative
+                // interface evidence. Complete supplier-local validation is
+                // mandatory before outer source/publication/artifact readiness.
+                validate_deferred_private_method_metadata(
+                    read,
+                    implementation,
+                    method,
+                    target,
+                    occurrence,
+                    admission,
+                )?;
+                continue;
+            }
+            None => {
+                return Err(reject(
+                    "method target must be an exact visible graph function",
+                ));
+            }
+        };
         if f.type_parameters.len() != target.type_arguments.len()
+            || f.read_scope_parameters.len() != method.read_scope_parameters.len()
+            || f.read_scope_parameters.len() != target.read_scope_arguments.len()
             || !f.effect_parameters.is_empty()
             || !f.requirement_parameters.is_empty()
             || f.implementation_parameters.len() != target.implementations.len()
@@ -1616,11 +1938,70 @@ fn validate_implementation_definition(
             target.function,
             admission.associated,
         )?;
-        let application_types = validate_witness_arguments(
+        let method_binder = ReadScopeBinder::ContractMethod {
+            contract: implementation.contract,
+            method: method.id,
+        };
+        reserve_scope_inventory(
+            &method.read_scope_parameters,
+            &method.read_scope_sources,
+            admission.associated,
+        )?;
+        reserve_scope_inventory(
+            &f.read_scope_parameters,
+            &f.read_scope_sources,
+            admission.associated,
+        )?;
+        validate_read_scope_inventory_at(
+            method_binder,
+            &method.read_scope_parameters,
+            &method.read_scope_sources,
+            |position| (position as usize) < method.parameters.len(),
+        )?;
+        validate_read_scope_inventory_at(
+            ReadScopeBinder::Declaration(target.function),
+            &f.read_scope_parameters,
+            &f.read_scope_sources,
+            |parameter| f.parameters.contains(&parameter),
+        )?;
+        admission
+            .associated
+            .reserve::<(ReadScopeReference, ReadScopeArgument)>(
+                method.read_scope_parameters.len(),
+            )?;
+        let expected_scopes = method
+            .read_scope_parameters
+            .iter()
+            .map(|parameter| {
+                let reference = ReadScopeReference {
+                    binder: method_binder,
+                    parameter: parameter.id,
+                };
+                (reference, ReadScopeArgument::Parameter(reference))
+            })
+            .collect::<BTreeMap<_, _>>();
+        let empty_loans = BTreeSet::new();
+        let target_scopes = if f.read_scope_parameters.is_empty() {
+            BTreeMap::new()
+        } else {
+            super::owned_associated::read_view_admission::scope_bindings(
+                read,
+                ReadScopeBinder::Declaration(target.function),
+                &target.read_scope_arguments,
+                super::owned_associated::read_view_admission::ScopeAuthority {
+                    binder: Some(method_binder),
+                    lexical: None,
+                    live_loans: &empty_loans,
+                },
+                admission.associated,
+            )?
+        };
+        let application_types = validate_witness_arguments_with_scopes(
             read,
             target.function,
             &f.implementation_parameters,
             &target_bindings,
+            &target_scopes,
             &target.implementations,
             occurrence,
             admission,
@@ -1643,9 +2024,11 @@ fn validate_implementation_definition(
         let empty_witnesses = BTreeMap::new();
         let expected_environment = super::parallel_types::AssociatedTypeEnvironment {
             ordinary: &substitutions,
-            source: super::owned_associated::AssociatedTypeContext::ContractSignature(
-                implementation.contract,
-            ),
+            scopes: &expected_scopes,
+            source: super::owned_associated::AssociatedTypeContext::ContractMethod {
+                contract: implementation.contract,
+                method: method.id,
+            },
             caller: occurrence.associated,
             consumer_generation: occurrence.consumer_generation,
             contract_selection: scope.map(|scope| {
@@ -1658,6 +2041,7 @@ fn validate_implementation_definition(
         };
         let target_environment = super::parallel_types::AssociatedTypeEnvironment {
             ordinary: &target_bindings,
+            scopes: &target_scopes,
             source: super::owned_associated::AssociatedTypeContext::Lexical(target.function),
             caller: occurrence.associated,
             consumer_generation: occurrence.consumer_generation,
@@ -1677,7 +2061,7 @@ fn validate_implementation_definition(
         let source_occurrence = defining_occurrence(read, Some(target.function))?;
         admission
             .associated
-            .validate_occurrence_at(read, &[f.result], source_occurrence)?;
+            .validate_occurrence_at(read, &[f.result.ty], source_occurrence)?;
         for (id, expected) in f.parameters.iter().zip(&method.parameters) {
             let p = parameter(read, target.function.package, *id)?;
             admission
@@ -1702,20 +2086,45 @@ fn validate_implementation_definition(
                 ));
             }
         }
-        if expected_types.substitute(method.result, 0)? != target_types.substitute(f.result, 0)? {
+        if expected_types.substitute(method.result.ty, 0)?
+            != target_types.substitute(f.result.ty, 0)?
+        {
             return Err(reject("implementation result mismatch"));
         }
-        let expected_source = method
-            .result_borrow
-            .map(|position| {
-                f.parameters
-                    .get(position as usize)
-                    .copied()
-                    .ok_or_else(|| reject("implementation borrowed result source is out of range"))
-            })
-            .transpose()?;
-        if f.result_borrow != expected_source {
+        let mut expected_relation = method.result.relation.try_map_source(|position| {
+            f.parameters
+                .get(position as usize)
+                .copied()
+                .ok_or_else(|| reject("implementation borrowed result source is out of range"))
+        })?;
+        if let ResultRelation::ViewFrom { scope, .. } = &mut expected_relation {
+            *scope = expected_types.substitute_scope(*scope)?;
+        }
+        let mut actual_relation = f.result.relation;
+        if let ResultRelation::ViewFrom { scope, .. } = &mut actual_relation {
+            *scope = target_types.substitute_scope(*scope)?;
+        }
+        if actual_relation != expected_relation {
             return Err(reject("implementation borrowed result source mismatch"));
+        }
+        if method.read_scope_sources.len() != f.read_scope_sources.len() {
+            return Err(reject("implementation source-scope inventory mismatch"));
+        }
+        for (expected, actual) in method.read_scope_sources.iter().zip(&f.read_scope_sources) {
+            read.validation_work()?;
+            let source = f
+                .parameters
+                .get(expected.source as usize)
+                .copied()
+                .ok_or_else(|| {
+                    reject("mapped source-scope position is outside the exact parameter inventory")
+                })?;
+            if source != actual.source
+                || expected_types.substitute_scope(expected.scope)?
+                    != target_types.substitute_scope(actual.scope)?
+            {
+                return Err(reject("implementation source-scope relationship mismatch"));
+            }
         }
     }
     Ok(())
@@ -1847,6 +2256,32 @@ fn validate_witness_arguments(
     occurrence: OwnedTypeOccurrence,
     admission: &mut WitnessAdmission,
 ) -> Result<BTreeMap<TypeObjectDigest, TypeObject>, Diagnostic> {
+    validate_witness_arguments_with_scopes(
+        read,
+        source,
+        parameters,
+        substitutions,
+        &BTreeMap::new(),
+        operands,
+        occurrence,
+        admission,
+    )
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "complete ordinary, scope and witness application inventories retain independent authority"
+)]
+fn validate_witness_arguments_with_scopes(
+    read: &dyn ExpressionRead,
+    source: DeclarationReference,
+    parameters: &[ImplementationParameter],
+    substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+    scopes: &BTreeMap<ReadScopeReference, ReadScopeArgument>,
+    operands: &[ImplementationOperand],
+    occurrence: OwnedTypeOccurrence,
+    admission: &mut WitnessAdmission,
+) -> Result<BTreeMap<TypeObjectDigest, TypeObject>, Diagnostic> {
     if parameters.len() != operands.len() {
         return Err(reject(
             "implementation prerequisite argument arity mismatch",
@@ -1886,6 +2321,7 @@ fn validate_witness_arguments(
     };
     let environment = super::parallel_types::AssociatedTypeEnvironment {
         ordinary: substitutions,
+        scopes,
         source: super::owned_associated::AssociatedTypeContext::Lexical(source),
         caller: occurrence.associated,
         consumer_generation: occurrence.consumer_generation,
@@ -2005,8 +2441,10 @@ fn witness_contract_inner(
                 read,
                 types: &types,
             };
+            let empty_scopes = BTreeMap::new();
             let environment = super::parallel_types::AssociatedTypeEnvironment {
                 ordinary: &bindings,
+                scopes: &empty_scopes,
                 source: super::owned_associated::AssociatedTypeContext::Lexical(*implementation),
                 caller: occurrence.associated,
                 consumer_generation: occurrence.consumer_generation,
@@ -2101,6 +2539,11 @@ pub(crate) fn method_signature(
     }
     let mut method =
         found.ok_or_else(|| reject("method is absent from the exact witness contract"))?;
+    if !method.read_scope_parameters.is_empty() {
+        return Err(reject(
+            "scope-bearing methods require complete explicit application admission",
+        ));
+    }
     let substitutions = contract_bindings(&c, application.self_type, &application.type_arguments);
     let overlay = AppliedTypeRead {
         read,
@@ -2110,7 +2553,9 @@ pub(crate) fn method_signature(
     for p in &mut method.parameters {
         p.ty = derived.substitute(p.ty, &substitutions, 0)?;
     }
-    method.result = derived.substitute(method.result, &substitutions, 0)?;
+    method.result = method
+        .result
+        .try_map_type(|ty| derived.substitute(ty, &substitutions, 0))?;
     let mut types = derived.into_types();
     types.extend(application.types);
     Ok(AppliedOwnedMethod { method, types })
@@ -2124,6 +2569,11 @@ pub(crate) fn validate_application(
     scope: Option<DeclarationId>,
 ) -> Result<(), Diagnostic> {
     let f = function_contract(read, reference)?;
+    if !f.read_scope_parameters.is_empty() {
+        return Err(reject(
+            "scope-bearing functions require complete explicit application admission",
+        ));
+    }
     if f.implementation_parameters.len() != operands.len() {
         return Err(reject("implementation witness arity mismatch"));
     }
@@ -2199,7 +2649,7 @@ fn validate_contract_at(
     validate_contract_at_with(read, reference, c, &OwnedAssociatedAdmission::new())
 }
 
-fn validate_contract_at_with(
+pub(crate) fn validate_contract_at_with(
     read: &(impl ExpressionRead + ?Sized),
     reference: DeclarationReference,
     c: &OwnedContract,
@@ -2230,17 +2680,36 @@ fn validate_contract_at_with(
     associated.reserve::<TypeParameterId>(c.type_parameters.len())?;
     associated.reserve::<MethodId>(c.methods.len())?;
     associated.reserve::<&Name>(c.methods.len())?;
+    for method in &c.methods {
+        reserve_scope_inventory(
+            &method.read_scope_parameters,
+            &method.read_scope_sources,
+            associated,
+        )?;
+    }
     c.validate_local()?;
     for member in &c.associated_types {
-        associated.validate_form(
-            read,
-            &TypeForm::AssociatedContractMember {
-                contract: reference,
-                member: member.id,
-            },
-            occurrence.associated,
-            generation,
-        )?;
+        match &member.bound {
+            AssociatedTypeBound::Owned => associated.validate_form(
+                read,
+                &TypeForm::AssociatedContractMember {
+                    contract: reference,
+                    member: member.id,
+                },
+                occurrence.associated,
+                generation,
+            )?,
+            AssociatedTypeBound::ReadViewFamily { .. } => {
+                super::owned_associated::read_view_admission::scope_parameters(
+                    read,
+                    ReadScopeBinder::AssociatedMember {
+                        contract: reference,
+                        member: member.id,
+                    },
+                    associated,
+                )?;
+            }
+        }
     }
     associated.reserve::<Name>(1)?;
     associated.reserve::<Name>(c.type_parameters.len())?;
@@ -2285,10 +2754,43 @@ fn validate_contract_at_with(
     associated.reserve::<TypeParameterId>(c.type_parameters.len())?;
     let ordinary_assumptions = super::transfer::ordinary_assumptions_in(read, Some(reference))?;
     for method in &c.methods {
+        let occurrence = OwnedTypeOccurrence {
+            associated: super::owned_associated::AssociatedTypeContext::ContractMethod {
+                contract: reference,
+                method: method.id,
+            },
+            ..occurrence
+        };
+        reserve_scope_inventory(
+            &method.read_scope_parameters,
+            &method.read_scope_sources,
+            associated,
+        )?;
+        validate_read_scope_inventory_at(
+            ReadScopeBinder::ContractMethod {
+                contract: reference,
+                method: method.id,
+            },
+            &method.read_scope_parameters,
+            &method.read_scope_sources,
+            |position| (position as usize) < method.parameters.len(),
+        )?;
+        associated.validate_occurrence_at(read, &[method.result.ty], occurrence)?;
         let mut suffix = false;
         for parameter in &method.parameters {
             read.validation_work()?;
-            if super::memory::direct_at(read, parameter.ty, occurrence, associated)? {
+            associated.validate_occurrence_at(read, &[parameter.ty], occurrence)?;
+            let form = read
+                .type_object(parameter.ty)?
+                .ok_or_else(|| reject("missing exact method parameter type"))?
+                .form;
+            if form.is_read_view() {
+                if suffix || parameter.use_mode != ParameterUse::Borrow {
+                    return Err(reject(
+                        "read-view method parameters require exact read-only borrow use in the prefix before Owned parameters",
+                    ));
+                }
+            } else if super::memory::direct_at(read, parameter.ty, occurrence, associated)? {
                 validate_owned_type_at(read, parameter.ty, occurrence, associated)?;
                 suffix = true;
                 if parameter.use_mode == ParameterUse::Unrestricted {
@@ -2308,11 +2810,17 @@ fn validate_contract_at_with(
                 ));
             }
         }
-        if super::memory::direct_at(read, method.result, occurrence, associated)? {
-            validate_owned_type_at(read, method.result, occurrence, associated)?;
+        let result_form = read
+            .type_object(method.result.ty)?
+            .ok_or_else(|| reject("missing exact method result type"))?
+            .form;
+        if result_form.is_read_view() {
+            // Complete occurrence admission above checks the exact family/nominal source scope.
+        } else if super::memory::direct_at(read, method.result.ty, occurrence, associated)? {
+            validate_owned_type_at(read, method.result.ty, occurrence, associated)?;
         } else if !ordinary_with_assumptions_in(
             read,
-            method.result,
+            method.result.ty,
             Some(reference),
             &ordinary_assumptions,
         )? {
@@ -2320,20 +2828,30 @@ fn validate_contract_at_with(
                 "method result requires scoped owned or ordinary data type",
             ));
         }
-        if let Some(position) = method.result_borrow {
-            let source = method.parameters.get(position as usize).ok_or_else(|| {
-                reject("borrowed method result source is outside its parameter inventory")
-            })?;
-            if !matches!(method.effect, FunctionEffect::Pure)
-                || !super::memory::direct_at(read, method.result, occurrence, associated)?
-                || !super::memory::direct_at(read, source.ty, occurrence, associated)?
-                || source.use_mode != ParameterUse::Borrow
-            {
-                return Err(reject(
-                    "borrowed method result requires a pure method, direct owned result and exact borrowed source",
-                ));
-            }
-        }
+        associated.reserve::<(u32, TypeObjectDigest, ParameterUse)>(method.parameters.len())?;
+        let sources = method
+            .parameters
+            .iter()
+            .enumerate()
+            .map(|(position, parameter)| {
+                Ok((
+                    u32::try_from(position).map_err(|_| {
+                        reject("method source position exceeds its canonical bound")
+                    })?,
+                    parameter.ty,
+                    parameter.use_mode,
+                ))
+            })
+            .collect::<Result<Vec<_>, Diagnostic>>()?;
+        super::owned_associated::read_view_admission::validate_result(
+            read,
+            &method.result,
+            &sources,
+            &method.read_scope_sources,
+            matches!(method.effect, FunctionEffect::Pure),
+            occurrence,
+            associated,
+        )?;
     }
     Ok(())
 }
@@ -2432,6 +2950,13 @@ pub(super) fn ordinary_with_assumptions_at(
             TypeForm::AssociatedContractMember { .. }
             | TypeForm::AssociatedWitnessProjection { .. } => {
                 return Err(super::owned_associated_wire::unsupported_semantics());
+            }
+            TypeForm::ReadViewApplied { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. } => {
+                // Read views have a separate affine category; ordinary assumptions
+                // cannot grant their scope, source, or field authority.
+                return Ok(false);
             }
             TypeForm::TypeParameter { parameter } => {
                 if !bindings.contains(parameter) {

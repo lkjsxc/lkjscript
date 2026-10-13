@@ -99,14 +99,20 @@ fn borrowed_result_rejects_wrong_input_including_untaken_return() {
 
 #[test]
 fn borrowed_result_rejects_owning_sources_and_ordinary_call_escape() {
-    for candidate in [
+    for (index, candidate) in [
         SOURCE.replacen("(parameter create b (type ByteBuffer) (use borrow))\n    (returns ByteBuffer (borrow-from b))", "(parameter create b (type ByteBuffer) (use consume))\n    (returns ByteBuffer (borrow-from b))", 1),
         SOURCE.replace("(borrow-call (call root (local b)) (binding view (type ByteBuffer))\n        (in (call length (local view))))", "(let (binding saved (type ByteBuffer) (call root (local b))) (in (call length (local saved))))"),
         SOURCE.replace("(in (call length (local view))))\n      (call discard", "(in (sequence (call discard (local b)) (call length (local view)))))\n      (call discard"),
         SOURCE.replace("(returns ByteBuffer (borrow-from b)) (body (local b))", "(returns ByteBuffer (borrow-from b)) (body (call root (local b)))"),
-    ] {
+    ].into_iter().enumerate() {
         let error = author(&candidate).unwrap_err();
-        assert!(error.contains("kernel_buffer_ownership"), "{error}");
+        // Invalid designated source usage is rejected by the complete signature
+        // source/result gate before the independent lexical-body checker.
+        let expected = if index == 0 { "kernel_read_view" } else { "kernel_buffer_ownership" };
+        assert!(error.contains(expected), "candidate {index}: {error}");
+        if index == 0 {
+            assert!(error.contains("source-tied result needs an exact borrowed Owned or view source"), "{error}");
+        }
     }
 }
 
@@ -126,7 +132,7 @@ fn provenance_uses_parameter_identity_even_when_both_sources_have_equal_types() 
             let DeclarationPayload::Function(function) = &declaration.payload else {
                 return None;
             };
-            function.result_borrow
+            function.result.relation.source().copied()
         })
         .unwrap();
     let wrong =
@@ -161,6 +167,9 @@ fn provenance_uses_parameter_identity_even_when_both_sources_have_equal_types() 
         associated: &OwnedAssociatedAdmission::new(),
         types: std::cell::RefCell::new(BTreeMap::new()),
         scope: None,
+        ended_views: std::cell::RefCell::new(BTreeMap::new()),
+        produced_view: std::cell::Cell::new(None),
+        scope_order: std::cell::RefCell::new(Vec::new()),
     };
     assert!(
         check
@@ -259,6 +268,9 @@ fn borrowed_result_cannot_be_claimed_by_a_non_view_expression() {
         associated: &OwnedAssociatedAdmission::new(),
         types: std::cell::RefCell::new(BTreeMap::new()),
         scope: None,
+        ended_views: std::cell::RefCell::new(BTreeMap::new()),
+        produced_view: std::cell::Cell::new(None),
+        scope_order: std::cell::RefCell::new(Vec::new()),
     };
     let nominated = LocalValueReference::FunctionParameter(
         crate::platform::semantic_id::ParameterId::migrate(b"ordinary-result-nomination", 0),

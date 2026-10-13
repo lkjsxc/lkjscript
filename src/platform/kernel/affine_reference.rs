@@ -90,6 +90,11 @@ impl Reference<'_> {
                         if matches!(record.payload, PackageInterfaceDeclarationPayload::OwnedRecord { .. }))
                 }
             }
+            Some(
+                TypeForm::ReadViewApplied { .. }
+                | TypeForm::AssociatedReadViewMember { .. }
+                | TypeForm::AssociatedReadViewProjection { .. },
+            ) => false,
             _ => false,
         }
     }
@@ -130,6 +135,24 @@ impl Reference<'_> {
     }
 
     fn shapes_are_legal(&self) -> bool {
+        // Refuse the unsupported category throughout the complete raw type
+        // inventory, including a view hidden in a phantom actual's closure.
+        if self
+            .snapshot
+            .types
+            .values()
+            .chain(self.snapshot.dependency_types.values())
+            .any(|object| {
+                matches!(
+                    object.form,
+                    TypeForm::ReadViewApplied { .. }
+                        | TypeForm::AssociatedReadViewMember { .. }
+                        | TypeForm::AssociatedReadViewProjection { .. }
+                )
+            })
+        {
+            return false;
+        }
         self.snapshot.owners.iter().all(|(key, owner)| match owner {
             OwnerRecord::Parameter(parameter) => match parameter.parent {
                 super::ParameterParent::Function(declaration) => {
@@ -205,7 +228,7 @@ impl Reference<'_> {
                         })
                 }
                 DeclarationPayload::Function(function) => {
-                    !self.contains_resource(function.result, &mut BTreeSet::new())
+                    !self.contains_resource(function.result.ty, &mut BTreeSet::new())
                         && matches!(key, OwnerKey::Declaration(declaration) if self
                             .resource_signature(DeclarationReference {
                                 package: self.snapshot.root.package_id,
@@ -213,6 +236,10 @@ impl Reference<'_> {
                             })
                             .is_ok())
                 }
+                // This capability-flow oracle has no descriptor custody or
+                // source-scope model. View admission belongs to its independent
+                // oracle; never accept an unmodelled declaration as plain data.
+                DeclarationPayload::ReadView(_) => false,
                 DeclarationPayload::Constant { ty, .. } => {
                     !self.contains_resource(*ty, &mut BTreeSet::new())
                 }
@@ -252,6 +279,13 @@ impl Reference<'_> {
             _ => return Err(()),
         };
         match operation {
+            ExpressionOperation::CreateReadView { .. }
+            | ExpressionOperation::BorrowReadView { .. }
+            | ExpressionOperation::ReborrowReadView { .. }
+            | ExpressionOperation::MoveReadView { .. }
+            | ExpressionOperation::DropReadView { .. }
+            | ExpressionOperation::ReadViewDataField { .. }
+            | ExpressionOperation::BorrowReadViewField { .. } => Err(()),
             ExpressionOperation::SequenceEmpty { .. } => Ok(Value::Plain),
             ExpressionOperation::SequenceLength { source, .. }
             | ExpressionOperation::SequencePop { source, .. } => {
@@ -344,9 +378,22 @@ impl Reference<'_> {
             ExpressionOperation::ImplementationCall {
                 function,
                 arguments,
+                read_scope_arguments,
                 ..
-            } => self.function_call(*function, arguments, live),
-            ExpressionOperation::MethodCall { arguments, .. } => {
+            } => {
+                if !read_scope_arguments.is_empty() {
+                    return Err(());
+                }
+                self.function_call(*function, arguments, live)
+            }
+            ExpressionOperation::MethodCall {
+                arguments,
+                read_scope_arguments,
+                ..
+            } => {
+                if !read_scope_arguments.is_empty() {
+                    return Err(());
+                }
                 for arg in arguments {
                     self.plain(*arg, live)?;
                 }
@@ -359,7 +406,14 @@ impl Reference<'_> {
             | ExpressionOperation::Text { .. }
             | ExpressionOperation::StaticText { .. }
             | ExpressionOperation::Constant { .. } => Ok(Value::Plain),
-            ExpressionOperation::FunctionValue { function, .. } => {
+            ExpressionOperation::FunctionValue {
+                function,
+                read_scope_arguments,
+                ..
+            } => {
+                if !read_scope_arguments.is_empty() {
+                    return Err(());
+                }
                 if !self.resource_signature(*function)?.is_empty() {
                     Err(())
                 } else {
@@ -434,8 +488,14 @@ impl Reference<'_> {
             ExpressionOperation::Call {
                 function,
                 arguments,
+                read_scope_arguments,
                 ..
-            } => self.function_call(*function, arguments, live),
+            } => {
+                if !read_scope_arguments.is_empty() {
+                    return Err(());
+                }
+                self.function_call(*function, arguments, live)
+            }
             ExpressionOperation::Invoke { callee, arguments }
             | ExpressionOperation::Bind { callee, arguments } => {
                 self.plain(*callee, live)?;
@@ -673,16 +733,28 @@ impl Reference<'_> {
                     return Err(());
                 };
                 match &declaration.payload {
-                    DeclarationPayload::Function(function) => (
-                        &function.parameters,
-                        function.result,
-                        &function.effect,
-                        !function.requirement_parameters.is_empty(),
-                    ),
+                    DeclarationPayload::Function(function) => {
+                        if !function.read_scope_parameters.is_empty()
+                            || !function.read_scope_sources.is_empty()
+                            || matches!(
+                                function.result.relation,
+                                super::ResultRelation::ViewFrom { .. }
+                            )
+                        {
+                            return Err(());
+                        }
+                        (
+                            &function.parameters,
+                            function.result.ty,
+                            &function.effect,
+                            !function.requirement_parameters.is_empty(),
+                        )
+                    }
                     DeclarationPayload::External(signature) => {
                         self.external_parameters(reference.package, &signature.parameters)?;
                         return Ok(Vec::new());
                     }
+                    DeclarationPayload::ReadView(_) => return Err(()),
                     _ => return Ok(Vec::new()),
                 }
             } else {
@@ -693,16 +765,28 @@ impl Reference<'_> {
                     return Err(());
                 };
                 match &declaration.payload {
-                    PackageInterfaceDeclarationPayload::Function(signature) => (
-                        &signature.parameters,
-                        signature.result,
-                        &signature.effect,
-                        !signature.requirement_parameters.is_empty(),
-                    ),
+                    PackageInterfaceDeclarationPayload::Function(signature) => {
+                        if !signature.read_scope_parameters.is_empty()
+                            || !signature.read_scope_sources.is_empty()
+                            || matches!(
+                                signature.result.relation,
+                                super::ResultRelation::ViewFrom { .. }
+                            )
+                        {
+                            return Err(());
+                        }
+                        (
+                            &signature.parameters,
+                            signature.result.ty,
+                            &signature.effect,
+                            !signature.requirement_parameters.is_empty(),
+                        )
+                    }
                     PackageInterfaceDeclarationPayload::External(signature) => {
                         self.external_parameters(reference.package, &signature.parameters)?;
                         return Ok(Vec::new());
                     }
+                    PackageInterfaceDeclarationPayload::ReadView(_) => return Err(()),
                     _ => return Ok(Vec::new()),
                 }
             };
@@ -864,6 +948,9 @@ impl Reference<'_> {
             return None;
         }
         let result = match &self.type_object(digest)?.form {
+            TypeForm::ReadViewApplied { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. } => None,
             TypeForm::CapabilityResource { interface } => Some((Shape::Direct, *interface)),
             TypeForm::Named { declaration } => {
                 let mut found = None;
@@ -895,6 +982,11 @@ impl Reference<'_> {
             return false;
         };
         let result = match &object.form {
+            // Unsupported affine descriptors must contaminate enclosing
+            // plain-data shapes, including unused or phantom applications.
+            TypeForm::ReadViewApplied { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. } => true,
             TypeForm::CapabilityResource { .. } => true,
             TypeForm::Named { declaration } => self
                 .named_member_types(*declaration)
@@ -1408,7 +1500,7 @@ fn mutate_function_escape(snapshot: &mut KernelSnapshot) {
     let DeclarationPayload::Function(function) = &mut record.payload else {
         panic!("maintained task payload");
     };
-    function.result = resource;
+    function.result.ty = resource;
 }
 
 fn maintained_resource_helper(
@@ -1549,6 +1641,7 @@ fn mutate_resource_self_recursion(snapshot: &mut KernelSnapshot) {
                 declaration: helper,
             },
             type_arguments: Vec::new(),
+            read_scope_arguments: Vec::new(),
             arguments: vec![ordinary, local],
         },
     )
@@ -1695,6 +1788,7 @@ fn implementation_applications_preserve_exact_resource_flow_with_generic_effects
                 effect_arguments,
                 requirement_arguments,
                 arguments,
+                read_scope_arguments,
             } = &expression.operation
             else {
                 continue;
@@ -1710,6 +1804,7 @@ fn implementation_applications_preserve_exact_resource_flow_with_generic_effects
                 type_arguments: type_arguments.clone(),
                 effect_arguments: effect_arguments.clone(),
                 requirement_arguments: requirement_arguments.clone(),
+                read_scope_arguments: read_scope_arguments.clone(),
                 implementations: vec![],
                 arguments: arguments.clone(),
             };
@@ -1783,6 +1878,7 @@ fn mutate_resource_function_value(snapshot: &mut KernelSnapshot) {
             declaration: helper,
         },
         type_arguments: Vec::new(),
+        read_scope_arguments: Vec::new(),
     };
 }
 
@@ -2085,7 +2181,7 @@ fn check_scoped_borrow_visibility(
             let DeclarationPayload::Function(function) = &mut record.payload else {
                 panic!("function");
             };
-            function.result = resource_type;
+            function.result.ty = resource_type;
         }
         assert!(
             !production_accepts(&candidate),

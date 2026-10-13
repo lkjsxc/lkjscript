@@ -1,9 +1,10 @@
 //! Shared Graph 10 compiler, linker, artifact-loader, and dense-runtime preparation.
 
+#[cfg(test)]
+use super::compiler::link_artifact;
 use super::compiler::{
     ArtifactBundleDigest, ArtifactLinkWork, ArtifactManifestDigest, CompilationBuildProfile,
-    CompilationManifestDigest, OptimizationPolicy, build_clean, link_artifact,
-    load_current_compilation,
+    CompilationManifestDigest, OptimizationPolicy, build_clean, load_current_compilation,
 };
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::execution::ExecutionControl;
@@ -439,7 +440,13 @@ pub(crate) fn prepare_repository_with_control(
         };
     let linked = match recovered_link {
         Some(linked) => linked,
-        None => link_artifact(&repository, compilation, &dependencies).map_err(|mut error| {
+        None => super::compiler::link_artifact_with_control(
+            &repository,
+            compilation,
+            &dependencies,
+            control,
+        )
+        .map_err(|mut error| {
             error
                 .notes
                 .push("while linking the current root compilation".into());
@@ -694,7 +701,10 @@ mod tests {
 
     #[test]
     fn maintained_application_clean_build_matches_its_owned_artifact() {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("applications/lkjournal");
+        let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("applications/lkjournal");
+        let temporary = tempfile::tempdir().expect("maintained lkjournal copy parent");
+        let root = temporary.path().join("lkjournal");
+        crate::platform::builtin_standard::copy_maintained_repository(&source, &root);
         let repository = GraphRepository::open(&root).expect("open maintained lkjournal");
         let compilation = build_clean(&repository, OptimizationPolicy::DeterministicBaseline)
             .expect("clean compile maintained lkjournal");

@@ -28,7 +28,7 @@ fn transfer_application_resolves_owned_sequence_element_substitutions() {
     let target = &mut Arc::make_mut(&mut program.functions)[function.0 as usize];
     target.type_parameter_constraints = Arc::from([TypeParameterConstraints::Owned]);
     Arc::make_mut(&mut target.parameters)[0].ty = template;
-    target.result = template;
+    target.result.ty = template;
     let control = ExecutionControl::uncancelled();
     for (item, sequence) in actuals {
         let application =
@@ -59,7 +59,9 @@ fn sequence_transfer_contract_checks_owned_elements_and_unselected_cases() {
 
     let (prepared, functions) = fixture();
     let mut program = (*prepared).clone();
-    let tree = program.functions[functions["tree-result"].0 as usize].result;
+    let tree = program.functions[functions["tree-result"].0 as usize]
+        .result
+        .ty;
     let callback = program.functions[functions["hidden-callback"].0 as usize].parameters[0].ty;
     let text = *program
         .types
@@ -150,7 +152,7 @@ fn transfer_application_resolves_wide_structural_signatures_with_only_applicatio
     target.type_parameter_constraints = Arc::from([TypeParameterConstraints::Transferable]);
     Arc::make_mut(&mut target.parameters)[0].ty = template;
     Arc::make_mut(&mut target.parameters)[0].use_mode = ParameterUse::Unrestricted;
-    target.result = template;
+    target.result.ty = template;
     let control = ExecutionControl::uncancelled();
     let retained = std::mem::size_of::<TypeObjectDigest>() as u64;
     let binding = (std::mem::size_of::<(TypeParameterId, TypeObjectDigest)>()
@@ -230,7 +232,7 @@ fn sealed_transfer_generic_result_binds_even_phantom_type_arguments() {
         .find(|(_, t)| matches!(t.form, TypeForm::Unit))
         .unwrap()
         .0;
-    let ty = program.functions[function.0 as usize].result;
+    let ty = program.functions[function.0 as usize].result.ty;
     let control = ExecutionControl::uncancelled();
     for wrong in [false, true] {
         let buffers = Buffers::start();

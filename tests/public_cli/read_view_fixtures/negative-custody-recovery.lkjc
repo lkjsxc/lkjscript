@@ -1,0 +1,12 @@
+declarations.begin
+(units
+  (module edit MODULE_OWNER readview-flat
+    (function create recover-passive-source (visibility private) (effect pure)
+      (scope-parameter read_scope_d8600000000000000000000000000003 s)
+      (parameter create view (type (read-view-application readview-flat::Metadata (types)
+        (read-scope (declaration recover-passive-source) read_scope_d8600000000000000000000000000003))) (use borrow))
+      (scope-source view (read-scope (declaration recover-passive-source) read_scope_d8600000000000000000000000000003))
+      (returns (owned-sequence I64) (read-from view))
+      (body (borrow-view-field (local view) readview-flat::Metadata field_d8300000000000000000000000000005
+        (binding source (type (owned-sequence I64))) (in (local source)))))))
+declarations.end

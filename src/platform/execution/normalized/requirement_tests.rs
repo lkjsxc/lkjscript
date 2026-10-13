@@ -24,7 +24,7 @@ pub(crate) fn applications(
     let DeclarationPayload::Function(function) = &generic.payload else {
         panic!("function");
     };
-    let unit = function.result;
+    let unit = function.result.ty;
     let first = function.effect.row().requirements[0];
     let OwnerRecord::Requirement(mut requirement) = snapshot.owners[&first.owner()].clone() else {
         panic!("requirement");
@@ -148,6 +148,7 @@ pub(crate) fn applications(
         let call = put(
             &mut snapshot,
             ExpressionOperation::Call {
+                read_scope_arguments: Vec::new(),
                 function: generic_reference,
                 type_arguments: vec![ordinary_type],
                 effect_arguments: vec![EffectRow {
@@ -194,6 +195,7 @@ pub(crate) fn applications(
         values.push(put(
             &mut snapshot,
             ExpressionOperation::Call {
+                read_scope_arguments: Vec::new(),
                 function: generic_reference,
                 type_arguments: vec![integer],
                 effect_arguments: vec![EffectRow::default()],
@@ -206,6 +208,7 @@ pub(crate) fn applications(
             values.push(put(
                 &mut snapshot,
                 ExpressionOperation::FunctionValue {
+                    read_scope_arguments: Vec::new(),
                     function: generic_reference,
                     type_arguments: vec![integer],
                     effect_arguments: vec![EffectRow::default()],
@@ -420,6 +423,7 @@ fn requirement_vectors_remain_distinct_bounded_and_simultaneously_recursive() {
                 })
                 .unwrap();
             let accepted = NormalizedValue::Function {
+                read_scope_arguments: Arc::from([]),
                 function: super::super::value::FunctionIndex(index as u32, program.value_origin),
                 type_arguments: Arc::from([integer]),
                 effect_arguments: Arc::clone(&function.effect_arguments),
@@ -644,6 +648,7 @@ fn raw_pure_descriptor_cannot_omit_unused_requirement_arguments() {
         .find_map(|(id, ty)| matches!(ty.form, TypeForm::I64).then_some(*id))
         .unwrap();
     let value = NormalizedValue::Function {
+        read_scope_arguments: Arc::from([]),
         function: super::super::value::FunctionIndex(index as u32, program.value_origin),
         type_arguments: Arc::from([integer]),
         effect_arguments: Arc::from([]),

@@ -6,6 +6,7 @@ use std::cell::Cell;
 use std::collections::BTreeMap;
 
 const SEED: &[u8] = b"applied-type-environments";
+static EMPTY_READ_SCOPES: BTreeMap<ReadScopeReference, ReadScopeArgument> = BTreeMap::new();
 
 #[derive(Default)]
 struct Read {
@@ -240,6 +241,8 @@ fn source_effects_are_rewritten_before_opaque_caller_type_actuals() {
             consumer_generation: contract::GRAPH_CONTRACT_VERSION,
             contract_selection: None,
             implementations: &implementations,
+
+            scopes: &EMPTY_READ_SCOPES,
         },
     );
     assert_eq!(applied.substitute(prepared, 0).unwrap(), expected);

@@ -50,6 +50,16 @@ pub(in super::super::super) struct Fixture {
     pub(in super::super::super) block: TypeObjectDigest,
     pub(in super::super::super) projection: TypeObjectDigest,
 }
+
+// A synthetic reader matrix only: these edited headers are not retained
+// planner artifacts and grant no authored source/admission acceptance evidence.
+fn synthetic_owned_generations(mut fixture: Fixture, root: u16, owners: u16) -> Fixture {
+    fixture.source.root.graph_contract_version = root;
+    for owner in fixture.source.owners.values_mut() {
+        owner.set_encoding_for_edit(owners);
+    }
+    fixture
+}
 fn name(value: &str) -> Name {
     Name::new(value).unwrap()
 }
@@ -120,7 +130,7 @@ pub(in super::super::super) fn make_fixture() -> Fixture {
         },
     ];
     value.methods[0].parameters[0].ty = abstract_member;
-    value.methods[0].result = abstract_member;
+    value.methods[0].result.ty = abstract_member;
     let DeclarationPayload::Function(value) = payload(&mut source, consumer) else {
         unreachable!()
     };
@@ -138,7 +148,7 @@ pub(in super::super::super) fn make_fixture() -> Fixture {
     let DeclarationPayload::Function(value) = payload(&mut source, consumer) else {
         unreachable!()
     };
-    value.result = projection;
+    value.result.ty = projection;
     let OwnerRecord::Parameter(value) = source
         .owners
         .get_mut(&OwnerKey::Parameter(parameter))
@@ -191,10 +201,13 @@ pub(in super::super::super) fn make_fixture() -> Fixture {
         scheme.self_type = formal_type;
         scheme.methods[0].type_arguments = vec![output];
         scheme.associated_types = vec![
-            AssociatedTypeBinding { member, ty: output },
+            AssociatedTypeBinding {
+                member,
+                value: crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty: output },
+            },
             AssociatedTypeBinding {
                 member: spare,
-                ty: cell,
+                value: crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty: cell },
             },
         ];
         scheme
@@ -253,6 +266,7 @@ pub(in super::super::super) fn prove(
             implementations,
             effects: &[],
             requirements: &[],
+            read_scope_arguments: &[],
         })
         .collect::<Vec<_>>();
     derive(&[&fixture.source], &entries, limits, control)
@@ -276,8 +290,11 @@ fn selected(fixture: &Fixture, index: usize) -> NormalizedImplementationArgument
         depth: 0,
         implementation: fixture.implementations[index],
         contract: fixture.contract,
-        implementation_generation: 33,
-        contract_generation: 33,
+        implementation_generation: owner.header.contract_version,
+        contract_generation: fixture.source.owners
+            [&OwnerKey::Declaration(fixture.contract.declaration)]
+            .header()
+            .contract_version,
         implementation_type_parameters: scheme.type_parameters.clone().into(),
         implementation_parameter_ids: Arc::from([]),
         implementation_type_arguments: Arc::from([fixture.cell]),
@@ -292,11 +309,13 @@ fn selected(fixture: &Fixture, index: usize) -> NormalizedImplementationArgument
                 member: fixture.spare,
                 template: fixture.cell,
                 ty: fixture.cell,
+                scope_parameter: None,
             },
             NormalizedAssociatedTypeBinding {
                 member: fixture.member,
                 template: output,
                 ty: output,
+                scope_parameter: None,
             },
         ]),
     })
@@ -345,8 +364,19 @@ fn normalized(fixture: &Fixture, selected: NormalizedImplementationArgument) -> 
             })
             .collect::<Vec<_>>()
             .into(),
-        result: function.result,
-        result_borrow: Some(0),
+        result: function
+            .result
+            .try_map_source(|source| {
+                Ok(function
+                    .parameters
+                    .iter()
+                    .position(|parameter| *parameter == source)
+                    .unwrap() as u32)
+            })
+            .unwrap(),
+        read_scope_parameters: Arc::from(function.read_scope_parameters.clone()),
+        read_scope_sources: Arc::from([]),
+        read_scope_arguments: Arc::from([]),
         task_requirements: Arc::from([]),
         body: NormalizedFunctionBody::Code(NormalizedCode {
             parameter_count: 1,
@@ -361,452 +391,581 @@ fn normalized(fixture: &Fixture, selected: NormalizedImplementationArgument) -> 
 
 #[test]
 fn canonical_associated_preparation_distinguishes_witnesses_and_exact_mapped_targets() {
-    let fixture = make_fixture();
-    let proof = prove(
-        &fixture,
-        &[0, 1, 2],
-        Limits::default(),
-        &ExecutionControl::uncancelled(),
-    )
-    .unwrap();
-    assert_eq!(proof.selections.len(), 3);
-    let consumers = proof
-        .applications
-        .iter()
-        .filter(|(application, _)| application.function == fixture.consumer)
-        .collect::<Vec<_>>();
-    assert_eq!(consumers.len(), 3);
-    for (application, function) in consumers {
-        let selected = &proof.selections[application.witnesses[0]];
-        let output = if selected.implementation == fixture.implementations[1] {
-            fixture.block
-        } else {
-            fixture.cell
-        };
-        assert_eq!(function.parameters, vec![(output, ParameterUse::Borrow)]);
-        assert_eq!(function.result, output);
-        assert_eq!(function.result_borrow, Some(0));
-        let target = proof
-            .methods
-            .iter()
-            .find(|((identity, _), _)| *identity == selected.identity)
-            .unwrap()
-            .1;
-        assert_eq!(target.function, fixture.reader);
-        assert_eq!(target.types, vec![output]);
-        assert_eq!(selected.members.len(), 2);
-        assert_eq!(selected.members[0].member, fixture.spare);
-    }
-    assert_eq!(
-        proof
+    // Synthetic Graph 33/34 controls; retained planner acceptance remains unrun.
+    for generation in [
+        crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
+        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+    ] {
+        let fixture = synthetic_owned_generations(make_fixture(), generation, generation);
+        let proof = prove(
+            &fixture,
+            &[0, 1, 2],
+            Limits::default(),
+            &ExecutionControl::uncancelled(),
+        )
+        .unwrap();
+        assert_eq!(proof.selections.len(), 3);
+        let consumers = proof
             .applications
-            .keys()
-            .filter(|application| application.function == fixture.reader)
-            .count(),
-        2
-    );
+            .iter()
+            .filter(|(application, _)| application.function == fixture.consumer)
+            .collect::<Vec<_>>();
+        assert_eq!(consumers.len(), 3);
+        for (application, function) in consumers {
+            let selected = &proof.selections[application.witnesses[0]];
+            let output = if selected.implementation == fixture.implementations[1] {
+                fixture.block
+            } else {
+                fixture.cell
+            };
+            assert_eq!(function.parameters, vec![(output, ParameterUse::Borrow)]);
+            assert_eq!(function.result.ty, output);
+            assert_eq!(function.result.relation.source().copied(), Some(0));
+            assert!(!function.requires_read_view_generation);
+            assert!(!selected.requires_read_view_generation);
+            let target = proof
+                .methods
+                .iter()
+                .find(|((identity, _, scopes), _)| {
+                    *identity == selected.identity && scopes.is_empty()
+                })
+                .unwrap()
+                .1;
+            assert_eq!(target.function, fixture.reader);
+            assert_eq!(target.types, vec![output]);
+            assert_eq!(selected.members.len(), 2);
+            assert_eq!(selected.members[0].member, fixture.spare);
+        }
+        assert_eq!(
+            proof
+                .applications
+                .keys()
+                .filter(|application| application.function == fixture.reader)
+                .count(),
+            2
+        );
+    }
 }
 
 #[test]
 fn canonical_associated_preparation_compares_real_materialization_and_rejects_corrupt_catalogues() {
-    let fixture = make_fixture();
-    let control = ExecutionControl::uncancelled();
-    let proof = prove(&fixture, &[0, 1, 2], Limits::default(), &control).unwrap();
-    let catalog = (0..3)
-        .map(|index| selected(&fixture, index))
-        .collect::<Vec<_>>();
-    for index in 0..3 {
-        let expected = proof
-            .selections
-            .iter()
-            .find(|selection| selection.implementation == fixture.implementations[index])
-            .unwrap();
-        proof
-            .compare_selection(expected, &catalog[index], &catalog, &proof.types, &control)
-            .unwrap();
-        let function = normalized(&fixture, Arc::clone(&catalog[index]));
-        let ordinary = BTreeMap::from([(function.type_parameters[0], fixture.cell)]);
-        let mut types = fixture.source.types.clone();
-        let actual =
-            crate::platform::execution::normalized::prepared_types::materialize_associated_roots(
-                &function,
-                &ordinary,
-                &[fixture.projection],
-                &mut types,
-                &control,
-            )
-            .unwrap();
-        let application = proof
-            .applications
-            .iter()
-            .find(|(application, _)| {
-                application.function == fixture.consumer
-                    && proof.selections[application.witnesses[0]].implementation
-                        == fixture.implementations[index]
-            })
-            .unwrap()
-            .1;
-        assert_eq!(actual, vec![application.result]);
-    }
-    for change in 0..7 {
-        let mut changed = (*catalog[0]).clone();
-        match change {
-            0 => Arc::make_mut(&mut changed.associated_types)[1].ty = fixture.block,
-            1 => Arc::make_mut(&mut changed.associated_types)[1].member = fixture.spare,
-            2 => changed.contract = fixture.implementations[1],
-            3 => changed.implementation = fixture.implementations[2],
-            4 => changed.implementation_type_arguments = Arc::from([fixture.block]),
-            5 => {
-                changed.implementation_type_parameter_constraints =
-                    Arc::from([TypeParameterConstraints::OwnedTransferable])
-            }
-            _ => changed.implementation_generation = 32,
+    // Synthetic Graph 33/34 controls; retained planner acceptance remains unrun.
+    for generation in [
+        crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
+        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+    ] {
+        let fixture = synthetic_owned_generations(make_fixture(), generation, generation);
+        let control = ExecutionControl::uncancelled();
+        let proof = prove(&fixture, &[0, 1, 2], Limits::default(), &control).unwrap();
+        let catalog = (0..3)
+            .map(|index| selected(&fixture, index))
+            .collect::<Vec<_>>();
+        for index in 0..3 {
+            let expected = proof
+                .selections
+                .iter()
+                .find(|selection| selection.implementation == fixture.implementations[index])
+                .unwrap();
+            proof
+                .compare_selection(expected, &catalog[index], &catalog, &proof.types, &control)
+                .unwrap();
+            let function = normalized(&fixture, Arc::clone(&catalog[index]));
+            let ordinary = BTreeMap::from([(function.type_parameters[0], fixture.cell)]);
+            let mut types = fixture.source.types.clone();
+            let actual =
+                crate::platform::execution::normalized::prepared_types::materialize_associated_roots(
+                    &function,
+                    &ordinary,
+                    &[fixture.projection],
+                    &mut types,
+                    &control,
+                )
+                .unwrap();
+            let application = proof
+                .applications
+                .iter()
+                .find(|(application, _)| {
+                    application.function == fixture.consumer
+                        && proof.selections[application.witnesses[0]].implementation
+                            == fixture.implementations[index]
+                })
+                .unwrap()
+                .1;
+            assert_eq!(actual, vec![application.result.ty]);
         }
-        let mut changed_catalog = catalog.clone();
-        changed_catalog[0] = Arc::new(changed);
+        for change in 0..7 {
+            let mut changed = (*catalog[0]).clone();
+            match change {
+                0 => Arc::make_mut(&mut changed.associated_types)[1].ty = fixture.block,
+                1 => Arc::make_mut(&mut changed.associated_types)[1].member = fixture.spare,
+                2 => changed.contract = fixture.implementations[1],
+                3 => changed.implementation = fixture.implementations[2],
+                4 => changed.implementation_type_arguments = Arc::from([fixture.block]),
+                5 => {
+                    changed.implementation_type_parameter_constraints =
+                        Arc::from([TypeParameterConstraints::OwnedTransferable])
+                }
+                _ => changed.implementation_generation = 32,
+            }
+            let mut changed_catalog = catalog.clone();
+            changed_catalog[0] = Arc::new(changed);
+            assert!(
+                proof
+                    .compare_selection(
+                        &proof.selections[0],
+                        &changed_catalog[0],
+                        &changed_catalog,
+                        &proof.types,
+                        &control
+                    )
+                    .is_err()
+            );
+        }
+        let detached = Arc::new((*catalog[0]).clone());
         assert!(
             proof
                 .compare_selection(
                     &proof.selections[0],
-                    &changed_catalog[0],
-                    &changed_catalog,
+                    &detached,
+                    &catalog,
                     &proof.types,
                     &control
                 )
                 .is_err()
         );
-    }
-    let detached = Arc::new((*catalog[0]).clone());
-    assert!(
-        proof
-            .compare_selection(
-                &proof.selections[0],
-                &detached,
-                &catalog,
-                &proof.types,
-                &control
-            )
-            .is_err()
-    );
-    let mut wrong_types = proof.types.clone();
-    wrong_types.insert(fixture.cell, TypeObject::new(TypeForm::ByteBuffer).unwrap());
-    assert!(
-        proof
-            .compare_selection(
-                &proof.selections[0],
-                &catalog[0],
-                &catalog,
-                &wrong_types,
-                &control
-            )
-            .is_err()
-    );
-    for source in [fixture.reader, fixture.implementations[0]] {
-        let mut changed = normalized(&fixture, Arc::clone(&catalog[0]));
-        changed.declaration = source;
-        let ordinary = BTreeMap::from([(changed.type_parameters[0], fixture.cell)]);
+        let mut wrong_types = proof.types.clone();
+        wrong_types.insert(fixture.cell, TypeObject::new(TypeForm::ByteBuffer).unwrap());
         assert!(
-            crate::platform::execution::normalized::prepared_types::materialize_associated_roots(
-                &changed,
-                &ordinary,
-                &[fixture.projection],
-                &mut proof.types.clone(),
-                &control
-            )
-            .is_err()
+            proof
+                .compare_selection(
+                    &proof.selections[0],
+                    &catalog[0],
+                    &catalog,
+                    &wrong_types,
+                    &control
+                )
+                .is_err()
+        );
+        for source in [fixture.reader, fixture.implementations[0]] {
+            let mut changed = normalized(&fixture, Arc::clone(&catalog[0]));
+            changed.declaration = source;
+            let ordinary = BTreeMap::from([(changed.type_parameters[0], fixture.cell)]);
+            assert!(
+                crate::platform::execution::normalized::prepared_types::materialize_associated_roots(
+                    &changed,
+                    &ordinary,
+                    &[fixture.projection],
+                    &mut proof.types.clone(),
+                    &control
+                )
+                .is_err()
+            );
+        }
+        let cancelled = ExecutionControl::cancel_after_checks(0);
+        assert_eq!(
+            proof
+                .compare_selection(
+                    &proof.selections[0],
+                    &catalog[0],
+                    &catalog,
+                    &proof.types,
+                    &cancelled
+                )
+                .unwrap_err()
+                .class,
+            ExecutionFailureClass::Cancelled
         );
     }
-    let cancelled = ExecutionControl::cancel_after_checks(0);
-    assert_eq!(
-        proof
-            .compare_selection(
-                &proof.selections[0],
-                &catalog[0],
-                &catalog,
-                &proof.types,
-                &cancelled
-            )
-            .unwrap_err()
-            .class,
-        ExecutionFailureClass::Cancelled
-    );
 }
 
 #[test]
 fn canonical_associated_preparation_rechecks_unused_members_and_exact_owner_occurrences() {
-    let fixture = make_fixture();
-    for change in 0..7 {
-        let mut changed = make_fixture();
-        match change {
-            0 => {
-                let unit = add(&mut changed.source, TypeForm::Unit);
-                let DeclarationPayload::OwnedImplementation(scheme) =
-                    payload(&mut changed.source, changed.implementations[0])
-                else {
-                    unreachable!()
-                };
-                scheme
-                    .associated_types
-                    .iter_mut()
-                    .find(|binding| binding.member == changed.spare)
-                    .unwrap()
-                    .ty = unit;
+    // Synthetic Graph 33/34 controls; retained planner acceptance remains unrun.
+    for generation in [
+        crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
+        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+    ] {
+        let fixture = synthetic_owned_generations(make_fixture(), generation, generation);
+        for change in 0..7 {
+            let mut changed = synthetic_owned_generations(make_fixture(), generation, generation);
+            match change {
+                0 => {
+                    let unit = add(&mut changed.source, TypeForm::Unit);
+                    let DeclarationPayload::OwnedImplementation(scheme) =
+                        payload(&mut changed.source, changed.implementations[0])
+                    else {
+                        unreachable!()
+                    };
+                    scheme
+                        .associated_types
+                        .iter_mut()
+                        .find(|binding| binding.member == changed.spare)
+                        .unwrap()
+                        .value =
+                        crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty: unit };
+                }
+                1 => {
+                    let DeclarationPayload::OwnedImplementation(scheme) =
+                        payload(&mut changed.source, changed.implementations[0])
+                    else {
+                        unreachable!()
+                    };
+                    scheme
+                        .associated_types
+                        .iter_mut()
+                        .find(|binding| binding.member == changed.spare)
+                        .unwrap()
+                        .value = crate::platform::kernel::AssociatedTypeBindingValue::Owned {
+                        ty: changed.projection,
+                    };
+                }
+                2 => {
+                    let DeclarationPayload::Function(function) =
+                        payload(&mut changed.source, changed.consumer)
+                    else {
+                        unreachable!()
+                    };
+                    let parameter = function.parameters[0];
+                    changed
+                        .source
+                        .owners
+                        .get_mut(&OwnerKey::Parameter(parameter))
+                        .unwrap()
+                        .set_encoding_for_edit(32);
+                }
+                3 => {
+                    let DeclarationPayload::Function(function) =
+                        payload(&mut changed.source, changed.consumer)
+                    else {
+                        unreachable!()
+                    };
+                    let body = function.body;
+                    changed
+                        .source
+                        .owners
+                        .get_mut(&OwnerKey::Expression(body))
+                        .unwrap()
+                        .set_encoding_for_edit(32);
+                }
+                4 => {
+                    let owner = changed
+                        .source
+                        .owners
+                        .get_mut(&OwnerKey::Declaration(changed.consumer.declaration))
+                        .unwrap();
+                    owner.set_encoding_for_edit(32);
+                }
+                _ => {
+                    let DeclarationPayload::Function(function) =
+                        payload(&mut changed.source, changed.consumer)
+                    else {
+                        unreachable!()
+                    };
+                    let body = function.body;
+                    let original = function.parameters[0];
+                    let OwnerRecord::Parameter(mut foreign) =
+                        changed.source.owners[&OwnerKey::Parameter(original)].clone()
+                    else {
+                        unreachable!()
+                    };
+                    let parameter = ParameterId::migrate(SEED, 90);
+                    foreign.header =
+                        OwnerHeader::new(OwnerKey::Parameter(parameter), OwnerKind::Parameter);
+                    foreign.header.contract_version = generation;
+                    foreign.ty = changed.cell;
+                    foreign.parent = ParameterParent::Function(if change == 5 {
+                        changed.reader.declaration
+                    } else {
+                        changed.consumer.declaration
+                    });
+                    changed.source.owners.insert(
+                        OwnerKey::Parameter(parameter),
+                        OwnerRecord::Parameter(foreign),
+                    );
+                    let OwnerRecord::Expression(expression) = changed
+                        .source
+                        .owners
+                        .get_mut(&OwnerKey::Expression(body))
+                        .unwrap()
+                    else {
+                        unreachable!()
+                    };
+                    expression.operation = ExpressionOperation::Local {
+                        value: LocalValueReference::FunctionParameter(parameter),
+                    };
+                }
             }
-            1 => {
-                let DeclarationPayload::OwnedImplementation(scheme) =
-                    payload(&mut changed.source, changed.implementations[0])
-                else {
-                    unreachable!()
-                };
-                scheme
-                    .associated_types
-                    .iter_mut()
-                    .find(|binding| binding.member == changed.spare)
-                    .unwrap()
-                    .ty = changed.projection;
-            }
-            2 => {
-                let DeclarationPayload::Function(function) =
-                    payload(&mut changed.source, changed.consumer)
-                else {
-                    unreachable!()
-                };
-                let parameter = function.parameters[0];
-                changed
-                    .source
-                    .owners
-                    .get_mut(&OwnerKey::Parameter(parameter))
-                    .unwrap()
-                    .set_encoding_for_edit(32);
-            }
-            3 => {
-                let DeclarationPayload::Function(function) =
-                    payload(&mut changed.source, changed.consumer)
-                else {
-                    unreachable!()
-                };
-                let body = function.body;
-                changed
-                    .source
-                    .owners
-                    .get_mut(&OwnerKey::Expression(body))
-                    .unwrap()
-                    .set_encoding_for_edit(32);
-            }
-            4 => {
-                let owner = changed
-                    .source
-                    .owners
-                    .get_mut(&OwnerKey::Declaration(changed.consumer.declaration))
-                    .unwrap();
-                owner.set_encoding_for_edit(32);
-            }
-            _ => {
-                let DeclarationPayload::Function(function) =
-                    payload(&mut changed.source, changed.consumer)
-                else {
-                    unreachable!()
-                };
-                let body = function.body;
-                let original = function.parameters[0];
-                let OwnerRecord::Parameter(mut foreign) =
-                    changed.source.owners[&OwnerKey::Parameter(original)].clone()
-                else {
-                    unreachable!()
-                };
-                let parameter = ParameterId::migrate(SEED, 90);
-                foreign.header =
-                    OwnerHeader::new(OwnerKey::Parameter(parameter), OwnerKind::Parameter);
-                foreign.ty = changed.cell;
-                foreign.parent = ParameterParent::Function(if change == 5 {
-                    changed.reader.declaration
-                } else {
-                    changed.consumer.declaration
-                });
-                changed.source.owners.insert(
-                    OwnerKey::Parameter(parameter),
-                    OwnerRecord::Parameter(foreign),
-                );
-                let OwnerRecord::Expression(expression) = changed
-                    .source
-                    .owners
-                    .get_mut(&OwnerKey::Expression(body))
-                    .unwrap()
-                else {
-                    unreachable!()
-                };
-                expression.operation = ExpressionOperation::Local {
-                    value: LocalValueReference::FunctionParameter(parameter),
-                };
-            }
+            assert_eq!(
+                prove(
+                    &changed,
+                    &[0],
+                    Limits::default(),
+                    &ExecutionControl::uncancelled()
+                )
+                .unwrap_err()
+                .class,
+                ExecutionFailureClass::Infrastructure,
+                "corruption {change}"
+            );
         }
-        assert_eq!(
+        assert!(
             prove(
-                &changed,
+                &fixture,
                 &[0],
                 Limits::default(),
                 &ExecutionControl::uncancelled()
             )
-            .unwrap_err()
-            .class,
-            ExecutionFailureClass::Infrastructure,
-            "corruption {change}"
+            .is_ok()
         );
     }
-    assert!(
-        prove(
-            &fixture,
-            &[0],
+    // Independent finite reader support and source-root coverage, not a planner proof.
+    for root in [32, 33, 34, 35] {
+        for owners in [32, 33, 34, 35] {
+            let fixture = synthetic_owned_generations(make_fixture(), root, owners);
+            let supported = matches!(root, 33 | 34) && matches!(owners, 33 | 34) && owners <= root;
+            assert_eq!(
+                prove(
+                    &fixture,
+                    &[0],
+                    Limits::default(),
+                    &ExecutionControl::uncancelled()
+                )
+                .is_ok(),
+                supported,
+                "synthetic root {root}, actual owners {owners}"
+            );
+        }
+    }
+    // Synthetic independent supplier generations under root 34: neither
+    // selected declaration is promoted to its caller or its counterpart.
+    for implementation_generation in [33, 34] {
+        for contract_generation in [33, 34] {
+            let mut mixed = make_fixture();
+            mixed
+                .source
+                .owners
+                .get_mut(&OwnerKey::Declaration(mixed.implementations[0].declaration))
+                .unwrap()
+                .set_encoding_for_edit(implementation_generation);
+            mixed
+                .source
+                .owners
+                .get_mut(&OwnerKey::Declaration(mixed.contract.declaration))
+                .unwrap()
+                .set_encoding_for_edit(contract_generation);
+            let proof = prove(
+                &mixed,
+                &[0],
+                Limits::default(),
+                &ExecutionControl::uncancelled(),
+            )
+            .unwrap();
+            let selection = proof
+                .selections
+                .iter()
+                .find(|selection| selection.implementation == mixed.implementations[0])
+                .unwrap();
+            assert_eq!(
+                (
+                    selection.implementation_generation,
+                    selection.contract_generation
+                ),
+                (implementation_generation, contract_generation)
+            );
+        }
+    }
+
+    // An unused scope formal makes the consuming declaration a Graph 34 owner.
+    for generation in [33, 34] {
+        let mut fixture = synthetic_owned_generations(make_fixture(), generation, generation);
+        let DeclarationPayload::Function(function) = payload(&mut fixture.source, fixture.consumer)
+        else {
+            unreachable!()
+        };
+        function.read_scope_parameters.push(ReadScopeParameter {
+            id: crate::platform::semantic_id::ReadScopeParameterId::migrate(SEED, 98),
+            name: name("unused_view_scope"),
+        });
+        let result = check_inventory(
+            &[&fixture.source],
             Limits::default(),
-            &ExecutionControl::uncancelled()
-        )
-        .is_ok()
-    );
+            &ExecutionControl::uncancelled(),
+        );
+        if generation == 34 {
+            let proof = result.unwrap();
+            assert!(proof.symbolic[&fixture.consumer].requires_read_view_generation);
+        } else {
+            assert_eq!(result.unwrap_err().code, "reference_associated_preparation");
+        }
+    }
 }
 
 #[test]
 fn canonical_associated_preparation_has_exact_capacity_and_cancelled_retry_boundaries() {
-    let fixture = make_fixture();
-    let healthy = prove(
-        &fixture,
-        &[0, 1, 2],
-        Limits::default(),
-        &ExecutionControl::uncancelled(),
-    )
-    .unwrap();
-    for limits in [
-        Limits {
-            steps: healthy.steps - 1,
-            bytes: healthy.bytes,
-        },
-        Limits {
-            steps: healthy.steps,
-            bytes: healthy.bytes - 1,
-        },
+    // Synthetic Graph 33/34 controls; retained planner acceptance remains unrun.
+    for generation in [
+        crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
+        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
     ] {
-        assert_eq!(
-            prove(
-                &fixture,
-                &[0, 1, 2],
-                limits,
-                &ExecutionControl::uncancelled()
-            )
-            .unwrap_err()
-            .class,
-            ExecutionFailureClass::Resource
-        );
-    }
-    let exact = prove(
-        &fixture,
-        &[0, 1, 2],
-        Limits {
-            steps: healthy.steps,
-            bytes: healthy.bytes,
-        },
-        &ExecutionControl::uncancelled(),
-    )
-    .unwrap();
-    assert_eq!((exact.steps, exact.bytes), (healthy.steps, healthy.bytes));
-    for checks in [0, 10, healthy.steps as u64 / 2] {
-        assert_eq!(
-            prove(
-                &fixture,
-                &[0, 1, 2],
-                Limits::default(),
-                &ExecutionControl::cancel_after_checks(checks)
-            )
-            .unwrap_err()
-            .class,
-            ExecutionFailureClass::Cancelled
-        );
-    }
-    let retry = prove(
-        &fixture,
-        &[0, 1, 2],
-        Limits::default(),
-        &ExecutionControl::uncancelled(),
-    )
-    .unwrap();
-    assert_eq!((retry.steps, retry.bytes), (healthy.steps, healthy.bytes));
-    // This fixture entry bypasses production source admission. Successful completion
-    // must retain the independent symbolic proof; it grants no source or artifact seal.
-    let completed = super::super::super::reference_schema::NormalizedReferenceSchema::independently_admit_witness_source(&fixture.source).unwrap();
-    assert_eq!(completed.source_admission_steps, 0);
-    let proof = completed.associated_proof().unwrap();
-    assert!(proof.types.is_empty());
-    assert!(proof.applications.is_empty());
-    assert!(proof.selections.is_empty());
-    assert!(proof.methods.is_empty());
-    assert!(proof.executables.is_empty());
-    assert_eq!(
-        proof.symbolic.keys().copied().collect::<BTreeSet<_>>(),
-        BTreeSet::from([fixture.consumer, fixture.reader])
-    );
-    let consumer = &proof.symbolic[&fixture.consumer];
-    assert_eq!(
-        consumer.parameters,
-        [(fixture.projection, ParameterUse::Borrow)]
-    );
-    assert_eq!(consumer.result, fixture.projection);
-    assert_eq!(consumer.result_borrow, Some(0));
-    assert!(!consumer.is_task);
-    assert!(consumer.requires_associated_generation);
-    assert_eq!(consumer.effect, EffectRow::default());
-    let control = ExecutionControl::uncancelled();
-    let contract = proof.contract_template(fixture.contract, &control).unwrap();
-    let method = contract.methods[0].id;
-    let contract_result = contract.methods[0].result;
-    assert!(matches!(
-        completed.types[&contract_result].form,
-        TypeForm::AssociatedContractMember { contract, member }
-            if contract == fixture.contract && member == fixture.member
-    ));
-    assert_eq!(proof.contract_methods.len(), 1);
-    let signature = &proof.contract_methods[&(fixture.contract, method)];
-    assert_eq!(
-        signature.parameters,
-        [(contract_result, ParameterUse::Borrow)]
-    );
-    assert_eq!(signature.result, contract_result);
-    assert_eq!(signature.result_borrow, Some(0));
-    assert!(!signature.is_task);
-    assert!(signature.requires_associated_generation);
-    assert_eq!(proof.symbolic_mappings.len(), 3);
-    for (index, expected) in [fixture.cell, fixture.block, fixture.cell]
-        .into_iter()
-        .enumerate()
-    {
-        let target = proof
-            .symbolic_mapping(fixture.implementations[index], method, &control)
-            .unwrap();
-        assert_eq!(target.function, Some(fixture.reader));
-        assert_eq!(target.types, [expected]);
-        assert!(target.witnesses.is_empty());
-        assert_eq!(
-            target.signature.parameters,
-            [(expected, ParameterUse::Borrow)]
-        );
-        assert_eq!(target.signature.result, expected);
-        assert_eq!(target.signature.result_borrow, Some(0));
-        assert!(!target.signature.is_task);
-        assert_eq!(target.signature.effect, EffectRow::default());
-    }
-    assert!(completed.types.contains_key(&fixture.cell));
-    assert!(completed.types.contains_key(&fixture.block));
-    assert!(completed.transferable_types.contains(&fixture.block));
-    assert!(completed.shareable_types.contains(&fixture.block));
-    for raw in [fixture.projection, contract_result] {
-        assert!(proof.raw_templates.contains(&raw));
-        for property in [
-            &completed.buffer_free_types,
-            &completed.capture_safe_types,
-            &completed.transferable_types,
-            &completed.shareable_types,
-            &completed.ordinary_types,
-            &completed.comparable_types,
-            &completed.application_free_types,
+        let fixture = synthetic_owned_generations(make_fixture(), generation, generation);
+        let healthy = prove(
+            &fixture,
+            &[0, 1, 2],
+            Limits::default(),
+            &ExecutionControl::uncancelled(),
+        )
+        .unwrap();
+        for limits in [
+            Limits {
+                steps: healthy.steps - 1,
+                bytes: healthy.bytes,
+            },
+            Limits {
+                steps: healthy.steps,
+                bytes: healthy.bytes - 1,
+            },
         ] {
-            assert!(!property.contains(&raw));
+            assert_eq!(
+                prove(
+                    &fixture,
+                    &[0, 1, 2],
+                    limits,
+                    &ExecutionControl::uncancelled()
+                )
+                .unwrap_err()
+                .class,
+                ExecutionFailureClass::Resource
+            );
+        }
+        let exact = prove(
+            &fixture,
+            &[0, 1, 2],
+            Limits {
+                steps: healthy.steps,
+                bytes: healthy.bytes,
+            },
+            &ExecutionControl::uncancelled(),
+        )
+        .unwrap();
+        assert_eq!((exact.steps, exact.bytes), (healthy.steps, healthy.bytes));
+        for checks in [0, 10, healthy.steps as u64 / 2] {
+            assert_eq!(
+                prove(
+                    &fixture,
+                    &[0, 1, 2],
+                    Limits::default(),
+                    &ExecutionControl::cancel_after_checks(checks)
+                )
+                .unwrap_err()
+                .class,
+                ExecutionFailureClass::Cancelled
+            );
+        }
+        let retry = prove(
+            &fixture,
+            &[0, 1, 2],
+            Limits::default(),
+            &ExecutionControl::uncancelled(),
+        )
+        .unwrap();
+        assert_eq!((retry.steps, retry.bytes), (healthy.steps, healthy.bytes));
+        // This fixture entry bypasses production source admission. Successful completion
+        // must retain the independent symbolic proof; it grants no source or artifact seal.
+        let completed = super::super::super::reference_schema::NormalizedReferenceSchema::independently_admit_witness_source(&fixture.source).unwrap();
+        assert_eq!(completed.source_admission_steps, 0);
+        let proof = completed.associated_proof().unwrap();
+        assert!(proof.types.is_empty());
+        assert!(proof.applications.is_empty());
+        assert!(proof.selections.is_empty());
+        assert!(proof.methods.is_empty());
+        assert!(proof.executables.is_empty());
+        assert_eq!(
+            proof.symbolic.keys().copied().collect::<BTreeSet<_>>(),
+            BTreeSet::from([fixture.consumer, fixture.reader])
+        );
+        let consumer = &proof.symbolic[&fixture.consumer];
+        assert_eq!(
+            consumer.parameters,
+            [(fixture.projection, ParameterUse::Borrow)]
+        );
+        assert_eq!(consumer.result.ty, fixture.projection);
+        assert_eq!(consumer.result.relation.source().copied(), Some(0));
+        assert!(!consumer.is_task);
+        assert!(consumer.requires_associated_generation);
+        assert_eq!(consumer.effect, EffectRow::default());
+        let control = ExecutionControl::uncancelled();
+        let contract = proof.contract_template(fixture.contract, &control).unwrap();
+        let method = contract.methods[0].id;
+        let contract_result = contract.methods[0].result.ty;
+        assert!(matches!(
+            completed.types[&contract_result].form,
+            TypeForm::AssociatedContractMember { contract, member }
+                if contract == fixture.contract && member == fixture.member
+        ));
+        assert_eq!(proof.contract_methods.len(), 1);
+        let signature = &proof.contract_methods[&(fixture.contract, method)];
+        assert_eq!(
+            signature.parameters,
+            [(contract_result, ParameterUse::Borrow)]
+        );
+        assert_eq!(signature.result.ty, contract_result);
+        assert_eq!(signature.result.relation.source().copied(), Some(0));
+        assert!(!signature.is_task);
+        assert!(signature.requires_associated_generation);
+        assert_eq!(proof.symbolic_mappings.len(), 3);
+        for (index, expected) in [fixture.cell, fixture.block, fixture.cell]
+            .into_iter()
+            .enumerate()
+        {
+            let target = proof
+                .symbolic_mapping(fixture.implementations[index], method, &[], &control)
+                .unwrap();
+            assert_eq!(target.function, Some(fixture.reader));
+            assert_eq!(target.types, [expected]);
+            assert!(target.witnesses.is_empty());
+            assert_eq!(
+                target.signature.parameters,
+                [(expected, ParameterUse::Borrow)]
+            );
+            assert_eq!(target.signature.result.ty, expected);
+            assert_eq!(target.signature.result.relation.source().copied(), Some(0));
+            assert!(!target.signature.is_task);
+            assert_eq!(target.signature.effect, EffectRow::default());
+            let extra_scope = ReadScopeArgument::Parameter(ReadScopeReference {
+                binder: ReadScopeBinder::ContractMethod {
+                    contract: fixture.contract,
+                    method,
+                },
+                parameter: crate::platform::semantic_id::ReadScopeParameterId::migrate(SEED, 91),
+            });
+            assert!(
+                proof
+                    .symbolic_mapping(
+                        fixture.implementations[index],
+                        method,
+                        &[extra_scope],
+                        &control
+                    )
+                    .is_err()
+            );
+        }
+        assert!(completed.types.contains_key(&fixture.cell));
+        assert!(completed.types.contains_key(&fixture.block));
+        assert!(completed.transferable_types.contains(&fixture.block));
+        assert!(completed.shareable_types.contains(&fixture.block));
+        for raw in [fixture.projection, contract_result] {
+            assert!(proof.raw_templates.contains(&raw));
+            for property in [
+                &completed.buffer_free_types,
+                &completed.capture_safe_types,
+                &completed.transferable_types,
+                &completed.shareable_types,
+                &completed.ordinary_types,
+                &completed.comparable_types,
+                &completed.application_free_types,
+            ] {
+                assert!(!property.contains(&raw));
+            }
         }
     }
 }
@@ -882,8 +1041,8 @@ fn canonical_associated_preparation_closes_source_effects_before_opaque_caller_t
     };
     function.type_parameters.push(ordinary);
     function.effect_parameters.push(effect);
-    function.result = result;
-    function.result_borrow = None;
+    function.result.ty = result;
+    function.result.relation = crate::platform::kernel::ResultRelation::Value;
     let operands = [operand(&fixture, 0)];
     let types = [fixture.cell, caller];
     let effects = [EffectRow::default()];
@@ -895,6 +1054,7 @@ fn canonical_associated_preparation_closes_source_effects_before_opaque_caller_t
             implementations: &operands,
             effects: &effects,
             requirements: &[],
+            read_scope_arguments: &[],
         }],
         Limits::default(),
         &ExecutionControl::uncancelled(),
@@ -913,7 +1073,7 @@ fn canonical_associated_preparation_closes_source_effects_before_opaque_caller_t
         .find(|(application, _)| application.function == fixture.consumer)
         .unwrap()
         .1;
-    assert_eq!(actual.result, expected);
+    assert_eq!(actual.result.ty, expected);
     assert!(
         matches!(&proof.types[&caller].form, TypeForm::TaskFunction { effect, .. } if effect == &caller_row)
     );
@@ -979,6 +1139,7 @@ fn canonical_associated_preparation_closes_untaken_containers_and_both_call_lane
             effect_arguments: vec![],
             requirement_arguments: vec![],
             arguments: vec![],
+            read_scope_arguments: Vec::new(),
         },
     );
     let right = expression(
@@ -989,6 +1150,7 @@ fn canonical_associated_preparation_closes_untaken_containers_and_both_call_lane
             effect_arguments: vec![],
             requirement_arguments: vec![],
             arguments: vec![],
+            read_scope_arguments: Vec::new(),
         },
     );
     let lanes = expression(105, ExpressionOperation::Parallel { left, right });
@@ -999,6 +1161,7 @@ fn canonical_associated_preparation_closes_untaken_containers_and_both_call_lane
             type_arguments: vec![sequence],
             effect_arguments: vec![],
             requirement_arguments: vec![],
+            read_scope_arguments: Vec::new(),
         },
     );
     let body = expression(
@@ -1242,15 +1405,17 @@ fn canonical_associated_schema_context_seals_owner_selection_and_source_template
     let method = contract.methods[0].id;
     let mapping = proof.mapping_template(selected, method, &control).unwrap();
     assert_eq!(mapping.type_arguments, [fixture.block]);
-    let target = proof.method_target(selected, method, &control).unwrap();
+    let target = proof
+        .method_target(selected, method, &[], &control)
+        .unwrap();
     assert_eq!(
-        proof.application(target, &control).unwrap().result,
+        proof.application(target, &control).unwrap().result.ty,
         fixture.block
     );
     let foreign = prove(&fixture, &[1], Limits::default(), &control).unwrap();
     assert!(
         proof
-            .method_target(&foreign.selections[0], method, &control)
+            .method_target(&foreign.selections[0], method, &[], &control)
             .is_err()
     );
     assert!(
@@ -1264,7 +1429,7 @@ fn canonical_associated_schema_context_seals_owner_selection_and_source_template
             .is_err()
     );
     let source_function = &proof.symbolic[&fixture.consumer];
-    assert_eq!(source_function.result, fixture.projection);
+    assert_eq!(source_function.result.ty, fixture.projection);
     assert!(source_function.occurrences.contains_key(&declaration));
     assert!(proof.flow_work.contexts > 0);
 }
@@ -1283,7 +1448,7 @@ fn canonical_associated_schema_checks_unselected_owned_bindings_and_growth_befor
         .iter_mut()
         .find(|binding| binding.member == fixture.spare)
         .unwrap()
-        .ty = unit;
+        .value = crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty: unit };
     let error = derive(
         &[&fixture.source],
         &[],
@@ -1323,8 +1488,8 @@ fn canonical_associated_schema_checks_unselected_owned_bindings_and_growth_befor
     let original_parameter = function.parameters[0];
     function.type_parameters = vec![formal];
     function.parameters = vec![parameter];
-    function.result = unit;
-    function.result_borrow = None;
+    function.result.ty = unit;
+    function.result.relation = crate::platform::kernel::ResultRelation::Value;
     function.body = body;
     declaration.header = OwnerHeader::new(
         OwnerKey::Declaration(grow.declaration),
@@ -1381,6 +1546,7 @@ fn canonical_associated_schema_checks_unselected_owned_bindings_and_growth_befor
                     effect_arguments: vec![],
                     requirement_arguments: vec![],
                     arguments: vec![local],
+                    read_scope_arguments: Vec::new(),
                 },
             )
             .unwrap(),
@@ -1442,8 +1608,8 @@ pub(in super::super::super) fn invoke_fixture() -> InvokeFixture {
     };
     function.type_parameters.clear();
     function.parameters = vec![parameter, second_parameter];
-    function.result = scalar;
-    function.result_borrow = None;
+    function.result.ty = scalar;
+    function.result.relation = crate::platform::kernel::ResultRelation::Value;
     function.body = local;
     declaration.header = OwnerHeader::new(
         OwnerKey::Declaration(target.declaration),
@@ -1490,6 +1656,7 @@ pub(in super::super::super) fn invoke_fixture() -> InvokeFixture {
                 type_arguments: vec![],
                 effect_arguments: vec![],
                 requirement_arguments: vec![],
+                read_scope_arguments: Vec::new(),
             },
         ),
         (argument, ExpressionOperation::I64 { value: 17 }),

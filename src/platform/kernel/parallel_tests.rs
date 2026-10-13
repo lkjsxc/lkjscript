@@ -246,7 +246,7 @@ fn parallel_independent_admission_rejects_hidden_authority_and_task_shape_change
         let DeclarationPayload::Function(f) = &mut d.payload else {
             panic!("child")
         };
-        f.result = ty;
+        f.result.ty = ty;
         assert!(parallel::admit_call(&forged, left, None).is_err());
         assert!(!memory_reference::accepts(&forged));
     }

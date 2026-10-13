@@ -13,6 +13,16 @@ pub trait NormalizedValueSchema {
     fn variant_index(&self, ty: TypeObjectDigest) -> Option<usize>;
     fn comparable(&self, ty: TypeObjectDigest) -> bool;
     fn application_free(&self, ty: TypeObjectDigest) -> bool;
+
+    /// Reject a view anywhere in the complete supplied type/layout closure. This guard
+    /// grants no ordinary, ownership, capture, transfer, or runtime-origin certificate.
+    fn reject_read_view_escape(
+        &self,
+        ty: TypeObjectDigest,
+        control: &crate::platform::execution::ExecutionControl,
+    ) -> Result<(), crate::platform::execution::ExecutionError> {
+        super::value::reject_read_view_type_escape(self, ty, control)
+    }
 }
 
 impl NormalizedValueSchema for NormalizedProgram {

@@ -129,9 +129,25 @@ fn strict_artifact_rejects_fully_rehashed_expanding_canonical_applications() {
         expected_artifacts.push((name, retained, expected, current));
     }
     for (name, retained, expected, current) in expected_artifacts {
+        let expected_sha256 = match name {
+            "direct" => "8280a500d9e45503617056b2b22150468fccbacd5faf7d9983b8377dc7b7133d",
+            "named" => "d6a270adb2993d422c9039695e37ff0fe8900fc6def4632d8ae6ef919d76d93a",
+            _ => unreachable!(),
+        };
+        predecessor_attack_tests::assert_frozen33_fixture_identity(expected, expected_sha256);
+        let frozen_error = load_artifact(expected).unwrap_err();
+        assert_eq!(
+            frozen_error.code, "kernel_callable_expansion",
+            "{name}: {frozen_error:?}"
+        );
+        assert_eq!(
+            frozen_error.class,
+            crate::platform::DiagnosticClass::Semantic
+        );
+        let expected_current = predecessor_attack_tests::current_derived_fixture(expected);
         assert!(
-            current.as_slice() == expected,
-            "current {name} fixture derived bytes changed"
+            current == expected_current,
+            "current {name} source and instructions differ from the pinned compiler33 fixture"
         );
         assert_eq!(
             load_artifact(retained).unwrap_err().code,
@@ -349,22 +365,32 @@ fn replace_unit_checked(
         31 => (*b"LKJCUN31", "lkjscript.compiler-unit-envelope.v31"),
         32 => (*b"LKJCUN32", "lkjscript.compiler-unit-envelope.v32"),
         33 => (*b"LKJCUN33", "lkjscript.compiler-unit-envelope.v33"),
+        34 => (*b"LKJCUN34", "lkjscript.compiler-unit-envelope.v34"),
         other => panic!("unexpected forged-unit generation {other}"),
     };
-    let bytes = crate::platform::packed::encode(
-        magic,
-        domain,
-        unit,
-        super::super::unit::MAXIMUM_COMPILER_UNIT_BYTES,
-    )
-    .unwrap();
+    let bytes = if unit.contract_version == 33 {
+        // Preserve the predecessor physical schema even for independently rehashed
+        // structural mutations. Unified current records are never written under old magic.
+        crate::platform::compiler::wire33::encode(unit).unwrap()
+    } else {
+        crate::platform::packed::encode(
+            magic,
+            domain,
+            unit,
+            super::super::unit::MAXIMUM_COMPILER_UNIT_BYTES,
+        )
+        .unwrap()
+    };
     let key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &bytes);
     if let Some(expected) = structural_rejection {
         assert_eq!(
             CompilationUnit::decode(&bytes, key).unwrap_err().code,
             expected
         );
-    } else if unit.contract_version == super::super::unit::COMPILER_UNIT_CONTRACT_VERSION {
+    } else if matches!(
+        unit.contract_version,
+        33 | super::super::unit::COMPILER_UNIT_CONTRACT_VERSION
+    ) {
         CompilationUnit::decode(&bytes, key).expect("structurally valid forged unit");
     } else {
         assert_eq!(
@@ -532,7 +558,7 @@ fn strict_effect_artifact_rejects_order_erasure_target_and_nested_callable_forge
                 *target = (*target + 1) % unit.tables.declarations.len() as u32;
             }
             "nested-erasure" => {
-                let old_result = unit.tables.types[signature.result as usize];
+                let old_result = unit.tables.types[signature.result.ty as usize];
                 let mut result = crate::platform::kernel::decode_type_object(
                     &loaded.objects
                         [&ObjectKey::from_digest(ObjectDomain::Type, old_result.bytes())],
@@ -563,7 +589,7 @@ fn strict_effect_artifact_rejects_order_erasure_target_and_nested_callable_forge
                     ObjectKey::from_digest(ObjectDomain::Type, digest.bytes()),
                     bytes,
                 ));
-                unit.tables.types[signature.result as usize] = digest;
+                unit.tables.types[signature.result.ty as usize] = digest;
             }
             _ => unreachable!(),
         }

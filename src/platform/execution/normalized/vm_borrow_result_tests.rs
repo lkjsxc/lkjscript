@@ -136,7 +136,7 @@ pub(crate) const SOURCE: &str = r#"declarations.begin
         (in (call add (call read-cell (local selected)) (field (local outer) (name tag)))))))))))
 declarations.end"#;
 
-fn fixture() -> (Arc<NormalizedProgram>, BTreeMap<String, FunctionIndex>) {
+pub(super) fn fixture() -> (Arc<NormalizedProgram>, BTreeMap<String, FunctionIndex>) {
     static PREPARED: OnceLock<(Arc<NormalizedProgram>, BTreeMap<String, FunctionIndex>)> =
         OnceLock::new();
     let (program, functions) = PREPARED.get_or_init(|| {

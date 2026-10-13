@@ -320,7 +320,7 @@ fn owned_witness_oracle_and_independent_reference_reject_unused_method_faults() 
                     requirements: vec![],
                 };
             } else if fault == "wrong-result" {
-                f.result = encode_type_object(&TypeObject::new(TypeForm::I64).unwrap())
+                f.result.ty = encode_type_object(&TypeObject::new(TypeForm::I64).unwrap())
                     .unwrap()
                     .0;
             } else {
@@ -354,5 +354,95 @@ fn owned_witness_oracle_and_independent_reference_reject_unused_method_faults() 
             failure.is_err(),
             "independent source dispatch accepted {fault}"
         );
+    }
+}
+
+#[test]
+fn raw_generic_map_admits_unretained_composites_and_checks_unused_actuals_and_final_children() {
+    let source = byte_buffer_tests::author_only(
+        r#"declarations.begin
+(units (module create raw-map
+  (function create size (visibility public) (effect pure)
+    (type-parameter create T)
+    (type-parameter create Phantom)
+    (parameter create input (type (map I64 T)))
+    (returns I64) (body (i64 7)))))
+declarations.end"#,
+    )
+    .unwrap();
+    let program = prepare_snapshot(&source);
+    let declaration = declaration_named(&source, "size");
+    let integer =
+        crate::platform::kernel::encode_type_object(&TypeObject::new(TypeForm::I64).unwrap())
+            .unwrap()
+            .0;
+    let concrete = crate::platform::kernel::encode_type_object(
+        &TypeObject::new(TypeForm::Map {
+            key: integer,
+            value: integer,
+        })
+        .unwrap(),
+    )
+    .unwrap()
+    .0;
+    assert!(
+        !program.types.contains_key(&concrete),
+        "raw applications do not require enumerated composite identities"
+    );
+    let missing = crate::platform::kernel::TypeObjectDigest::from_bytes([0xff; 32]);
+    let control = ExecutionControl::uncancelled();
+    for reference in [false, true] {
+        for case in 0..4 {
+            let types = match case {
+                2 => vec![integer, missing],
+                3 => vec![integer],
+                _ => vec![integer, integer],
+            };
+            let last = if case == 1 {
+                NormalizedValue::Bool(false)
+            } else {
+                NormalizedValue::I64(11)
+            };
+            let argument = NormalizedValue::map(std::collections::BTreeMap::from([
+                (
+                    super::super::value::NormalizedMapKey::I64(0),
+                    NormalizedValue::I64(3),
+                ),
+                (super::super::value::NormalizedMapKey::I64(1), last),
+            ]))
+            .unwrap();
+            let actual = if reference {
+                NormalizedReferenceInterpreter::new(
+                    &source,
+                    &program,
+                    NormalizedRunPolicy::foreground(),
+                )
+                .invoke_instantiated(declaration, &types, vec![argument], &control)
+                .map(|(value, work)| (value, work.calls, work.live_call_frames_after))
+            } else {
+                NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
+                    .invoke_entry(
+                        super::super::prepare::NormalizedEntryPoint::InstantiatedFunction(
+                            program.function(declaration).unwrap(),
+                            Arc::from(types),
+                        ),
+                        vec![argument],
+                        None,
+                        &control,
+                    )
+                    .map(|(value, work)| (value, work.calls, work.live_call_frames_after))
+            };
+            if case == 0 {
+                let (value, calls, live_frames) = actual.unwrap();
+                assert_eq!(value, NormalizedValue::I64(7));
+                assert_eq!(calls, 1);
+                assert_eq!(live_frames, 0);
+            } else {
+                assert!(
+                    actual.is_err(),
+                    "{reference}/{case}: unused actuals, full arity and every map child remain admitted"
+                );
+            }
+        }
     }
 }

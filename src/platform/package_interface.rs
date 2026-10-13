@@ -31,14 +31,19 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-21";
-pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 21;
-pub(crate) const ASSOCIATED_INTERFACE_MAGIC: [u8; 8] = *b"LKJPAT01";
+pub(crate) mod read_views;
+
+pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-22";
+pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 22;
+pub(crate) const ASSOCIATED_INTERFACE_MAGIC: [u8; 8] = *b"LKJPAV01";
 pub(crate) const ASSOCIATED_INTERFACE_ENVELOPE_DOMAIN: &str =
-    "lkjscript.package-interface-associated-owner-envelope.v1";
-pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF21";
+    "lkjscript.package-interface-associated-read-view-owner-envelope.v1";
+pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF22";
 pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str =
-    "lkjscript.package-interface-owner-envelope.v21";
+    "lkjscript.package-interface-owner-envelope.v22";
+pub(crate) const FROZEN_ASSOCIATED_INTERFACE_MAGIC: [u8; 8] = *b"LKJPAT01";
+pub(crate) const FROZEN_ASSOCIATED_INTERFACE_DOMAIN: &str =
+    "lkjscript.package-interface-associated-owner-envelope.v1";
 const PACKAGE_INTERFACE_IDENTITY_MAGIC: [u8; 8] = *b"LKJPIFI1";
 const PACKAGE_INTERFACE_IDENTITY_DOMAIN: &str = "lkjscript.package-interface-identity.v1";
 pub const MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES: usize = 1024 * 1024;
@@ -119,6 +124,10 @@ mod mixed_storage_tests;
 #[path = "package_interface_associated_authority_tests.rs"]
 mod associated_authority_tests;
 
+#[cfg(test)]
+#[path = "package_interface_read_view_tests.rs"]
+mod read_view_tests;
+
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PackageInterfaceOwnerDigest([u8; 32]);
 
@@ -191,7 +200,7 @@ impl Encode for AssociatedInterfaceWire {
             .ok_or(bincode::error::EncodeError::Other(
                 "interface has no associated inventory",
             ))?;
-        crate::platform::kernel::contract::OWNED_ASSOCIATED_CONTRACT_VERSION.encode(encoder)?;
+        crate::platform::kernel::contract::ASSOCIATED_READ_VIEW_CONTRACT_VERSION.encode(encoder)?;
         body.tag().encode(encoder)?;
         self.0.contract_version.encode(encoder)?;
         record.header.encode(encoder)?;
@@ -203,8 +212,14 @@ impl<C> Decode<C> for AssociatedInterfaceWire {
     fn decode<D: bincode::de::Decoder<Context = C>>(
         decoder: &mut D,
     ) -> Result<Self, bincode::error::DecodeError> {
-        use crate::platform::kernel::owned_associated_wire::{AssociatedOwnedBody, decode_version};
-        decode_version(decoder)?;
+        use crate::platform::kernel::owned_associated_wire::AssociatedOwnedBody;
+        if u16::decode(decoder)?
+            != crate::platform::kernel::contract::ASSOCIATED_READ_VIEW_CONTRACT_VERSION
+        {
+            return Err(bincode::error::DecodeError::Other(
+                "unknown associated read-view contract version",
+            ));
+        }
         let tag = u8::decode(decoder)?;
         let contract_version = u16::decode(decoder)?;
         let header = crate::platform::kernel::OwnerHeader::decode(decoder)?;
@@ -231,6 +246,81 @@ impl<C> Decode<C> for AssociatedInterfaceWire {
     }
 }
 bincode::impl_borrow_decode!(AssociatedInterfaceWire);
+
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+struct FrozenInterfaceOwner21 {
+    contract_version: u16,
+    record: crate::platform::kernel::interface21::PackageInterfaceRecord21,
+}
+
+struct FrozenAssociatedInterfaceWire21(PackageInterfaceOwner);
+impl Encode for FrozenAssociatedInterfaceWire21 {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        use crate::platform::kernel::owned_associated_wire::FrozenAssociatedOwnedBody33;
+        let PackageInterfaceRecord::Declaration(record) = &self.0.record else {
+            return Err(bincode::error::EncodeError::Other(
+                "associated interface requires a public declaration",
+            ));
+        };
+        let body = match &record.payload {
+            PackageInterfaceDeclarationPayload::OwnedContract(c) => {
+                FrozenAssociatedOwnedBody33::contract(c)
+            }
+            PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
+                FrozenAssociatedOwnedBody33::implementation(i)
+            }
+            _ => {
+                return Err(bincode::error::EncodeError::Other(
+                    "interface has no associated inventory",
+                ));
+            }
+        }
+        .map_err(|error| bincode::error::EncodeError::OtherString(error.message))?;
+        crate::platform::kernel::contract::OWNED_ASSOCIATED_CONTRACT_VERSION.encode(encoder)?;
+        body.tag().encode(encoder)?;
+        self.0.contract_version.encode(encoder)?;
+        record.header.encode(encoder)?;
+        record.name.encode(encoder)?;
+        body.encode_data(encoder)
+    }
+}
+impl<C> Decode<C> for FrozenAssociatedInterfaceWire21 {
+    fn decode<D: bincode::de::Decoder<Context = C>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        use crate::platform::kernel::owned_associated_wire::{
+            FrozenAssociatedOwnedBody33, decode_version,
+        };
+        decode_version(decoder)?;
+        let tag = u8::decode(decoder)?;
+        let contract_version = u16::decode(decoder)?;
+        let header = crate::platform::kernel::OwnerHeader::decode(decoder)?;
+        let name = crate::platform::kernel::Name::decode(decoder)?;
+        let payload = match FrozenAssociatedOwnedBody33::decode_data(tag, decoder)?.into_payload() {
+            DeclarationPayload::OwnedContract(c) => {
+                PackageInterfaceDeclarationPayload::OwnedContract(c)
+            }
+            DeclarationPayload::OwnedImplementation(i) => {
+                PackageInterfaceDeclarationPayload::OwnedImplementation(i)
+            }
+            _ => unreachable!("frozen associated payload has only parent forms"),
+        };
+        Ok(Self(PackageInterfaceOwner {
+            contract_version,
+            record: PackageInterfaceRecord::Declaration(
+                crate::platform::kernel::PackageInterfaceDeclaration {
+                    header,
+                    name,
+                    payload,
+                },
+            ),
+        }))
+    }
+}
+bincode::impl_borrow_decode!(FrozenAssociatedInterfaceWire21);
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 struct PackageInterfaceOwner10 {
@@ -423,6 +513,8 @@ impl PackageInterfaceOwner {
                 // can describe older private ordinary layouts inside an owned record.
                 if canonical.header().contract_version < 33 {
                     20
+                } else if canonical.header().contract_version == 33 {
+                    21
                 } else {
                     PACKAGE_INTERFACE_CONTRACT_VERSION
                 }
@@ -448,6 +540,8 @@ impl PackageInterfaceOwner {
                 19
             } else if canonical.header().contract_version < 33 {
                 20
+            } else if canonical.header().contract_version == 33 {
+                21
             } else {
                 PACKAGE_INTERFACE_CONTRACT_VERSION
             },
@@ -472,12 +566,21 @@ impl PackageInterfaceOwner {
     pub fn encode(&self) -> Result<(PackageInterfaceOwnerDigest, Vec<u8>), Diagnostic> {
         self.validate_local()?;
         if associated_interface_body(&self.record)?.is_some() {
+            if self.contract_version == 21 && self.record.header().contract_version == 33 {
+                let bytes = crate::platform::packed::encode(
+                    FROZEN_ASSOCIATED_INTERFACE_MAGIC,
+                    FROZEN_ASSOCIATED_INTERFACE_DOMAIN,
+                    &FrozenAssociatedInterfaceWire21(self.clone()),
+                    MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+                )?;
+                return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
+            }
             if self.contract_version != PACKAGE_INTERFACE_CONTRACT_VERSION
                 || self.record.header().contract_version
                     != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
             {
                 return Err(interface_corrupt(
-                    "associated interface requires the exact Interface21/Graph33 base profile",
+                    "associated interface requires an exact current or frozen base profile",
                 ));
             }
             let bytes = crate::platform::packed::encode(
@@ -583,7 +686,10 @@ impl PackageInterfaceOwner {
             let bytes = crate::platform::packed::encode(
                 *b"LKJPIF17",
                 "lkjscript.package-interface-owner-envelope.v17",
-                self,
+                &FrozenInterfaceOwner21 {
+                    contract_version: 17,
+                    record: self.record.clone().try_into()?,
+                },
                 MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
             )?;
             return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
@@ -592,7 +698,10 @@ impl PackageInterfaceOwner {
             let bytes = crate::platform::packed::encode(
                 *b"LKJPIF18",
                 "lkjscript.package-interface-owner-envelope.v18",
-                self,
+                &FrozenInterfaceOwner21 {
+                    contract_version: 18,
+                    record: self.record.clone().try_into()?,
+                },
                 MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
             )?;
             return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
@@ -601,7 +710,10 @@ impl PackageInterfaceOwner {
             let bytes = crate::platform::packed::encode(
                 *b"LKJPIF19",
                 "lkjscript.package-interface-owner-envelope.v19",
-                self,
+                &FrozenInterfaceOwner21 {
+                    contract_version: 19,
+                    record: self.record.clone().try_into()?,
+                },
                 MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
             )?;
             return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
@@ -610,7 +722,22 @@ impl PackageInterfaceOwner {
             let bytes = crate::platform::packed::encode(
                 *b"LKJPIF20",
                 "lkjscript.package-interface-owner-envelope.v20",
-                self,
+                &FrozenInterfaceOwner21 {
+                    contract_version: 20,
+                    record: self.record.clone().try_into()?,
+                },
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
+        }
+        if self.contract_version == 21 {
+            let bytes = crate::platform::packed::encode(
+                *b"LKJPIF21",
+                "lkjscript.package-interface-owner-envelope.v21",
+                &FrozenInterfaceOwner21 {
+                    contract_version: 21,
+                    record: self.record.clone().try_into()?,
+                },
                 MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
             )?;
             return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
@@ -652,8 +779,37 @@ impl PackageInterfaceOwner {
                 ));
             }
             wire.0
+        } else if bytes.starts_with(&FROZEN_ASSOCIATED_INTERFACE_MAGIC) {
+            let value: FrozenAssociatedInterfaceWire21 = crate::platform::packed::decode(
+                bytes,
+                FROZEN_ASSOCIATED_INTERFACE_MAGIC,
+                FROZEN_ASSOCIATED_INTERFACE_DOMAIN,
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            if value.0.contract_version != 21 || value.0.record.header().contract_version != 33 {
+                return Err(interface_corrupt(
+                    "frozen associated interface has a foreign base generation",
+                ));
+            }
+            value.0
+        } else if bytes.starts_with(b"LKJPIF21") {
+            let value: FrozenInterfaceOwner21 = crate::platform::packed::decode(
+                bytes,
+                *b"LKJPIF21",
+                "lkjscript.package-interface-owner-envelope.v21",
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            if value.contract_version != 21 {
+                return Err(interface_corrupt(
+                    "frozen interface has a foreign generation",
+                ));
+            }
+            Self {
+                contract_version: value.contract_version,
+                record: value.record.into(),
+            }
         } else if bytes.starts_with(b"LKJPIF20") {
-            let value: Self = crate::platform::packed::decode(
+            let value: FrozenInterfaceOwner21 = crate::platform::packed::decode(
                 bytes,
                 *b"LKJPIF20",
                 "lkjscript.package-interface-owner-envelope.v20",
@@ -664,9 +820,12 @@ impl PackageInterfaceOwner {
                     "predecessor interface envelope has a foreign generation",
                 ));
             }
-            value
+            Self {
+                contract_version: value.contract_version,
+                record: value.record.into(),
+            }
         } else if bytes.starts_with(b"LKJPIF19") {
-            let value: Self = crate::platform::packed::decode(
+            let value: FrozenInterfaceOwner21 = crate::platform::packed::decode(
                 bytes,
                 *b"LKJPIF19",
                 "lkjscript.package-interface-owner-envelope.v19",
@@ -677,9 +836,12 @@ impl PackageInterfaceOwner {
                     "predecessor interface envelope has a foreign generation",
                 ));
             }
-            value
+            Self {
+                contract_version: value.contract_version,
+                record: value.record.into(),
+            }
         } else if bytes.starts_with(b"LKJPIF18") {
-            let value: Self = crate::platform::packed::decode(
+            let value: FrozenInterfaceOwner21 = crate::platform::packed::decode(
                 bytes,
                 *b"LKJPIF18",
                 "lkjscript.package-interface-owner-envelope.v18",
@@ -690,9 +852,12 @@ impl PackageInterfaceOwner {
                     "predecessor interface envelope has a foreign generation",
                 ));
             }
-            value
+            Self {
+                contract_version: value.contract_version,
+                record: value.record.into(),
+            }
         } else if bytes.starts_with(b"LKJPIF17") {
-            let value: Self = crate::platform::packed::decode(
+            let value: FrozenInterfaceOwner21 = crate::platform::packed::decode(
                 bytes,
                 *b"LKJPIF17",
                 "lkjscript.package-interface-owner-envelope.v17",
@@ -703,7 +868,10 @@ impl PackageInterfaceOwner {
                     "predecessor interface envelope has a foreign generation",
                 ));
             }
-            value
+            Self {
+                contract_version: value.contract_version,
+                record: value.record.into(),
+            }
         } else if bytes.starts_with(b"LKJPIF16") {
             let wire: PackageInterfaceOwner16 = crate::platform::packed::decode(
                 bytes,
@@ -845,14 +1013,15 @@ impl PackageInterfaceOwner {
 
     fn validate_local(&self) -> Result<(), Diagnostic> {
         if associated_interface_body(&self.record)?.is_some()
-            && (self.contract_version != PACKAGE_INTERFACE_CONTRACT_VERSION
-                || self.record.header().contract_version
-                    != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
+            && !((self.contract_version == 21 && self.record.header().contract_version == 33)
+                || (self.contract_version == PACKAGE_INTERFACE_CONTRACT_VERSION
+                    && self.record.header().contract_version
+                        == crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION))
         {
             return Err(interface_error(
                 DiagnosticClass::Source,
                 "package_interface_associated_generation",
-                "associated parents require the exact Graph 33/interface 21 base profile",
+                "associated parents require an exact current or frozen base profile",
             ));
         }
         if self.contract_version != PACKAGE_INTERFACE_CONTRACT_VERSION
@@ -867,11 +1036,17 @@ impl PackageInterfaceOwner {
             && self.contract_version != 18
             && self.contract_version != 19
             && self.contract_version != 20
+            && self.contract_version != 21
         {
             return Err(interface_error(
                 DiagnosticClass::Source,
                 "package_interface_contract",
                 "package-interface owner uses a predecessor or foreign contract",
+            ));
+        }
+        if self.contract_version < 22 && self.record.header().contract_version >= 34 {
+            return Err(interface_corrupt(
+                "Graph 34 owners require interface generation 22",
             ));
         }
         if self.contract_version < 21 && self.record.header().contract_version >= 33 {
@@ -934,8 +1109,8 @@ impl PackageInterfaceOwner {
         }
         if self.contract_version < 15
             && matches!(&self.record, PackageInterfaceRecord::Declaration(d) if match &d.payload {
-                PackageInterfaceDeclarationPayload::Function(f) => f.result_borrow.is_some(),
-                PackageInterfaceDeclarationPayload::OwnedContract(c) => c.methods.iter().any(|m| m.result_borrow.is_some()),
+                PackageInterfaceDeclarationPayload::Function(f) => !matches!(f.result.relation, crate::platform::kernel::ResultRelation::Value),
+                PackageInterfaceDeclarationPayload::OwnedContract(c) => c.methods.iter().any(|m| !matches!(m.result.relation, crate::platform::kernel::ResultRelation::Value)),
                 _ => false,
             })
         {
@@ -1119,6 +1294,7 @@ impl PackageInterfaceSelection {
                 self.type_parameters
                     .extend(i.type_parameters.iter().copied());
             }
+            DeclarationPayload::ReadView(_) => {}
             DeclarationPayload::Record { fields, .. }
             | DeclarationPayload::OwnedRecord { fields, .. } => self.fields.extend(fields),
             DeclarationPayload::Variant { cases, .. } => self.cases.extend(cases),
@@ -1204,13 +1380,6 @@ impl PackageInterfaceSelection {
         dependency_types: &BTreeMap<TypeObjectDigest, TypeObject>,
         budget: &mut RepresentationBudget,
     ) -> Result<(), Diagnostic> {
-        if !self.declarations.iter().any(|id| {
-            matches!(records.get(&OwnerKey::Declaration(*id)),
-                Some(OwnerRecord::Declaration(record))
-                    if matches!(record.payload, DeclarationPayload::OwnedRecord { .. }))
-        }) {
-            return Ok(());
-        }
         self.observe_owned_representations_indexed_admitted(
             |key| Ok(records.get(&key).cloned()),
             |digest| {
@@ -1246,18 +1415,29 @@ impl PackageInterfaceSelection {
         let mut pending = Vec::new();
         for declaration in &self.declarations {
             budget.reserve::<OwnerRecord>(1)?;
-            if let Some(OwnerRecord::Declaration(record)) =
+            if let Some(owner @ OwnerRecord::Declaration(_)) =
                 read_owner(OwnerKey::Declaration(*declaration))?
-                && let DeclarationPayload::OwnedRecord { fields, .. } = &record.payload
             {
-                for field in fields {
-                    budget.reserve::<OwnerRecord>(1)?;
-                    match read_owner(OwnerKey::Field(*field))? {
-                        Some(OwnerRecord::Field(field)) => {
-                            budget.reserve::<TypeObjectDigest>(1)?;
-                            pending.push(field.ty);
+                for ty in owner.type_roots() {
+                    budget.reserve::<TypeObjectDigest>(1)?;
+                    pending.push(ty);
+                }
+                if let OwnerRecord::Declaration(record) = &owner
+                    && let DeclarationPayload::OwnedRecord { fields, .. } = &record.payload
+                {
+                    for field in fields {
+                        budget.reserve::<OwnerRecord>(1)?;
+                        match read_owner(OwnerKey::Field(*field))? {
+                            Some(OwnerRecord::Field(field)) => {
+                                budget.reserve::<TypeObjectDigest>(1)?;
+                                pending.push(field.ty);
+                            }
+                            _ => {
+                                return Err(interface_corrupt(
+                                    "owned representation field is absent",
+                                ));
+                            }
                         }
-                        _ => return Err(interface_corrupt("owned representation field is absent")),
                     }
                 }
             }
@@ -1282,7 +1462,9 @@ impl PackageInterfaceSelection {
                 .ok_or_else(|| interface_corrupt("owned representation type is absent"))?;
             budget.append_children(&object, &mut pending)?;
             let reference = match object.form {
-                TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. }
+                TypeForm::Named { declaration }
+                | TypeForm::Applied { declaration, .. }
+                | TypeForm::ReadViewApplied { declaration, .. }
                     if declaration.package == self.package =>
                 {
                     declaration
@@ -1313,6 +1495,10 @@ impl PackageInterfaceSelection {
                 }
             }
             match &record.payload {
+                DeclarationPayload::ReadView(view) => {
+                    budget.reserve::<TypeObjectDigest>(view.fields.len())?;
+                    pending.extend(view.fields.iter().map(|field| field.ty));
+                }
                 DeclarationPayload::OwnedRecord { fields, .. }
                 | DeclarationPayload::Record { fields, .. } => {
                     for field in fields {
@@ -1701,6 +1887,9 @@ pub(crate) fn interface_owner_validation_visits(owner: &PackageInterfaceOwner) -
                             .sum::<usize>()
                         + 1
                 }
+                PackageInterfaceDeclarationPayload::ReadView(view) => {
+                    view.type_parameters.len() + view.fields.len() + 1
+                }
                 PackageInterfaceDeclarationPayload::Record {
                     fields,
                     type_parameters,
@@ -1725,6 +1914,8 @@ pub(crate) fn interface_owner_validation_visits(owner: &PackageInterfaceOwner) -
                         + function.type_parameters.len()
                         + function.requirement_parameters.len()
                         + function.effect_parameters.len()
+                        + function.read_scope_parameters.len()
+                        + function.read_scope_sources.len()
                         + match &function.effect {
                             FunctionEffect::Pure => 0,
                             FunctionEffect::Task {
@@ -1797,6 +1988,17 @@ fn validate_owner_closure_metered(
             ));
         };
         match &declaration.payload {
+            PackageInterfaceDeclarationPayload::ReadView(view) => {
+                for parameter in &view.type_parameters {
+                    require_child(
+                        owners,
+                        &mut expected,
+                        OwnerKey::TypeParameter(*parameter),
+                        OwnerKind::TypeParameter,
+                        Some(*declaration_id),
+                    )?;
+                }
+            }
             PackageInterfaceDeclarationPayload::OwnedContract(c) => {
                 let mut parameter_names = BTreeSet::new();
                 for parameter in std::iter::once(&c.self_parameter).chain(c.type_parameters.iter())
@@ -1864,7 +2066,7 @@ fn validate_owner_closure_metered(
                             .parameters
                             .iter()
                             .map(|p| p.ty)
-                            .chain([method.result])
+                            .chain([method.result.ty])
                         {
                             let Some(object) = types.get(&ty) else {
                                 return Err(interface_corrupt(
@@ -2202,6 +2404,16 @@ fn validate_owner_closure_metered(
             }
             PackageInterfaceDeclarationPayload::Constant { .. } => {}
         }
+        // Admit exact signature children and legacy source-tied results before the complete
+        // read-view pass. A missing child is never replaced by a partial scope/type proof.
+        read_views::validate_declaration_metered(
+            package,
+            *owner,
+            &declaration.payload,
+            owners,
+            types,
+            &mut *associated_admission.visit,
+        )?;
     }
     // A public signature may describe a concrete callback requirement without publishing the
     // component or function that owns its declaration. The type closure independently proves
@@ -2334,6 +2546,8 @@ fn interface_owned_type(
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum InterfaceBorrowRequirementProof {
     Owned,
+    ReadView,
+    DeferredReadView(crate::platform::kernel::DeclarationReference),
     DeferredNominal(crate::platform::kernel::DeclarationReference),
     DeferredAssociated(crate::platform::kernel::DeclarationReference),
 }
@@ -2341,7 +2555,9 @@ enum InterfaceBorrowRequirementProof {
 impl InterfaceBorrowRequirementProof {
     fn retain(self, package: PackageId) -> Result<Self, Diagnostic> {
         match self {
-            Self::DeferredNominal(reference) | Self::DeferredAssociated(reference)
+            Self::DeferredNominal(reference)
+            | Self::DeferredAssociated(reference)
+            | Self::DeferredReadView(reference)
                 if reference.package == package =>
             {
                 Err(associated_interface_error(
@@ -2365,7 +2581,7 @@ fn interface_borrow_requirement_at(
     let Some(object) = types.get(&ty) else {
         return Ok(None);
     };
-    if object.form.is_associated() {
+    if object.form.is_associated() || matches!(object.form, TypeForm::ReadViewApplied { .. }) {
         return admission
             .validate_form(package, source, &object.form, owners, types, &mut |_| {
                 Ok(None)
@@ -2373,6 +2589,10 @@ fn interface_borrow_requirement_at(
             .map(|proof| {
                 Some(match proof {
                     AssociatedInterfaceProof::Owned => InterfaceBorrowRequirementProof::Owned,
+                    AssociatedInterfaceProof::ReadView => InterfaceBorrowRequirementProof::ReadView,
+                    AssociatedInterfaceProof::DeferredReadView(reference) => {
+                        InterfaceBorrowRequirementProof::DeferredReadView(reference)
+                    }
                     AssociatedInterfaceProof::Deferred(contract) => {
                         InterfaceBorrowRequirementProof::DeferredAssociated(contract)
                     }
@@ -2399,8 +2619,10 @@ fn validate_interface_method_borrow_result(
     admission: &mut AssociatedInterfaceAdmission<'_>,
 ) -> Result<Option<[InterfaceBorrowRequirementProof; 2]>, Diagnostic> {
     admission.checkpoint()?;
-    let Some(position) = method.result_borrow else {
-        return Ok(None);
+    let position = match method.result.relation {
+        crate::platform::kernel::ResultRelation::Value => return Ok(None),
+        crate::platform::kernel::ResultRelation::ReadFrom { source }
+        | crate::platform::kernel::ResultRelation::ViewFrom { source, .. } => source,
     };
     let source = method
         .parameters
@@ -2419,9 +2641,16 @@ fn validate_interface_method_borrow_result(
     let source =
         interface_borrow_requirement_at(package, owner, source.ty, types, owners, admission)?
             .ok_or_else(invalid)?;
-    let result =
-        interface_borrow_requirement_at(package, owner, method.result, types, owners, admission)?
-            .ok_or_else(invalid)?;
+    let result = interface_borrow_requirement_at(
+        package,
+        owner,
+        method.result.ty,
+        types,
+        owners,
+        admission,
+    )?
+    .ok_or_else(invalid)?;
+    validate_result_category(&method.result.relation, result)?;
     Ok(Some([source.retain(package)?, result.retain(package)?]))
 }
 
@@ -2434,8 +2663,10 @@ fn validate_interface_function_borrow_result(
     admission: &mut AssociatedInterfaceAdmission<'_>,
 ) -> Result<Option<[InterfaceBorrowRequirementProof; 2]>, Diagnostic> {
     admission.checkpoint()?;
-    let Some(source) = signature.result_borrow else {
-        return Ok(None);
+    let source = match signature.result.relation {
+        crate::platform::kernel::ResultRelation::Value => return Ok(None),
+        crate::platform::kernel::ResultRelation::ReadFrom { source }
+        | crate::platform::kernel::ResultRelation::ViewFrom { source, .. } => source,
     };
     let Some(parameter_owner) = owners.get(&OwnerKey::Parameter(source)) else {
         return Err(interface_corrupt(
@@ -2480,16 +2711,39 @@ fn validate_interface_function_borrow_result(
     let result_proof = interface_borrow_requirement_at(
         package,
         OwnerKey::Declaration(declaration),
-        signature.result,
+        signature.result.ty,
         types,
         owners,
         admission,
     )?
     .ok_or_else(invalid)?;
+    validate_result_category(&signature.result.relation, result_proof)?;
     Ok(Some([
         source_proof.retain(package)?,
         result_proof.retain(package)?,
     ]))
+}
+
+fn validate_result_category<S>(
+    relation: &crate::platform::kernel::ResultRelation<S>,
+    proof: InterfaceBorrowRequirementProof,
+) -> Result<(), Diagnostic> {
+    if matches!(
+        (relation, proof),
+        (
+            crate::platform::kernel::ResultRelation::ReadFrom { .. },
+            InterfaceBorrowRequirementProof::ReadView
+                | InterfaceBorrowRequirementProof::DeferredReadView(_)
+        ) | (
+            crate::platform::kernel::ResultRelation::ViewFrom { .. },
+            InterfaceBorrowRequirementProof::Owned
+        )
+    ) {
+        return Err(interface_corrupt(
+            "result relation differs from its independently admitted value category",
+        ));
+    }
+    Ok(())
 }
 
 /// Descriptive interface authority is deliberately separate from executable source admission.
@@ -2497,7 +2751,9 @@ fn validate_interface_function_borrow_result(
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum AssociatedInterfaceProof {
     Owned,
+    ReadView,
     Deferred(crate::platform::kernel::DeclarationReference),
+    DeferredReadView(crate::platform::kernel::DeclarationReference),
 }
 
 pub(crate) struct AssociatedInterfaceAdmission<'a> {
@@ -2548,12 +2804,13 @@ impl<'v> AssociatedInterfaceAdmission<'v> {
     ) -> Result<(), Diagnostic> {
         self.step()?;
         if owner.owner() != key
-            || owner.contract_version != PACKAGE_INTERFACE_CONTRACT_VERSION
-            || owner.record.header().contract_version
-                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+            || !((owner.contract_version == PACKAGE_INTERFACE_CONTRACT_VERSION
+                && owner.record.header().contract_version
+                    == crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
+                || (owner.contract_version == 21 && owner.record.header().contract_version == 33))
         {
             return Err(associated_interface_error(
-                "associated occurrence requires its exact Interface21/Graph33 owner",
+                "associated occurrence requires an exact current or frozen interface owner",
             ));
         }
         Ok(())
@@ -2668,9 +2925,45 @@ impl<'v> AssociatedInterfaceAdmission<'v> {
             crate::platform::kernel::DeclarationReference,
         ) -> Result<Option<&'a PackageInterfaceOwner>, Diagnostic>,
     ) -> Result<AssociatedInterfaceProof, Diagnostic> {
+        if let TypeForm::ReadViewApplied {
+            declaration,
+            arguments,
+            read_scope,
+        } = form
+        {
+            return read_views::validate_view_application_resolved_metered(
+                package,
+                source,
+                *declaration,
+                arguments,
+                read_scope,
+                owners,
+                types,
+                resolve,
+                &mut *self.visit,
+            )
+            .map(|deferred| {
+                if deferred {
+                    AssociatedInterfaceProof::DeferredReadView(*declaration)
+                } else {
+                    AssociatedInterfaceProof::ReadView
+                }
+            });
+        }
         let (scope_record, actual_scope) = self.scope(package, source, owners)?;
+        let read_scope = match form {
+            TypeForm::AssociatedReadViewMember { read_scope, .. }
+            | TypeForm::AssociatedReadViewProjection { read_scope, .. } => Some(read_scope),
+            _ => None,
+        };
+        if let Some(read_scope) = read_scope {
+            read_views::validate_scope_argument(package, source, read_scope, owners)?;
+        }
         let (contract, member, lexical) = match form {
-            TypeForm::AssociatedContractMember { contract, member } => {
+            TypeForm::AssociatedContractMember { contract, member }
+            | TypeForm::AssociatedReadViewMember {
+                contract, member, ..
+            } => {
                 if *contract != actual_scope
                     || scope_record.header.kind != OwnerKind::OwnedContract
                     || !matches!(
@@ -2689,6 +2982,13 @@ impl<'v> AssociatedInterfaceAdmission<'v> {
                 parameter,
                 contract,
                 member,
+            }
+            | TypeForm::AssociatedReadViewProjection {
+                scope,
+                parameter,
+                contract,
+                member,
+                ..
             } => {
                 if *scope != actual_scope {
                     return Err(associated_interface_error(
@@ -2801,7 +3101,11 @@ impl<'v> AssociatedInterfaceAdmission<'v> {
             resolve(contract)?
         };
         let Some(value) = value else {
-            return Ok(AssociatedInterfaceProof::Deferred(contract));
+            return Ok(if read_scope.is_some() {
+                AssociatedInterfaceProof::DeferredReadView(contract)
+            } else {
+                AssociatedInterfaceProof::Deferred(contract)
+            });
         };
         let declaration = self.declaration(value, contract)?;
         let PackageInterfaceDeclarationPayload::OwnedContract(contract_record) =
@@ -2835,14 +3139,25 @@ impl<'v> AssociatedInterfaceAdmission<'v> {
                 }
             }
             found |= entry.id == member
-                && entry.bound == crate::platform::kernel::AssociatedTypeBound::Owned;
+                && match (&entry.bound, read_scope) {
+                    (crate::platform::kernel::AssociatedTypeBound::Owned, None) => true,
+                    (
+                        crate::platform::kernel::AssociatedTypeBound::ReadViewFamily { .. },
+                        Some(_),
+                    ) => true,
+                    _ => false,
+                };
         }
         if !found {
             return Err(associated_interface_error(
-                "associated member is absent from the exact Owned contract inventory",
+                "associated member kind is absent from its exact contract inventory",
             ));
         }
-        Ok(AssociatedInterfaceProof::Owned)
+        Ok(if read_scope.is_some() {
+            AssociatedInterfaceProof::ReadView
+        } else {
+            AssociatedInterfaceProof::Owned
+        })
     }
 
     #[allow(
@@ -2882,15 +3197,23 @@ impl<'v> AssociatedInterfaceAdmission<'v> {
             let object = types.get(&ty).ok_or_else(|| {
                 associated_interface_error("associated interface type closure is incomplete")
             })?;
-            if object.form.is_associated() {
+            if object.form.is_associated()
+                || matches!(object.form, TypeForm::ReadViewApplied { .. })
+            {
                 if projection_free {
-                    return Err(associated_interface_error(
-                        "stored associated binding contains a projection or contract member",
-                    ));
+                    if matches!(object.form, TypeForm::ReadViewApplied { .. }) {
+                        // A family binding is nominal and projection-free, but all of its type
+                        // and scope actuals still require ordinary independent admission below.
+                    } else {
+                        return Err(associated_interface_error(
+                            "stored associated binding contains a projection or contract member",
+                        ));
+                    }
                 }
                 deferred |= matches!(
                     self.validate_form(package, source, &object.form, owners, types, resolve)?,
                     AssociatedInterfaceProof::Deferred(_)
+                        | AssociatedInterfaceProof::DeferredReadView(_)
                 );
             }
             let count = object.child_type_count();
@@ -3112,7 +3435,7 @@ fn validate_type_closure<S: ImmutableObjectStore + ?Sized>(
         let object = objects.get(&digest).ok_or_else(|| {
             associated_interface_error("completed interface type closure lost a visited object")
         })?;
-        if object.form.is_associated() {
+        if object.form.is_associated() || matches!(object.form, TypeForm::ReadViewApplied { .. }) {
             match associated_admission.validate_form(
                 package,
                 source,
@@ -3121,7 +3444,10 @@ fn validate_type_closure<S: ImmutableObjectStore + ?Sized>(
                 &objects,
                 &mut |_| Ok(None),
             )? {
-                AssociatedInterfaceProof::Owned | AssociatedInterfaceProof::Deferred(_) => {}
+                AssociatedInterfaceProof::Owned
+                | AssociatedInterfaceProof::ReadView
+                | AssociatedInterfaceProof::Deferred(_)
+                | AssociatedInterfaceProof::DeferredReadView(_) => {}
             }
             // Foreign Deferred retains the exact occurrence in owners/types. It grants no
             // readiness or property; the complete selected transport closure must discharge it.
@@ -3158,7 +3484,10 @@ fn validate_interface_type_reference(
 ) -> Result<(), Diagnostic> {
     match form {
         TypeForm::AssociatedContractMember { .. }
-        | TypeForm::AssociatedWitnessProjection { .. } => {
+        | TypeForm::AssociatedWitnessProjection { .. }
+        | TypeForm::AssociatedReadViewMember { .. }
+        | TypeForm::AssociatedReadViewProjection { .. }
+        | TypeForm::ReadViewApplied { .. } => {
             // validate_type_closure proves every associated occurrence after loading its complete
             // local map. This early reference pass proves ordinary scope/generation only.
         }
@@ -3422,6 +3751,11 @@ fn interface_representation_source(
     source: OwnerKey,
     owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
 ) -> bool {
+    if let OwnerKey::Declaration(_) = source {
+        return matches!(owners.get(&source).map(|owner| &owner.record),
+            Some(PackageInterfaceRecord::Declaration(record) | PackageInterfaceRecord::RepresentationDeclaration(record))
+                if matches!(record.payload, PackageInterfaceDeclarationPayload::ReadView(_)));
+    }
     if !matches!(source, OwnerKey::Field(_) | OwnerKey::Case(_)) {
         return false;
     }
@@ -3457,6 +3791,10 @@ fn interface_nominal_layout_types(
         }
     };
     match &record.payload {
+        PackageInterfaceDeclarationPayload::ReadView(view) => {
+            budget.reserve::<TypeObjectDigest>(view.fields.len())?;
+            Ok(view.fields.iter().map(|field| field.ty).collect())
+        }
         PackageInterfaceDeclarationPayload::Record { fields, .. }
         | PackageInterfaceDeclarationPayload::OwnedRecord { fields, .. } => {
             budget.reserve::<TypeObjectDigest>(fields.len())?;
@@ -3552,6 +3890,7 @@ fn representation_declarations_admitted(
                 if matches!(
                     record.payload,
                     PackageInterfaceDeclarationPayload::OwnedRecord { .. }
+                        | PackageInterfaceDeclarationPayload::ReadView(_)
                 ) =>
             {
                 budget.reserve::<OwnerKey>(1)?;
@@ -3562,6 +3901,11 @@ fn representation_declarations_admitted(
     }
     let mut reachable = BTreeSet::new();
     let mut pending = Vec::new();
+    for owner in owners.values() {
+        if let PackageInterfaceRecord::Declaration(record) = &owner.record {
+            budget.append_types(record.type_roots(), &mut pending)?;
+        }
+    }
     for key in &owned {
         if let OwnerKey::Declaration(id) = key
             && matches!(
@@ -3592,7 +3936,9 @@ fn representation_declarations_admitted(
             .get(&digest)
             .ok_or_else(|| interface_corrupt("owned representation type is absent"))?;
         budget.append_children(object, &mut pending)?;
-        if let TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } = object.form
+        if let TypeForm::Named { declaration }
+        | TypeForm::Applied { declaration, .. }
+        | TypeForm::ReadViewApplied { declaration, .. } = object.form
             && declaration.package == package
         {
             let key = OwnerKey::Declaration(declaration.declaration);
@@ -3624,8 +3970,9 @@ fn representation_declarations_admitted(
                 .get(&digest)
                 .ok_or_else(|| interface_corrupt("owned representation type is absent"))?;
             budget.append_children(object, &mut pending)?;
-            if let TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } =
-                object.form
+            if let TypeForm::Named { declaration }
+            | TypeForm::Applied { declaration, .. }
+            | TypeForm::ReadViewApplied { declaration, .. } = object.form
                 && declaration.package == package
             {
                 let key = OwnerKey::Declaration(declaration.declaration);
@@ -3889,14 +4236,18 @@ mod tests {
                     effect_parameters: Vec::new(),
                     type_parameters: Vec::new(),
                     parameters: vec![parameter],
-                    result: ty,
-                    result_borrow: Some(parameter),
+                    result: crate::platform::kernel::frozen_read_view_wire::legacy_result(
+                        ty,
+                        Some(parameter),
+                    ),
+                    read_scope_parameters: Vec::new(),
+                    read_scope_sources: Vec::new(),
                     effect: FunctionEffect::Pure,
                 }),
             }),
         };
         let (digest, bytes) = original.encode().unwrap();
-        assert_eq!(&bytes[..8], b"LKJPIF21");
+        assert_eq!(&bytes[..8], b"LKJPIF22");
         assert_eq!(
             PackageInterfaceOwner::decode(&bytes, owner, digest).unwrap(),
             original
@@ -3908,7 +4259,7 @@ mod tests {
         let PackageInterfaceDeclarationPayload::Function(f) = &mut d.payload else {
             unreachable!()
         };
-        f.result_borrow = None;
+        f.result.relation = crate::platform::kernel::ResultRelation::Value;
         assert_ne!(erased.encode().unwrap().0, digest);
         let mut predecessor = original;
         predecessor.contract_version = 14;
@@ -3972,7 +4323,10 @@ mod tests {
         let PackageInterfaceDeclarationPayload::Function(f) = d.payload else {
             unreachable!()
         };
-        assert_eq!(f.result_borrow, None);
+        assert_eq!(
+            f.result.relation,
+            crate::platform::kernel::ResultRelation::Value
+        );
     }
 
     #[test]
@@ -4002,8 +4356,13 @@ mod tests {
                                 effect_parameters: Vec::new(),
                                 type_parameters: Vec::new(),
                                 parameters: vec![parameter],
-                                result: ty,
-                                result_borrow: Some(parameter),
+                                result:
+                                    crate::platform::kernel::frozen_read_view_wire::legacy_result(
+                                        ty,
+                                        Some(parameter),
+                                    ),
+                                read_scope_parameters: Vec::new(),
+                                read_scope_sources: Vec::new(),
                                 effect: FunctionEffect::Pure,
                             },
                         ),
@@ -4066,8 +4425,9 @@ mod tests {
             id: MethodId::migrate(seed, 0),
             name: Name::new("length").unwrap(),
             parameters: Vec::new(),
-            result,
-            result_borrow: None,
+            result: crate::platform::kernel::frozen_read_view_wire::legacy_result(result, None),
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
             effect: FunctionEffect::Pure,
         }];
 
@@ -4078,7 +4438,7 @@ mod tests {
                     &method.id,
                     &method.name,
                     &method.parameters,
-                    &method.result,
+                    &method.result.ty,
                     &method.effect,
                 )
             })
@@ -4165,8 +4525,13 @@ mod tests {
                                     ty: self_type,
                                     use_mode: ParameterUse::Consume,
                                 }],
-                                result: product_type,
-                                result_borrow: None,
+                                result:
+                                    crate::platform::kernel::frozen_read_view_wire::legacy_result(
+                                        product_type,
+                                        None,
+                                    ),
+                                read_scope_parameters: Vec::new(),
+                                read_scope_sources: Vec::new(),
                                 effect: FunctionEffect::Pure,
                             }],
                             associated_types: Vec::new(),

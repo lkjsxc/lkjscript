@@ -1,0 +1,29 @@
+declarations.begin
+(units
+  (module create bad-sharing
+    (function create read-child (visibility private) (effect (task))
+      (type-parameter create W (constraint owned shareable))
+      (implementation-parameter implparam_d8600000000000000000000000000002 reader readview-consumer::RangeRead W (types I64))
+      (scope-parameter read_scope_d8600000000000000000000000000008 s)
+      (parameter create view (type (associated-read-view-projection read-child implparam_d8600000000000000000000000000002
+        readview-consumer::RangeRead assoc_type_d8100000000000000000000000000001
+        (read-scope (declaration read-child) read_scope_d8600000000000000000000000000008))) (use borrow))
+      (scope-source view (read-scope (declaration read-child) read_scope_d8600000000000000000000000000008))
+      (returns I64 (value))
+      (body (method-call parameter@read-child@implparam_d8600000000000000000000000000002 readview-consumer::RangeRead method_d8100000000000000000000000000002
+        (scopes (read-scope (declaration read-child) read_scope_d8600000000000000000000000000008)) (local view))))
+    (function create abstract-join (visibility private) (effect (task))
+      (type-parameter create W (constraint owned shareable))
+      (implementation-parameter implparam_d8600000000000000000000000000003 reader readview-consumer::RangeRead W (types I64))
+      (scope-parameter read_scope_d8600000000000000000000000000009 s)
+      (parameter create view (type (associated-read-view-projection abstract-join implparam_d8600000000000000000000000000003
+        readview-consumer::RangeRead assoc_type_d8100000000000000000000000000001
+        (read-scope (declaration abstract-join) read_scope_d8600000000000000000000000000009))) (use borrow))
+      (scope-source view (read-scope (declaration abstract-join) read_scope_d8600000000000000000000000000009))
+      (returns (record (left I64) (right I64)) (value))
+      (body (parallel
+        (implementation-call read-child (types W) (implementations parameter@abstract-join@implparam_d8600000000000000000000000000003)
+          (scopes (read-scope (declaration abstract-join) read_scope_d8600000000000000000000000000009)) (local view))
+        (implementation-call read-child (types W) (implementations parameter@abstract-join@implparam_d8600000000000000000000000000003)
+          (scopes (read-scope (declaration abstract-join) read_scope_d8600000000000000000000000000009)) (local view)))))))
+declarations.end

@@ -44,12 +44,14 @@ mod durability_closure_tests;
 mod owned_contract_parameter_deletion_tests;
 
 fn non_builtin_source_with_standard() -> (ExportedPackageTransport, ExportedPackageTransport) {
-    let standard = GraphRepository::open(
-        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard"),
-    )
-    .unwrap()
-    .export_package_transport()
-    .unwrap();
+    let maintained = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
+    let standard_parent = tempfile::tempdir().unwrap();
+    let standard_root = standard_parent.path().join("standard");
+    crate::platform::builtin_standard::copy_maintained_repository(&maintained, &standard_root);
+    let standard = GraphRepository::open(&standard_root)
+        .unwrap()
+        .export_package_transport()
+        .unwrap();
     let producer_parent = tempfile::tempdir().unwrap();
     let source = GraphRepository::create(
         &producer_parent.path().join("non-builtin"),
@@ -971,7 +973,6 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
                 name: Name::new("library").unwrap(),
             },
             AuthoredChange::CreateFunction {
-                result_borrow: None,
                 symbol: "$source_function".to_owned(),
                 module: ModuleSelector::Symbol {
                     symbol: "$source_module".to_owned(),
@@ -980,12 +981,16 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
                 visibility: DeclarationVisibility::Public,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: AuthoredType::Unit {},
+                result: crate::platform::change::AuthoredCallableResult::value(
+                    AuthoredType::Unit {},
+                ),
                 effect: AuthoredFunctionEffect::Pure {},
                 body: AuthoredExpression {
                     symbol: Some("$source_body".to_owned()),
                     operation: AuthoredExpressionOperation::Unit {},
                 },
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             },
         ],
     };
@@ -1115,7 +1120,6 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
                 name: Name::new("application").unwrap(),
             },
             AuthoredChange::CreateFunction {
-                result_borrow: None,
                 symbol: "$caller".to_owned(),
                 module: ModuleSelector::Symbol {
                     symbol: "$target_module".to_owned(),
@@ -1124,7 +1128,9 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
                 visibility: DeclarationVisibility::Private,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: AuthoredType::Unit {},
+                result: crate::platform::change::AuthoredCallableResult::value(
+                    AuthoredType::Unit {},
+                ),
                 effect: AuthoredFunctionEffect::Pure {},
                 body: AuthoredExpression {
                     symbol: Some("$call".to_owned()),
@@ -1137,8 +1143,11 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
                         },
                         type_arguments: Vec::new(),
                         arguments: Vec::new(),
+                        read_scope_arguments: Vec::new(),
                     },
                 },
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             },
         ],
     };
@@ -1285,7 +1294,6 @@ fn staged_package_interface_validates_exact_cross_package_task_requirements() {
                 name: Name::new("application").unwrap(),
             },
             AuthoredChange::CreateFunction {
-                result_borrow: None,
                 symbol: "$foreign_task".to_owned(),
                 module: ModuleSelector::Symbol {
                     symbol: "$task_module".to_owned(),
@@ -1294,7 +1302,9 @@ fn staged_package_interface_validates_exact_cross_package_task_requirements() {
                 visibility: DeclarationVisibility::Public,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: AuthoredType::Unit {},
+                result: crate::platform::change::AuthoredCallableResult::value(
+                    AuthoredType::Unit {},
+                ),
                 effect: AuthoredFunctionEffect::Task {
                     effect_parameters: Vec::new(),
                     requirements,
@@ -1314,6 +1324,7 @@ fn staged_package_interface_validates_exact_cross_package_task_requirements() {
                                     },
                                     type_arguments: Vec::new(),
                                     arguments: Vec::new(),
+                                    read_scope_arguments: Vec::new(),
                                 },
                             },
                             AuthoredExpression {
@@ -1330,6 +1341,8 @@ fn staged_package_interface_validates_exact_cross_package_task_requirements() {
                         ],
                     },
                 },
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             },
         ],
     };
@@ -2713,6 +2726,12 @@ fn authored_owned_closure_leaf_selects_the_same_owner_and_relations_as_reject() 
 
 #[test]
 fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
+    use crate::platform::change::{
+        AuthoredReadScopeArgument, AuthoredReadScopeBinder, AuthoredReadViewField,
+        AuthoredReadViewFieldKind,
+    };
+    use crate::platform::semantic_id::{FieldId, ReadScopeParameterId};
+
     let temporary = tempfile::tempdir().expect("temporary repository parent");
     let destination = temporary.path().join("meaning");
     let mut logical = crate::platform::execution::normalized::tests::normalized_http_snapshot();
@@ -2759,15 +2778,19 @@ fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
             name: Name::new("effect-owner").unwrap(),
             visibility: DeclarationVisibility::Private,
             payload: DeclarationPayload::Function(crate::platform::kernel::FunctionDeclaration {
-                result_borrow: None,
                 implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 type_parameters: vec![],
                 effect_parameters: vec![parameter],
                 parameters: vec![],
-                result: unit,
+                result: crate::platform::kernel::CallableResult {
+                    ty: unit,
+                    relation: crate::platform::kernel::ResultRelation::Value,
+                },
                 effect: FunctionEffect::Pure,
                 body,
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             }),
         }),
     );
@@ -2867,12 +2890,16 @@ fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
                 self_parameter,
                 type_parameters: vec![item_parameter],
                 methods: vec![crate::platform::kernel::OwnedMethod {
-                    result_borrow: None,
                     id: method,
                     name: Name::new("inspect").unwrap(),
                     parameters: vec![],
-                    result: unit,
+                    result: crate::platform::kernel::CallableResult {
+                        ty: unit,
+                        relation: crate::platform::kernel::ResultRelation::Value,
+                    },
                     effect: FunctionEffect::Pure,
+                    read_scope_parameters: Vec::new(),
+                    read_scope_sources: Vec::new(),
                 }],
                 associated_types: Vec::new(),
             }),
@@ -2898,6 +2925,7 @@ fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
                         package: logical.root.package_id,
                         declaration: method_function,
                     },
+                    read_scope_arguments: Vec::new(),
                 }],
                 associated_types: Vec::new(),
             }),
@@ -2907,15 +2935,19 @@ fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
             "marker-method",
             OwnerKind::PureFunction,
             DeclarationPayload::Function(crate::platform::kernel::FunctionDeclaration {
-                result_borrow: None,
                 implementation_parameters: vec![],
                 requirement_parameters: vec![],
                 effect_parameters: vec![],
                 type_parameters: vec![],
                 parameters: vec![],
-                result: unit,
+                result: crate::platform::kernel::CallableResult {
+                    ty: unit,
+                    relation: crate::platform::kernel::ResultRelation::Value,
+                },
                 effect: FunctionEffect::Pure,
                 body: method_body,
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             }),
         ),
     ] {
@@ -2936,36 +2968,91 @@ fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
         logical.owners.len() as u64,
         logical.root.owners.content(),
     );
-    // Exercise actual owned-record authoring before using the complete graph as
-    // the independent closure oracle. The private storage field must retire with
-    // its defining record and module, just like every other owned member.
+    // Exercise actual owned-record and read-view authoring before using the complete
+    // graph as the independent closure oracle. The view's generic is an owned child,
+    // while its exact scope and fields stay inline in the declaration.
     let fixture = GraphRepository::create(
         &temporary.path().join("owned-record-fixture"),
         &logical,
         None,
     )
     .expect("create fixture for owned-record authoring");
+    let view_scope = ReadScopeParameterId::migrate(seed, 0);
+    let view_item_field = FieldId::migrate(seed, 0);
+    let view_length_field = FieldId::migrate(seed, 1);
     let owned_record = AuthoredChangeSet {
         base: fixture.current.head.revision,
         preconditions: Vec::new(),
         budget: ChangeBudget::default(),
-        changes: vec![AuthoredChange::CreateOwnedRecord {
-            symbol: "$owned_record".to_owned(),
-            module: ModuleSelector::Id { module },
-            name: Name::new("OwnedStorage").unwrap(),
-            visibility: DeclarationVisibility::Private,
-            type_parameters: Vec::new(),
-            fields: vec![AuthoredField {
-                symbol: "$owned_storage".to_owned(),
-                name: Name::new("cell").unwrap(),
-                ty: AuthoredType::OwnedI64Cell {},
-            }],
-        }],
+        changes: vec![
+            AuthoredChange::CreateOwnedRecord {
+                symbol: "$owned_record".to_owned(),
+                module: ModuleSelector::Id { module },
+                name: Name::new("OwnedStorage").unwrap(),
+                visibility: DeclarationVisibility::Private,
+                type_parameters: Vec::new(),
+                fields: vec![AuthoredField {
+                    symbol: "$owned_storage".to_owned(),
+                    name: Name::new("cell").unwrap(),
+                    ty: AuthoredType::OwnedI64Cell {},
+                }],
+            },
+            AuthoredChange::CreateReadView {
+                symbol: "$read_view".to_owned(),
+                module: ModuleSelector::Id { module },
+                name: Name::new("StorageView").unwrap(),
+                visibility: DeclarationVisibility::Private,
+                type_parameters: vec![AuthoredTypeParameter {
+                    symbol: "$view_item".to_owned(),
+                    name: Name::new("Item").unwrap(),
+                    constraints: crate::platform::kernel::TypeParameterConstraints::Owned,
+                }],
+                scope_parameter: crate::platform::kernel::ReadScopeParameter {
+                    id: view_scope,
+                    name: Name::new("source").unwrap(),
+                },
+                fields: vec![
+                    AuthoredReadViewField {
+                        id: view_item_field,
+                        name: Name::new("item").unwrap(),
+                        ty: AuthoredType::TypeParameter {
+                            parameter: AuthoredTypeParameterReference::Symbol {
+                                symbol: "$view_item".to_owned(),
+                            },
+                        },
+                        kind: AuthoredReadViewFieldKind::ReadReference {
+                            read_scope: AuthoredReadScopeArgument::Parameter {
+                                binder: AuthoredReadScopeBinder::Declaration(
+                                    AuthoredDeclarationReference::Local {
+                                        declaration: DeclarationSelector::Symbol {
+                                            symbol: "$read_view".to_owned(),
+                                        },
+                                    },
+                                ),
+                                parameter: view_scope,
+                            },
+                        },
+                    },
+                    AuthoredReadViewField {
+                        id: view_length_field,
+                        name: Name::new("length").unwrap(),
+                        ty: AuthoredType::I64 {},
+                        kind: AuthoredReadViewFieldKind::Ordinary,
+                    },
+                ],
+            },
+        ],
     };
     let owned_record = fixture
         .repository
         .prepare_authored_change(&owned_record, PublicationOptions::default())
         .expect("author valid owned record storage");
+    let OwnerKey::Declaration(view_declaration) = owned_record.allocated["$read_view"] else {
+        panic!("authored view declaration identity")
+    };
+    let OwnerKey::TypeParameter(view_item) = owned_record.allocated["$view_item"] else {
+        panic!("authored view generic identity")
+    };
     fixture
         .repository
         .publish(&owned_record.publication)
@@ -2977,6 +3064,47 @@ fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
         .reconstruct_full_oracle()
         .expect("reconstruct independently validated fixture")
         .value;
+    let OwnerRecord::Declaration(view_owner) =
+        &logical.owners[&OwnerKey::Declaration(view_declaration)]
+    else {
+        panic!("canonical authored view declaration")
+    };
+    let DeclarationPayload::ReadView(view) = &view_owner.payload else {
+        panic!("positive read-view owner kind")
+    };
+    assert_eq!(view.type_parameters, [view_item]);
+    assert_eq!(view.scope_parameter.id, view_scope);
+    assert_eq!(
+        view.fields.iter().map(|field| field.id).collect::<Vec<_>>(),
+        [view_item_field, view_length_field]
+    );
+    assert!(matches!(
+        &logical.types[&view.fields[0].ty].form,
+        TypeForm::TypeParameter { parameter } if *parameter == view_item
+    ));
+    assert_eq!(
+        view.fields[0].kind,
+        crate::platform::kernel::ReadViewFieldKind::ReadReference {
+            read_scope: crate::platform::kernel::ReadScopeArgument::Parameter(
+                crate::platform::kernel::ReadScopeReference {
+                    binder: crate::platform::kernel::ReadScopeBinder::Declaration(
+                        crate::platform::kernel::DeclarationReference {
+                            package: logical.root.package_id,
+                            declaration: view_declaration,
+                        },
+                    ),
+                    parameter: view_scope,
+                },
+            ),
+        }
+    );
+    assert_eq!(
+        view.fields[1].kind,
+        crate::platform::kernel::ReadViewFieldKind::Ordinary
+    );
+    for field in [view_item_field, view_length_field] {
+        assert!(!logical.owners.contains_key(&OwnerKey::Field(field)));
+    }
     let expected = logical.owners.keys().copied().collect::<BTreeSet<_>>();
     assert_eq!(
         logical
@@ -3418,7 +3546,6 @@ fn authored_owned_closure_follows_ownership_without_deleting_referenced_targets(
                 name: Name::new("module").unwrap(),
             },
             AuthoredChange::CreateFunction {
-                result_borrow: None,
                 symbol: "$callee".to_owned(),
                 module: ModuleSelector::Symbol {
                     symbol: "$module".to_owned(),
@@ -3427,12 +3554,15 @@ fn authored_owned_closure_follows_ownership_without_deleting_referenced_targets(
                 visibility: DeclarationVisibility::Private,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: AuthoredType::Unit {},
+                result: crate::platform::change::AuthoredCallableResult::value(
+                    AuthoredType::Unit {},
+                ),
                 effect: AuthoredFunctionEffect::Pure {},
                 body: authored_expression(AuthoredExpressionOperation::Unit {}),
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             },
             AuthoredChange::CreateFunction {
-                result_borrow: None,
                 symbol: "$caller".to_owned(),
                 module: ModuleSelector::Symbol {
                     symbol: "$module".to_owned(),
@@ -3441,7 +3571,9 @@ fn authored_owned_closure_follows_ownership_without_deleting_referenced_targets(
                 visibility: DeclarationVisibility::Private,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: AuthoredType::Unit {},
+                result: crate::platform::change::AuthoredCallableResult::value(
+                    AuthoredType::Unit {},
+                ),
                 effect: AuthoredFunctionEffect::Pure {},
                 body: authored_expression(AuthoredExpressionOperation::Call {
                     requirement_arguments: Vec::new(),
@@ -3453,7 +3585,10 @@ fn authored_owned_closure_follows_ownership_without_deleting_referenced_targets(
                     },
                     type_arguments: Vec::new(),
                     arguments: Vec::new(),
+                    read_scope_arguments: Vec::new(),
                 }),
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             },
         ],
     };
@@ -4795,8 +4930,12 @@ fn reviewed_function_extraction_matches_disjoint_oracle_and_preserves_moved_iden
         Ok(())
     })
     .expect_err("cancelled extraction review must stop before publication");
-    assert_eq!(cancelled.class, DiagnosticClass::Cancelled);
+    assert_eq!(cancelled.class, DiagnosticClass::Cancelled, "{cancelled:?}");
     assert_eq!(cancelled.code, "change_extraction_test_cancelled");
+    assert_eq!(
+        emitted, 3,
+        "cancellation must reach the exact review callback"
+    );
     assert_eq!(
         created.repository.current().unwrap().head,
         created.current.head
@@ -5587,7 +5726,6 @@ fn authored_budget_dimensions_exhaust_independently_without_advancing_head() {
     reject(
         anonymous_identity_budget,
         vec![AuthoredChange::CreateFunction {
-            result_borrow: None,
             symbol: "$anonymous_identity_budget".to_owned(),
             module: ModuleSelector::Name {
                 name: Name::new("unreached_module").unwrap(),
@@ -5596,18 +5734,19 @@ fn authored_budget_dimensions_exhaust_independently_without_advancing_head() {
             visibility: DeclarationVisibility::Private,
             type_parameters: Vec::new(),
             parameters: Vec::new(),
-            result: AuthoredType::Unit {},
+            result: crate::platform::change::AuthoredCallableResult::value(AuthoredType::Unit {}),
             effect: AuthoredFunctionEffect::Pure {},
             body: AuthoredExpression {
                 symbol: None,
                 operation: AuthoredExpressionOperation::Unit {},
             },
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
         }],
         "change_budget_allocated_identities",
     );
 
     let create_with_unit = AuthoredChange::CreateFunction {
-        result_borrow: None,
         symbol: "$existing_type_budget".to_owned(),
         module: ModuleSelector::Name {
             name: Name::new("first").unwrap(),
@@ -5616,12 +5755,14 @@ fn authored_budget_dimensions_exhaust_independently_without_advancing_head() {
         visibility: DeclarationVisibility::Private,
         type_parameters: Vec::new(),
         parameters: Vec::new(),
-        result: AuthoredType::Unit {},
+        result: crate::platform::change::AuthoredCallableResult::value(AuthoredType::Unit {}),
         effect: AuthoredFunctionEffect::Pure {},
         body: AuthoredExpression {
             symbol: None,
             operation: AuthoredExpressionOperation::Unit {},
         },
+        read_scope_parameters: Vec::new(),
+        read_scope_sources: Vec::new(),
     };
     let mut existing_type_budget = ChangeBudget::default();
     existing_type_budget.canonical_edits.maximum_type_edits = 0;
@@ -5653,7 +5794,6 @@ fn authored_budget_dimensions_exhaust_independently_without_advancing_head() {
     reject(
         authored_type_budget,
         vec![AuthoredChange::CreateFunction {
-            result_borrow: None,
             symbol: "$type_node_budget".to_owned(),
             module: ModuleSelector::Name {
                 name: Name::new("first").unwrap(),
@@ -5662,12 +5802,14 @@ fn authored_budget_dimensions_exhaust_independently_without_advancing_head() {
             visibility: DeclarationVisibility::Private,
             type_parameters: Vec::new(),
             parameters: Vec::new(),
-            result: AuthoredType::Unit {},
+            result: crate::platform::change::AuthoredCallableResult::value(AuthoredType::Unit {}),
             effect: AuthoredFunctionEffect::Pure {},
             body: AuthoredExpression {
                 symbol: None,
                 operation: AuthoredExpressionOperation::Unit {},
             },
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
         }],
         "change_budget_authored_type_nodes",
     );
@@ -5743,6 +5885,7 @@ fn authored_request_creates_a_typed_function_and_test_from_forward_references() 
                             symbol: None,
                             operation: AuthoredExpressionOperation::Bool { value: true },
                         }],
+                        read_scope_arguments: Vec::new(),
                     },
                 },
                 expected: AuthoredExpression {
@@ -5751,7 +5894,6 @@ fn authored_request_creates_a_typed_function_and_test_from_forward_references() 
                 },
             },
             AuthoredChange::CreateFunction {
-                result_borrow: None,
                 symbol: "$identity".to_owned(),
                 module: ModuleSelector::Symbol {
                     symbol: "$authored".to_owned(),
@@ -5766,7 +5908,9 @@ fn authored_request_creates_a_typed_function_and_test_from_forward_references() 
                     use_mode: crate::platform::kernel::ParameterUse::Unrestricted,
                     resource_requirement: None,
                 }],
-                result: AuthoredType::Bool {},
+                result: crate::platform::change::AuthoredCallableResult::value(
+                    AuthoredType::Bool {},
+                ),
                 effect: AuthoredFunctionEffect::Pure {},
                 body: AuthoredExpression {
                     symbol: Some("$function_body".to_owned()),
@@ -5776,6 +5920,8 @@ fn authored_request_creates_a_typed_function_and_test_from_forward_references() 
                         },
                     },
                 },
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             },
             AuthoredChange::CreateModule {
                 symbol: "$authored".to_owned(),
@@ -5827,9 +5973,9 @@ fn authored_request_creates_a_typed_function_and_test_from_forward_references() 
     else {
         panic!("created parameter must be readable")
     };
-    assert_eq!(parameter_record.ty, function_payload.result);
+    assert_eq!(parameter_record.ty, function_payload.result.ty);
     assert_eq!(
-        view.type_object(function_payload.result)
+        view.type_object(function_payload.result.ty)
             .unwrap()
             .value
             .unwrap()
@@ -5980,7 +6126,6 @@ fn authored_type_builder_interns_every_unrestricted_graph_nine_type_form() {
         preconditions: Vec::new(),
         budget: ChangeBudget::default(),
         changes: vec![AuthoredChange::CreateFunction {
-            result_borrow: None,
             symbol: "$type_builder".to_owned(),
             module: ModuleSelector::Name {
                 name: Name::new("second").unwrap(),
@@ -5993,12 +6138,14 @@ fn authored_type_builder_interns_every_unrestricted_graph_nine_type_form() {
                 name: Name::new("T").unwrap(),
             }],
             parameters,
-            result: AuthoredType::Unit {},
+            result: crate::platform::change::AuthoredCallableResult::value(AuthoredType::Unit {}),
             effect: AuthoredFunctionEffect::Pure {},
             body: AuthoredExpression {
                 symbol: Some("$type_body".to_owned()),
                 operation: AuthoredExpressionOperation::Unit {},
             },
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
         }],
     };
     let prepared = created
@@ -6050,6 +6197,11 @@ fn authored_type_builder_interns_every_unrestricted_graph_nine_type_form() {
             TypeForm::AssociatedContractMember { .. }
             | TypeForm::AssociatedWitnessProjection { .. } => {
                 panic!("feature-free fixture cannot acquire associated type forms")
+            }
+            TypeForm::ReadViewApplied { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. } => {
+                panic!("feature-free fixture cannot acquire read-view type forms")
             }
             TypeForm::Unit => "unit",
             TypeForm::Bool => "bool",
@@ -6178,6 +6330,7 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                                     effect_arguments: Vec::new(),
                                     function: local_declaration("$entry"),
                                     type_arguments: Vec::new(),
+                                    read_scope_arguments: Vec::new(),
                                 },
                             }),
                         },
@@ -6284,7 +6437,6 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                 }],
             },
             AuthoredChange::CreateFunction {
-                result_borrow: None,
                 symbol: "$entry".to_owned(),
                 module: ModuleSelector::Symbol {
                     symbol: "$domain".to_owned(),
@@ -6293,7 +6445,9 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                 visibility: DeclarationVisibility::Package,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: AuthoredType::Unit {},
+                result: crate::platform::change::AuthoredCallableResult::value(
+                    AuthoredType::Unit {},
+                ),
                 effect: AuthoredFunctionEffect::Pure {},
                 body: AuthoredExpression {
                     symbol: Some("$entry_body".to_owned()),
@@ -6320,6 +6474,8 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                         ],
                     },
                 },
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             },
             AuthoredChange::CreateModule {
                 symbol: "$domain".to_owned(),
@@ -6517,19 +6673,22 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
                 }],
             },
             AuthoredChange::CreateFunction {
-                result_borrow: None,
                 symbol: "$mutable_function".to_owned(),
                 module: second_module,
                 name: Name::new("mutable_function").unwrap(),
                 visibility: DeclarationVisibility::Private,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: AuthoredType::Bool {},
+                result: crate::platform::change::AuthoredCallableResult::value(
+                    AuthoredType::Bool {},
+                ),
                 effect: AuthoredFunctionEffect::Pure {},
                 body: AuthoredExpression {
                     symbol: Some("$mutable_body".to_owned()),
                     operation: AuthoredExpressionOperation::Bool { value: true },
                 },
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             },
         ],
     };
@@ -6624,17 +6783,20 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
                 implementation: ImplementationName::new("core.option.some").unwrap(),
             },
             AuthoredChange::SetFunctionContract {
-                result_borrow: None,
                 function: DeclarationSelector::Id {
                     declaration: declaration_id(function),
                 },
-                result: AuthoredType::Bool {},
+                result: crate::platform::change::AuthoredCallableResult::value(
+                    AuthoredType::Bool {},
+                ),
                 effect: AuthoredFunctionEffect::Task {
                     effect_parameters: Vec::new(),
                     requirements: vec![AuthoredRequirementReference::Symbol {
                         symbol: "$added_requirement".to_owned(),
                     }],
                 },
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             },
             AuthoredChange::SetDeclarationVisibility {
                 declaration: DeclarationSelector::Id {
@@ -7158,6 +7320,7 @@ fn authored_expression_builder_covers_every_graph_nine_operation() {
                         function: callee_reference.clone(),
                         type_arguments: Vec::new(),
                         arguments: vec![authored_expression(AuthoredExpressionOperation::Unit {})],
+                        read_scope_arguments: Vec::new(),
                     },
                 },
                 AuthoredExpression {
@@ -7167,6 +7330,7 @@ fn authored_expression_builder_covers_every_graph_nine_operation() {
                         effect_arguments: Vec::new(),
                         function: callee_reference.clone(),
                         type_arguments: Vec::new(),
+                        read_scope_arguments: Vec::new(),
                     },
                 },
                 AuthoredExpression {
@@ -7178,6 +7342,7 @@ fn authored_expression_builder_covers_every_graph_nine_operation() {
                                 effect_arguments: Vec::new(),
                                 function: callee_reference,
                                 type_arguments: Vec::new(),
+                                read_scope_arguments: Vec::new(),
                             },
                         )),
                         arguments: vec![authored_expression(AuthoredExpressionOperation::Unit {})],
@@ -7294,7 +7459,6 @@ fn authored_expression_builder_covers_every_graph_nine_operation() {
         budget: ChangeBudget::default(),
         changes: vec![
             AuthoredChange::CreateFunction {
-                result_borrow: None,
                 symbol: "$all_pure".to_owned(),
                 module: ModuleSelector::Name {
                     name: Name::new("second").unwrap(),
@@ -7303,12 +7467,15 @@ fn authored_expression_builder_covers_every_graph_nine_operation() {
                 visibility: DeclarationVisibility::Private,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: AuthoredType::Unit {},
+                result: crate::platform::change::AuthoredCallableResult::value(
+                    AuthoredType::Unit {},
+                ),
                 effect: AuthoredFunctionEffect::Pure {},
                 body: pure_body,
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             },
             AuthoredChange::CreateFunction {
-                result_borrow: None,
                 symbol: "$all_task".to_owned(),
                 module: ModuleSelector::Name {
                     name: Name::new("second").unwrap(),
@@ -7317,12 +7484,16 @@ fn authored_expression_builder_covers_every_graph_nine_operation() {
                 visibility: DeclarationVisibility::Private,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: AuthoredType::Unit {},
+                result: crate::platform::change::AuthoredCallableResult::value(
+                    AuthoredType::Unit {},
+                ),
                 effect: AuthoredFunctionEffect::Task {
                     effect_parameters: Vec::new(),
                     requirements: vec![requirement_reference],
                 },
                 body: task_body,
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             },
         ],
     };
@@ -7542,7 +7713,6 @@ fn idempotent_authored_reprepare_ignores_physical_child_type_availability() {
         preconditions: Vec::new(),
         budget: ChangeBudget::default(),
         changes: vec![AuthoredChange::CreateFunction {
-            result_borrow: None,
             symbol: "$identity".to_owned(),
             module: ModuleSelector::Id { module },
             name: Name::new("structural-identity").unwrap(),
@@ -7555,7 +7725,7 @@ fn idempotent_authored_reprepare_ignores_physical_child_type_availability() {
                 use_mode: crate::platform::kernel::ParameterUse::Unrestricted,
                 resource_requirement: None,
             }],
-            result: structural,
+            result: crate::platform::change::AuthoredCallableResult::value(structural),
             effect: AuthoredFunctionEffect::Pure {},
             body: AuthoredExpression {
                 symbol: Some("$body".to_owned()),
@@ -7565,6 +7735,8 @@ fn idempotent_authored_reprepare_ignores_physical_child_type_availability() {
                     },
                 },
             },
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
         }],
     };
     let options = PublicationOptions {
@@ -8848,7 +9020,12 @@ fn constraint_interface_edit_accounts_validation_and_cancels_review_without_publ
         Ok(())
     })
     .unwrap_err();
-    assert_eq!(cancelled.class, DiagnosticClass::Cancelled);
+    assert_eq!(cancelled.class, DiagnosticClass::Cancelled, "{cancelled:?}");
+    assert_eq!(cancelled.code, "constraint_review_cancelled");
+    assert_eq!(
+        emitted, 5,
+        "cancellation must reach the exact review callback"
+    );
     assert_eq!(
         created.repository.current().unwrap().head,
         created.current.head

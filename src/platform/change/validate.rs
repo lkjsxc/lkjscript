@@ -14,7 +14,9 @@ use crate::platform::kernel::{
     analyze_http_route_set, http_route_languages_overlap, http_route_strictly_more_specific,
     validate_affine_roots_with_limits, validate_expression_roots_with_limits,
 };
-use crate::platform::witness::{OwnershipEntry, OwnershipParent, aggregation_children};
+use crate::platform::witness::{
+    OwnershipEntry, OwnershipParent, aggregation_children_with_bindings,
+};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const INCREMENTAL_VALIDATION_PROFILE: &str = "incremental_owner_frontier";
@@ -951,7 +953,17 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> IncrementalVali
                     continue;
                 }
             };
-            let children = match aggregation_children(&record) {
+            let children = match aggregation_children_with_bindings(&record, |binding| {
+                match self.overlay.owner(OwnerKey::Binding(binding))? {
+                    Some(OwnerRecord::Binding(record)) => Ok(Some(record)),
+                    None => Ok(None),
+                    Some(_) => Err(Diagnostic::new(
+                        DiagnosticClass::Corrupt,
+                        "change_validate_binding_record",
+                        "candidate binding identity selects a foreign owner record",
+                    )),
+                }
+            }) {
                 Ok(children) => children,
                 Err(diagnostic) => {
                     self.push_diagnostic(diagnostic);

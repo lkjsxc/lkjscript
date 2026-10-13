@@ -1,0 +1,18 @@
+declarations.begin
+(units
+  (module create bad-source-field
+    (read-view create Probe (visibility private)
+      (scope-parameter read_scope_d8600000000000000000000000000006 s)
+      (view-field field_d8600000000000000000000000000001 source (type (owned-sequence I64))
+        (read-reference (read-scope (declaration Probe) read_scope_d8600000000000000000000000000006))))
+    (function create wrong-source (visibility private) (effect pure)
+      (scope-parameter read_scope_d8600000000000000000000000000007 s)
+      (parameter create source (type (owned-sequence I64)) (use borrow))
+      (parameter create other (type (owned-sequence I64)) (use borrow))
+      (scope-source source (read-scope (declaration wrong-source) read_scope_d8600000000000000000000000000007))
+      (scope-source other (read-scope (declaration wrong-source) read_scope_d8600000000000000000000000000007))
+      (returns (read-view-application Probe (types) (read-scope (declaration wrong-source) read_scope_d8600000000000000000000000000007))
+        (view-from source (read-scope (declaration wrong-source) read_scope_d8600000000000000000000000000007)))
+      (body (view-create Probe (types) (scope (read-scope (declaration wrong-source) read_scope_d8600000000000000000000000000007)) (source source)
+        (field field_d8600000000000000000000000000001 (local other)))))))
+declarations.end

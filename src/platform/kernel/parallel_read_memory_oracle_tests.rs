@@ -132,8 +132,10 @@ fn parallel_read_oracle_keeps_task_borrowed_results_unsupported() {
     let DeclarationPayload::Function(f) = &mut d.payload else {
         unreachable!()
     };
-    f.result = ty;
-    f.result_borrow = Some(read.parameters[1]);
+    f.result.ty = ty;
+    f.result.relation = ResultRelation::ReadFrom {
+        source: read.parameters[1],
+    };
     let OwnerRecord::Expression(e) = changed
         .owners
         .get_mut(&OwnerKey::Expression(read.body))

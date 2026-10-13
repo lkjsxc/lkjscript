@@ -25,6 +25,9 @@ mod storage;
 #[path = "public_inventory_associated.rs"]
 mod associated;
 
+#[path = "public_inventory_read_views.rs"]
+mod read_views;
+
 const FAMILIES: [&str; 6] = [
     "native_owned_",
     "native_byte_buffer_",
@@ -149,6 +152,7 @@ pub(super) fn inventory(output: &str) -> Result<Inventory, DevError> {
     nominals::admit(&all)?;
     storage::admit(&all)?;
     associated::admit(&all)?;
+    read_views::admit(&all)?;
     let selected = all
         .iter()
         .filter(|name| {
@@ -161,6 +165,7 @@ pub(super) fn inventory(output: &str) -> Result<Inventory, DevError> {
                 || nominals::selected(name)
                 || storage::selected(name)
                 || associated::selected(name)
+                || read_views::selected(name)
                 || *name == TOPOLOGY
         })
         .cloned()

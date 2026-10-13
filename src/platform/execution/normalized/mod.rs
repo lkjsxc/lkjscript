@@ -30,6 +30,7 @@ mod prepare;
 mod prepared_types;
 pub(crate) mod pure_tail_probe;
 mod queue;
+mod read_view_storage;
 mod reference;
 mod reference_effects;
 mod reference_schema;

@@ -1,9 +1,9 @@
 //! Public typed intent for first-order owned contracts. Canonical admission remains mandatory.
 use super::*;
 use crate::platform::kernel::{
-    AssociatedTypeBinding, AssociatedTypeBound, AssociatedTypeMember, ImplementationOperand,
-    ImplementationParameter, OwnedContract, OwnedImplementation, OwnedMethod,
-    OwnedMethodImplementation, OwnedMethodParameter,
+    AssociatedTypeBinding, AssociatedTypeBindingValue, AssociatedTypeBound, AssociatedTypeMember,
+    ImplementationOperand, ImplementationParameter, OwnedContract, OwnedImplementation,
+    OwnedMethod, OwnedMethodImplementation, OwnedMethodParameter,
 };
 use crate::platform::semantic_id::{AssociatedTypeMemberId, ImplementationParameterId, MethodId};
 
@@ -21,7 +21,18 @@ pub struct AuthoredAssociatedTypeMember {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthoredAssociatedTypeBinding {
     pub member: AssociatedTypeMemberId,
-    pub ty: AuthoredType,
+    pub value: AuthoredAssociatedTypeBindingValue,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum AuthoredAssociatedTypeBindingValue {
+    Owned {
+        ty: AuthoredType,
+    },
+    ReadViewFamily {
+        scope_parameter: crate::platform::kernel::ReadScopeParameter,
+        ty: AuthoredType,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -29,8 +40,9 @@ pub struct AuthoredOwnedMethod {
     pub id: MethodId,
     pub name: Name,
     pub parameters: Vec<(AuthoredType, ParameterUse)>,
-    pub result: AuthoredType,
-    pub result_borrow: Option<u32>,
+    pub result: AuthoredCallableResult<u32>,
+    pub read_scope_parameters: Vec<crate::platform::kernel::ReadScopeParameter>,
+    pub read_scope_sources: Vec<AuthoredReadScopeSource<u32>>,
     pub effect: AuthoredFunctionEffect,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -46,6 +58,7 @@ pub struct AuthoredOwnedMethodImplementation {
     pub method: MethodId,
     pub function: AuthoredDeclarationReference,
     pub type_arguments: Vec<AuthoredType>,
+    pub read_scope_arguments: Vec<AuthoredReadScopeArgument>,
     pub implementations: Vec<AuthoredImplementationOperand>,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -62,7 +75,7 @@ pub enum AuthoredImplementationOperand {
 }
 
 impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer<'_, B, W> {
-    fn admit_associated_inventory(&mut self, count: usize) -> Result<(), Diagnostic> {
+    pub(super) fn admit_associated_inventory(&mut self, count: usize) -> Result<(), Diagnostic> {
         if count == 0 {
             return Ok(());
         }
@@ -116,7 +129,7 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
             members.push(AssociatedTypeMember {
                 id: member.id,
                 name: member.name.clone(),
-                bound: member.bound,
+                bound: member.bound.clone(),
             });
         }
         let AuthoredType::TypeParameter { parameter } = self_type else {
@@ -144,8 +157,10 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
                 id: method.id,
                 name: method.name.clone(),
                 parameters,
-                result: self.lower_type(&method.result)?,
-                result_borrow: method.result_borrow,
+                result: self.lower_method_result(&method.result)?,
+                read_scope_parameters: self
+                    .lower_read_scope_parameters(&method.read_scope_parameters)?,
+                read_scope_sources: self.lower_method_scope_sources(&method.read_scope_sources)?,
                 effect: self.lower_effect(&method.effect)?,
             });
         }
@@ -179,7 +194,20 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
             self.base.validation_checkpoint()?;
             bindings.push(AssociatedTypeBinding {
                 member: binding.member,
-                ty: self.lower_type(&binding.ty)?,
+                value: match &binding.value {
+                    AuthoredAssociatedTypeBindingValue::Owned { ty } => {
+                        AssociatedTypeBindingValue::Owned {
+                            ty: self.lower_type(ty)?,
+                        }
+                    }
+                    AuthoredAssociatedTypeBindingValue::ReadViewFamily {
+                        scope_parameter,
+                        ty,
+                    } => AssociatedTypeBindingValue::ReadViewFamily {
+                        scope_parameter: scope_parameter.clone(),
+                        ty: self.lower_type(ty)?,
+                    },
+                },
             });
         }
         if !bindings.is_empty() {
@@ -219,6 +247,7 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
                     .iter()
                     .map(|ty| self.lower_type(ty))
                     .collect::<Result<Vec<_>, _>>()?,
+                read_scope_arguments: self.lower_read_scopes(&mapping.read_scope_arguments)?,
                 implementations: mapping
                     .implementations
                     .iter()
@@ -289,7 +318,7 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
     }
 }
 
-fn associated_capacity() -> Diagnostic {
+pub(super) fn associated_capacity() -> Diagnostic {
     request_error(
         DiagnosticClass::Resource,
         "change_authored_associated_capacity",

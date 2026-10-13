@@ -15,6 +15,9 @@ use crate::platform::storage::page_store::ObjectPageReader;
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
+#[path = "oracle_read_views.rs"]
+mod read_views;
+
 type EncodedEntries = Vec<(Vec<u8>, Vec<u8>)>;
 
 #[derive(Clone, Debug)]
@@ -338,6 +341,8 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
                     ) {
                         if record.header().contract_version < 33 {
                             20
+                        } else if record.header().contract_version < 34 {
+                            21
                         } else {
                             crate::platform::package_interface::PACKAGE_INTERFACE_CONTRACT_VERSION
                         }
@@ -363,6 +368,8 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
                         19
                     } else if record.header().contract_version < 33 {
                         20
+                    } else if record.header().contract_version < 34 {
+                        21
                     } else {
                         crate::platform::package_interface::PACKAGE_INTERFACE_CONTRACT_VERSION
                     },
@@ -473,11 +480,21 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
                         )?;
                     }
                     for m in &i.methods {
-                        require(
-                            m.function.package,
-                            OwnerKey::Declaration(m.function.declaration),
-                            &[OwnerKind::PureFunction, OwnerKind::TaskFunction],
-                        )?;
+                        let omitted_local = m.function.package == *package
+                            && !inventory
+                                .contains_key(&OwnerKey::Declaration(m.function.declaration));
+                        if omitted_local {
+                            reader.charge(1)?;
+                            // Complete canonical source was independently reconstructed above.
+                            // Its mandatory full validation below proves this private target;
+                            // public inventory absence supplies no function authority.
+                        } else {
+                            require(
+                                m.function.package,
+                                OwnerKey::Declaration(m.function.declaration),
+                                &[OwnerKind::PureFunction, OwnerKind::TaskFunction],
+                            )?;
+                        }
                         for operand in &m.implementations {
                             operand.validate_local()?;
                             for operand in operand.walk() {
@@ -630,6 +647,7 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
     // A package dependency DAG cannot establish finite generic instantiation:
     // a supplied witness may dispatch from an upstream body back downstream.
     // Reconstruct the proof from this independently decoded complete source.
+    read_views::admit(&snapshots, &interfaces, &revisions, &reader)?;
     reader.charge(snapshots.len())?;
     let complete_sources: Vec<_> = snapshots.values().collect();
     let mut composition_work = 0;
@@ -670,7 +688,7 @@ fn public_inventory(
         }
         let payload = match &declaration.payload {
             DeclarationPayload::OwnedContract(c) => {
-                reader.charge(1 + c.type_parameters.len())?;
+                reader.charge(1 + c.type_parameters.len() + c.associated_types.len())?;
                 selected.insert(OwnerKey::TypeParameter(c.self_parameter));
                 selected.extend(
                     c.type_parameters
@@ -679,7 +697,11 @@ fn public_inventory(
                         .map(OwnerKey::TypeParameter),
                 );
                 for method in &c.methods {
-                    reader.charge(1)?;
+                    reader.charge(
+                        1 + method.parameters.len()
+                            + method.read_scope_parameters.len()
+                            + method.read_scope_sources.len(),
+                    )?;
                     if let FunctionEffect::Task {
                         requirements,
                         effect_parameters,
@@ -701,13 +723,15 @@ fn public_inventory(
                     i.type_parameters.len()
                         + i.type_arguments.len()
                         + i.implementation_parameters.len()
-                        + i.methods.len(),
+                        + i.methods.len()
+                        + i.associated_types.len(),
                 )?;
                 for parameter in &i.implementation_parameters {
                     reader.charge(1 + parameter.type_arguments.len())?;
                 }
                 for method in &i.methods {
-                    reader.charge(method.type_arguments.len())?;
+                    reader
+                        .charge(method.type_arguments.len() + method.read_scope_arguments.len())?;
                     for operand in &method.implementations {
                         operand.validate_local()?;
                         for operand in operand.walk() {
@@ -790,6 +814,9 @@ fn public_inventory(
                         .map(OwnerKey::EffectParameter),
                 );
                 reader.charge(function.parameters.len() + function.type_parameters.len())?;
+                reader.charge(
+                    function.read_scope_parameters.len() + function.read_scope_sources.len(),
+                )?;
                 selected.extend(function.parameters.iter().copied().map(OwnerKey::Parameter));
                 selected.extend(
                     function
@@ -817,8 +844,9 @@ fn public_inventory(
                     effect_parameters: function.effect_parameters.clone(),
                     type_parameters: function.type_parameters.clone(),
                     parameters: function.parameters.clone(),
-                    result: function.result,
-                    result_borrow: function.result_borrow,
+                    result: function.result.clone(),
+                    read_scope_parameters: function.read_scope_parameters.clone(),
+                    read_scope_sources: function.read_scope_sources.clone(),
                     effect: function.effect.clone(),
                 })
             }
@@ -837,6 +865,16 @@ fn public_inventory(
                     parameters: function.parameters.clone(),
                     result: function.result,
                 })
+            }
+            DeclarationPayload::ReadView(view) => {
+                reader.charge(1 + view.type_parameters.len() + view.fields.len())?;
+                selected.extend(
+                    view.type_parameters
+                        .iter()
+                        .copied()
+                        .map(OwnerKey::TypeParameter),
+                );
+                PackageInterfaceDeclarationPayload::ReadView(view.clone())
             }
             DeclarationPayload::Constant { ty, .. } => {
                 PackageInterfaceDeclarationPayload::Constant { ty: *ty }
@@ -964,6 +1002,9 @@ fn extend_representation_inventory(
     let mut pending = Vec::new();
     for value in result.values() {
         reader.charge(1)?;
+        let roots = value.type_roots();
+        reader.charge(roots.len())?;
+        pending.extend(roots);
         if let PackageInterfaceRecord::Declaration(record) = value
             && let PackageInterfaceDeclarationPayload::OwnedRecord { fields, .. } = &record.payload
         {
@@ -991,7 +1032,9 @@ fn extend_representation_inventory(
         reader.charge(object.child_type_count())?;
         pending.extend(object.child_types());
         let reference = match object.form {
-            TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. }
+            TypeForm::Named { declaration }
+            | TypeForm::Applied { declaration, .. }
+            | TypeForm::ReadViewApplied { declaration, .. }
                 if declaration.package == snapshot.root.package_id =>
             {
                 declaration
@@ -1014,6 +1057,7 @@ fn extend_representation_inventory(
             DeclarationPayload::OwnedRecord { fields, .. }
             | DeclarationPayload::Record { fields, .. } => fields.len().saturating_mul(3),
             DeclarationPayload::Variant { cases, .. } => cases.len().saturating_mul(3),
+            DeclarationPayload::ReadView(view) => 1 + view.fields.len().saturating_mul(3),
             _ => 0,
         })?;
         let (payload, members) = match &declaration.payload {
@@ -1059,6 +1103,13 @@ fn extend_representation_inventory(
                     .map(OwnerKey::Case)
                     .collect::<Vec<_>>(),
             ),
+            DeclarationPayload::ReadView(view) => {
+                pending.extend(view.fields.iter().map(|field| field.ty));
+                (
+                    PackageInterfaceDeclarationPayload::ReadView(view.clone()),
+                    Vec::new(),
+                )
+            }
             _ => {
                 return Err(failure(
                     "owned representation names a non-layout declaration",

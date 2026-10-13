@@ -1,6 +1,6 @@
 //! Exact nominal custody and module-owned representation. Layout is derived, never structural identity.
 use super::owned_associated::{
-    OwnedAssociatedAdmission, OwnedTypeOccurrence, TypeParameterContext,
+    OwnedAssociatedAdmission, OwnedTypeOccurrence, TypeParameterContext, read_view_admission,
 };
 use super::*;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -340,8 +340,53 @@ pub(crate) fn parameter(
     id: TypeParameterId,
 ) -> Result<TypeParameterRecord, Diagnostic> {
     read.validation_work()?;
-    let property = property_definition(read, scope)?;
-    if !super::transfer::function_parameter_listed(read, &property.parameters, id)? {
+    // A view's exact ordinary formal inventory is representation evidence. It
+    // grants no ordinary data category, field layout or scope-binder authority.
+    let key = OwnerKey::Declaration(scope.declaration);
+    let view = if scope.package == read.package_id() {
+        match read.owner(key)? {
+            Some(OwnerRecord::Declaration(DeclarationRecord {
+                header,
+                payload: DeclarationPayload::ReadView(view),
+                ..
+            })) => Some((header, view)),
+            _ => None,
+        }
+    } else {
+        if !read.has_representation_dependency(scope.package)? {
+            return Err(reject(
+                "representation parameter is outside the exact representation closure",
+            ));
+        }
+        match read.package_representation_owner(scope.package, key)? {
+            Some(
+                PackageInterfaceRecord::Declaration(PackageInterfaceDeclaration {
+                    header,
+                    payload: PackageInterfaceDeclarationPayload::ReadView(view),
+                    ..
+                })
+                | PackageInterfaceRecord::RepresentationDeclaration(PackageInterfaceDeclaration {
+                    header,
+                    payload: PackageInterfaceDeclarationPayload::ReadView(view),
+                    ..
+                }),
+            ) => Some((header, view)),
+            _ => None,
+        }
+    };
+    let parameters = if let Some((header, view)) = view {
+        if header.owner != key || header.kind != OwnerKind::ReadView {
+            return Err(reject(
+                "view representation parameter inventory has a foreign owner identity or kind",
+            ));
+        }
+        read_view_admission::require_generation(header.contract_version)?;
+        view.validate_local_at(scope)?;
+        view.type_parameters
+    } else {
+        property_definition(read, scope)?.parameters
+    };
+    if !super::transfer::function_parameter_listed(read, &parameters, id)? {
         return Err(reject(
             "representation parameter is absent from its exact nominal inventory",
         ));
@@ -569,6 +614,11 @@ fn validate_application_inner(
     for (id, ty) in parameters.into_iter().zip(arguments) {
         read.validation_work()?;
         let formal = parameter(read, declaration, id)?;
+        if read_view_admission::contains(read, ty, associated)? {
+            return Err(reject(
+                "ordinary or Owned record arguments cannot contain read views, including phantom arguments",
+            ));
+        }
         if let Some(occurrence) = occurrence {
             super::owned_contract::validate_type_argument_constraints_at(
                 read,
@@ -647,6 +697,9 @@ fn validate_definition_at(
             OwnedTypeOccurrence::representation(reference, field.header.contract_version);
         validate_type_depth(read, field.ty, 1)?;
         associated.validate_occurrence_at(read, &[field.ty], occurrence)?;
+        if read_view_admission::contains(read, field.ty, associated)? {
+            return Err(reject("owned record fields cannot contain read views"));
+        }
         if super::memory::direct_at(read, field.ty, occurrence, associated)? {
             super::owned_contract::validate_owned_type_at(read, field.ty, occurrence, associated)?;
         } else if !super::owned_contract::ordinary_with_assumptions_at(
@@ -731,4 +784,489 @@ fn validate_representation_cycles(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod read_view_tests {
+    use super::*;
+    use crate::platform::semantic_id::{
+        AssociatedTypeMemberId, DeclarationId, ImplementationParameterId, ModuleId,
+        ReadScopeParameterId,
+    };
+
+    const SEED: &[u8] = b"owned-layout-read-view-boundaries";
+
+    #[derive(Default)]
+    struct Read {
+        owners: BTreeMap<OwnerKey, OwnerRecord>,
+        types: BTreeMap<TypeObjectDigest, TypeObject>,
+        representations: BTreeMap<(PackageId, OwnerKey), PackageInterfaceRecord>,
+    }
+
+    impl ExpressionRead for Read {
+        fn package_id(&self) -> PackageId {
+            PackageId::migrate(SEED, 0)
+        }
+
+        fn owner(&self, key: OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic> {
+            Ok(self.owners.get(&key).cloned())
+        }
+
+        fn type_object(&self, digest: TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic> {
+            Ok(self.types.get(&digest).cloned())
+        }
+
+        fn package_interface_owner(
+            &self,
+            _package: PackageId,
+            _owner: OwnerKey,
+        ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+            Ok(None)
+        }
+
+        fn has_dependency(&self, _package: PackageId) -> Result<bool, Diagnostic> {
+            Ok(false)
+        }
+
+        fn has_representation_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+            Ok(self
+                .representations
+                .keys()
+                .any(|(owner, _)| *owner == package))
+        }
+
+        fn package_representation_owner(
+            &self,
+            package: PackageId,
+            owner: OwnerKey,
+        ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+            Ok(self.representations.get(&(package, owner)).cloned())
+        }
+    }
+
+    impl Read {
+        fn ty(&mut self, form: TypeForm) -> TypeObjectDigest {
+            let object = TypeObject::new(form).unwrap();
+            let digest = encode_type_object(&object).unwrap().0;
+            self.types.insert(digest, object);
+            digest
+        }
+
+        fn record(
+            &mut self,
+            ordinal: u64,
+            field_type: TypeObjectDigest,
+            phantom: Option<TypeParameterConstraints>,
+        ) -> DeclarationReference {
+            let declaration = DeclarationId::migrate(SEED, ordinal);
+            let field = FieldId::migrate(SEED, ordinal);
+            let mut type_parameters = Vec::new();
+            if let Some(constraints) = phantom {
+                let parameter = TypeParameterId::migrate(SEED, ordinal);
+                type_parameters.push(parameter);
+                let owner = OwnerRecord::TypeParameter(TypeParameterRecord {
+                    header: OwnerHeader::new(
+                        OwnerKey::TypeParameter(parameter),
+                        OwnerKind::TypeParameter,
+                    ),
+                    declaration,
+                    name: Name::new("Unused").unwrap(),
+                    constraints,
+                });
+                owner.validate_local().unwrap();
+                self.owners.insert(owner.owner(), owner);
+            }
+            let owner = OwnerRecord::Field(FieldRecord {
+                header: OwnerHeader::new(OwnerKey::Field(field), OwnerKind::Field),
+                declaration,
+                name: Name::new("child").unwrap(),
+                ty: field_type,
+            });
+            owner.validate_local().unwrap();
+            self.owners.insert(owner.owner(), owner);
+            let owner = OwnerRecord::Declaration(DeclarationRecord {
+                header: OwnerHeader::new(
+                    OwnerKey::Declaration(declaration),
+                    OwnerKind::OwnedRecord,
+                ),
+                module: ModuleId::migrate(SEED, 0),
+                name: Name::new(format!("Record{ordinal}")).unwrap(),
+                visibility: DeclarationVisibility::Private,
+                payload: DeclarationPayload::OwnedRecord {
+                    type_parameters,
+                    fields: vec![field],
+                },
+            });
+            owner.validate_local().unwrap();
+            self.owners.insert(owner.owner(), owner);
+            DeclarationReference {
+                package: self.package_id(),
+                declaration,
+            }
+        }
+
+        fn view(&mut self) -> TypeObjectDigest {
+            let declaration = DeclarationId::migrate(SEED, 100);
+            let reference = DeclarationReference {
+                package: self.package_id(),
+                declaration,
+            };
+            let parameter = ReadScopeParameterId::migrate(SEED, 100);
+            let owner = OwnerRecord::Declaration(DeclarationRecord {
+                header: OwnerHeader::new(OwnerKey::Declaration(declaration), OwnerKind::ReadView),
+                module: ModuleId::migrate(SEED, 0),
+                name: Name::new("EmptyView").unwrap(),
+                visibility: DeclarationVisibility::Private,
+                payload: DeclarationPayload::ReadView(ReadViewDeclaration {
+                    type_parameters: Vec::new(),
+                    scope_parameter: ReadScopeParameter {
+                        id: parameter,
+                        name: Name::new("read").unwrap(),
+                    },
+                    fields: Vec::new(),
+                }),
+            });
+            owner.validate_local().unwrap();
+            self.owners.insert(owner.owner(), owner);
+            self.ty(TypeForm::ReadViewApplied {
+                declaration: reference,
+                arguments: Vec::new(),
+                read_scope: ReadScopeArgument::Parameter(ReadScopeReference {
+                    binder: ReadScopeBinder::Declaration(reference),
+                    parameter,
+                }),
+            })
+        }
+    }
+
+    #[test]
+    fn composites_reject_positive_views_and_nested_ordinary_view_children() {
+        let mut read = Read::default();
+        let cell = read.ty(TypeForm::OwnedI64Cell);
+        let scalar = read.ty(TypeForm::I64);
+        let view = read.view();
+        let occurrence = OwnedTypeOccurrence::authored(None, contract::GRAPH_CONTRACT_VERSION);
+        for item in [view, read.ty(TypeForm::Option { item: view })] {
+            for ordinary in [scalar, item] {
+                let fields = vec![
+                    StructuralTypeField {
+                        name: Name::new("a_owner").unwrap(),
+                        ty: cell,
+                    },
+                    StructuralTypeField {
+                        name: Name::new("b_metadata").unwrap(),
+                        ty: ordinary,
+                    },
+                ];
+                for form in [
+                    TypeForm::OwnedProduct {
+                        fields: fields.clone(),
+                    },
+                    TypeForm::OwnedChoice { cases: fields },
+                    TypeForm::OwnedSequence { item: ordinary },
+                ] {
+                    let composite = read.ty(form);
+                    let legacy = super::super::owned_product::validate(&read, composite, None);
+                    let current = super::super::owned_product::validate_at(
+                        &read,
+                        composite,
+                        occurrence,
+                        &OwnedAssociatedAdmission::new(),
+                    );
+                    if ordinary == scalar {
+                        legacy.unwrap();
+                        current.unwrap();
+                    } else {
+                        let error = legacy.unwrap_err();
+                        assert_eq!(error.class, DiagnosticClass::Semantic);
+                        assert_eq!(error.message, "owned composites cannot contain read views");
+                        assert_eq!(current.unwrap_err().class, DiagnosticClass::Semantic);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn phantom_owned_and_ordinary_record_actuals_cannot_admit_read_views() {
+        let mut read = Read::default();
+        let cell = read.ty(TypeForm::OwnedI64Cell);
+        let scalar = read.ty(TypeForm::I64);
+        let view = read.view();
+        let occurrence = OwnedTypeOccurrence::authored(None, contract::GRAPH_CONTRACT_VERSION);
+        for (ordinal, constraints, valid) in [
+            (1, TypeParameterConstraints::Owned, cell),
+            (2, TypeParameterConstraints::Transferable, scalar),
+        ] {
+            let declaration = read.record(ordinal, cell, Some(constraints));
+            for actual in [valid, view] {
+                let application = read.ty(TypeForm::Applied {
+                    declaration,
+                    arguments: vec![actual],
+                });
+                let legacy = validate_application(&read, application, None);
+                let current = validate_application_at(
+                    &read,
+                    application,
+                    occurrence,
+                    &OwnedAssociatedAdmission::new(),
+                );
+                if actual == valid {
+                    legacy.unwrap();
+                    current.unwrap();
+                } else {
+                    let error = legacy.unwrap_err();
+                    assert_eq!(error.code, "kernel_owned_record");
+                    assert!(error.message.contains("phantom arguments"));
+                    assert_eq!(current.unwrap_err().class, DiagnosticClass::Semantic);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn view_phantom_parameters_use_exact_inventory_without_data_layout_authority() {
+        for constraints in [
+            TypeParameterConstraints::Owned,
+            TypeParameterConstraints::Transferable,
+        ] {
+            let mut read = Read::default();
+            let view = read.view();
+            let (declaration, read_scope) = match &read.types[&view].form {
+                TypeForm::ReadViewApplied {
+                    declaration,
+                    read_scope,
+                    ..
+                } => (*declaration, *read_scope),
+                _ => unreachable!(),
+            };
+            let id = TypeParameterId::migrate(SEED, 100);
+            let owner = OwnerRecord::TypeParameter(TypeParameterRecord {
+                header: OwnerHeader::new(OwnerKey::TypeParameter(id), OwnerKind::TypeParameter),
+                declaration: declaration.declaration,
+                name: Name::new("Unused").unwrap(),
+                constraints,
+            });
+            owner.validate_local().unwrap();
+            read.owners.insert(owner.owner(), owner);
+            let Some(OwnerRecord::Declaration(owner)) = read
+                .owners
+                .get_mut(&OwnerKey::Declaration(declaration.declaration))
+            else {
+                unreachable!()
+            };
+            let DeclarationPayload::ReadView(view) = &mut owner.payload else {
+                unreachable!()
+            };
+            view.type_parameters.push(id);
+            assert_eq!(
+                parameter(&read, declaration, id).unwrap().constraints,
+                constraints
+            );
+            assert!(parameter(&read, declaration, TypeParameterId::migrate(SEED, 101)).is_err());
+            assert!(property_definition(&read, declaration).is_err());
+            let actual = read.ty(if constraints.has_owned() {
+                TypeForm::OwnedI64Cell
+            } else {
+                TypeForm::I64
+            });
+            let view = read.ty(TypeForm::ReadViewApplied {
+                declaration,
+                arguments: vec![actual],
+                read_scope,
+            });
+            read_view_admission::validate_nominal_at(
+                &read,
+                view,
+                OwnedTypeOccurrence::authored(Some(declaration), contract::GRAPH_CONTRACT_VERSION),
+                &OwnedAssociatedAdmission::new(),
+            )
+            .unwrap();
+
+            let Some(OwnerRecord::Declaration(owner)) = read
+                .owners
+                .get_mut(&OwnerKey::Declaration(declaration.declaration))
+            else {
+                unreachable!()
+            };
+            owner.header.kind = OwnerKind::Record;
+            assert!(parameter(&read, declaration, id).is_err());
+            let Some(OwnerRecord::Declaration(owner)) = read
+                .owners
+                .get_mut(&OwnerKey::Declaration(declaration.declaration))
+            else {
+                unreachable!()
+            };
+            owner.header.kind = OwnerKind::ReadView;
+            owner.header.contract_version = 33;
+            assert_eq!(
+                parameter(&read, declaration, id).unwrap_err().code,
+                "kernel_read_view_generation"
+            );
+        }
+    }
+
+    #[test]
+    fn private_imported_view_parameters_require_the_exact_representation_inventory() {
+        let mut read = Read::default();
+        let package = PackageId::migrate(SEED, 2);
+        let declaration = DeclarationId::migrate(SEED, 400);
+        let id = TypeParameterId::migrate(SEED, 400);
+        let reference = DeclarationReference {
+            package,
+            declaration,
+        };
+        read.representations.insert(
+            (package, OwnerKey::Declaration(declaration)),
+            PackageInterfaceRecord::RepresentationDeclaration(PackageInterfaceDeclaration {
+                header: OwnerHeader::new(OwnerKey::Declaration(declaration), OwnerKind::ReadView),
+                name: Name::new("PrivateView").unwrap(),
+                payload: PackageInterfaceDeclarationPayload::ReadView(ReadViewDeclaration {
+                    type_parameters: vec![id],
+                    scope_parameter: ReadScopeParameter {
+                        id: ReadScopeParameterId::migrate(SEED, 400),
+                        name: Name::new("read").unwrap(),
+                    },
+                    fields: Vec::new(),
+                }),
+            }),
+        );
+        read.representations.insert(
+            (package, OwnerKey::TypeParameter(id)),
+            PackageInterfaceRecord::TypeParameter(TypeParameterRecord {
+                header: OwnerHeader::new(OwnerKey::TypeParameter(id), OwnerKind::TypeParameter),
+                declaration,
+                name: Name::new("Unused").unwrap(),
+                constraints: TypeParameterConstraints::Owned,
+            }),
+        );
+        assert!(!read.has_dependency(package).unwrap());
+        assert_eq!(
+            parameter(&read, reference, id).unwrap().declaration,
+            declaration
+        );
+        assert!(property_definition(&read, reference).is_err());
+        let Some(PackageInterfaceRecord::TypeParameter(formal)) = read
+            .representations
+            .get_mut(&(package, OwnerKey::TypeParameter(id)))
+        else {
+            unreachable!()
+        };
+        formal.declaration = DeclarationId::migrate(SEED, 401);
+        assert!(parameter(&read, reference, id).is_err());
+    }
+
+    #[test]
+    fn private_imported_ordinary_layout_cannot_hide_a_view_in_owned_metadata() {
+        let mut read = Read::default();
+        let scalar = read.ty(TypeForm::I64);
+        let cell = read.ty(TypeForm::OwnedI64Cell);
+        let view = read.view();
+        let package = PackageId::migrate(SEED, 1);
+        let declaration = DeclarationId::migrate(SEED, 200);
+        let field = FieldId::migrate(SEED, 200);
+        read.representations.insert(
+            (package, OwnerKey::Declaration(declaration)),
+            PackageInterfaceRecord::RepresentationDeclaration(PackageInterfaceDeclaration {
+                header: OwnerHeader::new(OwnerKey::Declaration(declaration), OwnerKind::Record),
+                name: Name::new("HiddenMetadata").unwrap(),
+                payload: PackageInterfaceDeclarationPayload::Record {
+                    type_parameters: Vec::new(),
+                    fields: vec![field],
+                },
+            }),
+        );
+        read.representations.insert(
+            (package, OwnerKey::Field(field)),
+            PackageInterfaceRecord::Field(FieldRecord {
+                header: OwnerHeader::new(OwnerKey::Field(field), OwnerKind::Field),
+                declaration,
+                name: Name::new("metadata").unwrap(),
+                ty: scalar,
+            }),
+        );
+        let data = read.ty(TypeForm::Named {
+            declaration: DeclarationReference {
+                package,
+                declaration,
+            },
+        });
+        let product = read.ty(TypeForm::OwnedProduct {
+            fields: vec![
+                StructuralTypeField {
+                    name: Name::new("a_owner").unwrap(),
+                    ty: cell,
+                },
+                StructuralTypeField {
+                    name: Name::new("b_metadata").unwrap(),
+                    ty: data,
+                },
+            ],
+        });
+        let declaration = read.record(3, product, None);
+        let record = read.ty(TypeForm::Named { declaration });
+        super::super::owned_product::validate(&read, product, None).unwrap();
+        validate_application(&read, record, None).unwrap();
+
+        let Some(PackageInterfaceRecord::Field(hidden)) = read
+            .representations
+            .get_mut(&(package, OwnerKey::Field(field)))
+        else {
+            unreachable!()
+        };
+        hidden.ty = view;
+        let error = super::super::owned_product::validate(&read, product, None).unwrap_err();
+        assert_eq!(error.message, "owned composites cannot contain read views");
+        assert_eq!(
+            validate_application(&read, record, None).unwrap_err().class,
+            DiagnosticClass::Semantic
+        );
+    }
+
+    #[test]
+    fn graph_generation_separates_associated_owned_and_read_view_forms() {
+        let mut read = Read::default();
+        let view = read.view();
+        let reference = DeclarationReference {
+            package: read.package_id(),
+            declaration: DeclarationId::migrate(SEED, 300),
+        };
+        let member = AssociatedTypeMemberId::migrate(SEED, 300);
+        let owned = read.ty(TypeForm::AssociatedContractMember {
+            contract: reference,
+            member,
+        });
+        // This pass checks syntactic generations only. Member inventories are
+        // independently admitted by the occurrence proof.
+        super::super::owned_product::require_generation(&read, vec![owned], 33).unwrap();
+        assert_eq!(
+            super::super::owned_product::require_generation(&read, vec![owned], 32)
+                .unwrap_err()
+                .code,
+            "kernel_owned_associated_generation"
+        );
+        let scope = match &read.types[&view].form {
+            TypeForm::ReadViewApplied { read_scope, .. } => *read_scope,
+            _ => unreachable!(),
+        };
+        let member_view = read.ty(TypeForm::AssociatedReadViewMember {
+            contract: reference,
+            member,
+            read_scope: scope,
+        });
+        let projected_view = read.ty(TypeForm::AssociatedReadViewProjection {
+            scope: reference,
+            parameter: ImplementationParameterId::migrate(SEED, 300),
+            contract: reference,
+            member,
+            read_scope: scope,
+        });
+        for view in [view, member_view, projected_view] {
+            let nested = read.ty(TypeForm::Option { item: view });
+            let error = super::super::owned_product::require_generation(&read, vec![nested], 33)
+                .unwrap_err();
+            assert_eq!(error.code, "kernel_read_view_generation");
+            super::super::owned_product::require_generation(&read, vec![nested], 34).unwrap();
+        }
+    }
 }

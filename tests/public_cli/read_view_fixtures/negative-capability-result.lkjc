@@ -1,0 +1,11 @@
+declarations.begin
+(units
+  (module create bad-capability
+    (function create scope-owner (visibility private) (effect pure)
+      (scope-parameter read_scope_d8600000000000000000000000000015 s)
+      (returns Unit (value)) (body (unit)))
+    (interface create Channel (visibility private)
+      (operation create read
+        (returns RESULT_TYPE)
+        (idempotency idempotent) (external-visibility none)))))
+declarations.end

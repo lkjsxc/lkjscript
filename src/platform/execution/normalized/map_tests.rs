@@ -270,6 +270,7 @@ fn composite(n: i64, origin: ValueOrigin) -> NormalizedValue {
             ])
             .unwrap(),
             NormalizedValue::Function {
+                read_scope_arguments: Arc::from([]),
                 function: FunctionIndex(3, origin),
                 type_arguments: Arc::from([]),
                 effect_arguments: Arc::from([]),
@@ -908,6 +909,7 @@ fn persistent_map_retirement_uses_inline_or_preexisting_owned_storage() {
                     fields: Arc::new(vec![value(7)]),
                 }),
                 NormalizedValue::Function {
+                    read_scope_arguments: Arc::from([]),
                     function: FunctionIndex(0, origin),
                     type_arguments: Arc::from([]),
                     effect_arguments: Arc::from([]),

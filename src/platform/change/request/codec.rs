@@ -12,13 +12,18 @@ use crate::platform::kernel::{
 };
 use crate::platform::package::RunnerKind;
 
-const INTENT_MAGIC: [u8; 8] = *b"LKJACR14";
+// The associated read-view cut commits complete scope inventories and one result relation.
+const INTENT_MAGIC: [u8; 8] = *b"LKJACR39";
 const BUDGET_MAGIC: [u8; 8] = *b"LKJABG01";
 const MAXIMUM_BUDGET_BYTES: usize = 1_024;
 
 #[cfg(test)]
 #[path = "associated_codec_tests.rs"]
 mod associated_codec_tests;
+
+#[cfg(test)]
+#[path = "read_view_codec_tests.rs"]
+mod read_view_codec_tests;
 
 pub(super) fn encode_authored_intent(
     request: &AuthoredChangeSet,
@@ -118,31 +123,6 @@ pub(super) fn encode_budget(budget: ChangeBudget) -> Result<Vec<u8>, Diagnostic>
 struct Writer {
     bytes: Vec<u8>,
     maximum: usize,
-    requirement_extension: bool,
-    outcome_extension: bool,
-    f64_extension: bool,
-    buffer_extension: bool,
-    owned_extension: bool,
-    task_method_extension: bool,
-    parallel_extension: bool,
-    product_extension: bool,
-    choice_extension: bool,
-    declaration_body_extension: bool,
-    literal_extension: bool,
-    transfer_constraint_extension: bool,
-    share_constraint_extension: bool,
-    implementation_authority_extension: bool,
-    owned_borrow_extension: bool,
-    sequence_extension: bool,
-    generalized_sequence_extension: bool,
-    owned_record_extension: bool,
-    storage_contract_extension: bool,
-    ordinary_constraint_extension: bool,
-    parameterized_contract_extension: bool,
-    borrowed_result_extension: bool,
-    generic_implementation_extension: bool,
-    implementation_prerequisite_extension: bool,
-    associated_extension: bool,
 }
 
 impl Writer {
@@ -150,89 +130,10 @@ impl Writer {
         Self {
             bytes: Vec::new(),
             maximum,
-            requirement_extension: false,
-            outcome_extension: false,
-            f64_extension: false,
-            buffer_extension: false,
-            owned_extension: false,
-            task_method_extension: false,
-            parallel_extension: false,
-            product_extension: false,
-            choice_extension: false,
-            declaration_body_extension: false,
-            literal_extension: false,
-            transfer_constraint_extension: false,
-            share_constraint_extension: false,
-            implementation_authority_extension: false,
-            owned_borrow_extension: false,
-            sequence_extension: false,
-            generalized_sequence_extension: false,
-            owned_record_extension: false,
-            storage_contract_extension: false,
-            ordinary_constraint_extension: false,
-            parameterized_contract_extension: false,
-            borrowed_result_extension: false,
-            generic_implementation_extension: false,
-            implementation_prerequisite_extension: false,
-            associated_extension: false,
         }
     }
 
-    fn finish(mut self) -> Vec<u8> {
-        if self.associated_extension && self.bytes.starts_with(&INTENT_MAGIC) {
-            self.bytes[..8].copy_from_slice(b"LKJACR38");
-        } else if self.storage_contract_extension
-            && self.ordinary_constraint_extension
-            && self.bytes.starts_with(&INTENT_MAGIC)
-        {
-            self.bytes[..8].copy_from_slice(b"LKJACR37");
-        } else if self.owned_record_extension && self.bytes.starts_with(&INTENT_MAGIC) {
-            self.bytes[..8].copy_from_slice(b"LKJACR36");
-        } else if self.generalized_sequence_extension && self.bytes.starts_with(&INTENT_MAGIC) {
-            self.bytes[..8].copy_from_slice(b"LKJACR35");
-        } else if self.share_constraint_extension && self.bytes.starts_with(&INTENT_MAGIC) {
-            self.bytes[..8].copy_from_slice(b"LKJACR34");
-        } else if self.implementation_prerequisite_extension
-            && self.bytes.starts_with(&INTENT_MAGIC)
-        {
-            self.bytes[..8].copy_from_slice(b"LKJACR33");
-        } else if self.generic_implementation_extension && self.bytes.starts_with(&INTENT_MAGIC) {
-            self.bytes[..8].copy_from_slice(b"LKJACR32");
-        } else if self.borrowed_result_extension && self.bytes.starts_with(&INTENT_MAGIC) {
-            self.bytes[..8].copy_from_slice(b"LKJACR31");
-        } else if self.parameterized_contract_extension && self.bytes.starts_with(&INTENT_MAGIC) {
-            self.bytes[..8].copy_from_slice(b"LKJACR30");
-        } else if self.sequence_extension && self.bytes.starts_with(&INTENT_MAGIC) {
-            self.bytes[..8].copy_from_slice(b"LKJACR29");
-        } else if self.owned_borrow_extension && self.bytes.starts_with(&INTENT_MAGIC) {
-            self.bytes[..8].copy_from_slice(b"LKJACR28");
-        } else if self.implementation_authority_extension && self.bytes.starts_with(&INTENT_MAGIC) {
-            self.bytes[..8].copy_from_slice(b"LKJACR27");
-        } else if self.transfer_constraint_extension && self.bytes.starts_with(&INTENT_MAGIC) {
-            self.bytes[..8].copy_from_slice(b"LKJACR26");
-        } else if self.parallel_extension && self.bytes.starts_with(&INTENT_MAGIC) {
-            self.bytes[..8].copy_from_slice(b"LKJACR25");
-        } else if self.task_method_extension && self.bytes.starts_with(&INTENT_MAGIC) {
-            self.bytes[..8].copy_from_slice(b"LKJACR24");
-        } else if self.choice_extension && self.bytes.starts_with(&INTENT_MAGIC) {
-            self.bytes[..8].copy_from_slice(b"LKJACR23");
-        } else if self.product_extension && self.bytes.starts_with(&INTENT_MAGIC) {
-            self.bytes[..8].copy_from_slice(b"LKJACR22");
-        } else if self.owned_extension && self.bytes.starts_with(&INTENT_MAGIC) {
-            self.bytes[..8].copy_from_slice(b"LKJACR21");
-        } else if self.buffer_extension && self.bytes.starts_with(&INTENT_MAGIC) {
-            self.bytes[..8].copy_from_slice(b"LKJACR20");
-        } else if self.literal_extension && self.bytes.starts_with(&INTENT_MAGIC) {
-            self.bytes[..8].copy_from_slice(b"LKJACR19");
-        } else if self.declaration_body_extension && self.bytes.starts_with(&INTENT_MAGIC) {
-            self.bytes[..8].copy_from_slice(b"LKJACR18");
-        } else if self.f64_extension && self.bytes.starts_with(&INTENT_MAGIC) {
-            self.bytes[..8].copy_from_slice(b"LKJACR17");
-        } else if self.outcome_extension && self.bytes.starts_with(&INTENT_MAGIC) {
-            self.bytes[..8].copy_from_slice(b"LKJACR16");
-        } else if self.requirement_extension && self.bytes.starts_with(&INTENT_MAGIC) {
-            self.bytes[..8].copy_from_slice(b"LKJACR15");
-        }
+    fn finish(self) -> Vec<u8> {
         self.bytes
     }
 
@@ -391,7 +292,6 @@ impl Writer {
                 implementations,
             } => {
                 if !implementations.is_empty() {
-                    self.implementation_prerequisite_extension = true;
                     self.tag(4)?;
                     self.declaration_reference(implementation, definitions)?;
                     self.list(type_arguments, |w, ty| w.authored_type(ty, definitions, 1))?;
@@ -399,7 +299,6 @@ impl Writer {
                         w.implementation_operand_at(operand, definitions, depth + 1)
                     });
                 }
-                self.generic_implementation_extension |= !type_arguments.is_empty();
                 self.tag(if type_arguments.is_empty() { 1 } else { 3 })?;
                 self.declaration_reference(implementation, definitions)?;
                 if !type_arguments.is_empty() {
@@ -598,135 +497,32 @@ impl Writer {
                 methods,
                 associated_types,
             } => {
-                self.owned_extension = true;
-                self.storage_contract_extension = true;
-                self.parameterized_contract_extension |= !type_parameters.is_empty();
-                let task_methods = methods
-                    .iter()
-                    .any(|m| !matches!(m.effect, AuthoredFunctionEffect::Pure {}));
-                self.task_method_extension |= task_methods;
-                let borrowed_results = methods.iter().any(|m| m.result_borrow.is_some());
-                self.borrowed_result_extension |= borrowed_results;
-                let associated = !associated_types.is_empty();
-                self.associated_extension |= associated;
-                self.tag(if associated {
-                    100
-                } else if borrowed_results {
-                    93
-                } else if !type_parameters.is_empty() {
-                    88
-                } else if task_methods {
-                    86
-                } else {
-                    80
-                })?;
+                self.tag(100)?;
                 self.symbol(symbol, definitions)?;
                 self.module_selector(module, definitions)?;
                 self.name(name)?;
                 self.visibility(*visibility)?;
-                self.authored_type(self_type, definitions, 1)?;
-                if associated || borrowed_results || !type_parameters.is_empty() {
-                    self.list(type_parameters, |w, p| {
-                        w.type_parameter_reference(p, definitions)
-                    })?;
-                }
-                self.list(methods, |w, m| {
-                    w.raw(&m.id.bytes())?;
-                    w.name(&m.name)?;
-                    w.list(&m.parameters, |w, (t, mode)| {
-                        w.authored_type(t, definitions, 1)?;
-                        w.parameter_use(*mode)
-                    })?;
-                    w.authored_type(&m.result, definitions, 1)?;
-                    if associated || borrowed_results {
-                        w.optional(m.result_borrow.as_ref(), |w, p| w.u64(u64::from(*p)))?;
-                    }
-                    if associated || borrowed_results || task_methods || !type_parameters.is_empty()
-                    {
-                        w.function_effect(&m.effect, definitions)
-                    } else {
-                        Ok(())
-                    }
-                })?;
-                if associated {
-                    self.associated_members(associated_types)
-                } else {
-                    Ok(())
-                }
+                self.owned_contract(
+                    self_type,
+                    type_parameters,
+                    methods,
+                    associated_types,
+                    definitions,
+                )
             }
             AuthoredChange::CreateOwnedImplementation {
                 symbol,
                 module,
                 name,
                 visibility,
-                contract,
-                type_parameters,
-                implementation_parameters,
-                self_type,
-                type_arguments,
-                methods,
-                associated_types,
+                ..
             } => {
-                self.owned_extension = true;
-                self.storage_contract_extension = true;
-                self.parameterized_contract_extension |= !type_arguments.is_empty();
-                let prerequisites = !implementation_parameters.is_empty()
-                    || methods.iter().any(|m| !m.implementations.is_empty());
-                self.implementation_prerequisite_extension |= prerequisites;
-                let generic = prerequisites
-                    || !type_parameters.is_empty()
-                    || methods.iter().any(|m| !m.type_arguments.is_empty());
-                self.generic_implementation_extension |= generic;
-                let associated = !associated_types.is_empty();
-                self.associated_extension |= associated;
-                self.tag(if associated {
-                    101
-                } else if prerequisites {
-                    97
-                } else if generic {
-                    95
-                } else if type_arguments.is_empty() {
-                    81
-                } else {
-                    89
-                })?;
+                self.tag(101)?;
                 self.symbol(symbol, definitions)?;
                 self.module_selector(module, definitions)?;
                 self.name(name)?;
                 self.visibility(*visibility)?;
-                self.declaration_reference(contract, definitions)?;
-                if associated || generic {
-                    self.list(type_parameters, |w, p| {
-                        w.type_parameter_reference(p, definitions)
-                    })?;
-                }
-                if associated || prerequisites {
-                    self.implementation_parameters(implementation_parameters, definitions)?;
-                }
-                self.authored_type(self_type, definitions, 1)?;
-                if associated || generic || !type_arguments.is_empty() {
-                    self.list(type_arguments, |w, ty| w.authored_type(ty, definitions, 1))?;
-                }
-                self.list(methods, |w, mapping| {
-                    w.raw(&mapping.method.bytes())?;
-                    w.declaration_reference(&mapping.function, definitions)?;
-                    if associated || generic {
-                        w.list(&mapping.type_arguments, |w, ty| {
-                            w.authored_type(ty, definitions, 1)
-                        })?;
-                    }
-                    if associated || prerequisites {
-                        w.list(&mapping.implementations, |w, operand| {
-                            w.implementation_operand(operand, definitions)
-                        })?;
-                    }
-                    Ok(())
-                })?;
-                if associated {
-                    self.associated_bindings(associated_types, definitions)
-                } else {
-                    Ok(())
-                }
+                self.owned_implementation(value, definitions)
             }
             AuthoredChange::SetOwnedContract {
                 declaration,
@@ -735,134 +531,26 @@ impl Writer {
                 methods,
                 associated_types,
             } => {
-                self.owned_extension = true;
-                self.storage_contract_extension = true;
-                self.parameterized_contract_extension |= !type_parameters.is_empty();
-                let task_methods = methods
-                    .iter()
-                    .any(|m| !matches!(m.effect, AuthoredFunctionEffect::Pure {}));
-                self.task_method_extension |= task_methods;
-                let borrowed_results = methods.iter().any(|m| m.result_borrow.is_some());
-                self.borrowed_result_extension |= borrowed_results;
-                let associated = !associated_types.is_empty();
-                self.associated_extension |= associated;
-                self.tag(if associated {
-                    102
-                } else if borrowed_results {
-                    94
-                } else if !type_parameters.is_empty() {
-                    90
-                } else if task_methods {
-                    87
-                } else {
-                    84
-                })?;
+                self.tag(102)?;
                 self.declaration_selector(declaration, definitions)?;
-                self.authored_type(self_type, definitions, 1)?;
-                if associated || borrowed_results || !type_parameters.is_empty() {
-                    self.list(type_parameters, |w, p| {
-                        w.type_parameter_reference(p, definitions)
-                    })?;
-                }
-                self.list(methods, |w, m| {
-                    w.raw(&m.id.bytes())?;
-                    w.name(&m.name)?;
-                    w.list(&m.parameters, |w, (t, mode)| {
-                        w.authored_type(t, definitions, 1)?;
-                        w.parameter_use(*mode)
-                    })?;
-                    w.authored_type(&m.result, definitions, 1)?;
-                    if associated || borrowed_results {
-                        w.optional(m.result_borrow.as_ref(), |w, p| w.u64(u64::from(*p)))?;
-                    }
-                    if associated || borrowed_results || task_methods || !type_parameters.is_empty()
-                    {
-                        w.function_effect(&m.effect, definitions)
-                    } else {
-                        Ok(())
-                    }
-                })?;
-                if associated {
-                    self.associated_members(associated_types)
-                } else {
-                    Ok(())
-                }
+                self.owned_contract(
+                    self_type,
+                    type_parameters,
+                    methods,
+                    associated_types,
+                    definitions,
+                )
             }
-            AuthoredChange::SetOwnedImplementation {
-                declaration,
-                contract,
-                type_parameters,
-                implementation_parameters,
-                self_type,
-                type_arguments,
-                methods,
-                associated_types,
-            } => {
-                self.owned_extension = true;
-                self.storage_contract_extension = true;
-                self.parameterized_contract_extension |= !type_arguments.is_empty();
-                let prerequisites = !implementation_parameters.is_empty()
-                    || methods.iter().any(|m| !m.implementations.is_empty());
-                self.implementation_prerequisite_extension |= prerequisites;
-                let generic = prerequisites
-                    || !type_parameters.is_empty()
-                    || methods.iter().any(|m| !m.type_arguments.is_empty());
-                self.generic_implementation_extension |= generic;
-                let associated = !associated_types.is_empty();
-                self.associated_extension |= associated;
-                self.tag(if associated {
-                    103
-                } else if prerequisites {
-                    98
-                } else if generic {
-                    96
-                } else if type_arguments.is_empty() {
-                    85
-                } else {
-                    91
-                })?;
+            AuthoredChange::SetOwnedImplementation { declaration, .. } => {
+                self.tag(103)?;
                 self.declaration_selector(declaration, definitions)?;
-                self.declaration_reference(contract, definitions)?;
-                if associated || generic {
-                    self.list(type_parameters, |w, p| {
-                        w.type_parameter_reference(p, definitions)
-                    })?;
-                }
-                if associated || prerequisites {
-                    self.implementation_parameters(implementation_parameters, definitions)?;
-                }
-                self.authored_type(self_type, definitions, 1)?;
-                if associated || generic || !type_arguments.is_empty() {
-                    self.list(type_arguments, |w, ty| w.authored_type(ty, definitions, 1))?;
-                }
-                self.list(methods, |w, mapping| {
-                    w.raw(&mapping.method.bytes())?;
-                    w.declaration_reference(&mapping.function, definitions)?;
-                    if associated || generic {
-                        w.list(&mapping.type_arguments, |w, ty| {
-                            w.authored_type(ty, definitions, 1)
-                        })?;
-                    }
-                    if associated || prerequisites {
-                        w.list(&mapping.implementations, |w, operand| {
-                            w.implementation_operand(operand, definitions)
-                        })?;
-                    }
-                    Ok(())
-                })?;
-                if associated {
-                    self.associated_bindings(associated_types, definitions)
-                } else {
-                    Ok(())
-                }
+                self.owned_implementation(value, definitions)
             }
             AuthoredChange::SetImplementationParameters {
                 declaration,
                 parameters,
             } => {
-                self.owned_extension = true;
                 let parameterized = parameters.iter().any(|p| !p.type_arguments.is_empty());
-                self.parameterized_contract_extension |= parameterized;
                 self.tag(if parameterized { 92 } else { 82 })?;
                 self.declaration_selector(declaration, definitions)?;
                 self.list(parameters, |w, p| {
@@ -889,6 +577,40 @@ impl Writer {
                 self.symbol(symbol, definitions)?;
                 self.name(name)
             }
+            AuthoredChange::CreateReadView {
+                symbol,
+                module,
+                name,
+                visibility,
+                type_parameters,
+                scope_parameter,
+                fields,
+            } => {
+                self.tag(104)?;
+                self.symbol(symbol, definitions)?;
+                self.module_selector(module, definitions)?;
+                self.name(name)?;
+                self.visibility(*visibility)?;
+                self.list(type_parameters, |writer, parameter| {
+                    writer.type_parameter(parameter, definitions)
+                })?;
+                self.read_scope_parameter(scope_parameter)?;
+                self.read_view_fields(fields, definitions)
+            }
+            AuthoredChange::SetReadView {
+                declaration,
+                type_parameters,
+                scope_parameter,
+                fields,
+            } => {
+                self.tag(105)?;
+                self.declaration_selector(declaration, definitions)?;
+                self.list(type_parameters, |writer, parameter| {
+                    writer.type_parameter_reference(parameter, definitions)
+                })?;
+                self.read_scope_parameter(scope_parameter)?;
+                self.read_view_fields(fields, definitions)
+            }
             AuthoredChange::CreateFunction {
                 symbol,
                 module,
@@ -897,12 +619,12 @@ impl Writer {
                 type_parameters,
                 parameters,
                 result,
-                result_borrow,
+                read_scope_parameters,
+                read_scope_sources,
                 effect,
                 body,
             } => {
-                self.borrowed_result_extension |= result_borrow.is_some();
-                self.tag(if result_borrow.is_some() { 91 } else { 2 })?;
+                self.tag(2)?;
                 self.symbol(symbol, definitions)?;
                 self.module_selector(module, definitions)?;
                 self.name(name)?;
@@ -913,10 +635,13 @@ impl Writer {
                 self.list(parameters, |writer, value| {
                     writer.parameter(value, definitions)
                 })?;
-                self.authored_type(result, definitions, 1)?;
-                if let Some(source) = result_borrow {
-                    self.local_reference(source, definitions)?;
-                }
+                self.callable_result(result, definitions, |writer, source| {
+                    writer.local_reference(source, definitions)
+                })?;
+                self.read_scope_parameters(read_scope_parameters)?;
+                self.read_scope_sources(read_scope_sources, definitions, |writer, source| {
+                    writer.local_reference(source, definitions)
+                })?;
                 self.function_effect(effect, definitions)?;
                 self.expression(body, definitions, 1)
             }
@@ -937,7 +662,6 @@ impl Writer {
                 fields,
             } => {
                 let owned = matches!(value, AuthoredChange::CreateOwnedRecord { .. });
-                self.owned_record_extension |= owned;
                 self.tag(if owned { 99 } else { 3 })?;
                 self.symbol(symbol, definitions)?;
                 self.module_selector(module, definitions)?;
@@ -1120,7 +844,6 @@ impl Writer {
                 declaration,
                 parameter,
             } => {
-                self.requirement_extension = true;
                 self.tag(42)?;
                 self.declaration_selector(declaration, definitions)?;
                 self.symbol(&parameter.symbol, definitions)?;
@@ -1135,7 +858,6 @@ impl Writer {
                 interface,
                 operations,
             } => {
-                self.requirement_extension = true;
                 self.tag(43)?;
                 self.owner_selector(parameter, definitions)?;
                 self.declaration_reference(interface, definitions)?;
@@ -1166,11 +888,6 @@ impl Writer {
             } => {
                 self.tag(39)?;
                 self.owner_selector(parameter, definitions)?;
-                self.owned_extension |= constraints.has_owned();
-                self.ordinary_constraint_extension |=
-                    !constraints.has_owned() && constraints.requires_transfer();
-                self.transfer_constraint_extension |= constraints.requires_transfer();
-                self.share_constraint_extension |= constraints.requires_share();
                 self.tag(constraints.tag())
             }
             AuthoredChange::AddParameter { parent, parameter } => {
@@ -1202,16 +919,19 @@ impl Writer {
             AuthoredChange::SetFunctionContract {
                 function,
                 result,
-                result_borrow,
+                read_scope_parameters,
+                read_scope_sources,
                 effect,
             } => {
-                self.borrowed_result_extension |= result_borrow.is_some();
-                self.tag(if result_borrow.is_some() { 92 } else { 21 })?;
+                self.tag(21)?;
                 self.declaration_selector(function, definitions)?;
-                self.authored_type(result, definitions, 1)?;
-                if let Some(source) = result_borrow {
-                    self.local_reference(source, definitions)?;
-                }
+                self.callable_result(result, definitions, |writer, source| {
+                    writer.local_reference(source, definitions)
+                })?;
+                self.read_scope_parameters(read_scope_parameters)?;
+                self.read_scope_sources(read_scope_sources, definitions, |writer, source| {
+                    writer.local_reference(source, definitions)
+                })?;
                 self.function_effect(effect, definitions)
             }
             AuthoredChange::SetExternalContract {
@@ -1240,7 +960,6 @@ impl Writer {
                 parameter,
                 use_mode,
             } => {
-                self.owned_extension = true;
                 self.tag(83)?;
                 self.owner_selector(parameter, definitions)?;
                 self.parameter_use(*use_mode)
@@ -1263,7 +982,6 @@ impl Writer {
                 function_type,
                 implementation,
             } => {
-                self.declaration_body_extension = true;
                 self.tag(46)?;
                 self.owner_selector(port, definitions)?;
                 self.authored_type(function_type, definitions, 1)?;
@@ -1361,7 +1079,6 @@ impl Writer {
                 self.module_selector(module, definitions)
             }
             AuthoredChange::SetFunctionLiterals { function, literals } => {
-                self.literal_extension = true;
                 self.tag(47)?;
                 self.declaration_selector(function, definitions)?;
                 self.list(literals, |writer, literal| {
@@ -1400,7 +1117,6 @@ impl Writer {
                 ty,
                 value,
             } => {
-                self.declaration_body_extension = true;
                 self.tag(44)?;
                 self.declaration_selector(constant, definitions)?;
                 self.authored_type(ty, definitions, 1)?;
@@ -1411,7 +1127,6 @@ impl Writer {
                 actual,
                 expected,
             } => {
-                self.declaration_body_extension = true;
                 self.tag(45)?;
                 self.declaration_selector(test, definitions)?;
                 self.expression(actual, definitions, 1)?;
@@ -1605,11 +1320,6 @@ impl Writer {
     ) -> Result<(), Diagnostic> {
         self.symbol(&value.symbol, definitions)?;
         self.name(&value.name)?;
-        self.owned_extension |= value.constraints.has_owned();
-        self.ordinary_constraint_extension |=
-            !value.constraints.has_owned() && value.constraints.requires_transfer();
-        self.transfer_constraint_extension |= value.constraints.requires_transfer();
-        self.share_constraint_extension |= value.constraints.requires_share();
         self.tag(value.constraints.tag())
     }
 
@@ -1682,6 +1392,246 @@ impl Writer {
         }
     }
 
+    fn callable_result<S>(
+        &mut self,
+        result: &AuthoredCallableResult<S>,
+        definitions: &BTreeMap<String, SymbolDefinition>,
+        mut source: impl FnMut(&mut Self, &S) -> Result<(), Diagnostic>,
+    ) -> Result<(), Diagnostic> {
+        self.authored_type(&result.ty, definitions, 1)?;
+        match &result.relation {
+            AuthoredResultRelation::Value => self.tag(1),
+            AuthoredResultRelation::ReadFrom { source: value } => {
+                self.tag(2)?;
+                source(self, value)
+            }
+            AuthoredResultRelation::ViewFrom {
+                source: value,
+                scope,
+            } => {
+                self.tag(3)?;
+                source(self, value)?;
+                self.read_scope_argument(scope, definitions)
+            }
+        }
+    }
+
+    fn read_scope_parameter(
+        &mut self,
+        parameter: &crate::platform::kernel::ReadScopeParameter,
+    ) -> Result<(), Diagnostic> {
+        self.raw(&parameter.id.bytes())?;
+        self.name(&parameter.name)
+    }
+
+    fn read_scope_parameters(
+        &mut self,
+        parameters: &[crate::platform::kernel::ReadScopeParameter],
+    ) -> Result<(), Diagnostic> {
+        self.associated_inventory_count(parameters.len())?;
+        self.list(parameters, Self::read_scope_parameter)
+    }
+
+    fn read_scope_argument(
+        &mut self,
+        argument: &AuthoredReadScopeArgument,
+        definitions: &BTreeMap<String, SymbolDefinition>,
+    ) -> Result<(), Diagnostic> {
+        match argument {
+            AuthoredReadScopeArgument::Parameter { binder, parameter } => {
+                self.tag(1)?;
+                match binder {
+                    AuthoredReadScopeBinder::Declaration(declaration) => {
+                        self.tag(1)?;
+                        self.declaration_reference(declaration, definitions)?;
+                    }
+                    AuthoredReadScopeBinder::ContractMethod { contract, method } => {
+                        self.tag(2)?;
+                        self.declaration_reference(contract, definitions)?;
+                        self.raw(&method.bytes())?;
+                    }
+                    AuthoredReadScopeBinder::AssociatedMember { contract, member } => {
+                        self.tag(3)?;
+                        self.declaration_reference(contract, definitions)?;
+                        self.raw(&member.bytes())?;
+                    }
+                    AuthoredReadScopeBinder::AssociatedBinding {
+                        implementation,
+                        member,
+                    } => {
+                        self.tag(4)?;
+                        self.declaration_reference(implementation, definitions)?;
+                        self.raw(&member.bytes())?;
+                    }
+                }
+                self.raw(&parameter.bytes())
+            }
+            AuthoredReadScopeArgument::Lexical { callable, binding } => {
+                self.tag(2)?;
+                self.declaration_reference(callable, definitions)?;
+                self.local_reference(binding, definitions)
+            }
+        }
+    }
+
+    fn read_scope_arguments(
+        &mut self,
+        arguments: &[AuthoredReadScopeArgument],
+        definitions: &BTreeMap<String, SymbolDefinition>,
+    ) -> Result<(), Diagnostic> {
+        self.associated_inventory_count(arguments.len())?;
+        self.list(arguments, |writer, argument| {
+            writer.read_scope_argument(argument, definitions)
+        })
+    }
+
+    fn read_scope_sources<S>(
+        &mut self,
+        sources: &[AuthoredReadScopeSource<S>],
+        definitions: &BTreeMap<String, SymbolDefinition>,
+        mut source: impl FnMut(&mut Self, &S) -> Result<(), Diagnostic>,
+    ) -> Result<(), Diagnostic> {
+        self.associated_inventory_count(sources.len())?;
+        self.list(sources, |writer, entry| {
+            source(writer, &entry.source)?;
+            writer.read_scope_argument(&entry.scope, definitions)
+        })
+    }
+
+    fn owned_contract(
+        &mut self,
+        self_type: &AuthoredType,
+        type_parameters: &[AuthoredTypeParameterReference],
+        methods: &[AuthoredOwnedMethod],
+        associated_types: &[AuthoredAssociatedTypeMember],
+        definitions: &BTreeMap<String, SymbolDefinition>,
+    ) -> Result<(), Diagnostic> {
+        self.authored_type(self_type, definitions, 1)?;
+        self.list(type_parameters, |writer, parameter| {
+            writer.type_parameter_reference(parameter, definitions)
+        })?;
+        self.list(methods, |writer, method| {
+            writer.raw(&method.id.bytes())?;
+            writer.name(&method.name)?;
+            writer.list(&method.parameters, |writer, (ty, mode)| {
+                writer.authored_type(ty, definitions, 1)?;
+                writer.parameter_use(*mode)
+            })?;
+            writer.callable_result(&method.result, definitions, |writer, source| {
+                writer.u64(u64::from(*source))
+            })?;
+            writer.read_scope_parameters(&method.read_scope_parameters)?;
+            writer.read_scope_sources(
+                &method.read_scope_sources,
+                definitions,
+                |writer, source| writer.u64(u64::from(*source)),
+            )?;
+            writer.function_effect(&method.effect, definitions)
+        })?;
+        self.associated_members(associated_types)
+    }
+
+    fn owned_implementation(
+        &mut self,
+        value: &AuthoredChange,
+        definitions: &BTreeMap<String, SymbolDefinition>,
+    ) -> Result<(), Diagnostic> {
+        let (
+            contract,
+            type_parameters,
+            implementation_parameters,
+            self_type,
+            type_arguments,
+            methods,
+            associated_types,
+        ) = match value {
+            AuthoredChange::CreateOwnedImplementation {
+                contract,
+                type_parameters,
+                implementation_parameters,
+                self_type,
+                type_arguments,
+                methods,
+                associated_types,
+                ..
+            }
+            | AuthoredChange::SetOwnedImplementation {
+                contract,
+                type_parameters,
+                implementation_parameters,
+                self_type,
+                type_arguments,
+                methods,
+                associated_types,
+                ..
+            } => (
+                contract,
+                type_parameters,
+                implementation_parameters,
+                self_type,
+                type_arguments,
+                methods,
+                associated_types,
+            ),
+            _ => {
+                return Err(codec_error(
+                    "change_authored_implementation_codec",
+                    "owned implementation encoding requires a complete create or set operation",
+                ));
+            }
+        };
+        self.declaration_reference(contract, definitions)?;
+        self.list(type_parameters, |writer, parameter| {
+            writer.type_parameter_reference(parameter, definitions)
+        })?;
+        self.implementation_parameters(implementation_parameters, definitions)?;
+        self.authored_type(self_type, definitions, 1)?;
+        self.list(type_arguments, |writer, ty| {
+            writer.authored_type(ty, definitions, 1)
+        })?;
+        self.list(methods, |writer, mapping| {
+            writer.raw(&mapping.method.bytes())?;
+            writer.declaration_reference(&mapping.function, definitions)?;
+            writer.list(&mapping.type_arguments, |writer, ty| {
+                writer.authored_type(ty, definitions, 1)
+            })?;
+            writer.read_scope_arguments(&mapping.read_scope_arguments, definitions)?;
+            writer.list(&mapping.implementations, |writer, operand| {
+                writer.implementation_operand(operand, definitions)
+            })
+        })?;
+        self.associated_bindings(associated_types, definitions)
+    }
+
+    fn read_view_fields(
+        &mut self,
+        fields: &[AuthoredReadViewField],
+        definitions: &BTreeMap<String, SymbolDefinition>,
+    ) -> Result<(), Diagnostic> {
+        self.associated_inventory_count(fields.len())?;
+        self.list(fields, |writer, field| {
+            writer.raw(&field.id.bytes())?;
+            writer.name(&field.name)?;
+            writer.authored_type(&field.ty, definitions, 1)?;
+            match &field.kind {
+                AuthoredReadViewFieldKind::Ordinary => writer.tag(1),
+                AuthoredReadViewFieldKind::ReadReference { read_scope } => {
+                    writer.tag(2)?;
+                    writer.read_scope_argument(read_scope, definitions)
+                }
+            }
+        })
+    }
+
+    fn read_view_field_reference(
+        &mut self,
+        field: &AuthoredReadViewFieldReference,
+        definitions: &BTreeMap<String, SymbolDefinition>,
+    ) -> Result<(), Diagnostic> {
+        self.declaration_reference(&field.declaration, definitions)?;
+        self.raw(&field.field.bytes())
+    }
+
     fn associated_members(
         &mut self,
         members: &[AuthoredAssociatedTypeMember],
@@ -1690,9 +1640,15 @@ impl Writer {
         self.list(members, |writer, member| {
             writer.raw(&member.id.bytes())?;
             writer.name(&member.name)?;
-            writer.tag(match member.bound {
-                crate::platform::kernel::AssociatedTypeBound::Owned => 1,
-            })
+            match &member.bound {
+                crate::platform::kernel::AssociatedTypeBound::Owned => writer.tag(1),
+                crate::platform::kernel::AssociatedTypeBound::ReadViewFamily {
+                    scope_parameter,
+                } => {
+                    writer.tag(2)?;
+                    writer.read_scope_parameter(scope_parameter)
+                }
+            }
         })
     }
 
@@ -1704,7 +1660,20 @@ impl Writer {
         self.associated_inventory_count(bindings.len())?;
         self.list(bindings, |writer, binding| {
             writer.raw(&binding.member.bytes())?;
-            writer.authored_type(&binding.ty, definitions, 1)
+            match &binding.value {
+                AuthoredAssociatedTypeBindingValue::Owned { ty } => {
+                    writer.tag(1)?;
+                    writer.authored_type(ty, definitions, 1)
+                }
+                AuthoredAssociatedTypeBindingValue::ReadViewFamily {
+                    scope_parameter,
+                    ty,
+                } => {
+                    writer.tag(2)?;
+                    writer.read_scope_parameter(scope_parameter)?;
+                    writer.authored_type(ty, definitions, 1)
+                }
+            }
         })
     }
 
@@ -1729,6 +1698,7 @@ impl Writer {
             Type(&'a AuthoredType, usize),
             Types(&'a [AuthoredType], usize),
             Fields(&'a [AuthoredStructuralTypeField], usize),
+            ReadScope(&'a AuthoredReadScopeArgument),
         }
         // Lazy slice frames keep pending metadata proportional to depth, including wide
         // function/application arguments. Admission precedes every child and stack growth.
@@ -1757,6 +1727,10 @@ impl Writer {
                     }
                     continue;
                 }
+                Frame::ReadScope(scope) => {
+                    self.read_scope_argument(scope, definitions)?;
+                    continue;
+                }
             };
             if depth > MAXIMUM_TYPE_DEPTH {
                 return Err(codec_error(
@@ -1766,8 +1740,42 @@ impl Writer {
             }
             let next = depth + 1;
             match value {
+                AuthoredType::ReadViewApplied {
+                    declaration,
+                    arguments,
+                    read_scope,
+                } => {
+                    self.tag(27)?;
+                    self.declaration_reference(declaration, definitions)?;
+                    self.length(arguments.len())?;
+                    pending.push(Frame::ReadScope(read_scope));
+                    pending.push(Frame::Types(arguments, next));
+                }
+                AuthoredType::AssociatedReadViewMember {
+                    contract,
+                    member,
+                    read_scope,
+                } => {
+                    self.tag(28)?;
+                    self.declaration_reference(contract, definitions)?;
+                    self.raw(&member.bytes())?;
+                    self.read_scope_argument(read_scope, definitions)?;
+                }
+                AuthoredType::AssociatedReadViewProjection {
+                    scope,
+                    parameter,
+                    contract,
+                    member,
+                    read_scope,
+                } => {
+                    self.tag(29)?;
+                    self.declaration_reference(scope, definitions)?;
+                    self.raw(&parameter.bytes())?;
+                    self.declaration_reference(contract, definitions)?;
+                    self.raw(&member.bytes())?;
+                    self.read_scope_argument(read_scope, definitions)?;
+                }
                 AuthoredType::AssociatedContractMember { contract, member } => {
-                    self.associated_extension = true;
                     self.tag(25)?;
                     self.declaration_reference(contract, definitions)?;
                     self.raw(&member.bytes())?;
@@ -1778,7 +1786,6 @@ impl Writer {
                     contract,
                     member,
                 } => {
-                    self.associated_extension = true;
                     self.tag(26)?;
                     self.declaration_reference(scope, definitions)?;
                     self.raw(&parameter.bytes())?;
@@ -1789,15 +1796,12 @@ impl Writer {
                 AuthoredType::Bool {} => self.tag(2)?,
                 AuthoredType::I64 {} => self.tag(3)?,
                 AuthoredType::OwnedI64Cell {} => {
-                    self.owned_extension = true;
                     self.tag(21)?;
                 }
                 AuthoredType::ByteBuffer {} => {
-                    self.buffer_extension = true;
                     self.tag(20)?;
                 }
                 AuthoredType::F64 {} => {
-                    self.f64_extension = true;
                     self.tag(19)?;
                 }
                 AuthoredType::Bytes {} => self.tag(4)?,
@@ -1831,19 +1835,16 @@ impl Writer {
                     pending.push(Frame::Fields(fields, next));
                 }
                 AuthoredType::OwnedChoice { cases } => {
-                    self.choice_extension = true;
                     self.tag(23)?;
                     self.length(cases.len())?;
                     pending.push(Frame::Fields(cases, next));
                 }
                 AuthoredType::OwnedProduct { fields } => {
-                    self.product_extension = true;
                     self.tag(22)?;
                     self.length(fields.len())?;
                     pending.push(Frame::Fields(fields, next));
                 }
                 AuthoredType::OwnedSequence { item } => {
-                    self.sequence_extension = true;
                     self.tag(24)?;
                     pending.push(Frame::Type(item, next));
                 }
@@ -2007,18 +2008,15 @@ impl Writer {
     ) -> Result<(), Diagnostic> {
         match value {
             AuthoredRequirementReference::ParameterSelected { reference } => {
-                self.requirement_extension = true;
                 self.tag(3)?;
                 self.selected_reference(*reference)
             }
             AuthoredRequirementReference::ParameterExact { package, parameter } => {
-                self.requirement_extension = true;
                 self.tag(4)?;
                 self.raw(&package.bytes())?;
                 self.raw(&parameter.bytes())
             }
             AuthoredRequirementReference::ParameterSymbol { symbol } => {
-                self.requirement_extension = true;
                 self.tag(5)?;
                 self.symbol(symbol, definitions)
             }
@@ -2119,12 +2117,79 @@ impl Writer {
     ) -> Result<(), Diagnostic> {
         let next = depth.saturating_add(1);
         match value {
+            AuthoredExpressionOperation::CreateReadView {
+                declaration,
+                type_arguments,
+                read_scope,
+                source,
+                fields,
+            } => {
+                self.tag(50)?;
+                self.declaration_reference(declaration, definitions)?;
+                self.list(type_arguments, |writer, ty| {
+                    writer.authored_type(ty, definitions, 1)
+                })?;
+                self.read_scope_argument(read_scope, definitions)?;
+                self.local_reference(source, definitions)?;
+                self.associated_inventory_count(fields.len())?;
+                self.list(fields, |writer, field| {
+                    writer.raw(&field.field.bytes())?;
+                    writer.expression(&field.value, definitions, next)
+                })
+            }
+            AuthoredExpressionOperation::BorrowReadView {
+                value,
+                binding,
+                body,
+            } => {
+                self.tag(51)?;
+                self.local_reference(value, definitions)?;
+                self.symbol(&binding.symbol, definitions)?;
+                self.name(&binding.name)?;
+                self.optional(binding.declared_type.as_ref(), |writer, ty| {
+                    writer.authored_type(ty, definitions, 1)
+                })?;
+                self.expression(body, definitions, next)
+            }
+            AuthoredExpressionOperation::ReborrowReadView { value, read_scope } => {
+                self.tag(52)?;
+                self.local_reference(value, definitions)?;
+                self.read_scope_argument(read_scope, definitions)
+            }
+            AuthoredExpressionOperation::MoveReadView { value } => {
+                self.tag(53)?;
+                self.local_reference(value, definitions)
+            }
+            AuthoredExpressionOperation::DropReadView { value } => {
+                self.tag(54)?;
+                self.local_reference(value, definitions)
+            }
+            AuthoredExpressionOperation::ReadViewDataField { value, field } => {
+                self.tag(55)?;
+                self.local_reference(value, definitions)?;
+                self.read_view_field_reference(field, definitions)
+            }
+            AuthoredExpressionOperation::BorrowReadViewField {
+                value,
+                field,
+                binding,
+                body,
+            } => {
+                self.tag(56)?;
+                self.local_reference(value, definitions)?;
+                self.read_view_field_reference(field, definitions)?;
+                self.symbol(&binding.symbol, definitions)?;
+                self.name(&binding.name)?;
+                self.optional(binding.declared_type.as_ref(), |writer, ty| {
+                    writer.authored_type(ty, definitions, 1)
+                })?;
+                self.expression(body, definitions, next)
+            }
             AuthoredExpressionOperation::BorrowCall {
                 call,
                 binding,
                 body,
             } => {
-                self.borrowed_result_extension = true;
                 self.tag(44)?;
                 self.expression(call, definitions, next)?;
                 self.symbol(&binding.symbol, definitions)?;
@@ -2135,7 +2200,6 @@ impl Writer {
                 self.expression(body, definitions, next)
             }
             AuthoredExpressionOperation::SequenceEmpty { sequence_type } => {
-                self.sequence_extension = true;
                 self.tag(39)?;
                 self.authored_type(sequence_type, definitions, 1)
             }
@@ -2143,7 +2207,6 @@ impl Writer {
                 sequence_type,
                 source,
             } => {
-                self.sequence_extension = true;
                 self.tag(40)?;
                 self.authored_type(sequence_type, definitions, 1)?;
                 self.expression(source, definitions, next)
@@ -2153,7 +2216,6 @@ impl Writer {
                 value,
                 source,
             } => {
-                self.sequence_extension = true;
                 self.tag(41)?;
                 self.authored_type(sequence_type, definitions, 1)?;
                 self.expression(value, definitions, next)?;
@@ -2163,7 +2225,6 @@ impl Writer {
                 sequence_type,
                 source,
             } => {
-                self.sequence_extension = true;
                 self.tag(42)?;
                 self.authored_type(sequence_type, definitions, 1)?;
                 self.expression(source, definitions, next)
@@ -2173,7 +2234,6 @@ impl Writer {
                 source,
                 index,
             } => {
-                self.generalized_sequence_extension = true;
                 self.tag(45)?;
                 self.authored_type(sequence_type, definitions, 1)?;
                 self.expression(index, definitions, next)?;
@@ -2185,7 +2245,6 @@ impl Writer {
                 value,
                 source,
             } => {
-                self.generalized_sequence_extension = true;
                 self.tag(46)?;
                 self.authored_type(sequence_type, definitions, 1)?;
                 self.expression(index, definitions, next)?;
@@ -2199,7 +2258,6 @@ impl Writer {
                 binding,
                 body,
             } => {
-                self.sequence_extension = true;
                 self.tag(43)?;
                 self.authored_type(sequence_type, definitions, 1)?;
                 self.expression(index, definitions, next)?;
@@ -2212,7 +2270,6 @@ impl Writer {
                 self.expression(body, definitions, next)
             }
             AuthoredExpressionOperation::Parallel { left, right } => {
-                self.parallel_extension = true;
                 self.tag(36)?;
                 self.expression(left, definitions, next)?;
                 self.expression(right, definitions, next)
@@ -2227,7 +2284,6 @@ impl Writer {
                 self.i64(*value)
             }
             AuthoredExpressionOperation::F64 { value } => {
-                self.f64_extension = true;
                 self.tag(27)?;
                 self.raw(&value.bits().to_le_bytes())
             }
@@ -2262,7 +2318,6 @@ impl Writer {
                 case,
                 value,
             } => {
-                self.choice_extension = true;
                 self.tag(34)?;
                 self.authored_type(choice_type, definitions, 1)?;
                 self.name(case)?;
@@ -2273,7 +2328,6 @@ impl Writer {
                 source,
                 arms,
             } => {
-                self.choice_extension = true;
                 self.tag(35)?;
                 self.authored_type(choice_type, definitions, 1)?;
                 self.expression(source, definitions, next)?;
@@ -2292,7 +2346,6 @@ impl Writer {
                 source,
                 arms,
             } => {
-                self.owned_borrow_extension = true;
                 self.tag(38)?;
                 self.authored_type(choice_type, definitions, 1)?;
                 self.expression(source, definitions, next)?;
@@ -2310,7 +2363,6 @@ impl Writer {
                 record_type,
                 fields,
             } => {
-                self.owned_record_extension = true;
                 self.tag(47)?;
                 self.authored_type(record_type, definitions, 1)?;
                 self.list(fields, |w, (field, value)| {
@@ -2324,7 +2376,6 @@ impl Writer {
                 fields,
                 body,
             } => {
-                self.owned_record_extension = true;
                 self.tag(48)?;
                 self.authored_type(record_type, definitions, 1)?;
                 self.expression(source, definitions, next)?;
@@ -2345,7 +2396,6 @@ impl Writer {
                 binding,
                 body,
             } => {
-                self.owned_record_extension = true;
                 self.tag(49)?;
                 self.authored_type(record_type, definitions, 1)?;
                 self.expression(source, definitions, next)?;
@@ -2361,7 +2411,6 @@ impl Writer {
                 product_type,
                 fields,
             } => {
-                self.product_extension = true;
                 self.tag(32)?;
                 self.authored_type(product_type, definitions, 1)?;
                 self.list(fields, |w, (name, value)| {
@@ -2375,7 +2424,6 @@ impl Writer {
                 fields,
                 body,
             } => {
-                self.product_extension = true;
                 self.tag(33)?;
                 self.authored_type(product_type, definitions, 1)?;
                 self.expression(source, definitions, next)?;
@@ -2396,7 +2444,6 @@ impl Writer {
                 binding,
                 body,
             } => {
-                self.owned_borrow_extension = true;
                 self.tag(37)?;
                 self.authored_type(product_type, definitions, 1)?;
                 self.expression(source, definitions, next)?;
@@ -2431,67 +2478,67 @@ impl Writer {
                 type_arguments,
                 effect_arguments,
                 requirement_arguments,
+                read_scope_arguments,
                 implementations,
                 arguments,
             } => {
-                self.owned_extension = true;
-                if effect_arguments.is_empty() && requirement_arguments.is_empty() {
-                    self.tag(30)?;
-                } else {
-                    self.implementation_authority_extension = true;
-                    self.tag(37)?;
-                    self.list(requirement_arguments, |writer, argument| {
-                        writer.requirement_reference(argument, definitions)
-                    })?;
-                    self.list(effect_arguments, |writer, row| {
-                        writer.effect_row(row, definitions)
-                    })?;
-                }
-                self.declaration_reference(function, definitions)?;
-                self.list(type_arguments, |w, t| w.authored_type(t, definitions, 1))?;
-                self.list(implementations, |w, i| {
-                    w.implementation_operand(i, definitions)
+                self.tag(58)?;
+                self.list(requirement_arguments, |writer, argument| {
+                    writer.requirement_reference(argument, definitions)
                 })?;
-                self.list(arguments, |w, e| w.expression(e, definitions, next))
+                self.list(effect_arguments, |writer, row| {
+                    writer.effect_row(row, definitions)
+                })?;
+                self.declaration_reference(function, definitions)?;
+                self.list(type_arguments, |writer, ty| {
+                    writer.authored_type(ty, definitions, 1)
+                })?;
+                self.read_scope_arguments(read_scope_arguments, definitions)?;
+                self.list(implementations, |writer, operand| {
+                    writer.implementation_operand(operand, definitions)
+                })?;
+                self.list(arguments, |writer, expression| {
+                    writer.expression(expression, definitions, next)
+                })
             }
             AuthoredExpressionOperation::MethodCall {
                 witness,
                 contract,
                 method,
+                read_scope_arguments,
                 arguments,
             } => {
-                self.owned_extension = true;
-                self.tag(31)?;
+                self.tag(60)?;
                 self.implementation_operand(witness, definitions)?;
                 self.declaration_reference(contract, definitions)?;
                 self.raw(&method.bytes())?;
-                self.list(arguments, |w, e| w.expression(e, definitions, next))
+                self.read_scope_arguments(read_scope_arguments, definitions)?;
+                self.list(arguments, |writer, expression| {
+                    writer.expression(expression, definitions, next)
+                })
             }
             AuthoredExpressionOperation::Call {
                 requirement_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
+                read_scope_arguments,
                 arguments,
             } => {
-                if requirement_arguments.is_empty() {
-                    self.tag(11)?;
-                } else {
-                    self.requirement_extension = true;
-                    self.tag(24)?;
-                    self.list(requirement_arguments, |writer, argument| {
-                        writer.requirement_reference(argument, definitions)
-                    })?;
-                }
+                self.tag(57)?;
+                self.list(requirement_arguments, |writer, argument| {
+                    writer.requirement_reference(argument, definitions)
+                })?;
                 self.list(effect_arguments, |writer, row| {
                     writer.effect_row(row, definitions)
                 })?;
                 self.declaration_reference(function, definitions)?;
-                self.list(type_arguments, |writer, value| {
-                    writer.authored_type(value, definitions, 1)
+                self.list(type_arguments, |writer, ty| {
+                    writer.authored_type(ty, definitions, 1)
                 })?;
-                self.list(arguments, |writer, value| {
-                    writer.expression(value, definitions, next)
+                self.read_scope_arguments(read_scope_arguments, definitions)?;
+                self.list(arguments, |writer, expression| {
+                    writer.expression(expression, definitions, next)
                 })
             }
             AuthoredExpressionOperation::FunctionValue {
@@ -2499,23 +2546,20 @@ impl Writer {
                 effect_arguments,
                 function,
                 type_arguments,
+                read_scope_arguments,
             } => {
-                if requirement_arguments.is_empty() {
-                    self.tag(12)?;
-                } else {
-                    self.requirement_extension = true;
-                    self.tag(25)?;
-                    self.list(requirement_arguments, |writer, argument| {
-                        writer.requirement_reference(argument, definitions)
-                    })?;
-                }
+                self.tag(59)?;
+                self.list(requirement_arguments, |writer, argument| {
+                    writer.requirement_reference(argument, definitions)
+                })?;
                 self.list(effect_arguments, |writer, row| {
                     writer.effect_row(row, definitions)
                 })?;
                 self.declaration_reference(function, definitions)?;
-                self.list(type_arguments, |writer, value| {
-                    writer.authored_type(value, definitions, 1)
-                })
+                self.list(type_arguments, |writer, ty| {
+                    writer.authored_type(ty, definitions, 1)
+                })?;
+                self.read_scope_arguments(read_scope_arguments, definitions)
             }
             AuthoredExpressionOperation::Invoke { callee, arguments } => {
                 self.tag(13)?;
@@ -2639,7 +2683,6 @@ impl Writer {
                 type_argument,
                 outcome,
             } => {
-                self.outcome_extension = true;
                 self.tag(26)?;
                 self.requirement_reference(requirement, definitions)?;
                 self.symbol(&binding.symbol, definitions)?;
@@ -2871,8 +2914,9 @@ mod tests {
                         use_mode: ParameterUse::Unrestricted,
                         resource_requirement: None,
                     }],
-                    result: AuthoredType::Text {},
-                    result_borrow: None,
+                    result: AuthoredCallableResult::value(AuthoredType::Text {}),
+                    read_scope_parameters: vec![],
+                    read_scope_sources: vec![],
                     effect: AuthoredFunctionEffect::Pure {},
                     body: AuthoredExpression {
                         symbol: Some(body_symbol.to_owned()),
@@ -2896,8 +2940,69 @@ mod tests {
         let renamed = canonical_authored_intent_bytes(&renamed).unwrap();
         assert_eq!(first, renamed);
         assert_eq!(&first[..8], &INTENT_MAGIC);
+        // A literal protocol layout, independent of Writer and the allocation collector.
+        let mut expected = b"LKJACR39".to_vec();
+        expected.extend_from_slice(&[9; 32]);
+        let count = |bytes: &mut Vec<u8>, value: u64| {
+            bytes.extend_from_slice(&value.to_be_bytes());
+        };
+        count(&mut expected, 0); // Preconditions.
+        count(&mut expected, 2); // Operations.
+        expected.extend_from_slice(&[1, 1]); // Create module; module symbol domain.
+        count(&mut expected, 1);
+        count(&mut expected, 11);
+        expected.extend_from_slice(b"application");
+        expected.extend_from_slice(&[2, 2]); // Create function; declaration symbol domain.
+        count(&mut expected, 1);
+        expected.extend_from_slice(&[3, 1]); // Symbol module selector; module domain.
+        count(&mut expected, 1);
+        count(&mut expected, 8);
+        expected.extend_from_slice(b"identity");
+        expected.push(3); // Public.
+        count(&mut expected, 0); // Type parameters.
+        count(&mut expected, 1); // Function parameters.
+        expected.push(7); // Function parameter symbol domain.
+        count(&mut expected, 1);
+        count(&mut expected, 5);
+        expected.extend_from_slice(b"value");
+        expected.extend_from_slice(&[5, 1, 0, 5, 1]); // Text; unrestricted; no resource; Text result; Value.
+        count(&mut expected, 0); // Scope formals.
+        count(&mut expected, 0); // Scope sources.
+        expected.extend_from_slice(&[1, 1, 12]); // Pure; body symbol present; expression domain.
+        count(&mut expected, 1);
+        expected.extend_from_slice(&[6, 6, 7]); // Local; symbolic local; function parameter domain.
+        count(&mut expected, 1);
+        assert_eq!(first, expected);
+        // Frozen codec14 bytes retain the predecessor identity as content-only evidence;
+        // no current intent is patched or represented as historical encoder output.
+        let mut historical = b"LKJACR14".to_vec();
+        historical.extend_from_slice(&[9; 32]);
+        count(&mut historical, 0); // Preconditions.
+        count(&mut historical, 2); // Operations.
+        historical.extend_from_slice(&[1, 1]); // Module creation and symbol domain.
+        count(&mut historical, 1);
+        count(&mut historical, 11);
+        historical.extend_from_slice(b"application");
+        historical.extend_from_slice(&[2, 2]); // Function creation and declaration domain.
+        count(&mut historical, 1);
+        historical.extend_from_slice(&[3, 1]); // Symbolic module reference.
+        count(&mut historical, 1);
+        count(&mut historical, 8);
+        historical.extend_from_slice(b"identity");
+        historical.push(3); // Public.
+        count(&mut historical, 0); // Type parameters.
+        count(&mut historical, 1); // Value parameters.
+        historical.push(7); // Parameter symbol domain.
+        count(&mut historical, 1);
+        count(&mut historical, 5);
+        historical.extend_from_slice(b"value");
+        historical.extend_from_slice(&[5, 1, 0, 5]); // Text parameter, unrestricted, no resource, Text result.
+        historical.extend_from_slice(&[1, 1, 12]); // Pure, body symbol, expression domain.
+        count(&mut historical, 1);
+        historical.extend_from_slice(&[6, 6, 7]); // Local expression, symbol reference, parameter domain.
+        count(&mut historical, 1);
         assert_eq!(
-            crate::platform::semantic_id::encode_hex(blake3::hash(&first).as_bytes()),
+            crate::platform::semantic_id::encode_hex(blake3::hash(&historical).as_bytes()),
             "073725ec7d23ee566d493e9dceb01fb850964bf2f381e9a21552f12de778a5cf"
         );
     }
@@ -2908,11 +3013,11 @@ mod tests {
         let AuthoredChange::CreateFunction { result, .. } = &mut type_request.changes[1] else {
             panic!("fixture function")
         };
-        *result = AuthoredType::OwnedSequence {
+        result.ty = AuthoredType::OwnedSequence {
             item: Box::new(AuthoredType::OwnedI64Cell {}),
         };
         let encoded = canonical_authored_intent_bytes(&type_request).unwrap();
-        assert_eq!(&encoded[..8], b"LKJACR29");
+        assert_eq!(&encoded[..8], b"LKJACR39");
 
         let scalar = |value| {
             Box::new(AuthoredExpression {
@@ -2920,7 +3025,7 @@ mod tests {
                 operation: AuthoredExpressionOperation::I64 { value },
             })
         };
-        // Scalar type metadata deliberately isolates the operation's generation switch;
+        // Scalar type metadata deliberately isolates the operation's commitment;
         // semantic admission independently rejects this invalid sequence annotation.
         let operations = [
             AuthoredExpressionOperation::SequenceEmpty {
@@ -2959,7 +3064,7 @@ mod tests {
             };
             body.operation = operation;
             let encoded = canonical_authored_intent_bytes(&request).unwrap();
-            assert_eq!(&encoded[..8], b"LKJACR29");
+            assert_eq!(&encoded[..8], b"LKJACR39");
             assert!(encodings.insert(encoded));
         }
     }
@@ -3019,10 +3124,10 @@ mod tests {
             };
             body.operation = operation;
             let bytes = canonical_authored_intent_bytes(&request).unwrap();
-            assert_eq!(&bytes[..8], b"LKJACR35");
+            assert_eq!(&bytes[..8], b"LKJACR39");
             bytes
         };
-        // Invalid scalar annotations isolate the operation's generation selection.
+        // Invalid scalar annotations isolate the operation's commitment.
         let get = |index, source| AuthoredExpressionOperation::SequenceGet {
             sequence_type: AuthoredType::I64 {},
             source: scalar(source),
@@ -3078,8 +3183,9 @@ mod tests {
                         id: crate::platform::semantic_id::MethodId::migrate(b"mixed-codec", 0),
                         name: Name::new("seven").unwrap(),
                         parameters: vec![],
-                        result: AuthoredType::I64 {},
-                        result_borrow: None,
+                        result: AuthoredCallableResult::value(AuthoredType::I64 {}),
+                        read_scope_parameters: vec![],
+                        read_scope_sources: vec![],
                         effect: AuthoredFunctionEffect::Pure {},
                     }],
                 },
@@ -3110,9 +3216,9 @@ mod tests {
         let capture =
             canonical_authored_intent_bytes(&request(C::CaptureSafeTransferable)).unwrap();
         let owned = canonical_authored_intent_bytes(&request(C::Owned)).unwrap();
-        assert_eq!(&ordinary[..8], b"LKJACR37");
-        assert_eq!(&capture[..8], b"LKJACR37");
-        assert_eq!(&owned[..8], b"LKJACR30");
+        assert_eq!(&ordinary[..8], b"LKJACR39");
+        assert_eq!(&capture[..8], b"LKJACR39");
+        assert_eq!(&owned[..8], b"LKJACR39");
         assert_ne!(ordinary, capture);
     }
 
@@ -3324,7 +3430,7 @@ mod tests {
         let AuthoredChange::CreateFunction { result, .. } = &mut deep.changes[1] else {
             panic!("fixture function")
         };
-        *result = ty;
+        result.ty = ty;
         assert_eq!(
             canonical_authored_intent_bytes(&deep).unwrap_err().code,
             "change_authored_type_depth"

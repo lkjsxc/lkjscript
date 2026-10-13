@@ -117,7 +117,7 @@ fn prepared_type_lookup_matches_scan_for_nested_composites_and_distinct_scopes()
         ("other-scope", TypeForm::I64, TypeForm::Bool),
     ] {
         let function = functions[name];
-        let template = program.functions[function.0 as usize].result;
+        let template = program.functions[function.0 as usize].result.ty;
         let context = bindings(&program, function, data.clone(), tag);
         let hit = program
             .prepared_type_lookup
@@ -153,7 +153,7 @@ fn prepared_type_lookup_matches_scan_for_nested_composites_and_distinct_scopes()
 fn prepared_type_lookup_full_context_includes_unused_bindings_without_cross_scope_reuse() {
     let (program, functions) = fixture();
     let function = functions["carry"];
-    let template = program.functions[function.0 as usize].result;
+    let template = program.functions[function.0 as usize].result.ty;
     let original = bindings(&program, function, TypeForm::I64, TypeForm::Bool);
     assert!(
         program
@@ -224,7 +224,7 @@ fn prepared_type_lookup_full_context_includes_unused_bindings_without_cross_scop
 fn prepared_type_lookup_rejects_foreign_origin_and_divergent_template_or_result_shapes() {
     let (base, functions) = fixture();
     let function = functions["carry"];
-    let template = base.functions[function.0 as usize].result;
+    let template = base.functions[function.0 as usize].result.ty;
     let context = bindings(&base, function, TypeForm::I64, TypeForm::Bool);
     let result = base
         .prepared_type_lookup
@@ -257,7 +257,7 @@ fn prepared_type_lookup_rejects_foreign_origin_and_divergent_template_or_result_
 fn prepared_type_lookup_resolution_work_is_independent_of_unrelated_type_universe() {
     let (mut program, functions) = fixture();
     let function = functions["carry"];
-    let template = program.functions[function.0 as usize].result;
+    let template = program.functions[function.0 as usize].result.ty;
     let context = bindings(&program, function, TypeForm::I64, TypeForm::Bool);
     let control = ExecutionControl::uncancelled();
     let mut before = Work {
@@ -310,7 +310,7 @@ fn prepared_type_lookup_resolution_work_is_independent_of_unrelated_type_univers
 fn prepared_type_lookup_hits_remain_cancellable_and_leave_subsequent_resolution_healthy() {
     let (program, functions) = fixture();
     let function = functions["carry"];
-    let template = program.functions[function.0 as usize].result;
+    let template = program.functions[function.0 as usize].result.ty;
     let context = bindings(&program, function, TypeForm::I64, TypeForm::Bool);
     let healthy = ExecutionControl::uncancelled();
     let expected = resolve(&program, template, &context, &healthy).unwrap();

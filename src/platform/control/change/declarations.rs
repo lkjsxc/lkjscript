@@ -20,6 +20,8 @@ struct Unit {
 pub(super) struct Lowered {
     pub private: BTreeSet<String>,
     edits: BTreeMap<String, OwnerKey>,
+    // Native edit units own a complete ordered signature, including newly authored children.
+    read_view_type_parameters: BTreeMap<String, Vec<AuthoredTypeParameterReference>>,
 }
 
 struct Lowering<'a> {
@@ -227,6 +229,34 @@ pub(super) fn lower(
             }
         }
         lowering.check_contracts(&input.records)?;
+        for unit in lowering
+            .units
+            .iter()
+            .filter(|unit| unit.kind == "read-view" && unit.existing.is_some())
+        {
+            let Some(owner) = unit.existing else { continue };
+            let parent = owner.to_string();
+            let parameters = lowering
+                .units
+                .iter()
+                .filter(|child| child.parent == parent && child.kind == "type-parameter")
+                .map(|child| match child.existing {
+                    Some(OwnerKey::TypeParameter(parameter)) => {
+                        Ok(AuthoredTypeParameterReference::Id { parameter })
+                    }
+                    None => Ok(AuthoredTypeParameterReference::Symbol {
+                        symbol: child.label.clone(),
+                    }),
+                    _ => Err(lowering.error(
+                        child.syntax,
+                        "read view parameter requires its exact type-parameter identity",
+                    )),
+                })
+                .collect::<Result<Vec<_>, Diagnostic>>()?;
+            lowered
+                .read_view_type_parameters
+                .insert(unit.label.clone(), parameters);
+        }
         for (scope, id) in lowering.aliases.values().cloned().collect::<Vec<_>>() {
             lowering.ty(id, &scope, 1)?;
         }
@@ -785,6 +815,55 @@ impl Lowering<'_> {
         let label = self.allocate('@')?;
         let mut fields = vec![("as", label.clone())];
         let operation = match form.as_str() {
+            "read-view-application" => {
+                if args.len() != 3 || self.block.head(args[1]) != Some("types") {
+                    return Err(self.error(
+                        id,
+                        "read-view-application requires declaration, ordered types and scope",
+                    ));
+                }
+                fields.push((
+                    "declaration",
+                    self.reference(args[0], scope, "declaration")?,
+                ));
+                fields.push(("read-scope", self.read_scope(args[2], scope)?));
+                for (index, ty) in self.parts(args[1])?.1.to_vec().into_iter().enumerate() {
+                    let value = self.ty(ty, scope, depth + 1)?;
+                    self.record(
+                        ty,
+                        "type.argument",
+                        vec![
+                            ("parent", label.clone()),
+                            ("index", index.to_string()),
+                            ("type", value),
+                        ],
+                    )?;
+                }
+                "type.read-view-application".into()
+            }
+            "associated-read-view-member" => {
+                if args.len() != 3 {
+                    return Err(self.error(
+                        id,
+                        "associated-read-view-member requires contract, member and scope",
+                    ));
+                }
+                fields.push(("contract", self.reference(args[0], scope, "declaration")?));
+                fields.push(("member", self.block.atom(args[1])?.to_owned()));
+                fields.push(("read-scope", self.read_scope(args[2], scope)?));
+                "type.associated-read-view-member".into()
+            }
+            "associated-read-view-projection" => {
+                if args.len() != 5 {
+                    return Err(self.error(id, "associated-read-view-projection requires callable, witness parameter, contract, member and scope"));
+                }
+                fields.push(("scope", self.reference(args[0], scope, "declaration")?));
+                fields.push(("parameter", self.block.atom(args[1])?.to_owned()));
+                fields.push(("contract", self.reference(args[2], scope, "declaration")?));
+                fields.push(("member", self.block.atom(args[3])?.to_owned()));
+                fields.push(("read-scope", self.read_scope(args[4], scope)?));
+                "type.associated-read-view-projection".into()
+            }
             "associated-contract-member" => {
                 if args.len() != 2 {
                     return Err(self.error(
@@ -950,6 +1029,200 @@ impl Lowering<'_> {
         };
         self.record(id, &operation, fields)?;
         Ok(label)
+    }
+
+    fn scope_parameter_fields(&self, id: usize) -> Result<Vec<(&'static str, String)>, Diagnostic> {
+        let (head, args) = self.parts(id)?;
+        if head != "scope-parameter" || args.len() != 2 {
+            return Err(self.error(id, "scope parameter requires exact ID and name"));
+        }
+        Ok(vec![
+            ("scope-parameter", self.block.atom(args[0])?.to_owned()),
+            ("scope-name", self.block.atom(args[1])?.to_owned()),
+        ])
+    }
+
+    fn read_scope(&mut self, id: usize, scope: &str) -> Result<String, Diagnostic> {
+        if let SyntaxKind::Atom { value, .. } = &self.block.syntax[id].kind {
+            if value.starts_with('%') {
+                return Ok(value.clone());
+            }
+            return Err(self.error(id, "read scope requires an exact scope form or %fragment"));
+        }
+        let (head, args) = self.parts(id)?;
+        let head = head.to_owned();
+        let args = args.to_vec();
+        let label = self.allocate('%')?;
+        let mut fields = vec![("as", label.clone())];
+        let operation = if head == "lexical-read-scope" {
+            if args.len() != 2 {
+                return Err(self.error(
+                    id,
+                    "lexical-read-scope requires callable and lexical binding",
+                ));
+            }
+            fields.push(("callable", self.reference(args[0], scope, "declaration")?));
+            fields.push(("binding", self.block.atom(args[1])?.to_owned()));
+            "read-scope.lexical-actual"
+        } else if head == "read-scope" {
+            if args.len() != 2 {
+                return Err(self.error(
+                    id,
+                    "read-scope requires a qualified binder and exact scope parameter ID",
+                ));
+            }
+            let (kind, binder) = self.parts(args[0])?;
+            let kind = kind.to_owned();
+            let binder = binder.to_vec();
+            if binder.len() != if kind == "declaration" { 1 } else { 2 }
+                || !matches!(
+                    kind.as_str(),
+                    "declaration" | "contract-method" | "associated-member" | "associated-binding"
+                )
+            {
+                return Err(self.error(args[0], "scope binder requires declaration, contract-method, associated-member or associated-binding coordinates"));
+            }
+            fields.push(("binder-kind", kind.clone()));
+            fields.push(("binder", self.reference(binder[0], scope, "declaration")?));
+            if let Some(child) = binder.get(1) {
+                fields.push((
+                    if kind == "contract-method" {
+                        "method"
+                    } else {
+                        "member"
+                    },
+                    self.block.atom(*child)?.to_owned(),
+                ));
+            }
+            fields.push(("parameter", self.block.atom(args[1])?.to_owned()));
+            "read-scope.parameter-actual"
+        } else {
+            return Err(self.error(id, "unknown read scope form"));
+        };
+        self.record(id, operation, fields)?;
+        Ok(label)
+    }
+
+    fn callable_scope_edges(
+        &mut self,
+        parameters: &[usize],
+        sources: &[usize],
+        scope: &str,
+        parent: &str,
+        method: bool,
+    ) -> Result<(), Diagnostic> {
+        for (index, id) in parameters.iter().copied().enumerate() {
+            let (head, args) = self.parts(id)?;
+            if head != "scope-parameter" || args.len() != 2 {
+                return Err(self.error(id, "scope parameter requires ID and name"));
+            }
+            let fields = vec![
+                ("parent", parent.to_owned()),
+                ("index", index.to_string()),
+                ("id", self.block.atom(args[0])?.to_owned()),
+                ("name", self.block.atom(args[1])?.to_owned()),
+            ];
+            self.record(id, "read-scope.parameter", fields)?;
+        }
+        for (index, id) in sources.iter().copied().enumerate() {
+            let (head, args) = self.parts(id)?;
+            let args = args.to_vec();
+            if head != "scope-source" || args.len() != 2 {
+                return Err(self.error(id, "scope source requires parameter and scope"));
+            }
+            let source = if method {
+                self.block.atom(args[0])?.to_owned()
+            } else {
+                self.reference(args[0], scope, "parameter")?
+            };
+            let read_scope = self.read_scope(args[1], scope)?;
+            self.record(
+                id,
+                "read-scope.source",
+                vec![
+                    ("parent", parent.to_owned()),
+                    ("index", index.to_string()),
+                    ("source", source),
+                    ("scope", read_scope),
+                ],
+            )?;
+        }
+        Ok(())
+    }
+
+    fn result_fields(
+        &mut self,
+        returns: usize,
+        scope: &str,
+        method: bool,
+    ) -> Result<Vec<(&'static str, String)>, Diagnostic> {
+        let (_, args) = self.parts(returns)?;
+        let args = args.to_vec();
+        if !(1..=2).contains(&args.len()) {
+            return Err(self.error(returns, "returns requires type and one result relation"));
+        }
+        let mut fields = vec![("result", self.ty(args[0], scope, 1)?)];
+        let Some(relation) = args.get(1).copied() else {
+            fields.push(("result-kind", "value".into()));
+            return Ok(fields);
+        };
+        let (kind, values) = self.parts(relation)?;
+        let kind = if kind == "borrow-from" {
+            "read-from".to_owned()
+        } else {
+            kind.to_owned()
+        };
+        let values = values.to_vec();
+        let expected = match kind.as_str() {
+            "value" => 0,
+            "read-from" => 1,
+            "view-from" => 2,
+            _ => {
+                return Err(self.error(
+                    relation,
+                    "result relation must be value, read-from or view-from",
+                ));
+            }
+        };
+        if values.len() != expected {
+            return Err(self.error(relation, "result relation has incorrect coordinates"));
+        }
+        fields.push(("result-kind", kind));
+        if let Some(source) = values.first() {
+            fields.push((
+                "result-source",
+                if method {
+                    self.block.atom(*source)?.to_owned()
+                } else {
+                    self.reference(*source, scope, "parameter")?
+                },
+            ));
+        }
+        if let Some(read_scope) = values.get(1) {
+            fields.push(("result-scope", self.read_scope(*read_scope, scope)?));
+        }
+        Ok(fields)
+    }
+
+    fn scope_arguments(
+        &mut self,
+        clause: usize,
+        scope: &str,
+        parent: &str,
+    ) -> Result<(), Diagnostic> {
+        for (index, id) in self.parts(clause)?.1.to_vec().into_iter().enumerate() {
+            let read_scope = self.read_scope(id, scope)?;
+            self.record(
+                id,
+                "scope.argument",
+                vec![
+                    ("parent", parent.to_owned()),
+                    ("index", index.to_string()),
+                    ("scope", read_scope),
+                ],
+            )?;
+        }
+        Ok(())
     }
 
     fn row(&mut self, id: usize, scope: &str) -> Result<String, Diagnostic> {
@@ -1146,6 +1419,28 @@ impl Lowering<'_> {
         }
         Ok(())
     }
+    fn body_scope(&mut self, block: &mut Block, id: usize, scope: &str) -> Result<(), Diagnostic> {
+        if self.block.head(id) == Some("lexical-read-scope") {
+            let (_, args) = self.parts(id)?;
+            let args = args.to_vec();
+            if args.len() != 2 {
+                return Err(self.error(id, "lexical-read-scope requires callable and binding"));
+            }
+            let value = self.reference(args[0], scope, "declaration")?;
+            block.syntax[args[0]].kind = SyntaxKind::Atom {
+                value,
+                quoted: false,
+            };
+        } else {
+            let value = self.read_scope(id, scope)?;
+            block.syntax[id].kind = SyntaxKind::Atom {
+                value,
+                quoted: false,
+            };
+        }
+        Ok(())
+    }
+
     fn body(&mut self, id: usize, scope: &str) -> Result<String, Diagnostic> {
         let label = self.allocate('$')?;
         let mut block = self.block.clone();
@@ -1182,6 +1477,8 @@ impl Lowering<'_> {
                     reference(0, "declaration")?
                 }
                 "method-call" => reference(1, "declaration")?,
+                "view-create" => reference(0, "declaration")?,
+                "view-data-field" | "borrow-view-field" => reference(1, "declaration")?,
                 "variant" => reference(0, "case")?,
                 "capability-call" => {
                     reference(0, "requirement")?;
@@ -1200,7 +1497,18 @@ impl Lowering<'_> {
                     quoted: false,
                 };
             }
+            if form == "view-reborrow" {
+                if let Some(id) = args.get(1) {
+                    self.body_scope(&mut block, *id, scope)?;
+                }
+            }
             match form.as_str() {
+                "scopes" | "scope" => {
+                    for arg in &args {
+                        self.body_scope(&mut block, *arg, scope)?;
+                    }
+                    continue;
+                }
                 "pack-owned" | "unpack-owned" | "borrow-owned-field" => {
                     if let Some(annotation) = args.first().copied() {
                         let type_node = self.one(annotation)?;
@@ -1447,6 +1755,54 @@ impl Lowering<'_> {
             "module" | "record" | "owned-record" | "variant" | "interface" | "component" => {
                 format!("create.{kind}")
             }
+            "read-view" => {
+                let formal = self.required_clause(unit, "scope-parameter")?;
+                fields.extend(self.scope_parameter_fields(formal)?);
+                allowed.extend(["scope-parameter", "view-field"]);
+                for (index, field) in unit
+                    .clauses
+                    .iter()
+                    .copied()
+                    .filter(|id| self.block.head(*id) == Some("view-field"))
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .enumerate()
+                {
+                    let (_, args) = self.parts(field)?;
+                    let args = args.to_vec();
+                    if args.len() != 4 || self.block.head(args[2]) != Some("type") {
+                        return Err(self.error(
+                            field,
+                            "view field requires exact ID, name, type and field kind",
+                        ));
+                    }
+                    let mut values = vec![
+                        ("parent", unit.label.clone()),
+                        ("index", index.to_string()),
+                        ("id", self.block.atom(args[0])?.to_owned()),
+                        ("name", self.block.atom(args[1])?.to_owned()),
+                        ("type", self.ty(self.one(args[2])?, &scope, 1)?),
+                    ];
+                    let (kind, scope_args) = self.parts(args[3])?;
+                    let kind = kind.to_owned();
+                    let scope_args = scope_args.to_vec();
+                    match kind.as_str() {
+                        "ordinary" if scope_args.is_empty() => {
+                            values.push(("kind", "ordinary".into()))
+                        }
+                        "read-reference" if scope_args.len() == 1 => {
+                            values.push(("kind", "read-reference".into()));
+                            values.push(("read-scope", self.read_scope(scope_args[0], &scope)?));
+                        }
+                        _ => return Err(self.error(
+                            args[3],
+                            "view field kind requires ordinary or read-reference with exact scope",
+                        )),
+                    }
+                    self.record(field, "read-view.field", values)?;
+                }
+                "create.read-view".into()
+            }
             "owned-contract" | "owned-implementation" => {
                 allowed.extend(["self", "method", "associated-type"]);
                 let self_type = self.one(self.required_clause(unit, "self")?)?;
@@ -1562,18 +1918,21 @@ impl Lowering<'_> {
                                 "associated member requires exact ID, name and (bound owned)",
                             ));
                         }
-                        let (bound, values) = self.parts(args[2])?;
-                        if bound != "bound"
-                            || values.len() != 1
-                            || self.block.atom(values[0])? != "owned"
-                        {
-                            return Err(
-                                self.error(args[2], "associated member requires (bound owned)")
-                            );
-                        }
                         fields.push(("id", self.block.atom(args[0])?.to_owned()));
                         fields.push(("name", self.block.atom(args[1])?.to_owned()));
-                        fields.push(("bound", "owned".into()));
+                        let (bound, values) = self.parts(args[2])?;
+                        let values = values.to_vec();
+                        if bound == "bound"
+                            && values.len() == 1
+                            && self.block.atom(values[0])? == "owned"
+                        {
+                            fields.push(("kind", "owned".into()));
+                        } else if bound == "read-view-family" && values.len() == 1 {
+                            fields.push(("kind", "read-view-family".into()));
+                            fields.extend(self.scope_parameter_fields(values[0])?);
+                        } else {
+                            return Err(self.error(args[2], "associated member requires (bound owned) or one read-view-family scope formal"));
+                        }
                         "owned.associated-member"
                     } else {
                         if args.len() != 2 {
@@ -1583,7 +1942,19 @@ impl Lowering<'_> {
                             ));
                         }
                         fields.push(("member", self.block.atom(args[0])?.to_owned()));
-                        fields.push(("type", self.ty(args[1], &scope, 1)?));
+                        if self.block.head(args[1]) == Some("read-view-family") {
+                            let (_, values) = self.parts(args[1])?;
+                            let values = values.to_vec();
+                            if values.len() != 2 {
+                                return Err(self.error(args[1], "associated family binding requires one scope parameter and type"));
+                            }
+                            fields.push(("kind", "read-view-family".into()));
+                            fields.extend(self.scope_parameter_fields(values[0])?);
+                            fields.push(("type", self.ty(values[1], &scope, 1)?));
+                        } else {
+                            fields.push(("kind", "owned".into()));
+                            fields.push(("type", self.ty(args[1], &scope, 1)?));
+                        }
                         "owned.associated-binding"
                     };
                     self.record(*clause, operation, fields)?;
@@ -1600,7 +1971,7 @@ impl Lowering<'_> {
                     let (_, args) = self.parts(*clause)?;
                     let args = args.to_vec();
                     if kind == "owned-implementation" {
-                        if !(2..=4).contains(&args.len()) {
+                        if !(2..=5).contains(&args.len()) {
                             return Err(self.error(
                                 *clause,
                                 "method mapping requires exact method ID, function and optional types/implementations clauses",
@@ -1620,6 +1991,7 @@ impl Lowering<'_> {
                                 let next = match self.block.head(*clause) {
                                     Some("types") => 1,
                                     Some("implementations") => 2,
+                                    Some("scopes") => 3,
                                     _ => return Err(self.error(*clause, "method mapping accepts only types and implementations clauses")),
                                 };
                                 if next <= rank {
@@ -1628,76 +2000,76 @@ impl Lowering<'_> {
                                 rank = next;
                                 if next == 1 {
                                     self.owned_type_arguments(*clause, &scope, &label)?;
-                                } else {
+                                } else if next == 2 {
                                     self.implementation_arguments(*clause, &scope, &label, 1)?;
+                                } else {
+                                    self.scope_arguments(*clause, &scope, &label)?;
                                 }
                             }
                             fields.push(("as", label));
                         }
                         self.record(*clause, "owned.mapping", fields)?;
                     } else {
-                        if !(4..=5).contains(&args.len()) {
-                            return Err(self.error(
-                                *clause,
-                                "method requires ID, name, parameters, returns and optional effect",
-                            ));
+                        if !(4..=7).contains(&args.len()) {
+                            return Err(self.error(*clause, "method requires ID, name, parameters, returns and ordered optional effect/scope-parameters/scope-sources"));
                         }
-                        let label = self.allocate('$')?;
+                        let label = self.allocate('%')?;
                         let (parameter_clause, parameters) = self.parts(args[2])?;
-                        if parameter_clause != "parameters" {
-                            return Err(self.error(args[2], "method requires parameters"));
+                        if parameter_clause != "parameters"
+                            || self.block.head(args[3]) != Some("returns")
+                        {
+                            return Err(
+                                self.error(*clause, "method requires parameters then returns")
+                            );
                         }
                         let parameters = parameters.to_vec();
-                        let (result_clause, results) = self.parts(args[3])?;
-                        let result_clause = result_clause.to_owned();
-                        let results = results.to_vec();
-                        if result_clause != "returns" || !(1..=2).contains(&results.len()) {
-                            return Err(self.error(args[3], "method requires one result"));
-                        }
-                        let result = self.ty(results[0], &scope, 1)?;
-                        let result_borrow = if let Some(source) = results.get(1) {
-                            let source = self.one(*source)?;
-                            if self.block.head(results[1]) != Some("borrow-from") {
-                                return Err(
-                                    self.error(results[1], "borrowed result requires borrow-from")
-                                );
-                            }
-                            let position: u32 = self.block.atom(source)?.parse().map_err(|_| {
-                                self.error(
-                                    source,
-                                    "method borrow-from requires a zero-based parameter position",
-                                )
-                            })?;
-                            Some(position.to_string())
-                        } else {
-                            None
-                        };
-                        let effect = if let Some(clause) = args.get(4) {
-                            if self.block.head(*clause) != Some("effect") {
-                                return Err(self.error(*clause, "method requires an effect clause"));
-                            }
-                            let value = self.one(*clause)?;
-                            if self.block.atom(value).ok() == Some("pure") {
-                                "pure"
-                            } else {
-                                self.effect_edges(value, &scope, &label)?;
-                                "task"
-                            }
-                        } else {
-                            "pure"
-                        };
                         let mut method_fields = vec![
                             ("parent", unit.label.clone()),
                             ("index", index.to_string()),
                             ("as", label.clone()),
-                            ("id", self.block.atom(args[0])?.into()),
-                            ("name", self.block.atom(args[1])?.into()),
-                            ("result", result),
-                            ("effect", effect.into()),
+                            ("id", self.block.atom(args[0])?.to_owned()),
+                            ("name", self.block.atom(args[1])?.to_owned()),
                         ];
-                        if let Some(source) = result_borrow {
-                            method_fields.push(("borrow-from", source));
+                        method_fields.extend(self.result_fields(args[3], &scope, true)?);
+                        let mut effect = "pure";
+                        let mut scope_parameters = Vec::new();
+                        let mut scope_sources = Vec::new();
+                        let mut rank = 0;
+                        for optional in &args[4..] {
+                            let next = match self.block.head(*optional) {
+                                Some("effect") => 1,
+                                Some("scope-parameters") => 2,
+                                Some("scope-sources") => 3,
+                                _ => {
+                                    return Err(
+                                        self.error(*optional, "unknown method signature clause")
+                                    );
+                                }
+                            };
+                            if next <= rank {
+                                return Err(self.error(*optional, "method clauses must occur once in effect/scope-parameters/scope-sources order"));
+                            }
+                            rank = next;
+                            if next == 1 {
+                                let value = self.one(*optional)?;
+                                if self.block.atom(value).ok() != Some("pure") {
+                                    self.effect_edges(value, &scope, &label)?;
+                                    effect = "task";
+                                }
+                            } else if next == 2 {
+                                scope_parameters = self.parts(*optional)?.1.to_vec();
+                            } else {
+                                scope_sources = self.parts(*optional)?.1.to_vec();
+                            }
                         }
+                        method_fields.push(("effect", effect.into()));
+                        self.callable_scope_edges(
+                            &scope_parameters,
+                            &scope_sources,
+                            &scope,
+                            &label,
+                            true,
+                        )?;
                         self.record(*clause, "owned.method", method_fields)?;
                         for (index, parameter) in parameters.into_iter().enumerate() {
                             let parts = self.block.list(parameter)?.to_vec();
@@ -1753,23 +2125,24 @@ impl Lowering<'_> {
                     self.implementation_parameters(unit, &scope, &label)?;
                 }
                 let returns = self.required_clause(unit, "returns")?;
-                let (_, values) = self.parts(returns)?;
-                let values = values.to_vec();
-                if !(1..=2).contains(&values.len()) {
-                    return Err(
-                        self.error(returns, "returns requires a type and optional borrow-from")
-                    );
-                }
-                fields.push(("result", self.ty(values[0], &scope, 1)?));
-                if let Some(source) = values.get(1) {
-                    if kind != "function" || self.block.head(*source) != Some("borrow-from") {
-                        return Err(
-                            self.error(*source, "borrow-from is supported only on functions")
-                        );
-                    }
-                    let source = self.one(*source)?;
-                    let reference = self.reference(source, &scope, "parameter")?;
-                    fields.push(("borrow-from", reference));
+                if kind == "function" {
+                    fields.extend(self.result_fields(returns, &scope, false)?);
+                    let parameters = unit
+                        .clauses
+                        .iter()
+                        .copied()
+                        .filter(|id| self.block.head(*id) == Some("scope-parameter"))
+                        .collect::<Vec<_>>();
+                    let sources = unit
+                        .clauses
+                        .iter()
+                        .copied()
+                        .filter(|id| self.block.head(*id) == Some("scope-source"))
+                        .collect::<Vec<_>>();
+                    self.callable_scope_edges(&parameters, &sources, &scope, &unit.label, false)?;
+                    allowed.extend(["scope-parameter", "scope-source"]);
+                } else {
+                    fields.push(("result", self.ty(self.one(returns)?, &scope, 1)?));
                 }
                 allowed.push("returns");
                 if kind == "external" {
@@ -2194,6 +2567,12 @@ pub(super) fn contract_children(record: &crate::platform::kernel::OwnerRecord) -
                 children.extend(type_parameters.iter().copied().map(OwnerKey::TypeParameter));
                 children.extend(fields.iter().copied().map(OwnerKey::Field));
             }
+            D::ReadView(view) => children.extend(
+                view.type_parameters
+                    .iter()
+                    .copied()
+                    .map(OwnerKey::TypeParameter),
+            ),
             D::Variant {
                 type_parameters,
                 cases,
@@ -2258,6 +2637,7 @@ pub(super) fn owner_family(record: &crate::platform::kernel::OwnerRecord) -> &'s
             D::OwnedImplementation(_) => "owned-implementation",
             D::Record { .. } => "record",
             D::OwnedRecord { .. } => "owned-record",
+            D::ReadView(_) => "read-view",
             D::Variant { .. } => "variant",
             D::Interface { .. } => "interface",
             D::Function(_) => "function",
@@ -2299,6 +2679,7 @@ pub(super) fn finish(
             | AuthoredChange::CreateModule { symbol, .. }
             | AuthoredChange::CreateRecord { symbol, .. }
             | AuthoredChange::CreateOwnedRecord { symbol, .. }
+            | AuthoredChange::CreateReadView { symbol, .. }
             | AuthoredChange::CreateVariant { symbol, .. }
             | AuthoredChange::CreateInterface { symbol, .. }
             | AuthoredChange::CreateExternal { symbol, .. }
@@ -2379,6 +2760,41 @@ pub(super) fn finish(
                     associated_types,
                 });
             }
+            AuthoredChange::CreateReadView {
+                symbol,
+                visibility,
+                scope_parameter,
+                fields,
+                ..
+            } => {
+                let declaration =
+                    declaration.ok_or_else(|| canonical::error("expected read view identity"))?;
+                let crate::platform::kernel::OwnerRecord::Declaration(old) = reader.owner(owner)?
+                else {
+                    return Err(canonical::error("expected read view owner"));
+                };
+                let crate::platform::kernel::DeclarationPayload::ReadView(_) = old.payload else {
+                    return Err(canonical::error("expected read view payload"));
+                };
+                changes.push(AuthoredChange::SetDeclarationVisibility {
+                    declaration: declaration.clone(),
+                    visibility,
+                });
+                changes.push(AuthoredChange::SetReadView {
+                    declaration,
+                    type_parameters: lowered
+                        .read_view_type_parameters
+                        .get(&symbol)
+                        .cloned()
+                        .ok_or_else(|| {
+                            canonical::error(
+                                "complete read view edit parameter inventory is missing",
+                            )
+                        })?,
+                    scope_parameter,
+                    fields,
+                });
+            }
             AuthoredChange::CreateModule { name, .. }
             | AuthoredChange::AddEffectParameter {
                 parameter: AuthoredEffectParameter { name, .. },
@@ -2398,7 +2814,8 @@ pub(super) fn finish(
             AuthoredChange::CreateFunction {
                 visibility,
                 result,
-                result_borrow,
+                read_scope_parameters,
+                read_scope_sources,
                 effect,
                 body,
                 ..
@@ -2412,7 +2829,8 @@ pub(super) fn finish(
                 changes.push(AuthoredChange::SetFunctionContract {
                     function: function.clone(),
                     result,
-                    result_borrow,
+                    read_scope_parameters,
+                    read_scope_sources,
                     effect,
                 });
                 let crate::platform::kernel::OwnerRecord::Declaration(old) = reader.owner(owner)?
@@ -2712,6 +3130,7 @@ fn namespace(kind: &str) -> Option<&'static str> {
         | "owned-implementation"
         | "record"
         | "owned-record"
+        | "read-view"
         | "variant"
         | "interface"
         | "external"
@@ -2739,6 +3158,7 @@ fn child_allowed(parent: &str, child: &str) -> bool {
         "module" => namespace(child) == Some("declaration"),
         "record" | "owned-record" => matches!(child, "field" | "type-parameter"),
         "variant" => matches!(child, "case" | "type-parameter"),
+        "read-view" => child == "type-parameter",
         "owned-contract" | "owned-implementation" => child == "type-parameter",
         "interface" => child == "operation",
         "function" => matches!(

@@ -1,5 +1,5 @@
 //! Structural affine products. Ordinary metadata uses the existing closed-data proof.
-use super::owned_associated::{OwnedAssociatedAdmission, OwnedTypeOccurrence};
+use super::owned_associated::{OwnedAssociatedAdmission, OwnedTypeOccurrence, read_view_admission};
 use super::*;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::DeclarationId;
@@ -68,7 +68,12 @@ pub(crate) fn require_generation(
         let object = read
             .type_object(ty)?
             .ok_or_else(|| reject("missing graph-bound type"))?;
-        if generation < contract::GRAPH_CONTRACT_VERSION && object.form.is_associated() {
+        if object.form.is_read_view() {
+            read_view_admission::require_generation(generation)?;
+        }
+        if generation < contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+            && object.form.is_owned_associated()
+        {
             return Err(Diagnostic::new(
                 DiagnosticClass::Semantic,
                 "kernel_owned_associated_generation",
@@ -160,6 +165,9 @@ pub(crate) fn validate_in_scope(
     };
     let reject = |message| Diagnostic::new(DiagnosticClass::Semantic, code, message);
     validate_composite_depth(read, ty, code)?;
+    if read_view_admission::contains(read, ty, &OwnedAssociatedAdmission::new())? {
+        return Err(reject("owned composites cannot contain read views"));
+    }
     let mut pending = vec![(ty, 0)];
     let mut seen = BTreeSet::new();
     while let Some((ty, depth)) = pending.pop() {
@@ -264,6 +272,9 @@ pub(crate) fn validate_at(
     let reject = |message| Diagnostic::new(DiagnosticClass::Semantic, code, message);
     validate_composite_depth(read, ty, code)?;
     associated.validate_occurrence_at(read, &[ty], occurrence)?;
+    if read_view_admission::contains(read, ty, associated)? {
+        return Err(reject("owned composites cannot contain read views"));
+    }
     associated.reserve::<TypeObjectDigest>(1)?;
     require_generation(read, vec![ty], occurrence.consumer_generation)?;
     let assumptions = super::transfer::ordinary_assumptions_at(read, occurrence.parameters)?;

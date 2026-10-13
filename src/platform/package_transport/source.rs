@@ -355,6 +355,8 @@ impl PackageContainer {
                     )
                 && object.get(..8)
                     != Some(crate::platform::kernel::contract::OWNED_RECORD_OWNER_MAGIC.as_slice())
+                && object.get(..8)
+                    != Some(crate::platform::kernel::contract::MIXED_STORAGE_OWNER_MAGIC.as_slice())
             {
                 return Err(package_error(
                     DiagnosticClass::Source,
@@ -736,6 +738,7 @@ pub(crate) fn collect_with_budget_and_control<S: ImmutableObjectStore + ?Sized>(
         maximum_read_bytes,
         control,
         None,
+        None,
     )
     .map_err(|error| source_context(root, error))
 }
@@ -783,6 +786,7 @@ pub(crate) fn collect_preplanned_with_budget_and_control<S: ImmutableObjectStore
         maximum_read_bytes,
         control,
         Some(&prior.logical),
+        None,
     )
     .map_err(|error| source_context(root, error))
 }
@@ -796,6 +800,7 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
     maximum_read_bytes: u64,
     control: &ExecutionControl,
     prior: Option<&super::PackageRevisionClosureValidation>,
+    mut reuse: Option<&mut SourceValidationReuse>,
 ) -> Result<AdmittedClosure, Diagnostic> {
     control.check().map_err(execution_diagnostic)?;
     if maximum_visits > MAXIMUM_VALIDATION_VISITS
@@ -876,6 +881,17 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
         transports.insert(binding.package_revision, transport);
     }
     let mut packages = BTreeMap::new();
+    let mut pending_validations = Vec::new();
+    let mut pending_validation_bytes = 0_u64;
+    let mut exact_selections = BTreeMap::new();
+    if reuse.is_some() {
+        let lookup = validation_reuse::selection_lookup_work(selections.len());
+        store.charge_visits(selections.len() as u64 * (lookup + 1))?;
+        for selection in selections {
+            control.check().map_err(execution_diagnostic)?;
+            exact_selections.insert(selection.package_revision, selection.transport);
+        }
+    }
     let mut shared_interfaces = SharedDependencyInterfaces::new(&interfaces, &store);
     // Every canonical read charges a decoding/validation visit, including repeated interface
     // validation and map traversal. Full type/expression/relation work shares the same remainder.
@@ -892,6 +908,16 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
             .checked_add(snapshot.types.len())
             .ok_or_else(|| limit("validation visits"))? as u64;
         store.charge_visits(projection_visits)?;
+        // Current interface evidence cannot stand in for the exact authored source profile.
+        // Inspect every canonical owner/type, including private, unused and untaken content,
+        // before the independent full witness is rebuilt from those bytes.
+        store.charge_visits(projection_visits)?;
+        admit_read_view_source_profile(
+            &snapshot,
+            &revisions[&binding.package_revision],
+            control,
+            &mut |count| store.charge_visits(count),
+        )?;
         let mut intrinsic_work = 0;
         for record in snapshot.owners.values() {
             if let OwnerRecord::Declaration(DeclarationRecord {
@@ -908,13 +934,67 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
             }
         }
         store.charge_visits(intrinsic_work as u64)?;
-        let remaining = usize::try_from(maximum_visits - store.visits())
-            .map_err(|_| limit("validation visits"))?;
         #[cfg(test)]
         tests::before_source_full_validation(control);
-        let witness = rebuild_full_witness_checked(&snapshot, remaining, &|| {
-            control.check().map_err(execution_diagnostic)
-        })
+        // Fresh canonical reconstruction, exact interface attachment, profile and intrinsic
+        // checks precede every hit. Reuse covers only a complete local full-validator verdict.
+        let mut completed_validation = None;
+        let (witness, current_full_validation_work) = if let Some(cache) = reuse.as_deref() {
+            let key = SourceValidationBinding::from_current_source(
+                *binding,
+                transports[&binding.package_revision].semantic_root,
+                &snapshot,
+                &exact_selections,
+                &store,
+                control,
+            )?;
+            if let Some(proof) = cache.lookup(&key, &store, control)? {
+                cache.reserve_reconstruction(proof, &store, control)?;
+                crate::platform::witness::rebuild_full_witness_from_source_validation(
+                    &snapshot,
+                    &key,
+                    proof,
+                    &|| control.check().map_err(execution_diagnostic),
+                )
+                .map(|witness| (witness, 0))
+            } else if cache.can_retain(&key, pending_validation_bytes) {
+                cache.reserve_pending(&store, control)?;
+                let remaining = usize::try_from(maximum_visits - store.visits())
+                    .map_err(|_| limit("validation visits"))?;
+                crate::platform::witness::rebuild_full_witness_checked_for_source(
+                    &snapshot,
+                    remaining,
+                    &|| control.check().map_err(execution_diagnostic),
+                    key,
+                )
+                .map(|(witness, proof)| {
+                    let work = witness.report.full_validation.work_consumed;
+                    completed_validation = Some(proof);
+                    (witness, work)
+                })
+            } else {
+                // Optional metadata capacity cannot grant a larger validation allowance.
+                let remaining = usize::try_from(maximum_visits - store.visits())
+                    .map_err(|_| limit("validation visits"))?;
+                rebuild_full_witness_checked(&snapshot, remaining, &|| {
+                    control.check().map_err(execution_diagnostic)
+                })
+                .map(|witness| {
+                    let work = witness.report.full_validation.work_consumed;
+                    (witness, work)
+                })
+            }
+        } else {
+            let remaining = usize::try_from(maximum_visits - store.visits())
+                .map_err(|_| limit("validation visits"))?;
+            rebuild_full_witness_checked(&snapshot, remaining, &|| {
+                control.check().map_err(execution_diagnostic)
+            })
+            .map(|witness| {
+                let work = witness.report.full_validation.work_consumed;
+                (witness, work)
+            })
+        }
         .map_err(|errors| {
             let first = errors.into_iter().next().unwrap_or_else(|| {
                 corrupt("package_source_validation", "full source validation failed")
@@ -928,7 +1008,9 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
                 ),
             )
         })?;
-        store.charge_visits(witness.report.full_validation.work_consumed)?;
+        // The report retains the original complete proof's historical work count. Only
+        // validation actually executed in this collector consumes its current remainder.
+        store.charge_visits(current_full_validation_work)?;
         let (interface_owners, interface_types) = project(&snapshot, &witness)?;
         let rebuilt = build_package_interface(&interface_owners, &interface_types)?;
         let revision = revisions
@@ -954,6 +1036,10 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
         let transport = transports
             .remove(&binding.package_revision)
             .ok_or_else(|| corrupt("package_source_transport", "source transport disappeared"))?;
+        if let Some(proof) = completed_validation {
+            pending_validation_bytes += proof.source_binding().retained_bytes();
+            pending_validations.push(proof);
+        }
         packages.insert(
             binding.package_revision,
             ImmutablePackage {
@@ -974,6 +1060,8 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
     store.charge_visits(packages.len() as u64)?;
     let source_snapshots = packages.values().map(|p| &p.snapshot).collect::<Vec<_>>();
     let mut composed_work = 0;
+    #[cfg(test)]
+    tests::before_source_composed_validation(control);
     crate::platform::kernel::callable_flow::validate_snapshot_callable_closure(
         &source_snapshots,
         &|| control.check().map_err(execution_diagnostic),
@@ -987,6 +1075,9 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
     let dependency_plan = validated.logical.dependency_plan.evidence().clone();
     let dependency_order = validated.logical.dependency_plan.into_order();
     control.check().map_err(execution_diagnostic)?;
+    if let Some(cache) = reuse.as_deref_mut() {
+        cache.commit(pending_validations, &store, control)?;
+    }
     let validation_visits = store.visits();
     Ok(AdmittedClosure {
         validation_read_bytes: maximum_read_bytes
@@ -1003,6 +1094,11 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
         dependency_edges: validated.dependency_edges,
     })
 }
+
+#[path = "source_validation_reuse.rs"]
+mod validation_reuse;
+use validation_reuse::SourceValidationReuse;
+pub(crate) use validation_reuse::{SourceAdmissionSession, SourceValidationBinding};
 
 #[path = "shared_dependency_interfaces.rs"]
 mod shared_interfaces;
@@ -1180,6 +1276,108 @@ fn reconstruct<S: ImmutableObjectStore + ?Sized>(
     Ok(snapshot)
 }
 
+fn admit_read_view_source_profile(
+    snapshot: &KernelSnapshot,
+    revision: &PackageRevision,
+    control: &ExecutionControl,
+    visit: &mut dyn FnMut(u64) -> Result<(), Diagnostic>,
+) -> Result<(), Diagnostic> {
+    let profile = |owner_version: Option<u16>| -> Result<(), Diagnostic> {
+        if snapshot.root.graph_contract_version != contract::GRAPH_CONTRACT_VERSION
+            || revision.graph_contract_version != contract::GRAPH_CONTRACT_VERSION
+            || revision.revision.graph_contract_version != contract::GRAPH_CONTRACT_VERSION
+            || owner_version.is_some_and(|version| version != contract::GRAPH_CONTRACT_VERSION)
+        {
+            return Err(package_error(
+                DiagnosticClass::Semantic,
+                "package_source_read_view_generation",
+                "read-view source and every consuming canonical owner require the exact current graph profile",
+            ));
+        }
+        Ok(())
+    };
+    for object in snapshot.types.values() {
+        control.check().map_err(execution_diagnostic)?;
+        if matches!(
+            object.form,
+            TypeForm::ReadViewApplied { .. }
+                | TypeForm::AssociatedReadViewMember { .. }
+                | TypeForm::AssociatedReadViewProjection { .. }
+        ) {
+            profile(None)?;
+        }
+    }
+    for owner in snapshot.owners.values() {
+        control.check().map_err(execution_diagnostic)?;
+        if let OwnerRecord::Declaration(declaration) = owner {
+            let count = match &declaration.payload {
+                DeclarationPayload::OwnedContract(contract) => {
+                    contract.associated_types.len() + contract.methods.len()
+                }
+                DeclarationPayload::OwnedImplementation(implementation) => {
+                    implementation.associated_types.len() + implementation.methods.len()
+                }
+                _ => 0,
+            };
+            visit(u64::try_from(count).map_err(|_| limit("source profile visits"))?)?;
+        }
+        let present = match owner {
+            OwnerRecord::Declaration(declaration) => match &declaration.payload {
+                DeclarationPayload::ReadView(_) => true,
+                DeclarationPayload::Function(function) => {
+                    !function.read_scope_parameters.is_empty()
+                        || !function.read_scope_sources.is_empty()
+                        || matches!(function.result.relation, ResultRelation::ViewFrom { .. })
+                }
+                DeclarationPayload::OwnedContract(contract) => {
+                    contract.associated_types.iter().any(|member| {
+                        matches!(member.bound, AssociatedTypeBound::ReadViewFamily { .. })
+                    }) || contract.methods.iter().any(|method| {
+                        !method.read_scope_parameters.is_empty()
+                            || !method.read_scope_sources.is_empty()
+                            || matches!(method.result.relation, ResultRelation::ViewFrom { .. })
+                    })
+                }
+                DeclarationPayload::OwnedImplementation(implementation) => {
+                    implementation.associated_types.iter().any(|binding| {
+                        matches!(
+                            binding.value,
+                            AssociatedTypeBindingValue::ReadViewFamily { .. }
+                        )
+                    }) || implementation
+                        .methods
+                        .iter()
+                        .any(|method| !method.read_scope_arguments.is_empty())
+                }
+                _ => false,
+            },
+            OwnerRecord::Expression(expression) => {
+                expression.operation.is_read_view_operation()
+                    || !expression.operation.read_scope_arguments().is_empty()
+            }
+            OwnerRecord::Binding(binding) => matches!(
+                binding.kind,
+                BindingKind::ReadView | BindingKind::ReadViewBorrow
+            ),
+            OwnerRecord::Parameter(parameter) => {
+                snapshot.types.get(&parameter.ty).is_some_and(|object| {
+                    matches!(
+                        object.form,
+                        TypeForm::ReadViewApplied { .. }
+                            | TypeForm::AssociatedReadViewMember { .. }
+                            | TypeForm::AssociatedReadViewProjection { .. }
+                    )
+                })
+            }
+            _ => false,
+        };
+        if present {
+            profile(Some(owner.header().contract_version))?;
+        }
+    }
+    Ok(())
+}
+
 fn project(
     snapshot: &KernelSnapshot,
     witness: &FullWitness,
@@ -1279,13 +1477,16 @@ mod tests {
     include!("native_plan_source_tests.rs");
     include!("native_plan_reuse_tests.rs");
     include!("source_validation_control_tests.rs");
+    include!("source_validation_reuse_tests.rs");
 
     #[test]
     fn source_transport_preserves_supported_composite_and_task_owner_envelopes() {
         let source = crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(
             "declarations.begin\n(units (module create historical (function create value (visibility public) (returns I64) (effect pure) (body (i64 37)))))\ndeclarations.end\n",
         ).unwrap();
-        for generation in [19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33] {
+        for generation in [
+            19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34,
+        ] {
             let mut historical = source.clone();
             for owner in historical.owners.values_mut() {
                 owner.set_encoding_for_edit(generation);
@@ -1306,13 +1507,36 @@ mod tests {
             assert_eq!(canonical.owners, historical.owners);
             super::super::oracle::reconstruct(&admitted.container).unwrap();
         }
+        // Current feature-free source may retain a supported Graph33 owner beside Graph34
+        // owners. Container admission preserves those exact bytes rather than rewriting them.
+        let mut mixed = source.clone();
+        let retained = mixed.owners.keys().next().copied().unwrap();
+        mixed
+            .owners
+            .get_mut(&retained)
+            .unwrap()
+            .set_encoding_for_edit(33);
+        let directory = tempfile::tempdir().unwrap();
+        let exported = GraphRepository::create(&directory.path().join("mixed"), &mixed, None)
+            .unwrap()
+            .repository
+            .export_package_container()
+            .unwrap();
+        let bytes = exported.container.encode().unwrap();
+        let decoded = PackageContainer::decode(&bytes, exported.container.root.transport).unwrap();
+        let admitted = decoded.admit().unwrap();
+        let canonical = &admitted.packages[&admitted.container.root.package_revision].snapshot;
+        assert_eq!(canonical.root.graph_contract_version, 34);
+        assert_eq!(canonical.owners, mixed.owners);
+        super::super::oracle::reconstruct(&admitted.container).unwrap();
     }
 
     fn standard_source() -> AdmittedClosure {
-        let repository = GraphRepository::open(
-            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard"),
-        )
-        .expect("maintained source");
+        let maintained = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
+        let directory = tempfile::tempdir().expect("owned standard source copy");
+        let root = directory.path().join("standard");
+        crate::platform::builtin_standard::copy_maintained_repository(&maintained, &root);
+        let repository = GraphRepository::open(&root).expect("maintained source");
         repository
             .export_package_container()
             .expect("full canonical source admission")
@@ -1663,12 +1887,15 @@ mod tests {
 
     #[test]
     fn omitted_transitive_selection_or_source_rejects_even_when_dependency_is_already_ready() {
-        let source = GraphRepository::open(
-            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("applications/lkjournal"),
-        )
-        .unwrap()
-        .export_package_container()
-        .unwrap();
+        let maintained =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("applications/lkjournal");
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("lkjournal");
+        crate::platform::builtin_standard::copy_maintained_repository(&maintained, &root);
+        let source = GraphRepository::open(&root)
+            .unwrap()
+            .export_package_container()
+            .unwrap();
         assert_eq!(source.packages.len(), 2);
         let dependency = source
             .container

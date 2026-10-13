@@ -71,8 +71,10 @@ fn bare_function(
             effect_parameters: vec![],
             requirement_parameters: vec![],
             parameters: vec![],
-            result,
-            result_borrow: None,
+            result: crate::platform::kernel::CallableResult {
+                ty: result,
+                relation: crate::platform::kernel::ResultRelation::Value,
+            },
             effect: if task {
                 FunctionEffect::Task {
                     requirements: vec![],
@@ -82,6 +84,9 @@ fn bare_function(
                 FunctionEffect::Pure
             },
             body,
+
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
         }),
     )
 }
@@ -140,8 +145,10 @@ fn import(source: &mut KernelSnapshot, producer: &KernelSnapshot) -> PackageRevi
                             requirement_parameters: f.requirement_parameters.clone(),
                             parameters: f.parameters.clone(),
                             result: f.result,
-                            result_borrow: f.result_borrow,
                             effect: f.effect.clone(),
+
+                            read_scope_parameters: f.read_scope_parameters.clone(),
+                            read_scope_sources: f.read_scope_sources.clone(),
                         })
                     }
                     _ => panic!("fixture exports only declared memory vocabulary"),
@@ -211,6 +218,8 @@ fn call(
                 arguments,
                 effect_arguments: vec![],
                 requirement_arguments: vec![],
+
+                read_scope_arguments: Vec::new(),
             },
             None => ExpressionOperation::Call {
                 function,
@@ -218,6 +227,8 @@ fn call(
                 arguments,
                 effect_arguments: vec![],
                 requirement_arguments: vec![],
+
+                read_scope_arguments: Vec::new(),
             },
         },
     )
@@ -275,9 +286,14 @@ fn vertical() -> Vertical {
                     ty: self_type,
                     use_mode: ParameterUse::Borrow,
                 }],
-                result: output,
-                result_borrow: Some(0),
+                result: crate::platform::kernel::CallableResult {
+                    ty: output,
+                    relation: crate::platform::kernel::ResultRelation::ReadFrom { source: 0 },
+                },
                 effect: FunctionEffect::Pure,
+
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             }],
         }),
     );
@@ -346,6 +362,8 @@ fn vertical() -> Vertical {
                     contract,
                     method,
                     arguments: vec![argument],
+
+                    read_scope_arguments: Vec::new(),
                 },
             );
             let view = binding(&mut consumer, 110, projection);
@@ -364,8 +382,8 @@ fn vertical() -> Vertical {
                 },
             );
             let f = function_mut(&mut consumer, scope);
-            f.result = projection;
-            f.result_borrow = Some(parameter);
+            f.result.ty = projection;
+            f.result.relation = ResultRelation::ReadFrom { source: parameter };
             f.body = body;
             consumer
                 .owners
@@ -476,8 +494,8 @@ fn vertical() -> Vertical {
         let f = function_mut(&mut supplier, method_scope);
         f.type_parameters = vec![p, q];
         f.parameters = vec![parameter];
-        f.result = result_ty;
-        f.result_borrow = Some(parameter);
+        f.result.ty = result_ty;
+        f.result.relation = ResultRelation::ReadFrom { source: parameter };
         f.body = body;
         supplier
             .owners
@@ -515,12 +533,17 @@ fn vertical() -> Vertical {
         };
         let i = implementation_mut(&mut supplier, scheme);
         i.self_type = nominal;
-        i.associated_types = vec![AssociatedTypeBinding { member, ty: output }];
+        i.associated_types = vec![AssociatedTypeBinding {
+            member,
+            value: crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty: output },
+        }];
         i.methods = vec![OwnedMethodImplementation {
             method,
             function: method_scope,
             type_arguments: vec![sty, uty],
             implementations: vec![],
+
+            read_scope_arguments: Vec::new(),
         }];
         schemes.push(scheme);
     }
@@ -572,8 +595,8 @@ fn vertical() -> Vertical {
     );
     let f = function_mut(&mut client, caller);
     f.parameters = vec![parent];
-    f.result = cell;
-    f.result_borrow = Some(parent);
+    f.result.ty = cell;
+    f.result.relation = ResultRelation::ReadFrom { source: parent };
     f.body = borrow;
     client
         .owners
@@ -682,7 +705,8 @@ fn associated_memory_vertical_private_supplier_returns_the_actual_imported_desce
     let projected = Oracle(&f.consumer, Some(f.generic_read))
         .function(f.generic_read)
         .unwrap()
-        .result;
+        .result
+        .ty;
     let Some(OwnerRecord::Field(field)) = hidden.owners.get_mut(&OwnerKey::Field(f.field.field))
     else {
         unreachable!()
@@ -712,7 +736,8 @@ fn associated_memory_vertical_same_typed_parents_keep_exact_descendant_provenanc
     };
     Resolver::new(&source).admit_canonical_closure().unwrap();
     assert!(!accepts(&source));
-    function_mut(&mut source, f.caller).result_borrow = Some(second);
+    function_mut(&mut source, f.caller).result.relation =
+        ResultRelation::ReadFrom { source: second };
     assert!(accepts(&source));
 }
 

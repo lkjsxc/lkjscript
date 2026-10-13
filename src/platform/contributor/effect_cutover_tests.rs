@@ -11,6 +11,50 @@ pub(crate) fn neutral_effect_fields(value: &mut serde_json::Value) {
         serde_json::Value::Object(fields) => {
             fields.remove("contract_version");
             fields.remove("graph_contract_version");
+            if fields.get("kind").and_then(serde_json::Value::as_str) == Some("function") {
+                // Compare the same historical result relationship, not its successor carrier.
+                // ViewFrom and every nonempty scope inventory remain observable.
+                if !fields.contains_key("result_borrow") {
+                    let historical = fields.get("result").and_then(|value| {
+                        let result = value.as_object()?;
+                        let relation = result.get("relation")?.as_object()?;
+                        if result.len() != 2 {
+                            return None;
+                        }
+                        let ty = result.get("ty")?.clone();
+                        match relation.get("kind")?.as_str()? {
+                            "value" if relation.len() == 1 => Some((ty, None)),
+                            "read_from" if relation.len() == 2 => {
+                                Some((ty, Some(relation.get("source")?.clone())))
+                            }
+                            _ => None,
+                        }
+                    });
+                    if let Some((ty, source)) = historical {
+                        fields.insert("result".to_owned(), ty);
+                        if let Some(source) = source {
+                            fields.insert("result_borrow".to_owned(), source);
+                        }
+                    }
+                }
+                for key in ["read_scope_parameters", "read_scope_sources"] {
+                    if fields
+                        .get(key)
+                        .is_some_and(|value| value.as_array().is_some_and(Vec::is_empty))
+                    {
+                        fields.remove(key);
+                    }
+                }
+            }
+            if matches!(
+                fields.get("kind").and_then(serde_json::Value::as_str),
+                Some("call" | "implementation_call" | "function_value" | "method_call")
+            ) && fields
+                .get("read_scope_arguments")
+                .is_some_and(|value| value.as_array().is_some_and(Vec::is_empty))
+            {
+                fields.remove("read_scope_arguments");
+            }
             // Generation 18 makes the previously absent witness vector explicit.
             // Only the empty vector on a function is generation-neutral; every
             // actual selection remains part of the historical meaning comparison.
@@ -95,6 +139,44 @@ fn historical_projection_preserves_actual_borrowed_result_sources() {
     assert_ne!(
         meaning_hash(json!({})),
         meaning_hash(json!({"result_borrow": null}))
+    );
+}
+
+#[test]
+fn historical_projection_preserves_view_scopes_and_exact_carrier_sources() {
+    use serde_json::json;
+    let ordinary = json!({"kind":"function","result":"T"});
+    let current = json!({"kind":"function","result":{"ty":"T","relation":{"kind":"value"}},"read_scope_parameters":[],"read_scope_sources":[]});
+    assert_eq!(
+        meaning_hash(ordinary.clone()),
+        meaning_hash(current.clone())
+    );
+    let borrowed = json!({"kind":"function","result":"T","result_borrow":"input-a"});
+    let current_borrowed = json!({"kind":"function","result":{"ty":"T","relation":{"kind":"read_from","source":"input-a"}}});
+    assert_eq!(meaning_hash(borrowed), meaning_hash(current_borrowed));
+    let view = json!({"kind":"function","result":{"ty":"T","relation":{"kind":"view_from","source":"input-a","scope":"scope-a"}}});
+    assert_ne!(meaning_hash(ordinary), meaning_hash(view.clone()));
+    let mut other = view.clone();
+    other["result"]["relation"]["source"] = json!("input-b");
+    assert_ne!(meaning_hash(view.clone()), meaning_hash(other));
+    let mut other = view.clone();
+    other["result"]["relation"]["scope"] = json!("scope-b");
+    assert_ne!(meaning_hash(view), meaning_hash(other));
+    let mut unused = current.clone();
+    unused["read_scope_parameters"] = json!([{"id":"unused","name":"scope"}]);
+    assert_ne!(meaning_hash(current), meaning_hash(unused));
+    assert_ne!(
+        meaning_hash(json!({})),
+        meaning_hash(json!({"read_scope_parameters":[]}))
+    );
+    let call = json!({"kind":"call","function":"f"});
+    assert_eq!(
+        meaning_hash(call.clone()),
+        meaning_hash(json!({"kind":"call","function":"f","read_scope_arguments":[]}))
+    );
+    assert_ne!(
+        meaning_hash(call),
+        meaning_hash(json!({"kind":"call","function":"f","read_scope_arguments":["scope-a"]}))
     );
 }
 

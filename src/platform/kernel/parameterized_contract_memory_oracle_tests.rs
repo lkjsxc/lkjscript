@@ -286,7 +286,7 @@ fn parameterized_contract_oracle_matches_complete_method_structure_and_owned_mod
     let DeclarationPayload::Function(f) = payload(&mut changed, target) else {
         unreachable!()
     };
-    f.result = cell;
+    f.result.ty = cell;
     assert!(
         !accepts(&changed),
         "an owned result must match the full substituted template"

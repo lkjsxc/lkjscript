@@ -7,11 +7,11 @@ use super::{
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    ExactOwnerKey, OwnerKey, OwnerKind, PropagationClass, RelationEndpoint,
+    ExactOwnerKey, OwnerKey, OwnerKind, OwnerRecord, PropagationClass, RelationEndpoint,
 };
 use crate::platform::witness::{
     MAXIMUM_TEST_DEPENDENCY_PREFIX_ITEMS, OwnershipEntry, OwnershipParent, TestDependency,
-    aggregation_children,
+    aggregation_children_with_bindings,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -209,10 +209,20 @@ fn candidate_test_dependencies<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead
             )
         })?;
         pending.extend(
-            aggregation_children(&record)?
-                .into_iter()
-                .filter(|(role, _)| role.aggregates_into_parent())
-                .map(|(_, child)| child),
+            aggregation_children_with_bindings(&record, |binding| {
+                match overlay.owner(OwnerKey::Binding(binding))? {
+                    Some(OwnerRecord::Binding(record)) => Ok(Some(record)),
+                    None => Ok(None),
+                    Some(_) => Err(Diagnostic::new(
+                        DiagnosticClass::Corrupt,
+                        "change_test_binding_record",
+                        "test closure binding identity selects a foreign candidate record",
+                    )),
+                }
+            })?
+            .into_iter()
+            .filter(|(role, _)| role.aggregates_into_parent())
+            .map(|(_, child)| child),
         );
         let remaining_relations = admission
             .maximum_relation_edges

@@ -280,7 +280,7 @@ fn signature_impact_checks_the_dependent_port_against_the_full_validation_oracle
     let DeclarationPayload::Function(function) = &mut record.payload else {
         panic!("caller function")
     };
-    function.result = callable;
+    function.result.ty = callable;
     let delta = replace_owner_delta(&base, caller, changed);
     let overlay = KernelOverlay::new(&base, &delta);
     let full_errors = validate_full(&overlay.materialize_logical_oracle()).unwrap_err();
@@ -363,7 +363,8 @@ fn test_relation_rebind_updates_only_the_affected_test_dependency_entries() {
         name: Name::new("other_function").expect("valid name"),
         visibility: crate::platform::kernel::DeclarationVisibility::Private,
         payload: DeclarationPayload::Function(crate::platform::kernel::FunctionDeclaration {
-            result_borrow: None,
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
             implementation_parameters: Vec::new(),
             requirement_parameters: Vec::new(),
             effect_parameters: Vec::new(),
@@ -379,6 +380,7 @@ fn test_relation_rebind_updates_only_the_affected_test_dependency_entries() {
         panic!("test actual expression expected");
     };
     actual.operation = ExpressionOperation::Call {
+        read_scope_arguments: Vec::new(),
         requirement_arguments: Vec::new(),
         effect_arguments: Vec::new(),
         function: crate::platform::kernel::DeclarationReference {
@@ -717,7 +719,7 @@ fn generic_preparation_rejects_an_invalid_result_type_on_the_owner_frontier() {
     let DeclarationPayload::Function(function) = &mut record.payload else {
         panic!("function payload expected");
     };
-    function.result = function_type;
+    function.result.ty = function_type;
     let delta = replace_owner_delta(&base, callee, replacement);
     let diagnostics = prepare_change_analysis(&base, &base_witness, delta)
         .expect_err("invalid function result must reject incrementally");

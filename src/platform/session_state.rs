@@ -66,6 +66,14 @@ impl<R: SessionShapeRead> Closure<'_, R> {
         let object = self.object(ty)?;
         let next = depth + 1;
         let form = match object.form {
+            TypeForm::ReadViewApplied { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. } => {
+                return Err(session_semantic(
+                    "session_state_live_type",
+                    "retained session state cannot contain a read view",
+                ));
+            }
             TypeForm::AssociatedContractMember { .. }
             | TypeForm::AssociatedWitnessProjection { .. } => {
                 return Err(
@@ -260,7 +268,10 @@ pub(super) fn validate<R: SessionShapeRead>(
                     "state type parameter is unresolved",
                 ));
             }
-            TypeForm::StaticText
+            TypeForm::ReadViewApplied { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. }
+            | TypeForm::StaticText
             | TypeForm::Secret
             | TypeForm::Result { .. }
             | TypeForm::ByteBuffer
@@ -286,6 +297,12 @@ pub(super) fn validate<R: SessionShapeRead>(
 mod tests {
     use super::*;
     use crate::platform::kernel::TypeObjectInterner;
+    use crate::platform::kernel::{
+        PackageId, ReadScopeArgument, ReadScopeBinder, ReadScopeReference,
+    };
+    use crate::platform::semantic_id::{
+        AssociatedTypeMemberId, DeclarationId, ImplementationParameterId, ReadScopeParameterId,
+    };
 
     struct StateTypes(TypeObjectInterner);
 
@@ -335,5 +352,135 @@ mod tests {
                 "session_state_live_type"
             );
         }
+    }
+
+    struct ViewStateTypes {
+        types: TypeObjectInterner,
+        unit: TypeObjectDigest,
+        view: TypeObjectDigest,
+        nested: TypeObjectDigest,
+        parameter: TypeParameterId,
+    }
+
+    fn declaration(ordinal: u64) -> DeclarationReference {
+        DeclarationReference {
+            package: PackageId::migrate(b"session-view-boundary", 0),
+            declaration: DeclarationId::migrate(b"session-view-boundary", ordinal),
+        }
+    }
+
+    impl SessionShapeRead for ViewStateTypes {
+        fn type_object(&self, digest: TypeObjectDigest) -> Result<TypeObject, Diagnostic> {
+            self.types
+                .get(digest)
+                .cloned()
+                .ok_or_else(|| session_semantic("test_state_type", "state test type is absent"))
+        }
+        fn nominal_parameters(
+            &self,
+            reference: DeclarationReference,
+        ) -> Result<Vec<TypeParameterId>, Diagnostic> {
+            Ok(if reference == declaration(1) {
+                vec![self.parameter]
+            } else {
+                vec![]
+            })
+        }
+        fn nominal_shape(
+            &self,
+            reference: DeclarationReference,
+        ) -> Result<SessionNominalShape, Diagnostic> {
+            Ok(if reference == declaration(1) {
+                SessionNominalShape::Record(BTreeMap::from([(
+                    Name::new("tag").unwrap(),
+                    self.unit,
+                )]))
+            } else if reference == declaration(2) {
+                SessionNominalShape::Variant(BTreeMap::from([
+                    (Name::new("safe").unwrap(), None),
+                    (Name::new("unused").unwrap(), Some(self.view)),
+                ]))
+            } else if reference == declaration(3) {
+                SessionNominalShape::Record(BTreeMap::from([(
+                    Name::new("hidden").unwrap(),
+                    self.nested,
+                )]))
+            } else {
+                panic!("unselected fixture declaration")
+            })
+        }
+    }
+
+    #[test]
+    fn retained_state_views_reject_direct_nested_phantom_and_inactive_closures() {
+        let mut types = TypeObjectInterner::default();
+        let unit = types.intern(TypeForm::Unit).unwrap();
+        let scope = ReadScopeArgument::Parameter(ReadScopeReference {
+            binder: ReadScopeBinder::Declaration(declaration(0)),
+            parameter: ReadScopeParameterId::migrate(b"session-view-boundary", 0),
+        });
+        let member = AssociatedTypeMemberId::migrate(b"session-view-boundary", 0);
+        let view = types
+            .intern(TypeForm::ReadViewApplied {
+                declaration: declaration(0),
+                arguments: vec![],
+                read_scope: scope,
+            })
+            .unwrap();
+        let associated = types
+            .intern(TypeForm::AssociatedReadViewMember {
+                contract: declaration(0),
+                member,
+                read_scope: scope,
+            })
+            .unwrap();
+        let projected = types
+            .intern(TypeForm::AssociatedReadViewProjection {
+                scope: declaration(0),
+                parameter: ImplementationParameterId::migrate(b"session-view-boundary", 0),
+                contract: declaration(0),
+                member,
+                read_scope: scope,
+            })
+            .unwrap();
+        let optional = types.intern(TypeForm::Option { item: view }).unwrap();
+        let nested = types.intern(TypeForm::List { item: optional }).unwrap();
+        let phantom = types
+            .intern(TypeForm::Applied {
+                declaration: declaration(1),
+                arguments: vec![view],
+            })
+            .unwrap();
+        let healthy = types
+            .intern(TypeForm::Applied {
+                declaration: declaration(1),
+                arguments: vec![unit],
+            })
+            .unwrap();
+        let inactive = types
+            .intern(TypeForm::Named {
+                declaration: declaration(2),
+            })
+            .unwrap();
+        let hidden = types
+            .intern(TypeForm::Named {
+                declaration: declaration(3),
+            })
+            .unwrap();
+        let read = ViewStateTypes {
+            types,
+            unit,
+            view,
+            nested,
+            parameter: TypeParameterId::migrate(b"session-view-boundary", 0),
+        };
+        for root in [
+            view, associated, projected, optional, nested, phantom, inactive, hidden,
+        ] {
+            let error = validate(&read, root).unwrap_err();
+            assert_eq!(error.class, DiagnosticClass::Semantic);
+            assert_eq!(error.code, "session_state_live_type");
+        }
+        validate(&read, healthy).unwrap();
     }
 }

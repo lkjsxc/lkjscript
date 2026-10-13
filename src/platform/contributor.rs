@@ -6,8 +6,9 @@ use super::kernel::{
     BindingKind, DeclarationPayload, DeclarationReference, EncodedOwnerKey, ExpressionChildRole,
     ExpressionOperation, FunctionEffect, KernelSnapshot, LocalValueReference, Name,
     OperationReference, OwnerKey, OwnerKind, OwnerRecord, PackageInterfaceDeclarationPayload,
-    PackageInterfaceRecord, ParameterParent, ParameterUse, RelationEndpoint, RequirementReference,
-    TypeForm, TypeObjectDigest, encode_owner, extract_relations, infer_function_expression_type,
+    PackageInterfaceRecord, ParameterParent, ParameterUse, ReadScopeArgument, ReadScopeBinder,
+    RelationEndpoint, RequirementReference, ResultRelation, TypeForm, TypeObjectDigest,
+    encode_owner, extract_relations, infer_function_expression_type,
     infer_function_expression_type_object, validate_full,
 };
 use super::publication::GraphRepository;
@@ -567,6 +568,33 @@ pub struct FunctionDefinitionOracleRelation {
     pub target: String,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct FunctionDefinitionOracleScopeParameter {
+    pub id: String,
+    pub parent: String,
+    pub index: u32,
+    pub name: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct FunctionDefinitionOracleScopeSource {
+    pub parent: String,
+    pub index: u32,
+    pub source: String,
+    pub scope: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct FunctionDefinitionOracleScopeArgument {
+    pub parent: String,
+    pub slot: String,
+    pub index: u32,
+    pub scope: String,
+}
+
 /// Independent reconstruction of one accepted local function definition.
 ///
 /// This contributor-only oracle uses the complete typed authority and a fresh witness rebuild. It
@@ -583,7 +611,12 @@ pub struct FunctionDefinitionOracle {
     pub name: String,
     pub effect: String,
     pub result_type: String,
-    pub result_borrow: Option<String>,
+    pub result_kind: String,
+    pub result_source: Option<String>,
+    pub result_scope: Option<String>,
+    pub read_scope_parameters: Vec<FunctionDefinitionOracleScopeParameter>,
+    pub read_scope_sources: Vec<FunctionDefinitionOracleScopeSource>,
+    pub read_scope_arguments: Vec<FunctionDefinitionOracleScopeArgument>,
     pub type_parameters: u64,
     pub parameters: u64,
     pub requirements: u64,
@@ -960,6 +993,16 @@ fn reconstruct_function_extraction(
             "extraction oracle does not admit a generic target",
         ));
     }
+    if !function_record.read_scope_parameters.is_empty()
+        || !function_record.read_scope_sources.is_empty()
+        || !matches!(function_record.result.relation, ResultRelation::Value)
+    {
+        return Err(oracle_error(
+            DiagnosticClass::Semantic,
+            "contributor_extraction_read_scope",
+            "extraction oracle cannot preserve source-tied result or scope contracts",
+        ));
+    }
     let selected_text = selected.to_string();
     let selected_index = definition
         .body_preorder
@@ -1000,6 +1043,33 @@ fn reconstruct_function_extraction(
         .iter()
         .map(|owner| owner.owner.parse::<OwnerKey>())
         .collect::<Result<Vec<_>, _>>()?;
+    if !definition.read_scope_arguments.is_empty()
+        || body_owners
+            .iter()
+            .any(|owner| match snapshot.owners.get(owner) {
+                Some(OwnerRecord::Binding(record)) => matches!(
+                    record.kind,
+                    BindingKind::ReadView | BindingKind::ReadViewBorrow
+                ),
+                Some(OwnerRecord::Expression(record)) => matches!(
+                    record.operation,
+                    ExpressionOperation::CreateReadView { .. }
+                        | ExpressionOperation::BorrowReadView { .. }
+                        | ExpressionOperation::ReborrowReadView { .. }
+                        | ExpressionOperation::MoveReadView { .. }
+                        | ExpressionOperation::DropReadView { .. }
+                        | ExpressionOperation::ReadViewDataField { .. }
+                        | ExpressionOperation::BorrowReadViewField { .. }
+                ),
+                _ => false,
+            })
+    {
+        return Err(oracle_error(
+            DiagnosticClass::Semantic,
+            "contributor_extraction_read_scope",
+            "extraction oracle cannot move source-tied view scopes into an ordinary helper",
+        ));
+    }
     if body_owners.iter().any(|owner| {
         matches!(snapshot.owners.get(owner), Some(OwnerRecord::Expression(record)) if matches!(
             record.operation,
@@ -1674,7 +1744,15 @@ fn oracle_type_contains_parameter(
         return Ok(false);
     }
     let object = oracle_type_object(snapshot, digest)?;
-    let mut contains = matches!(object.form, TypeForm::TypeParameter { .. });
+    // This extraction oracle cannot move either ordinary type formals or source-tied
+    // type applications into an unscoped helper, including hidden phantom actuals.
+    let mut contains = matches!(
+        object.form,
+        TypeForm::TypeParameter { .. }
+            | TypeForm::ReadViewApplied { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. }
+    );
     if !contains {
         for child in object.child_types() {
             if oracle_type_contains_parameter(snapshot, child, active)? {
@@ -2206,6 +2284,7 @@ fn reconstruct_function_definition(
         body: Vec::new(),
         capability_calls: Vec::new(),
         matches: Vec::new(),
+        read_scope_arguments: Vec::new(),
         maximum_depth: 0,
     };
     walker.visit_expression(
@@ -2222,6 +2301,7 @@ fn reconstruct_function_definition(
     let maximum_depth = walker.maximum_depth;
     let capability_calls = walker.capability_calls;
     let matches = walker.matches;
+    let read_scope_arguments = walker.read_scope_arguments;
     let body_preorder = walker.body;
     let closure = walker.seen;
     let relations = witness
@@ -2269,8 +2349,49 @@ fn reconstruct_function_definition(
         kind: declaration.expected_kind().name().to_owned(),
         name: declaration.name.as_str().to_owned(),
         effect: effect.to_owned(),
-        result_type: function_record.result.to_string(),
-        result_borrow: function_record.result_borrow.map(|id| id.to_string()),
+        result_type: function_record.result.ty.to_string(),
+        result_kind: match function_record.result.relation {
+            ResultRelation::Value => "value",
+            ResultRelation::ReadFrom { .. } => "read-from",
+            ResultRelation::ViewFrom { .. } => "view-from",
+        }
+        .to_owned(),
+        result_source: function_record
+            .result
+            .relation
+            .source()
+            .map(ToString::to_string),
+        result_scope: match function_record.result.relation {
+            ResultRelation::ViewFrom { scope, .. } => Some(oracle_read_scope(scope)),
+            _ => None,
+        },
+        read_scope_parameters: function_record
+            .read_scope_parameters
+            .iter()
+            .enumerate()
+            .map(|(index, parameter)| {
+                Ok(FunctionDefinitionOracleScopeParameter {
+                    id: parameter.id.to_string(),
+                    parent: function.to_string(),
+                    index: oracle_ordinal(index)?,
+                    name: parameter.name.as_str().to_owned(),
+                })
+            })
+            .collect::<Result<_, Diagnostic>>()?,
+        read_scope_sources: function_record
+            .read_scope_sources
+            .iter()
+            .enumerate()
+            .map(|(index, source)| {
+                Ok(FunctionDefinitionOracleScopeSource {
+                    parent: function.to_string(),
+                    index: oracle_ordinal(index)?,
+                    source: source.source.to_string(),
+                    scope: oracle_read_scope(source.scope),
+                })
+            })
+            .collect::<Result<_, Diagnostic>>()?,
+        read_scope_arguments,
         type_parameters: function_record.type_parameters.len() as u64,
         parameters: function_record.parameters.len() as u64,
         requirements: requirements.len() as u64,
@@ -2306,6 +2427,7 @@ struct DefinitionOracleWalker<'a> {
     body: Vec<FunctionDefinitionOracleOwner>,
     capability_calls: Vec<FunctionDefinitionOracleCapability>,
     matches: Vec<FunctionDefinitionOracleMatch>,
+    read_scope_arguments: Vec<FunctionDefinitionOracleScopeArgument>,
     maximum_depth: u64,
 }
 
@@ -2348,6 +2470,36 @@ impl DefinitionOracleWalker<'_> {
                 format!("body owner '{owner}' is not an expression"),
             ));
         };
+        let scoped_call = match &record.operation {
+            ExpressionOperation::Call {
+                read_scope_arguments,
+                ..
+            } => Some(("call", read_scope_arguments)),
+            ExpressionOperation::ImplementationCall {
+                read_scope_arguments,
+                ..
+            } => Some(("implementation-call", read_scope_arguments)),
+            ExpressionOperation::FunctionValue {
+                read_scope_arguments,
+                ..
+            } => Some(("function-value", read_scope_arguments)),
+            ExpressionOperation::MethodCall {
+                read_scope_arguments,
+                ..
+            } => Some(("method-call", read_scope_arguments)),
+            _ => None,
+        };
+        if let Some((slot, arguments)) = scoped_call {
+            for (index, scope) in arguments.iter().copied().enumerate() {
+                self.read_scope_arguments
+                    .push(FunctionDefinitionOracleScopeArgument {
+                        parent: owner.to_string(),
+                        slot: slot.to_owned(),
+                        index: oracle_ordinal(index)?,
+                        scope: oracle_read_scope(scope),
+                    });
+            }
+        }
         match &record.operation {
             ExpressionOperation::CapabilityCall {
                 requirement,
@@ -2383,13 +2535,37 @@ impl DefinitionOracleWalker<'_> {
         match &record.operation {
             ExpressionOperation::Let { bindings, body } => {
                 for (index, binding) in bindings.iter().copied().enumerate() {
+                    let expected = match self.snapshot.owners.get(&OwnerKey::Binding(binding)) {
+                        Some(OwnerRecord::Binding(record)) if record.value.is_some() => {
+                            match record.kind {
+                                BindingKind::Let => (BindingKind::Let, BindingContainerRole::Let),
+                                BindingKind::ReadView => {
+                                    (BindingKind::ReadView, BindingContainerRole::ReadView)
+                                }
+                                _ => {
+                                    return Err(oracle_error(
+                                        DiagnosticClass::Corrupt,
+                                        "contributor_definition_binding",
+                                        "let binding has an invalid owning category",
+                                    ));
+                                }
+                            }
+                        }
+                        _ => {
+                            return Err(oracle_error(
+                                DiagnosticClass::Corrupt,
+                                "contributor_definition_binding",
+                                "let binding has no exact initializer",
+                            ));
+                        }
+                    };
                     self.visit_binding(
                         binding,
                         owner,
                         "let_binding",
                         oracle_ordinal(index)?,
                         child_depth,
-                        (BindingKind::Let, BindingContainerRole::Let),
+                        expected,
                     )?;
                 }
                 self.visit_expression_child(
@@ -2526,6 +2702,7 @@ impl DefinitionOracleWalker<'_> {
                 binding,
                 body,
             } => {
+                let binding_role = self.scoped_binding_role(*binding, true)?;
                 self.visit_expression_child(
                     *call,
                     owner,
@@ -2540,7 +2717,7 @@ impl DefinitionOracleWalker<'_> {
                     "borrow_call_binding",
                     0,
                     child_depth,
-                    (BindingKind::OwnedBorrow, BindingContainerRole::OwnedBorrow),
+                    binding_role,
                 )?;
                 self.visit_expression_child(
                     *body,
@@ -2549,6 +2726,34 @@ impl DefinitionOracleWalker<'_> {
                     0,
                     child_depth,
                     ExpressionChildRole::BorrowCallBody,
+                )?;
+            }
+            ExpressionOperation::BorrowReadView { binding, body, .. }
+            | ExpressionOperation::BorrowReadViewField { binding, body, .. } => {
+                let expected =
+                    if matches!(record.operation, ExpressionOperation::BorrowReadView { .. }) {
+                        (
+                            BindingKind::ReadViewBorrow,
+                            BindingContainerRole::ReadViewBorrow,
+                        )
+                    } else {
+                        self.scoped_binding_role(*binding, false)?
+                    };
+                self.visit_binding(
+                    *binding,
+                    owner,
+                    "read_view_binding",
+                    0,
+                    child_depth,
+                    expected,
+                )?;
+                self.visit_expression_child(
+                    *body,
+                    owner,
+                    "read_view_body",
+                    0,
+                    child_depth,
+                    ExpressionChildRole::ReadViewBody,
                 )?;
             }
             ExpressionOperation::BorrowOwnedField {
@@ -2695,6 +2900,48 @@ impl DefinitionOracleWalker<'_> {
             }
         }
         Ok(())
+    }
+
+    fn scoped_binding_role(
+        &self,
+        binding: super::semantic_id::BindingId,
+        call_result: bool,
+    ) -> Result<(BindingKind, BindingContainerRole), Diagnostic> {
+        let key = OwnerKey::Binding(binding);
+        let Some(OwnerRecord::Binding(record)) = self.snapshot.owners.get(&key) else {
+            return Err(oracle_error(
+                DiagnosticClass::Corrupt,
+                "contributor_definition_binding",
+                "scoped result binding is absent",
+            ));
+        };
+        if record.header.owner != key
+            || record.header.kind != OwnerKind::Binding
+            || record.value.is_some()
+        {
+            return Err(oracle_error(
+                DiagnosticClass::Corrupt,
+                "contributor_definition_binding",
+                "scoped result binding has an inconsistent owner or initializer",
+            ));
+        }
+        match (record.kind, call_result) {
+            (BindingKind::OwnedBorrow, _) => {
+                Ok((BindingKind::OwnedBorrow, BindingContainerRole::OwnedBorrow))
+            }
+            (BindingKind::ReadView, true) => {
+                Ok((BindingKind::ReadView, BindingContainerRole::ReadView))
+            }
+            (BindingKind::ReadViewBorrow, false) => Ok((
+                BindingKind::ReadViewBorrow,
+                BindingContainerRole::ReadViewBorrow,
+            )),
+            _ => Err(oracle_error(
+                DiagnosticClass::Corrupt,
+                "contributor_definition_binding",
+                "scoped result binding disagrees with its exact containing operation",
+            )),
+        }
     }
 
     fn visit_expression_child(
@@ -3063,6 +3310,13 @@ fn oracle_expression_form(operation: &ExpressionOperation) -> &'static str {
         ExpressionOperation::SequenceReplace { .. } => "sequence_replace",
         ExpressionOperation::BorrowOwnedItem { .. } => "borrow_owned_item",
         ExpressionOperation::BorrowCall { .. } => "borrow_call",
+        ExpressionOperation::CreateReadView { .. } => "create_read_view",
+        ExpressionOperation::BorrowReadView { .. } => "borrow_read_view",
+        ExpressionOperation::ReborrowReadView { .. } => "reborrow_read_view",
+        ExpressionOperation::MoveReadView { .. } => "move_read_view",
+        ExpressionOperation::DropReadView { .. } => "drop_read_view",
+        ExpressionOperation::ReadViewDataField { .. } => "read_view_data_field",
+        ExpressionOperation::BorrowReadViewField { .. } => "borrow_read_view_field",
     }
 }
 
@@ -3074,6 +3328,8 @@ fn oracle_binding_kind(kind: BindingKind) -> &'static str {
         BindingKind::OwnedUnpack => "owned_unpack",
         BindingKind::OwnedChoicePayload => "owned_choice_payload",
         BindingKind::OwnedBorrow => "owned_borrow",
+        BindingKind::ReadView => "read_view",
+        BindingKind::ReadViewBorrow => "read_view_borrow",
     }
 }
 
@@ -3113,6 +3369,41 @@ fn oracle_child_role(role: ExpressionChildRole) -> &'static str {
         ExpressionChildRole::OwnedSequenceBody => "owned_sequence_body",
         ExpressionChildRole::BorrowCallInvocation => "borrow_call_invocation",
         ExpressionChildRole::BorrowCallBody => "borrow_call_body",
+        ExpressionChildRole::ReadViewField => "read_view_field",
+        ExpressionChildRole::ReadViewBody => "read_view_body",
+    }
+}
+
+fn oracle_read_scope(scope: ReadScopeArgument) -> String {
+    match scope {
+        ReadScopeArgument::Lexical { callable, binding } => format!(
+            "lexical:{}/{}:{binding}",
+            callable.package, callable.declaration
+        ),
+        ReadScopeArgument::Parameter(reference) => {
+            let owner = match reference.binder {
+                ReadScopeBinder::Declaration(declaration) => format!(
+                    "declaration:{}/{}",
+                    declaration.package, declaration.declaration
+                ),
+                ReadScopeBinder::ContractMethod { contract, method } => format!(
+                    "contract-method:{}/{}:{method}",
+                    contract.package, contract.declaration
+                ),
+                ReadScopeBinder::AssociatedMember { contract, member } => format!(
+                    "associated-member:{}/{}:{member}",
+                    contract.package, contract.declaration
+                ),
+                ReadScopeBinder::AssociatedBinding {
+                    implementation,
+                    member,
+                } => format!(
+                    "associated-binding:{}/{}:{member}",
+                    implementation.package, implementation.declaration
+                ),
+            };
+            format!("parameter:{owner}:{}", reference.parameter)
+        }
     }
 }
 
@@ -3508,6 +3799,7 @@ declarations.end"#;
             panic!("recursive selected expression")
         };
         expression.operation = ExpressionOperation::Call {
+            read_scope_arguments: Vec::new(),
             requirement_arguments: Vec::new(),
             effect_arguments: Vec::new(),
             function: crate::platform::kernel::DeclarationReference {
@@ -3562,11 +3854,119 @@ declarations.end"#;
         let selected = "expr_9c71a3f66a11506528fec58a584c31a6"
             .parse::<crate::platform::semantic_id::ExpressionId>()
             .expect("maintained handoff expression identity");
-        let oracle =
-            function_extraction_oracle(&project, &function.to_string(), &selected.to_string())
-                .expect("derive affine extraction oracle");
-        let repository = GraphRepository::open(&project).expect("open maintained repository");
-        let view = repository.view_current().expect("open maintained revision");
+        // This fixture checks default-budget authored extraction from a current accepted base.
+        // Historical revalidation is a separate charged admission; the maintained predecessor
+        // must not rely on the process-wide one-entry proof cache remaining warm between views.
+        let maintained = GraphRepository::open(&project).expect("open maintained repository");
+        let maintained_view = maintained
+            .view_current()
+            .expect("read exact maintained revision");
+        let snapshot = maintained_view
+            .reconstruct_full_oracle()
+            .expect("reconstruct complete maintained authority")
+            .value;
+        // Include the local immutable blob bytes as well as every exact supplier selection.
+        let source = maintained_view
+            .export_package_container()
+            .expect("export complete maintained source closure");
+        let source_root = &source.packages[&source.container.root.package_revision];
+        assert_eq!(source_root.revision.package, snapshot.root.package_id);
+        assert_eq!(
+            source_root
+                .revision
+                .revision
+                .revision_id()
+                .expect("maintained source semantic revision"),
+            maintained_view.revision()
+        );
+        assert_eq!(
+            source_root.transport.semantic_root,
+            maintained_view.current().accepted.semantic_root
+        );
+        for dependency in snapshot.dependencies.values() {
+            source.packages[&dependency.package_revision]
+                .revision
+                .matches_dependency(dependency.package_revision, dependency)
+                .expect("source closure preserves the exact maintained dependency selection");
+        }
+        for (digest, length) in &snapshot.blobs {
+            let key = crate::platform::storage::object::ObjectKey::from_digest(
+                crate::platform::storage::object::ObjectDomain::Blob,
+                digest.bytes(),
+            );
+            let bytes = source
+                .container
+                .objects
+                .get(&key)
+                .expect("complete source includes each local immutable blob");
+            key.verify(bytes).expect("local blob digest is exact");
+            assert_eq!(
+                u64::try_from(bytes.len()).expect("local blob length fits its domain"),
+                *length
+            );
+        }
+        let transports = [crate::platform::publication::InitialPackageTransport {
+            digest: source.container.root.transport,
+            container: source
+                .container
+                .encode()
+                .expect("encode complete maintained source and selected dependencies"),
+        }];
+        let temporary = tempfile::tempdir().expect("current-proof extraction fixture parent");
+        let current_project = temporary.path().join("lkjournal");
+        let created = GraphRepository::create_with_package_transports(
+            &current_project,
+            &snapshot,
+            Some("current-proof maintained affine extraction fixture".to_owned()),
+            &transports,
+        )
+        .expect("accept exact maintained authority with a current proof");
+        let current_before = std::fs::read(current_project.join("HEAD"))
+            .expect("current fixture HEAD before oracle");
+        let oracle = function_extraction_oracle(
+            &current_project,
+            &function.to_string(),
+            &selected.to_string(),
+        )
+        .expect("derive affine extraction oracle from the current accepted base");
+        let view = created
+            .repository
+            .view_current()
+            .expect("open current accepted extraction base");
+        assert_eq!(view.validation_origin(), "accepted-current");
+        assert_eq!(view.validation_work().1, 0);
+        assert_eq!(oracle.revision, view.revision().to_string());
+        let current = view
+            .reconstruct_full_oracle()
+            .expect("reconstruct current accepted fixture authority")
+            .value;
+        assert_eq!(current.root.repository_id, snapshot.root.repository_id);
+        assert_eq!(current.root.package_id, snapshot.root.package_id);
+        assert_eq!(current.root.package_name, snapshot.root.package_name);
+        assert_eq!(
+            current.root.graph_contract_version,
+            snapshot.root.graph_contract_version
+        );
+        assert_eq!(
+            crate::platform::kernel::semantic_state_digest(&current)
+                .expect("current fixture semantic identity"),
+            crate::platform::kernel::semantic_state_digest(&snapshot)
+                .expect("maintained semantic identity")
+        );
+        assert_eq!(current.owners, snapshot.owners);
+        assert_eq!(current.types, snapshot.types);
+        assert_eq!(current.dependencies, snapshot.dependencies);
+        assert_eq!(current.retirements, snapshot.retirements);
+        assert_eq!(current.blobs, snapshot.blobs);
+        assert_eq!(
+            current.dependency_interfaces,
+            snapshot.dependency_interfaces
+        );
+        assert_eq!(current.dependency_types, snapshot.dependency_types);
+        assert_eq!(
+            current.representation_dependencies,
+            snapshot.representation_dependencies
+        );
         let request = crate::platform::change::AuthoredChangeSet {
             base: view.revision(),
             preconditions: Vec::new(),
@@ -3692,6 +4092,11 @@ declarations.end"#;
             usize::try_from(oracle.generated_owners).expect("generated owner count")
         );
         assert!(extraction.base_definition.is_some());
+        assert_eq!(
+            std::fs::read(current_project.join("HEAD"))
+                .expect("current fixture HEAD after extraction preparation"),
+            current_before
+        );
         assert_eq!(
             std::fs::read(project.join("HEAD")).expect("lkjournal HEAD after oracle"),
             before

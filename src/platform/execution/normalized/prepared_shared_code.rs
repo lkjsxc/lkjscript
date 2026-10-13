@@ -12,6 +12,7 @@ struct CodeIdentity {
     effect: EffectRow,
     effects: Arc<[EffectRow]>,
     requirements: Arc<[RequirementOperand]>,
+    scopes: Arc<[ReadScopeArgument]>,
 }
 
 pub(super) fn share(
@@ -68,6 +69,7 @@ pub(super) fn share(
             effect: function.effect.row(),
             effects: Arc::clone(&function.effect_arguments),
             requirements: Arc::clone(&function.requirement_arguments),
+            scopes: Arc::clone(&function.read_scope_arguments),
         };
         let mut count = 0;
         for instruction in code.instructions.iter() {

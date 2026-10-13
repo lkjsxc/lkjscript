@@ -54,6 +54,28 @@ impl Search<'_> {
                 .ok_or_else(|| invalid("transfer type parameter escaped its exact invocation"));
         }
         Ok(match (&source.form, &target.form) {
+            (
+                TypeForm::ReadViewApplied {
+                    declaration: a,
+                    arguments: x,
+                    read_scope: p,
+                },
+                TypeForm::ReadViewApplied {
+                    declaration: b,
+                    arguments: y,
+                    read_scope: q,
+                },
+            ) => {
+                if a != b || p != q || x.len() != y.len() {
+                    return Ok(false);
+                }
+                for (a, b) in x.iter().zip(y) {
+                    if !self.same(*a, *b, depth + 1)? {
+                        return Ok(false);
+                    }
+                }
+                true
+            }
             (TypeForm::List { item: a }, TypeForm::List { item: b })
             | (TypeForm::Option { item: a }, TypeForm::Option { item: b })
             | (TypeForm::OwnedSequence { item: a }, TypeForm::OwnedSequence { item: b })
@@ -143,6 +165,11 @@ impl Search<'_> {
                 }
                 self.same(*x, *y, depth + 1)?
             }
+            (
+                TypeForm::AssociatedReadViewMember { .. }
+                | TypeForm::AssociatedReadViewProjection { .. },
+                _,
+            ) => template == candidate,
             // These forms have no stored child types. Exact canonical identity
             // also keeps nominal declarations and capability interfaces distinct.
             (

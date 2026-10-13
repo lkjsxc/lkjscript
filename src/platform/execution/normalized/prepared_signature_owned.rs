@@ -8,7 +8,8 @@
 use super::{
     CompilationPayload, CompilationUnit, DeclarationPayload, DeclarationReference, FunctionEffect,
     Name, NormalizedParameter, OwnerKey, OwnerRecord, PackageId, ParameterId, ParameterParent,
-    RuntimeOwnerMap, TypeForm, TypeObject, TypeObjectDigest, runtime_corrupt,
+    RuntimeOwnerMap, TypeForm, TypeObject, TypeObjectDigest, producer_covers_source_generation,
+    runtime_corrupt,
 };
 use crate::platform::diagnostic::Diagnostic;
 use crate::platform::kernel::{AssociatedTypeBound, OwnerKind};
@@ -39,19 +40,27 @@ impl Context<'_> {
         work: &mut super::super::prepared_types::Budget<'_>,
     ) -> Result<bool, Diagnostic> {
         work.step()?;
-        let TypeForm::AssociatedWitnessProjection {
-            scope,
-            parameter: witness,
-            contract,
-            member,
-        } = &self.types.get(&ty).ok_or_else(invalid)?.form
-        else {
-            // Contract-local members never become function/external projections.
-            return Err(invalid());
-        };
-        if *scope != self.declaration {
+        let (scope, witness, contract, member, read_scope) =
+            match &self.types.get(&ty).ok_or_else(invalid)?.form {
+                TypeForm::AssociatedWitnessProjection {
+                    scope,
+                    parameter,
+                    contract,
+                    member,
+                } => (*scope, *parameter, *contract, *member, None),
+                TypeForm::AssociatedReadViewProjection {
+                    scope,
+                    parameter,
+                    contract,
+                    member,
+                    read_scope,
+                } => (*scope, *parameter, *contract, *member, Some(*read_scope)),
+                _ => return Err(invalid()),
+            };
+        if scope != self.declaration {
             return Err(invalid());
         }
+        let family = read_scope.is_some();
         let key = OwnerKey::Declaration(self.declaration.declaration);
         let Some(OwnerRecord::Declaration(source)) =
             self.owners.get(&(self.declaration.package, key))
@@ -61,14 +70,32 @@ impl Context<'_> {
         let DeclarationPayload::Function(function) = &source.payload else {
             return Err(invalid());
         };
+        if let Some(read_scope) = read_scope {
+            crate::platform::kernel::read_view::validate_formal_scope(
+                read_scope,
+                &function.read_scope_parameters,
+                Some(crate::platform::kernel::ReadScopeBinder::Declaration(
+                    self.declaration,
+                )),
+            )
+            .map_err(|_| invalid())?;
+        }
+        let source_generation = source.header.contract_version;
+        if self
+            .units
+            .get(&(self.declaration.package, key))
+            .is_none_or(|unit| !producer_covers_source_generation(unit, source_generation))
+        {
+            return Err(invalid());
+        }
         let kind = match function.effect {
             FunctionEffect::Pure => OwnerKind::PureFunction,
             FunctionEffect::Task { .. } => OwnerKind::TaskFunction,
         };
         if source.header.owner != key
             || source.header.kind != kind
-            || source.header.contract_version
-                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+            || !matches!(source.header.contract_version, 33 | 34)
+            || (family && source.header.contract_version != 34)
             || function.parameters.len() != self.parameters.len()
         {
             return Err(invalid());
@@ -94,14 +121,14 @@ impl Context<'_> {
             };
             if source.header.owner != key
                 || source.header.kind != OwnerKind::Parameter
-                || source.header.contract_version
-                    != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+                || !matches!(source.header.contract_version, 33 | 34)
+                || (family && source.header.contract_version != 34)
                 || source.parent != ParameterParent::Function(self.declaration.declaration)
                 || source.ty != ty
             {
                 return Err(invalid());
             }
-        } else if self.result != ty || function.result != ty {
+        } else if self.result != ty || function.result.ty != ty {
             return Err(invalid());
         }
         work.reserve::<(ImplementationParameterId, usize, usize, usize)>(
@@ -116,12 +143,12 @@ impl Context<'_> {
             if !ids.insert(formal.id) || !names.insert(&formal.name) {
                 return Err(invalid());
             }
-            if formal.id == *witness {
+            if formal.id == witness {
                 selected = Some(formal);
             }
         }
         let selected = selected.ok_or_else(invalid)?;
-        if selected.contract != *contract || !self.types.contains_key(&selected.self_type) {
+        if selected.contract != contract || !self.types.contains_key(&selected.self_type) {
             return Err(invalid());
         }
         // The complete formal's legal Self and generic actuals were already
@@ -138,8 +165,8 @@ impl Context<'_> {
         };
         if source.header.owner != key
             || source.header.kind != OwnerKind::OwnedContract
-            || source.header.contract_version
-                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+            || !matches!(source.header.contract_version, 33 | 34)
+            || (family && source.header.contract_version != 34)
             || selected.type_arguments.len() != definition.type_parameters.len()
         {
             return Err(invalid());
@@ -148,6 +175,9 @@ impl Context<'_> {
             .units
             .get(&(contract.package, key))
             .ok_or_else(invalid)?;
+        if !producer_covers_source_generation(unit, source.header.contract_version) {
+            return Err(invalid());
+        }
         let CompilationPayload::OwnedContract(compiled) = &unit.payload else {
             return Err(invalid());
         };
@@ -170,9 +200,10 @@ impl Context<'_> {
             if actual != compiled || !ids.insert(actual.id) || !names.insert(&actual.name) {
                 return Err(invalid());
             }
-            if actual.id == *member {
-                owned = match actual.bound {
-                    AssociatedTypeBound::Owned => true,
+            if actual.id == member {
+                owned = match &actual.bound {
+                    AssociatedTypeBound::Owned => !family,
+                    AssociatedTypeBound::ReadViewFamily { .. } => family,
                 };
             }
         }

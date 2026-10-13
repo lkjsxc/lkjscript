@@ -136,7 +136,7 @@ fn task_fixture() -> (KernelSnapshot, OwnerKey) {
             function.effect_parameters.clear();
             function.requirement_parameters.clear();
             function.parameters.clear();
-            function.result = unit;
+            function.result.ty = unit;
             function.effect = FunctionEffect::Task {
                 effect_parameters: Vec::new(),
                 requirements: Vec::new(),

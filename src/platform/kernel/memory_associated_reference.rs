@@ -9,6 +9,30 @@ use crate::platform::semantic_id::{
 
 #[path = "memory_associated_closure_reference.rs"]
 mod closure;
+#[path = "read_view_closure_reference.rs"]
+mod view_closure;
+#[path = "read_view_flow_reference.rs"]
+mod view_flow;
+#[cfg(test)]
+#[path = "read_view_growth_reference_tests.rs"]
+mod view_growth_tests;
+#[path = "read_view_method_reference.rs"]
+mod view_methods;
+#[cfg(test)]
+#[path = "read_view_reference_tests.rs"]
+mod view_reference_tests;
+#[path = "read_view_scope_reference.rs"]
+mod view_scopes;
+#[path = "read_view_share_reference.rs"]
+mod view_share;
+#[path = "read_view_signature_reference.rs"]
+mod view_signatures;
+#[path = "read_view_substitution_reference.rs"]
+mod view_substitution;
+#[path = "read_view_type_reference.rs"]
+mod view_types;
+pub(super) use view_scopes::{ReadProvenance, ReadViewEnvironment, ScopeRelations, SourceAnchor};
+pub(super) use view_types::Category as ReadCategory;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(super) enum Context {
@@ -116,6 +140,7 @@ impl Oracle<'_> {
                     arguments,
                     effect_arguments,
                     requirement_arguments,
+                    ..
                 }
                 | ExpressionOperation::ImplementationCall {
                     function,
@@ -196,7 +221,7 @@ impl Oracle<'_> {
                     if !Oracle(&overlay, self.1).legal_signature(&signature) {
                         return None;
                     }
-                    let source = match f.result_borrow {
+                    let source = match owned_read_source(&f.result) {
                         Some(source) => Some(f.parameters.iter().position(|id| *id == source)?),
                         None => None,
                     };
@@ -218,6 +243,7 @@ impl Oracle<'_> {
                     contract,
                     method,
                     arguments,
+                    ..
                 } => {
                     // The old reference admits complete mapped method inventories;
                     // the separate algebra retains exact supplied witness authority.
@@ -251,13 +277,13 @@ impl Oracle<'_> {
                             Some((ty, ty, p.use_mode))
                         })
                         .collect::<Option<Vec<_>>>()?;
-                    let result = resolver.substitute(m.result, &environment, 0).ok()?;
+                    let result = resolver.substitute(m.result.ty, &environment, 0).ok()?;
                     resolver.admit_roots(&[result], caller, false).ok()?;
                     (
                         environment,
                         parameters,
                         result,
-                        m.result_borrow.map(|index| index as usize),
+                        owned_read_source(&m.result).map(|index| index as usize),
                         arguments.clone(),
                     )
                 }
@@ -329,6 +355,7 @@ pub(super) struct Resolver<'a> {
     maximum_objects: usize,
     retained_entries: usize,
     resolutions: BTreeMap<TypeObjectDigest, Vec<(Environment, TypeObjectDigest)>>,
+    view_resolutions: BTreeMap<TypeObjectDigest, Vec<(ReadViewEnvironment, TypeObjectDigest)>>,
     active_operands: BTreeSet<(ImplementationOperand, Occurrence)>,
 }
 
@@ -344,6 +371,7 @@ impl<'a> Resolver<'a> {
             maximum_objects: limits.objects,
             retained_entries: 0,
             resolutions: BTreeMap::new(),
+            view_resolutions: BTreeMap::new(),
             active_operands: BTreeSet::new(),
         }
     }
@@ -427,7 +455,20 @@ impl<'a> Resolver<'a> {
         // dependency record's generation describes its encoding, not that owner.
         if [owner, self.source.root.graph_contract_version]
             .into_iter()
-            .all(|generation| generation == contract::GRAPH_CONTRACT_VERSION)
+            .all(|generation| matches!(generation, 33 | 34))
+        {
+            Ok(())
+        } else {
+            Err(Failure::Generation)
+        }
+    }
+    fn current_view(&self, occurrence: Occurrence) -> Result<()> {
+        let (package, key) = occurrence.consumer;
+        let property = occurrence.context == Context::Forbidden
+            && matches!(key, OwnerKey::Declaration(id) if occurrence.parameter_scope == Some(DeclarationReference { package, declaration: id }))
+            && self.header(package, key, true)?.kind == OwnerKind::ReadView;
+        if self.header(package, key, property)?.contract_version == 34
+            && self.source.root.graph_contract_version == 34
         {
             Ok(())
         } else {
@@ -555,7 +596,7 @@ impl<'a> Resolver<'a> {
             if !ids.insert(entry.id) || !names.insert(&entry.name) {
                 return Err(Failure::Inventory);
             }
-            if entry.bound != AssociatedTypeBound::Owned {
+            if entry.id == member && entry.bound != AssociatedTypeBound::Owned {
                 return Err(Failure::Category);
             }
         }
@@ -599,11 +640,27 @@ impl<'a> Resolver<'a> {
         }
     }
     fn parameter_authority(
-        &self,
+        &mut self,
         parameter: TypeParameterId,
         occurrence: Occurrence,
     ) -> Result<()> {
         let scope = occurrence.parameter_scope.ok_or(Failure::Authority)?;
+        let key = OwnerKey::Declaration(scope.declaration);
+        if self.header(scope.package, key, true)?.kind == OwnerKind::ReadView {
+            let view = self.read_view_declaration(scope)?;
+            let view_oracle = Oracle(self.source, Some(scope));
+            let p = view_oracle
+                .type_parameter(scope.package, parameter)
+                .ok_or(Failure::Authority)?;
+            if !view.type_parameters.contains(&parameter)
+                || p.header.owner != OwnerKey::TypeParameter(parameter)
+                || p.header.kind != OwnerKind::TypeParameter
+                || p.declaration != scope.declaration
+            {
+                return Err(Failure::Authority);
+            }
+            return Ok(());
+        }
         let oracle = Oracle(self.source, Some(scope));
         if oracle.scoped_parameter(parameter).is_some() {
             return Ok(());
@@ -685,10 +742,27 @@ impl<'a> Resolver<'a> {
             // The cloned object and child list both carry the raw child slots.
             self.reserve_entries(1 + children)?;
             let object = self.object(ty)?.clone();
+            // Type-object profile and containing Graph generation are separate.
+            if object.form.is_read_view()
+                && object.contract_version != contract::ASSOCIATED_READ_VIEW_CONTRACT_VERSION
+            {
+                return Err(Failure::Generation);
+            }
             if projection_free && object.form.is_associated() {
                 return Err(Failure::BindingProjection);
             }
             self.admit_form(&object.form, here)?;
+            if matches!(
+                object.form,
+                TypeForm::ReadViewApplied { .. }
+                    | TypeForm::AssociatedReadViewMember { .. }
+                    | TypeForm::AssociatedReadViewProjection { .. }
+            ) {
+                if depth != 0 {
+                    return Err(Failure::Category);
+                }
+                self.admit_read_view_form(&object.form, here)?;
+            }
             if let TypeForm::TypeParameter { parameter } = object.form {
                 self.parameter_authority(parameter, here)?;
             }
@@ -755,16 +829,54 @@ impl<'a> Resolver<'a> {
             contract.associated_types.len() + implementation.associated_types.len(),
         )?;
         let expected: BTreeSet<_> = contract.associated_types.iter().map(|m| m.id).collect();
+        if implementation
+            .associated_types
+            .windows(2)
+            .any(|b| b[0].member >= b[1].member)
+        {
+            return Err(Failure::Inventory);
+        }
         let mut actual = BTreeSet::new();
         for binding in &implementation.associated_types {
-            self.member(implementation.contract, binding.member)?;
             if !actual.insert(binding.member) {
                 return Err(Failure::Inventory);
             }
             let occurrence = self.declaration_occurrence(scope, Context::Lexical(scope));
-            self.admit_roots(&[binding.ty], occurrence, true)?;
-            if !self.owned_type(binding.ty, occurrence, 0)? {
-                return Err(Failure::Category);
+            match &binding.value {
+                AssociatedTypeBindingValue::Owned { ty } => {
+                    self.member(implementation.contract, binding.member)?;
+                    self.admit_roots(&[*ty], occurrence, true)?;
+                    if !self.owned_type(*ty, occurrence, 0)? {
+                        return Err(Failure::Category);
+                    }
+                }
+                AssociatedTypeBindingValue::ReadViewFamily {
+                    scope_parameter,
+                    ty,
+                } => {
+                    self.read_view_member(implementation.contract, binding.member)?;
+                    let binder = ReadScopeBinder::AssociatedBinding {
+                        implementation: scope,
+                        member: binding.member,
+                    };
+                    self.admit_scope_inventory(&binder)?;
+                    let expected = ReadScopeArgument::Parameter(ReadScopeReference {
+                        binder,
+                        parameter: scope_parameter.id,
+                    });
+                    match &self.object(*ty)?.form {
+                        TypeForm::ReadViewApplied {
+                            declaration,
+                            read_scope,
+                            ..
+                        } if read_scope == &expected => {
+                            let declaration = *declaration;
+                            self.admit_roots(&[*ty], occurrence, true)?;
+                            self.admit_view_layout(declaration)?;
+                        }
+                        _ => return Err(Failure::Category),
+                    }
+                }
             }
         }
         if actual != expected {
@@ -794,8 +906,9 @@ impl<'a> Resolver<'a> {
             TypeForm::TypeParameter { parameter } => {
                 let scope = occurrence.parameter_scope.ok_or(Failure::Authority)?;
                 let oracle = Oracle(self.source, Some(scope));
+                self.parameter_authority(parameter, occurrence)?;
                 let p = oracle
-                    .scoped_parameter(parameter)
+                    .type_parameter(scope.package, parameter)
                     .ok_or(Failure::Authority)?;
                 Ok(p.constraints.has_owned())
             }
@@ -1238,7 +1351,10 @@ impl<'a> Resolver<'a> {
                     .iter()
                     .find(|b| b.member == member)
                     .ok_or(Failure::Inventory)?;
-                self.replace(binding.ty, &bindings, depth + 1)
+                let AssociatedTypeBindingValue::Owned { ty } = &binding.value else {
+                    return Err(Failure::Category);
+                };
+                self.replace(*ty, &bindings, depth + 1)
             }
         }
     }
@@ -1248,6 +1364,11 @@ impl<'a> Resolver<'a> {
         environment: &Environment,
         depth: usize,
     ) -> Result<TypeObjectDigest> {
+        // Scope-aware derivation must be selected even when a view is hidden
+        // under an old-form root. The old cache contains no scope map.
+        if self.contains_read_view(ty)? {
+            return Err(Failure::Unproved);
+        }
         self.admit_environment(environment, depth, false)?;
         self.substitute_inner(ty, environment, depth)
     }
@@ -1307,8 +1428,11 @@ impl<'a> Resolver<'a> {
                     .associated_types
                     .iter()
                     .find(|binding| binding.member == member)
-                    .map(|binding| binding.ty)
-                    .ok_or(Failure::Inventory)
+                    .map(|binding| match &binding.value {
+                        AssociatedTypeBindingValue::Owned { ty } => Ok(*ty),
+                        AssociatedTypeBindingValue::ReadViewFamily { .. } => Err(Failure::Category),
+                    })
+                    .ok_or(Failure::Inventory)?
             }
             TypeForm::AssociatedWitnessProjection { .. } => Err(Failure::Authority),
             form => {

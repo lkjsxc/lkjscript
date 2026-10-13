@@ -50,6 +50,7 @@ impl Decoder {
                 "expression.sequence-get" => &["index", "source"],
                 "expression.sequence-replace" => &["index", "value", "source"],
                 "expression.borrow-call" => &["call", "body"],
+                "expression.read-view-borrow" | "expression.read-view-borrow-field" => &["body"],
                 "expression.borrow-owned-item" => &["index", "source", "body"],
                 "expression.match-owned" | "expression.match-borrowed-owned" => &["source"],
                 "expression.unpack-owned" | "expression.borrow-owned-field" => &["source", "body"],
@@ -82,6 +83,7 @@ impl Decoder {
             let (edge, fields): (&str, &[&str]) = match record.operation.as_str() {
                 "expression.let" => ("expression.binding", &["value"]),
                 "expression.record" => ("expression.record-field", &["value"]),
+                "expression.read-view-create" => ("expression.read-view-field", &["value"]),
                 "expression.map" => ("expression.map-entry", &["key", "value"]),
                 "expression.match" => ("expression.match-arm", &["body"]),
                 "expression.pack-owned" => ("expression.owned-field", &["value"]),
@@ -131,7 +133,10 @@ impl Decoder {
             }
             if matches!(
                 record.operation.as_str(),
-                "type.application" | "type.function" | "type.task-function"
+                "type.application"
+                    | "type.read-view-application"
+                    | "type.function"
+                    | "type.task-function"
             ) && let Some(edges) = self.type_parameters.get(symbol)
             {
                 children.extend(

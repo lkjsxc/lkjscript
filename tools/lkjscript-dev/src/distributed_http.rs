@@ -7,7 +7,7 @@ use lkjscript::platform::control::{CompactRecord, parse_records};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read};
@@ -2585,12 +2585,12 @@ fn project_function_definition(
         )?;
         require_exact(
             required_field(projection, "contract")?,
-            "lkjscript-function-definition-projection-21",
+            "lkjscript-function-definition-projection-22",
             "definition contract",
         )?;
         require_exact(
             required_field(projection, "version")?,
-            "21",
+            "22",
             "definition version",
         )?;
         let digest = required_field(projection, "digest")?.to_owned();
@@ -2695,6 +2695,7 @@ fn project_function_definition(
             "assembled definition record count disagrees with its complete projection",
         ));
     }
+    validate_definition_scope_inventory(&all_records, function)?;
     let (recomputed, recomputed_bytes) = recompute_definition_digest(&all_records)?;
     if recomputed != digest || recomputed_bytes != logical_bytes {
         return Err(AcceptanceFailure::acceptance(
@@ -2792,7 +2793,7 @@ fn definition_records(
 fn recompute_definition_digest(
     records: &[DefinitionRecord],
 ) -> Result<(String, u64), AcceptanceFailure> {
-    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.function-definition.logical.v3");
+    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.function-definition.logical.v4");
     hasher.update(&(records.len() as u64).to_be_bytes());
     let mut logical_bytes = 0_u64;
     for record in records {
@@ -2800,11 +2801,24 @@ fn recompute_definition_digest(
             "definition.header" => 1,
             "definition.function"
             | "definition.type-parameter"
+            | "definition.implementation-parameter"
+            | "definition.implementation-type-argument"
+            | "definition.requirement-parameter"
+            | "definition.requirement-parameter-operation"
+            | "definition.effect-parameter"
+            | "definition.read-scope-parameter"
+            | "definition.read-scope-source"
             | "definition.parameter"
             | "definition.requirement"
             | "definition.requirement-operation"
             | "definition.requirement-limit" => 2,
-            "definition.expression" | "definition.binding" | "definition.literal" => 3,
+            "definition.expression"
+            | "definition.binding"
+            | "definition.literal"
+            | "definition.effect-argument"
+            | "definition.implementation-operand"
+            | "definition.implementation-operand-type-argument"
+            | "definition.read-scope-argument" => 3,
             "definition.reference" => 4,
             "definition.fact" => 5,
             operation => {
@@ -2831,6 +2845,288 @@ fn recompute_definition_digest(
     ))
 }
 
+fn validate_definition_scope_inventory(
+    records: &[DefinitionRecord],
+    function: &str,
+) -> Result<(), AcceptanceFailure> {
+    let fail = |message: &str| AcceptanceFailure::acceptance("definition_scope_inventory", message);
+    let field = definition_record_field;
+    let headers = records
+        .iter()
+        .filter(|record| record.operation == "definition.header")
+        .collect::<Vec<_>>();
+    let [header] = headers.as_slice() else {
+        return Err(fail("definition must contain exactly one bound header"));
+    };
+    let package = field(header, "package")?;
+    if !definition_static_id(package, "pkg_")
+        || field(header, "function")? != function
+        || field(header, "contract")? != "lkjscript-function-definition-projection-22"
+    {
+        return Err(fail(
+            "definition header omits its exact package or function binder",
+        ));
+    }
+    let signature_scope_prefix = format!("parameter:declaration:{package}/{function}:");
+    let functions = records
+        .iter()
+        .filter(|record| record.operation == "definition.function")
+        .collect::<Vec<_>>();
+    let [contract] = functions.as_slice() else {
+        return Err(fail(
+            "definition must contain exactly one function contract",
+        ));
+    };
+    let contract_fields = [
+        "id",
+        "kind",
+        "module",
+        "name",
+        "visibility",
+        "type-parameters",
+        "implementation-parameters",
+        "effect-parameters",
+        "requirement-parameters",
+        "effect-row-parameters",
+        "parameters",
+        "result",
+        "result-kind",
+        "result-source",
+        "result-scope",
+        "read-scope-parameters",
+        "read-scope-sources",
+        "effect",
+        "requirements",
+        "body",
+    ];
+    if field(contract, "id")? != function
+        || contract.fields.len() != contract_fields.len()
+        || contract_fields
+            .iter()
+            .any(|name| !contract.fields.contains_key(*name))
+    {
+        return Err(fail(
+            "definition function identity or exact contract fields disagree",
+        ));
+    }
+    let parameters = records
+        .iter()
+        .filter(|record| record.operation == "definition.parameter")
+        .map(|record| {
+            if field(record, "parent")? != function {
+                return Err(fail("definition parameter names a foreign function"));
+            }
+            Ok(field(record, "id")?)
+        })
+        .collect::<Result<BTreeSet<_>, AcceptanceFailure>>()?;
+    let source = field(contract, "result-source")?;
+    let scope = field(contract, "result-scope")?;
+    let valid_source = || definition_static_id(source, "param_") && parameters.contains(source);
+    let valid_result = match field(contract, "result-kind")? {
+        "value" => source == "-" && scope == "-",
+        "read-from" => valid_source() && scope == "-",
+        "view-from" => valid_source() && definition_read_scope_coordinate(scope),
+        _ => false,
+    };
+    if !valid_result {
+        return Err(fail(
+            "definition result relation omits or contradicts its source or scope",
+        ));
+    }
+    let mut scope_ids = BTreeSet::new();
+    let mut scope_names = BTreeSet::new();
+    let mut scope_sources = BTreeSet::new();
+    for (operation, count_field, names) in [
+        (
+            "definition.read-scope-parameter",
+            "read-scope-parameters",
+            ["id", "parent", "index", "name"],
+        ),
+        (
+            "definition.read-scope-source",
+            "read-scope-sources",
+            ["parent", "index", "source", "scope"],
+        ),
+    ] {
+        let inventory = records
+            .iter()
+            .filter(|record| record.operation == operation)
+            .collect::<Vec<_>>();
+        if inventory.len() as u64 != parse_u64(field(contract, count_field)?, count_field)? {
+            return Err(fail(
+                "definition read-scope inventory disagrees with its complete count",
+            ));
+        }
+        for (index, record) in inventory.iter().enumerate() {
+            if record.fields.len() != names.len()
+                || names.iter().any(|name| !record.fields.contains_key(*name))
+                || field(record, "parent")? != function
+                || parse_u64(field(record, "index")?, "read-scope index")? != index as u64
+            {
+                return Err(fail(
+                    "definition read-scope record is foreign, incomplete, or reordered",
+                ));
+            }
+            if operation == "definition.read-scope-parameter" {
+                let id = field(record, "id")?;
+                if !definition_static_id(id, "read_scope_")
+                    || !scope_ids.insert(id)
+                    || field(record, "name")?.is_empty()
+                    || !scope_names.insert(field(record, "name")?)
+                {
+                    return Err(fail(
+                        "definition read-scope formal is malformed or duplicated",
+                    ));
+                }
+            } else if !definition_static_id(field(record, "source")?, "param_")
+                || !parameters.contains(field(record, "source")?)
+                || !field(record, "scope")?
+                    .strip_prefix(&signature_scope_prefix)
+                    .is_some_and(|id| scope_ids.contains(id))
+                || !scope_sources.insert((field(record, "source")?, field(record, "scope")?))
+            {
+                return Err(fail(
+                    "definition read-scope source is duplicated or omits its declared function formal",
+                ));
+            }
+        }
+    }
+    if field(contract, "result-kind")? == "view-from"
+        && !scope
+            .strip_prefix(&signature_scope_prefix)
+            .is_some_and(|id| scope_ids.contains(id))
+    {
+        return Err(fail(
+            "definition view result scope is not a declared exact function formal",
+        ));
+    }
+    let mut arguments: BTreeMap<(&str, &str), Vec<&DefinitionRecord>> = BTreeMap::new();
+    for record in records
+        .iter()
+        .filter(|record| record.operation == "definition.read-scope-argument")
+    {
+        if record.fields.len() != 4
+            || !["parent", "slot", "index", "scope"]
+                .iter()
+                .all(|name| record.fields.contains_key(*name))
+            || !definition_read_scope_coordinate(field(record, "scope")?)
+        {
+            return Err(fail(
+                "definition read-scope actual has incomplete or malformed coordinates",
+            ));
+        }
+        arguments
+            .entry((field(record, "parent")?, field(record, "slot")?))
+            .or_default()
+            .push(record);
+    }
+    let mut ordered_actuals = records
+        .iter()
+        .filter(|record| record.operation == "definition.read-scope-argument");
+    let mut expression_ids = BTreeSet::new();
+    for expression in records
+        .iter()
+        .filter(|record| record.operation == "definition.expression")
+    {
+        let id = field(expression, "id")?;
+        if !expression_ids.insert(id) {
+            return Err(fail("definition body repeats an expression identity"));
+        }
+        let slot = match field(expression, "form")? {
+            "call" => "call",
+            "implementation_call" => "implementation-call",
+            "function_value" => "function-value",
+            "method_call" => "method-call",
+            _ => continue,
+        };
+        let actuals = arguments.remove(&(id, slot)).unwrap_or_default();
+        if actuals.len() as u64
+            != parse_u64(
+                field(expression, "read-scope-arguments")?,
+                "read-scope actual count",
+            )?
+            || actuals.iter().enumerate().any(|(index, record)| {
+                record
+                    .fields
+                    .get("index")
+                    .and_then(|value| value.parse::<u64>().ok())
+                    != Some(index as u64)
+            })
+        {
+            return Err(fail(
+                "definition read-scope actual inventory is omitted, duplicated, or reordered",
+            ));
+        }
+        for actual in actuals {
+            if ordered_actuals.next() != Some(actual) {
+                return Err(fail(
+                    "definition scope-actual groups disagree with authored expression order",
+                ));
+            }
+        }
+    }
+    if !arguments.is_empty() || ordered_actuals.next().is_some() {
+        return Err(fail(
+            "definition read-scope actual names a foreign expression or slot",
+        ));
+    }
+    Ok(())
+}
+
+fn definition_record_field<'a>(
+    record: &'a DefinitionRecord,
+    name: &str,
+) -> Result<&'a str, AcceptanceFailure> {
+    record.fields.get(name).map(String::as_str).ok_or_else(|| {
+        AcceptanceFailure::acceptance(
+            "definition_scope_field",
+            format!("definition '{}' omitted '{name}'", record.operation),
+        )
+    })
+}
+
+fn definition_static_id(value: &str, prefix: &str) -> bool {
+    value.strip_prefix(prefix).is_some_and(|hex| {
+        hex.len() == 32
+            && hex
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            && hex.bytes().any(|byte| byte != b'0')
+    })
+}
+
+fn definition_read_scope_coordinate(value: &str) -> bool {
+    let declaration = |value: &str| {
+        value.split_once('/').is_some_and(|(package, owner)| {
+            definition_static_id(package, "pkg_") && definition_static_id(owner, "decl_")
+        })
+    };
+    let parts = value.split(':').collect::<Vec<_>>();
+    match parts.as_slice() {
+        ["parameter", "declaration", owner, parameter] => {
+            declaration(owner) && definition_static_id(parameter, "read_scope_")
+        }
+        ["parameter", "contract-method", owner, method, parameter] => {
+            declaration(owner)
+                && definition_static_id(method, "method_")
+                && definition_static_id(parameter, "read_scope_")
+        }
+        [
+            "parameter",
+            "associated-member" | "associated-binding",
+            owner,
+            member,
+            parameter,
+        ] => {
+            declaration(owner)
+                && definition_static_id(member, "assoc_type_")
+                && definition_static_id(parameter, "read_scope_")
+        }
+        ["lexical", owner, binding] => declaration(owner) && definition_static_id(binding, "bind_"),
+        _ => false,
+    }
+}
+
 fn definition_contract_equal(
     before: &DefinitionProjection,
     after: &DefinitionProjection,
@@ -2844,6 +3140,13 @@ fn definition_contract_equal(
                     record.operation.as_str(),
                     "definition.function"
                         | "definition.type-parameter"
+                        | "definition.implementation-parameter"
+                        | "definition.implementation-type-argument"
+                        | "definition.requirement-parameter"
+                        | "definition.requirement-parameter-operation"
+                        | "definition.effect-parameter"
+                        | "definition.read-scope-parameter"
+                        | "definition.read-scope-source"
                         | "definition.parameter"
                         | "definition.requirement"
                         | "definition.requirement-operation"
@@ -3595,6 +3898,186 @@ pub(crate) fn encode_transferred_test_fixture(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn scoped_definition_fixture() -> Vec<DefinitionRecord> {
+        let bytes = b"definition.header repository=repository package=pkg_77777777777777777777777777777777 revision=revision function=decl_11111111111111111111111111111111 contract=lkjscript-function-definition-projection-22 ordering=ordering\n\
+definition.function id=decl_11111111111111111111111111111111 kind=pure_function module=module name=reader visibility=public type-parameters=0 implementation-parameters=0 effect-parameters=0 requirement-parameters=0 effect-row-parameters=0 parameters=1 result=type result-kind=view-from result-source=param_33333333333333333333333333333333 result-scope=parameter:declaration:pkg_77777777777777777777777777777777/decl_11111111111111111111111111111111:read_scope_44444444444444444444444444444444 read-scope-parameters=2 read-scope-sources=1 effect=pure requirements=0 body=expr_55555555555555555555555555555555\n\
+definition.read-scope-parameter id=read_scope_44444444444444444444444444444444 parent=decl_11111111111111111111111111111111 index=0 name=loan\n\
+definition.read-scope-parameter id=read_scope_88888888888888888888888888888888 parent=decl_11111111111111111111111111111111 index=1 name=unused\n\
+definition.read-scope-source parent=decl_11111111111111111111111111111111 index=0 source=param_33333333333333333333333333333333 scope=parameter:declaration:pkg_77777777777777777777777777777777/decl_11111111111111111111111111111111:read_scope_44444444444444444444444444444444\n\
+definition.parameter id=param_33333333333333333333333333333333 parent=decl_11111111111111111111111111111111 index=0 name=source type=type use=borrow requirement=none\n\
+definition.read-scope-argument parent=expr_55555555555555555555555555555555 slot=call index=0 scope=lexical:pkg_77777777777777777777777777777777/decl_11111111111111111111111111111111:bind_66666666666666666666666666666666\n\
+definition.expression id=expr_55555555555555555555555555555555 form=call read-scope-arguments=1\n";
+        let parsed = compact_records("scope fixture", bytes).expect("strict literal scope records");
+        definition_records(&parsed, bytes).expect("physical scope records")
+    }
+
+    #[test]
+    fn distributed_definition_preserves_unused_scopes_and_exact_call_inventory() {
+        let records = scoped_definition_fixture();
+        let function = "decl_11111111111111111111111111111111";
+        validate_definition_scope_inventory(&records, function).expect("complete scope inventory");
+        let mut omitted = records.clone();
+        omitted.remove(3);
+        assert!(validate_definition_scope_inventory(&omitted, function).is_err());
+        for (record_index, field, value) in [
+            (0, "result-source", "-"),
+            (0, "result-kind", "value"),
+            (3, "source", "param_99999999999999999999999999999999"),
+            (5, "slot", "method-mapping"),
+            (5, "index", "1"),
+            (5, "scope", "lexical:bind_66666666666666666666666666666666"),
+            (6, "read-scope-arguments", "0"),
+        ] {
+            let mut changed = records.clone();
+            changed[record_index + 1]
+                .fields
+                .insert(field.to_owned(), value.to_owned());
+            assert!(
+                validate_definition_scope_inventory(&changed, function).is_err(),
+                "{field}"
+            );
+        }
+        let mut duplicate_name = records.clone();
+        duplicate_name[3]
+            .fields
+            .insert("name".to_owned(), "loan".to_owned());
+        assert!(validate_definition_scope_inventory(&duplicate_name, function).is_err());
+        let mut two_sources = records.clone();
+        let mut second_source = two_sources[4].clone();
+        second_source
+            .fields
+            .insert("index".to_owned(), "1".to_owned());
+        second_source.fields.insert(
+            "scope".to_owned(),
+            "parameter:declaration:pkg_77777777777777777777777777777777/decl_11111111111111111111111111111111:read_scope_88888888888888888888888888888888".to_owned(),
+        );
+        two_sources.insert(5, second_source);
+        two_sources[1]
+            .fields
+            .insert("read-scope-sources".to_owned(), "2".to_owned());
+        validate_definition_scope_inventory(&two_sources, function)
+            .expect("same source at two declared scopes");
+        two_sources[5].fields.insert(
+            "scope".to_owned(),
+            records[4]
+                .fields
+                .get("scope")
+                .expect("first source scope")
+                .clone(),
+        );
+        assert!(validate_definition_scope_inventory(&two_sources, function).is_err());
+        for invalid_scope in [
+            "lexical:pkg_77777777777777777777777777777777/decl_11111111111111111111111111111111:bind_66666666666666666666666666666666",
+            "parameter:declaration:pkg_77777777777777777777777777777777/decl_11111111111111111111111111111111:read_scope_99999999999999999999999999999999",
+            "parameter:declaration:pkg_77777777777777777777777777777777/decl_99999999999999999999999999999999:read_scope_44444444444444444444444444444444",
+            "parameter:declaration:pkg_99999999999999999999999999999999/decl_11111111111111111111111111111111:read_scope_44444444444444444444444444444444",
+            "parameter:contract-method:pkg_77777777777777777777777777777777/decl_11111111111111111111111111111111:method_22222222222222222222222222222222:read_scope_44444444444444444444444444444444",
+        ] {
+            assert!(definition_read_scope_coordinate(invalid_scope));
+            for record_index in [1, 4] {
+                let mut changed = records.clone();
+                let name = if record_index == 1 {
+                    "result-scope"
+                } else {
+                    "scope"
+                };
+                changed[record_index]
+                    .fields
+                    .insert(name.to_owned(), invalid_scope.to_owned());
+                assert!(
+                    validate_definition_scope_inventory(&changed, function).is_err(),
+                    "{name}: {invalid_scope}"
+                );
+            }
+        }
+        let mut value_result = records.clone();
+        for (name, value) in [
+            ("result-kind", "value"),
+            ("result-source", "-"),
+            ("result-scope", "-"),
+            ("read-scope-parameters", "0"),
+            ("read-scope-sources", "0"),
+        ] {
+            value_result[1]
+                .fields
+                .insert(name.to_owned(), value.to_owned());
+        }
+        value_result.retain(|record| {
+            !matches!(
+                record.operation.as_str(),
+                "definition.read-scope-parameter" | "definition.read-scope-source"
+            )
+        });
+        validate_definition_scope_inventory(&value_result, function)
+            .expect("Value with no callable scope inventory");
+        let tail_bytes = b"definition.read-scope-argument parent=expr_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa slot=call index=0 scope=lexical:pkg_77777777777777777777777777777777/decl_11111111111111111111111111111111:bind_66666666666666666666666666666666\n\
+definition.expression id=expr_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa form=call read-scope-arguments=1\n";
+        let tail_parsed =
+            compact_records("second scope group", tail_bytes).expect("strict second scope group");
+        let mut two_calls = records.clone();
+        two_calls.extend(
+            definition_records(&tail_parsed, tail_bytes).expect("second physical scope group"),
+        );
+        validate_definition_scope_inventory(&two_calls, function)
+            .expect("two authored scope-actual groups");
+        two_calls.swap(6, 8);
+        assert!(validate_definition_scope_inventory(&two_calls, function).is_err());
+        let projection = |records| DefinitionProjection {
+            revision: "revision".to_owned(),
+            function: function.to_owned(),
+            digest: String::new(),
+            total_records: 0,
+            body_records: 0,
+            fact_records: 0,
+            logical_bytes: 0,
+            pages: 0,
+            output_bytes: 0,
+            first_continuation: String::new(),
+            changed_page_budgets: false,
+            records,
+        };
+        let before = projection(records.clone());
+        let mut changed = records;
+        changed[3]
+            .fields
+            .insert("name".to_owned(), "different-unused-formal".to_owned());
+        assert!(
+            !definition_contract_equal(&before, &projection(changed))
+                .expect("compare exact scope contracts")
+        );
+    }
+
+    #[test]
+    fn distributed_definition_scope_coordinates_retain_every_binder_owner() {
+        let owner = "pkg_77777777777777777777777777777777/decl_11111111111111111111111111111111";
+        for coordinate in [
+            format!("parameter:declaration:{owner}:read_scope_44444444444444444444444444444444"),
+            format!(
+                "parameter:contract-method:{owner}:method_22222222222222222222222222222222:read_scope_44444444444444444444444444444444"
+            ),
+            format!(
+                "parameter:associated-member:{owner}:assoc_type_22222222222222222222222222222222:read_scope_44444444444444444444444444444444"
+            ),
+            format!(
+                "parameter:associated-binding:{owner}:assoc_type_22222222222222222222222222222222:read_scope_44444444444444444444444444444444"
+            ),
+            format!("lexical:{owner}:bind_66666666666666666666666666666666"),
+        ] {
+            assert!(definition_read_scope_coordinate(&coordinate));
+            assert!(!definition_read_scope_coordinate(
+                &coordinate.replace(owner, "decl_11111111111111111111111111111111")
+            ));
+            assert!(!definition_read_scope_coordinate(&format!(
+                "{coordinate}:extra"
+            )));
+        }
+        let records = scoped_definition_fixture();
+        recompute_definition_digest(&records).expect("v4 covers all three scope record kinds");
+        let mut unknown = records;
+        unknown[6].operation = "definition.future-scope".to_owned();
+        assert!(recompute_definition_digest(&unknown).is_err());
+    }
 
     fn options(values: &[&str]) -> Result<Options, DevError> {
         parse_options(values.iter().map(OsString::from))

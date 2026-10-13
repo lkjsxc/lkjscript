@@ -33,6 +33,12 @@ pub(crate) fn encode_typed_with_control(
     ty: TypeObjectDigest,
     control: &ExecutionControl,
 ) -> Result<Vec<u8>, Diagnostic> {
+    value
+        .reject_read_view_escape(control)
+        .map_err(super::runner::execution_diagnostic)?;
+    program
+        .reject_read_view_escape(ty, control)
+        .map_err(super::runner::execution_diagnostic)?;
     let layout = layout_identity(program, ty, control)?;
     let mut output = Vec::new();
     output.extend_from_slice(VALUE_MAGIC);
@@ -68,7 +74,9 @@ pub(crate) fn decode_typed_with_control(
     ty: TypeObjectDigest,
     control: &ExecutionControl,
 ) -> Result<NormalizedValue, Diagnostic> {
-    checkpoint(control)?;
+    program
+        .reject_read_view_escape(ty, control)
+        .map_err(super::runner::execution_diagnostic)?;
     if bytes.len() > MAXIMUM_VALUE_BYTES {
         return Err(codec_error(
             DiagnosticClass::Resource,
@@ -160,6 +168,12 @@ fn encode_value(
     state.enter(depth, false)?;
     let form = type_form(program, ty)?;
     match (value, form) {
+        (
+            _,
+            TypeForm::ReadViewApplied { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. },
+        ) => return Err(unsupported("ReadView")),
         (NormalizedValue::Unit, TypeForm::Unit) => {}
         (NormalizedValue::Bool(value), TypeForm::Bool) => {
             append_bytes(output, &[u8::from(*value)])?
@@ -324,6 +338,9 @@ fn decode_value_charged(
 ) -> Result<NormalizedValue, Diagnostic> {
     state.enter(depth, precharged)?;
     match type_form(program, ty)? {
+        TypeForm::ReadViewApplied { .. }
+        | TypeForm::AssociatedReadViewMember { .. }
+        | TypeForm::AssociatedReadViewProjection { .. } => Err(unsupported("ReadView")),
         TypeForm::AssociatedContractMember { .. }
         | TypeForm::AssociatedWitnessProjection { .. } => Err(unsupported("associated owned type")),
         TypeForm::Unit => Ok(NormalizedValue::Unit),
@@ -533,6 +550,9 @@ fn describe_layout(
     }
     append_bytes(output, &ty.bytes())?;
     match type_form(program, ty)? {
+        TypeForm::ReadViewApplied { .. }
+        | TypeForm::AssociatedReadViewMember { .. }
+        | TypeForm::AssociatedReadViewProjection { .. } => return Err(unsupported("ReadView")),
         TypeForm::AssociatedContractMember { .. }
         | TypeForm::AssociatedWitnessProjection { .. } => {
             return Err(unsupported("associated owned type"));

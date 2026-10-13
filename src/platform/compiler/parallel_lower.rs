@@ -9,6 +9,7 @@ pub(super) struct Child {
     pub(super) result_owned: bool,
     pub(super) types: Vec<u32>,
     pub(super) implementations: Vec<crate::platform::kernel::ImplementationOperand>,
+    pub(super) read_scope_arguments: Vec<ReadScopeArgument>,
 }
 
 impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
@@ -16,6 +17,7 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
         &mut self,
         expression: ExpressionId,
         wrapper_generation: u16,
+        live_loans: &BTreeSet<BindingId>,
     ) -> Result<crate::platform::kernel::parallel::ParallelCall, Diagnostic> {
         let read = CodeExpressionRead {
             canonical: self.canonical,
@@ -26,22 +28,30 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
             parallel_steps: Some(&self.derived_type_admission.parallel_steps),
         };
         let admission = &self.derived_type_admission.parallel;
-        let result: Result<_, Diagnostic> = (|| {
-            // This reads the actual child header and complete written witness tree.
-            // A closed output cannot erase the original consumer's generation.
-            let call = crate::platform::kernel::parallel::admit_call_at(
-                &read, expression, self.scope, admission,
+        let result: Result<_, Diagnostic> =
+            (|| {
+                // This reads the actual child header and complete written witness tree.
+                // A closed output cannot erase the original consumer's generation.
+                let caller = self.scope.map(|declaration| DeclarationReference {
+                    package: self.package,
+                    declaration,
+                });
+                let call = crate::platform::kernel::parallel::admit_call_at_with_scope_authority(
+                &read, expression, self.scope,
+                crate::platform::kernel::owned_associated::read_view_admission::ScopeAuthority {
+                    binder: caller.map(ReadScopeBinder::Declaration), lexical: caller, live_loans,
+                }, admission,
             )?;
-            validate_wrapper(
-                &read,
-                expression,
-                self.scope,
-                wrapper_generation,
-                &call,
-                admission,
-            )?;
-            Ok(call)
-        })();
+                validate_wrapper(
+                    &read,
+                    expression,
+                    self.scope,
+                    wrapper_generation,
+                    &call,
+                    admission,
+                )?;
+                Ok(call)
+            })();
         self.work.canonical.add(read.work.into_inner());
         self.work.owner_records_read = self
             .work
@@ -326,7 +336,7 @@ fn validate_wrapper(
         }
     }
     let signature = crate::platform::kernel::function_contract(read, call.function)?;
-    associated |= contains_associated(read, signature.result, admission)?;
+    associated |= contains_associated(read, signature.result.ty, admission)?;
     for id in &signature.parameters {
         read.validation_work()?;
         let key = OwnerKey::Parameter(*id);
@@ -367,12 +377,7 @@ fn validate_wrapper(
         let parent = scope
             .and_then(|scope| read.owner(OwnerKey::Declaration(scope)).transpose())
             .transpose()?;
-        if generation != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
-            || parent.is_none_or(|parent| {
-                parent.header().contract_version
-                    != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
-            })
-        {
+        if generation < 33 || parent.is_none_or(|parent| parent.header().contract_version < 33) {
             return Err(compiler_error(
                 DiagnosticClass::Semantic,
                 "kernel_owned_associated_generation",

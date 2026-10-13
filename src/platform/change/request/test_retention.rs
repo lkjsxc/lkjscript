@@ -1,7 +1,9 @@
 //! Retain accepted test trees only after a complete typed literal-edit proof.
 use super::*;
-use crate::platform::kernel::{ExpressionOperation as E, LocalValueReference as L};
-use crate::platform::witness::aggregation_children;
+use crate::platform::kernel::{
+    DeclarationPayload, ExpressionOperation as E, LocalValueReference as L, TypeForm,
+};
+use crate::platform::witness::aggregation_children_with_bindings;
 
 pub(super) fn retain<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     lowerer: &mut AuthoredLowerer<'_, B, W>,
@@ -39,8 +41,12 @@ pub(super) fn retain<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>
         ) {
             return Ok(false);
         }
-        let old_children = aggregation_children(&previous)?;
-        let new_children = aggregation_children(&proposed)?;
+        let old_children = aggregation_children_with_bindings(&previous, |binding| {
+            candidate_binding(lowerer, binding)
+        })?;
+        let new_children = aggregation_children_with_bindings(&proposed, |binding| {
+            candidate_binding(lowerer, binding)
+        })?;
         if old_children.len() != new_children.len() {
             return Ok(false);
         }
@@ -87,18 +93,26 @@ pub(super) fn retain<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>
     let owner_count = lowerer.owners.len();
     charge(lowerer, owner_count)?;
     let owners = lowerer.owners.keys().copied().collect::<Vec<_>>();
+    let mut examined_types = BTreeSet::new();
     for owner in owners {
         if identities.contains_key(&owner) {
             continue;
         }
-        let record = &lowerer.owners.get(&owner).ok_or_else(missing)?.record;
-        if aggregation_children(record)?
-            .iter()
-            .any(|(_, child)| identities.contains_key(child))
+        let record = lowerer
+            .owners
+            .get(&owner)
+            .ok_or_else(missing)?
+            .record
+            .clone();
+        if aggregation_children_with_bindings(&record, |binding| {
+            candidate_binding(lowerer, binding)
+        })?
+        .iter()
+        .any(|(_, child)| identities.contains_key(child))
         {
             return Ok(false);
         }
-        let referenced = match record {
+        let referenced = match &record {
             OwnerRecord::Expression(expression) => match expression.operation {
                 E::Local {
                     value: L::LexicalBinding(id) | L::MatchPayload(id) | L::TransactionBinding(id),
@@ -111,6 +125,14 @@ pub(super) fn retain<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>
         };
         if referenced.is_some_and(|owner| identities.contains_key(&owner)) {
             return Ok(false);
+        }
+        if references_discarded_scope(&record, &identities) {
+            return Ok(false);
+        }
+        for ty in record.type_roots() {
+            if type_references_discarded_scope(lowerer, ty, &identities, &mut examined_types, 0)? {
+                return Ok(false);
+            }
         }
     }
     // All comparisons precede edits. Only accepted scalar owners change; labels
@@ -138,6 +160,24 @@ pub(super) fn retain<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>
     Ok(true)
 }
 
+fn candidate_binding<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+    lowerer: &mut AuthoredLowerer<'_, B, W>,
+    binding: BindingId,
+) -> Result<Option<crate::platform::kernel::BindingRecord>, Diagnostic> {
+    lowerer.require_owner(OwnerKey::Binding(binding))?;
+    let working = lowerer
+        .owners
+        .get(&OwnerKey::Binding(binding))
+        .ok_or_else(missing)?;
+    if working.deleted {
+        return Ok(None);
+    }
+    match &working.record {
+        OwnerRecord::Binding(record) => Ok(Some(record.clone())),
+        _ => Err(missing()),
+    }
+}
+
 fn same_scalar(left: &E, right: &E) -> bool {
     matches!(
         (left, right),
@@ -160,10 +200,85 @@ fn map_binding(value: &mut BindingId, identities: &BTreeMap<OwnerKey, OwnerKey>)
     }
 }
 
+fn map_local(value: &mut L, identities: &BTreeMap<OwnerKey, OwnerKey>) {
+    match value {
+        L::LexicalBinding(binding) | L::MatchPayload(binding) | L::TransactionBinding(binding) => {
+            map_binding(binding, identities);
+        }
+        L::FunctionParameter(_) | L::OperationParameter(_) => {}
+    }
+}
+
+fn map_scope(
+    scope: &mut crate::platform::kernel::ReadScopeArgument,
+    identities: &BTreeMap<OwnerKey, OwnerKey>,
+) {
+    if let crate::platform::kernel::ReadScopeArgument::Lexical { binding, .. } = scope {
+        map_binding(binding, identities);
+    }
+}
+
 fn remap(operation: &mut E, identities: &BTreeMap<OwnerKey, OwnerKey>) {
     let expression = |value: &mut ExpressionId| map_expression(value, identities);
     let binding = |value: &mut BindingId| map_binding(value, identities);
     match operation {
+        E::Call {
+            read_scope_arguments,
+            ..
+        }
+        | E::ImplementationCall {
+            read_scope_arguments,
+            ..
+        }
+        | E::FunctionValue {
+            read_scope_arguments,
+            ..
+        }
+        | E::MethodCall {
+            read_scope_arguments,
+            ..
+        } => {
+            for scope in read_scope_arguments {
+                map_scope(scope, identities);
+            }
+        }
+        _ => {}
+    }
+    match operation {
+        E::CreateReadView {
+            read_scope,
+            source,
+            fields,
+            ..
+        } => {
+            map_scope(read_scope, identities);
+            map_local(source, identities);
+            for field in fields {
+                expression(&mut field.value);
+            }
+        }
+        E::BorrowReadView {
+            value,
+            binding: id,
+            body,
+        }
+        | E::BorrowReadViewField {
+            value,
+            binding: id,
+            body,
+            ..
+        } => {
+            map_local(value, identities);
+            binding(id);
+            expression(body);
+        }
+        E::ReborrowReadView { value, read_scope } => {
+            map_local(value, identities);
+            map_scope(read_scope, identities);
+        }
+        E::MoveReadView { value }
+        | E::DropReadView { value }
+        | E::ReadViewDataField { value, .. } => map_local(value, identities),
         E::BorrowCall {
             call,
             binding: id,
@@ -173,10 +288,7 @@ fn remap(operation: &mut E, identities: &BTreeMap<OwnerKey, OwnerKey>) {
             binding(id);
             expression(body);
         }
-        E::Local { value } => match value {
-            L::LexicalBinding(id) | L::MatchPayload(id) | L::TransactionBinding(id) => binding(id),
-            L::FunctionParameter(_) | L::OperationParameter(_) => {}
-        },
+        E::Local { value } => map_local(value, identities),
         E::If {
             condition,
             when_true,
@@ -339,6 +451,123 @@ fn remap(operation: &mut E, identities: &BTreeMap<OwnerKey, OwnerKey>) {
         | E::Constant { .. }
         | E::FunctionValue { .. } => {}
     }
+}
+
+fn scope_references_discarded_binding(
+    scope: crate::platform::kernel::ReadScopeArgument,
+    identities: &BTreeMap<OwnerKey, OwnerKey>,
+) -> bool {
+    matches!(scope, crate::platform::kernel::ReadScopeArgument::Lexical { binding, .. }
+        if identities.contains_key(&OwnerKey::Binding(binding)))
+}
+
+fn local_references_discarded_binding(value: L, identities: &BTreeMap<OwnerKey, OwnerKey>) -> bool {
+    match value {
+        L::LexicalBinding(binding) | L::MatchPayload(binding) | L::TransactionBinding(binding) => {
+            identities.contains_key(&OwnerKey::Binding(binding))
+        }
+        L::FunctionParameter(_) | L::OperationParameter(_) => false,
+    }
+}
+
+fn result_references_discarded_binding<S>(
+    result: &crate::platform::kernel::CallableResult<S>,
+    identities: &BTreeMap<OwnerKey, OwnerKey>,
+) -> bool {
+    matches!(result.relation, crate::platform::kernel::ResultRelation::ViewFrom { scope, .. }
+        if scope_references_discarded_binding(scope, identities))
+}
+
+fn references_discarded_scope(
+    record: &OwnerRecord,
+    identities: &BTreeMap<OwnerKey, OwnerKey>,
+) -> bool {
+    let scope = |scope| scope_references_discarded_binding(scope, identities);
+    match record {
+        OwnerRecord::Expression(expression) => {
+            if expression.operation.read_scope_arguments().iter().copied().any(scope) {
+                return true;
+            }
+            match &expression.operation {
+                E::CreateReadView { source, read_scope, .. } => {
+                    local_references_discarded_binding(*source, identities) || scope(*read_scope)
+                }
+                E::ReborrowReadView { value, read_scope } => {
+                    local_references_discarded_binding(*value, identities) || scope(*read_scope)
+                }
+                E::BorrowReadView { value, .. }
+                | E::MoveReadView { value }
+                | E::DropReadView { value }
+                | E::ReadViewDataField { value, .. }
+                | E::BorrowReadViewField { value, .. } => {
+                    local_references_discarded_binding(*value, identities)
+                }
+                _ => false,
+            }
+        }
+        OwnerRecord::Declaration(declaration) => match &declaration.payload {
+            DeclarationPayload::Function(function) => {
+                result_references_discarded_binding(&function.result, identities)
+                    || function.read_scope_sources.iter().any(|entry| scope(entry.scope))
+            }
+            DeclarationPayload::OwnedContract(contract) => contract.methods.iter().any(|method| {
+                result_references_discarded_binding(&method.result, identities)
+                    || method.read_scope_sources.iter().any(|entry| scope(entry.scope))
+            }),
+            DeclarationPayload::OwnedImplementation(implementation) => implementation.methods.iter()
+                .any(|method| method.read_scope_arguments.iter().copied().any(scope)),
+            DeclarationPayload::ReadView(view) => view.fields.iter().any(|field| {
+                matches!(field.kind, crate::platform::kernel::ReadViewFieldKind::ReadReference { read_scope }
+                    if scope(read_scope))
+            }),
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+fn type_references_discarded_scope<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+    lowerer: &mut AuthoredLowerer<'_, B, W>,
+    ty: TypeObjectDigest,
+    identities: &BTreeMap<OwnerKey, OwnerKey>,
+    examined: &mut BTreeSet<TypeObjectDigest>,
+    depth: usize,
+) -> Result<bool, Diagnostic> {
+    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+        return Err(request_error(
+            DiagnosticClass::Resource,
+            "change_literal_type_depth",
+            "test literal correspondence type traversal exceeds the structural-depth bound",
+        ));
+    }
+    if !examined.insert(ty) {
+        return Ok(false);
+    }
+    charge(lowerer, 1)?;
+    let object = lowerer.candidate_type_object(ty)?.ok_or_else(missing)?;
+    match object.form {
+        TypeForm::ReadViewApplied { read_scope, .. }
+        | TypeForm::AssociatedReadViewMember { read_scope, .. }
+        | TypeForm::AssociatedReadViewProjection { read_scope, .. }
+            if scope_references_discarded_binding(read_scope, identities) =>
+        {
+            return Ok(true);
+        }
+        _ => {}
+    }
+    for child in object.child_types() {
+        if type_references_discarded_scope(
+            lowerer,
+            child,
+            identities,
+            examined,
+            depth.saturating_add(1),
+        )? {
+            return Ok(true);
+        }
+    }
+    lowerer.check_budget("test literal scope reference correspondence")?;
+    Ok(false)
 }
 
 fn charge<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(

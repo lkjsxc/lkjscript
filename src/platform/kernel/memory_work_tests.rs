@@ -88,6 +88,9 @@ declarations.end"#).unwrap();
             associated: &OwnedAssociatedAdmission::new(),
             types: std::cell::RefCell::new(BTreeMap::new()),
             scope: None,
+            ended_views: std::cell::RefCell::new(BTreeMap::new()),
+            produced_view: std::cell::Cell::new(None),
+            scope_order: std::cell::RefCell::new(Vec::new()),
         }
         .eval(expression, &mut state, ParameterUse::Unrestricted, 0);
         (result, read.used.get())
@@ -184,6 +187,9 @@ declarations.end"#,
             associated: &OwnedAssociatedAdmission::new(),
             types: std::cell::RefCell::new(BTreeMap::new()),
             scope: None,
+            ended_views: std::cell::RefCell::new(BTreeMap::new()),
+            produced_view: std::cell::Cell::new(None),
+            scope_order: std::cell::RefCell::new(Vec::new()),
         }
         .eval(expression, &mut state, ParameterUse::Unrestricted, 0);
         if result.is_ok() {
@@ -248,6 +254,9 @@ declarations.end"#,
             associated: &OwnedAssociatedAdmission::new(),
             types: std::cell::RefCell::new(BTreeMap::new()),
             scope: None,
+            ended_views: std::cell::RefCell::new(BTreeMap::new()),
+            produced_view: std::cell::Cell::new(None),
+            scope_order: std::cell::RefCell::new(Vec::new()),
         }
         .eval(expression, &mut state, ParameterUse::Unrestricted, 0);
         if result.is_ok() {

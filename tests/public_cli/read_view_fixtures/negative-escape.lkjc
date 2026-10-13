@@ -1,0 +1,17 @@
+declarations.begin
+(units
+  (module create bad-escape
+    (function create local-source (visibility private) (effect pure)
+      (scope-parameter read_scope_d8600000000000000000000000000005 s)
+      (parameter create declared (type (owned-sequence I64)) (use borrow))
+      (scope-source declared (read-scope (declaration local-source) read_scope_d8600000000000000000000000000005))
+      (returns (read-view-application readview-flat::Metadata (types)
+        (read-scope (declaration local-source) read_scope_d8600000000000000000000000000005))
+        (view-from declared (read-scope (declaration local-source) read_scope_d8600000000000000000000000000005)))
+      (body (let (binding fresh (type (owned-sequence I64)) (call readview-flat::build (list I64 (i64 11) (i64 7))))
+        (in (borrow-call
+          (call readview-flat::make-metadata (scopes (read-scope (declaration local-source) read_scope_d8600000000000000000000000000005)) (local fresh))
+          (binding view (type (read-view-application readview-flat::Metadata (types)
+            (read-scope (declaration local-source) read_scope_d8600000000000000000000000000005))))
+          (in (view-move (local view))))))))))
+declarations.end

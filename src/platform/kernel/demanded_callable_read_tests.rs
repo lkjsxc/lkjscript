@@ -48,10 +48,13 @@ fn incoming_mapping_is_read_once_across_all_demanded_witness_paths() -> Result<(
             width + 1,
             "lexical declaration rereads at width {width}"
         );
+        // The complete view-closure admission reads each root before the
+        // independent provenance walk. Both remain linear in demanded inputs;
+        // this exact count also rejects repeated root visits on cache hits.
         assert_eq!(
             type_reads,
-            width + 1,
-            "type flow still visits every demanded input"
+            2 * (width + 1),
+            "complete view closure and provenance each visit every demanded input once"
         );
     }
     Ok(())

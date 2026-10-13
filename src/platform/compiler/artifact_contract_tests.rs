@@ -41,7 +41,7 @@ fn artifact_manifest_generations_admit_current_and_preserve_historical_boundarie
             current.compiler_contract_version,
             current.bytecode_contract_version
         ),
-        (40, 33, 33, 27)
+        (41, 34, 34, 28)
     );
     let (digest, bytes) = current.encode().unwrap();
     assert_eq!(ArtifactManifest::decode(&bytes, digest).unwrap(), current);

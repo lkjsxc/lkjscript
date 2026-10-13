@@ -1704,6 +1704,8 @@ mod native_indexed_data;
 
 #[path = "native_associated_blockread.rs"]
 mod native_associated_blockread;
+#[path = "native_associated_read_views.rs"]
+mod native_associated_read_views;
 #[path = "native_owned_borrows.rs"]
 mod native_owned_borrows;
 #[path = "native_owned_compact_proof.rs"]

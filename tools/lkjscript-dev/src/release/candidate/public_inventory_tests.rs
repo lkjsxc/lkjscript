@@ -22,6 +22,10 @@ pub(super) fn listing() -> String {
         "native_declarations::incremental_units::native_package_planner_rebuilds_exactly_and_runs_checked_plan_after_source_deletion: test",
         "native_declarations::incremental_units::native_package_planner_compiles_independently_authored_diamond_and_detached_results: test",
         "native_declarations::native_associated_blockread::native_associated_blockread_consumer_first_four_literals_three_targets_and_detached_bytes: test",
+        "native_declarations::native_associated_read_views::native_associated_read_views_consumer_first_five_literals_parent_drop_and_detached_bytes: test",
+        "native_declarations::native_associated_read_views::native_associated_read_views_source_alias_path_custody_and_complete_category_refusals: test",
+        "native_declarations::native_associated_read_views::native_associated_read_views_closed_joined_reads_projected_sources_and_passive_metadata_custody: test",
+        "native_declarations::native_associated_read_views::native_associated_read_views_checked_traps_fuel_cleanup_and_subsequent_invocation: test",
         "unrelated_test: test",
     ]
     .join("\n")
@@ -51,8 +55,8 @@ pub(super) fn success(inventory: &Inventory) -> String {
 #[test]
 fn all_required_families_and_exact_topology_are_selected_without_unrelated_cases() {
     let inventory = inventory(&listing()).unwrap();
-    assert_eq!(inventory.all.len(), 39);
-    assert_eq!(inventory.selected.len(), 38);
+    assert_eq!(inventory.all.len(), 43);
+    assert_eq!(inventory.selected.len(), 42);
     assert!(!inventory.selected.contains("unrelated_test"));
     passed(&success(&inventory), &inventory).unwrap();
 }
@@ -122,7 +126,7 @@ fn required_parallel_namespaces_accept_nested_paths_and_reject_substring_imposto
         "native_declarations::native_parallel_reads::nested::native_parallel_reads_scoped",
     );
     let inventory = inventory(&nested).unwrap();
-    assert_eq!(inventory.selected.len(), 38);
+    assert_eq!(inventory.selected.len(), 42);
     passed(&success(&inventory), &inventory).unwrap();
 }
 
@@ -150,19 +154,19 @@ fn a_successful_exit_or_summary_cannot_hide_unrun_ignored_or_duplicate_tests() {
     let inventory = inventory(&listing()).unwrap();
     let original = success(&inventory);
     for changed in [
-        original.replace("38 passed", "7 passed"),
+        original.replace("42 passed", "7 passed"),
         original.replace("0 ignored", "1 ignored"),
         original.replace("0 failed", "1 failed"),
         original.replace("0 measured", "1 measured"),
         original.replace("1 filtered out", "2 filtered out"),
-        original.replace("running 38 tests", "running 0 tests"),
+        original.replace("running 42 tests", "running 0 tests"),
         original.replacen(" ... ok", " ... ignored", 1),
         original.replacen(" ... ok", " ... FAILED", 1),
         original.lines().filter(|line| !line.starts_with("test buffers::")).collect::<Vec<_>>().join("\n"),
         original.clone() + "test native_declarations::native_owned_products::parallel::native_parallel_joined ... ok\n",
         original.clone() + "test unrelated_test ... ok\n",
         original.clone() + &original,
-        "test result: ok. 38 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s\n".to_owned(),
+        "test result: ok. 42 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s\n".to_owned(),
     ] {
         assert!(passed(&changed, &inventory).is_err(), "accepted {changed}");
     }

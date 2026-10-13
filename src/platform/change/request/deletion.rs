@@ -10,7 +10,8 @@ use crate::platform::kernel::{
     extract_owner_relations,
 };
 use crate::platform::witness::{
-    MAXIMUM_RELATION_PREFIX_ITEMS, OwnershipParent, aggregation_children, ownership_contributions,
+    MAXIMUM_RELATION_PREFIX_ITEMS, OwnershipParent, aggregation_children_with_bindings,
+    ownership_contributions_with_bindings,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -180,10 +181,23 @@ fn current_owned_children<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?S
                 "owned-child traversal lost its candidate owner",
             )
         })?;
-    let mut children = aggregation_children(&record)?
-        .into_iter()
-        .map(|(_, child)| child)
-        .collect::<BTreeSet<_>>();
+    let mut children = aggregation_children_with_bindings(&record, |binding| {
+        lowerer.require_owner(OwnerKey::Binding(binding))?;
+        let working = &lowerer.owners[&OwnerKey::Binding(binding)];
+        if working.deleted {
+            return Ok(None);
+        }
+        match &working.record {
+            OwnerRecord::Binding(record) => Ok(Some(record.clone())),
+            _ => Err(delete_corrupt(
+                "change_delete_binding_record",
+                "owned binding identity selects a foreign candidate record",
+            )),
+        }
+    })?
+    .into_iter()
+    .map(|(_, child)| child)
+    .collect::<BTreeSet<_>>();
 
     for edge in incoming_relations(lowerer, owner)? {
         if !matches!(
@@ -400,6 +414,28 @@ fn detach_root_from_live_parent<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRea
         return Ok(());
     }
 
+    lowerer.admit_owner_edit(parent)?;
+    lowerer.require_owner(parent)?;
+    let original_read_view_membership = match (&record, lowerer.owners[&parent].original.as_ref()) {
+        (OwnerRecord::TypeParameter(_), Some(OwnerRecord::Declaration(original))) => {
+            if let DeclarationPayload::ReadView(view) = &original.payload {
+                lowerer.work.ownership_steps = lowerer
+                    .work
+                    .ownership_steps
+                    .saturating_add(u64::try_from(view.type_parameters.len()).unwrap_or(u64::MAX));
+                lowerer.check_budget("authored read view accepted-parent membership")?;
+                Some(
+                    view.type_parameters
+                        .iter()
+                        .filter(|child| OwnerKey::TypeParameter(**child) == root)
+                        .count(),
+                )
+            } else {
+                None
+            }
+        }
+        _ => None,
+    };
     let parent_record = lowerer.candidate_mut(parent)?;
     match (record, parent_record) {
         (OwnerRecord::RequirementParameter(_), OwnerRecord::Declaration(parent)) => {
@@ -447,6 +483,20 @@ fn detach_root_from_live_parent<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRea
                     child,
                     "implementation type parameter",
                 ),
+                DeclarationPayload::ReadView(view) => {
+                    if original_read_view_membership != Some(1) {
+                        return Err(delete_error(
+                            "change_delete_parent_membership",
+                            "selected read view type parameter is not present exactly once in its canonical parent",
+                        ));
+                    }
+                    // A complete view replacement installs its final inventory before deletions.
+                    // An explicitly selected exact accepted child may already be detached there.
+                    if !view.type_parameters.contains(&child) {
+                        return Ok(());
+                    }
+                    remove_exact(&mut view.type_parameters, child, "read view type parameter")
+                }
                 DeclarationPayload::Record {
                     type_parameters, ..
                 }
@@ -842,26 +892,34 @@ fn base_parent<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
             format!("accepted owner {owner:?} has no exact base ownership witness"),
         )
     })?;
-    let original = lowerer.owners[&owner].original.as_ref().ok_or_else(|| {
+    let original = lowerer.owners[&owner].original.clone().ok_or_else(|| {
         delete_corrupt(
             "change_delete_owner_cache",
             "retirement lowering lost the accepted canonical owner record",
         )
     })?;
-    let mut canonical = ownership_contributions(original)?.get(&owner).copied();
+    let mut canonical = ownership_contributions_with_bindings(&original, |binding| {
+        accepted_binding(lowerer, binding)
+    })?
+    .get(&owner)
+    .copied();
     if canonical.is_none()
         && let OwnershipParent::Owner(parent) = entry.parent
     {
         if !lowerer.owners.contains_key(&parent) {
             require_accepted_owner(lowerer, parent)?;
         }
-        let parent = lowerer.owners[&parent].original.as_ref().ok_or_else(|| {
+        let parent = lowerer.owners[&parent].original.clone().ok_or_else(|| {
             delete_corrupt(
                 "change_delete_owner_cache",
                 "retirement lowering lost the accepted canonical parent record",
             )
         })?;
-        canonical = ownership_contributions(parent)?.get(&owner).copied();
+        canonical = ownership_contributions_with_bindings(&parent, |binding| {
+            accepted_binding(lowerer, binding)
+        })?
+        .get(&owner)
+        .copied();
     }
     if canonical != Some(entry) {
         return Err(delete_corrupt(
@@ -875,6 +933,19 @@ fn base_parent<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         OwnershipParent::Package => None,
         OwnershipParent::Owner(parent) => Some(parent),
     })
+}
+
+fn accepted_binding<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+    lowerer: &mut AuthoredLowerer<'_, B, W>,
+    binding: crate::platform::semantic_id::BindingId,
+) -> Result<Option<crate::platform::kernel::BindingRecord>, Diagnostic> {
+    match accepted_record(lowerer, OwnerKey::Binding(binding))? {
+        OwnerRecord::Binding(record) => Ok(Some(record)),
+        _ => Err(delete_corrupt(
+            "change_delete_binding_record",
+            "owned binding identity selects a foreign accepted record",
+        )),
+    }
 }
 
 fn delete_error(code: &'static str, message: impl Into<String>) -> Diagnostic {

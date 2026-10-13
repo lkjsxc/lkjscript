@@ -118,6 +118,7 @@ pub(super) fn associated_schema_fixture_with_limits(
 }
 
 struct Closure<'source, 'types> {
+    read_view_proof: Option<Arc<super::reference::read_view_admission::Proof>>,
     associated_proof: Option<Arc<associated_preparation::Proof>>,
     associated_context: Option<associated_preparation::ReadContext>,
     parallel_targets: BTreeSet<(
@@ -160,6 +161,20 @@ fn allocate<T>(allocated: &mut usize, count: usize) -> Result<(), ExecutionError
 fn index_node<T>(allocated: &mut usize) -> Result<(), ExecutionError> {
     allocate::<T>(allocated, 1)?;
     allocate::<usize>(allocated, 3)
+}
+
+// Associated Owned meaning exists in the finite Graph 33/34 reader set.
+// A read-view provenance requirement never inherits the older Owned permission.
+pub(super) fn associated_generation_admitted(version: u16, read_view: bool) -> bool {
+    version == crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+        || (!read_view
+            && version == crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION)
+}
+
+fn associated_owner_generation_admitted(root: u16, owner: u16, read_view: bool) -> bool {
+    associated_generation_admitted(root, read_view)
+        && associated_generation_admitted(owner, read_view)
+        && owner <= root
 }
 
 // Derive historical bound admission here, independently of canonical owner
@@ -394,6 +409,9 @@ impl<'source> Closure<'source, '_> {
         let object = self.types.get(&ty).ok_or_else(failure)?;
         let sequence = matches!(object.form, TypeForm::OwnedSequence { .. });
         match object.form {
+            TypeForm::ReadViewApplied { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. } => return Ok(false),
             TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => return Ok(true),
             TypeForm::TypeParameter { .. } => {
                 return if self.scoped_owned(ty, scope)? {
@@ -491,7 +509,10 @@ impl<'source> Closure<'source, '_> {
                 | TypeForm::OwnedChoice { .. }
                 | TypeForm::OwnedSequence { .. }
                 | TypeForm::Secret
-                | TypeForm::Stream { .. } => return Ok(false),
+                | TypeForm::Stream { .. }
+                | TypeForm::ReadViewApplied { .. }
+                | TypeForm::AssociatedReadViewMember { .. }
+                | TypeForm::AssociatedReadViewProjection { .. } => return Ok(false),
                 TypeForm::TypeParameter { parameter } if !assumptions.contains(parameter) => {
                     return Ok(false);
                 }
@@ -1078,8 +1099,15 @@ impl<'source> Closure<'source, '_> {
                     }
                 }
                 if owner.header.owner != OwnerKey::Declaration(source.declaration)
-                    || owner.header.contract_version
-                        != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+                    || !associated_owner_generation_admitted(
+                        self.snapshots
+                            .get(&source.package)
+                            .ok_or_else(failure)?
+                            .root
+                            .graph_contract_version,
+                        owner.header.contract_version,
+                        false,
+                    )
                     || expected.contract != contract
                     || selected != Some(expected)
                 {
@@ -1147,8 +1175,15 @@ impl<'source> Closure<'source, '_> {
             return Err(failure());
         };
         if owner.header.owner != OwnerKey::Declaration(contract.declaration)
-            || owner.header.contract_version
-                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+            || !associated_owner_generation_admitted(
+                self.snapshots
+                    .get(&contract.package)
+                    .ok_or_else(failure)?
+                    .root
+                    .graph_contract_version,
+                owner.header.contract_version,
+                false,
+            )
             || !matches!(owner.payload, DeclarationPayload::OwnedContract(_))
             || selected.is_none()
         {
@@ -1590,7 +1625,7 @@ impl<'source> Closure<'source, '_> {
                             &mapped,
                             depth + 1,
                         )?;
-                        self.identity(function.result, &target_bindings, 0)?;
+                        self.identity(function.result.ty, &target_bindings, 0)?;
                         for parameter in &function.parameters {
                             let OwnerRecord::Parameter(parameter) = self
                                 .owner(mapping.function.package, OwnerKey::Parameter(*parameter))?
@@ -1648,7 +1683,7 @@ impl<'source> Closure<'source, '_> {
             for parameter in &method.parameters {
                 self.identity(parameter.ty, &contract_bindings, 0)?;
             }
-            self.identity(method.result, &contract_bindings, 0)?;
+            self.identity(method.result.ty, &contract_bindings, 0)?;
         }
         Ok((contract, self_type, arguments))
     }
@@ -1731,7 +1766,7 @@ impl<'source> Closure<'source, '_> {
         for parameter in &method.parameters {
             self.identity(parameter.ty, &substitutions, 0)?;
         }
-        self.identity(method.result, &substitutions, 0)?;
+        self.identity(method.result.ty, &substitutions, 0)?;
         if let Some(Witness {
             form:
                 WitnessForm::Concrete {
@@ -1994,6 +2029,9 @@ impl<'source> Closure<'source, '_> {
         // directly so temporary declaration clones cannot escape allocation accounting.
         let snapshot = *self.snapshots.get(&package).ok_or_else(failure)?;
         let owner = snapshot.owners.get(&key).ok_or_else(failure)?;
+        if owner.header().contract_version > snapshot.root.graph_contract_version {
+            return Err(failure());
+        }
         admit_parameter_generation(owner)?;
         Ok(owner)
     }
@@ -2083,7 +2121,9 @@ impl<'source> Closure<'source, '_> {
         let object = self.types.get(&ty).cloned().ok_or_else(failure)?;
         let form = match object.form {
             TypeForm::AssociatedContractMember { .. }
-            | TypeForm::AssociatedWitnessProjection { .. } => {
+            | TypeForm::AssociatedWitnessProjection { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. } => {
                 return Err(ExecutionError::new(
                     crate::platform::execution::ExecutionFailureClass::Infrastructure,
                     "owned_associated_semantics_unsupported",
@@ -2093,6 +2133,18 @@ impl<'source> Closure<'source, '_> {
             TypeForm::TypeParameter { parameter } => {
                 return bindings.get(&parameter).copied().ok_or_else(failure);
             }
+            TypeForm::ReadViewApplied {
+                declaration,
+                arguments,
+                read_scope,
+            } => TypeForm::ReadViewApplied {
+                declaration,
+                arguments: arguments
+                    .into_iter()
+                    .map(|ty| self.identity(ty, bindings, depth + 1))
+                    .collect::<Result<_, _>>()?,
+                read_scope,
+            },
             TypeForm::Applied {
                 declaration,
                 arguments,
@@ -2343,8 +2395,10 @@ impl<'source> Closure<'source, '_> {
                                     effect_arguments,
                                     requirement_arguments,
                                     arguments,
+                                    read_scope_arguments,
                                 } if effect_arguments.is_empty()
-                                    && requirement_arguments.is_empty() =>
+                                    && requirement_arguments.is_empty()
+                                    && read_scope_arguments.is_empty() =>
                                 {
                                     (function, type_arguments, Vec::new(), arguments)
                                 }
@@ -2355,8 +2409,10 @@ impl<'source> Closure<'source, '_> {
                                     requirement_arguments,
                                     implementations,
                                     arguments,
+                                    read_scope_arguments,
                                 } if effect_arguments.is_empty()
-                                    && requirement_arguments.is_empty() =>
+                                    && requirement_arguments.is_empty()
+                                    && read_scope_arguments.is_empty() =>
                                 {
                                     (function, type_arguments, implementations, arguments)
                                 }
@@ -2405,7 +2461,7 @@ impl<'source> Closure<'source, '_> {
                             scope,
                             bindings,
                         )?;
-                        let ty = self.identity(signature.result, &child_bindings, 0)?;
+                        let ty = self.identity(signature.result.ty, &child_bindings, 0)?;
                         for parameter in &signature.parameters {
                             let OwnerRecord::Parameter(parameter) = self
                                 .owner(function.package, OwnerKey::Parameter(*parameter))?
@@ -2577,6 +2633,7 @@ impl<'source> Closure<'source, '_> {
                     requirement_arguments,
                     function,
                     type_arguments,
+                    read_scope_arguments: _,
                 } => {
                     allocate::<TypeObjectDigest>(&mut self.allocated, type_arguments.len())?;
                     let mut concrete = Vec::with_capacity(type_arguments.len());
@@ -2748,7 +2805,7 @@ impl<'source> Closure<'source, '_> {
                     allocate::<u8>(&mut self.allocated, field.name.as_str().len())?;
                 }
             }
-            TypeForm::Applied { arguments, .. } => {
+            TypeForm::Applied { arguments, .. } | TypeForm::ReadViewApplied { arguments, .. } => {
                 allocate::<TypeObjectDigest>(&mut self.allocated, arguments.len())?
             }
             TypeForm::TaskFunction {
@@ -2839,6 +2896,7 @@ fn check_duplicate_witness_dag_in(
     let control = crate::platform::execution::ExecutionControl::uncancelled();
     let mut types = source.types.clone();
     let mut closure = Closure {
+        read_view_proof: None,
         associated_proof: None,
         associated_context: None,
         parallel_targets: BTreeSet::new(),
@@ -2886,6 +2944,7 @@ pub(super) fn check_product_substitution(
 ) -> Result<(), ExecutionError> {
     let control = crate::platform::execution::ExecutionControl::uncancelled();
     let mut closure = Closure {
+        read_view_proof: None,
         associated_proof: None,
         associated_context: None,
         parallel_targets: BTreeSet::new(),
@@ -2912,9 +2971,9 @@ pub(super) fn complete(
     control: &crate::platform::execution::ExecutionControl,
 ) -> Result<(), ExecutionError> {
     if snapshots.iter().any(|snapshot| {
-        snapshot.types.values().chain(snapshot.dependency_types.values()).any(|object| object.form.is_associated())
+        snapshot.types.values().chain(snapshot.dependency_types.values()).any(|object| object.form.is_associated() || matches!(object.form, TypeForm::ReadViewApplied { .. }))
             || snapshot.owners.values().any(|owner| matches!(owner,
-                OwnerRecord::Declaration(owner) if matches!(&owner.payload,
+                OwnerRecord::Declaration(owner) if owner.payload.has_read_view_metadata() || matches!(&owner.payload,
                     DeclarationPayload::OwnedContract(contract) if !contract.associated_types.is_empty())
                     || matches!(&owner.payload, DeclarationPayload::OwnedImplementation(implementation) if !implementation.associated_types.is_empty())))
     }) {
@@ -2922,10 +2981,21 @@ pub(super) fn complete(
         // property and permission proof under the remaining source allowance.
         let maximum = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
         let admitted = usize::try_from(schema.source_admission_steps).map_err(|_| failure())?;
+        let debited_maximum = maximum.checked_sub(admitted).ok_or_else(failure)?;
         let proof = associated_preparation::check_inventory(snapshots, associated_preparation::Limits {
-            steps: maximum.checked_sub(admitted).ok_or_else(failure)?,
+            steps: debited_maximum,
             bytes: MAXIMUM_METADATA_BYTES,
-        }, control)?;
+        }, control).map_err(|mut error| {
+            if error.code == "kernel_associated_reference_capacity"
+                && error.message.contains("reference_flow phase=")
+            {
+                error.message.push_str(&format!(
+                    "; reference_source_debit source_admission_steps={} kernel_maximum={} debited_maximum={}",
+                    admitted, maximum, debited_maximum,
+                ));
+            }
+            error
+        })?;
         return associated_schema::core(schema, snapshots, proof, control);
     }
     // The witness-only admission entry bypasses reconstruction deliberately.
@@ -3012,6 +3082,7 @@ pub(super) fn complete(
         }
     }
     let mut closure = Closure {
+        read_view_proof: None,
         associated_proof: None,
         associated_context: None,
         parallel_targets: BTreeSet::new(),
@@ -3050,7 +3121,8 @@ pub(super) fn complete(
                         !function.type_parameters.is_empty()
                             || !function.effect_parameters.is_empty()
                             || !function.requirement_parameters.is_empty()
-                            || !function.implementation_parameters.is_empty(),
+                            || !function.implementation_parameters.is_empty()
+                            || !function.read_scope_parameters.is_empty(),
                     ),
                     DeclarationPayload::External(function) => {
                         Some(!function.type_parameters.is_empty())
@@ -3082,7 +3154,7 @@ pub(super) fn complete(
                                 bindings.insert(*parameter, ty);
                             }
                             closure.symbolic = true;
-                            closure.identity(function.result, &bindings, 0)?;
+                            closure.identity(function.result.ty, &bindings, 0)?;
                             allocate::<Witness>(
                                 &mut closure.allocated,
                                 function.implementation_parameters.len(),
@@ -3224,7 +3296,7 @@ pub(super) fn complete(
                 function.effect_parameters,
                 function.requirement_parameters,
                 function.implementation_parameters,
-                function.result,
+                function.result.ty,
                 Some(function.body),
             ),
             DeclarationPayload::External(function) => (
@@ -3499,10 +3571,10 @@ pub(super) fn complete(
             }
         }
         let result = if bindings.is_empty() {
-            function.result
+            function.result.ty
         } else {
             schema
-                .substitute_type(function.result, &bindings, 0)
+                .substitute_type(function.result.ty, &bindings, 0)
                 .ok_or_else(failure)?
         };
         parallel_transfer_type(
@@ -3539,6 +3611,7 @@ pub(super) fn complete(
                     .ok_or_else(failure)?
             };
             let owned = scoped_owned(schema, snapshots, ty, scope)?;
+            let view = schema.is_read_view_type(ty);
             if seen_owned && !owned {
                 return Err(failure());
             }
@@ -3546,7 +3619,7 @@ pub(super) fn complete(
             if parameter.parent
                 != crate::platform::kernel::ParameterParent::Function(target.declaration)
                 || parameter.resource_requirement.is_some()
-                || if owned {
+                || if owned || view {
                     !matches!(
                         parameter.use_mode,
                         crate::platform::kernel::ParameterUse::Consume
@@ -3604,11 +3677,14 @@ fn canonical_owner<'a>(
     declaration: DeclarationReference,
     key: OwnerKey,
 ) -> Result<&'a OwnerRecord, ExecutionError> {
-    let owner = snapshots
+    let snapshot = snapshots
         .iter()
         .find(|snapshot| snapshot.root.package_id == declaration.package)
-        .and_then(|snapshot| snapshot.owners.get(&key))
         .ok_or_else(failure)?;
+    let owner = snapshot.owners.get(&key).ok_or_else(failure)?;
+    if owner.header().contract_version > snapshot.root.graph_contract_version {
+        return Err(failure());
+    }
     admit_parameter_generation(owner)?;
     Ok(owner)
 }
@@ -3618,11 +3694,12 @@ fn indexed_owner<'a>(
     declaration: DeclarationReference,
     key: OwnerKey,
 ) -> Result<&'a OwnerRecord, ExecutionError> {
-    let owner = snapshots
-        .get(&declaration.package)
-        .and_then(|snapshot| snapshot.owners.get(&key))
-        .ok_or_else(failure)?;
+    let snapshot = snapshots.get(&declaration.package).ok_or_else(failure)?;
+    let owner = snapshot.owners.get(&key).ok_or_else(failure)?;
     if owner.header().owner != key {
+        return Err(failure());
+    }
+    if owner.header().contract_version > snapshot.root.graph_contract_version {
         return Err(failure());
     }
     admit_parameter_generation(owner)?;
@@ -3695,6 +3772,20 @@ enum CanonicalSources<'a, 's> {
 }
 
 impl<'s> CanonicalSources<'_, 's> {
+    fn root_generation(self, package: PackageId) -> Result<u16, ExecutionError> {
+        match self {
+            Self::Snapshots(snapshots) => snapshots
+                .iter()
+                .find(|snapshot| snapshot.root.package_id == package)
+                .map(|snapshot| snapshot.root.graph_contract_version)
+                .ok_or_else(failure),
+            Self::Indexed(snapshots) => snapshots
+                .get(&package)
+                .map(|snapshot| snapshot.root.graph_contract_version)
+                .ok_or_else(failure),
+        }
+    }
+
     fn owner(
         self,
         declaration: DeclarationReference,
@@ -3788,17 +3879,18 @@ fn carrier_owned(
                 }
             }
             let selected = selected.ok_or_else(failure)?;
-            if owner.header.contract_version
-                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
-                || !matches!(
-                    schema
-                        .types
-                        .get(&selected.self_type)
-                        .ok_or_else(failure)?
-                        .form,
-                    TypeForm::TypeParameter { .. }
-                )
-                || !carrier_owned(schema, snapshots, selected.self_type, Some(*lexical), meter)?
+            if !associated_owner_generation_admitted(
+                snapshots.root_generation(lexical.package)?,
+                owner.header.contract_version,
+                false,
+            ) || !matches!(
+                schema
+                    .types
+                    .get(&selected.self_type)
+                    .ok_or_else(failure)?
+                    .form,
+                TypeForm::TypeParameter { .. }
+            ) || !carrier_owned(schema, snapshots, selected.self_type, Some(*lexical), meter)?
             {
                 return Err(failure());
             }
@@ -3831,8 +3923,11 @@ fn indexed_associated_bound(
                 && candidate.bound == crate::platform::kernel::AssociatedTypeBound::Owned,
         );
     }
-    if owner.header.contract_version != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
-        || matches != 1
+    if !associated_owner_generation_admitted(
+        snapshots.root_generation(contract.package)?,
+        owner.header.contract_version,
+        false,
+    ) || matches != 1
     {
         return Err(failure());
     }
@@ -3974,6 +4069,20 @@ fn parallel_carrier_type_read(
         let form = &schema.types.get(&ty).ok_or_else(failure)?.form;
         let mut edges = Vec::new();
         match form {
+            TypeForm::ReadViewApplied { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. } => {
+                if !share
+                    || !owners_allowed
+                    || !schema
+                        .read_view_proof
+                        .as_ref()
+                        .ok_or_else(failure)?
+                        .prepared_read_shareable(ty)?
+                {
+                    return Err(failure());
+                }
+            }
             TypeForm::Unit
             | TypeForm::Bool
             | TypeForm::I64
@@ -4552,6 +4661,9 @@ fn property_types(
         {
             continue;
         }
+        if schema.is_read_view_type(*ty) {
+            continue;
+        }
         if (retention == Retention::BufferFree && !schema.is_owned_type(*ty))
             || retention == Retention::NoApplication
             || retention != Retention::BufferFree
@@ -4837,7 +4949,7 @@ declarations.end
         let DeclarationPayload::Function(function) = &owner.payload else {
             panic!("function");
         };
-        let item = function.result;
+        let item = function.result.ty;
         let parameter = function.type_parameters[0];
         let mut schema = schema(&snapshot);
         let sequence = intern(&mut schema, TypeForm::OwnedSequence { item });
@@ -5180,7 +5292,7 @@ declarations.end
             panic!("function")
         };
         let parameter = function.type_parameters[0];
-        let item = function.result;
+        let item = function.result.ty;
         let mut schema = schema(&snapshot);
         let list = intern(&mut schema, TypeForm::List { item });
         let sequence = intern(&mut schema, TypeForm::OwnedSequence { item: list });
@@ -5218,7 +5330,7 @@ declarations.end
         let DeclarationPayload::Function(function) = &owner.payload else {
             panic!("function");
         };
-        let item = function.result;
+        let item = function.result.ty;
         let parameter = function.type_parameters[0];
         let mut schema = schema(&snapshot);
         let sequence = intern(&mut schema, TypeForm::OwnedSequence { item });
@@ -5256,7 +5368,7 @@ declarations.end
         let DeclarationPayload::Function(function) = &owner.payload else {
             panic!("function");
         };
-        let ty = function.result;
+        let ty = function.result.ty;
         let parameter = function.type_parameters[0];
         let schema = schema(&snapshot);
         assert!(prove(&schema, &snapshot, ty, Some(scope)).is_ok());
@@ -5386,7 +5498,7 @@ declarations.end
         let error = parallel_transfer_type(
             &schema,
             &[&snapshot],
-            function.result,
+            function.result.ty,
             Some(scope),
             &mut work,
             &mut 0,
@@ -5399,7 +5511,7 @@ declarations.end
         let error = parallel_transfer_type(
             &schema,
             &[&snapshot],
-            function.result,
+            function.result.ty,
             Some(scope),
             &mut 0,
             &mut 0,
@@ -5411,7 +5523,7 @@ declarations.end
         let error = parallel_transfer_type(
             &schema,
             &[&snapshot],
-            function.result,
+            function.result.ty,
             Some(scope),
             &mut 0,
             &mut metadata,
@@ -5448,7 +5560,7 @@ declarations.end
         let DeclarationPayload::Function(function) = &owner.payload else {
             panic!("function");
         };
-        assert!(schema.types.contains_key(&function.result));
+        assert!(schema.types.contains_key(&function.result.ty));
     }
     #[test]
     fn canonical_concrete_transfer_property_preserves_owners_and_complete_alternatives() {

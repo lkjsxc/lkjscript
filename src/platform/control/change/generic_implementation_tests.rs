@@ -40,7 +40,7 @@ declarations.end
     let compact = decode_compact_change("prerequisite-flat.lkjc", flat.as_bytes()).unwrap();
     let native = decode_compact_change("prerequisite-native.lkjc", native.as_bytes()).unwrap();
     let bytes = canonical_authored_intent_bytes(&native.semantic).unwrap();
-    assert_eq!(&bytes[..8], b"LKJACR33");
+    assert_eq!(&bytes[..8], b"LKJACR39");
     assert_eq!(
         bytes,
         canonical_authored_intent_bytes(&compact.semantic).unwrap()
@@ -257,7 +257,7 @@ declarations.end
     let flat = decode_compact_change("generic-flat.lkjc", flat.as_bytes()).unwrap();
     let native = decode_compact_change("generic-native.lkjc", native.as_bytes()).unwrap();
     let bytes = canonical_authored_intent_bytes(&native.semantic).unwrap();
-    assert_eq!(&bytes[..8], b"LKJACR32");
+    assert_eq!(&bytes[..8], b"LKJACR39");
     assert_eq!(
         bytes,
         canonical_authored_intent_bytes(&flat.semantic).unwrap()

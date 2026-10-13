@@ -73,8 +73,8 @@ fn transfer_symbolic_group_admits_mixed_metadata_before_any_application_exists()
     let DeclarationPayload::Function(function) = &declaration.payload else {
         unreachable!()
     };
-    assert!(transfer::admit(&snapshot, function.result, Some(scope)).unwrap());
-    assert!(owned_product::validate(&snapshot, function.result, None).is_err());
+    assert!(transfer::admit(&snapshot, function.result.ty, Some(scope)).unwrap());
+    assert!(owned_product::validate(&snapshot, function.result.ty, None).is_err());
 }
 
 #[test]
@@ -128,7 +128,7 @@ declarations.end
     let DeclarationPayload::Function(function) = &declaration.payload else {
         unreachable!()
     };
-    assert!(!transfer::admit(&snapshot, function.result, Some(scope)).unwrap());
+    assert!(!transfer::admit(&snapshot, function.result.ty, Some(scope)).unwrap());
     let weakened = source.replace("(constraint transferable)", "(constraint capture-safe)");
     let snapshot = author(&weakened).unwrap();
     let scope = named(&snapshot, "forward");
@@ -139,7 +139,7 @@ declarations.end
     let DeclarationPayload::Function(function) = &declaration.payload else {
         unreachable!()
     };
-    assert!(transfer::admit(&snapshot, function.result, Some(scope)).is_err());
+    assert!(transfer::admit(&snapshot, function.result.ty, Some(scope)).is_err());
 }
 
 #[test]

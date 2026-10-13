@@ -254,6 +254,8 @@ impl Read {
                         function: target(application.target),
                         type_arguments,
                         effect_arguments: vec![],
+
+                        read_scope_arguments: Vec::new(),
                     }
                 } else {
                     ExpressionOperation::Call {
@@ -262,6 +264,8 @@ impl Read {
                         type_arguments,
                         effect_arguments: vec![],
                         arguments: vec![],
+
+                        read_scope_arguments: Vec::new(),
                     }
                 };
                 expressions.push(read.expression(operation));
@@ -285,15 +289,20 @@ impl Read {
                     name: Name::new(format!("f{f}")).unwrap(),
                     visibility: DeclarationVisibility::Private,
                     payload: DeclarationPayload::Function(FunctionDeclaration {
-                        result_borrow: None,
                         implementation_parameters: Vec::new(),
                         requirement_parameters: Vec::new(),
                         effect_parameters: vec![],
                         type_parameters: (0..*arity).map(|p| parameter(f, p)).collect(),
                         parameters: vec![],
-                        result,
+                        result: crate::platform::kernel::CallableResult {
+                            ty: result,
+                            relation: crate::platform::kernel::ResultRelation::Value,
+                        },
                         effect: FunctionEffect::Pure,
                         body,
+
+                        read_scope_parameters: Vec::new(),
+                        read_scope_sources: Vec::new(),
                     }),
                 }),
             );

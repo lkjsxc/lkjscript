@@ -223,7 +223,7 @@ fn public_record_initializers_preserve_effect_sites_and_canonical_types() {
             10_000,
         )
         .unwrap();
-        assert_eq!(ty, function.result);
+        assert_eq!(ty, function.result.ty);
         inferred.insert(symbol, ty);
         let (bindings, body) = record_body(&snapshot, function);
         let ExpressionOperation::Record {

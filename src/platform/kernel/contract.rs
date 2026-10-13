@@ -1,7 +1,16 @@
 //! Supported graph generations, current type-object codec, and hostile-decoder limits.
 
-pub const GRAPH_CONTRACT_IDENTITY: &str = "lkjscript-meaning-graph-33";
-pub const GRAPH_CONTRACT_VERSION: u16 = 33;
+pub const GRAPH_CONTRACT_IDENTITY: &str = "lkjscript-meaning-graph-34";
+pub const GRAPH_CONTRACT_VERSION: u16 = 34;
+pub const READ_VIEW_GRAPH_CONTRACT_VERSION: u16 = 34;
+pub const ASSOCIATED_READ_VIEW_CONTRACT_IDENTITY: &str = "lkjscript-associated-read-views-1";
+pub const ASSOCIATED_READ_VIEW_CONTRACT_VERSION: u16 = 1;
+pub const ASSOCIATED_READ_VIEW_OWNER_MAGIC: [u8; 8] = *b"LKJOAV01";
+pub const ASSOCIATED_READ_VIEW_TYPE_MAGIC: [u8; 8] = *b"LKJTAV01";
+pub const ASSOCIATED_READ_VIEW_OWNER_ENVELOPE_DOMAIN: &str =
+    "lkjscript.kernel.associated-read-view-owner-envelope.v1";
+pub const ASSOCIATED_READ_VIEW_TYPE_ENVELOPE_DOMAIN: &str =
+    "lkjscript.kernel.associated-read-view-type-envelope.v1";
 /// A separately identified additive wire capability; semantic admission remains gated.
 pub const OWNED_ASSOCIATED_CONTRACT_IDENTITY: &str = "lkjscript-owned-associated-types-1";
 pub const OWNED_ASSOCIATED_CONTRACT_VERSION: u16 = 1;
@@ -33,6 +42,7 @@ pub const REQUIREMENT_GRAPH_CONTRACT_VERSION: u16 = 15;
 pub const PREDECESSOR_GRAPH_CONTRACT_VERSION: u16 = 14;
 pub const fn supported_graph_contract(version: u16) -> bool {
     version == GRAPH_CONTRACT_VERSION
+        || version == MIXED_STORAGE_GRAPH_CONTRACT_VERSION
         || version == OWNED_RECORD_GRAPH_CONTRACT_VERSION
         || version == GENERALIZED_SEQUENCE_GRAPH_CONTRACT_VERSION
         || version == SHARE_GRAPH_CONTRACT_VERSION
@@ -53,9 +63,10 @@ pub const fn supported_graph_contract(version: u16) -> bool {
         || version == REQUIREMENT_GRAPH_CONTRACT_VERSION
         || version == PREDECESSOR_GRAPH_CONTRACT_VERSION
 }
-/// Existing base type bytes and identities stay unchanged; extensions use disjoint envelopes.
+/// Current type profile; predecessor readers preserve their own exact envelopes and identities.
 pub const TYPE_OBJECT_CONTRACT_IDENTITY: &str = "lkjscript-type-object-10";
 pub const TYPE_OBJECT_CONTRACT_VERSION: u16 = 10;
+pub const PREDECESSOR_TYPE_OBJECT_CONTRACT_VERSION: u16 = 10;
 pub const OWNED_SEQUENCE_TYPE_CONTRACT_VERSION: u16 = 1;
 pub const OWNED_SEQUENCE_TYPE_MAGIC: [u8; 8] = *b"LKJSEQ01";
 pub const OWNED_SEQUENCE_TYPE_ENVELOPE_DOMAIN: &str =
@@ -89,7 +100,8 @@ pub const NOMINAL_APPLICATION_ENVELOPE_DOMAIN: &str =
     "lkjscript.kernel.nominal-application-envelope.v1";
 pub const SEMANTIC_STATE_CONTRACT_VERSION: u16 = 1;
 
-pub const OWNER_MAGIC: [u8; 8] = *b"LKJOWN33";
+pub const OWNER_MAGIC: [u8; 8] = *b"LKJOWN34";
+pub const MIXED_STORAGE_OWNER_MAGIC: [u8; 8] = *b"LKJOWN33";
 pub const OWNED_RECORD_OWNER_MAGIC: [u8; 8] = *b"LKJOWN32";
 pub const GENERALIZED_SEQUENCE_OWNER_MAGIC: [u8; 8] = *b"LKJOWN31";
 pub const SHARE_OWNER_MAGIC: [u8; 8] = *b"LKJOWN30";
@@ -110,11 +122,13 @@ pub const TRANSACTION_OWNER_MAGIC: [u8; 8] = *b"LKJOWN16";
 pub const REQUIREMENT_OWNER_MAGIC: [u8; 8] = *b"LKJOWN15";
 pub const PREDECESSOR_OWNER_MAGIC: [u8; 8] = *b"LKJOWN14";
 pub const TYPE_OBJECT_MAGIC: [u8; 8] = *b"LKJTYP10";
+pub const PREDECESSOR_TYPE_OBJECT_MAGIC: [u8; 8] = *b"LKJTYP10";
 pub const ROOT_MAGIC: [u8; 8] = *b"LKJSMR01";
 pub const DEPENDENCY_MAGIC: [u8; 8] = *b"LKJDEP14";
 pub const RETIREMENT_MAGIC: [u8; 8] = *b"LKJRET14";
 
-pub const OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v33";
+pub const OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v34";
+pub const MIXED_STORAGE_OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v33";
 pub const OWNED_RECORD_OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v32";
 pub const GENERALIZED_SEQUENCE_OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v31";
 pub const SHARE_OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v30";
@@ -137,6 +151,7 @@ pub const TRANSACTION_OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-enve
 pub const REQUIREMENT_OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v15";
 pub const PREDECESSOR_OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v14";
 pub const TYPE_OBJECT_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.type-envelope.v10";
+pub const PREDECESSOR_TYPE_OBJECT_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.type-envelope.v10";
 pub const ROOT_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.root-envelope.v14";
 pub const DEPENDENCY_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.dependency-envelope.v14";
 pub const RETIREMENT_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.retirement-envelope.v14";

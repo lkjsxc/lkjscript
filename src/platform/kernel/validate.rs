@@ -18,8 +18,9 @@ use super::root::{DependencyRecord, RetirementRecord, SemanticRoot};
 use super::type_object::{TypeForm, TypeObject};
 use super::{
     BlobObjectDigest, DeclarationReference, HttpRouteRecord, PackageInterfaceDeclarationPayload,
-    PackageInterfaceRecord, PackageRevisionDigest, RequirementRecord, RequirementReference,
-    TypeObjectDigest, TypeObjectInterner, encode_type_object, requirement_is_covered_by,
+    PackageInterfaceRecord, PackageRevisionDigest, ReadScopeArgument, ReadScopeBinder,
+    ReadViewFieldKind, RequirementRecord, RequirementReference, ResultRelation, TypeObjectDigest,
+    TypeObjectInterner, encode_type_object, requirement_is_covered_by,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::{BindingId, ExpressionId, TargetId};
@@ -68,6 +69,9 @@ enum BindingContainerKind {
     OwnedUnpack,
     OwnedChoicePayload,
     OwnedBorrow,
+    ReadView,
+    ReadViewLet,
+    ReadViewBorrow,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -219,6 +223,9 @@ fn snapshot_resource_interface(
 
 fn object_child_digests(form: &TypeForm) -> Vec<TypeObjectDigest> {
     match form {
+        TypeForm::Applied { arguments, .. } | TypeForm::ReadViewApplied { arguments, .. } => {
+            arguments.clone()
+        }
         TypeForm::StructuralRecord { fields }
         | TypeForm::OwnedProduct { fields }
         | TypeForm::OwnedChoice { cases: fields } => fields.iter().map(|field| field.ty).collect(),
@@ -486,6 +493,15 @@ impl FullValidator<'_> {
                     "owned sequence types require Graph Contract 25",
                 );
             }
+            if self.snapshot.root.graph_contract_version
+                < super::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+                && super::owned_associated::read_view_admission::direct(&object.form)
+            {
+                self.error(
+                    "kernel_read_view_generation",
+                    "read-view type closure requires Graph Contract 34",
+                );
+            }
             if self.snapshot.root.graph_contract_version < 31
                 && let TypeForm::OwnedSequence { item } = object.form
             {
@@ -639,7 +655,7 @@ impl FullValidator<'_> {
                         "type parameter",
                     );
                     if parameter.constraints.has_owned()
-                        && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::OwnedContract(_) | DeclarationPayload::OwnedImplementation(_) | DeclarationPayload::Function(_) | DeclarationPayload::OwnedRecord { .. }))
+                        && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::OwnedContract(_) | DeclarationPayload::OwnedImplementation(_) | DeclarationPayload::Function(_) | DeclarationPayload::OwnedRecord { .. } | DeclarationPayload::ReadView(_)))
                     {
                         self.error(
                             "kernel_owned_parameter_owner",
@@ -647,7 +663,7 @@ impl FullValidator<'_> {
                         );
                     }
                     if parameter.constraints.requires_transfer()
-                        && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::Function(_) | DeclarationPayload::OwnedContract(_) | DeclarationPayload::OwnedImplementation(_) | DeclarationPayload::OwnedRecord { .. }))
+                        && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::Function(_) | DeclarationPayload::OwnedContract(_) | DeclarationPayload::OwnedImplementation(_) | DeclarationPayload::OwnedRecord { .. } | DeclarationPayload::ReadView(_)))
                     {
                         self.error(
                             "kernel_transfer_parameter_owner",
@@ -655,7 +671,7 @@ impl FullValidator<'_> {
                         );
                     }
                     if parameter.constraints.requires_share()
-                        && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::Function(_) | DeclarationPayload::OwnedImplementation(_) | DeclarationPayload::OwnedRecord { .. }))
+                        && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::Function(_) | DeclarationPayload::OwnedImplementation(_) | DeclarationPayload::OwnedRecord { .. } | DeclarationPayload::ReadView(_)))
                     {
                         self.error(
                             "kernel_share_parameter_owner",
@@ -980,9 +996,10 @@ impl FullValidator<'_> {
                     DeclarationPayload::Function(signature) => Some((
                         signature.type_parameters.len()
                             + signature.effect_parameters.len()
-                            + signature.requirement_parameters.len(),
+                            + signature.requirement_parameters.len()
+                            + signature.read_scope_parameters.len(),
                         signature.parameters.clone(),
-                        signature.result,
+                        signature.result.ty,
                         signature.effect.clone(),
                     )),
                     _ => {
@@ -1025,9 +1042,10 @@ impl FullValidator<'_> {
                 PackageInterfaceDeclarationPayload::Function(signature) => Some((
                     signature.type_parameters.len()
                         + signature.effect_parameters.len()
-                        + signature.requirement_parameters.len(),
+                        + signature.requirement_parameters.len()
+                        + signature.read_scope_parameters.len(),
                     signature.parameters.clone(),
-                    signature.result,
+                    signature.result.ty,
                     signature.effect.clone(),
                 )),
                 _ => {
@@ -1239,6 +1257,20 @@ impl FullValidator<'_> {
             return;
         };
         match payload {
+            DeclarationPayload::ReadView(view) => {
+                let declaration = DeclarationReference {
+                    package: self.snapshot.root.package_id,
+                    declaration: declaration_id,
+                };
+                self.capture(view.validate_local_at(declaration));
+                for parameter in &view.type_parameters {
+                    self.require_parent_listed(
+                        OwnerKey::TypeParameter(*parameter),
+                        owner,
+                        "read-view type parameter",
+                    );
+                }
+            }
             DeclarationPayload::OwnedContract(c) => {
                 self.require_local_kind(
                     OwnerKey::TypeParameter(c.self_parameter),
@@ -1257,6 +1289,18 @@ impl FullValidator<'_> {
                         return;
                     }
                     self.validate_effect_row(owner, &method.effect.row());
+                    self.capture(super::validate_read_scope_inventory_at(
+                        ReadScopeBinder::ContractMethod {
+                            contract: DeclarationReference {
+                                package: self.snapshot.root.package_id,
+                                declaration: declaration_id,
+                            },
+                            method: method.id,
+                        },
+                        &method.read_scope_parameters,
+                        &method.read_scope_sources,
+                        |source| (source as usize) < method.parameters.len(),
+                    ));
                 }
             }
             DeclarationPayload::OwnedImplementation(i) => {
@@ -1282,6 +1326,16 @@ impl FullValidator<'_> {
                     );
                 }
                 for mapping in &i.methods {
+                    for argument in &mapping.read_scope_arguments {
+                        self.validate_read_scope_argument(
+                            owner,
+                            *argument,
+                            Some(ReadScopeBinder::ContractMethod {
+                                contract: i.contract,
+                                method: mapping.method,
+                            }),
+                        );
+                    }
                     self.require_exact_kind(
                         mapping.function.package,
                         OwnerKey::Declaration(mapping.function.declaration),
@@ -1364,6 +1418,15 @@ impl FullValidator<'_> {
                 }
             }
             DeclarationPayload::Function(function) => {
+                self.capture(super::validate_read_scope_inventory_at(
+                    ReadScopeBinder::Declaration(DeclarationReference {
+                        package: self.snapshot.root.package_id,
+                        declaration: declaration_id,
+                    }),
+                    &function.read_scope_parameters,
+                    &function.read_scope_sources,
+                    |source| function.parameters.contains(&source),
+                ));
                 for parameter in &function.requirement_parameters {
                     self.require_local_kind(
                         OwnerKey::RequirementParameter(*parameter),
@@ -1445,18 +1508,88 @@ impl FullValidator<'_> {
     fn validate_types(&mut self) {
         let mut reachable = BTreeSet::new();
         let mut checked = BTreeSet::new();
-        let roots = self
-            .snapshot
-            .owners
-            .iter()
-            .flat_map(|(owner, record)| {
-                record
-                    .type_roots()
-                    .into_iter()
-                    .map(|digest| (*owner, digest))
-            })
-            .collect::<Vec<_>>();
-        for (source, root) in roots {
+        let mut roots = Vec::new();
+        for (owner, record) in &self.snapshot.owners {
+            let type_roots = record.type_roots();
+            let declaration =
+                self.semantic_declaration(*owner)
+                    .map(|declaration| DeclarationReference {
+                        package: self.snapshot.root.package_id,
+                        declaration,
+                    });
+            match record {
+                OwnerRecord::Declaration(record) => match &record.payload {
+                    DeclarationPayload::OwnedContract(contract) => {
+                        for method in &contract.methods {
+                            let binder =
+                                declaration.map(|contract| ReadScopeBinder::ContractMethod {
+                                    contract,
+                                    method: method.id,
+                                });
+                            roots.extend(
+                                method
+                                    .parameters
+                                    .iter()
+                                    .map(|parameter| (*owner, parameter.ty, binder)),
+                            );
+                            roots.push((*owner, method.result.ty, binder));
+                        }
+                    }
+                    DeclarationPayload::OwnedImplementation(implementation) => {
+                        let binder = declaration.map(ReadScopeBinder::Declaration);
+                        roots.push((*owner, implementation.self_type, binder));
+                        roots.extend(
+                            implementation
+                                .type_arguments
+                                .iter()
+                                .map(|ty| (*owner, *ty, binder)),
+                        );
+                        for parameter in &implementation.implementation_parameters {
+                            roots.push((*owner, parameter.self_type, binder));
+                            roots.extend(
+                                parameter
+                                    .type_arguments
+                                    .iter()
+                                    .map(|ty| (*owner, *ty, binder)),
+                            );
+                        }
+                        for method in &implementation.methods {
+                            roots.extend(
+                                method.type_arguments.iter().map(|ty| (*owner, *ty, binder)),
+                            );
+                            for operand in &method.implementations {
+                                roots.extend(operand.walk().flat_map(|operand| {
+                                    operand
+                                        .type_arguments()
+                                        .iter()
+                                        .map(|ty| (*owner, *ty, binder))
+                                }));
+                            }
+                        }
+                        for binding in &implementation.associated_types {
+                            let binder = declaration.map(|implementation| {
+                                ReadScopeBinder::AssociatedBinding {
+                                    implementation,
+                                    member: binding.member,
+                                }
+                            });
+                            roots.push((*owner, binding.ty(), binder));
+                        }
+                    }
+                    _ => roots.extend(
+                        type_roots
+                            .into_iter()
+                            .map(|ty| (*owner, ty, declaration.map(ReadScopeBinder::Declaration))),
+                    ),
+                },
+                _ => roots.extend(
+                    type_roots
+                        .into_iter()
+                        .map(|ty| (*owner, ty, declaration.map(ReadScopeBinder::Declaration))),
+                ),
+            }
+        }
+        for (source, root, binder) in roots {
             let mut active = BTreeSet::new();
             let mut pending = vec![(root, false, 0_usize)];
             while let Some((digest, exiting, depth)) = pending.pop() {
@@ -1482,7 +1615,7 @@ impl FullValidator<'_> {
                     );
                     continue;
                 }
-                if !checked.insert((source, digest)) {
+                if !checked.insert((source, digest, binder)) {
                     continue;
                 }
                 active.insert(digest);
@@ -1494,7 +1627,7 @@ impl FullValidator<'_> {
                     active.remove(&digest);
                     continue;
                 };
-                self.validate_type_reference(source, &object.form);
+                self.validate_type_reference(source, &object.form, binder);
                 pending.push((digest, true, depth));
                 let mut children = object.child_types();
                 children.reverse();
@@ -1515,8 +1648,44 @@ impl FullValidator<'_> {
         }
     }
 
-    fn validate_type_reference(&mut self, source: OwnerKey, form: &TypeForm) {
+    fn validate_type_reference(
+        &mut self,
+        source: OwnerKey,
+        form: &TypeForm,
+        binder: Option<ReadScopeBinder>,
+    ) {
         match form {
+            TypeForm::ReadViewApplied {
+                declaration,
+                read_scope,
+                ..
+            } => {
+                self.require_exact_kind(
+                    declaration.package,
+                    OwnerKey::Declaration(declaration.declaration),
+                    &[OwnerKind::ReadView],
+                    "read-view declaration",
+                );
+                self.validate_read_scope_argument(source, *read_scope, binder);
+            }
+            TypeForm::AssociatedReadViewMember {
+                contract,
+                read_scope,
+                ..
+            }
+            | TypeForm::AssociatedReadViewProjection {
+                contract,
+                read_scope,
+                ..
+            } => {
+                self.require_exact_kind(
+                    contract.package,
+                    OwnerKey::Declaration(contract.declaration),
+                    &[OwnerKind::OwnedContract],
+                    "read-view family contract",
+                );
+                self.validate_read_scope_argument(source, *read_scope, binder);
+            }
             TypeForm::TaskFunction { effect, .. } => self.validate_effect_row(source, effect),
             TypeForm::TypeParameter { parameter } => {
                 self.require_local_kind(
@@ -1555,6 +1724,179 @@ impl FullValidator<'_> {
             ),
             _ => {}
         }
+    }
+
+    fn validate_read_scope_argument(
+        &mut self,
+        source: OwnerKey,
+        argument: ReadScopeArgument,
+        binder: Option<ReadScopeBinder>,
+    ) {
+        let expression = match source {
+            OwnerKey::Expression(expression) => Some(expression),
+            OwnerKey::Binding(binding) => {
+                if !self.consume_work() {
+                    return;
+                }
+                self.binding_containers
+                    .get(&binding)
+                    .and_then(|containers| containers.first())
+                    .map(|container| {
+                        // A let annotation occurs at its initializer position,
+                        // within earlier bindings' exact ordered scope roots.
+                        // Body-only loan annotations keep their container site.
+                        match self.snapshot.owners.get(&OwnerKey::Binding(binding)) {
+                            Some(OwnerRecord::Binding(record))
+                                if matches!(
+                                    container.kind,
+                                    BindingContainerKind::Let | BindingContainerKind::ReadViewLet
+                                ) =>
+                            {
+                                record.value.unwrap_or(container.expression)
+                            }
+                            _ => container.expression,
+                        }
+                    })
+            }
+            _ => None,
+        };
+        let lexical = expression
+            .and_then(|_| self.semantic_declaration(source))
+            .map(|declaration| DeclarationReference {
+                package: self.snapshot.root.package_id,
+                declaration,
+            });
+        let mut loans = BTreeSet::new();
+        if let ReadScopeArgument::Lexical { binding, .. } = argument {
+            if !self.consume_work() {
+                return;
+            }
+            if !lexical.is_some_and(|callable| matches!(self.snapshot.owners.get(&OwnerKey::Declaration(callable.declaration)),
+                Some(OwnerRecord::Declaration(record)) if record.header.owner == OwnerKey::Declaration(callable.declaration)
+                    && matches!(record.header.kind, OwnerKind::PureFunction | OwnerKind::TaskFunction)
+                    && matches!(record.payload, DeclarationPayload::Function(_))))
+            {
+                self.error("kernel_read_view", "lexical read scopes require an exact named Function declaration");
+                return;
+            }
+            if let Some(OwnerRecord::Binding(record)) =
+                self.snapshot.owners.get(&OwnerKey::Binding(binding))
+            {
+                let containers = self
+                    .binding_containers
+                    .get(&binding)
+                    .map(Vec::as_slice)
+                    .unwrap_or_default();
+                let body_scope = expression.is_some_and(|expression| {
+                    containers.iter().any(|container| {
+                        container
+                            .scope_roots
+                            .iter()
+                            .any(|root| self.is_expression_descendant(expression, *root))
+                    })
+                });
+                let owning_view = record.kind == BindingKind::ReadView
+                    && record.value.is_some()
+                    && containers.len() == 1
+                    && containers[0].kind == BindingContainerKind::ReadViewLet;
+                let declared_scope = record
+                    .declared_type
+                    .and_then(|ty| {
+                        self.snapshot
+                            .types
+                            .get(&ty)
+                            .or_else(|| self.snapshot.dependency_types.get(&ty))
+                    })
+                    .and_then(|object| match object.form {
+                        TypeForm::ReadViewApplied { read_scope, .. }
+                        | TypeForm::AssociatedReadViewMember { read_scope, .. }
+                        | TypeForm::AssociatedReadViewProjection { read_scope, .. } => {
+                            Some(read_scope)
+                        }
+                        _ => None,
+                    });
+                let initializer_scope = owning_view
+                    && declared_scope == Some(argument)
+                    && (source == OwnerKey::Binding(binding)
+                        || expression.is_some_and(|expression| {
+                            record.value.is_some_and(|initializer| {
+                                self.is_expression_descendant(expression, initializer)
+                            })
+                        }));
+                let explicit_loan = record.value.is_none()
+                    && matches!(
+                        record.kind,
+                        BindingKind::OwnedBorrow
+                            | BindingKind::ReadView
+                            | BindingKind::ReadViewBorrow
+                    )
+                    && (source == OwnerKey::Binding(binding) || body_scope
+                        || expression.is_some_and(|expression| containers.len() == 1
+                            && matches!(self.snapshot.owners.get(&OwnerKey::Expression(containers[0].expression)), Some(OwnerRecord::Expression(parent))
+                                if parent.contract_version >= super::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+                                    && matches!(parent.operation, ExpressionOperation::BorrowCall { call, binding: owner, .. } if call == expression && owner == binding))));
+                if explicit_loan
+                    || initializer_scope
+                    || (owning_view && declared_scope.is_some() && body_scope)
+                {
+                    loans.insert(binding);
+                }
+            }
+        }
+        let generation = self
+            .snapshot
+            .owners
+            .get(&source)
+            .map(|record| record.header().contract_version);
+        let result = self.with_associated_read(|read, admission| {
+            super::owned_associated::read_view_admission::require_generation(
+                generation.ok_or_else(|| {
+                    super::owned_associated::read_view_admission::reject(
+                        "read-scope consuming owner is absent",
+                    )
+                })?,
+            )?;
+            super::owned_associated::read_view_admission::ScopeAuthority {
+                binder,
+                lexical,
+                live_loans: &loans,
+            }
+            .validate(read, argument, admission)
+        });
+        self.capture(result);
+    }
+
+    fn with_associated_read<T>(
+        &mut self,
+        action: impl FnOnce(
+            &dyn super::ExpressionRead,
+            &super::owned_associated::OwnedAssociatedAdmission,
+        ) -> Result<T, Diagnostic>,
+    ) -> Result<T, Diagnostic> {
+        let work = std::cell::Cell::new(self.work);
+        let interrupted = std::cell::Cell::new(false);
+        let result = {
+            let checkpoint = || {
+                if let Err(error) = (self.read.checkpoint)() {
+                    interrupted.set(true);
+                    return Err(error);
+                }
+                let next = work.get().checked_add(1).ok_or_else(full_work_exhausted)?;
+                work.set(next);
+                if next > self.maximum_work {
+                    return Err(full_work_exhausted());
+                }
+                Ok(())
+            };
+            let read = super::infer::CheckedExpressionRead {
+                read: self.snapshot,
+                checkpoint: &checkpoint,
+            };
+            action(&read, &self.associated_admission)
+        };
+        self.work = work.get();
+        self.interrupted |= interrupted.get();
+        result
     }
 
     fn validate_requirement_operand(
@@ -1623,6 +1965,17 @@ impl FullValidator<'_> {
             if !self.consume_work() {
                 return;
             }
+            let view = super::owned_associated::read_view_admission::direct(&object.form);
+            if !view {
+                match self.with_associated_read(|read, admission| super::owned_associated::read_view_admission::contains(read, digest, admission)) {
+                    Ok(true) => self.error("kernel_read_view_container", format!("type object {digest} contains a read view outside an explicit view occurrence")),
+                    Ok(false) => {}
+                    Err(error) => self.diagnostics.push(error),
+                }
+                if self.exhausted() {
+                    return;
+                }
+            }
             let nominal_owned = match super::owned_record::is_owned(
                 &self.read,
                 self.snapshot.root.package_id,
@@ -1640,6 +1993,7 @@ impl FullValidator<'_> {
                     | TypeForm::OwnedChoice { .. }
                     | TypeForm::OwnedSequence { .. }
             ) && !nominal_owned
+                && !view
                 && object.child_types().into_iter().any(|t| {
                     self.snapshot
                         .types
@@ -1704,6 +2058,60 @@ impl FullValidator<'_> {
         for (owner, record) in owners {
             if !self.consume_work() {
                 return;
+            }
+            let forbidden_views = match &record {
+                OwnerRecord::Field(field) => vec![field.ty],
+                OwnerRecord::Case(case) => case.payload.into_iter().collect(),
+                OwnerRecord::Operation(operation) => vec![operation.result],
+                OwnerRecord::Port(port) => vec![port.function_type],
+                OwnerRecord::Parameter(parameter) => {
+                    let direct_view = self
+                        .snapshot
+                        .types
+                        .get(&parameter.ty)
+                        .or_else(|| self.snapshot.dependency_types.get(&parameter.ty))
+                        .is_some_and(|object| {
+                            super::owned_associated::read_view_admission::direct(&object.form)
+                        });
+                    if direct_view {
+                        if !matches!(parameter.parent, ParameterParent::Function(_))
+                            || parameter.use_mode != ParameterUse::Borrow
+                            || parameter.resource_requirement.is_some()
+                        {
+                            self.error("kernel_read_view_parameter", "view parameters require an exact named function borrow without capability binding");
+                        }
+                        Vec::new()
+                    } else {
+                        vec![parameter.ty]
+                    }
+                }
+                OwnerRecord::Declaration(declaration) => match &declaration.payload {
+                    DeclarationPayload::External(function) => vec![function.result],
+                    DeclarationPayload::Constant { ty, .. } => vec![*ty],
+                    DeclarationPayload::Function(function)
+                        if matches!(function.result.relation, ResultRelation::Value) =>
+                    {
+                        vec![function.result.ty]
+                    }
+                    DeclarationPayload::ReadView(view) => view
+                        .fields
+                        .iter()
+                        .filter(|field| matches!(field.kind, ReadViewFieldKind::Ordinary))
+                        .map(|field| field.ty)
+                        .collect(),
+                    _ => Vec::new(),
+                },
+                _ => Vec::new(),
+            };
+            for ty in forbidden_views {
+                match self.with_associated_read(|read, admission| super::owned_associated::read_view_admission::contains(read, ty, admission)) {
+                    Ok(true) => self.error("kernel_read_view_container", format!("owner {owner:?} stores or returns a read view in a forbidden value position")),
+                    Ok(false) => {}
+                    Err(error) => self.diagnostics.push(error),
+                }
+                if self.exhausted() {
+                    return;
+                }
             }
             match record {
                 OwnerRecord::Parameter(ref parameter) => {
@@ -1879,7 +2287,7 @@ impl FullValidator<'_> {
                         }
                     }
                     DeclarationPayload::Function(function) => {
-                        if self.type_contains_resource(function.result) {
+                        if self.type_contains_resource(function.result.ty) {
                             self.error(
                                 "kernel_affine_function_result",
                                 format!(
@@ -2166,10 +2574,162 @@ impl FullValidator<'_> {
         operation: &ExpressionOperation,
     ) {
         match operation {
+            ExpressionOperation::BorrowReadView { binding, body, .. } => {
+                self.binding_containers
+                    .entry(*binding)
+                    .or_default()
+                    .push(BindingContainer {
+                        expression,
+                        scope_roots: vec![*body],
+                        kind: BindingContainerKind::ReadViewBorrow,
+                    });
+            }
+            ExpressionOperation::BorrowReadViewField {
+                field,
+                binding,
+                body,
+                ..
+            } => {
+                let kind = self.with_associated_read(|read, _| {
+                    let Some(OwnerRecord::Declaration(record)) =
+                        read.owner(OwnerKey::Declaration(field.declaration.declaration))?
+                    else {
+                        return Err(super::owned_associated::read_view_admission::reject(
+                            "missing exact view reference-field declaration",
+                        ));
+                    };
+                    if field.declaration.package != read.package_id()
+                        || record.header.owner
+                            != OwnerKey::Declaration(field.declaration.declaration)
+                    {
+                        return Err(super::owned_associated::read_view_admission::reject(
+                            "view reference field has a foreign exact declaration",
+                        ));
+                    }
+                    let DeclarationPayload::ReadView(view) = record.payload else {
+                        return Err(super::owned_associated::read_view_admission::reject(
+                            "reference field is not a nominal view field",
+                        ));
+                    };
+                    let mut found = view.fields.iter().filter(|entry| entry.id == field.field);
+                    let entry = found.next().ok_or_else(|| {
+                        super::owned_associated::read_view_admission::reject(
+                            "missing exact view reference field",
+                        )
+                    })?;
+                    if found.next().is_some()
+                        || !matches!(entry.kind, ReadViewFieldKind::ReadReference { .. })
+                    {
+                        return Err(super::owned_associated::read_view_admission::reject(
+                            "view borrow requires one exact declared read-reference field",
+                        ));
+                    }
+                    let object = read.type_object(entry.ty)?.ok_or_else(|| {
+                        super::owned_associated::read_view_admission::reject(
+                            "missing exact view referent type",
+                        )
+                    })?;
+                    Ok(
+                        if super::owned_associated::read_view_admission::direct(&object.form) {
+                            BindingContainerKind::ReadViewBorrow
+                        } else {
+                            BindingContainerKind::OwnedBorrow
+                        },
+                    )
+                });
+                match kind {
+                    Ok(kind) => self.binding_containers.entry(*binding).or_default().push(
+                        BindingContainer {
+                            expression,
+                            scope_roots: vec![*body],
+                            kind,
+                        },
+                    ),
+                    Err(error) => self.diagnostics.push(error),
+                }
+            }
+            ExpressionOperation::BorrowCall {
+                call,
+                binding,
+                body,
+            } => {
+                let kind = self.with_associated_read(|read, _| {
+                    let Some(OwnerRecord::Expression(call)) =
+                        read.owner(OwnerKey::Expression(*call))?
+                    else {
+                        return Err(super::owned_associated::read_view_admission::reject(
+                            "missing exact scoped call",
+                        ));
+                    };
+                    let relation = match call.operation {
+                        ExpressionOperation::Call { function, .. }
+                        | ExpressionOperation::ImplementationCall { function, .. } => {
+                            super::owned_contract::function_contract(read, function)?
+                                .result
+                                .relation
+                        }
+                        ExpressionOperation::MethodCall {
+                            contract, method, ..
+                        } => {
+                            let contract = super::owned_contract::contract_record(read, contract)?;
+                            let mut methods =
+                                contract.methods.iter().filter(|entry| entry.id == method);
+                            let entry = methods.next().ok_or_else(|| {
+                                super::owned_associated::read_view_admission::reject(
+                                    "scoped call names no exact contract method",
+                                )
+                            })?;
+                            if methods.next().is_some() {
+                                return Err(super::owned_associated::read_view_admission::reject(
+                                    "duplicate exact scoped contract method",
+                                ));
+                            }
+                            // Method source positions and function source IDs have different
+                            // coordinates. Only the relation kind is compared here.
+                            return match entry.result.relation {
+                                ResultRelation::ViewFrom { .. } => {
+                                    Ok(BindingContainerKind::ReadView)
+                                }
+                                ResultRelation::ReadFrom { .. } => {
+                                    Ok(BindingContainerKind::OwnedBorrow)
+                                }
+                                ResultRelation::Value => {
+                                    Err(super::owned_associated::read_view_admission::reject(
+                                        "scoped call requires a declared source-tied result",
+                                    ))
+                                }
+                            };
+                        }
+                        _ => {
+                            return Err(super::owned_associated::read_view_admission::reject(
+                                "scoped call requires a named function or exact method",
+                            ));
+                        }
+                    };
+                    match relation {
+                        ResultRelation::ViewFrom { .. } => Ok(BindingContainerKind::ReadView),
+                        ResultRelation::ReadFrom { .. } => Ok(BindingContainerKind::OwnedBorrow),
+                        ResultRelation::Value => {
+                            Err(super::owned_associated::read_view_admission::reject(
+                                "scoped call requires a declared source-tied result",
+                            ))
+                        }
+                    }
+                });
+                match kind {
+                    Ok(kind) => self.binding_containers.entry(*binding).or_default().push(
+                        BindingContainer {
+                            expression,
+                            scope_roots: vec![*body],
+                            kind,
+                        },
+                    ),
+                    Err(error) => self.diagnostics.push(error),
+                }
+            }
             ExpressionOperation::BorrowOwnedField { binding, body, .. }
             | ExpressionOperation::BorrowOwnedRecordField { binding, body, .. }
-            | ExpressionOperation::BorrowOwnedItem { binding, body, .. }
-            | ExpressionOperation::BorrowCall { binding, body, .. } => {
+            | ExpressionOperation::BorrowOwnedItem { binding, body, .. } => {
                 self.binding_containers
                     .entry(*binding)
                     .or_default()
@@ -2229,6 +2789,24 @@ impl FullValidator<'_> {
             }
             ExpressionOperation::Let { bindings, body } => {
                 for (index, binding) in bindings.iter().enumerate() {
+                    let kind = match self.snapshot.owners.get(&OwnerKey::Binding(*binding)) {
+                        Some(OwnerRecord::Binding(record))
+                            if record.declared_type.is_some_and(|ty| {
+                                self.snapshot
+                                    .types
+                                    .get(&ty)
+                                    .or_else(|| self.snapshot.dependency_types.get(&ty))
+                                    .is_some_and(|object| {
+                                        super::owned_associated::read_view_admission::direct(
+                                            &object.form,
+                                        )
+                                    })
+                            }) =>
+                        {
+                            BindingContainerKind::ReadViewLet
+                        }
+                        _ => BindingContainerKind::Let,
+                    };
                     let mut scope_roots = bindings[index.saturating_add(1)..]
                         .iter()
                         .filter_map(|binding| {
@@ -2245,7 +2823,7 @@ impl FullValidator<'_> {
                         .push(BindingContainer {
                             expression,
                             scope_roots,
-                            kind: BindingContainerKind::Let,
+                            kind,
                         });
                 }
             }
@@ -2454,6 +3032,9 @@ impl FullValidator<'_> {
                 BindingContainerKind::OwnedUnpack => BindingKind::OwnedUnpack,
                 BindingContainerKind::OwnedChoicePayload => BindingKind::OwnedChoicePayload,
                 BindingContainerKind::OwnedBorrow => BindingKind::OwnedBorrow,
+                BindingContainerKind::ReadView => BindingKind::ReadView,
+                BindingContainerKind::ReadViewLet => BindingKind::ReadView,
+                BindingContainerKind::ReadViewBorrow => BindingKind::ReadViewBorrow,
             };
             if kind != expected {
                 self.error(
@@ -2681,7 +3262,80 @@ impl FullValidator<'_> {
         expression: ExpressionId,
         operation: &ExpressionOperation,
     ) {
+        let source = OwnerKey::Expression(expression);
+        let binder = self.semantic_declaration(source).map(|declaration| {
+            ReadScopeBinder::Declaration(DeclarationReference {
+                package: self.snapshot.root.package_id,
+                declaration,
+            })
+        });
         match operation {
+            ExpressionOperation::Call {
+                read_scope_arguments,
+                ..
+            }
+            | ExpressionOperation::ImplementationCall {
+                read_scope_arguments,
+                ..
+            }
+            | ExpressionOperation::FunctionValue {
+                read_scope_arguments,
+                ..
+            }
+            | ExpressionOperation::MethodCall {
+                read_scope_arguments,
+                ..
+            } => {
+                for argument in read_scope_arguments {
+                    self.validate_read_scope_argument(source, *argument, binder);
+                }
+            }
+            ExpressionOperation::CreateReadView {
+                read_scope,
+                source: value,
+                ..
+            } => {
+                self.validate_read_scope_argument(source, *read_scope, binder);
+                self.validate_local_reference(expression, *value);
+            }
+            ExpressionOperation::ReborrowReadView { read_scope, value } => {
+                self.validate_read_scope_argument(source, *read_scope, binder);
+                self.validate_local_reference(expression, *value);
+            }
+            ExpressionOperation::BorrowReadView { value, .. }
+            | ExpressionOperation::MoveReadView { value }
+            | ExpressionOperation::DropReadView { value }
+            | ExpressionOperation::ReadViewDataField { value, .. }
+            | ExpressionOperation::BorrowReadViewField { value, .. } => {
+                self.validate_local_reference(expression, *value)
+            }
+            _ => {}
+        }
+        match operation {
+            ExpressionOperation::CreateReadView {
+                declaration,
+                fields,
+                ..
+            } => {
+                self.validate_read_view_access(expression, *declaration, None);
+                if let Some(OwnerRecord::Declaration(record)) = self
+                    .snapshot
+                    .owners
+                    .get(&OwnerKey::Declaration(declaration.declaration))
+                    && let DeclarationPayload::ReadView(view) = &record.payload
+                    && (fields.len() != view.fields.len()
+                        || fields
+                            .iter()
+                            .zip(&view.fields)
+                            .any(|(actual, formal)| actual.field != formal.id))
+                {
+                    self.error("kernel_read_view_field", "view construction requires the complete exact field inventory in authored order");
+                }
+            }
+            ExpressionOperation::ReadViewDataField { field, .. }
+            | ExpressionOperation::BorrowReadViewField { field, .. } => {
+                self.validate_read_view_access(expression, field.declaration, Some(field.field))
+            }
             ExpressionOperation::PackOwnedRecord { fields, .. } => {
                 for field in fields {
                     self.require_exact_kind(
@@ -2911,6 +3565,72 @@ impl FullValidator<'_> {
         }
     }
 
+    fn validate_read_view_access(
+        &mut self,
+        expression: ExpressionId,
+        declaration: DeclarationReference,
+        field: Option<crate::platform::semantic_id::FieldId>,
+    ) {
+        self.require_exact_kind(
+            declaration.package,
+            OwnerKey::Declaration(declaration.declaration),
+            &[OwnerKind::ReadView],
+            "read-view field declaration",
+        );
+        let caller = self
+            .semantic_declaration(OwnerKey::Expression(expression))
+            .map(|declaration| DeclarationReference {
+                package: self.snapshot.root.package_id,
+                declaration,
+            });
+        let result = self.with_associated_read(|read, admission| {
+            let caller = caller.ok_or_else(|| {
+                super::owned_associated::read_view_admission::reject(
+                    "view operations require an exact enclosing declaration",
+                )
+            })?;
+            super::owned_associated::read_view_admission::require_access(
+                read,
+                declaration,
+                caller,
+                admission,
+            )?;
+            if let Some(field) = field {
+                let Some(OwnerRecord::Declaration(record)) =
+                    read.owner(OwnerKey::Declaration(declaration.declaration))?
+                else {
+                    return Err(super::owned_associated::read_view_admission::reject(
+                        "missing exact view field owner",
+                    ));
+                };
+                let DeclarationPayload::ReadView(view) = record.payload else {
+                    return Err(super::owned_associated::read_view_admission::reject(
+                        "field owner is not a read view",
+                    ));
+                };
+                let mut found = false;
+                for entry in view.fields {
+                    admission.step(read)?;
+                    if entry.id == field {
+                        if found {
+                            return Err(super::owned_associated::read_view_admission::reject(
+                                "duplicate exact view field identity",
+                            ));
+                        }
+                        found = true;
+                    }
+                }
+                if !found {
+                    return Err(super::owned_associated::read_view_admission::reject(
+                        "field is absent from the exact view inventory",
+                    ));
+                }
+            }
+            Ok(())
+        });
+        self.capture(result);
+    }
+
     fn validate_local_reference(
         &mut self,
         expression: ExpressionId,
@@ -2973,6 +3693,16 @@ impl FullValidator<'_> {
                     return;
                 };
                 let expected = match reference {
+                    LocalValueReference::LexicalBinding(_)
+                        if matches!(
+                            container.kind,
+                            BindingContainerKind::ReadView
+                                | BindingContainerKind::ReadViewLet
+                                | BindingContainerKind::ReadViewBorrow
+                        ) =>
+                    {
+                        container.kind
+                    }
                     LocalValueReference::LexicalBinding(_)
                         if container.kind == BindingContainerKind::OwnedBorrow =>
                     {
@@ -3071,6 +3801,7 @@ impl FullValidator<'_> {
                         c.self_parameter == id || c.type_parameters.contains(&id)
                     }
                     DeclarationPayload::OwnedImplementation(i) => i.type_parameters.contains(&id),
+                    DeclarationPayload::ReadView(view) => view.type_parameters.contains(&id),
                     DeclarationPayload::External(function) => {
                         function.type_parameters.contains(&id)
                     }
@@ -3451,7 +4182,17 @@ impl FullValidator<'_> {
                         "parameter storage admission has no canonical occurrence context",
                     )
                 })?;
-            super::memory::direct_at(&read, parameter.ty, occurrence, &self.associated_admission)
+            Ok(super::memory::direct_at(
+                &read,
+                parameter.ty,
+                occurrence,
+                &self.associated_admission,
+            )? || super::memory::view_at(
+                &read,
+                parameter.ty,
+                occurrence,
+                &self.associated_admission,
+            )?)
         })();
         self.work = work.get();
         self.interrupted |= interrupted.get();
@@ -3479,3 +4220,739 @@ fn full_work_exhausted() -> Diagnostic {
 #[cfg(test)]
 #[path = "associated_parameter_shape_tests.rs"]
 mod associated_parameter_shape_tests;
+
+#[cfg(test)]
+mod read_view_glue_tests {
+    use super::*;
+    use crate::platform::kernel::{
+        CallableResult, DeclarationRecord, DeclarationVisibility, ExpressionRecord,
+        FunctionDeclaration, Name, OwnerHeader, ReadScopeParameter, ReadScopeReference,
+        ReadScopeSource, ReadViewDeclaration,
+    };
+    use crate::platform::semantic_id::{DeclarationId, ParameterId, ReadScopeParameterId};
+
+    const SEED: &[u8] = b"read-view-full-kernel-glue";
+
+    struct Fixture {
+        source: KernelSnapshot,
+        function: DeclarationReference,
+        view: DeclarationReference,
+        parameter: ParameterId,
+        scope: ReadScopeArgument,
+        view_type: TypeObjectDigest,
+    }
+
+    fn intern(source: &mut KernelSnapshot, form: TypeForm) -> TypeObjectDigest {
+        let object = TypeObject::new(form).unwrap();
+        let digest = encode_type_object(&object).unwrap().0;
+        source.types.insert(digest, object);
+        digest
+    }
+
+    fn fixture() -> Fixture {
+        let mut source = super::super::tests::transport_snapshot();
+        let (module, module_record) = source
+            .owners
+            .iter()
+            .find_map(|(key, record)| match key {
+                OwnerKey::Module(module) => Some((*module, record.clone())),
+                _ => None,
+            })
+            .unwrap();
+        source.owners.clear();
+        source
+            .owners
+            .insert(OwnerKey::Module(module), module_record);
+        source.types.clear();
+        let function = DeclarationReference {
+            package: source.root.package_id,
+            declaration: DeclarationId::migrate(SEED, 0),
+        };
+        let view = DeclarationReference {
+            package: source.root.package_id,
+            declaration: DeclarationId::migrate(SEED, 1),
+        };
+        let scope_parameter = ReadScopeParameter {
+            id: ReadScopeParameterId::migrate(SEED, 0),
+            name: Name::new("s").unwrap(),
+        };
+        let scope = ReadScopeArgument::Parameter(ReadScopeReference {
+            binder: ReadScopeBinder::Declaration(function),
+            parameter: scope_parameter.id,
+        });
+        let unit = intern(&mut source, TypeForm::Unit);
+        source.owners.insert(
+            OwnerKey::Declaration(view.declaration),
+            OwnerRecord::Declaration(DeclarationRecord {
+                header: OwnerHeader::new(
+                    OwnerKey::Declaration(view.declaration),
+                    OwnerKind::ReadView,
+                ),
+                module,
+                name: Name::new("View").unwrap(),
+                visibility: DeclarationVisibility::Public,
+                payload: DeclarationPayload::ReadView(ReadViewDeclaration {
+                    type_parameters: vec![],
+                    scope_parameter: ReadScopeParameter {
+                        id: ReadScopeParameterId::migrate(SEED, 1),
+                        name: Name::new("v").unwrap(),
+                    },
+                    fields: vec![],
+                }),
+            }),
+        );
+        let view_type = intern(
+            &mut source,
+            TypeForm::ReadViewApplied {
+                declaration: view,
+                arguments: vec![],
+                read_scope: scope,
+            },
+        );
+        let parameter = ParameterId::migrate(SEED, 0);
+        source.owners.insert(
+            OwnerKey::Parameter(parameter),
+            OwnerRecord::Parameter(ParameterRecord {
+                header: OwnerHeader::new(OwnerKey::Parameter(parameter), OwnerKind::Parameter),
+                parent: ParameterParent::Function(function.declaration),
+                name: Name::new("source").unwrap(),
+                ty: view_type,
+                use_mode: ParameterUse::Borrow,
+                resource_requirement: None,
+            }),
+        );
+        let body = ExpressionId::migrate(SEED, 0);
+        source.owners.insert(
+            OwnerKey::Expression(body),
+            OwnerRecord::Expression(
+                ExpressionRecord::new(body, ExpressionOperation::Unit {}).unwrap(),
+            ),
+        );
+        source.owners.insert(
+            OwnerKey::Declaration(function.declaration),
+            OwnerRecord::Declaration(DeclarationRecord {
+                header: OwnerHeader::new(
+                    OwnerKey::Declaration(function.declaration),
+                    OwnerKind::PureFunction,
+                ),
+                module,
+                name: Name::new("read").unwrap(),
+                visibility: DeclarationVisibility::Public,
+                payload: DeclarationPayload::Function(FunctionDeclaration {
+                    implementation_parameters: vec![],
+                    requirement_parameters: vec![],
+                    effect_parameters: vec![],
+                    type_parameters: vec![],
+                    parameters: vec![parameter],
+                    result: CallableResult {
+                        ty: unit,
+                        relation: ResultRelation::Value,
+                    },
+                    read_scope_parameters: vec![scope_parameter],
+                    read_scope_sources: vec![ReadScopeSource {
+                        source: parameter,
+                        scope,
+                    }],
+                    effect: FunctionEffect::Pure,
+                    body,
+                }),
+            }),
+        );
+        Fixture {
+            source,
+            function,
+            view,
+            parameter,
+            scope,
+            view_type,
+        }
+    }
+
+    fn healthy() -> Result<(), Diagnostic> {
+        Ok(())
+    }
+
+    fn validator(source: &KernelSnapshot) -> FullValidator<'_> {
+        FullValidator {
+            snapshot: source,
+            read: super::super::infer::CheckedExpressionRead {
+                read: source,
+                checkpoint: &healthy,
+            },
+            interrupted: false,
+            diagnostics: vec![],
+            work: 0,
+            maximum_work: MAXIMUM_VALIDATION_WORK,
+            associated_admission: super::super::owned_associated::OwnedAssociatedAdmission::new(),
+            relations: vec![],
+            expression_parents: BTreeMap::new(),
+            expression_root_owners: BTreeMap::new(),
+            binding_containers: BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn borrowed_view_parameter_is_a_positive_scoped_category() {
+        let f = fixture();
+        let mut check = validator(&f.source);
+        check.validate_resource_shapes();
+        assert!(check.diagnostics.is_empty(), "{:?}", check.diagnostics);
+        let owner = OwnerKey::Parameter(f.parameter);
+        assert!(
+            check
+                .parameter_owns_storage(owner, &f.source.owners[&owner])
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn explicit_owned_view_actual_is_not_an_ordinary_buffer_container() {
+        use crate::platform::kernel::{TypeParameterConstraints, TypeParameterRecord};
+        use crate::platform::semantic_id::TypeParameterId;
+        let mut f = fixture();
+        let formal = TypeParameterId::migrate(SEED, 0);
+        let OwnerRecord::Declaration(view) = f
+            .source
+            .owners
+            .get_mut(&OwnerKey::Declaration(f.view.declaration))
+            .unwrap()
+        else {
+            panic!("view");
+        };
+        let DeclarationPayload::ReadView(view) = &mut view.payload else {
+            panic!("view");
+        };
+        view.type_parameters.push(formal);
+        f.source.owners.insert(
+            OwnerKey::TypeParameter(formal),
+            OwnerRecord::TypeParameter(TypeParameterRecord {
+                header: OwnerHeader::new(OwnerKey::TypeParameter(formal), OwnerKind::TypeParameter),
+                declaration: f.view.declaration,
+                name: Name::new("Self").unwrap(),
+                constraints: TypeParameterConstraints::Owned,
+            }),
+        );
+        let actual = intern(&mut f.source, TypeForm::ByteBuffer);
+        let view_type = intern(
+            &mut f.source,
+            TypeForm::ReadViewApplied {
+                declaration: f.view,
+                arguments: vec![actual],
+                read_scope: f.scope,
+            },
+        );
+        let OwnerRecord::Parameter(parameter) = f
+            .source
+            .owners
+            .get_mut(&OwnerKey::Parameter(f.parameter))
+            .unwrap()
+        else {
+            panic!("parameter");
+        };
+        parameter.ty = view_type;
+        f.source.types.remove(&f.view_type);
+        let mut check = validator(&f.source);
+        check.validate_resource_shapes();
+        assert!(check.diagnostics.is_empty(), "{:?}", check.diagnostics);
+        super::super::owned_associated::read_view_admission::validate_nominal_at(
+            &f.source,
+            view_type,
+            super::super::owned_associated::OwnedTypeOccurrence::authored(
+                Some(f.function),
+                super::super::contract::GRAPH_CONTRACT_VERSION,
+            ),
+            &check.associated_admission,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn unrestricted_view_parameter_and_value_result_are_refused() {
+        let mut f = fixture();
+        let OwnerRecord::Parameter(parameter) = f
+            .source
+            .owners
+            .get_mut(&OwnerKey::Parameter(f.parameter))
+            .unwrap()
+        else {
+            panic!("parameter");
+        };
+        parameter.use_mode = ParameterUse::Unrestricted;
+        let OwnerRecord::Declaration(function) = f
+            .source
+            .owners
+            .get_mut(&OwnerKey::Declaration(f.function.declaration))
+            .unwrap()
+        else {
+            panic!("function");
+        };
+        let DeclarationPayload::Function(function) = &mut function.payload else {
+            panic!("function");
+        };
+        function.result.ty = f.view_type;
+        let mut check = validator(&f.source);
+        check.validate_resource_shapes();
+        assert!(
+            check
+                .diagnostics
+                .iter()
+                .any(|error| error.code == "kernel_read_view_parameter")
+        );
+        assert!(
+            check
+                .diagnostics
+                .iter()
+                .any(|error| error.code == "kernel_read_view_container")
+        );
+    }
+
+    #[test]
+    fn inactive_nested_view_container_is_refused() {
+        let mut f = fixture();
+        let option = intern(&mut f.source, TypeForm::Option { item: f.view_type });
+        let mut check = validator(&f.source);
+        check.validate_resource_shapes();
+        assert!(
+            check
+                .diagnostics
+                .iter()
+                .any(|error| error.code == "kernel_read_view_container"
+                    && error.message.contains(&option.to_string()))
+        );
+    }
+
+    #[test]
+    fn scoped_view_call_requires_the_owning_view_binding_role() {
+        let mut f = fixture();
+        let OwnerRecord::Declaration(function) = f
+            .source
+            .owners
+            .get_mut(&OwnerKey::Declaration(f.function.declaration))
+            .unwrap()
+        else {
+            panic!("function");
+        };
+        let DeclarationPayload::Function(function) = &mut function.payload else {
+            panic!("function");
+        };
+        function.result = CallableResult {
+            ty: f.view_type,
+            relation: ResultRelation::ViewFrom {
+                source: f.parameter,
+                scope: f.scope,
+            },
+        };
+        let call = ExpressionId::migrate(SEED, 1);
+        let binding = BindingId::migrate(SEED, 0);
+        f.source.owners.insert(
+            OwnerKey::Expression(call),
+            OwnerRecord::Expression(
+                ExpressionRecord::new(
+                    call,
+                    ExpressionOperation::Call {
+                        function: f.function,
+                        arguments: vec![],
+                        type_arguments: vec![],
+                        effect_arguments: vec![],
+                        requirement_arguments: vec![],
+                        read_scope_arguments: vec![f.scope],
+                    },
+                )
+                .unwrap(),
+            ),
+        );
+        f.source.owners.insert(
+            OwnerKey::Binding(binding),
+            OwnerRecord::Binding(super::super::BindingRecord {
+                header: OwnerHeader::new(OwnerKey::Binding(binding), OwnerKind::Binding),
+                name: Name::new("view").unwrap(),
+                kind: BindingKind::ReadView,
+                value: None,
+                declared_type: Some(f.view_type),
+            }),
+        );
+        let operation = ExpressionOperation::BorrowCall {
+            call,
+            binding,
+            body: ExpressionId::migrate(SEED, 0),
+        };
+        let mut check = validator(&f.source);
+        check.collect_binding_containers(ExpressionId::migrate(SEED, 2), &operation);
+        check.validate_binding_ownership();
+        assert!(check.diagnostics.is_empty(), "{:?}", check.diagnostics);
+        assert_eq!(
+            check.binding_containers[&binding][0].kind,
+            BindingContainerKind::ReadView
+        );
+        let OwnerRecord::Binding(record) = f
+            .source
+            .owners
+            .get_mut(&OwnerKey::Binding(binding))
+            .unwrap()
+        else {
+            panic!("binding");
+        };
+        record.kind = BindingKind::OwnedBorrow;
+        let mut check = validator(&f.source);
+        check.collect_binding_containers(ExpressionId::migrate(SEED, 2), &operation);
+        check.validate_binding_ownership();
+        assert!(
+            check
+                .diagnostics
+                .iter()
+                .any(|error| error.code == "kernel_full_binding_kind")
+        );
+    }
+
+    #[test]
+    fn equal_scope_parameter_ids_do_not_import_a_foreign_binder() {
+        let f = fixture();
+        let ReadScopeArgument::Parameter(mut foreign) = f.scope else {
+            panic!("formal");
+        };
+        foreign.binder = ReadScopeBinder::Declaration(f.view);
+        let mut check = validator(&f.source);
+        check.validate_read_scope_argument(
+            OwnerKey::Declaration(f.function.declaration),
+            ReadScopeArgument::Parameter(foreign),
+            Some(ReadScopeBinder::Declaration(f.function)),
+        );
+        assert!(
+            check
+                .diagnostics
+                .iter()
+                .any(|error| error.code == "kernel_read_view")
+        );
+        let mut f = fixture();
+        let constant = DeclarationReference {
+            package: f.function.package,
+            declaration: DeclarationId::migrate(SEED, 10),
+        };
+        let body = ExpressionId::migrate(SEED, 0);
+        let unit = f
+            .source
+            .types
+            .iter()
+            .find_map(|(ty, object)| matches!(object.form, TypeForm::Unit).then_some(*ty))
+            .unwrap();
+        let module = match &f.source.owners[&OwnerKey::Declaration(f.function.declaration)] {
+            OwnerRecord::Declaration(record) => record.module,
+            _ => panic!("function"),
+        };
+        f.source.owners.insert(
+            OwnerKey::Declaration(constant.declaration),
+            OwnerRecord::Declaration(DeclarationRecord {
+                header: OwnerHeader::new(
+                    OwnerKey::Declaration(constant.declaration),
+                    OwnerKind::Constant,
+                ),
+                module,
+                name: Name::new("constant").unwrap(),
+                visibility: DeclarationVisibility::Private,
+                payload: DeclarationPayload::Constant {
+                    ty: unit,
+                    value: body,
+                },
+            }),
+        );
+        let binding = BindingId::migrate(SEED, 10);
+        f.source.owners.insert(
+            OwnerKey::Binding(binding),
+            OwnerRecord::Binding(super::super::BindingRecord {
+                header: OwnerHeader::new(OwnerKey::Binding(binding), OwnerKind::Binding),
+                name: Name::new("loan").unwrap(),
+                kind: BindingKind::OwnedBorrow,
+                value: None,
+                declared_type: Some(unit),
+            }),
+        );
+        let mut check = validator(&f.source);
+        check
+            .expression_root_owners
+            .insert(body, OwnerKey::Declaration(constant.declaration));
+        check.binding_containers.insert(
+            binding,
+            vec![BindingContainer {
+                expression: ExpressionId::migrate(SEED, 10),
+                scope_roots: vec![body],
+                kind: BindingContainerKind::OwnedBorrow,
+            }],
+        );
+        check.validate_read_scope_argument(
+            OwnerKey::Expression(body),
+            ReadScopeArgument::Lexical {
+                callable: constant,
+                binding,
+            },
+            Some(ReadScopeBinder::Declaration(constant)),
+        );
+        assert!(
+            check
+                .diagnostics
+                .iter()
+                .any(|error| error.message.contains("named Function"))
+        );
+    }
+
+    #[test]
+    fn owning_view_let_preserves_role_but_requires_exact_initializer_scope() {
+        let mut f = fixture();
+        let initializer = ExpressionId::migrate(SEED, 3);
+        let parent = ExpressionId::migrate(SEED, 4);
+        let binding = BindingId::migrate(SEED, 1);
+        f.source.owners.insert(
+            OwnerKey::Expression(initializer),
+            OwnerRecord::Expression(
+                ExpressionRecord::new(
+                    initializer,
+                    ExpressionOperation::CreateReadView {
+                        declaration: f.view,
+                        type_arguments: vec![],
+                        read_scope: f.scope,
+                        source: LocalValueReference::FunctionParameter(f.parameter),
+                        fields: vec![],
+                    },
+                )
+                .unwrap(),
+            ),
+        );
+        f.source.owners.insert(
+            OwnerKey::Binding(binding),
+            OwnerRecord::Binding(super::super::BindingRecord {
+                header: OwnerHeader::new(OwnerKey::Binding(binding), OwnerKind::Binding),
+                name: Name::new("view").unwrap(),
+                kind: BindingKind::ReadView,
+                value: Some(initializer),
+                declared_type: Some(f.view_type),
+            }),
+        );
+        let mut check = validator(&f.source);
+        check.collect_binding_containers(
+            parent,
+            &ExpressionOperation::Let {
+                bindings: vec![binding],
+                body: ExpressionId::migrate(SEED, 0),
+            },
+        );
+        check.validate_binding_ownership();
+        assert!(check.diagnostics.is_empty(), "{:?}", check.diagnostics);
+        assert_eq!(
+            check.binding_containers[&binding][0].kind,
+            BindingContainerKind::ReadViewLet
+        );
+        check
+            .expression_root_owners
+            .insert(parent, OwnerKey::Declaration(f.function.declaration));
+        check.validate_read_scope_argument(
+            OwnerKey::Binding(binding),
+            ReadScopeArgument::Lexical {
+                callable: f.function,
+                binding,
+            },
+            Some(ReadScopeBinder::Declaration(f.function)),
+        );
+        assert!(
+            check
+                .diagnostics
+                .iter()
+                .any(|error| error.code == "kernel_read_view")
+        );
+    }
+
+    #[test]
+    fn exact_view_initializer_scope_protects_source_without_self_readable_value() {
+        let mut f = fixture();
+        let initializer = ExpressionId::migrate(SEED, 5);
+        let parent = ExpressionId::migrate(SEED, 6);
+        let binding = BindingId::migrate(SEED, 2);
+        let scope = ReadScopeArgument::Lexical {
+            callable: f.function,
+            binding,
+        };
+        let annotation = intern(
+            &mut f.source,
+            TypeForm::ReadViewApplied {
+                declaration: f.view,
+                arguments: vec![],
+                read_scope: scope,
+            },
+        );
+        f.source.owners.insert(
+            OwnerKey::Expression(initializer),
+            OwnerRecord::Expression(
+                ExpressionRecord::new(
+                    initializer,
+                    ExpressionOperation::CreateReadView {
+                        declaration: f.view,
+                        type_arguments: vec![],
+                        read_scope: scope,
+                        source: LocalValueReference::FunctionParameter(f.parameter),
+                        fields: vec![],
+                    },
+                )
+                .unwrap(),
+            ),
+        );
+        f.source.owners.insert(
+            OwnerKey::Binding(binding),
+            OwnerRecord::Binding(super::super::BindingRecord {
+                header: OwnerHeader::new(OwnerKey::Binding(binding), OwnerKind::Binding),
+                name: Name::new("view").unwrap(),
+                kind: BindingKind::ReadView,
+                value: Some(initializer),
+                declared_type: Some(annotation),
+            }),
+        );
+        f.source.owners.insert(
+            OwnerKey::Expression(parent),
+            OwnerRecord::Expression(
+                ExpressionRecord::new(
+                    parent,
+                    ExpressionOperation::Let {
+                        bindings: vec![binding],
+                        body: ExpressionId::migrate(SEED, 0),
+                    },
+                )
+                .unwrap(),
+            ),
+        );
+        let OwnerRecord::Declaration(function) = f
+            .source
+            .owners
+            .get_mut(&OwnerKey::Declaration(f.function.declaration))
+            .unwrap()
+        else {
+            panic!("function");
+        };
+        let DeclarationPayload::Function(function) = &mut function.payload else {
+            panic!("function");
+        };
+        function.body = parent;
+        let mut check = validator(&f.source);
+        check.validate_expressions();
+        check.validate_read_scope_argument(
+            OwnerKey::Expression(initializer),
+            scope,
+            Some(ReadScopeBinder::Declaration(f.function)),
+        );
+        assert!(check.diagnostics.is_empty(), "{:?}", check.diagnostics);
+        check.validate_local_reference(initializer, LocalValueReference::LexicalBinding(binding));
+        assert!(
+            check
+                .diagnostics
+                .iter()
+                .any(|error| error.code == "kernel_full_lexical_scope")
+        );
+    }
+
+    #[test]
+    fn prospective_call_scope_is_metadata_permission_without_argument_or_value_rights() {
+        let mut f = fixture();
+        let argument = ExpressionId::migrate(SEED, 7);
+        let call = ExpressionId::migrate(SEED, 8);
+        let parent = ExpressionId::migrate(SEED, 9);
+        let binding = BindingId::migrate(SEED, 3);
+        let scope = ReadScopeArgument::Lexical {
+            callable: f.function,
+            binding,
+        };
+        f.source.owners.insert(
+            OwnerKey::Expression(argument),
+            OwnerRecord::Expression(
+                ExpressionRecord::new(
+                    argument,
+                    ExpressionOperation::Local {
+                        value: LocalValueReference::FunctionParameter(f.parameter),
+                    },
+                )
+                .unwrap(),
+            ),
+        );
+        f.source.owners.insert(
+            OwnerKey::Expression(call),
+            OwnerRecord::Expression(
+                ExpressionRecord::new(
+                    call,
+                    ExpressionOperation::Call {
+                        function: f.function,
+                        arguments: vec![argument],
+                        type_arguments: vec![],
+                        effect_arguments: vec![],
+                        requirement_arguments: vec![],
+                        read_scope_arguments: vec![scope],
+                    },
+                )
+                .unwrap(),
+            ),
+        );
+        f.source.owners.insert(
+            OwnerKey::Binding(binding),
+            OwnerRecord::Binding(super::super::BindingRecord {
+                header: OwnerHeader::new(OwnerKey::Binding(binding), OwnerKind::Binding),
+                name: Name::new("view").unwrap(),
+                kind: BindingKind::ReadView,
+                value: None,
+                declared_type: Some(f.view_type),
+            }),
+        );
+        f.source.owners.insert(
+            OwnerKey::Expression(parent),
+            OwnerRecord::Expression(
+                ExpressionRecord::new(
+                    parent,
+                    ExpressionOperation::BorrowCall {
+                        call,
+                        binding,
+                        body: ExpressionId::migrate(SEED, 0),
+                    },
+                )
+                .unwrap(),
+            ),
+        );
+        let OwnerRecord::Declaration(function) = f
+            .source
+            .owners
+            .get_mut(&OwnerKey::Declaration(f.function.declaration))
+            .unwrap()
+        else {
+            panic!("function");
+        };
+        let DeclarationPayload::Function(function) = &mut function.payload else {
+            panic!("function");
+        };
+        function.body = parent;
+        function.result = CallableResult {
+            ty: f.view_type,
+            relation: ResultRelation::ViewFrom {
+                source: f.parameter,
+                scope: f.scope,
+            },
+        };
+        let mut check = validator(&f.source);
+        check.validate_expressions();
+        check.validate_read_scope_argument(
+            OwnerKey::Expression(call),
+            scope,
+            Some(ReadScopeBinder::Declaration(f.function)),
+        );
+        assert!(check.diagnostics.is_empty(), "{:?}", check.diagnostics);
+        check.validate_read_scope_argument(
+            OwnerKey::Expression(argument),
+            scope,
+            Some(ReadScopeBinder::Declaration(f.function)),
+        );
+        assert!(
+            check
+                .diagnostics
+                .iter()
+                .any(|error| error.code == "kernel_read_view")
+        );
+        check.validate_local_reference(argument, LocalValueReference::LexicalBinding(binding));
+        assert!(
+            check
+                .diagnostics
+                .iter()
+                .any(|error| error.code == "kernel_full_lexical_scope")
+        );
+    }
+}

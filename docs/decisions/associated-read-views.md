@@ -1,9 +1,9 @@
 # Associated source-tied read-view families
 
-Status: selected, independently reviewed design for the next isolated language
-increment. This document and [the semantic contract](../spec/associated-read-views.md)
-define the intended behavior; implementation, version assignment and acceptance
-are pending.
+Status: selected, independently reviewed language design. This document and
+[the semantic contract](../spec/associated-read-views.md) define its semantics and
+rationale. [Current availability, validation and publication](../status.md) are
+tracked separately.
 The base is `fce333fd500c23a1413c8b6b00c6a0153cba27e7`; its **0.1.95** proof and
 publication work remain separate. This selection changes neither that source nor
 its evidence.
@@ -137,12 +137,29 @@ read referents and metadata, not an inferred grant.
 A clean versioned encoding cut is permitted. Prefer one explicit authoritative
 result/scope/member model over preserving obsolete field shapes through competing
 paths when that would complicate admission. Feature-free byte identity with .95
-is not an acceptance prerequisite for this increment. Exact new generation and
-reader-profile values must be assigned at their maintained owners before encoding
-implementation. Unsupported readers must refuse clearly; supported historical
+is not an acceptance prerequisite for this increment. The selected cut is Graph34,
+Interface22, compiler34/bytecode28/artifact41, authored39/compact42,
+Summary12/Witness10/Validator41 and Registry26/CLI47/projection22. The closed
+ordinary base type schema remains TypeObject10 with singular primitive identities;
+new view forms use the dedicated capability1 envelope. TypeObject11 is refused.
+This retains unchanged base shapes without maintaining competing current result
+or scope models. Unsupported readers must refuse clearly; supported historical
 proof identities remain historical and cannot be relabeled as proof of the new
 semantics. Maintained native assets must be rebuilt/admitted through ordinary
 product operations if the chosen cut invalidates their current encodings.
+
+Owning `ReadView` bindings have an initializer under `Let` or adopt a `ViewFrom`
+result under `BorrowCall`; ordinary `Let` cannot conceal views. Their prospective
+lexical scope is distinct from a readable destination value and from any forwarded
+parent scope. Current borrowed calls open this boundary before invocation through
+the body, and a matching annotated view initializer opens it before source/field
+construction. Ending it closes only its own scope owner. Partial construction and
+descriptor drop preserve the independently proved source custody rules.
+
+The native planner bootstrap uses an explicit ordinary predecessor reader when
+needed, preserving original byte and proof identities before complete current
+admission. Rebuild current assets through supported authoring/compiler operations;
+no special trusted planner bypass or header rewriting is permitted.
 
 General regions, collectors, mutable views, multi-source views, stored associated
 RHS projections, borrowed task results, detached loans, general higher-kinded

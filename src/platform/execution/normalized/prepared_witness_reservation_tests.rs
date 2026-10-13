@@ -98,6 +98,7 @@ fn probe(
         implementations,
         contracts,
         runtime_owners: &runtime_owners,
+        producer_profiles: None,
         owned_records: program.owned_record_declarations.clone(),
         targets: BTreeMap::new(),
         instances: BTreeMap::new(),

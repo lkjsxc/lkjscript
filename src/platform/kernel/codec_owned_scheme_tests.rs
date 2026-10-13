@@ -40,6 +40,8 @@ fn scheme() -> OwnerRecord {
                 method: MethodId::migrate(seed, 0),
                 function: reference(),
                 type_arguments: vec![parameter_type, owned_type(TypeForm::ByteBuffer)],
+
+                read_scope_arguments: Vec::new(),
             }],
             associated_types: Vec::new(),
         }),
@@ -50,7 +52,7 @@ fn scheme() -> OwnerRecord {
 fn current_scheme_binds_ordered_parameters_and_every_mapping_argument() {
     let original = scheme();
     let (digest, bytes) = encode_owner(&original).unwrap();
-    assert_eq!(&bytes[..8], b"LKJOWN33");
+    assert_eq!(&bytes[..8], b"LKJOWN34");
     assert_eq!(
         decode_owner(&bytes, original.owner(), original.kind(), digest).unwrap(),
         original
@@ -123,6 +125,8 @@ fn applied_witness_identity_retains_unused_ordered_arguments() {
                 contract: reference(),
                 method: MethodId::migrate(b"generic-implementation-codec", 0),
                 arguments: Vec::new(),
+
+                read_scope_arguments: Vec::new(),
             }
         } else {
             ExpressionOperation::ImplementationCall {
@@ -132,6 +136,8 @@ fn applied_witness_identity_retains_unused_ordered_arguments() {
                 type_arguments: Vec::new(),
                 implementations: vec![witness],
                 arguments: Vec::new(),
+
+                read_scope_arguments: Vec::new(),
             }
         };
         let mut owner = OwnerRecord::Expression(
@@ -322,7 +328,7 @@ fn prerequisite_declarations_maps_and_nested_arguments_bind_canonical_identity()
             parameter,
         });
     let (digest, bytes) = encode_owner(&original).unwrap();
-    assert_eq!(&bytes[..8], b"LKJOWN33");
+    assert_eq!(&bytes[..8], b"LKJOWN34");
     assert_eq!(
         decode_owner(&bytes, original.owner(), original.kind(), digest).unwrap(),
         original
@@ -368,6 +374,8 @@ fn prerequisite_declarations_maps_and_nested_arguments_bind_canonical_identity()
             contract: reference(),
             method: MethodId::migrate(b"prerequisite-wire", 0),
             arguments: Vec::new(),
+
+            read_scope_arguments: Vec::new(),
         },
     )
     .unwrap();

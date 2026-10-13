@@ -12,7 +12,7 @@ fn borrowed_result_native_intent_matches_independent_compact_edges() {
         r#"request base={base}
 create.module as=$module name=views
 add.parameter as=$source function=$identity name=source type=owned-i64-cell use=borrow
-create.function as=$identity module=$module name=identity visibility=public result=owned-i64-cell borrow-from=$source effect=pure body=$body
+create.function as=$identity module=$module name=identity visibility=public result=owned-i64-cell result-kind=read-from result-source=$source effect=pure body=$body
 expression.local as=$body value=$source
 "#
     );
@@ -30,7 +30,7 @@ declarations.end
     let flat = decode_compact_change("borrowed-flat.lkjc", flat.as_bytes()).unwrap();
     let native = decode_compact_change("borrowed-native.lkjc", native.as_bytes()).unwrap();
     let bytes = canonical_authored_intent_bytes(&native.semantic).unwrap();
-    assert_eq!(&bytes[..8], b"LKJACR31");
+    assert_eq!(&bytes[..8], b"LKJACR39");
     assert_eq!(
         bytes,
         canonical_authored_intent_bytes(&flat.semantic).unwrap()
@@ -38,7 +38,7 @@ declarations.end
     assert_eq!(native.request_commitment, flat.request_commitment);
     assert_eq!(
         commitment_codec_identity(&bytes),
-        "lkjscript-authored-change-codec-31"
+        "lkjscript-authored-change-codec-39"
     );
     assert_eq!(
         commitment_codec_identity(b"LKJACR30"),
@@ -66,7 +66,7 @@ declarations.end
 create.module as=$module name=views
 type.parameter as=@self parameter=$self
 create.owned-contract as=$contract module=$module name=IndexRead visibility=public self=@self
-owned.method parent=$contract index=0 as=%method id=method_85000000000000000000000000000003 name=at result=@self borrow-from=1
+owned.method parent=$contract index=0 as=%method id=method_85000000000000000000000000000003 name=at result=@self result-kind=read-from result-source=1
 owned.parameter parent=%method index=0 type=i64 use=unrestricted
 owned.parameter parent=%method index=1 type=@self use=borrow
 add.type-parameter as=$self declaration=$contract name=Self constraint=owned
@@ -122,7 +122,7 @@ fn borrowed_result_drafts_reenter_and_literal_edits_keep_provenance() {
         .unwrap(),
     )
     .unwrap();
-    assert!(draft.contains("(borrow-from source)"), "{draft}");
+    assert!(draft.contains("(read-from source)"), "{draft}");
     assert!(draft.contains("(borrow-call "), "{draft}");
     let unchanged = decode_compact_change_in_repository(
         "borrowed-noop.lkjc",

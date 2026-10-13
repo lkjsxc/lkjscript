@@ -71,6 +71,11 @@ impl<'a> WitnessTypes<'a> {
             .clone();
         let mut child = |ty| self.apply(ty, bindings, depth + 1);
         match &mut object.form {
+            // The legacy ordinary materializer has no scope map. View-bearing
+            // templates are retained for the separate complete view algebra.
+            TypeForm::ReadViewApplied { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. } => return Some(ty),
             TypeForm::TypeParameter { parameter } => {
                 return Some(bindings.get(parameter).copied().unwrap_or(ty));
             }
@@ -158,6 +163,18 @@ impl<'a> WitnessTypes<'a> {
         }
         for m in &i.methods {
             let f = oracle.function(m.function)?;
+            if !f.read_scope_parameters.is_empty()
+                || !f.read_scope_sources.is_empty()
+                || matches!(f.result.relation, ResultRelation::ViewFrom { .. })
+                || oracle.form(f.result.ty).is_some_and(TypeForm::is_read_view)
+                || f.parameters.iter().any(|p| {
+                    oracle
+                        .parameter(m.function.package, *p)
+                        .is_some_and(|p| oracle.form(p.ty).is_some_and(TypeForm::is_read_view))
+                })
+            {
+                continue;
+            }
             if f.type_parameters.len() != m.type_arguments.len() {
                 return None;
             }
@@ -172,7 +189,7 @@ impl<'a> WitnessTypes<'a> {
                     0,
                 )?;
             }
-            self.apply(f.result, &target_bindings, 0)?;
+            self.apply(f.result.ty, &target_bindings, 0)?;
             for p in &f.implementation_parameters {
                 let self_type = self.apply(p.self_type, &target_bindings, 0)?;
                 let arguments = p
@@ -243,10 +260,20 @@ impl<'a> WitnessTypes<'a> {
             )
             .collect();
         for m in &c.methods {
+            if !m.read_scope_parameters.is_empty()
+                || !m.read_scope_sources.is_empty()
+                || matches!(m.result.relation, ResultRelation::ViewFrom { .. })
+                || oracle.form(m.result.ty).is_some_and(TypeForm::is_read_view)
+                || m.parameters
+                    .iter()
+                    .any(|p| oracle.form(p.ty).is_some_and(TypeForm::is_read_view))
+            {
+                continue;
+            }
             for p in &m.parameters {
                 self.apply(p.ty, &bindings, 0)?;
             }
-            self.apply(m.result, &bindings, 0)?;
+            self.apply(m.result.ty, &bindings, 0)?;
         }
         Some(())
     }
@@ -473,10 +500,49 @@ impl Oracle<'_> {
         } else if let Some((parameters, _)) = self.owned_record_inventory(declaration) {
             parameters.contains(&id)
                 && (p.constraints.has_owned() || p.constraints.requires_transfer())
+        } else if let Some(view) = self.raw_view_declaration(declaration) {
+            p.header.contract_version == contract::GRAPH_CONTRACT_VERSION
+                && self.declaration_generation(declaration)
+                    == Some(contract::GRAPH_CONTRACT_VERSION)
+                && view.type_parameters.contains(&id)
+                && (p.constraints.has_owned() || p.constraints.requires_transfer())
         } else {
             false
         };
         listed.then_some(p)
+    }
+    // This reader is deliberately independent of the production view resolver.
+    // Representation access reveals fields, never authored callable authority.
+    fn raw_view_declaration(
+        &self,
+        reference: DeclarationReference,
+    ) -> Option<&ReadViewDeclaration> {
+        if reference.package == self.0.root.package_id {
+            let OwnerRecord::Declaration(owner) = self
+                .0
+                .owners
+                .get(&OwnerKey::Declaration(reference.declaration))?
+            else {
+                return None;
+            };
+            match &owner.payload {
+                DeclarationPayload::ReadView(view) => Some(view),
+                _ => None,
+            }
+        } else {
+            let owner = match self.representation_foreign(
+                reference.package,
+                OwnerKey::Declaration(reference.declaration),
+            )? {
+                PackageInterfaceRecord::Declaration(owner)
+                | PackageInterfaceRecord::RepresentationDeclaration(owner) => owner,
+                _ => return None,
+            };
+            match &owner.payload {
+                PackageInterfaceDeclarationPayload::ReadView(view) => Some(view),
+                _ => None,
+            }
+        }
     }
     fn ordinary_witness_bounds(bounds: TypeParameterConstraints) -> bool {
         matches!(
@@ -537,7 +603,8 @@ impl Oracle<'_> {
                 requirement_parameters: f.requirement_parameters.clone(),
                 parameters: f.parameters.clone(),
                 result: f.result,
-                result_borrow: f.result_borrow,
+                read_scope_parameters: f.read_scope_parameters.clone(),
+                read_scope_sources: f.read_scope_sources.clone(),
                 effect: f.effect.clone(),
             })
         } else {
@@ -735,6 +802,9 @@ impl Oracle<'_> {
                 | TypeForm::OwnedSequence { .. }
                 | TypeForm::AssociatedContractMember { .. }
                 | TypeForm::AssociatedWitnessProjection { .. }
+                | TypeForm::ReadViewApplied { .. }
+                | TypeForm::AssociatedReadViewMember { .. }
+                | TypeForm::AssociatedReadViewProjection { .. }
                 | TypeForm::Secret
                 | TypeForm::Stream { .. } => return false,
                 TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
@@ -802,7 +872,9 @@ impl Oracle<'_> {
         };
         let scoped = Oracle(self.0, Some(d));
         if !c.associated_types.is_empty()
-            && (self.declaration_generation(d) != Some(contract::GRAPH_CONTRACT_VERSION)
+            && (self
+                .declaration_generation(d)
+                .is_none_or(|v| !matches!(v, 33 | 34))
                 || c.associated_types.len() > contract::MAXIMUM_CHILDREN
                 || {
                     let mut ids = BTreeSet::new();
@@ -810,7 +882,9 @@ impl Oracle<'_> {
                     c.associated_types.iter().any(|member| {
                         !ids.insert(member.id)
                             || !names.insert(&member.name)
-                            || member.bound != AssociatedTypeBound::Owned
+                            || matches!(member.bound, AssociatedTypeBound::ReadViewFamily { .. })
+                                && self.declaration_generation(d)
+                                    != Some(contract::GRAPH_CONTRACT_VERSION)
                     })
                 })
         {
@@ -824,7 +898,7 @@ impl Oracle<'_> {
             .admit_roots(
                 &c.methods
                     .iter()
-                    .flat_map(|m| m.parameters.iter().map(|p| p.ty).chain([m.result]))
+                    .flat_map(|m| m.parameters.iter().map(|p| p.ty).chain([m.result.ty]))
                     .collect::<Vec<_>>(),
                 occurrence,
                 false,
@@ -861,6 +935,19 @@ impl Oracle<'_> {
             {
                 return false;
             }
+            if !m.read_scope_parameters.is_empty()
+                || !m.read_scope_sources.is_empty()
+                || matches!(m.result.relation, ResultRelation::ViewFrom { .. })
+                || m.parameters
+                    .iter()
+                    .any(|p| self.form(p.ty).is_some_and(TypeForm::is_read_view))
+                || self.form(m.result.ty).is_some_and(TypeForm::is_read_view)
+            {
+                if associated.read_view_method_signature(d, m).is_err() {
+                    return false;
+                }
+                continue;
+            }
             let mut suffix = false;
             for p in &m.parameters {
                 if scoped.owned_type_in_scope(p.ty) {
@@ -875,12 +962,12 @@ impl Oracle<'_> {
                     return false;
                 }
             }
-            if !scoped.owned_type_in_scope(m.result) && !scoped.ordinary(m.result) {
+            if !scoped.owned_type_in_scope(m.result.ty) && !scoped.ordinary(m.result.ty) {
                 return false;
             }
-            if let Some(source) = m.result_borrow
+            if let Some(source) = owned_read_source(&m.result)
                 && (!matches!(m.effect, FunctionEffect::Pure)
-                    || !scoped.owned_type_in_scope(m.result)
+                    || !scoped.owned_type_in_scope(m.result.ty)
                     || m.parameters.get(source as usize).is_none_or(|p| {
                         p.use_mode != ParameterUse::Borrow || !scoped.owned_type_in_scope(p.ty)
                     }))
@@ -896,7 +983,14 @@ impl Oracle<'_> {
         generation: u16,
         package: PackageId,
     ) -> bool {
-        if generation != contract::GRAPH_CONTRACT_VERSION && !c.associated_types.is_empty() {
+        if !matches!(generation, 33 | 34) && !c.associated_types.is_empty() {
+            return false;
+        }
+        if generation != contract::GRAPH_CONTRACT_VERSION
+            && c.associated_types
+                .iter()
+                .any(|m| matches!(m.bound, AssociatedTypeBound::ReadViewFamily { .. }))
+        {
             return false;
         }
         if generation < 33
@@ -917,7 +1011,11 @@ impl Oracle<'_> {
         {
             return false;
         }
-        if generation < 27 && c.methods.iter().any(|m| m.result_borrow.is_some()) {
+        if generation < 27
+            && c.methods
+                .iter()
+                .any(|m| owned_read_source(&m.result).is_some())
+        {
             return false;
         }
         if generation >= 26 {
@@ -930,7 +1028,7 @@ impl Oracle<'_> {
                     .parameters
                     .iter()
                     .map(|parameter| parameter.ty)
-                    .chain([method.result])
+                    .chain([method.result.ty])
                     .all(|ty| {
                         self.form(ty)
                             == Some(&TypeForm::TypeParameter {
@@ -1124,6 +1222,26 @@ impl Oracle<'_> {
             let Some(f) = self.function(mapping.function) else {
                 return false;
             };
+            let view_mapping = !m.read_scope_parameters.is_empty()
+                || !m.read_scope_sources.is_empty()
+                || !f.read_scope_parameters.is_empty()
+                || !f.read_scope_sources.is_empty()
+                || matches!(m.result.relation, ResultRelation::ViewFrom { .. })
+                || matches!(f.result.relation, ResultRelation::ViewFrom { .. })
+                || self.form(m.result.ty).is_some_and(TypeForm::is_read_view)
+                || m.parameters
+                    .iter()
+                    .any(|p| self.form(p.ty).is_some_and(TypeForm::is_read_view));
+            if view_mapping {
+                if !self.valid_parameters(mapping.function, &f)
+                    || associated
+                        .admit_view_method_mapping(reference, m, mapping)
+                        .is_err()
+                {
+                    return false;
+                }
+                continue;
+            }
             if self
                 .declaration_generation(reference)
                 .is_none_or(|v| v < 30)
@@ -1141,8 +1259,8 @@ impl Oracle<'_> {
                 || f.implementation_parameters.len() != mapping.implementations.len()
                 || !self.valid_parameters(mapping.function, &f)
                 || f.parameters.len() != m.parameters.len()
-                || f.result_borrow
-                    != m.result_borrow
+                || owned_read_source(&f.result)
+                    != owned_read_source(&m.result)
                         .and_then(|index| f.parameters.get(index as usize).copied())
             {
                 return false;
@@ -1183,7 +1301,7 @@ impl Oracle<'_> {
                 return false;
             }
             let associated_mapping = !c.associated_types.is_empty()
-                || std::iter::once(f.result)
+                || std::iter::once(f.result.ty)
                     .chain(f.parameters.iter().filter_map(|id| {
                         self.parameter(mapping.function.package, *id).map(|p| p.ty)
                     }))
@@ -1237,19 +1355,21 @@ impl Oracle<'_> {
                     return false;
                 }
             }
-            if (!target_scope.owned_type_in_scope(f.result) && !target_scope.ordinary(f.result))
+            if (!target_scope.owned_type_in_scope(f.result.ty)
+                && !target_scope.ordinary(f.result.ty))
                 || if associated_mapping {
                     associated
-                        .definition_type(m.result, reference, 0)
+                        .definition_type(m.result.ty, reference, 0)
                         .ok()
                         .is_none_or(|expected| {
-                            associated.substitute(f.result, &environment, 0).ok() != Some(expected)
+                            associated.substitute(f.result.ty, &environment, 0).ok()
+                                != Some(expected)
                         })
                 } else {
                     derived
-                        .apply(m.result, &bindings, 0)
+                        .apply(m.result.ty, &bindings, 0)
                         .is_none_or(|expected| {
-                            derived.apply(f.result, &target_bindings, 0) != Some(expected)
+                            derived.apply(f.result.ty, &target_bindings, 0) != Some(expected)
                         })
                 }
             {
@@ -1273,9 +1393,20 @@ impl Oracle<'_> {
         let Some(occurrence) = scoped.declaration_occurrence() else {
             return false;
         };
-        if scoped.associated_closure(f.result)
+        let view_signature = !f.read_scope_parameters.is_empty()
+            || !f.read_scope_sources.is_empty()
+            || matches!(f.result.relation, ResultRelation::ViewFrom { .. })
+            || self.form(f.result.ty).is_some_and(TypeForm::is_read_view)
+            || f.parameters.iter().any(|p| {
+                self.parameter(d.package, *p)
+                    .is_some_and(|p| self.form(p.ty).is_some_and(TypeForm::is_read_view))
+            });
+        if view_signature && associated.read_view_function_signature(d).is_err() {
+            return false;
+        }
+        if scoped.associated_closure(f.result.ty)
             && associated
-                .admit_roots(&[f.result], occurrence, false)
+                .admit_roots(&[f.result.ty], occurrence, false)
                 .is_err()
         {
             return false;
@@ -1298,10 +1429,12 @@ impl Oracle<'_> {
                 return false;
             }
         }
-        if let Some(source) = f.result_borrow {
+        if let Some(source) = owned_read_source(&f.result)
+            && !view_signature
+        {
             let scoped = Oracle(self.0, Some(d));
             if !matches!(f.effect, FunctionEffect::Pure)
-                || !scoped.owned_type_in_scope(f.result)
+                || !scoped.owned_type_in_scope(f.result.ty)
                 || !f.parameters.contains(&source)
                 || self.parameter(d.package, source).is_none_or(|p| {
                     p.header.owner != OwnerKey::Parameter(source)

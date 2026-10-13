@@ -3,11 +3,43 @@
 //! The oracle substitutes terms/witnesses and uses weighted reachability, without
 //! production type substitution, demand extraction, SCC or preparation machinery.
 //! Finite concrete closure is evidence for its initial states, never a prefix proof.
+//! Canonical view-scope coordinates are proved separately before entering this
+//! algebra. Scope forwarding is zero constructor depth; nominal family binding
+//! constructors and every effective witness type actual retain the usual edges.
 
 use crate::platform::diagnostic::Diagnostic;
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Deref;
+
+/// Fixed scalar error context; never an admission token or an additional work debit.
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct ReferencePhaseLedger {
+    pub(super) entry: usize,
+    pub(super) phase: &'static str,
+    pub(super) after_presence: Option<usize>,
+    pub(super) after_preflight: Option<usize>,
+    pub(super) after_inventory: Option<usize>,
+    pub(super) after_translation: Option<usize>,
+    pub(super) after_raw_admission: Option<usize>,
+    pub(super) after_classifier_admission: Option<usize>,
+    pub(super) after_context_growth: Option<usize>,
+    pub(super) after_reachability: Option<usize>,
+    pub(super) last_completed_contexts: Option<usize>,
+    pub(super) last_completed_slots: Option<usize>,
+    pub(super) last_completed_edges: Option<usize>,
+}
+
+pub(super) enum ReferencePhaseBoundary {
+    Presence,
+    Preflight,
+    Inventory,
+    Translation,
+    RawAdmission,
+    ClassifierAdmission,
+    ContextGrowth,
+    Reachability,
+}
 
 /// One operation-local allowance shared by raw translation and the independent
 /// algebraic proof. Reservations are cumulative, including disposable work.
@@ -17,6 +49,7 @@ pub(super) struct Budget<'a> {
     maximum_work: usize,
     bytes: Cell<usize>,
     maximum_bytes: usize,
+    phase_ledger: Cell<ReferencePhaseLedger>,
 }
 
 impl<'a> Budget<'a> {
@@ -26,13 +59,52 @@ impl<'a> Budget<'a> {
         maximum_work: usize,
         maximum_bytes: usize,
     ) -> Self {
+        let entry = *work;
         Self {
             checkpoint,
             work: RefCell::new(work),
             maximum_work,
             bytes: Cell::new(0),
             maximum_bytes,
+            phase_ledger: Cell::new(ReferencePhaseLedger {
+                entry,
+                phase: "initialization",
+                ..ReferencePhaseLedger::default()
+            }),
         }
+    }
+    pub(super) fn consumed(&self) -> usize {
+        **self.work.borrow()
+    }
+    pub(super) fn phase_ledger(&self) -> ReferencePhaseLedger {
+        self.phase_ledger.get()
+    }
+    pub(super) fn observe_phase(&self, phase: &'static str) {
+        let mut ledger = self.phase_ledger.get();
+        ledger.phase = phase;
+        self.phase_ledger.set(ledger);
+    }
+    pub(super) fn observe_boundary(&self, boundary: ReferencePhaseBoundary) {
+        let mut ledger = self.phase_ledger.get();
+        let work = Some(self.consumed());
+        match boundary {
+            ReferencePhaseBoundary::Presence => ledger.after_presence = work,
+            ReferencePhaseBoundary::Preflight => ledger.after_preflight = work,
+            ReferencePhaseBoundary::Inventory => ledger.after_inventory = work,
+            ReferencePhaseBoundary::Translation => ledger.after_translation = work,
+            ReferencePhaseBoundary::RawAdmission => ledger.after_raw_admission = work,
+            ReferencePhaseBoundary::ClassifierAdmission => ledger.after_classifier_admission = work,
+            ReferencePhaseBoundary::ContextGrowth => ledger.after_context_growth = work,
+            ReferencePhaseBoundary::Reachability => ledger.after_reachability = work,
+        }
+        self.phase_ledger.set(ledger);
+    }
+    pub(super) fn observe_progress(&self, contexts: usize, slots: usize, edges: usize) {
+        let mut ledger = self.phase_ledger.get();
+        ledger.last_completed_contexts = Some(contexts);
+        ledger.last_completed_slots = Some(slots);
+        ledger.last_completed_edges = Some(edges);
+        self.phase_ledger.set(ledger);
     }
     pub(super) fn tick(&self) -> Result<(), Refusal> {
         (self.checkpoint)().map_err(Refusal::Control)?;
@@ -1464,7 +1536,10 @@ pub(super) fn reference_classify_with_budget(
 ) -> Result<Proof, Refusal> {
     let raw = program;
     let program = BoundedProgram { program, budget };
+    budget.observe_phase("classifier model admission");
     program.admit()?;
+    budget.observe_boundary(ReferencePhaseBoundary::ClassifierAdmission);
+    budget.observe_phase("classifier context growth");
     let mut relation = SubstitutionRelation {
         program,
         limits,
@@ -1497,6 +1572,11 @@ pub(super) fn reference_classify_with_budget(
             },
         })?;
     }
+    budget.observe_progress(
+        relation.contexts.len(),
+        relation.slots.len(),
+        relation.edges.len(),
+    );
     let mut cursor = 0;
     while let Some(source) = relation.pending.get(cursor) {
         let source = budget.clone_state(source)?;
@@ -1523,7 +1603,14 @@ pub(super) fn reference_classify_with_budget(
                 relation.witness_transfer(value, target)?;
             }
         }
+        budget.observe_progress(
+            relation.contexts.len(),
+            relation.slots.len(),
+            relation.edges.len(),
+        );
     }
+    budget.observe_boundary(ReferencePhaseBoundary::ContextGrowth);
+    budget.observe_phase("weighted reachability");
     budget.reserve::<Slot>(relation.slots.len())?;
     let slots: Vec<_> = relation
         .slots
@@ -1592,6 +1679,7 @@ pub(super) fn reference_classify_with_budget(
             break;
         }
     }
+    budget.observe_boundary(ReferencePhaseBoundary::Reachability);
     Ok(Proof {
         finite: positive_diagonal.is_none(),
         positive_diagonal,

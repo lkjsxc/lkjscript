@@ -18,6 +18,55 @@ enum OrdinaryBindings<'a> {
 struct TypeContext<'a> {
     ordinary: OrdinaryBindings<'a>,
     associated: ClosedTypeEnvironment<'a>,
+    scopes: ScopeBindings<'a>,
+}
+
+#[derive(Clone, Copy)]
+enum ScopeBindings<'a> {
+    None,
+    Function {
+        declaration: crate::platform::kernel::DeclarationReference,
+        parameters: &'a [crate::platform::kernel::ReadScopeParameter],
+        arguments: &'a [crate::platform::kernel::ReadScopeArgument],
+    },
+    Family {
+        reference: crate::platform::kernel::ReadScopeReference,
+        actual: crate::platform::kernel::ReadScopeArgument,
+    },
+}
+
+impl ScopeBindings<'_> {
+    fn resolve(
+        self,
+        scope: crate::platform::kernel::ReadScopeArgument,
+    ) -> Result<crate::platform::kernel::ReadScopeArgument, ExecutionError> {
+        use crate::platform::kernel::{ReadScopeArgument, ReadScopeBinder};
+        Ok(match (self, scope) {
+            (
+                Self::Function {
+                    declaration,
+                    parameters,
+                    arguments,
+                },
+                ReadScopeArgument::Parameter(reference),
+            ) if reference.binder == ReadScopeBinder::Declaration(declaration) => {
+                if parameters.len() != arguments.len() {
+                    return Err(reject());
+                }
+                let position = parameters
+                    .iter()
+                    .position(|parameter| parameter.id == reference.parameter)
+                    .ok_or_else(reject)?;
+                *arguments.get(position).ok_or_else(reject)?
+            }
+            (Self::Family { reference, actual }, ReadScopeArgument::Parameter(parameter))
+                if parameter == reference =>
+            {
+                actual
+            }
+            _ => scope,
+        })
+    }
 }
 
 impl<'a> TypeContext<'a> {
@@ -25,6 +74,7 @@ impl<'a> TypeContext<'a> {
         Self {
             ordinary: OrdinaryBindings::Map(bindings),
             associated: ClosedTypeEnvironment::forbidden(),
+            scopes: ScopeBindings::None,
         }
     }
 
@@ -59,6 +109,7 @@ impl<'a> TypeContext<'a> {
             // belong to this exact implementation scheme; a prerequisite does
             // not authorize interpreting a stored RHS as a new projection.
             associated: ClosedTypeEnvironment::forbidden(),
+            scopes: ScopeBindings::None,
         })
     }
 
@@ -106,16 +157,32 @@ pub(super) fn resolve_application_in(
     if !std::ptr::eq(program, context.program()) {
         return Err(reject());
     }
-    if let Some(actual) = program
-        .prepared_type_lookup
-        .get_application(
+    let lookup = if context.read_scope_parameters().is_empty() {
+        program.prepared_type_lookup.get_application(
             program.value_origin,
             context.function(),
             template,
             context.ordinary(),
         )
-        .map_err(|()| reject())?
-    {
+    } else {
+        program
+            .prepared_type_lookup
+            .get_scoped_application_arguments(
+                program.value_origin,
+                context.function(),
+                program
+                    .functions
+                    .get(context.function().0 as usize)
+                    .ok_or_else(reject)?
+                    .declaration,
+                template,
+                context.ordinary(),
+                context.read_scope_parameters(),
+                context.read_scope_arguments(),
+            )
+    }
+    .map_err(|()| reject())?;
+    if let Some(actual) = lookup {
         let exact = matches_context(
             program,
             template,
@@ -123,6 +190,7 @@ pub(super) fn resolve_application_in(
             TypeContext {
                 ordinary: OrdinaryBindings::Map(context.ordinary()),
                 associated: *context.environment(),
+                scopes: application_scopes(program, context)?,
             },
             0,
             work,
@@ -133,7 +201,31 @@ pub(super) fn resolve_application_in(
     if contains_associated(program, template, 0, work)? {
         return Err(reject());
     }
-    resolve_in(program, template, context.ordinary(), work)
+    scan_context(
+        program,
+        template,
+        TypeContext {
+            ordinary: OrdinaryBindings::Map(context.ordinary()),
+            associated: *context.environment(),
+            scopes: application_scopes(program, context)?,
+        },
+        work,
+    )
+}
+
+fn application_scopes<'a>(
+    program: &'a NormalizedProgram,
+    context: &PreparedApplicationContext<'a>,
+) -> Result<ScopeBindings<'a>, ExecutionError> {
+    let function = program
+        .functions
+        .get(context.function().0 as usize)
+        .ok_or_else(reject)?;
+    Ok(ScopeBindings::Function {
+        declaration: function.declaration,
+        parameters: context.read_scope_parameters(),
+        arguments: context.read_scope_arguments(),
+    })
 }
 
 pub(in super::super::super) fn contains_associated_type(
@@ -152,10 +244,7 @@ fn contains_associated(
 ) -> Result<bool, ExecutionError> {
     work.visit(depth)?;
     let object = program.types.get(&ty).ok_or_else(reject)?;
-    if matches!(
-        object.form,
-        TypeForm::AssociatedContractMember { .. } | TypeForm::AssociatedWitnessProjection { .. }
-    ) {
+    if object.form.is_associated() {
         return Ok(true);
     }
     let mut child = |ty| contains_associated(program, ty, depth + 1, work);
@@ -169,7 +258,7 @@ fn contains_associated(
                 }
             }
         }
-        TypeForm::Applied { arguments, .. } => {
+        TypeForm::Applied { arguments, .. } | TypeForm::ReadViewApplied { arguments, .. } => {
             for ty in arguments {
                 if child(*ty)? {
                     return Ok(true);
@@ -225,9 +314,8 @@ pub(super) fn validate_associated_bindings_in(
     work: &mut Work<'_>,
 ) -> Result<(), ExecutionError> {
     catalogued(program, selected, 0, work)?;
-    if selected.implementation_generation
-        != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
-        || selected.contract_generation != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+    if !matches!(selected.implementation_generation, 33 | 34)
+        || !matches!(selected.contract_generation, 33 | 34)
     {
         return Err(reject());
     }
@@ -240,7 +328,28 @@ pub(super) fn validate_associated_bindings_in(
                 return Err(reject());
             }
         }
-        if !program.is_owned_type(binding.ty)
+        let valid_category = if let Some(parameter) = &binding.scope_parameter {
+            if selected.implementation_generation != 34 || selected.contract_generation != 34 {
+                return Err(reject());
+            }
+            let scope = crate::platform::kernel::ReadScopeArgument::Parameter(
+                crate::platform::kernel::ReadScopeReference {
+                    binder: crate::platform::kernel::ReadScopeBinder::AssociatedBinding {
+                        implementation: selected.implementation,
+                        member: binding.member,
+                    },
+                    parameter: parameter.id,
+                },
+            );
+            program
+                .read_view_layout(binding.ty)
+                .is_some_and(|layout| layout.read_scope == scope)
+                && matches!(program.types.get(&binding.template).map(|object| &object.form),
+                    Some(TypeForm::ReadViewApplied { read_scope, .. }) if *read_scope == scope)
+        } else {
+            program.is_owned_type(binding.ty)
+        };
+        if !valid_category
             || !matches_context(program, binding.template, binding.ty, context, 0, work)?
         {
             return Err(reject());
@@ -313,22 +422,32 @@ fn scan(
     bindings: &BTreeMap<TypeParameterId, TypeObjectDigest>,
     work: &mut Work<'_>,
 ) -> Result<TypeObjectDigest, ExecutionError> {
+    scan_context(program, template, TypeContext::ordinary(bindings), work)
+}
+
+fn scan_context(
+    program: &NormalizedProgram,
+    template: TypeObjectDigest,
+    context: TypeContext<'_>,
+    work: &mut Work<'_>,
+) -> Result<TypeObjectDigest, ExecutionError> {
     // Closed types dominate calls and have the same admitted identity. Check this
     // candidate first so their cost does not depend on unrelated program types.
-    if matches(program, template, template, bindings, 0, work)? {
+    if matches_context(program, template, template, context, 0, work)? {
         return Ok(template);
     }
     if let TypeForm::TypeParameter { parameter } =
         &program.types.get(&template).ok_or_else(reject)?.form
     {
-        return bindings
-            .get(parameter)
-            .copied()
+        return context
+            .parameter(*parameter)
             .filter(|ty| program.types.contains_key(ty))
             .ok_or_else(reject);
     }
     for candidate in program.types.keys() {
-        if *candidate != template && matches(program, template, *candidate, bindings, 0, work)? {
+        if *candidate != template
+            && matches_context(program, template, *candidate, context, 0, work)?
+        {
             return Ok(*candidate);
         }
     }
@@ -380,11 +499,51 @@ fn matches_context(
         .map_err(context_error)?
     {
         if template.contract_version
-            != crate::platform::kernel::contract::OWNED_ASSOCIATED_CONTRACT_VERSION
+            != if template.form.is_read_view() {
+                crate::platform::kernel::contract::ASSOCIATED_READ_VIEW_CONTRACT_VERSION
+            } else {
+                crate::platform::kernel::contract::OWNED_ASSOCIATED_CONTRACT_VERSION
+            }
         {
             return Err(reject());
         }
         catalogued(program, selection.selected(), depth + 1, work)?;
+        if template.form.is_read_view() {
+            let scope = match &template.form {
+                TypeForm::AssociatedReadViewMember { read_scope, .. }
+                | TypeForm::AssociatedReadViewProjection { read_scope, .. } => {
+                    context.scopes.resolve(*read_scope)?
+                }
+                _ => return Err(reject()),
+            };
+            let parameter = selection
+                .binding()
+                .scope_parameter
+                .as_ref()
+                .ok_or_else(reject)?;
+            if program.read_view_layout(actual).is_none() {
+                return Ok(false);
+            }
+            let mut selected = TypeContext::selected(program, selection.selected(), work)?;
+            selected.scopes = ScopeBindings::Family {
+                reference: crate::platform::kernel::ReadScopeReference {
+                    binder: crate::platform::kernel::ReadScopeBinder::AssociatedBinding {
+                        implementation: selection.selected().implementation,
+                        member: selection.binding().member,
+                    },
+                    parameter: parameter.id,
+                },
+                actual: scope,
+            };
+            return matches_context(
+                program,
+                selection.binding().template,
+                actual,
+                selected,
+                depth + 1,
+                work,
+            );
+        }
         if selection.ty() != actual || !program.is_owned_type(actual) {
             return Ok(false);
         }
@@ -448,6 +607,28 @@ fn matches_context(
             },
         ) => {
             if td != ad || t.len() != a.len() {
+                return Ok(false);
+            }
+            for (t, a) in t.iter().zip(a) {
+                if !child(*t, *a)? {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
+        }
+        (
+            TypeForm::ReadViewApplied {
+                declaration: td,
+                arguments: t,
+                read_scope: ts,
+            },
+            TypeForm::ReadViewApplied {
+                declaration: ad,
+                arguments: a,
+                read_scope: ascope,
+            },
+        ) => {
+            if td != ad || t.len() != a.len() || context.scopes.resolve(*ts)? != *ascope {
                 return Ok(false);
             }
             for (t, a) in t.iter().zip(a) {

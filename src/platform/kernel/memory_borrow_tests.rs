@@ -116,6 +116,9 @@ fn lexical_loan_provenance_freezes_every_ancestor_and_balances_nested_scopes() {
         associated: &OwnedAssociatedAdmission::new(),
         types: std::cell::RefCell::new(BTreeMap::new()),
         scope: None,
+        ended_views: std::cell::RefCell::new(BTreeMap::new()),
+        produced_view: std::cell::Cell::new(None),
+        scope_order: std::cell::RefCell::new(Vec::new()),
     };
     let root = LocalValueReference::LexicalBinding(
         crate::platform::semantic_id::BindingId::migrate(b"loan-parent-model", 0),

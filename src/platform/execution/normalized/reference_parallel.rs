@@ -3,8 +3,8 @@ use super::super::{
     parallel,
     shared_budget::SharedBudget,
     vm::transfer::{
-        ScopedArgument, ScopedReadCustody, ScopedReadLease, TaskApplication, TransferArguments,
-        TransferResult,
+        ScopedArgument, ScopedReadCustody, ScopedReadLease, ScopedReadScope, TaskApplication,
+        TransferArguments, TransferResult,
     },
 };
 use super::*;
@@ -19,11 +19,81 @@ struct CanonicalTask {
     declaration: DeclarationReference,
     types: Arc<[TypeObjectDigest]>,
     implementations: Vec<AppliedReferenceImplementation>,
+    read_scope_arguments: Vec<ReadScopeArgument>,
+    argument_sources: Vec<ParallelArgumentSource>,
+}
+
+struct ParallelArgumentSource {
+    anchor: Option<super::super::read_view_storage::SourceAnchor>,
+    scope: Option<super::super::read_view_storage::RuntimeScopeLease>,
 }
 struct CanonicalParallelCall {
     task: CanonicalTask,
     arguments: Vec<ExpressionId>,
     signature: ReferenceSignature,
+}
+
+fn parallel_reference_parameter(
+    position: u32,
+    parameters: &[ParameterRecord],
+) -> Result<ParameterId, ExecutionError> {
+    let parameter = parameters
+        .get(position as usize)
+        .ok_or_else(|| reference_type_error("parallel source position is foreign"))?;
+    let OwnerKey::Parameter(parameter) = parameter.header.owner else {
+        return Err(reference_type_error("parallel source owner is foreign"));
+    };
+    Ok(parameter)
+}
+
+fn parallel_reference_result(
+    result: CallableResult<u32>,
+    parameters: &[ParameterRecord],
+) -> Result<CallableResult<ParameterId>, ExecutionError> {
+    Ok(CallableResult {
+        ty: result.ty,
+        relation: match result.relation {
+            ResultRelation::Value => ResultRelation::Value,
+            ResultRelation::ReadFrom { source: position } => ResultRelation::ReadFrom {
+                source: parallel_reference_parameter(position, parameters)?,
+            },
+            ResultRelation::ViewFrom {
+                source: position,
+                scope,
+            } => ResultRelation::ViewFrom {
+                source: parallel_reference_parameter(position, parameters)?,
+                scope,
+            },
+        },
+    })
+}
+
+fn parallel_applied_scope(
+    scope: ReadScopeArgument,
+    declaration: DeclarationReference,
+    parameters: &[ReadScopeParameter],
+    actuals: &[ReadScopeArgument],
+) -> Result<ReadScopeArgument, ExecutionError> {
+    if parameters.len() != actuals.len() {
+        return Err(reference_type_error(
+            "parallel scope application arity changed",
+        ));
+    }
+    let ReadScopeArgument::Parameter(reference) = scope else {
+        return Err(reference_type_error(
+            "parallel signature scope is not an exact formal",
+        ));
+    };
+    if reference.binder != crate::platform::kernel::ReadScopeBinder::Declaration(declaration) {
+        return Err(reference_type_error(
+            "parallel signature scope has a foreign binder",
+        ));
+    }
+    parameters
+        .iter()
+        .position(|parameter| parameter.id == reference.parameter)
+        .and_then(|position| actuals.get(position).copied())
+        .ok_or_else(|| reference_type_error("parallel signature scope has a foreign parameter"))
 }
 
 fn physical_catalog_binding(
@@ -244,6 +314,11 @@ impl ReferenceState<'_> {
                 }
                 Ok(true)
             }
+            TypeForm::ReadViewApplied { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. } => Err(reference_type_error(
+                "structured transfer cannot own, capture or return a read view",
+            )),
             _ if self.schema.transferable_types.contains(&ty) => Ok(false),
             _ => Err(reference_type_error(
                 "structured result requires closed data or owned memory",
@@ -296,27 +371,37 @@ impl ReferenceState<'_> {
         &mut self,
         expression: ExpressionId,
     ) -> Result<CanonicalParallelCall, ExecutionError> {
-        let (function, types, implementations, arguments) =
+        let (function, types, implementations, read_scope_arguments, arguments) =
             match self.read_expression(expression)? {
                 ExpressionOperation::Call {
                     function,
                     type_arguments,
                     effect_arguments,
                     requirement_arguments,
+                    read_scope_arguments,
                     arguments,
-                } if effect_arguments.is_empty() && requirement_arguments.is_empty() => {
-                    (function, type_arguments, Vec::new(), arguments)
-                }
+                } if effect_arguments.is_empty() && requirement_arguments.is_empty() => (
+                    function,
+                    type_arguments,
+                    Vec::new(),
+                    read_scope_arguments,
+                    arguments,
+                ),
                 ExpressionOperation::ImplementationCall {
                     function,
                     type_arguments,
                     effect_arguments,
                     requirement_arguments,
                     implementations,
+                    read_scope_arguments,
                     arguments,
-                } if effect_arguments.is_empty() && requirement_arguments.is_empty() => {
-                    (function, type_arguments, implementations, arguments)
-                }
+                } if effect_arguments.is_empty() && requirement_arguments.is_empty() => (
+                    function,
+                    type_arguments,
+                    implementations,
+                    read_scope_arguments,
+                    arguments,
+                ),
                 _ => {
                     return Err(reference_type_error(
                         "parallel branches require closed direct named calls",
@@ -332,6 +417,7 @@ impl ReferenceState<'_> {
         };
         self.charge_allocation((types.len() * std::mem::size_of::<TypeObjectDigest>()) as u64)?;
         let types = self.resolve_type_arguments(&types)?;
+        let read_scope_arguments = self.resolve_read_scope_arguments(&read_scope_arguments)?;
         let mut signature = self.function_signature(function)?;
         if !matches!(&signature.effect, FunctionEffect::Task { requirements, effect_parameters } if requirements.is_empty() && effect_parameters.is_empty())
             || !signature.effect_parameters.is_empty()
@@ -339,7 +425,8 @@ impl ReferenceState<'_> {
             || signature.parameters.len() != arguments.len()
             || signature.type_parameters.len() != types.len()
             || declaration.implementation_parameters.len() != implementations.len()
-            || signature.result_borrow.is_some()
+            || signature.read_scope_parameters.len() != read_scope_arguments.len()
+            || signature.result.relation != ResultRelation::Value
         {
             return Err(reference_type_error(
                 "parallel child requires an exact closed empty-row task",
@@ -385,6 +472,7 @@ impl ReferenceState<'_> {
             ReferenceApplication {
                 types: &types,
                 implementations: &selected,
+                scopes: &read_scope_arguments,
                 ..Default::default()
             },
         )?;
@@ -401,15 +489,30 @@ impl ReferenceState<'_> {
                 .ok_or_else(|| reference_type_error("canonical parallel proof is missing"))?;
             let closed = proof.application(application, self.control)?;
             if closed.parameters.len() != signature.parameters.len()
-                || closed.result_borrow.is_some()
+                || closed.result.relation != ResultRelation::Value
                 || !closed.effect.requirements.is_empty()
                 || !closed.effect.parameters.is_empty()
+                || closed.read_scope_parameters != signature.read_scope_parameters
             {
                 return Err(reference_type_error(
                     "canonical parallel signature is not an empty-row owning task",
                 ));
             }
-            signature.result = closed.result;
+            signature.result = parallel_reference_result(closed.result, &signature.parameters)?;
+            self.charge_items(
+                closed.read_scope_sources.len(),
+                std::mem::size_of::<ReadScopeSource<ParameterId>>(),
+            )?;
+            signature.read_scope_sources = closed
+                .read_scope_sources
+                .iter()
+                .map(|source| {
+                    Ok(ReadScopeSource {
+                        source: parallel_reference_parameter(source.source, &signature.parameters)?,
+                        scope: source.scope,
+                    })
+                })
+                .collect::<Result<_, ExecutionError>>()?;
             for (parameter, (ty, use_mode)) in
                 signature.parameters.iter_mut().zip(&closed.parameters)
             {
@@ -421,6 +524,14 @@ impl ReferenceState<'_> {
                 parameter.ty = *ty;
             }
         } else {
+            if !signature.read_scope_parameters.is_empty()
+                || !signature.read_scope_sources.is_empty()
+                || !read_scope_arguments.is_empty()
+            {
+                return Err(reference_type_error(
+                    "parallel read scopes require exact canonical application admission",
+                ));
+            }
             self.implementation_bindings(
                 function,
                 &declaration.implementation_parameters,
@@ -429,11 +540,16 @@ impl ReferenceState<'_> {
             )?;
         }
         if associated.is_none() && !bindings.is_empty() {
-            signature.result =
-                self.schema
-                    .transfer_type_identity(signature.result, &bindings, self.control)?;
+            signature.result = CallableResult {
+                ty: self.schema.transfer_type_identity(
+                    signature.result.ty,
+                    &bindings,
+                    self.control,
+                )?,
+                relation: signature.result.relation,
+            };
         }
-        self.parallel_transfer_type(signature.result, 0, &mut 0)?;
+        self.parallel_transfer_type(signature.result.ty, 0, &mut 0)?;
         let mut seen_owned = false;
         for parameter in &mut signature.parameters {
             self.control.check()?;
@@ -445,16 +561,42 @@ impl ReferenceState<'_> {
             let memory =
                 direct_memory_type(&self.schema, parameter.ty, &BTreeMap::new(), self.control)?
                     .is_some();
-            if seen_owned && !memory {
+            let view = self
+                .schema
+                .types
+                .get(&parameter.ty)
+                .is_some_and(|object| object.form.is_read_view());
+            if view {
+                let proof = self.schema.read_view_proof.as_ref().ok_or_else(|| {
+                    reference_type_error("parallel view input lacks independent category admission")
+                })?;
+                if proof.prepared_category(parameter.ty)?
+                    != crate::platform::kernel::ValueCategory::ReadView
+                    || !proof.prepared_read_shareable(parameter.ty)?
+                    || parameter.use_mode != ParameterUse::Borrow
+                    || contract_version
+                        < crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+                    || parameter.header.contract_version
+                        < crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+                {
+                    return Err(reference_type_error(
+                        "parallel view input requires an independently ReadShareable exact descriptor",
+                    ));
+                }
+            }
+            let scoped = memory || view;
+            if seen_owned && !scoped {
                 return Err(reference_type_error(
                     "parallel owned parameters must form the final suffix",
                 ));
             }
-            seen_owned |= memory;
+            seen_owned |= scoped;
             if parameter.parent
                 != crate::platform::kernel::ParameterParent::Function(function.declaration)
                 || parameter.resource_requirement.is_some()
-                || if memory {
+                || if view {
+                    parameter.use_mode != ParameterUse::Borrow
+                } else if memory {
                     !matches!(
                         parameter.use_mode,
                         ParameterUse::Borrow | ParameterUse::Consume
@@ -467,7 +609,10 @@ impl ReferenceState<'_> {
                     "parallel child parameters require closed data or scoped memory",
                 ));
             }
-            if parameter.use_mode == ParameterUse::Borrow {
+            if view {
+                // The positive category and accessible reference closure above
+                // grant only joined read input, never transfer or capture.
+            } else if parameter.use_mode == ParameterUse::Borrow {
                 if contract_version
                     < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION
                     || parameter.header.contract_version
@@ -490,6 +635,8 @@ impl ReferenceState<'_> {
                 declaration: function,
                 types: types.into(),
                 implementations: selected,
+                read_scope_arguments,
+                argument_sources: Vec::new(),
             },
             arguments,
             signature,
@@ -499,29 +646,147 @@ impl ReferenceState<'_> {
     fn scoped_arguments(
         &mut self,
         values: Vec<CheckedValue>,
-    ) -> Result<Vec<ScopedArgument>, ExecutionError> {
+        application: &TaskApplication,
+        signature: &ReferenceSignature,
+        destination: super::super::value::ValueOrigin,
+    ) -> Result<(Vec<ScopedArgument>, Vec<ParallelArgumentSource>), ExecutionError> {
+        if values.len() != signature.parameters.len() {
+            return Err(reference_type_error(
+                "structured scope custody requires the complete ordered canonical arguments",
+            ));
+        }
         self.charge_allocation(super::super::value::collection_storage_bytes(
             values.len() as u64,
             std::mem::size_of::<ScopedArgument>() as u64,
             "normalized_parallel_arguments",
         )?)?;
+        self.charge_items(values.len(), std::mem::size_of::<ParallelArgumentSource>())?;
         let mut captured = Vec::with_capacity(values.len());
-        for value in values {
-            if value.raw().memory_is_borrowed() {
+        let mut sources = Vec::with_capacity(values.len());
+        for (position, value) in values.into_iter().enumerate() {
+            // Preserve each argument's exact parent placement before the shared
+            // raw envelope changes invocation coordinates.
+            sources.push(ParallelArgumentSource {
+                anchor: value.source_anchor().cloned(),
+                scope: value
+                    .source_scope()
+                    .map(|scope| scope.reborrow(self.control))
+                    .transpose()?,
+            });
+            let parameter = parallel_reference_parameter(
+                u32::try_from(position).map_err(|_| {
+                    reference_type_error("parallel source argument position overflow")
+                })?,
+                &signature.parameters,
+            )?;
+            let scope_count = signature
+                .read_scope_sources
+                .iter()
+                .filter(|source| source.source == parameter)
+                .count();
+            if application.read_scope_source_count(position) != scope_count {
+                return Err(reference_type_error(
+                    "structured source scope custody differs from the canonical ordered inventory",
+                ));
+            }
+            self.charge_items(scope_count, std::mem::size_of::<ScopedReadScope>())?;
+            let mut scope_custody = Vec::with_capacity(scope_count);
+            let mut expected = signature
+                .read_scope_sources
+                .iter()
+                .filter(|source| source.source == parameter);
+            application.visit_read_scope_keys(position, &mut |key| {
+                self.control.check()?;
+                let expected = expected.next().ok_or_else(|| reference_type_error(
+                    "structured source scope custody contains an extra relationship",
+                ))?;
+                let source = sources.last().ok_or_else(|| reference_type_error(
+                    "structured source scope custody lost its ordered argument",
+                ))?;
+                let lease = source.scope.as_ref().ok_or_else(|| reference_type_error(
+                    "structured scoped source lacks an independently admitted runtime lease",
+                ))?;
+                let anchor = source.anchor.as_ref().ok_or_else(|| reference_type_error(
+                    "structured scoped source lacks an exact checked placement",
+                ))?;
+                let borrowed = value.raw().memory_is_borrowed()
+                    || (matches!(value.raw(), NormalizedValue::ReadView(_)) && value.is_view_borrowed());
+                if key != expected.scope || key != lease.key()
+                    || anchor.program != self.schema.value_origin
+                    || lease.source().program != self.schema.value_origin
+                    || signature.parameters[position].use_mode != ParameterUse::Borrow
+                    || !borrowed
+                {
+                    return Err(reference_type_error(
+                        "structured source relationship changes its exact canonical key or checked placement",
+                    ));
+                }
+                scope_custody.push(ScopedReadScope::new(
+                    key,
+                    lease.reborrow(self.control)?,
+                    anchor.clone(),
+                    lease.source().clone(),
+                )?);
+                Ok(())
+            })?;
+            if expected.next().is_some() || scope_custody.len() != scope_count {
+                return Err(reference_type_error(
+                    "structured source scope custody omits a canonical relationship",
+                ));
+            }
+            if let NormalizedValue::ReadView(view) = value.raw() {
+                if !value.is_view_borrowed() {
+                    return Err(reference_type_error(
+                        "parallel view custody requires an admitted read borrow",
+                    ));
+                }
+                self.charge_allocation(
+                    ScopedReadCustody::ALLOCATION_BYTES
+                        + std::mem::size_of::<CheckedValue>() as u64,
+                )?;
+                let source = view.source().clone();
+                let anchor = super::super::read_view_storage::SourceAnchor {
+                    program: self.schema.value_origin,
+                    application: application.application_identity(),
+                    invocation: destination,
+                    coordinate: super::super::read_view_storage::SourceCoordinate::Parameter(
+                        u32::try_from(position).map_err(|_| {
+                            reference_type_error("parallel view argument position overflow")
+                        })?,
+                    ),
+                    origin: destination,
+                    path: Arc::from([]),
+                };
+                let shared = self.share_parallel_view(&value, anchor)?;
+                captured.push(ScopedArgument::View {
+                    value: shared.release(),
+                    source,
+                    custody: ScopedReadCustody::new(value),
+                });
+            } else if value.raw().memory_is_borrowed() {
                 self.charge_allocation(
                     ScopedReadCustody::ALLOCATION_BYTES
                         + std::mem::size_of::<CheckedValue>() as u64,
                 )?;
                 let raw = value.duplicate(ParameterUse::Borrow)?.release();
-                captured.push(ScopedArgument::Read {
-                    value: raw,
-                    custody: ScopedReadCustody::new(value),
-                });
+                let custody = ScopedReadCustody::new(value);
+                if scope_count == 0 {
+                    captured.push(ScopedArgument::Read {
+                        value: raw,
+                        custody,
+                    });
+                } else {
+                    captured.push(ScopedArgument::ReadScoped {
+                        value: raw,
+                        custody,
+                        scopes: scope_custody,
+                    });
+                }
             } else {
                 captured.push(ScopedArgument::Value(value.release()));
             }
         }
-        Ok(captured)
+        Ok((captured, sources))
     }
 
     fn inspect_transfer_data(
@@ -649,8 +914,33 @@ impl ReferenceState<'_> {
             }
         };
         let selected = &self.program.functions[offset];
-        let mut matches = substitute(selected.result)? == signature.result
-            && selected.parameters.len() == signature.parameters.len();
+        let mut matches = parallel_reference_result(
+            CallableResult {
+                ty: substitute(selected.result.ty)?,
+                relation: selected.result.relation,
+            },
+            &signature.parameters,
+        )? == signature.result
+            && selected.parameters.len() == signature.parameters.len()
+            && selected.read_scope_parameters.as_ref()
+                == signature.read_scope_parameters.as_slice()
+            && selected.read_scope_arguments.as_ref() == task.read_scope_arguments.as_slice()
+            && selected.read_scope_sources.len() == signature.read_scope_sources.len();
+        for (prepared, canonical) in selected
+            .read_scope_sources
+            .iter()
+            .zip(&signature.read_scope_sources)
+        {
+            self.control.check()?;
+            matches &= parallel_reference_parameter(prepared.source, &signature.parameters)?
+                == canonical.source
+                && parallel_applied_scope(
+                    prepared.scope,
+                    task.declaration,
+                    &selected.read_scope_parameters,
+                    &task.read_scope_arguments,
+                )? == canonical.scope;
+        }
         if let Some(application) = &task.associated {
             let proof = self
                 .schema
@@ -711,19 +1001,19 @@ impl ReferenceState<'_> {
             ));
         }
         let CanonicalParallelCall {
-            task: left_task,
+            task: mut left_task,
             arguments: left_args,
             signature: left_signature,
         } = self.parallel_call(left)?;
         let CanonicalParallelCall {
-            task: right_task,
+            task: mut right_task,
             arguments: right_args,
             signature: right_signature,
         } = self.parallel_call(right)?;
         let left_types = Arc::clone(&left_task.types);
         let right_types = Arc::clone(&right_task.types);
-        let left_type = left_signature.result;
-        let right_type = right_signature.result;
+        let left_type = left_signature.result.ty;
+        let right_type = right_signature.result.ty;
         let owned = self.parallel_transfer_type(left_type, 0, &mut 0)?
             | self.parallel_transfer_type(right_type, 0, &mut 0)?;
         let result_type = self.parallel_pair_type(left_type, right_type, owned)?;
@@ -813,8 +1103,16 @@ impl ReferenceState<'_> {
             control,
             &mut |bytes| self.charge_allocation(bytes),
         )?;
-        let left_values = self.scoped_arguments(left_values)?;
-        let right_values = self.scoped_arguments(right_values)?;
+        let (left_values, left_sources) =
+            self.scoped_arguments(left_values, &left_application, &left_signature, left_domain)?;
+        let (right_values, right_sources) = self.scoped_arguments(
+            right_values,
+            &right_application,
+            &right_signature,
+            right_domain,
+        )?;
+        left_task.argument_sources = left_sources;
+        right_task.argument_sources = right_sources;
         let left = TransferArguments::seal_scoped_applied(
             program,
             source,
@@ -894,6 +1192,28 @@ impl ReferenceState<'_> {
         envelope: TransferArguments,
     ) -> ChildOutcome {
         let declaration = task.declaration;
+        let capture_bytes = (std::mem::size_of::<read_views::ScopeFrame>()
+            + task.read_scope_arguments.len()
+                * (std::mem::size_of::<ReadScopeArgument>()
+                    + std::mem::size_of::<super::super::read_view_storage::RuntimeScopeLease>()
+                    + 6 * std::mem::size_of::<usize>())) as u64;
+        if let Err(error) = budget.reserve(capture_bytes, 0) {
+            self.control.cancel();
+            return ChildOutcome {
+                result: Err(error),
+                observation: NormalizedReferenceObservation::default(),
+            };
+        }
+        let read_scope_frame = match self.capture_read_scope_frame(&task.read_scope_arguments) {
+            Ok(frame) => frame,
+            Err(error) => {
+                self.control.cancel();
+                return ChildOutcome {
+                    result: Err(error),
+                    observation: NormalizedReferenceObservation::default(),
+                };
+            }
+        };
         let resources = match NormalizedResourceScope::new() {
             Ok(resources) => resources,
             Err(error) => {
@@ -926,6 +1246,7 @@ impl ReferenceState<'_> {
             lexical_loan_scopes: 0,
             borrow_result_sources: Vec::new(),
             borrow_result_demand: false,
+            read_source_demand: Vec::new(),
             local_counts: Vec::new(),
             next_transaction: 0,
             transactions: BTreeMap::new(),
@@ -937,9 +1258,12 @@ impl ReferenceState<'_> {
             type_scopes: Vec::new(),
             effect_scopes: Vec::new(),
             requirement_scopes: Vec::new(),
+            read_scope_frames: vec![read_scope_frame],
             allowances: Vec::new(),
             root_allowance: Some(EffectRow::default()),
             observation: NormalizedReferenceObservation {
+                allocated_bytes: capture_bytes,
+                allocation_charges: 1,
                 production_tier: "graph14_reference_records_10",
                 ..NormalizedReferenceObservation::default()
             },
@@ -949,7 +1273,7 @@ impl ReferenceState<'_> {
                 envelope.adopt_scoped_applied(self.program, memory_domain, self.control)?;
             // These anchors belong to the complete child invocation, outside
             // all replaceable call frames and nested structured groups.
-            let _read_leases = leases;
+            let read_leases = leases;
             let index = application.function();
             if application.types().as_ref() != task.types.as_ref() {
                 return Err(reference_type_error(
@@ -980,7 +1304,29 @@ impl ReferenceState<'_> {
                         "canonical child signature changed in transit",
                     ));
                 }
-                signature.result = closed.result;
+                signature.result = parallel_reference_result(closed.result, &signature.parameters)?;
+                if closed.read_scope_parameters != signature.read_scope_parameters {
+                    return Err(reference_type_error(
+                        "canonical child scope inventory changed in transit",
+                    ));
+                }
+                state.charge_items(
+                    closed.read_scope_sources.len(),
+                    std::mem::size_of::<ReadScopeSource<ParameterId>>(),
+                )?;
+                signature.read_scope_sources = closed
+                    .read_scope_sources
+                    .iter()
+                    .map(|source| {
+                        Ok(ReadScopeSource {
+                            source: parallel_reference_parameter(
+                                source.source,
+                                &signature.parameters,
+                            )?,
+                            scope: source.scope,
+                        })
+                    })
+                    .collect::<Result<_, ExecutionError>>()?;
                 for (parameter, (ty, use_mode)) in
                     signature.parameters.iter_mut().zip(&closed.parameters)
                 {
@@ -1004,6 +1350,82 @@ impl ReferenceState<'_> {
                 .copied()
                 .zip(task.types.iter().copied())
                 .collect();
+            if values.len() != signature.parameters.len()
+                || values.len() != task.argument_sources.len()
+            {
+                return Err(reference_type_error(
+                    "structured ordered argument source inventory changed in transit",
+                ));
+            }
+            let mut imported_sources = 0usize;
+            for (position, source) in task.argument_sources.iter().enumerate() {
+                state.control.check()?;
+                let parameter = parallel_reference_parameter(
+                    u32::try_from(position)
+                        .map_err(|_| reference_type_error("structured source position overflow"))?,
+                    &signature.parameters,
+                )?;
+                let scope_count = signature
+                    .read_scope_sources
+                    .iter()
+                    .filter(|source| source.source == parameter)
+                    .count();
+                let lease = read_leases
+                    .iter()
+                    .find(|lease| lease.position() == position);
+                let Some(lease) = lease else {
+                    if scope_count != 0 {
+                        return Err(reference_type_error(
+                            "structured child omitted ordered source scope custody",
+                        ));
+                    }
+                    continue;
+                };
+                if lease.imported_scope_count(&application) != scope_count {
+                    return Err(reference_type_error(
+                        "structured child source scope custody changed its complete inventory",
+                    ));
+                }
+                let mut expected = signature
+                    .read_scope_sources
+                    .iter()
+                    .filter(|source| source.source == parameter);
+                lease.visit_imported_scopes(&application, state.control, &mut |actual_position, key, imported| {
+                    let expected = expected.next().ok_or_else(|| reference_type_error(
+                        "structured child imported an extra source scope relationship",
+                    ))?;
+                    let captured = source.scope.as_ref().ok_or_else(|| reference_type_error(
+                        "structured child source scope lacks independent checked custody",
+                    ))?;
+                    let anchor = source.anchor.as_ref().ok_or_else(|| reference_type_error(
+                        "structured child source scope lacks its ordered checked placement",
+                    ))?;
+                    if actual_position != position || key != expected.scope
+                        || key != captured.key() || key != imported.key()
+                        || !captured.same_live_scope(&imported)
+                        || captured.source() != imported.source()
+                        || anchor.program != state.schema.value_origin
+                    {
+                        return Err(reference_type_error(
+                            "structured child scope is detached from its exact ordered argument lifetime",
+                        ));
+                    }
+                    imported_sources = imported_sources.checked_add(1).ok_or_else(|| {
+                        reference_type_error("structured child source scope count overflow")
+                    })?;
+                    Ok(())
+                })?;
+                if expected.next().is_some() {
+                    return Err(reference_type_error(
+                        "structured child omitted a canonical source scope relationship",
+                    ));
+                }
+            }
+            if imported_sources != signature.read_scope_sources.len() {
+                return Err(reference_type_error(
+                    "structured child source scope custody is not the complete canonical inventory",
+                ));
+            }
             state.charge_allocation(super::super::value::collection_storage_bytes(
                 values.len() as u64,
                 std::mem::size_of::<CheckedValue>() as u64,
@@ -1012,17 +1434,28 @@ impl ReferenceState<'_> {
             let arguments = values
                 .into_iter()
                 .zip(signature.parameters)
-                .map(|(value, parameter)| {
-                    if value.memory_form().is_some() {
-                        CheckedValue::memory(&state.schema, value)
+                .zip(task.argument_sources)
+                .map(|((value, parameter), source)| {
+                    let mut checked = if let NormalizedValue::ReadView(view) = value {
+                        CheckedValue::view(&state.schema, view, true, state.control)?
+                    } else if value.memory_form().is_some() {
+                        CheckedValue::memory(&state.schema, value)?
                     } else {
                         let ty = state.schema.transfer_type_identity(
                             parameter.ty,
                             &bindings,
                             state.control,
                         )?;
-                        state.admit_raw(value, ty, &BTreeMap::new(), None, true)
+                        state.admit_raw(value, ty, &BTreeMap::new(), None, true)?
+                    };
+                    if let Some(anchor) = source.anchor {
+                        checked.bind_source(anchor, source.scope);
+                    } else if source.scope.is_some() {
+                        return Err(reference_type_error(
+                            "structured source scope has no exact ordered source anchor",
+                        ));
                     }
+                    Ok(checked)
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             let DeclarationPayload::Function(function) = state.declaration(declaration)?.payload
@@ -1036,6 +1469,7 @@ impl ReferenceState<'_> {
                 ReferenceApplication {
                     types: &task.types,
                     implementations: &task.implementations,
+                    scopes: &task.read_scope_arguments,
                     ..Default::default()
                 },
             )?;
@@ -1044,6 +1478,9 @@ impl ReferenceState<'_> {
                     "structured child changed canonical application in transit",
                 ));
             }
+            // The forwarding frame grants only the parent actuals needed for
+            // admission. The admitted call now owns its exact callee frame.
+            state.read_scope_frames.clear();
             let value = state.execute_witness_call(admitted)?;
             TransferResult::seal_applied(
                 self.program,

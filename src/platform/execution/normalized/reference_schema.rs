@@ -46,6 +46,8 @@ pub(super) fn bind_associated_dependencies(
 
 #[derive(Clone, Debug, Default)]
 pub struct NormalizedReferenceSchema {
+    pub(super) read_view_proof:
+        Option<std::sync::Arc<super::reference::read_view_admission::Proof>>,
     pub(super) associated_proof:
         Option<std::sync::Arc<super::reference_types::associated_preparation::Proof>>,
     pub(super) source_admission_steps: u64,
@@ -180,6 +182,16 @@ impl NormalizedReferenceSchema {
                             declaration: *id,
                         };
                         match &declaration.payload {
+                            DeclarationPayload::ReadView(view) => {
+                                for field in &view.fields {
+                                    control.check()?;
+                                    if !schema.types.contains_key(&field.ty) {
+                                        return Err(inventory_error(
+                                            "inline view field type is absent from its canonical type inventory",
+                                        ));
+                                    }
+                                }
+                            }
                             DeclarationPayload::OwnedContract(_)
                             | DeclarationPayload::OwnedImplementation(_) => {}
                             DeclarationPayload::Function(_)
@@ -286,8 +298,10 @@ impl NormalizedReferenceSchema {
                 }
             }
         }
+        let after_local_full = source_work;
         validate_dependency_closure(&inputs, control, &mut source_work)?;
         dependency_binding::validate(&inputs, control, &mut source_work)?;
+        let after_dependency_correspondence = source_work;
         schema.source_admission_steps = source_work as u64;
         schema.functions = functions.into_iter().collect();
         schema.records = records.into_values().collect();
@@ -319,8 +333,22 @@ impl NormalizedReferenceSchema {
             crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
         )
         .map_err(source_error)?;
+        let after_composed = source_work;
         schema.source_admission_steps = source_work as u64;
-        super::reference_types::complete(&mut schema, &inputs, control)?;
+        super::reference_types::complete(&mut schema, &inputs, control).map_err(|mut error| {
+            if error.code == "kernel_associated_reference_capacity"
+                && error.message.contains("reference_flow phase=")
+            {
+                error.message.push_str(&format!(
+                    "; reference_source_admission packages={} after_local_full={} after_dependency_correspondence={} after_composed={}",
+                    inputs.len(), after_local_full, after_dependency_correspondence, after_composed,
+                ));
+            }
+            error
+        })?;
+        if schema.read_view_proof.is_none() {
+            schema.register_read_views(&inputs, control)?;
+        }
         Ok(schema)
     }
 
@@ -350,6 +378,33 @@ impl NormalizedReferenceSchema {
         self.associated_proof.as_ref()
     }
 
+    pub(super) fn register_read_views(
+        &mut self,
+        snapshots: &[&KernelSnapshot],
+        control: &crate::platform::execution::ExecutionControl,
+    ) -> Result<(), ExecutionError> {
+        let proof = super::reference::read_view_admission::Proof::reconstruct_with_types(
+            snapshots,
+            &self.types,
+            control,
+        )?;
+        for (ty, object) in proof.types() {
+            control.check()?;
+            if self
+                .types
+                .get(ty)
+                .is_some_and(|existing| existing != object)
+            {
+                return Err(inventory_error(
+                    "read-view type identity disagrees with canonical schema",
+                ));
+            }
+            self.types.insert(*ty, object.clone());
+        }
+        self.read_view_proof = Some(std::sync::Arc::new(proof));
+        Ok(())
+    }
+
     pub(super) fn is_owned_type(&self, ty: TypeObjectDigest) -> bool {
         self.types.get(&ty).is_some_and(|object| {
             matches!(
@@ -369,6 +424,17 @@ impl NormalizedReferenceSchema {
                 }
                 _ => false,
             })
+    }
+
+    pub(super) fn is_read_view_type(&self, ty: TypeObjectDigest) -> bool {
+        self.types.get(&ty).is_some_and(|object| {
+            matches!(
+                object.form,
+                TypeForm::ReadViewApplied { .. }
+                    | TypeForm::AssociatedReadViewMember { .. }
+                    | TypeForm::AssociatedReadViewProjection { .. }
+            )
+        })
     }
 
     pub fn substitute_type(
@@ -456,6 +522,19 @@ impl NormalizedReferenceSchema {
                         })
                     })
                     .collect::<Option<_>>()?,
+            },
+            TypeForm::ReadViewApplied {
+                declaration,
+                arguments,
+                read_scope,
+            } => TypeForm::ReadViewApplied {
+                declaration: *declaration,
+                arguments: arguments
+                    .iter()
+                    .copied()
+                    .map(descend)
+                    .collect::<Option<_>>()?,
+                read_scope: *read_scope,
             },
             TypeForm::Applied {
                 declaration,

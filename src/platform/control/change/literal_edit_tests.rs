@@ -346,7 +346,7 @@ fn literal_edit_budgets_and_codec_bind_exact_values_owners_and_base() {
     let original = fixture.edit();
     let bytes =
         crate::platform::change::canonical_authored_intent_bytes(&original.semantic).unwrap();
-    assert_eq!(&bytes[..8], b"LKJACR19");
+    assert_eq!(&bytes[..8], b"LKJACR39");
     for case in ["value", "owner", "base"] {
         let mut request = original.semantic.clone();
         if case == "base" {

@@ -4,9 +4,11 @@ use super::builtin_standard::BuiltinStandard;
 use super::control::render_record;
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::kernel::{
+    AssociatedTypeBindingValue, AssociatedTypeBound, CallableResult, DeclarationReference,
     EncodedOwnerKey, ExternalVisibility, FunctionEffect, Idempotency, OwnerKey, OwnerKind,
     PackageId, PackageInterfaceDeclarationPayload, PackageInterfaceRecord, ParameterParent,
-    TypeForm, TypeObjectDigest,
+    ReadScopeArgument, ReadScopeBinder, ReadScopeParameter, ReadScopeReference, ReadScopeSource,
+    ReadViewFieldKind, ResultRelation, TypeForm, TypeObjectDigest,
 };
 use base64::Engine;
 
@@ -130,12 +132,13 @@ pub(crate) fn parse_interface_owner_kind(value: &str) -> Result<OwnerKind, Diagn
     }
 }
 
-pub(crate) const fn interface_owner_kinds() -> [OwnerKind; 17] {
+pub(crate) const fn interface_owner_kinds() -> [OwnerKind; 18] {
     [
         OwnerKind::OwnedContract,
         OwnerKind::OwnedImplementation,
         OwnerKind::Record,
         OwnerKind::OwnedRecord,
+        OwnerKind::ReadView,
         OwnerKind::Variant,
         OwnerKind::Interface,
         OwnerKind::External,
@@ -302,6 +305,120 @@ fn owner_summary(
     Ok(summary)
 }
 
+fn append_record(
+    records: &mut Vec<DiscoveryRecord>,
+    record: DiscoveryRecord,
+) -> Result<(), Diagnostic> {
+    if records.len() >= BUILTIN_QUERY_MAXIMUM_ITEMS {
+        return Err(discovery_error(
+            DiagnosticClass::Resource,
+            "builtin_type_projection_limit",
+            "package interface projection exceeded its record bound",
+        ));
+    }
+    records.push(record);
+    Ok(())
+}
+
+fn declaration_id(owner: OwnerKey) -> Result<super::semantic_id::DeclarationId, Diagnostic> {
+    if let OwnerKey::Declaration(id) = owner {
+        Ok(id)
+    } else {
+        Err(discovery_error(
+            DiagnosticClass::Corrupt,
+            "builtin_interface_child_kind",
+            "interface declaration has a non-declaration identity",
+        ))
+    }
+}
+
+fn append_scope_parameters(
+    parent: &str,
+    binder: ReadScopeBinder,
+    parameters: &[ReadScopeParameter],
+    records: &mut Vec<DiscoveryRecord>,
+) -> Result<(), Diagnostic> {
+    for (index, parameter) in parameters.iter().enumerate() {
+        append_record(
+            records,
+            DiscoveryRecord::new(
+                "read-scope-parameter",
+                [
+                    ("parent", parent.to_owned()),
+                    ("index", index.to_string()),
+                    ("id", parameter.id.to_string()),
+                    ("name", parameter.name.to_string()),
+                    (
+                        "scope",
+                        super::cli::read_scope_coordinate(ReadScopeArgument::Parameter(
+                            ReadScopeReference {
+                                binder,
+                                parameter: parameter.id,
+                            },
+                        )),
+                    ),
+                ],
+            ),
+        )?;
+    }
+    Ok(())
+}
+
+fn append_scope_sources<S: std::fmt::Display>(
+    parent: &str,
+    sources: &[ReadScopeSource<S>],
+    records: &mut Vec<DiscoveryRecord>,
+) -> Result<(), Diagnostic> {
+    for (index, source) in sources.iter().enumerate() {
+        append_record(
+            records,
+            DiscoveryRecord::new(
+                "read-scope-source",
+                [
+                    ("parent", parent.to_owned()),
+                    ("index", index.to_string()),
+                    ("source", source.source.to_string()),
+                    ("scope", super::cli::read_scope_coordinate(source.scope)),
+                ],
+            ),
+        )?;
+    }
+    Ok(())
+}
+
+fn append_callable_result<S: std::fmt::Display>(
+    standard: &PackageInterfaceView<'_>,
+    operation: &str,
+    parent: &str,
+    path: &str,
+    result: &CallableResult<S>,
+    records: &mut Vec<DiscoveryRecord>,
+) -> Result<(), Diagnostic> {
+    let (kind, source, scope) = match &result.relation {
+        ResultRelation::Value => ("value", "-".to_owned(), "-".to_owned()),
+        ResultRelation::ReadFrom { source } => ("read-from", source.to_string(), "-".to_owned()),
+        ResultRelation::ViewFrom { source, scope } => (
+            "view-from",
+            source.to_string(),
+            super::cli::read_scope_coordinate(*scope),
+        ),
+    };
+    append_record(
+        records,
+        DiscoveryRecord::new(
+            operation,
+            [
+                ("parent", parent.to_owned()),
+                ("type-path", path.to_owned()),
+                ("result-kind", kind.to_owned()),
+                ("result-source", source),
+                ("result-scope", scope),
+            ],
+        ),
+    )?;
+    append_type(standard, path, result.ty, records, 0)
+}
+
 fn append_owner_detail(
     standard: &PackageInterfaceView<'_>,
     record: &PackageInterfaceRecord,
@@ -326,11 +443,166 @@ fn append_owner_detail(
                 detail.fields.extend([
                     ("self".to_owned(), c.self_parameter.to_string()),
                     (
+                        "associated-types".to_owned(),
+                        c.associated_types.len().to_string(),
+                    ),
+                    (
                         "type-parameters".to_owned(),
                         c.type_parameters.len().to_string(),
                     ),
                 ]);
-                records.push(detail);
+                append_record(records, detail)?;
+                let contract = DeclarationReference {
+                    package: standard.package,
+                    declaration: declaration_id(declaration.header.owner)?,
+                };
+                for (index, member) in c.associated_types.iter().enumerate() {
+                    let mut fields = vec![
+                        ("owner".to_owned(), declaration.header.owner.to_string()),
+                        ("index".to_owned(), index.to_string()),
+                        ("id".to_owned(), member.id.to_string()),
+                        ("name".to_owned(), member.name.to_string()),
+                        ("arity".to_owned(), member.bound.scope_arity().to_string()),
+                    ];
+                    match &member.bound {
+                        AssociatedTypeBound::Owned => {
+                            fields.push(("kind".to_owned(), "owned".to_owned()))
+                        }
+                        AssociatedTypeBound::ReadViewFamily { scope_parameter } => {
+                            fields.extend([
+                                ("kind".to_owned(), "read-view-family".to_owned()),
+                                ("scope-parameter".to_owned(), scope_parameter.id.to_string()),
+                                ("scope-name".to_owned(), scope_parameter.name.to_string()),
+                            ]);
+                            append_scope_parameters(
+                                &format!("{}/{}", declaration.header.owner, member.id),
+                                ReadScopeBinder::AssociatedMember {
+                                    contract,
+                                    member: member.id,
+                                },
+                                std::slice::from_ref(scope_parameter),
+                                records,
+                            )?;
+                        }
+                    }
+                    append_record(
+                        records,
+                        DiscoveryRecord {
+                            operation: "owned.associated-type".to_owned(),
+                            fields,
+                        },
+                    )?;
+                }
+                for (index, method) in c.methods.iter().enumerate() {
+                    let parent = format!("{}/{}", declaration.header.owner, method.id);
+                    let path = format!("method.{}", method.id);
+                    let (effect, effect_parameters, requirements) = match &method.effect {
+                        FunctionEffect::Pure => ("pure", &[][..], &[][..]),
+                        FunctionEffect::Task {
+                            effect_parameters,
+                            requirements,
+                        } => (
+                            "task",
+                            effect_parameters.as_slice(),
+                            requirements.as_slice(),
+                        ),
+                    };
+                    append_record(
+                        records,
+                        DiscoveryRecord::new(
+                            "owned.method",
+                            [
+                                ("owner", declaration.header.owner.to_string()),
+                                ("index", index.to_string()),
+                                ("id", method.id.to_string()),
+                                ("name", method.name.to_string()),
+                                ("parameters", method.parameters.len().to_string()),
+                                ("effect", effect.to_owned()),
+                                ("effect-parameters", effect_parameters.len().to_string()),
+                                ("requirements", requirements.len().to_string()),
+                                (
+                                    "read-scope-parameters",
+                                    method.read_scope_parameters.len().to_string(),
+                                ),
+                                (
+                                    "read-scope-sources",
+                                    method.read_scope_sources.len().to_string(),
+                                ),
+                                ("result-path", format!("{path}.result")),
+                            ],
+                        ),
+                    )?;
+                    for (index, parameter) in effect_parameters.iter().enumerate() {
+                        append_record(
+                            records,
+                            DiscoveryRecord::new(
+                                "owned.method-effect-parameter",
+                                [
+                                    ("parent", parent.clone()),
+                                    ("index", index.to_string()),
+                                    (
+                                        "reference",
+                                        format!("{}/{}", parameter.package, parameter.parameter),
+                                    ),
+                                ],
+                            ),
+                        )?;
+                    }
+                    for (index, requirement) in requirements.iter().enumerate() {
+                        append_record(
+                            records,
+                            DiscoveryRecord::new(
+                                "owned.method-requirement",
+                                [
+                                    ("parent", parent.clone()),
+                                    ("index", index.to_string()),
+                                    (
+                                        "reference",
+                                        format!(
+                                            "{}/{}",
+                                            requirement.package(),
+                                            requirement.owner()
+                                        ),
+                                    ),
+                                ],
+                            ),
+                        )?;
+                    }
+                    append_scope_parameters(
+                        &parent,
+                        ReadScopeBinder::ContractMethod {
+                            contract,
+                            method: method.id,
+                        },
+                        &method.read_scope_parameters,
+                        records,
+                    )?;
+                    append_scope_sources(&parent, &method.read_scope_sources, records)?;
+                    for (index, parameter) in method.parameters.iter().enumerate() {
+                        let type_path = format!("{path}.parameter.{index}");
+                        append_record(
+                            records,
+                            DiscoveryRecord::new(
+                                "owned.method-parameter",
+                                [
+                                    ("parent", parent.clone()),
+                                    ("index", index.to_string()),
+                                    ("use", parameter_use_name(parameter.use_mode).to_owned()),
+                                    ("type-path", type_path.clone()),
+                                ],
+                            ),
+                        )?;
+                        append_type(standard, &type_path, parameter.ty, records, 0)?;
+                    }
+                    append_callable_result(
+                        standard,
+                        "owned.method-result",
+                        &parent,
+                        &format!("{path}.result"),
+                        &method.result,
+                        records,
+                    )?;
+                }
             }
             PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
                 for (index, parameter) in i.type_parameters.iter().enumerate() {
@@ -350,6 +622,10 @@ fn append_owner_detail(
                     ),
                     ("self".to_owned(), i.self_type.to_string()),
                     (
+                        "associated-types".to_owned(),
+                        i.associated_types.len().to_string(),
+                    ),
+                    (
                         "type-parameters".to_owned(),
                         i.type_parameters.len().to_string(),
                     ),
@@ -362,34 +638,83 @@ fn append_owner_detail(
                         i.implementation_parameters.len().to_string(),
                     ),
                 ]);
-                records.push(detail);
+                append_record(records, detail)?;
+                let implementation = DeclarationReference {
+                    package: standard.package,
+                    declaration: declaration_id(declaration.header.owner)?,
+                };
+                for (index, binding) in i.associated_types.iter().enumerate() {
+                    let type_path = format!("associated-binding.{}", binding.member);
+                    let mut fields = vec![
+                        ("owner".to_owned(), declaration.header.owner.to_string()),
+                        ("index".to_owned(), index.to_string()),
+                        ("member".to_owned(), binding.member.to_string()),
+                        ("type-path".to_owned(), type_path.clone()),
+                    ];
+                    match &binding.value {
+                        AssociatedTypeBindingValue::Owned { .. } => fields.extend([
+                            ("kind".to_owned(), "owned".to_owned()),
+                            ("arity".to_owned(), "0".to_owned()),
+                        ]),
+                        AssociatedTypeBindingValue::ReadViewFamily {
+                            scope_parameter, ..
+                        } => {
+                            fields.extend([
+                                ("kind".to_owned(), "read-view-family".to_owned()),
+                                ("arity".to_owned(), "1".to_owned()),
+                                ("scope-parameter".to_owned(), scope_parameter.id.to_string()),
+                                ("scope-name".to_owned(), scope_parameter.name.to_string()),
+                            ]);
+                            append_scope_parameters(
+                                &format!("{}/{}", declaration.header.owner, binding.member),
+                                ReadScopeBinder::AssociatedBinding {
+                                    implementation,
+                                    member: binding.member,
+                                },
+                                std::slice::from_ref(scope_parameter),
+                                records,
+                            )?;
+                        }
+                    }
+                    append_record(
+                        records,
+                        DiscoveryRecord {
+                            operation: "owned.associated-binding".to_owned(),
+                            fields,
+                        },
+                    )?;
+                    append_type(standard, &type_path, binding.ty(), records, 0)?;
+                }
                 append_type(standard, "self", i.self_type, records, 0)?;
                 for (index, ty) in i.type_arguments.iter().enumerate() {
                     append_type(standard, &format!("type-argument.{index}"), *ty, records, 0)?;
                 }
                 for (index, prerequisite) in i.implementation_parameters.iter().enumerate() {
-                    records.push(DiscoveryRecord::new(
-                        "owned.prerequisite",
-                        [
-                            ("owner", declaration.header.owner.to_string()),
-                            ("id", prerequisite.id.to_string()),
-                            ("index", index.to_string()),
-                            ("name", prerequisite.name.to_string()),
-                            (
-                                "contract",
-                                format!(
-                                    "{}/{}",
-                                    prerequisite.contract.package,
-                                    prerequisite.contract.declaration
+                    append_record(
+                        records,
+                        DiscoveryRecord::new(
+                            "owned.prerequisite",
+                            [
+                                ("owner", declaration.header.owner.to_string()),
+                                ("id", prerequisite.id.to_string()),
+                                ("index", index.to_string()),
+                                ("name", prerequisite.name.to_string()),
+                                (
+                                    "contract",
+                                    format!(
+                                        "{}/{}",
+                                        prerequisite.contract.package,
+                                        prerequisite.contract.declaration
+                                    ),
                                 ),
-                            ),
-                            ("self", prerequisite.self_type.to_string()),
-                            (
-                                "type-arguments",
-                                prerequisite.type_arguments.len().to_string(),
-                            ),
-                        ],
-                    ));
+                                ("self", prerequisite.self_type.to_string()),
+                                (
+                                    "type-arguments",
+                                    prerequisite.type_arguments.len().to_string(),
+                                ),
+                            ],
+                        ),
+                    )?;
                     append_type(
                         standard,
                         &format!("prerequisite.{}.self", prerequisite.id),
@@ -408,22 +733,29 @@ fn append_owner_detail(
                     }
                 }
                 for mapping in &i.methods {
-                    records.push(DiscoveryRecord::new(
-                        "owned.method-implementation",
-                        [
-                            ("owner", declaration.header.owner.to_string()),
-                            ("method", mapping.method.to_string()),
-                            (
-                                "function",
-                                format!(
-                                    "{}/{}",
-                                    mapping.function.package, mapping.function.declaration
+                    append_record(
+                        records,
+                        DiscoveryRecord::new(
+                            "owned.method-implementation",
+                            [
+                                ("owner", declaration.header.owner.to_string()),
+                                ("method", mapping.method.to_string()),
+                                (
+                                    "function",
+                                    format!(
+                                        "{}/{}",
+                                        mapping.function.package, mapping.function.declaration
+                                    ),
                                 ),
-                            ),
-                            ("type-arguments", mapping.type_arguments.len().to_string()),
-                            ("implementations", mapping.implementations.len().to_string()),
-                        ],
-                    ));
+                                ("type-arguments", mapping.type_arguments.len().to_string()),
+                                ("implementations", mapping.implementations.len().to_string()),
+                                (
+                                    "read-scope-arguments",
+                                    mapping.read_scope_arguments.len().to_string(),
+                                ),
+                            ],
+                        ),
+                    )?;
                     for (index, ty) in mapping.type_arguments.iter().enumerate() {
                         append_type(
                             standard,
@@ -431,6 +763,23 @@ fn append_owner_detail(
                             *ty,
                             records,
                             0,
+                        )?;
+                    }
+                    for (index, scope) in mapping.read_scope_arguments.iter().enumerate() {
+                        append_record(
+                            records,
+                            DiscoveryRecord::new(
+                                "read-scope-argument",
+                                [
+                                    (
+                                        "parent",
+                                        format!("{}/{}", declaration.header.owner, mapping.method),
+                                    ),
+                                    ("slot", "method-mapping".to_owned()),
+                                    ("index", index.to_string()),
+                                    ("scope", super::cli::read_scope_coordinate(*scope)),
+                                ],
+                            ),
                         )?;
                     }
                     for (index, operand) in mapping.implementations.iter().enumerate() {
@@ -461,21 +810,84 @@ fn append_owner_detail(
                         records,
                     )?;
                 }
-                records.push(declaration_detail(
-                    declaration,
-                    if matches!(
-                        declaration.payload,
-                        PackageInterfaceDeclarationPayload::OwnedRecord { .. }
-                    ) {
-                        "owned-record"
-                    } else {
-                        "record"
-                    },
-                    fields.len(),
-                    None,
-                ));
+                append_record(
+                    records,
+                    declaration_detail(
+                        declaration,
+                        if matches!(
+                            declaration.payload,
+                            PackageInterfaceDeclarationPayload::OwnedRecord { .. }
+                        ) {
+                            "owned-record"
+                        } else {
+                            "record"
+                        },
+                        fields.len(),
+                        None,
+                    ),
+                )?;
                 for (index, field) in fields.iter().enumerate() {
                     append_child_owner(standard, OwnerKey::Field(*field), index, records)?;
+                }
+            }
+            PackageInterfaceDeclarationPayload::ReadView(view) => {
+                append_type_parameters(standard, &view.type_parameters, records)?;
+                let mut detail =
+                    declaration_detail(declaration, "read-view", view.fields.len(), None);
+                detail.fields.extend([
+                    (
+                        "type-parameters".to_owned(),
+                        view.type_parameters.len().to_string(),
+                    ),
+                    ("read-scope-parameters".to_owned(), "1".to_owned()),
+                ]);
+                append_record(records, detail)?;
+                let reference = DeclarationReference {
+                    package: standard.package,
+                    declaration: declaration_id(declaration.header.owner)?,
+                };
+                append_scope_parameters(
+                    &declaration.header.owner.to_string(),
+                    ReadScopeBinder::Declaration(reference),
+                    std::slice::from_ref(&view.scope_parameter),
+                    records,
+                )?;
+                for (index, field) in view.fields.iter().enumerate() {
+                    let type_path = format!("view-field.{}", field.id);
+                    let mut fields = vec![
+                        ("owner".to_owned(), declaration.header.owner.to_string()),
+                        ("index".to_owned(), index.to_string()),
+                        ("id".to_owned(), field.id.to_string()),
+                        ("name".to_owned(), field.name.to_string()),
+                        (
+                            "reference".to_owned(),
+                            format!(
+                                "{}/{}/{}",
+                                reference.package, reference.declaration, field.id
+                            ),
+                        ),
+                        ("type-path".to_owned(), type_path.clone()),
+                    ];
+                    match field.kind {
+                        ReadViewFieldKind::Ordinary => {
+                            fields.push(("kind".to_owned(), "ordinary".to_owned()))
+                        }
+                        ReadViewFieldKind::ReadReference { read_scope } => fields.extend([
+                            ("kind".to_owned(), "read-reference".to_owned()),
+                            (
+                                "read-scope".to_owned(),
+                                super::cli::read_scope_coordinate(read_scope),
+                            ),
+                        ]),
+                    }
+                    append_record(
+                        records,
+                        DiscoveryRecord {
+                            operation: "read-view.field".to_owned(),
+                            fields,
+                        },
+                    )?;
+                    append_type(standard, &type_path, field.ty, records, 0)?;
                 }
             }
             PackageInterfaceDeclarationPayload::Variant {
@@ -490,34 +902,33 @@ fn append_owner_detail(
                         records,
                     )?;
                 }
-                records.push(declaration_detail(
-                    declaration,
-                    "variant",
-                    cases.len(),
-                    None,
-                ));
+                append_record(
+                    records,
+                    declaration_detail(declaration, "variant", cases.len(), None),
+                )?;
                 for (index, case) in cases.iter().enumerate() {
                     append_child_owner(standard, OwnerKey::Case(*case), index, records)?;
                 }
             }
             PackageInterfaceDeclarationPayload::Interface { operations } => {
-                records.push(declaration_detail(
-                    declaration,
-                    "interface",
-                    operations.len(),
-                    None,
-                ));
+                append_record(
+                    records,
+                    declaration_detail(declaration, "interface", operations.len(), None),
+                )?;
                 for (index, operation) in operations.iter().enumerate() {
                     append_child_owner(standard, OwnerKey::Operation(*operation), index, records)?;
                 }
             }
             PackageInterfaceDeclarationPayload::External(signature) => {
-                records.push(declaration_detail(
-                    declaration,
-                    "external",
-                    signature.parameters.len(),
-                    Some("pure"),
-                ));
+                append_record(
+                    records,
+                    declaration_detail(
+                        declaration,
+                        "external",
+                        signature.parameters.len(),
+                        Some("pure"),
+                    ),
+                )?;
                 append_type_parameters(standard, &signature.type_parameters, records)?;
                 append_parameters(standard, &signature.parameters, records)?;
                 append_type(standard, "result", signature.result, records, 0)?;
@@ -527,61 +938,85 @@ fn append_owner_detail(
                     FunctionEffect::Pure => "pure",
                     FunctionEffect::Task { .. } => "task",
                 };
-                records.push(declaration_detail(
+                let mut detail = declaration_detail(
                     declaration,
                     declaration.header.kind.name(),
                     signature.parameters.len(),
                     Some(effect),
-                ));
+                );
+                detail.fields.extend([
+                    (
+                        "read-scope-parameters".to_owned(),
+                        signature.read_scope_parameters.len().to_string(),
+                    ),
+                    (
+                        "read-scope-sources".to_owned(),
+                        signature.read_scope_sources.len().to_string(),
+                    ),
+                ]);
+                append_record(records, detail)?;
                 if let FunctionEffect::Task {
                     effect_parameters,
                     requirements,
                 } = &signature.effect
                 {
                     for (index, requirement) in requirements.iter().enumerate() {
-                        records.push(DiscoveryRecord::new(
-                            "effect.requirement",
-                            [
-                                ("index", index.to_string()),
-                                (
-                                    "reference",
-                                    format!("{}/{}", requirement.package(), requirement.owner()),
-                                ),
-                            ],
-                        ));
+                        append_record(
+                            records,
+                            DiscoveryRecord::new(
+                                "effect.requirement",
+                                [
+                                    ("index", index.to_string()),
+                                    (
+                                        "reference",
+                                        format!(
+                                            "{}/{}",
+                                            requirement.package(),
+                                            requirement.owner()
+                                        ),
+                                    ),
+                                ],
+                            ),
+                        )?;
                     }
                     for (index, parameter) in effect_parameters.iter().enumerate() {
-                        records.push(DiscoveryRecord::new(
-                            "effect.parameter",
-                            [
-                                ("index", index.to_string()),
-                                (
-                                    "reference",
-                                    format!("{}/{}", parameter.package, parameter.parameter),
-                                ),
-                            ],
-                        ));
+                        append_record(
+                            records,
+                            DiscoveryRecord::new(
+                                "effect.parameter",
+                                [
+                                    ("index", index.to_string()),
+                                    (
+                                        "reference",
+                                        format!("{}/{}", parameter.package, parameter.parameter),
+                                    ),
+                                ],
+                            ),
+                        )?;
                     }
                 }
                 append_type_parameters(standard, &signature.type_parameters, records)?;
                 for (index, witness) in signature.implementation_parameters.iter().enumerate() {
-                    records.push(DiscoveryRecord::new(
-                        "implementation-parameter",
-                        [
-                            ("id", witness.id.to_string()),
-                            ("index", index.to_string()),
-                            ("name", witness.name.to_string()),
-                            (
-                                "contract",
-                                format!(
-                                    "{}/{}",
-                                    witness.contract.package, witness.contract.declaration
+                    append_record(
+                        records,
+                        DiscoveryRecord::new(
+                            "implementation-parameter",
+                            [
+                                ("id", witness.id.to_string()),
+                                ("index", index.to_string()),
+                                ("name", witness.name.to_string()),
+                                (
+                                    "contract",
+                                    format!(
+                                        "{}/{}",
+                                        witness.contract.package, witness.contract.declaration
+                                    ),
                                 ),
-                            ),
-                            ("self", witness.self_type.to_string()),
-                            ("type-arguments", witness.type_arguments.len().to_string()),
-                        ],
-                    ));
+                                ("self", witness.self_type.to_string()),
+                                ("type-arguments", witness.type_arguments.len().to_string()),
+                            ],
+                        ),
+                    )?;
                     append_type(
                         standard,
                         &format!("implementation.{index}.self"),
@@ -615,25 +1050,53 @@ fn append_owner_detail(
                         records,
                     )?;
                 }
+                let reference = DeclarationReference {
+                    package: standard.package,
+                    declaration: declaration_id(declaration.header.owner)?,
+                };
+                append_scope_parameters(
+                    &declaration.header.owner.to_string(),
+                    ReadScopeBinder::Declaration(reference),
+                    &signature.read_scope_parameters,
+                    records,
+                )?;
+                append_scope_sources(
+                    &declaration.header.owner.to_string(),
+                    &signature.read_scope_sources,
+                    records,
+                )?;
                 append_parameters(standard, &signature.parameters, records)?;
-                append_type(standard, "result", signature.result, records, 0)?;
+                append_callable_result(
+                    standard,
+                    "function.result",
+                    &declaration.header.owner.to_string(),
+                    "result",
+                    &signature.result,
+                    records,
+                )?;
             }
             PackageInterfaceDeclarationPayload::Constant { ty } => {
-                records.push(declaration_detail(declaration, "constant", 0, Some("pure")));
+                append_record(
+                    records,
+                    declaration_detail(declaration, "constant", 0, Some("pure")),
+                )?;
                 append_type(standard, "value", *ty, records, 0)?;
             }
             PackageInterfaceDeclarationPayload::Component {
                 requirements,
                 ports,
             } => {
-                records.push(DiscoveryRecord::new(
-                    "declaration",
-                    [
-                        ("kind", "component".to_owned()),
-                        ("requirements", requirements.len().to_string()),
-                        ("ports", ports.len().to_string()),
-                    ],
-                ));
+                append_record(
+                    records,
+                    DiscoveryRecord::new(
+                        "declaration",
+                        [
+                            ("kind", "component".to_owned()),
+                            ("requirements", requirements.len().to_string()),
+                            ("ports", ports.len().to_string()),
+                        ],
+                    ),
+                )?;
                 for (index, requirement) in requirements.iter().enumerate() {
                     append_child_owner(
                         standard,
@@ -701,23 +1164,26 @@ fn append_implementation_operand(
                 ("parameter", scope, parameter.to_string(), &[][..], &[][..])
             }
         };
-        records.push(DiscoveryRecord::new(
-            "owned.method-implementation-operand",
-            [
-                ("owner", owner.to_string()),
-                ("method", method.to_string()),
-                ("index", index.to_string()),
-                ("path", path.clone()),
-                ("kind", kind.to_owned()),
-                (
-                    "reference",
-                    format!("{}/{}", reference.package, reference.declaration),
-                ),
-                ("parameter", parameter),
-                ("type-arguments", types.len().to_string()),
-                ("implementations", operands.len().to_string()),
-            ],
-        ));
+        append_record(
+            records,
+            DiscoveryRecord::new(
+                "owned.method-implementation-operand",
+                [
+                    ("owner", owner.to_string()),
+                    ("method", method.to_string()),
+                    ("index", index.to_string()),
+                    ("path", path.clone()),
+                    ("kind", kind.to_owned()),
+                    (
+                        "reference",
+                        format!("{}/{}", reference.package, reference.declaration),
+                    ),
+                    ("parameter", parameter),
+                    ("type-arguments", types.len().to_string()),
+                    ("implementations", operands.len().to_string()),
+                ],
+            ),
+        )?;
         for (ordinal, ty) in types.iter().enumerate() {
             append_type(
                 standard,
@@ -775,7 +1241,7 @@ fn append_child_owner(
             "built-in package interface declaration names a missing public child owner",
         )
     })?;
-    records.push(owner_summary(standard.package, &value.record)?);
+    append_record(records, owner_summary(standard.package, &value.record)?)?;
     append_child_detail(standard, &value.record, Some(index), records)
 }
 
@@ -794,46 +1260,55 @@ fn append_child_detail(
             common.push(("name".to_owned(), parameter.name.as_str().to_owned()));
             common.push(("identity".to_owned(), parameter.header.owner.to_string()));
             common.push(("declaration".to_owned(), parameter.declaration.to_string()));
-            records.push(DiscoveryRecord {
-                operation: "requirement-parameter".to_owned(),
-                fields: {
-                    common.push((
-                        "interface".to_owned(),
-                        format!(
-                            "{}/{}",
-                            parameter.constraint.interface.package,
-                            parameter.constraint.interface.declaration
-                        ),
-                    ));
-                    common.push((
-                        "minimum-operations".to_owned(),
-                        parameter.constraint.operations.len().to_string(),
-                    ));
-                    common
+            append_record(
+                records,
+                DiscoveryRecord {
+                    operation: "requirement-parameter".to_owned(),
+                    fields: {
+                        common.push((
+                            "interface".to_owned(),
+                            format!(
+                                "{}/{}",
+                                parameter.constraint.interface.package,
+                                parameter.constraint.interface.declaration
+                            ),
+                        ));
+                        common.push((
+                            "minimum-operations".to_owned(),
+                            parameter.constraint.operations.len().to_string(),
+                        ));
+                        common
+                    },
                 },
-            });
+            )?;
             for (index, operation) in parameter.constraint.operations.iter().enumerate() {
-                records.push(DiscoveryRecord::new(
-                    "requirement-parameter.operation",
-                    [
-                        ("parent", parameter.header.owner.to_string()),
-                        ("index", index.to_string()),
-                        (
-                            "reference",
-                            format!("{}/{}", operation.package, operation.operation),
-                        ),
-                    ],
-                ));
+                append_record(
+                    records,
+                    DiscoveryRecord::new(
+                        "requirement-parameter.operation",
+                        [
+                            ("parent", parameter.header.owner.to_string()),
+                            ("index", index.to_string()),
+                            (
+                                "reference",
+                                format!("{}/{}", operation.package, operation.operation),
+                            ),
+                        ],
+                    ),
+                )?;
             }
         }
         PackageInterfaceRecord::EffectParameter(parameter) => {
             common.push(("name".to_owned(), parameter.name.as_str().to_owned()));
             common.push(("identity".to_owned(), parameter.header.owner.to_string()));
             common.push(("declaration".to_owned(), parameter.declaration.to_string()));
-            records.push(DiscoveryRecord {
-                operation: "effect-parameter".to_owned(),
-                fields: common,
-            });
+            append_record(
+                records,
+                DiscoveryRecord {
+                    operation: "effect-parameter".to_owned(),
+                    fields: common,
+                },
+            )?;
         }
         PackageInterfaceRecord::TypeParameter(parameter) => {
             common.push(("name".to_owned(), parameter.name.as_str().to_owned()));
@@ -841,18 +1316,24 @@ fn append_child_detail(
                 "constraint".to_owned(),
                 parameter.constraints.name().to_owned(),
             ));
-            records.push(DiscoveryRecord {
-                operation: "type-parameter".to_owned(),
-                fields: common,
-            });
+            append_record(
+                records,
+                DiscoveryRecord {
+                    operation: "type-parameter".to_owned(),
+                    fields: common,
+                },
+            )?;
         }
         PackageInterfaceRecord::Field(field) => {
             common.push(("name".to_owned(), field.name.as_str().to_owned()));
             common.push(("type-path".to_owned(), format!("field.{}", field.name)));
-            records.push(DiscoveryRecord {
-                operation: "field".to_owned(),
-                fields: common,
-            });
+            append_record(
+                records,
+                DiscoveryRecord {
+                    operation: "field".to_owned(),
+                    fields: common,
+                },
+            )?;
             append_type(
                 standard,
                 &format!("field.{}", field.name),
@@ -864,10 +1345,13 @@ fn append_child_detail(
         PackageInterfaceRecord::Case(case) => {
             common.push(("name".to_owned(), case.name.as_str().to_owned()));
             common.push(("payload".to_owned(), case.payload.is_some().to_string()));
-            records.push(DiscoveryRecord {
-                operation: "case".to_owned(),
-                fields: common,
-            });
+            append_record(
+                records,
+                DiscoveryRecord {
+                    operation: "case".to_owned(),
+                    fields: common,
+                },
+            )?;
             if let Some(payload) = case.payload {
                 append_type(
                     standard,
@@ -899,10 +1383,13 @@ fn append_child_detail(
                 ),
                 ("result-path".to_owned(), "result".to_owned()),
             ]);
-            records.push(DiscoveryRecord {
-                operation: "operation".to_owned(),
-                fields: common,
-            });
+            append_record(
+                records,
+                DiscoveryRecord {
+                    operation: "operation".to_owned(),
+                    fields: common,
+                },
+            )?;
             append_parameters(standard, &operation.parameters, records)?;
             append_type(standard, "result", operation.result, records, 0)?;
         }
@@ -918,10 +1405,13 @@ fn append_child_detail(
                     format!("parameter.{}", parameter.name),
                 ),
             ]);
-            records.push(DiscoveryRecord {
-                operation: "parameter".to_owned(),
-                fields: common,
-            });
+            append_record(
+                records,
+                DiscoveryRecord {
+                    operation: "parameter".to_owned(),
+                    fields: common,
+                },
+            )?;
             append_type(
                 standard,
                 &format!("parameter.{}", parameter.name),
@@ -946,32 +1436,41 @@ fn append_child_detail(
                 ),
                 ("limits".to_owned(), requirement.limits.len().to_string()),
             ]);
-            records.push(DiscoveryRecord {
-                operation: "requirement".to_owned(),
-                fields: common,
-            });
+            append_record(
+                records,
+                DiscoveryRecord {
+                    operation: "requirement".to_owned(),
+                    fields: common,
+                },
+            )?;
             for (index, operation) in requirement.operations.iter().enumerate() {
-                records.push(DiscoveryRecord::new(
-                    "requirement.operation",
-                    [
-                        ("index", index.to_string()),
-                        (
-                            "reference",
-                            format!("{}/{}", operation.package, operation.operation),
-                        ),
-                    ],
-                ));
+                append_record(
+                    records,
+                    DiscoveryRecord::new(
+                        "requirement.operation",
+                        [
+                            ("index", index.to_string()),
+                            (
+                                "reference",
+                                format!("{}/{}", operation.package, operation.operation),
+                            ),
+                        ],
+                    ),
+                )?;
             }
             for (index, limit) in requirement.limits.iter().enumerate() {
-                records.push(DiscoveryRecord::new(
-                    "requirement.limit",
-                    [
-                        ("index", index.to_string()),
-                        ("name", limit.name.as_str().to_owned()),
-                        ("maximum", limit.maximum.to_string()),
-                        ("unit", format!("{:?}", limit.unit).to_ascii_lowercase()),
-                    ],
-                ));
+                append_record(
+                    records,
+                    DiscoveryRecord::new(
+                        "requirement.limit",
+                        [
+                            ("index", index.to_string()),
+                            ("name", limit.name.as_str().to_owned()),
+                            ("maximum", limit.maximum.to_string()),
+                            ("unit", format!("{:?}", limit.unit).to_ascii_lowercase()),
+                        ],
+                    ),
+                )?;
             }
         }
         PackageInterfaceRecord::Port(port) => {
@@ -979,10 +1478,13 @@ fn append_child_detail(
                 ("name".to_owned(), port.name.as_str().to_owned()),
                 ("type-path".to_owned(), "function".to_owned()),
             ]);
-            records.push(DiscoveryRecord {
-                operation: "port".to_owned(),
-                fields: common,
-            });
+            append_record(
+                records,
+                DiscoveryRecord {
+                    operation: "port".to_owned(),
+                    fields: common,
+                },
+            )?;
             append_type(standard, "function", port.function_type, records, 0)?;
         }
         PackageInterfaceRecord::Declaration(_)
@@ -1051,10 +1553,55 @@ fn append_type(
         ("form".to_owned(), type_form_name(&ty.form).to_owned()),
     ];
     match &ty.form {
-        TypeForm::AssociatedContractMember { .. }
-        | TypeForm::AssociatedWitnessProjection { .. } => {
-            return Err(crate::platform::kernel::owned_associated_wire::unsupported_semantics());
+        TypeForm::AssociatedContractMember { contract, member }
+        | TypeForm::AssociatedReadViewMember {
+            contract, member, ..
+        } => {
+            fields.extend([
+                (
+                    "contract".to_owned(),
+                    format!("{}/{}", contract.package, contract.declaration),
+                ),
+                ("member".to_owned(), member.to_string()),
+            ]);
         }
+        TypeForm::AssociatedWitnessProjection {
+            scope,
+            parameter,
+            contract,
+            member,
+        }
+        | TypeForm::AssociatedReadViewProjection {
+            scope,
+            parameter,
+            contract,
+            member,
+            ..
+        } => {
+            fields.extend([
+                (
+                    "scope".to_owned(),
+                    format!("{}/{}", scope.package, scope.declaration),
+                ),
+                ("parameter".to_owned(), parameter.to_string()),
+                (
+                    "contract".to_owned(),
+                    format!("{}/{}", contract.package, contract.declaration),
+                ),
+                ("member".to_owned(), member.to_string()),
+            ]);
+        }
+        TypeForm::ReadViewApplied {
+            declaration,
+            arguments,
+            ..
+        } => fields.extend([
+            (
+                "reference".to_owned(),
+                format!("{}/{}", declaration.package, declaration.declaration),
+            ),
+            ("arguments".to_owned(), arguments.len().to_string()),
+        ]),
         TypeForm::TypeParameter { parameter } => {
             fields.push(("parameter".to_owned(), parameter.to_string()));
         }
@@ -1097,52 +1644,73 @@ fn append_type(
         | TypeForm::Result { .. }
         | TypeForm::Stream { .. } => {}
     }
-    records.push(DiscoveryRecord {
-        operation: "type".to_owned(),
-        fields,
-    });
-    if let TypeForm::TaskFunction { effect, .. } = &ty.form {
-        records.push(DiscoveryRecord::new(
-            "type.effect",
-            [
-                ("path", path.to_owned()),
-                ("requirements", effect.requirements.len().to_string()),
-                ("parameters", effect.parameters.len().to_string()),
-            ],
+    if let TypeForm::ReadViewApplied { read_scope, .. }
+    | TypeForm::AssociatedReadViewMember { read_scope, .. }
+    | TypeForm::AssociatedReadViewProjection { read_scope, .. } = &ty.form
+    {
+        fields.push((
+            "read-scope".to_owned(),
+            super::cli::read_scope_coordinate(*read_scope),
         ));
-        for (index, requirement) in effect.requirements.iter().enumerate() {
-            records.push(DiscoveryRecord::new(
-                "type.effect-requirement",
+    }
+    append_record(
+        records,
+        DiscoveryRecord {
+            operation: "type".to_owned(),
+            fields,
+        },
+    )?;
+    if let TypeForm::TaskFunction { effect, .. } = &ty.form {
+        append_record(
+            records,
+            DiscoveryRecord::new(
+                "type.effect",
                 [
                     ("path", path.to_owned()),
-                    ("index", index.to_string()),
-                    (
-                        "reference",
-                        format!("{}/{}", requirement.package(), requirement.owner()),
-                    ),
+                    ("requirements", effect.requirements.len().to_string()),
+                    ("parameters", effect.parameters.len().to_string()),
                 ],
-            ));
+            ),
+        )?;
+        for (index, requirement) in effect.requirements.iter().enumerate() {
+            append_record(
+                records,
+                DiscoveryRecord::new(
+                    "type.effect-requirement",
+                    [
+                        ("path", path.to_owned()),
+                        ("index", index.to_string()),
+                        (
+                            "reference",
+                            format!("{}/{}", requirement.package(), requirement.owner()),
+                        ),
+                    ],
+                ),
+            )?;
         }
         for (index, parameter) in effect.parameters.iter().enumerate() {
-            records.push(DiscoveryRecord::new(
-                "type.effect-parameter",
-                [
-                    ("path", path.to_owned()),
-                    ("index", index.to_string()),
-                    (
-                        "reference",
-                        format!("{}/{}", parameter.package, parameter.parameter),
-                    ),
-                ],
-            ));
+            append_record(
+                records,
+                DiscoveryRecord::new(
+                    "type.effect-parameter",
+                    [
+                        ("path", path.to_owned()),
+                        ("index", index.to_string()),
+                        (
+                            "reference",
+                            format!("{}/{}", parameter.package, parameter.parameter),
+                        ),
+                    ],
+                ),
+            )?;
         }
     }
     match &ty.form {
         TypeForm::AssociatedContractMember { .. }
-        | TypeForm::AssociatedWitnessProjection { .. } => {
-            return Err(crate::platform::kernel::owned_associated_wire::unsupported_semantics());
-        }
-        TypeForm::Applied { arguments, .. } => {
+        | TypeForm::AssociatedWitnessProjection { .. }
+        | TypeForm::AssociatedReadViewMember { .. }
+        | TypeForm::AssociatedReadViewProjection { .. } => {}
+        TypeForm::Applied { arguments, .. } | TypeForm::ReadViewApplied { arguments, .. } => {
             for (index, argument) in arguments.iter().enumerate() {
                 append_type(
                     standard,
@@ -1163,15 +1731,18 @@ fn append_type(
             };
             for (index, field) in fields.iter().enumerate() {
                 let child = format!("{path}.{}", field.name);
-                records.push(DiscoveryRecord::new(
-                    edge,
-                    [
-                        ("parent", path.to_owned()),
-                        ("index", index.to_string()),
-                        ("name", field.name.as_str().to_owned()),
-                        ("type-path", child.clone()),
-                    ],
-                ));
+                append_record(
+                    records,
+                    DiscoveryRecord::new(
+                        edge,
+                        [
+                            ("parent", path.to_owned()),
+                            ("index", index.to_string()),
+                            ("name", field.name.as_str().to_owned()),
+                            ("type-path", child.clone()),
+                        ],
+                    ),
+                )?;
                 append_type(standard, &child, field.ty, records, depth + 1)?;
             }
         }
@@ -1333,6 +1904,9 @@ fn exact_owner_reference(package: PackageId, owner: OwnerKey) -> String {
 
 fn type_form_name(form: &TypeForm) -> &'static str {
     match form {
+        TypeForm::ReadViewApplied { .. } => "read-view-application",
+        TypeForm::AssociatedReadViewMember { .. } => "associated-read-view-member",
+        TypeForm::AssociatedReadViewProjection { .. } => "associated-read-view-projection",
         TypeForm::AssociatedContractMember { .. } => "associated-contract-member",
         TypeForm::AssociatedWitnessProjection { .. } => "associated-witness-projection",
         TypeForm::Unit => "unit",
@@ -1580,6 +2154,824 @@ fn discovery_error(
 mod tests {
     use super::*;
     use std::collections::BTreeSet;
+
+    use super::super::kernel::{
+        AssociatedTypeBinding, AssociatedTypeMember, ImplementationParameter, Name, OwnedContract,
+        OwnedImplementation, OwnedMethod, OwnedMethodImplementation, OwnedMethodParameter,
+        OwnerHeader, PackageFunctionSignature, PackageInterfaceDeclaration, ParameterRecord,
+        ParameterUse, ReadViewDeclaration, ReadViewField, TypeObject, TypeParameterConstraints,
+        TypeParameterRecord,
+    };
+    use super::super::semantic_id::{
+        AssociatedTypeMemberId, BindingId, DeclarationId, FieldId, ImplementationParameterId,
+        MethodId, ParameterId, ReadScopeParameterId, TypeParameterId,
+    };
+    use std::collections::BTreeMap;
+
+    struct InterfaceFixture {
+        package: PackageId,
+        owners: BTreeMap<OwnerKey, super::super::package_interface::PackageInterfaceOwner>,
+        types: BTreeMap<TypeObjectDigest, TypeObject>,
+    }
+
+    impl InterfaceFixture {
+        fn new() -> Self {
+            Self {
+                package: "pkg_20000000000000000000000000000001"
+                    .parse()
+                    .expect("package"),
+                owners: BTreeMap::new(),
+                types: BTreeMap::new(),
+            }
+        }
+
+        fn reference(&self, ordinal: u64) -> DeclarationReference {
+            DeclarationReference {
+                package: self.package,
+                declaration: DeclarationId::migrate(b"builtin-read-view-observation", ordinal),
+            }
+        }
+
+        fn view(&self) -> PackageInterfaceView<'_> {
+            PackageInterfaceView {
+                package: self.package,
+                package_revision: super::super::kernel::PackageRevisionDigest::of(
+                    b"discovery-fixture",
+                ),
+                interface_owners: &self.owners,
+                interface_types: &self.types,
+            }
+        }
+
+        fn ty(&mut self, form: TypeForm) -> TypeObjectDigest {
+            let object = TypeObject::new(form).expect("type shape");
+            let (digest, _) =
+                super::super::kernel::encode_type_object(&object).expect("exact type");
+            self.types.insert(digest, object);
+            digest
+        }
+
+        fn record(&mut self, record: PackageInterfaceRecord) {
+            let owner = record.header().owner;
+            assert!(
+                self.owners
+                    .insert(
+                        owner,
+                        super::super::package_interface::PackageInterfaceOwner {
+                            contract_version: 22,
+                            record,
+                        }
+                    )
+                    .is_none()
+            );
+        }
+
+        fn declaration(
+            &mut self,
+            reference: DeclarationReference,
+            name: &str,
+            kind: OwnerKind,
+            payload: PackageInterfaceDeclarationPayload,
+        ) {
+            self.record(PackageInterfaceRecord::Declaration(
+                PackageInterfaceDeclaration {
+                    header: OwnerHeader::new(OwnerKey::Declaration(reference.declaration), kind),
+                    name: Name::new(name).expect("name"),
+                    payload,
+                },
+            ));
+        }
+
+        fn type_parameter(
+            &mut self,
+            reference: DeclarationReference,
+            ordinal: u64,
+            constraints: TypeParameterConstraints,
+        ) -> TypeParameterId {
+            let id = TypeParameterId::migrate(b"builtin-read-view-observation", ordinal);
+            self.record(PackageInterfaceRecord::TypeParameter(TypeParameterRecord {
+                header: OwnerHeader::new(OwnerKey::TypeParameter(id), OwnerKind::TypeParameter),
+                declaration: reference.declaration,
+                name: Name::new("T").expect("name"),
+                constraints,
+            }));
+            id
+        }
+
+        fn parameter(
+            &mut self,
+            reference: DeclarationReference,
+            ordinal: u64,
+            ty: TypeObjectDigest,
+        ) -> ParameterId {
+            let id = ParameterId::migrate(b"builtin-read-view-observation", ordinal);
+            self.record(PackageInterfaceRecord::Parameter(ParameterRecord {
+                header: OwnerHeader::new(OwnerKey::Parameter(id), OwnerKind::Parameter),
+                parent: ParameterParent::Function(reference.declaration),
+                name: Name::new(&format!("source-{ordinal}")).expect("name"),
+                ty,
+                use_mode: ParameterUse::Borrow,
+                resource_requirement: None,
+            }));
+            id
+        }
+    }
+
+    fn scope_parameter(ordinal: u64, name: &str) -> ReadScopeParameter {
+        ReadScopeParameter {
+            id: ReadScopeParameterId::migrate(b"builtin-read-view-observation", ordinal),
+            name: Name::new(name).expect("scope name"),
+        }
+    }
+
+    fn parameter_scope(
+        binder: ReadScopeBinder,
+        parameter: &ReadScopeParameter,
+    ) -> ReadScopeArgument {
+        ReadScopeArgument::Parameter(ReadScopeReference {
+            binder,
+            parameter: parameter.id,
+        })
+    }
+
+    fn select<'a>(records: &'a [DiscoveryRecord], operation: &str) -> Vec<&'a DiscoveryRecord> {
+        records
+            .iter()
+            .filter(|record| record.operation == operation)
+            .collect()
+    }
+
+    fn field<'a>(record: &'a DiscoveryRecord, name: &str) -> &'a str {
+        record
+            .fields
+            .iter()
+            .find_map(|(key, value)| (key == name).then_some(value.as_str()))
+            .expect("required observation field")
+    }
+
+    #[test]
+    fn interface_discovery_preserves_result_relations_and_unused_scope_inventories() {
+        let mut fixture = InterfaceFixture::new();
+        let function = fixture.reference(1);
+        let view = fixture.reference(2);
+        let scopes = [scope_parameter(1, "active"), scope_parameter(2, "unused")];
+        let active = parameter_scope(ReadScopeBinder::Declaration(function), &scopes[0]);
+        let unused = parameter_scope(ReadScopeBinder::Declaration(function), &scopes[1]);
+        let cell = fixture.ty(TypeForm::OwnedI64Cell);
+        let integer = fixture.ty(TypeForm::I64);
+        let view_ty = fixture.ty(TypeForm::ReadViewApplied {
+            declaration: view,
+            arguments: vec![integer],
+            read_scope: active,
+        });
+        let source = fixture.parameter(function, 1, cell);
+        let other = fixture.parameter(function, 2, cell);
+        fixture.declaration(
+            function,
+            "view-result",
+            OwnerKind::PureFunction,
+            PackageInterfaceDeclarationPayload::Function(PackageFunctionSignature {
+                implementation_parameters: vec![],
+                requirement_parameters: vec![],
+                effect_parameters: vec![],
+                type_parameters: vec![],
+                parameters: vec![source, other],
+                result: CallableResult {
+                    ty: view_ty,
+                    relation: ResultRelation::ViewFrom {
+                        source,
+                        scope: active,
+                    },
+                },
+                read_scope_parameters: scopes.to_vec(),
+                read_scope_sources: vec![
+                    ReadScopeSource {
+                        source,
+                        scope: active,
+                    },
+                    ReadScopeSource {
+                        source: other,
+                        scope: unused,
+                    },
+                ],
+                effect: FunctionEffect::Pure,
+            }),
+        );
+        let owner = OwnerKey::Declaration(function.declaration);
+        let records = inspect_interface_owner(&fixture.view(), OwnerKind::PureFunction, owner)
+            .expect("complete function observation");
+        assert_eq!(
+            select(&records, "function.result"),
+            vec![&DiscoveryRecord::new(
+                "function.result",
+                [
+                    ("parent", owner.to_string()),
+                    ("type-path", "result".to_owned()),
+                    ("result-kind", "view-from".to_owned()),
+                    ("result-source", source.to_string()),
+                    (
+                        "result-scope",
+                        format!(
+                            "parameter:declaration:{}/{}:{}",
+                            function.package, function.declaration, scopes[0].id
+                        )
+                    ),
+                ]
+            )]
+        );
+        assert_eq!(select(&records, "read-scope-parameter").len(), 2);
+        assert_eq!(select(&records, "read-scope-source").len(), 2);
+        assert_eq!(
+            field(select(&records, "read-scope-parameter")[1], "scope"),
+            format!(
+                "parameter:declaration:{}/{}:{}",
+                function.package, function.declaration, scopes[1].id
+            )
+        );
+        assert_eq!(
+            field(select(&records, "read-scope-source")[1], "source"),
+            other.to_string()
+        );
+        assert_eq!(
+            field(select(&records, "read-scope-source")[1], "scope"),
+            format!(
+                "parameter:declaration:{}/{}:{}",
+                function.package, function.declaration, scopes[1].id
+            )
+        );
+
+        for (ty, relation, expected_kind, expected_source) in [
+            (
+                cell,
+                ResultRelation::ReadFrom { source },
+                "read-from",
+                source.to_string(),
+            ),
+            (integer, ResultRelation::Value, "value", "-".to_owned()),
+        ] {
+            let PackageInterfaceRecord::Declaration(declaration) =
+                &mut fixture.owners.get_mut(&owner).expect("function").record
+            else {
+                unreachable!()
+            };
+            let PackageInterfaceDeclarationPayload::Function(signature) = &mut declaration.payload
+            else {
+                unreachable!()
+            };
+            signature.result = CallableResult { ty, relation };
+            let records = inspect_interface_owner(&fixture.view(), OwnerKind::PureFunction, owner)
+                .expect("result variant");
+            let result = select(&records, "function.result")[0];
+            assert_eq!(field(result, "result-kind"), expected_kind);
+            assert_eq!(field(result, "result-source"), expected_source);
+            assert_eq!(field(result, "result-scope"), "-");
+            assert!(
+                select(&records, "type")
+                    .iter()
+                    .any(|record| field(record, "path") == "result"
+                        && field(record, "digest") == ty.to_string())
+            );
+        }
+    }
+
+    #[test]
+    fn interface_discovery_keeps_read_view_fields_phantom_actuals_and_private_evidence_distinct() {
+        let mut fixture = InterfaceFixture::new();
+        let view = fixture.reference(3);
+        let scope = scope_parameter(3, "source");
+        let scope_actual = parameter_scope(ReadScopeBinder::Declaration(view), &scope);
+        let phantom = fixture.type_parameter(view, 3, TypeParameterConstraints::None);
+        let integer = fixture.ty(TypeForm::I64);
+        let cell = fixture.ty(TypeForm::OwnedI64Cell);
+        let ordinary = FieldId::migrate(b"builtin-read-view-observation", 1);
+        let borrowed = FieldId::migrate(b"builtin-read-view-observation", 2);
+        fixture.declaration(
+            view,
+            "View",
+            OwnerKind::ReadView,
+            PackageInterfaceDeclarationPayload::ReadView(ReadViewDeclaration {
+                type_parameters: vec![phantom],
+                scope_parameter: scope.clone(),
+                fields: vec![
+                    ReadViewField {
+                        id: ordinary,
+                        name: Name::new("offset").expect("name"),
+                        ty: integer,
+                        kind: ReadViewFieldKind::Ordinary,
+                    },
+                    ReadViewField {
+                        id: borrowed,
+                        name: Name::new("child").expect("name"),
+                        ty: cell,
+                        kind: ReadViewFieldKind::ReadReference {
+                            read_scope: scope_actual,
+                        },
+                    },
+                ],
+            }),
+        );
+        let owner = OwnerKey::Declaration(view.declaration);
+        assert_eq!(
+            parse_interface_owner_kind("read_view").expect("view public kind"),
+            OwnerKind::ReadView
+        );
+        let page = query_interface_owners(
+            &fixture.view(),
+            &BuiltinOwnerSelector {
+                kind: Some(OwnerKind::ReadView),
+                ..BuiltinOwnerSelector::default()
+            },
+            1,
+            64 * 1024,
+            None,
+        )
+        .expect("view owner page");
+        assert_eq!((page.matched, page.returned), (1, 1));
+        let records = inspect_interface_owner(&fixture.view(), OwnerKind::ReadView, owner)
+            .expect("view detail");
+        assert_eq!(
+            select(&records, "read-view.field"),
+            vec![
+                &DiscoveryRecord::new(
+                    "read-view.field",
+                    [
+                        ("owner", owner.to_string()),
+                        ("index", "0".to_owned()),
+                        ("id", ordinary.to_string()),
+                        ("name", "offset".to_owned()),
+                        (
+                            "reference",
+                            format!("{}/{}/{ordinary}", view.package, view.declaration)
+                        ),
+                        ("type-path", format!("view-field.{ordinary}")),
+                        ("kind", "ordinary".to_owned()),
+                    ]
+                ),
+                &DiscoveryRecord::new(
+                    "read-view.field",
+                    [
+                        ("owner", owner.to_string()),
+                        ("index", "1".to_owned()),
+                        ("id", borrowed.to_string()),
+                        ("name", "child".to_owned()),
+                        (
+                            "reference",
+                            format!("{}/{}/{borrowed}", view.package, view.declaration)
+                        ),
+                        ("type-path", format!("view-field.{borrowed}")),
+                        ("kind", "read-reference".to_owned()),
+                        (
+                            "read-scope",
+                            format!(
+                                "parameter:declaration:{}/{}:{}",
+                                view.package, view.declaration, scope.id
+                            )
+                        ),
+                    ]
+                ),
+            ]
+        );
+        assert_eq!(
+            select(&records, "type-parameter").len(),
+            1,
+            "unused formal stays visible"
+        );
+        let applied = fixture.ty(TypeForm::ReadViewApplied {
+            declaration: view,
+            arguments: vec![integer],
+            read_scope: scope_actual,
+        });
+        let mut type_records = vec![];
+        append_type(
+            &fixture.view(),
+            "application",
+            applied,
+            &mut type_records,
+            0,
+        )
+        .expect("phantom actual");
+        assert_eq!(select(&type_records, "type").len(), 2);
+        assert_eq!(
+            field(select(&type_records, "type")[1], "path"),
+            "application.argument.0"
+        );
+        assert_eq!(
+            field(select(&type_records, "type")[1], "digest"),
+            integer.to_string()
+        );
+
+        fixture.types.remove(&cell);
+        assert_eq!(
+            inspect_interface_owner(&fixture.view(), OwnerKind::ReadView, owner)
+                .expect_err("unused field root must still exist")
+                .code,
+            "builtin_interface_type"
+        );
+        let PackageInterfaceRecord::Declaration(declaration) =
+            fixture.owners[&owner].record.clone()
+        else {
+            unreachable!()
+        };
+        fixture.owners.get_mut(&owner).expect("view").record =
+            PackageInterfaceRecord::RepresentationDeclaration(declaration);
+        assert_eq!(
+            query_interface_owners(
+                &fixture.view(),
+                &BuiltinOwnerSelector::default(),
+                10,
+                64 * 1024,
+                None
+            )
+            .expect("private evidence page")
+            .matched,
+            0
+        );
+        assert_eq!(
+            inspect_interface_owner(&fixture.view(), OwnerKind::ReadView, owner)
+                .expect_err("private view authority is hidden")
+                .code,
+            "builtin_owner_missing"
+        );
+    }
+
+    #[test]
+    fn interface_discovery_observes_unused_families_complete_methods_and_mapping_scopes() {
+        let mut fixture = InterfaceFixture::new();
+        let contract = fixture.reference(4);
+        let implementation = fixture.reference(5);
+        let view = fixture.reference(6);
+        let target = fixture.reference(7);
+        let member = AssociatedTypeMemberId::migrate(b"builtin-read-view-observation", 1);
+        let family = AssociatedTypeMemberId::migrate(b"builtin-read-view-observation", 2);
+        let method = MethodId::migrate(b"builtin-read-view-observation", 1);
+        let family_scope = scope_parameter(4, "family");
+        let binding_scope = scope_parameter(5, "binding");
+        let method_scope = scope_parameter(6, "method");
+        let unused_scope = scope_parameter(7, "unused-method");
+        let scope = parameter_scope(
+            ReadScopeBinder::ContractMethod { contract, method },
+            &method_scope,
+        );
+        let self_parameter = fixture.type_parameter(contract, 4, TypeParameterConstraints::Owned);
+        let self_ty = fixture.ty(TypeForm::TypeParameter {
+            parameter: self_parameter,
+        });
+        let integer = fixture.ty(TypeForm::I64);
+        let cell = fixture.ty(TypeForm::OwnedI64Cell);
+        let result = fixture.ty(TypeForm::AssociatedReadViewMember {
+            contract,
+            member: family,
+            read_scope: scope,
+        });
+        fixture.declaration(
+            contract,
+            "Read",
+            OwnerKind::OwnedContract,
+            PackageInterfaceDeclarationPayload::OwnedContract(OwnedContract {
+                self_parameter,
+                type_parameters: vec![],
+                associated_types: vec![
+                    AssociatedTypeMember {
+                        id: member,
+                        name: Name::new("UnusedOwned").expect("name"),
+                        bound: AssociatedTypeBound::Owned,
+                    },
+                    AssociatedTypeMember {
+                        id: family,
+                        name: Name::new("UnusedView").expect("name"),
+                        bound: AssociatedTypeBound::ReadViewFamily {
+                            scope_parameter: family_scope.clone(),
+                        },
+                    },
+                ],
+                methods: vec![OwnedMethod {
+                    id: method,
+                    name: Name::new("view").expect("name"),
+                    parameters: vec![OwnedMethodParameter {
+                        ty: self_ty,
+                        use_mode: ParameterUse::Borrow,
+                    }],
+                    result: CallableResult {
+                        ty: result,
+                        relation: ResultRelation::ViewFrom { source: 0, scope },
+                    },
+                    read_scope_parameters: vec![method_scope.clone(), unused_scope.clone()],
+                    read_scope_sources: vec![ReadScopeSource { source: 0, scope }],
+                    effect: FunctionEffect::Task {
+                        effect_parameters: vec![],
+                        requirements: vec![],
+                    },
+                }],
+            }),
+        );
+        let contract_records = inspect_interface_owner(
+            &fixture.view(),
+            OwnerKind::OwnedContract,
+            OwnerKey::Declaration(contract.declaration),
+        )
+        .expect("complete contract");
+        let members = select(&contract_records, "owned.associated-type");
+        assert_eq!(members.len(), 2);
+        assert_eq!(
+            (field(members[0], "kind"), field(members[0], "arity")),
+            ("owned", "0")
+        );
+        assert_eq!(
+            (field(members[1], "kind"), field(members[1], "arity")),
+            ("read-view-family", "1")
+        );
+        assert_eq!(
+            field(members[1], "scope-parameter"),
+            family_scope.id.to_string()
+        );
+        assert_eq!(
+            field(
+                select(&contract_records, "read-scope-parameter")[0],
+                "scope"
+            ),
+            format!(
+                "parameter:associated-member:{}/{}:{family}:{}",
+                contract.package, contract.declaration, family_scope.id
+            )
+        );
+        assert_eq!(select(&contract_records, "read-scope-parameter").len(), 3);
+        assert_eq!(
+            field(select(&contract_records, "owned.method")[0], "effect"),
+            "task",
+            "empty effects remain Task"
+        );
+        assert_eq!(
+            field(
+                select(&contract_records, "owned.method-parameter")[0],
+                "use"
+            ),
+            "borrow"
+        );
+        let result_record = select(&contract_records, "owned.method-result")[0];
+        assert_eq!(field(result_record, "result-kind"), "view-from");
+        assert_eq!(field(result_record, "result-source"), "0");
+        assert_eq!(
+            field(result_record, "result-scope"),
+            format!(
+                "parameter:contract-method:{}/{}:{method}:{}",
+                contract.package, contract.declaration, method_scope.id
+            )
+        );
+
+        let bound_ty = fixture.ty(TypeForm::ReadViewApplied {
+            declaration: view,
+            arguments: vec![integer],
+            read_scope: parameter_scope(
+                ReadScopeBinder::AssociatedBinding {
+                    implementation,
+                    member: family,
+                },
+                &binding_scope,
+            ),
+        });
+        fixture.declaration(
+            implementation,
+            "Selected",
+            OwnerKind::OwnedImplementation,
+            PackageInterfaceDeclarationPayload::OwnedImplementation(OwnedImplementation {
+                type_parameters: vec![],
+                implementation_parameters: vec![ImplementationParameter {
+                    id: ImplementationParameterId::migrate(b"builtin-read-view-observation", 1),
+                    name: Name::new("unused-witness").expect("name"),
+                    contract,
+                    self_type: cell,
+                    type_arguments: vec![],
+                }],
+                contract,
+                self_type: cell,
+                type_arguments: vec![],
+                associated_types: vec![
+                    AssociatedTypeBinding {
+                        member,
+                        value: AssociatedTypeBindingValue::Owned { ty: cell },
+                    },
+                    AssociatedTypeBinding {
+                        member: family,
+                        value: AssociatedTypeBindingValue::ReadViewFamily {
+                            scope_parameter: binding_scope.clone(),
+                            ty: bound_ty,
+                        },
+                    },
+                ],
+                methods: vec![OwnedMethodImplementation {
+                    method,
+                    function: target,
+                    type_arguments: vec![],
+                    implementations: vec![],
+                    read_scope_arguments: vec![scope],
+                }],
+            }),
+        );
+        let owner = OwnerKey::Declaration(implementation.declaration);
+        let records =
+            inspect_interface_owner(&fixture.view(), OwnerKind::OwnedImplementation, owner)
+                .expect("complete implementation");
+        let bindings = select(&records, "owned.associated-binding");
+        assert_eq!(bindings.len(), 2);
+        assert_eq!(
+            (field(bindings[0], "kind"), field(bindings[0], "arity")),
+            ("owned", "0")
+        );
+        assert_eq!(
+            (field(bindings[1], "kind"), field(bindings[1], "arity")),
+            ("read-view-family", "1")
+        );
+        assert_eq!(
+            field(bindings[1], "scope-parameter"),
+            binding_scope.id.to_string()
+        );
+        assert_eq!(
+            field(select(&records, "read-scope-parameter")[0], "scope"),
+            format!(
+                "parameter:associated-binding:{}/{}:{family}:{}",
+                implementation.package, implementation.declaration, binding_scope.id
+            )
+        );
+        assert_eq!(select(&records, "owned.prerequisite").len(), 1);
+        assert_eq!(
+            select(&records, "read-scope-argument"),
+            vec![&DiscoveryRecord::new(
+                "read-scope-argument",
+                [
+                    ("parent", format!("{owner}/{method}")),
+                    ("slot", "method-mapping".to_owned()),
+                    ("index", "0".to_owned()),
+                    (
+                        "scope",
+                        format!(
+                            "parameter:contract-method:{}/{}:{method}:{}",
+                            contract.package, contract.declaration, method_scope.id
+                        )
+                    ),
+                ]
+            )]
+        );
+        fixture.types.remove(&bound_ty);
+        assert_eq!(
+            inspect_interface_owner(&fixture.view(), OwnerKind::OwnedImplementation, owner)
+                .expect_err("unused family RHS is observed")
+                .code,
+            "builtin_interface_type"
+        );
+    }
+
+    #[test]
+    fn interface_discovery_distinguishes_exact_associated_and_view_projection_coordinates() {
+        let mut fixture = InterfaceFixture::new();
+        let contract = fixture.reference(8);
+        let function = fixture.reference(9);
+        let member = AssociatedTypeMemberId::migrate(b"builtin-read-view-observation", 3);
+        let family = AssociatedTypeMemberId::migrate(b"builtin-read-view-observation", 4);
+        let witness = ImplementationParameterId::migrate(b"builtin-read-view-observation", 2);
+        let other_witness = ImplementationParameterId::migrate(b"builtin-read-view-observation", 3);
+        let binding = BindingId::migrate(b"builtin-read-view-observation", 1);
+        let lexical = ReadScopeArgument::Lexical {
+            callable: function,
+            binding,
+        };
+        let forms = [
+            (
+                TypeForm::AssociatedContractMember { contract, member },
+                "associated-contract-member",
+                false,
+                false,
+            ),
+            (
+                TypeForm::AssociatedWitnessProjection {
+                    scope: function,
+                    parameter: witness,
+                    contract,
+                    member,
+                },
+                "associated-witness-projection",
+                true,
+                false,
+            ),
+            (
+                TypeForm::AssociatedReadViewMember {
+                    contract,
+                    member: family,
+                    read_scope: lexical,
+                },
+                "associated-read-view-member",
+                false,
+                true,
+            ),
+            (
+                TypeForm::AssociatedReadViewProjection {
+                    scope: function,
+                    parameter: witness,
+                    contract,
+                    member: family,
+                    read_scope: lexical,
+                },
+                "associated-read-view-projection",
+                true,
+                true,
+            ),
+        ];
+        let mut observations = vec![];
+        for (form, name, has_witness, has_scope) in forms {
+            let digest = fixture.ty(form);
+            let mut records = vec![];
+            append_type(&fixture.view(), "root", digest, &mut records, 0)
+                .expect("exact symbolic type observation");
+            let mut expected = vec![
+                ("path".to_owned(), "root".to_owned()),
+                ("digest".to_owned(), digest.to_string()),
+                ("form".to_owned(), name.to_owned()),
+            ];
+            if has_witness {
+                expected.extend([
+                    (
+                        "scope".to_owned(),
+                        format!("{}/{}", function.package, function.declaration),
+                    ),
+                    ("parameter".to_owned(), witness.to_string()),
+                ]);
+            }
+            expected.extend([
+                (
+                    "contract".to_owned(),
+                    format!("{}/{}", contract.package, contract.declaration),
+                ),
+                (
+                    "member".to_owned(),
+                    if has_scope { family } else { member }.to_string(),
+                ),
+            ]);
+            if has_scope {
+                expected.push((
+                    "read-scope".to_owned(),
+                    format!(
+                        "lexical:{}/{}:{binding}",
+                        function.package, function.declaration
+                    ),
+                ));
+            }
+            assert_eq!(
+                records,
+                vec![DiscoveryRecord {
+                    operation: "type".to_owned(),
+                    fields: expected
+                }]
+            );
+            observations.push(records);
+        }
+        let other = fixture.ty(TypeForm::AssociatedReadViewProjection {
+            scope: function,
+            parameter: other_witness,
+            contract,
+            member: family,
+            read_scope: lexical,
+        });
+        let mut records = vec![];
+        append_type(&fixture.view(), "root", other, &mut records, 0).expect("other exact witness");
+        assert_eq!(field(&records[0], "parameter"), other_witness.to_string());
+        assert_ne!(
+            records, observations[3],
+            "equal result forms do not erase witness identity"
+        );
+        assert!(!records[0].fields.iter().any(|(name, _)| matches!(
+            name.as_str(),
+            "invocation" | "address" | "lease" | "runtime"
+        )));
+    }
+
+    #[test]
+    fn interface_discovery_inline_scope_inventory_shares_the_complete_record_bound() {
+        let fixture = InterfaceFixture::new();
+        let reference = fixture.reference(10);
+        let scopes = [scope_parameter(8, "first"), scope_parameter(9, "second")];
+        let existing = DiscoveryRecord::new("owner", [("id", "prior-owner".to_owned())]);
+        let mut exact = vec![existing.clone(); 9_998];
+        append_scope_parameters(
+            "parent",
+            ReadScopeBinder::Declaration(reference),
+            &scopes,
+            &mut exact,
+        )
+        .expect("exact record capacity");
+        assert_eq!(exact.len(), 10_000);
+        let mut short = vec![existing; 9_999];
+        let error = append_scope_parameters(
+            "parent",
+            ReadScopeBinder::Declaration(reference),
+            &scopes,
+            &mut short,
+        )
+        .expect_err("scope-only overflow is bounded");
+        assert_eq!(
+            (error.class, error.code.as_str()),
+            (DiagnosticClass::Resource, "builtin_type_projection_limit")
+        );
+        assert_eq!(short.len(), 10_000, "refused record was not appended");
+    }
 
     #[test]
     fn owner_pages_are_deterministic_revision_bound_and_selector_bound() {

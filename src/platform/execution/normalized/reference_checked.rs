@@ -4,15 +4,19 @@ use super::super::value::ValueOrigin;
 use super::*;
 use std::collections::BTreeSet;
 
+#[cfg(test)]
+#[path = "reference_read_view_checked_tests.rs"]
+mod read_view_checked_tests;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Ownership {
     Ordinary,
     Memory,
     Capability,
     AffineVariant,
+    ReadView,
 }
 
-#[derive(Debug)]
 pub(super) struct Value {
     datum: NormalizedValue,
     preparation: ValueOrigin,
@@ -23,21 +27,80 @@ pub(super) struct Value {
     // rather than multiplying the same ancestor loans at every forwarding hop.
     guards: Option<Arc<AncestorCustody>>,
     reservation: Option<Arc<AncestorCustody>>,
+    source_anchor: Option<super::super::read_view_storage::SourceAnchor>,
+    source_scope: Option<super::super::read_view_storage::RuntimeScopeLease>,
+    view_borrowed: bool,
 }
 
-#[derive(Debug, Default)]
+impl std::fmt::Debug for Value {
+    fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        out.debug_struct("Value")
+            .field("datum", &self.datum)
+            .field("ownership", &self.ownership)
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Default)]
 struct AncestorCustody {
     inner: Option<Arc<AncestorCustody>>,
     token: Option<NormalizedValue>,
+    token_origin: Option<ValueOrigin>,
     outer: Option<Arc<AncestorCustody>>,
+    projected: Option<Arc<super::super::read_view_storage::ProjectedOwnedRead>>,
+    cleanup_next: Option<Arc<AncestorCustody>>,
+    cleanup_inner_closed: bool,
+}
+
+impl std::fmt::Debug for AncestorCustody {
+    fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        out.write_str("AncestorCustody(<sealed read closure>)")
+    }
 }
 
 impl Drop for AncestorCustody {
     fn drop(&mut self) {
-        // Explicit order, independent of container destructor conventions.
-        drop(self.inner.take());
+        // Intrusive links are reserved with each node. Finalization preserves
+        // loan order without recursion or cleanup-time allocation.
+        drain_custody(self.inner.take());
         drop(self.token.take());
-        drop(self.outer.take());
+        drop(self.projected.take());
+        drain_custody(self.outer.take());
+    }
+}
+
+fn drain_custody(mut pending: Option<Arc<AncestorCustody>>) {
+    while let Some(mut node) = pending.take() {
+        let Some(value) = Arc::get_mut(&mut node) else {
+            drop(node);
+            continue;
+        };
+        pending = value.cleanup_next.take();
+        if !value.cleanup_inner_closed {
+            value.cleanup_inner_closed = true;
+            let inner = value.inner.take();
+            value.cleanup_next = pending.take();
+            pending = Some(node);
+            enqueue_custody(inner, &mut pending);
+        } else {
+            drop(value.token.take());
+            drop(value.projected.take());
+            let outer = value.outer.take();
+            drop(node);
+            enqueue_custody(outer, &mut pending);
+        }
+    }
+}
+
+fn enqueue_custody(node: Option<Arc<AncestorCustody>>, pending: &mut Option<Arc<AncestorCustody>>) {
+    if let Some(mut node) = node {
+        if let Some(value) = Arc::get_mut(&mut node) {
+            value.cleanup_next = pending.take();
+            *pending = Some(node);
+        } else {
+            // Another reader retains the complete subtree and its finalizer.
+            drop(node);
+        }
     }
 }
 
@@ -72,6 +135,9 @@ impl Value {
             provenance: None,
             guards: None,
             reservation: None,
+            source_anchor: None,
+            source_scope: None,
+            view_borrowed: false,
         })
     }
 
@@ -111,6 +177,272 @@ impl Value {
         self.provenance = Some(source);
     }
 
+    pub(super) fn source_anchor(&self) -> Option<&super::super::read_view_storage::SourceAnchor> {
+        self.source_anchor.as_ref()
+    }
+
+    pub(super) fn source_scope(
+        &self,
+    ) -> Option<&super::super::read_view_storage::RuntimeScopeLease> {
+        self.source_scope.as_ref()
+    }
+
+    pub(super) fn bind_source(
+        &mut self,
+        anchor: super::super::read_view_storage::SourceAnchor,
+        scope: Option<super::super::read_view_storage::RuntimeScopeLease>,
+    ) {
+        self.source_anchor = Some(anchor);
+        self.source_scope = scope;
+    }
+
+    pub(super) fn restore_source_binding(
+        &mut self,
+        anchor: Option<super::super::read_view_storage::SourceAnchor>,
+        scope: Option<super::super::read_view_storage::RuntimeScopeLease>,
+    ) {
+        self.source_anchor = anchor;
+        self.source_scope = scope;
+    }
+
+    pub(super) fn is_view_borrowed(&self) -> bool {
+        self.view_borrowed
+    }
+
+    /// A checked reborrow preserves the whole old cleanup packet alongside its
+    /// independently reborrowed descriptor. Cloning this Arc grants no read.
+    pub(super) fn inherit_read_custody(&mut self, parent: &Self) -> Result<(), ExecutionError> {
+        if self.guards.is_some() {
+            return Err(reject("fresh view reborrow already has ancestor custody"));
+        }
+        self.guards = parent.guards.as_ref().map(Arc::clone);
+        Ok(())
+    }
+
+    pub(super) fn rebind_view_source(
+        &mut self,
+        anchor: super::super::read_view_storage::SourceAnchor,
+        admission: &impl super::super::read_view_storage::ReadViewAdmission,
+        control: &ExecutionControl,
+        reservation: crate::platform::execution::normalized::read_view_storage::DescriptorReservation,
+    ) -> Result<(), ExecutionError> {
+        let NormalizedValue::ReadView(view) = &self.datum else {
+            return Err(reject("view rebasing requires a live admitted descriptor"));
+        };
+        let reborrowed = view.reborrow(anchor.clone(), false, admission, control, reservation)?;
+        self.datum = NormalizedValue::ReadView(reborrowed);
+        self.source_anchor = Some(anchor);
+        Ok(())
+    }
+
+    pub(super) fn view(
+        schema: &BoundReferenceSchema,
+        view: super::super::read_view_storage::ReadView,
+        borrowed: bool,
+        control: &ExecutionControl,
+    ) -> Result<Self, ExecutionError> {
+        view.validate(control)?;
+        if view.identity().program != schema.value_origin {
+            return Err(reject(
+                "reference view belongs to another canonical preparation",
+            ));
+        }
+        schema
+            .read_view_proof
+            .as_ref()
+            .ok_or_else(|| reject("reference view lacks independent raw admission"))?
+            .prepared_layout(view.identity().ty)?;
+        let source_anchor = Some(view.source().clone());
+        let source_scope = Some(view.scope()?.reborrow(control)?);
+        Ok(Self {
+            datum: NormalizedValue::ReadView(view),
+            preparation: schema.value_origin,
+            ownership: Ownership::ReadView,
+            provenance: None,
+            guards: None,
+            reservation: None,
+            source_anchor,
+            source_scope,
+            view_borrowed: borrowed,
+        })
+    }
+
+    pub(super) fn duplicate_view(
+        &self,
+        schema: &BoundReferenceSchema,
+        destination: super::super::read_view_storage::SourceAnchor,
+        admission: &impl super::super::read_view_storage::ReadViewAdmission,
+        control: &ExecutionControl,
+        reservation: crate::platform::execution::normalized::read_view_storage::DescriptorReservation,
+    ) -> Result<Self, ExecutionError> {
+        let NormalizedValue::ReadView(view) = &self.datum else {
+            return Err(reject(
+                "view borrow requires a separately admitted descriptor",
+            ));
+        };
+        let view = view.reborrow(destination, false, admission, control, reservation)?;
+        let mut result = Self::view(schema, view, true, control)?;
+        result.provenance = self.provenance;
+        result.guards = self.guards.as_ref().map(Arc::clone);
+        Ok(result)
+    }
+
+    pub(super) fn projected_read(
+        schema: &BoundReferenceSchema,
+        packet: super::super::read_view_storage::ProjectedOwnedRead,
+        scope: super::super::read_view_storage::RuntimeScopeLease,
+        control: &ExecutionControl,
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+    ) -> Result<Self, ExecutionError> {
+        let source_anchor = packet.source().clone();
+        if !packet.scope()?.same_live_scope(&scope) {
+            return Err(reject(
+                "projected read changed its retained effective source scope",
+            ));
+        }
+        let datum = packet.raw(control)?.memory_borrow()?;
+        Self::validate_memory_admission(&datum, schema.value_origin)?;
+        reserve(
+            (std::mem::size_of::<AncestorCustody>()
+                + 2 * std::mem::size_of::<usize>()
+                + std::mem::size_of::<super::super::read_view_storage::ProjectedOwnedRead>()
+                + 2 * std::mem::size_of::<usize>()) as u64,
+        )?;
+        let packet = Arc::new(packet);
+        let mut custody = AncestorCustody::default();
+        custody.projected = Some(packet);
+        Ok(Self {
+            datum,
+            preparation: schema.value_origin,
+            ownership: Ownership::Memory,
+            provenance: None,
+            guards: Some(Arc::new(custody)),
+            reservation: None,
+            source_anchor: Some(source_anchor),
+            source_scope: Some(scope),
+            view_borrowed: false,
+        })
+    }
+
+    pub(super) fn retain_view_custody(
+        &self,
+        builder: &mut super::super::read_view_storage::ViewBuilder,
+        admission: &impl super::super::read_view_storage::ReadViewAdmission,
+        control: &ExecutionControl,
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+    ) -> Result<(), ExecutionError> {
+        let mut pending = Vec::new();
+        let mut seen = BTreeSet::new();
+        if let Some(guards) = &self.guards {
+            reserve(std::mem::size_of::<Arc<AncestorCustody>>() as u64)?;
+            pending.push(Arc::clone(guards));
+        }
+        while let Some(node) = pending.pop() {
+            control.check()?;
+            if seen.len() as u64 >= super::super::value::MAXIMUM_ADMISSION_ITEMS {
+                return Err(reject(
+                    "reference descriptor custody exceeds finite admission",
+                ));
+            }
+            reserve((4 * std::mem::size_of::<usize>()) as u64)?;
+            if !seen.insert(Arc::as_ptr(&node) as usize) {
+                continue;
+            }
+            for ancestor in [&node.inner, &node.outer].into_iter().flatten() {
+                reserve(std::mem::size_of::<Arc<AncestorCustody>>() as u64)?;
+                pending.push(Arc::clone(ancestor));
+            }
+            if let Some(NormalizedValue::ReadView(view)) = &node.token {
+                builder.reserve_guards(1, control, reserve)?;
+                builder.retain_guard(view, admission, control)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Reserve and flatten the complete old custody tree while its original owner is live.
+    /// Every raw token is independently borrowed; no Arc drop loses an ancestor loan.
+    pub(super) fn retain_flat_read_custody(
+        &self,
+        origin: ValueOrigin,
+        builder: &mut super::super::read_view_storage::ViewBuilder,
+        admission: &impl super::super::read_view_storage::ReadViewAdmission,
+        control: &ExecutionControl,
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+    ) -> Result<(), ExecutionError> {
+        let (reads, projected) = self.flatten_read_custody(origin, control, reserve)?;
+        for read in reads {
+            builder.retain_read(read, admission, control, reserve)?;
+        }
+        builder.reserve_guards(projected.len(), control, reserve)?;
+        for packet in projected {
+            builder.retain_projected(&packet, admission, control)?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn flatten_read_custody(
+        &self,
+        origin: ValueOrigin,
+        control: &ExecutionControl,
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+    ) -> Result<
+        (
+            Vec<super::super::read_view_storage::HeldRead>,
+            Vec<Arc<super::super::read_view_storage::ProjectedOwnedRead>>,
+        ),
+        ExecutionError,
+    > {
+        let mut pending = Vec::new();
+        let mut seen = BTreeSet::new();
+        let mut reads = Vec::new();
+        let mut projected = Vec::new();
+        if let Some(guards) = &self.guards {
+            reserve(std::mem::size_of::<Arc<AncestorCustody>>() as u64)?;
+            pending.push(Arc::clone(guards));
+        }
+        while let Some(node) = pending.pop() {
+            control.check()?;
+            if seen.len() as u64 >= super::super::value::MAXIMUM_ADMISSION_ITEMS {
+                return Err(reject(
+                    "reference ancestor closure exceeds finite admission",
+                ));
+            }
+            reserve((std::mem::size_of::<usize>() + 3 * std::mem::size_of::<usize>()) as u64)?;
+            if !seen.insert(Arc::as_ptr(&node) as usize) {
+                continue;
+            }
+            for ancestor in [&node.inner, &node.outer].into_iter().flatten() {
+                reserve(std::mem::size_of::<Arc<AncestorCustody>>() as u64)?;
+                pending.push(Arc::clone(ancestor));
+            }
+            if let Some(token) = &node.token {
+                if matches!(token, NormalizedValue::ReadView(_)) {
+                    continue;
+                }
+                if !token.memory_is_borrowed() {
+                    return Err(reject("source custody contains owning authority"));
+                }
+                let origin = node.token_origin.unwrap_or(origin);
+                token.memory_validate(origin, false)?;
+                reserve(std::mem::size_of::<super::super::read_view_storage::HeldRead>() as u64)?;
+                reads.push(super::super::read_view_storage::HeldRead {
+                    origin,
+                    value: token.memory_borrow()?,
+                });
+            }
+            if let Some(packet) = &node.projected {
+                packet.raw(control)?;
+                reserve(
+                    std::mem::size_of::<Arc<super::super::read_view_storage::ProjectedOwnedRead>>()
+                        as u64,
+                )?;
+                projected.push(Arc::clone(packet));
+            }
+        }
+        Ok((reads, projected))
+    }
+
     pub(super) fn parent_storage_bytes() -> usize {
         std::mem::size_of::<AncestorCustody>() + 2 * std::mem::size_of::<usize>()
     }
@@ -144,6 +476,7 @@ impl Value {
             .ok_or_else(|| reject("borrowed result custody reservation was shared"))?;
         let parent = take_parent()?;
         unique.inner = self.guards.take();
+        unique.token_origin = parent.source_anchor.as_ref().map(|source| source.origin);
         unique.token = Some(parent.datum);
         unique.outer = parent.guards;
         self.guards = self.reservation.take();
@@ -176,6 +509,13 @@ impl Value {
                 provenance: self.provenance,
                 guards: self.guards.as_ref().map(Arc::clone),
                 reservation: None,
+                source_anchor: self.source_anchor.clone(),
+                source_scope: self
+                    .source_scope
+                    .as_ref()
+                    .map(|scope| scope.reborrow(&ExecutionControl::uncancelled()))
+                    .transpose()?,
+                view_borrowed: self.view_borrowed,
             });
         }
 
@@ -196,6 +536,9 @@ impl Value {
                 provenance: None,
                 guards: None,
                 reservation: None,
+                source_anchor: None,
+                source_scope: None,
+                view_borrowed: false,
             }),
             _ => Err(reference_error(
                 "normalized_reference_local_resource_use",
@@ -222,6 +565,9 @@ impl Value {
                 provenance: None,
                 guards: None,
                 reservation: None,
+                source_anchor: None,
+                source_scope: None,
+                view_borrowed: false,
             }),
             _ => Err(reject(
                 "primitive reference constructor received structured data or authority; use its checked constructor",
@@ -246,8 +592,10 @@ impl Value {
         if type_arguments
             .iter()
             .any(|ty| !schema.buffer_free_types.contains(ty))
-            || signature.result_borrow.is_some()
-            || !schema.buffer_free_types.contains(&signature.result)
+            || signature.result.relation.source().copied().is_some()
+            || !signature.read_scope_parameters.is_empty()
+            || !signature.read_scope_sources.is_empty()
+            || !schema.buffer_free_types.contains(&signature.result.ty)
             || signature
                 .parameters
                 .iter()
@@ -287,6 +635,7 @@ impl Value {
                 type_arguments,
                 effect_arguments,
                 requirement_arguments,
+                read_scope_arguments: Arc::from([]),
                 bound_arguments: None,
             },
             preparation: schema.value_origin,
@@ -294,6 +643,9 @@ impl Value {
             provenance: None,
             guards: None,
             reservation: None,
+            source_anchor: None,
+            source_scope: None,
+            view_borrowed: false,
         })
     }
 
@@ -336,6 +688,9 @@ impl Value {
             provenance: None,
             guards: None,
             reservation: None,
+            source_anchor: None,
+            source_scope: None,
+            view_borrowed: false,
         })
     }
 
@@ -354,6 +709,9 @@ impl Value {
             provenance: None,
             guards: None,
             reservation: None,
+            source_anchor: None,
+            source_scope: None,
+            view_borrowed: false,
         })
     }
 
@@ -370,6 +728,9 @@ impl Value {
             provenance: None,
             guards: None,
             reservation: None,
+            source_anchor: None,
+            source_scope: None,
+            view_borrowed: false,
         }))
     }
 
@@ -397,6 +758,9 @@ impl Value {
             provenance: None,
             guards: None,
             reservation: None,
+            source_anchor: None,
+            source_scope: None,
+            view_borrowed: false,
         }))
     }
 
@@ -441,6 +805,9 @@ impl Value {
                 provenance: None,
                 guards: None,
                 reservation: None,
+                source_anchor: None,
+                source_scope: None,
+                view_borrowed: false,
             }),
         ))
     }
@@ -544,6 +911,9 @@ impl ReferenceState<'_> {
             provenance: None,
             guards: None,
             reservation: None,
+            source_anchor: None,
+            source_scope: None,
+            view_borrowed: false,
         })
     }
 
@@ -616,6 +986,9 @@ impl ReferenceState<'_> {
             provenance: None,
             guards: None,
             reservation: None,
+            source_anchor: None,
+            source_scope: None,
+            view_borrowed: false,
         })
     }
 
@@ -685,6 +1058,9 @@ impl ReferenceState<'_> {
             provenance: None,
             guards: None,
             reservation: None,
+            source_anchor: None,
+            source_scope: None,
+            view_borrowed: false,
         })
     }
 
@@ -697,6 +1073,9 @@ impl ReferenceState<'_> {
             provenance: None,
             guards: None,
             reservation: None,
+            source_anchor: None,
+            source_scope: None,
+            view_borrowed: false,
         })
     }
 
@@ -708,6 +1087,9 @@ impl ReferenceState<'_> {
             provenance: None,
             guards: None,
             reservation: None,
+            source_anchor: None,
+            source_scope: None,
+            view_borrowed: false,
         }
     }
 
@@ -747,6 +1129,9 @@ impl ReferenceState<'_> {
             provenance: None,
             guards: None,
             reservation: None,
+            source_anchor: None,
+            source_scope: None,
+            view_borrowed: false,
         })
     }
 
@@ -773,6 +1158,9 @@ impl ReferenceState<'_> {
             provenance: None,
             guards: None,
             reservation: None,
+            source_anchor: None,
+            source_scope: None,
+            view_borrowed: false,
         })
     }
 
@@ -802,6 +1190,9 @@ impl ReferenceState<'_> {
             provenance: None,
             guards: None,
             reservation: None,
+            source_anchor: None,
+            source_scope: None,
+            view_borrowed: false,
         })
     }
 }
@@ -837,6 +1228,9 @@ impl ReferenceState<'_> {
                     provenance: None,
                     guards: None,
                     reservation: None,
+                    source_anchor: None,
+                    source_scope: None,
+                    view_borrowed: false,
                 })
             }
             Err(mut error) => {
@@ -864,6 +1258,9 @@ impl ReferenceState<'_> {
         input: bool,
     ) -> Result<Ownership, ExecutionError> {
         self.control.check()?;
+        datum.reject_read_view_escape(self.control)?;
+        self.schema
+            .reject_read_view_escape(expected, self.control)?;
         self.charge_reference_bindings(bindings.len())?;
         self.charge_allocation(std::mem::size_of::<ReferenceVisit<'_>>() as u64)?;
         let bindings = Arc::new(bindings.clone());
@@ -1250,6 +1647,7 @@ impl ReferenceState<'_> {
                         type_arguments,
                         effect_arguments,
                         requirement_arguments,
+                        read_scope_arguments,
                         bound_arguments,
                     } = node
                     else {
@@ -1257,6 +1655,11 @@ impl ReferenceState<'_> {
                             "raw callback has a foreign representation; select an exact callable",
                         ));
                     };
+                    if !read_scope_arguments.is_empty() {
+                        return Err(reject(
+                            "first-class callable cannot retain read-scope authority",
+                        ));
+                    }
                     let declaration = schema.functions.get(function.0 as usize).copied().filter(|_| function.1 == schema.value_origin).ok_or_else(|| reject("raw callback belongs to another preparation; select the current callable"))?;
                     let signature = self
                         .applied_signature(
@@ -1283,7 +1686,7 @@ impl ReferenceState<'_> {
                         }
                         _ => false,
                     };
-                    if !schema.buffer_free_types.contains(&signature.result)
+                    if !schema.buffer_free_types.contains(&signature.result.ty)
                         || signature
                             .parameters
                             .iter()
@@ -1360,7 +1763,7 @@ impl ReferenceState<'_> {
                         .skip(bound_arguments.as_ref().map_or(0, |prefix| prefix.len()))
                         .zip(parameters)
                         .map(|(parameter, ty)| (parameter.ty, *ty))
-                        .chain(std::iter::once((signature.result, *result)))
+                        .chain(std::iter::once((signature.result.ty, *result)))
                     {
                         let actual = schema.instantiated_identity(actual, &actual_bindings, 0).ok_or_else(|| reject("raw callback has an unbound exact type; instantiate its declared parameters"))?;
                         let expected = schema.instantiated_identity(expected, &bindings, 0).ok_or_else(|| reject("raw callback boundary has an unbound expected type; select an exact invocation"))?;
@@ -1611,6 +2014,7 @@ impl ReferenceState<'_> {
             type_arguments,
             effect_arguments,
             requirement_arguments,
+            read_scope_arguments,
             bound_arguments,
         } = callee.raw()
         else {
@@ -1623,7 +2027,9 @@ impl ReferenceState<'_> {
             effect_arguments,
             requirement_arguments,
         )?;
-        if signature.type_parameters.len() != type_arguments.len()
+        if !read_scope_arguments.is_empty()
+            || !signature.read_scope_parameters.is_empty()
+            || signature.type_parameters.len() != type_arguments.len()
             || signature
                 .parameters
                 .iter()
@@ -1696,6 +2102,7 @@ impl ReferenceState<'_> {
                 type_arguments: Arc::clone(type_arguments),
                 effect_arguments: Arc::clone(effect_arguments),
                 requirement_arguments: Arc::clone(requirement_arguments),
+                read_scope_arguments: Arc::clone(read_scope_arguments),
                 bound_arguments: Some(Arc::new(prefix)),
             },
             preparation: self.schema.value_origin,
@@ -1703,6 +2110,9 @@ impl ReferenceState<'_> {
             provenance: None,
             guards: None,
             reservation: None,
+            source_anchor: None,
+            source_scope: None,
+            view_borrowed: false,
         })
     }
 
@@ -1721,11 +2131,17 @@ impl ReferenceState<'_> {
             type_arguments,
             effect_arguments,
             requirement_arguments,
+            read_scope_arguments,
             bound_arguments,
         } = callee.raw()
         else {
             return Err(reference_type_error("invoke callee is not a function"));
         };
+        if !read_scope_arguments.is_empty() {
+            return Err(reject(
+                "first-class reference invocation cannot carry symbolic read-scope actuals",
+            ));
+        }
         let declaration = self.function_reference(*function)?;
         let Some(prefix) = bound_arguments else {
             return Ok((
@@ -1765,6 +2181,9 @@ impl ReferenceState<'_> {
                 provenance: None,
                 guards: None,
                 reservation: None,
+                source_anchor: None,
+                source_scope: None,
+                view_borrowed: false,
             });
         }
         complete.extend(arguments);
@@ -1867,7 +2286,10 @@ impl ReferenceState<'_> {
                 | TypeForm::CapabilityResource { .. }
                 | TypeForm::TypeParameter { .. }
                 | TypeForm::AssociatedContractMember { .. }
-                | TypeForm::AssociatedWitnessProjection { .. } => {
+                | TypeForm::AssociatedWitnessProjection { .. }
+                | TypeForm::ReadViewApplied { .. }
+                | TypeForm::AssociatedReadViewMember { .. }
+                | TypeForm::AssociatedReadViewProjection { .. } => {
                     return Err(reject(
                         "capture stores a secret, stream, resource, or unknown type parameter",
                     ));

@@ -129,7 +129,7 @@ fn rehashed_external_implementation_and_signature_must_match_canonical_declarati
             2 => {
                 let (digest, bytes) =
                     encode_type_object(&TypeObject::new(TypeForm::Bool).unwrap()).unwrap();
-                signature.result = changed.tables.types.len() as u32;
+                signature.result.ty = changed.tables.types.len() as u32;
                 changed.tables.types.push(digest);
                 forged.objects.insert(
                     ObjectKey::from_digest(ObjectDomain::Type, digest.bytes()),

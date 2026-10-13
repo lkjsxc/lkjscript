@@ -37,15 +37,31 @@ impl Proof {
         &self,
         implementation: DeclarationReference,
         method: MethodId,
+        read_scope_arguments: &[ReadScopeArgument],
         control: &ExecutionControl,
     ) -> Result<&SymbolicTarget, ExecutionError> {
         control.check()?;
         if !self.implementation_inventory.contains(&implementation) {
             return Err(reject());
         }
-        self.symbolic_mappings
+        let template = self
+            .mapping_templates
             .get(&(implementation, method))
-            .ok_or_else(reject)
+            .ok_or_else(reject)?;
+        let target = self
+            .symbolic_mappings
+            .get(&(implementation, method))
+            .ok_or_else(reject)?;
+        // This slice is the mapping RHS's complete target-callable scope inventory.
+        // It may permute the contract method's formals. The symbolic target already
+        // applied that simultaneous substitution while deriving its signature.
+        // Arbitrary runtime method actuals use the separately scoped methods cache.
+        if template.read_scope_arguments.as_slice() != read_scope_arguments
+            || target.read_scope_arguments.as_slice() != read_scope_arguments
+        {
+            return Err(reject());
+        }
+        Ok(target)
     }
 
     pub(in super::super::super) fn mapping_template_at(
@@ -199,6 +215,7 @@ impl Proof {
         &self,
         selection: &Selection,
         method: MethodId,
+        read_scope_arguments: &[ReadScopeArgument],
         control: &ExecutionControl,
     ) -> Result<&Application, ExecutionError> {
         control.check()?;
@@ -207,7 +224,7 @@ impl Proof {
             return Err(reject());
         }
         self.methods
-            .get(&(selection.identity, method))
+            .get(&(selection.identity, method, read_scope_arguments.to_vec()))
             .filter(|target| self.applications.contains_key(*target))
             .ok_or_else(reject)
     }

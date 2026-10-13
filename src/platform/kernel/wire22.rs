@@ -1,6 +1,7 @@
 //! Frozen Graph 15–22 expression layout and Graph 18–22 owner layout.
 //! Only implementation applications gain operands in Graph 23; predecessor bytes remain exact.
 
+use super::frozen_read_view_wire as frozen;
 use super::*;
 use crate::platform::semantic_id::*;
 use bincode::{Decode, Encode};
@@ -15,7 +16,7 @@ pub enum OwnerRecord22 {
     Case(CaseRecord),
     Operation(OperationRecord),
     Parameter(ParameterRecord),
-    Binding(BindingRecord),
+    Binding(frozen::FrozenBindingRecord33),
     Expression(ExpressionRecord22),
     Requirement(RequirementRecord),
     Port(PortRecord),
@@ -186,7 +187,7 @@ impl From<OwnerRecord22> for OwnerRecord {
             OwnerRecord22::Case(record) => Self::Case(record),
             OwnerRecord22::Operation(record) => Self::Operation(record),
             OwnerRecord22::Parameter(record) => Self::Parameter(record),
-            OwnerRecord22::Binding(record) => Self::Binding(record),
+            OwnerRecord22::Binding(record) => Self::Binding(record.into()),
             OwnerRecord22::Expression(record) => Self::Expression(record.into()),
             OwnerRecord22::Requirement(record) => Self::Requirement(record),
             OwnerRecord22::Port(record) => Self::Port(record),
@@ -212,7 +213,7 @@ impl TryFrom<OwnerRecord> for OwnerRecord22 {
             OwnerRecord::Case(record) => Self::Case(record),
             OwnerRecord::Operation(record) => Self::Operation(record),
             OwnerRecord::Parameter(record) => Self::Parameter(record),
-            OwnerRecord::Binding(record) => Self::Binding(record),
+            OwnerRecord::Binding(record) => Self::Binding(record.try_into()?),
             OwnerRecord::Expression(record) => Self::Expression(record.try_into()?),
             OwnerRecord::Requirement(record) => Self::Requirement(record),
             OwnerRecord::Port(record) => Self::Port(record),
@@ -275,6 +276,7 @@ impl From<ExpressionOperation22> for ExpressionOperation {
                 type_arguments,
                 arguments,
             } => Self::Call {
+                read_scope_arguments: Vec::new(),
                 requirement_arguments,
                 effect_arguments,
                 function,
@@ -287,6 +289,7 @@ impl From<ExpressionOperation22> for ExpressionOperation {
                 function,
                 type_arguments,
             } => Self::FunctionValue {
+                read_scope_arguments: Vec::new(),
                 requirement_arguments,
                 effect_arguments,
                 function,
@@ -364,6 +367,7 @@ impl From<ExpressionOperation22> for ExpressionOperation {
                 implementations,
                 arguments,
             } => Self::ImplementationCall {
+                read_scope_arguments: Vec::new(),
                 requirement_arguments: Vec::new(),
                 effect_arguments: Vec::new(),
                 function,
@@ -377,6 +381,7 @@ impl From<ExpressionOperation22> for ExpressionOperation {
                 method,
                 arguments,
             } => Self::MethodCall {
+                read_scope_arguments: Vec::new(),
                 witness: witness.into(),
                 contract,
                 method,
@@ -428,6 +433,15 @@ impl TryFrom<ExpressionOperation> for ExpressionOperation22 {
 
     fn try_from(value: ExpressionOperation) -> Result<Self, Self::Error> {
         Ok(match value {
+            super::ExpressionOperation::CreateReadView { .. }
+            | super::ExpressionOperation::BorrowReadView { .. }
+            | super::ExpressionOperation::ReborrowReadView { .. }
+            | super::ExpressionOperation::MoveReadView { .. }
+            | super::ExpressionOperation::DropReadView { .. }
+            | super::ExpressionOperation::ReadViewDataField { .. }
+            | super::ExpressionOperation::BorrowReadViewField { .. } => {
+                return Err(frozen::read_view_extension());
+            }
             super::ExpressionOperation::PackOwnedRecord { .. }
             | super::ExpressionOperation::UnpackOwnedRecord { .. }
             | super::ExpressionOperation::BorrowOwnedRecordField { .. } => {
@@ -458,29 +472,37 @@ impl TryFrom<ExpressionOperation> for ExpressionOperation22 {
             ExpressionOperation::Let { bindings, body } => Self::Let { bindings, body },
             ExpressionOperation::Sequence { items } => Self::Sequence { items },
             ExpressionOperation::Call {
+                read_scope_arguments,
                 requirement_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
                 arguments,
-            } => Self::Call {
-                requirement_arguments,
-                effect_arguments,
-                function,
-                type_arguments,
-                arguments,
-            },
+            } => {
+                frozen::require_empty_read_scope(read_scope_arguments.is_empty())?;
+                Self::Call {
+                    requirement_arguments,
+                    effect_arguments,
+                    function,
+                    type_arguments,
+                    arguments,
+                }
+            }
             ExpressionOperation::FunctionValue {
+                read_scope_arguments,
                 requirement_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
-            } => Self::FunctionValue {
-                requirement_arguments,
-                effect_arguments,
-                function,
-                type_arguments,
-            },
+            } => {
+                frozen::require_empty_read_scope(read_scope_arguments.is_empty())?;
+                Self::FunctionValue {
+                    requirement_arguments,
+                    effect_arguments,
+                    function,
+                    type_arguments,
+                }
+            }
             ExpressionOperation::Invoke { callee, arguments } => Self::Invoke { callee, arguments },
             ExpressionOperation::Record {
                 nominal_type,
@@ -546,6 +568,7 @@ impl TryFrom<ExpressionOperation> for ExpressionOperation22 {
             },
             ExpressionOperation::F64 { value } => Self::F64 { value },
             ExpressionOperation::ImplementationCall {
+                read_scope_arguments,
                 requirement_arguments,
                 effect_arguments,
                 function,
@@ -553,6 +576,7 @@ impl TryFrom<ExpressionOperation> for ExpressionOperation22 {
                 implementations,
                 arguments,
             } => {
+                frozen::require_empty_read_scope(read_scope_arguments.is_empty())?;
                 if !requirement_arguments.is_empty() || !effect_arguments.is_empty() {
                     return Err(crate::platform::diagnostic::Diagnostic::new(
                         crate::platform::diagnostic::DiagnosticClass::Source,
@@ -571,16 +595,20 @@ impl TryFrom<ExpressionOperation> for ExpressionOperation22 {
                 }
             }
             ExpressionOperation::MethodCall {
+                read_scope_arguments,
                 witness,
                 contract,
                 method,
                 arguments,
-            } => Self::MethodCall {
-                witness: witness.try_into()?,
-                contract,
-                method,
-                arguments,
-            },
+            } => {
+                frozen::require_empty_read_scope(read_scope_arguments.is_empty())?;
+                Self::MethodCall {
+                    witness: witness.try_into()?,
+                    contract,
+                    method,
+                    arguments,
+                }
+            }
             ExpressionOperation::PackOwned {
                 product_type,
                 fields,

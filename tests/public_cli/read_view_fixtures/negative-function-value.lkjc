@@ -1,0 +1,17 @@
+declarations.begin
+(units
+  (module create bad-function-value
+    (function create read (visibility private) (effect pure)
+      (scope-parameter read_scope_d8600000000000000000000000000013 s)
+      (parameter create view (type (read-view-application readview-flat::Metadata (types)
+        (read-scope (declaration read) read_scope_d8600000000000000000000000000013))) (use borrow))
+      (scope-source view (read-scope (declaration read) read_scope_d8600000000000000000000000000013))
+      (returns I64 (value))
+      (body (call readview-flat::metadata-length
+        (scopes (read-scope (declaration read) read_scope_d8600000000000000000000000000013)) (local view))))
+    (function create ignored (visibility private) (effect pure)
+      (scope-parameter read_scope_d8600000000000000000000000000014 s)
+      (returns Unit (value))
+      (body (sequence
+        (function-value read (scopes (read-scope (declaration ignored) read_scope_d8600000000000000000000000000014))) (unit))))))
+declarations.end

@@ -13,6 +13,7 @@ struct Member {
     path: Vec<usize>,
     contract: DeclarationReference,
     member: AssociatedTypeMemberId,
+    read_scope: Option<ReadScopeArgument>,
 }
 
 #[derive(Clone)]
@@ -27,6 +28,10 @@ pub(super) struct State {
     formals: BTreeMap<(usize, Vec<usize>), Vec<usize>>,
     members: BTreeMap<Member, usize>,
     pending: Vec<Request>,
+    pub(super) call_scopes: BTreeMap<
+        (usize, usize, Option<ExpressionId>),
+        BTreeMap<ReadScopeReference, ReadScopeArgument>,
+    >,
 }
 
 pub(super) fn invalid() -> Diagnostic {
@@ -99,24 +104,38 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         let DeclarationPayload::OwnedContract(contract) = record.payload else {
             return Err(invalid());
         };
+        self.reserve::<AssociatedTypeMemberId>(contract.associated_types.len())?;
+        self.reserve::<&crate::platform::kernel::Name>(contract.associated_types.len())?;
+        let mut ids = BTreeSet::new();
+        let mut names = BTreeSet::new();
+        for member in &contract.associated_types {
+            self.tick()?;
+            if !ids.insert(member.id) || !names.insert(&member.name) {
+                return Err(invalid());
+            }
+        }
         Ok(contract)
     }
 
-    fn associated_member(
+    pub(super) fn associated_member(
         &mut self,
         reference: DeclarationReference,
         member: AssociatedTypeMemberId,
-    ) -> Result<(), Diagnostic> {
+    ) -> Result<AssociatedTypeBound, Diagnostic> {
         let contract = self.associated_contract(reference)?;
         let mut matches = 0usize;
+        let mut bound = None;
         for candidate in &contract.associated_types {
             self.tick()?;
             matches += usize::from(candidate.id == member);
+            if candidate.id == member {
+                bound = Some(candidate.bound.clone());
+            }
         }
         if matches != 1 {
             return Err(invalid());
         }
-        Ok(())
+        bound.ok_or_else(invalid)
     }
 
     /// The surrounding source admission proves Owned/category/generation/dependency
@@ -141,19 +160,43 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         }
         self.associated.enabled = true;
         let contract = self.associated_contract(scheme.contract)?;
-        if scheme.associated_types.len() != contract.associated_types.len() {
+        if scheme.associated_types.len() != contract.associated_types.len()
+            || scheme
+                .associated_types
+                .windows(2)
+                .any(|pair| pair[0].member >= pair[1].member)
+        {
             return Err(invalid());
         }
         self.reserve::<AssociatedTypeMemberId>(scheme.associated_types.len())?;
         let mut bound = BTreeSet::new();
         for binding in &scheme.associated_types {
             self.tick()?;
-            self.associated_member(scheme.contract, binding.member)?;
+            let kind = self.associated_member(scheme.contract, binding.member)?;
+            let binding_scope = match (&kind, &binding.value) {
+                (AssociatedTypeBound::Owned, AssociatedTypeBindingValue::Owned { .. }) => None,
+                (
+                    AssociatedTypeBound::ReadViewFamily { .. },
+                    AssociatedTypeBindingValue::ReadViewFamily {
+                        scope_parameter, ..
+                    },
+                ) => Some(ReadScopeArgument::Parameter(ReadScopeReference {
+                    binder: ReadScopeBinder::AssociatedBinding {
+                        implementation: owner,
+                        member: binding.member,
+                    },
+                    parameter: scope_parameter.id,
+                })),
+                _ => return Err(invalid()),
+            };
+            if binding_scope.is_none() && self.type_contains_view(owner.package, binding.ty())? {
+                return Err(invalid());
+            }
             if !bound.insert(binding.member) {
                 return Err(invalid());
             }
             self.reserve::<(TypeObjectDigest, usize)>(1)?;
-            let mut pending = vec![(binding.ty, 0usize)];
+            let mut pending = vec![(binding.ty(), 0usize)];
             let mut visited = BTreeMap::new();
             while let Some((ty, depth)) = pending.pop() {
                 self.tick()?;
@@ -175,9 +218,34 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                     .read
                     .type_object(owner.package, ty)?
                     .ok_or_else(invalid)?;
+                if depth == 0 {
+                    match (&object.form, binding_scope) {
+                        (TypeForm::ReadViewApplied { read_scope, .. }, Some(expected))
+                            if *read_scope == expected =>
+                        {
+                            self.validate_scope(
+                                expected,
+                                Some(match expected {
+                                    ReadScopeArgument::Parameter(reference) => reference.binder,
+                                    _ => return Err(invalid()),
+                                }),
+                                &BTreeSet::new(),
+                            )?;
+                        }
+                        (_, None) if !object.form.is_read_view() => {}
+                        _ => return Err(invalid()),
+                    }
+                } else if object.form.is_read_view() {
+                    return Err(invalid());
+                }
+                if depth > 0 && self.type_contains_view(owner.package, ty)? {
+                    return Err(invalid());
+                }
                 match object.form {
                     TypeForm::AssociatedContractMember { .. }
-                    | TypeForm::AssociatedWitnessProjection { .. } => return Err(invalid()),
+                    | TypeForm::AssociatedWitnessProjection { .. }
+                    | TypeForm::AssociatedReadViewMember { .. }
+                    | TypeForm::AssociatedReadViewProjection { .. } => return Err(invalid()),
                     TypeForm::TypeParameter { parameter } => {
                         if !scheme.type_parameters.contains(&parameter) {
                             return Err(invalid());
@@ -221,6 +289,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         parameter: ImplementationParameterId,
         contract: DeclarationReference,
         member: AssociatedTypeMemberId,
+        read_scope: Option<ReadScopeArgument>,
     ) -> Result<usize, Diagnostic> {
         self.associated.enabled = true;
         if scope != self.contexts[context].key.owner {
@@ -237,6 +306,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
             path: vec![ordinal],
             contract,
             member,
+            read_scope,
         })
     }
 
@@ -301,7 +371,10 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
 
     fn member_slot(&mut self, key: Member) -> Result<usize, Diagnostic> {
         self.tick()?;
-        self.associated_member(key.contract, key.member)?;
+        let kind = self.associated_member(key.contract, key.member)?;
+        if matches!(kind, AssociatedTypeBound::ReadViewFamily { .. }) != key.read_scope.is_some() {
+            return Err(invalid());
+        }
         let selected = self.selected_at(key.context, &key.path)?;
         if self.selection_contract(selected)? != key.contract {
             return Err(invalid());
@@ -343,7 +416,7 @@ pub(super) fn connect<R: CallableClosureRead + ?Sized>(
         }
         analysis.reserve::<recursive::Incoming>(1)?;
         let mut entry = recursive::Incoming::new(call);
-        let inputs = entry.resolve(|call| recursive::load_inputs(analysis, call))?;
+        let inputs = entry.resolve(|call| analysis.scoped_inputs(call))?;
         // Explicit actuals are roots even when ordinary demands cannot reach them.
         // A bare lexical forwarding operand does not eagerly expand its shape DAG.
         match &*inputs {
@@ -380,7 +453,7 @@ pub(super) fn connect<R: CallableClosureRead + ?Sized>(
         for entry in &mut incoming[context] {
             analysis.tick()?;
             let call = entry.call;
-            let inputs = entry.resolve(|call| recursive::load_inputs(analysis, call))?;
+            let inputs = entry.resolve(|call| analysis.scoped_inputs(call))?;
             transfer(analysis, &request, call, &inputs)?;
         }
     }
@@ -443,13 +516,25 @@ fn seed_all_paths<R: CallableClosureRead + ?Sized>(
         let contract = analysis.selection_contract(selected)?;
         let members = analysis.associated_contract(contract)?.associated_types;
         for member in members {
-            analysis.reserve::<usize>(path.len())?;
-            analysis.member_slot(Member {
-                context,
-                path: path.clone(),
-                contract,
-                member: member.id,
-            })?;
+            let scopes = match member.bound {
+                AssociatedTypeBound::Owned => vec![None],
+                AssociatedTypeBound::ReadViewFamily { .. } => analysis
+                    .context_scope_actuals(context)?
+                    .into_iter()
+                    .map(Some)
+                    .collect(),
+            };
+            analysis.reserve::<Option<ReadScopeArgument>>(scopes.len())?;
+            for read_scope in scopes {
+                analysis.reserve::<usize>(path.len())?;
+                analysis.member_slot(Member {
+                    context,
+                    path: path.clone(),
+                    contract,
+                    member: member.id,
+                    read_scope,
+                })?;
+            }
         }
         if let Selection::Scheme { prerequisites, .. } = analysis.selected_shape(selected)? {
             analysis.reserve::<usize>(path.len())?;
@@ -488,7 +573,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         let formals = self.formal_slots(member.context, member.path.clone())?;
         let to = self.associated.members[member];
         self.reserve::<(TypeObjectDigest, Vec<usize>)>(1)?;
-        let mut pending = vec![(binding.ty, Vec::new())];
+        let mut pending = vec![(binding.ty(), Vec::new())];
         let mut visited = BTreeSet::new();
         while let Some((ty, path)) = pending.pop() {
             self.tick()?;
@@ -511,7 +596,9 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                     self.edge(formals[ordinal], to, implementation, None, ordinal, path)?;
                 }
                 TypeForm::AssociatedContractMember { .. }
-                | TypeForm::AssociatedWitnessProjection { .. } => return Err(invalid()),
+                | TypeForm::AssociatedWitnessProjection { .. }
+                | TypeForm::AssociatedReadViewMember { .. }
+                | TypeForm::AssociatedReadViewProjection { .. } => return Err(invalid()),
                 _ => {
                     self.reserve::<TypeObjectDigest>(object.child_type_count())?;
                     for (child, ty) in object.child_types().into_iter().enumerate() {
@@ -614,11 +701,16 @@ fn transfer<R: CallableClosureRead + ?Sized>(
                         }
                     }
                     Request::Member(target) => {
+                        let read_scope = target
+                            .read_scope
+                            .map(|scope| analysis.call_scope(call, scope))
+                            .transpose()?;
                         let from = analysis.member_slot(Member {
                             context: call.from,
                             path: source_path,
                             contract: target.contract,
                             member: target.member,
+                            read_scope,
                         })?;
                         let to = analysis.associated.members[target];
                         // Path provenance is an alias, not a type constructor.

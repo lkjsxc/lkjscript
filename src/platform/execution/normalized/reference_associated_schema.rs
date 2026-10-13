@@ -65,6 +65,8 @@ fn inventory(
                     type_parameters,
                     cases,
                 } => (type_parameters, &[], cases, false),
+                // View layouts and their inline fields have their own canonical proof.
+                DeclarationPayload::ReadView(_) => continue,
                 _ => continue,
             };
             // Four owned Arc slices publish each nominal layout, including empty arguments.
@@ -258,6 +260,7 @@ pub(super) fn core_with_limits(
     let proof = Arc::new(proof);
     schema.associated_proof = Some(Arc::clone(&proof));
     inventory(schema, snapshots, &mut visits, &mut bytes, control)?;
+    schema.register_read_views(snapshots, control)?;
     for _ in snapshots {
         control.check()?;
         visits = visits
@@ -267,6 +270,7 @@ pub(super) fn core_with_limits(
         index_node::<(PackageId, &KernelSnapshot)>(&mut bytes)?;
     }
     let mut closure = Closure {
+        read_view_proof: schema.read_view_proof.clone(),
         associated_proof: Some(Arc::clone(&proof)),
         associated_context: None,
         parallel_targets: BTreeSet::new(),
@@ -302,6 +306,10 @@ pub(super) fn core_with_limits(
         };
         allocate::<TypeObjectDigest>(&mut closure.allocated, application.types.len())?;
         allocate::<usize>(&mut closure.allocated, application.witnesses.len())?;
+        allocate::<crate::platform::kernel::ReadScopeArgument>(
+            &mut closure.allocated,
+            application.read_scope_arguments.len(),
+        )?;
         allocate::<crate::platform::kernel::EffectRow>(
             &mut closure.allocated,
             application.effects.len(),

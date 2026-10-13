@@ -566,6 +566,7 @@ fn byte_buffer_raw_unused_generic_and_descriptor_instantiations_reject() {
             .is_err()
     );
     let raw = NormalizedValue::Function {
+        read_scope_arguments: Arc::from([]),
         function,
         type_arguments: std::sync::Arc::from([buffer]),
         effect_arguments: std::sync::Arc::from([]),

@@ -35,7 +35,7 @@ fn fixture(mode: &str) -> (crate::platform::kernel::KernelSnapshot, NormalizedPr
         panic!("requirement")
     };
     let interface = requirement_record.interface;
-    let unit = function.result;
+    let unit = function.result.ty;
     let resource = admit_snapshot_type(&mut snapshot, TypeForm::CapabilityResource { interface });
     let seed = b"iteration-owned-resource";
     let relay = DeclarationId::migrate(seed, 1);
@@ -234,6 +234,7 @@ fn fixture(mode: &str) -> (crate::platform::kernel::KernelSnapshot, NormalizedPr
                 }),
             );
             ExpressionOperation::Call {
+                read_scope_arguments: Vec::new(),
                 function: DeclarationReference {
                     package,
                     declaration: nested,
@@ -332,6 +333,7 @@ fn fixture(mode: &str) -> (crate::platform::kernel::KernelSnapshot, NormalizedPr
     let call = expression(
         &mut snapshot,
         ExpressionOperation::Call {
+            read_scope_arguments: Vec::new(),
             requirement_arguments: Vec::new(),
             function: DeclarationReference {
                 package,
@@ -983,6 +985,7 @@ pub(crate) fn requirement_snapshot(cross_operand: bool) -> crate::platform::kern
             ExpressionRecord::new(
                 entry_expression,
                 ExpressionOperation::Call {
+                    read_scope_arguments: Vec::new(),
                     function: DeclarationReference {
                         package,
                         declaration: generic,
@@ -1146,7 +1149,7 @@ fn add_requirement_match_and_borrow(snapshot: &mut crate::platform::kernel::Kern
         panic!("function");
     };
     let root = function.body;
-    let unit = function.result;
+    let unit = function.result.ty;
     let requirement = function.effect.row().requirements[0];
     let OwnerRecord::Requirement(record) = &snapshot.owners[&requirement.owner()] else {
         panic!("requirement");

@@ -167,7 +167,7 @@ impl Fixture {
                     assert_eq!(implementation.associated_types.len(), 1);
                     assert_eq!(implementation.methods.len(), 2);
                     selves.insert(implementation.self_type);
-                    outputs.insert(implementation.associated_types[0].ty);
+                    outputs.insert(implementation.associated_types[0].ty());
                     implementations += 1;
                 }
                 CompilationPayload::OwnedRecord { fields, .. } => {

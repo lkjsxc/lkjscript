@@ -25,6 +25,7 @@ use std::sync::Arc;
 pub(super) enum Class {
     Free,
     Memory,
+    ReadView,
     Binding(usize),
     Retained(usize),
     Direct,
@@ -55,27 +56,263 @@ pub(super) struct BorrowResultTarget {
     pub(super) position: u32,
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 struct BorrowMetadata {
     source: Option<BorrowSource>,
     placement: Option<BorrowSource>,
     packet: Option<BorrowResultTarget>,
     guards: Vec<Value>,
+    view_borrowed: bool,
+    path: Option<Arc<[super::super::read_view_storage::ReadPathStep]>>,
+    projected: Option<Arc<super::super::read_view_storage::ProjectedOwnedRead>>,
+    next_cleanup: Option<Box<BorrowMetadata>>,
+}
+
+impl std::fmt::Debug for BorrowMetadata {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("BorrowMetadata")
+            .field("source", &self.source)
+            .field("placement", &self.placement)
+            .field("packet", &self.packet)
+            .field("guards", &self.guards)
+            .field("view_borrowed", &self.view_borrowed)
+            .field("path", &self.path)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Drop for BorrowMetadata {
     fn drop(&mut self) {
-        // Explicit iteration fixes custody order independently of Vec's
-        // destructor implementation and allocates no cleanup storage.
-        for guard in self.guards.drain(..) {
+        // Existing reserved metadata boxes form an intrusive cleanup queue. Detach each
+        // child's metadata before releasing its raw read, so nested return packets never
+        // recurse through Rust destructors or allocate storage during unwinding.
+        let mut pending = self.next_cleanup.take();
+        for mut guard in self.guards.drain(..) {
+            if let Some(mut metadata) = guard.borrow.take() {
+                metadata.next_cleanup = pending.take();
+                pending = Some(metadata);
+            }
             drop(guard);
+        }
+        while let Some(mut metadata) = pending.take() {
+            pending = metadata.next_cleanup.take();
+            for mut guard in metadata.guards.drain(..) {
+                if let Some(mut ancestors) = guard.borrow.take() {
+                    ancestors.next_cleanup = pending.take();
+                    pending = Some(ancestors);
+                }
+                drop(guard);
+            }
         }
     }
 }
 
 pub(super) type Invocation = (FunctionIndex, Arc<[TypeObjectDigest]>, Vec<Value>);
 
+/// Charge the complete replacement while the old cursor storage remains live.
+/// Moving iterators cannot detach, clone or consume any token in the checked packet.
+fn grow_read_cursors<'a>(
+    cursors: &mut Vec<std::slice::Iter<'a, Value>>,
+    control: &ExecutionControl,
+    reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+) -> Result<(), ExecutionError> {
+    control.check()?;
+    let capacity = cursors
+        .capacity()
+        .checked_mul(2)
+        .ok_or_else(|| {
+            resource_error(
+                "normalized_borrow_result_storage",
+                "read cursor capacity overflowed",
+            )
+        })?
+        .max(1);
+    let bytes = capacity
+        .checked_mul(std::mem::size_of::<std::slice::Iter<'a, Value>>())
+        .and_then(|bytes| u64::try_from(bytes).ok())
+        .ok_or_else(|| {
+            resource_error(
+                "normalized_borrow_result_storage",
+                "read cursor storage size overflowed",
+            )
+        })?;
+    reserve(bytes)?;
+    control.check()?;
+    let mut next = Vec::new();
+    next.try_reserve_exact(capacity).map_err(|_| {
+        resource_error(
+            "normalized_borrow_result_storage",
+            "read cursor storage reservation failed",
+        )
+    })?;
+    next.append(cursors);
+    *cursors = next;
+    Ok(())
+}
+
 impl Value {
+    pub(super) fn read_view_controlled(
+        program: &NormalizedProgram,
+        raw: NormalizedValue,
+        control: &ExecutionControl,
+    ) -> Result<Self, ExecutionError> {
+        let NormalizedValue::ReadView(view) = &raw else {
+            return Err(admission_error("expected a sealed read-view descriptor"));
+        };
+        view.validate(control)?;
+        if view.identity().program != program.value_origin
+            || !program
+                .read_view_instances
+                .contains_key(&view.identity().ty)
+        {
+            return Err(admission_error("read view has no exact prepared layout"));
+        }
+        Ok(Self {
+            raw,
+            origin: program.value_origin,
+            class: Class::ReadView,
+            borrow: None,
+        })
+    }
+
+    pub(super) fn set_view_borrowed(&mut self) {
+        self.borrow
+            .get_or_insert_with(|| Box::new(BorrowMetadata::default()))
+            .view_borrowed = true;
+    }
+
+    pub(super) fn set_view_owned(&mut self) {
+        self.borrow
+            .get_or_insert_with(|| Box::new(BorrowMetadata::default()))
+            .view_borrowed = false;
+    }
+
+    pub(super) fn is_view_borrowed(&self) -> bool {
+        self.class == Class::ReadView
+            && self
+                .borrow
+                .as_ref()
+                .is_some_and(|borrow| borrow.view_borrowed)
+    }
+
+    pub(super) fn read_path(&self) -> &[super::super::read_view_storage::ReadPathStep] {
+        self.borrow
+            .as_ref()
+            .and_then(|borrow| borrow.path.as_deref())
+            .unwrap_or(&[])
+    }
+
+    pub(super) fn set_read_path(
+        &mut self,
+        path: Arc<[super::super::read_view_storage::ReadPathStep]>,
+    ) {
+        self.borrow
+            .get_or_insert_with(|| Box::new(BorrowMetadata::default()))
+            .path = Some(path);
+    }
+
+    pub(super) fn shared_read_path(
+        &self,
+    ) -> Option<Arc<[super::super::read_view_storage::ReadPathStep]>> {
+        self.borrow
+            .as_ref()
+            .and_then(|borrow| borrow.path.as_ref().map(Arc::clone))
+    }
+
+    pub(super) fn retain_projected_read(
+        &mut self,
+        packet: Arc<super::super::read_view_storage::ProjectedOwnedRead>,
+    ) {
+        self.borrow
+            .get_or_insert_with(|| Box::new(BorrowMetadata::default()))
+            .projected = Some(packet);
+    }
+
+    pub(super) fn projected_read(
+        &self,
+    ) -> Option<&super::super::read_view_storage::ProjectedOwnedRead> {
+        self.borrow
+            .as_ref()
+            .and_then(|borrow| borrow.projected.as_deref())
+    }
+
+    pub(super) fn copy_read_provenance_from(&mut self, source: &Value) {
+        if let Some(metadata) = &source.borrow {
+            let target = self
+                .borrow
+                .get_or_insert_with(|| Box::new(BorrowMetadata::default()));
+            target.source = metadata.source;
+            target.path = metadata.path.as_ref().map(Arc::clone);
+            target.projected = metadata.projected.as_ref().map(Arc::clone);
+        }
+    }
+
+    pub(super) fn validate_read_custody(
+        &self,
+        control: &ExecutionControl,
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+    ) -> Result<(), ExecutionError> {
+        control.check()?;
+        if let NormalizedValue::ReadView(view) = &self.raw {
+            view.validate(control)?;
+        }
+        if let Some(packet) = self.projected_read() {
+            packet.raw(control)?;
+        }
+        self.visit_ancestor_reads(control, reserve, &mut |guard, _reserve| {
+            if let NormalizedValue::ReadView(view) = guard.raw() {
+                view.validate(control)?;
+            }
+            if let Some(packet) = guard.projected_read() {
+                packet.raw(control)?;
+            }
+            Ok(())
+        })
+    }
+
+    /// Visit real retained reads in authored preorder. Runtime ancestry is independent
+    /// of structural type depth. The caller owns every scratch-storage reservation.
+    pub(super) fn visit_ancestor_reads<R>(
+        &self,
+        control: &ExecutionControl,
+        reserve: &mut R,
+        visit: &mut impl FnMut(&Value, &mut R) -> Result<(), ExecutionError>,
+    ) -> Result<(), ExecutionError>
+    where
+        R: FnMut(u64) -> Result<(), ExecutionError>,
+    {
+        control.check()?;
+        let Some(root) = self
+            .borrow
+            .as_ref()
+            .filter(|borrow| !borrow.guards.is_empty())
+        else {
+            return Ok(());
+        };
+        let mut cursors: Vec<std::slice::Iter<'_, Value>> = Vec::new();
+        grow_read_cursors(&mut cursors, control, reserve)?;
+        cursors.push(root.guards.iter());
+        while let Some(cursor) = cursors.last_mut() {
+            control.check()?;
+            let Some(guard) = cursor.next() else {
+                cursors.pop();
+                continue;
+            };
+            visit(guard, reserve)?;
+            if let Some(child) = guard
+                .borrow
+                .as_ref()
+                .filter(|borrow| !borrow.guards.is_empty())
+            {
+                if cursors.len() == cursors.capacity() {
+                    grow_read_cursors(&mut cursors, control, reserve)?;
+                }
+                cursors.push(child.guards.iter());
+            }
+        }
+        Ok(())
+    }
     pub(super) fn memory(
         program: &NormalizedProgram,
         raw: NormalizedValue,
@@ -147,6 +384,15 @@ impl Value {
             self.borrow
                 .get_or_insert_with(|| Box::new(BorrowMetadata::default()))
                 .source = source;
+        }
+    }
+
+    /// After consuming result admission, only activation-local hints are obsolete.
+    /// The packet keeps its actual guards, projected lease, path and cleanup storage.
+    pub(super) fn clear_owning_memory_placement(&mut self) {
+        if let Some(metadata) = self.borrow.as_mut() {
+            metadata.source = None;
+            metadata.placement = None;
         }
     }
 
@@ -226,12 +472,14 @@ impl Value {
 
     pub(super) fn duplicate(&self, use_mode: ParameterUse) -> Result<Self, ExecutionError> {
         if self.class == Class::Memory && use_mode == ParameterUse::Borrow {
-            return Ok(Self {
+            let mut value = Self {
                 raw: self.raw.memory_borrow()?,
                 origin: self.origin,
                 class: Class::Memory,
                 borrow: None,
-            });
+            };
+            value.copy_read_provenance_from(self);
+            return Ok(value);
         }
 
         if !matches!(
@@ -291,11 +539,11 @@ impl Value {
         let target = program.functions.get(function.0 as usize)
             .filter(|_| function.1 == program.value_origin)
             .ok_or_else(|| admission_error("function constructor has a foreign prepared identity; select the exact callable"))?;
-        if target.result_borrow.is_some()
+        if target.result.relation.source().copied().is_some()
             || type_arguments
                 .iter()
                 .any(|ty| !program.buffer_free_types.contains(ty))
-            || !program.buffer_free_types.contains(&target.result)
+            || !program.buffer_free_types.contains(&target.result.ty)
             || target
                 .parameters
                 .iter()
@@ -357,6 +605,7 @@ impl Value {
                 type_arguments,
                 effect_arguments: Arc::clone(&target.effect_arguments),
                 requirement_arguments: Arc::clone(&target.requirement_arguments),
+                read_scope_arguments: Arc::clone(&target.read_scope_arguments),
                 bound_arguments: None,
             },
             origin: program.value_origin,
@@ -380,6 +629,7 @@ impl Value {
             type_arguments,
             effect_arguments: _,
             requirement_arguments: _,
+            read_scope_arguments: _,
             bound_arguments,
         } = &self.raw
         else {
@@ -811,6 +1061,7 @@ impl Admission<'_> {
             type_arguments,
             effect_arguments: _,
             requirement_arguments: _,
+            read_scope_arguments: _,
             bound_arguments,
         } = callee.raw()
         else {
@@ -878,6 +1129,7 @@ impl Admission<'_> {
             type_arguments,
             effect_arguments: _,
             requirement_arguments: _,
+            read_scope_arguments: _,
             bound_arguments,
         } = callee.raw()
         else {
@@ -939,6 +1191,7 @@ impl Admission<'_> {
             type_arguments,
             effect_arguments,
             requirement_arguments,
+            read_scope_arguments,
             bound_arguments,
         } = callee.raw()
         else {
@@ -960,6 +1213,7 @@ impl Admission<'_> {
                 type_arguments: Arc::clone(type_arguments),
                 effect_arguments: Arc::clone(effect_arguments),
                 requirement_arguments: Arc::clone(requirement_arguments),
+                read_scope_arguments: Arc::clone(read_scope_arguments),
                 bound_arguments: Some(Arc::new(prefix)),
             },
             origin: self.program.value_origin,
@@ -1032,7 +1286,10 @@ impl Admission<'_> {
                 | TypeForm::CapabilityResource { .. }
                 | TypeForm::TypeParameter { .. }
                 | TypeForm::AssociatedContractMember { .. }
-                | TypeForm::AssociatedWitnessProjection { .. } => {
+                | TypeForm::AssociatedWitnessProjection { .. }
+                | TypeForm::ReadViewApplied { .. }
+                | TypeForm::AssociatedReadViewMember { .. }
+                | TypeForm::AssociatedReadViewProjection { .. } => {
                     return Err(admission_error(
                         "capture type contains a secret, stream, resource, or unresolved stored parameter",
                     ));
@@ -1126,6 +1383,12 @@ impl Admission<'_> {
         input: bool,
     ) -> Result<Class, ExecutionError> {
         self.control.check()?;
+        raw.reject_read_view_escape(self.control)?;
+        super::super::value_schema::NormalizedValueSchema::reject_read_view_escape(
+            self.program,
+            ty,
+            self.control,
+        )?;
         self.allocate(std::mem::size_of::<Visit<'_>>() as u64)?;
         self.binding_storage(self.substitutions.len())?;
         let bindings = Arc::new(self.substitutions.clone());
@@ -1357,6 +1620,7 @@ impl Admission<'_> {
                         type_arguments,
                         effect_arguments,
                         requirement_arguments,
+                        read_scope_arguments,
                         bound_arguments,
                     },
                     expected_callable @ (TypeForm::Function { parameters, result }
@@ -1385,7 +1649,8 @@ impl Admission<'_> {
                         }
                         _ => false,
                     };
-                    if callable.result_borrow.is_some()
+                    if callable.result.relation.source().copied().is_some()
+                        || read_scope_arguments.as_ref() != callable.read_scope_arguments.as_ref()
                         || !effect_matches
                         || !callable.implementation_parameters.is_empty()
                         || !callable.requirement_parameters.is_empty()
@@ -1415,7 +1680,7 @@ impl Admission<'_> {
                             "raw callback has a foreign signature or effect; pass the exact callable kind and effect row",
                         ));
                     }
-                    if !self.program.buffer_free_types.contains(&callable.result)
+                    if !self.program.buffer_free_types.contains(&callable.result.ty)
                         || callable
                             .parameters
                             .iter()
@@ -1481,7 +1746,7 @@ impl Admission<'_> {
                             ));
                         }
                     }
-                    let actual_result = self.type_identity(callable.result, &substitutions)?;
+                    let actual_result = self.type_identity(callable.result.ty, &substitutions)?;
                     if actual_result.is_none()
                         || actual_result != self.type_identity(*result, &bindings)?
                     {
@@ -1676,6 +1941,7 @@ impl Admission<'_> {
 
     fn classify(&self, value: &NormalizedValue) -> Result<Class, ExecutionError> {
         match value {
+            NormalizedValue::ReadView(_) => Ok(Class::ReadView),
             NormalizedValue::Resource(handle) if handle.is_affine_capability() => Ok(Class::Direct),
             NormalizedValue::Variant { layout, .. } => {
                 if layout.1 != self.program.value_origin {
@@ -1794,3 +2060,7 @@ mod owned_nominal_tests;
 #[cfg(test)]
 #[path = "vm_sequence_projection_tests.rs"]
 mod sequence_projection_tests;
+
+#[cfg(test)]
+#[path = "vm_read_ancestor_tests.rs"]
+mod read_ancestor_tests;

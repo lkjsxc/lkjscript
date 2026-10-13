@@ -50,15 +50,17 @@ pub enum OwnerKind {
     OwnedContract,
     OwnedImplementation,
     OwnedRecord,
+    ReadView,
 }
 
 impl OwnerKind {
-    pub const ALL: [Self; 28] = [
+    pub const ALL: [Self; 29] = [
         Self::Module,
         Self::Record,
         Self::OwnedContract,
         Self::OwnedImplementation,
         Self::OwnedRecord,
+        Self::ReadView,
         Self::Variant,
         Self::Interface,
         Self::External,
@@ -86,10 +88,11 @@ impl OwnerKind {
 
     /// Coarse durable owner kinds that survive the scoped-identity cutover and may therefore be
     /// selected by the current public exact-owner command.
-    pub const PUBLIC_EXACT: [Self; 15] = [
+    pub const PUBLIC_EXACT: [Self; 16] = [
         Self::OwnedContract,
         Self::OwnedImplementation,
         Self::OwnedRecord,
+        Self::ReadView,
         Self::Module,
         Self::Record,
         Self::Variant,
@@ -111,6 +114,7 @@ impl OwnerKind {
             Self::OwnedContract => 26,
             Self::OwnedImplementation => 27,
             Self::OwnedRecord => 28,
+            Self::ReadView => 29,
             Self::Variant => 3,
             Self::Interface => 4,
             Self::External => 5,
@@ -144,6 +148,7 @@ impl OwnerKind {
             Self::OwnedContract => "owned_contract",
             Self::OwnedImplementation => "owned_implementation",
             Self::OwnedRecord => "owned_record",
+            Self::ReadView => "read_view",
             Self::Variant => "variant",
             Self::Interface => "interface",
             Self::External => "external",
@@ -191,6 +196,7 @@ impl OwnerKind {
                 | (Self::OwnedContract, OwnerKey::Declaration(_))
                 | (Self::OwnedImplementation, OwnerKey::Declaration(_))
                 | (Self::OwnedRecord, OwnerKey::Declaration(_))
+                | (Self::ReadView, OwnerKey::Declaration(_))
                 | (Self::Variant, OwnerKey::Declaration(_))
                 | (Self::Interface, OwnerKey::Declaration(_))
                 | (Self::External, OwnerKey::Declaration(_))
@@ -226,6 +232,7 @@ impl OwnerKind {
             Self::OwnedContract
                 | Self::OwnedImplementation
                 | Self::OwnedRecord
+                | Self::ReadView
                 | Self::Record
                 | Self::Variant
                 | Self::Interface

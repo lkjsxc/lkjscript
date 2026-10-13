@@ -13,6 +13,7 @@ use super::reference::{DeclarationReference, FieldReference, RequirementReferenc
 use super::type_object::{StructuralTypeField, TypeForm, TypeObject};
 use super::validate::KernelSnapshot;
 use super::{PackageInterfaceDeclarationPayload, PackageInterfaceRecord, TypeObjectInterner};
+use super::{ReadScopeArgument, ReadScopeBinder, ResultRelation};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::package::RunnerKind;
 use crate::platform::semantic_id::{
@@ -22,6 +23,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 #[path = "nominal_flow.rs"]
 mod nominal_flow;
+#[path = "infer_read_views.rs"]
+mod read_views;
 
 #[cfg(test)]
 #[path = "nominal_flow_tests.rs"]
@@ -30,10 +33,14 @@ mod nominal_flow_tests;
 #[derive(Clone, Debug)]
 struct ExecutionContext {
     declaration: Option<DeclarationId>,
+    /// An independently identified current named function, separate from data/root context.
+    callable: Option<DeclarationReference>,
     pure: bool,
     requirements: BTreeSet<super::RequirementOperand>,
     effect_parameters: BTreeSet<super::EffectParameterReference>,
     bindings: BTreeMap<BindingId, (BindingKind, TypeObjectDigest)>,
+    live_read_scopes: BTreeSet<BindingId>,
+    read_scope_order: Vec<BindingId>,
 }
 
 #[derive(Clone, Debug)]
@@ -420,9 +427,15 @@ fn infer_function_expression<R: ExpressionRead, T>(
         admitted_occurrences: BTreeSet::new(),
     };
     validator.consume_work()?;
-    let body = match read.owner(OwnerKey::Declaration(declaration))? {
+    let (body, callable) = match read.owner(OwnerKey::Declaration(declaration))? {
         Some(OwnerRecord::Declaration(record)) => match record.payload {
-            DeclarationPayload::Function(function) => function.body,
+            DeclarationPayload::Function(function) => (
+                function.body,
+                (record.header.contract_version >= 34).then_some(DeclarationReference {
+                    package: read.package_id(),
+                    declaration,
+                }),
+            ),
             _ => {
                 return Err(type_error(
                     "kernel_type_parameter_scope",
@@ -441,10 +454,13 @@ fn infer_function_expression<R: ExpressionRead, T>(
         body,
         &ExecutionContext {
             declaration: Some(declaration),
+            callable,
             pure,
             requirements,
             effect_parameters: effect.row().parameters.into_iter().collect(),
             bindings: BTreeMap::new(),
+            live_read_scopes: BTreeSet::new(),
+            read_scope_order: Vec::new(),
         },
         0,
     )?;
@@ -528,6 +544,17 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             }
                         };
                         let context = ExecutionContext {
+                            callable: match declaration.header.owner {
+                                OwnerKey::Declaration(id)
+                                    if declaration.header.contract_version >= 34 =>
+                                {
+                                    Some(DeclarationReference {
+                                        package: self.read.package_id(),
+                                        declaration: id,
+                                    })
+                                }
+                                _ => None,
+                            },
                             declaration: match declaration.header.owner {
                                 OwnerKey::Declaration(id) => Some(id),
                                 _ => None,
@@ -536,10 +563,12 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             requirements,
                             effect_parameters: symbolic,
                             bindings: BTreeMap::new(),
+                            live_read_scopes: BTreeSet::new(),
+                            read_scope_order: Vec::new(),
                         };
                         self.compare_root_type(
                             function.body,
-                            function.result,
+                            function.result.ty,
                             &context,
                             "function",
                         );
@@ -642,10 +671,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     ));
                     let component_context = ExecutionContext {
                         declaration: Some(port.declaration),
+                        callable: None,
                         pure: false,
                         requirements,
                         effect_parameters: BTreeSet::new(),
                         bindings: BTreeMap::new(),
+                        live_read_scopes: BTreeSet::new(),
+                        read_scope_order: Vec::new(),
                     };
                     if let Err(diagnostic) =
                         self.validate_call_effect(&signature, &component_context)
@@ -655,10 +687,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     }
                     let context = ExecutionContext {
                         declaration: Some(port.declaration),
+                        callable: None,
                         pure: !signature.task,
                         requirements: signature.requirements,
                         effect_parameters: BTreeSet::new(),
                         bindings: BTreeMap::new(),
+                        live_read_scopes: BTreeSet::new(),
+                        read_scope_order: Vec::new(),
                     };
                     match port.implementation {
                         PortImplementation::Expression(expression) => self.compare_root_type(
@@ -676,6 +711,8 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                                     requirements: &[],
                                     implementations: &[],
                                 },
+                                &[],
+                                None,
                                 &context,
                                 port.header.contract_version,
                             ) {
@@ -918,7 +955,76 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         for _ in &context.effect_parameters {
             self.consume_work()?;
         }
+        self.associated_admission
+            .reserve::<BindingId>(context.live_read_scopes.len())?;
+        self.associated_admission
+            .reserve::<BindingId>(context.read_scope_order.len())?;
         Ok(context.clone())
+    }
+
+    fn scope_authority<'c>(
+        &self,
+        context: &'c ExecutionContext,
+    ) -> super::owned_associated::read_view_admission::ScopeAuthority<'c> {
+        let callable = context.callable;
+        super::owned_associated::read_view_admission::ScopeAuthority {
+            binder: callable.map(ReadScopeBinder::Declaration),
+            lexical: callable,
+            live_loans: &context.live_read_scopes,
+        }
+    }
+
+    fn enter_read_scope(
+        &mut self,
+        context: &mut ExecutionContext,
+        binding: BindingId,
+    ) -> Result<(), Diagnostic> {
+        if context.callable.is_none() {
+            return Ok(());
+        }
+        let Some(owner) = self.read.owner(OwnerKey::Binding(binding))? else {
+            return Err(type_error(
+                "kernel_read_view_scope",
+                "missing exact lexical scope binding",
+            ));
+        };
+        owner.validate_local()?;
+        if !matches!(owner, OwnerRecord::Binding(ref record) if record.header.owner == OwnerKey::Binding(binding))
+        {
+            return Err(type_error(
+                "kernel_read_view_scope",
+                "lexical scope binding has a foreign exact owner",
+            ));
+        }
+        self.consume_work()?;
+        self.associated_admission.reserve::<BindingId>(2)?;
+        if !context.live_read_scopes.insert(binding) {
+            return Err(type_error(
+                "kernel_read_view_scope",
+                "lexical loan binding is already active",
+            ));
+        }
+        context.read_scope_order.push(binding);
+        Ok(())
+    }
+
+    fn require_scope_containment(
+        &mut self,
+        child: ReadScopeArgument,
+        parent: ReadScopeArgument,
+        context: &ExecutionContext,
+    ) -> Result<(), Diagnostic> {
+        let authority = self.scope_authority(context);
+        self.owned_read_with_associated(|read, admission| {
+            super::owned_associated::read_view_admission::prove_reborrow_scope(
+                read,
+                parent,
+                child,
+                authority,
+                &context.read_scope_order,
+                admission,
+            )
+        })
     }
 
     fn validate_target_port(
@@ -989,6 +1095,18 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         context: &ExecutionContext,
         depth: usize,
     ) -> Result<TypeObjectDigest, Diagnostic> {
+        self.infer_at_with_call_scope(expression, context, depth, None)
+    }
+
+    fn infer_at_with_call_scope(
+        &mut self,
+        expression: ExpressionId,
+        context: &ExecutionContext,
+        depth: usize,
+        metadata_authority: Option<
+            super::owned_associated::read_view_admission::ScopeAuthority<'_>,
+        >,
+    ) -> Result<TypeObjectDigest, Diagnostic> {
         self.consume_work()?;
         if depth > MAXIMUM_EXPRESSION_DEPTH {
             return Err(type_error(
@@ -1013,6 +1131,15 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             self.validate_nominal_type(ty, context, occurrence, 0)?;
         }
         let inferred = match record.operation {
+            operation @ (ExpressionOperation::CreateReadView { .. }
+            | ExpressionOperation::BorrowReadView { .. }
+            | ExpressionOperation::ReborrowReadView { .. }
+            | ExpressionOperation::MoveReadView { .. }
+            | ExpressionOperation::DropReadView { .. }
+            | ExpressionOperation::ReadViewDataField { .. }
+            | ExpressionOperation::BorrowReadViewField { .. }) => {
+                self.infer_read_view_operation(operation, context, consumer_generation, next)
+            }
             ExpressionOperation::SequenceEmpty { sequence_type } => {
                 self.sequence_item_type(sequence_type)?;
                 Ok(sequence_type)
@@ -1184,14 +1311,32 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 binding,
                 body,
             } => {
+                let mut scoped = self.scoped_context(context)?;
+                // The adopted binding defines the invocation's lexical loan body.
+                // Its type/category is checked below before any body expression is admitted.
+                self.enter_read_scope(&mut scoped, binding)?;
+                let authority = self.scope_authority(&scoped);
                 let invocation = self.owned_read_with_associated(|read, admission| {
-                    super::memory::borrow_invocation_at(read, call, context.declaration, admission)
+                    super::memory::borrow_invocation_at_with_scope_authority(
+                        read,
+                        call,
+                        context.declaration,
+                        authority,
+                        admission,
+                    )
                 })?;
                 self.adopt_applied_types(invocation.types)?;
                 // The wrapped invocation retains its complete ordinary type/effect checks.
-                let actual = self.infer(call, context, next)?;
+                // Only this direct invocation's scope metadata can name its future scope.
+                // Its recursive argument/effect trees retain the prior lexical context.
+                let actual = self.infer_at_with_call_scope(call, context, next, Some(authority))?;
+                if let Some((selected, selected_ty)) = &mut self.selected_expression
+                    && *selected == call
+                {
+                    *selected_ty = Some(actual);
+                }
                 require_same(
-                    invocation.result,
+                    invocation.result.ty,
                     actual,
                     "kernel_owned_borrow",
                     "borrowed invocation result",
@@ -1203,12 +1348,21 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     "kernel_owned_borrow",
                     "borrowed invocation source",
                 )?;
-                self.require_borrow_binding(binding, invocation.result, context)?;
-                let mut scoped = self.scoped_context(context)?;
+                let kind = match invocation.result.relation {
+                    ResultRelation::ReadFrom { .. } => BindingKind::OwnedBorrow,
+                    ResultRelation::ViewFrom { .. } => BindingKind::ReadView,
+                    ResultRelation::Value => {
+                        return Err(type_error(
+                            "kernel_read_view_result",
+                            "borrow-call requires a source-tied result relation",
+                        ));
+                    }
+                };
+                self.require_typed_loan_binding(binding, invocation.result.ty, kind, context)?;
                 self.consume_work()?;
                 scoped
                     .bindings
-                    .insert(binding, (BindingKind::OwnedBorrow, invocation.result));
+                    .insert(binding, (kind, invocation.result.ty));
                 self.infer(body, &scoped, next)
             }
             ExpressionOperation::BorrowOwnedItem {
@@ -1248,6 +1402,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 scoped
                     .bindings
                     .insert(binding, (BindingKind::OwnedBorrow, item));
+                self.enter_read_scope(&mut scoped, binding)?;
                 self.infer(body, &scoped, next)
             }
             ExpressionOperation::BorrowOwnedField {
@@ -1294,6 +1449,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 scoped
                     .bindings
                     .insert(binding, (BindingKind::OwnedBorrow, ty));
+                self.enter_read_scope(&mut scoped, binding)?;
                 self.infer(body, &scoped, next)
             }
             ExpressionOperation::MatchBorrowedOwned {
@@ -1335,6 +1491,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     scoped
                         .bindings
                         .insert(arm.binding, (BindingKind::OwnedBorrow, case.ty));
+                    self.enter_read_scope(&mut scoped, arm.binding)?;
                     let actual = self.infer(arm.body, &scoped, next)?;
                     if let Some(expected) = result {
                         require_same(
@@ -1537,6 +1694,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 scoped
                     .bindings
                     .insert(binding, (BindingKind::OwnedBorrow, ty));
+                self.enter_read_scope(&mut scoped, binding)?;
                 self.infer(body, &scoped, next)
             }
             ExpressionOperation::PackOwned {
@@ -1663,7 +1821,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             ));
                         }
                     };
-                    if binding_record.kind != BindingKind::Let {
+                    if !matches!(
+                        binding_record.kind,
+                        BindingKind::Let | BindingKind::ReadView
+                    ) {
                         return Err(type_error(
                             "kernel_type_binding_kind",
                             "let expression references a non-let binding",
@@ -1672,7 +1833,70 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     let value = binding_record.value.ok_or_else(|| {
                         type_error("kernel_type_binding_value", "let binding has no value")
                     })?;
+                    if binding_record.kind == BindingKind::ReadView {
+                        let declared = binding_record.declared_type.ok_or_else(|| {
+                            type_error(
+                                "kernel_read_view_binding",
+                                "owning view initializer requires an exact annotation",
+                            )
+                        })?;
+                        let form = self.type_object(declared)?.form;
+                        let declared_scope = match form {
+                            TypeForm::ReadViewApplied { read_scope, .. }
+                            | TypeForm::AssociatedReadViewMember { read_scope, .. }
+                            | TypeForm::AssociatedReadViewProjection { read_scope, .. } => {
+                                read_scope
+                            }
+                            _ => {
+                                return Err(type_error(
+                                    "kernel_read_view_binding",
+                                    "ReadView initializer annotation must have positive view category",
+                                ));
+                            }
+                        };
+                        let callable =
+                            context.declaration.map(|declaration| DeclarationReference {
+                                package: self.read.package_id(),
+                                declaration,
+                            });
+                        if let ReadScopeArgument::Lexical {
+                            callable: source_callable,
+                            binding: source_binding,
+                        } = declared_scope
+                            && Some(source_callable) == callable
+                            && source_binding == binding
+                        {
+                            self.enter_read_scope(&mut scoped, binding)?;
+                        }
+                    }
                     let actual = self.infer(value, &scoped, next)?;
+                    let view = self.type_object(actual)?.form.is_read_view();
+                    if (binding_record.kind == BindingKind::ReadView) != view {
+                        return Err(type_error(
+                            "kernel_read_view_binding",
+                            "owning view initializers require the exact ReadView binding category",
+                        ));
+                    }
+                    if binding_record.kind == BindingKind::ReadView
+                        && binding_record.declared_type.is_none()
+                    {
+                        return Err(type_error(
+                            "kernel_read_view_binding",
+                            "owning view initializer requires an exact declared view type",
+                        ));
+                    }
+                    if binding_record.kind == BindingKind::Let
+                        && self.owned_read_with_associated(|read, admission| {
+                            super::owned_associated::read_view_admission::contains(
+                                read, actual, admission,
+                            )
+                        })?
+                    {
+                        return Err(type_error(
+                            "kernel_read_view_binding",
+                            "ordinary let cannot hide a view occurrence",
+                        ));
+                    }
                     self.validate_type_occurrence(
                         actual,
                         &scoped,
@@ -1682,7 +1906,14 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         require_same(expected, actual, "kernel_type_binding", "let binding value")?;
                     }
                     self.consume_work()?;
-                    scoped.bindings.insert(binding, (BindingKind::Let, actual));
+                    if binding_record.kind == BindingKind::ReadView
+                        && !scoped.live_read_scopes.contains(&binding)
+                    {
+                        self.enter_read_scope(&mut scoped, binding)?;
+                    }
+                    scoped
+                        .bindings
+                        .insert(binding, (binding_record.kind, actual));
                 }
                 self.infer(body, &scoped, next)
             }
@@ -1705,12 +1936,25 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         "parallel requires a task context even when both effect rows are empty",
                     ));
                 }
+                let authority = self.scope_authority(context);
                 let mut left_call = self.owned_read_with_associated(|read, admission| {
-                    super::parallel::admit_call_at(read, left, context.declaration, admission)
+                    super::parallel::admit_call_at_with_scope_authority(
+                        read,
+                        left,
+                        context.declaration,
+                        authority,
+                        admission,
+                    )
                 })?;
                 self.adopt_applied_types(std::mem::take(&mut left_call.types))?;
                 let mut right_call = self.owned_read_with_associated(|read, admission| {
-                    super::parallel::admit_call_at(read, right, context.declaration, admission)
+                    super::parallel::admit_call_at_with_scope_authority(
+                        read,
+                        right,
+                        context.declaration,
+                        authority,
+                        admission,
+                    )
                 })?;
                 self.adopt_applied_types(std::mem::take(&mut right_call.types))?;
                 // Both complete argument trees remain part of ordinary exact type,
@@ -1752,6 +1996,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             ExpressionOperation::ImplementationCall {
                 function,
                 type_arguments,
+                read_scope_arguments,
                 effect_arguments,
                 requirement_arguments,
                 implementations,
@@ -1765,6 +2010,8 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         requirements: &requirement_arguments,
                         implementations: &implementations,
                     },
+                    &read_scope_arguments,
+                    metadata_authority,
                     context,
                     record.contract_version,
                 )?;
@@ -1776,6 +2023,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 witness,
                 contract,
                 method,
+                read_scope_arguments,
                 arguments,
             } => {
                 let occurrence = super::owned_associated::OwnedTypeOccurrence::authored(
@@ -1785,9 +2033,17 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     }),
                     record.contract_version,
                 );
+                let authority = metadata_authority.unwrap_or_else(|| self.scope_authority(context));
                 let application = self.owned_read_with_associated(|read, admission| {
-                    super::owned_contract::admit_method_application(
-                        read, &witness, contract, method, occurrence, admission,
+                    super::owned_contract::admit_method_application_with_scopes(
+                        read,
+                        &witness,
+                        contract,
+                        method,
+                        &read_scope_arguments,
+                        authority,
+                        occurrence,
+                        admission,
                     )
                 })?;
                 self.adopt_applied_types(application.types)?;
@@ -1797,7 +2053,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     &FunctionSignature {
                         target: Some(contract),
                         parameters: Vec::new(),
-                        result: signature.result,
+                        result: signature.result.ty,
                         task: !matches!(signature.effect, FunctionEffect::Pure),
                         requirements: row.requirements.into_iter().collect(),
                         effect_parameters: row.parameters.into_iter().collect(),
@@ -1809,17 +2065,18 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     .iter()
                     .map(|p| p.ty)
                     .collect::<Vec<_>>();
-                for ty in parameters.iter().chain([&signature.result]) {
+                for ty in parameters.iter().chain([&signature.result.ty]) {
                     self.validate_nominal_type(*ty, context, occurrence, 0)?;
                 }
                 self.validate_arguments(&arguments, &parameters, context, next)?;
-                Ok(signature.result)
+                Ok(signature.result.ty)
             }
             ExpressionOperation::Call {
                 requirement_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
+                read_scope_arguments,
                 arguments,
             } => {
                 let signature = self.function_signature(
@@ -1830,6 +2087,8 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         requirements: &requirement_arguments,
                         implementations: &[],
                     },
+                    &read_scope_arguments,
+                    metadata_authority,
                     context,
                     record.contract_version,
                 )?;
@@ -1842,7 +2101,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 effect_arguments,
                 function,
                 type_arguments,
+                read_scope_arguments,
             } => {
+                self.require_unrestricted_named_callable(function)?;
                 let signature = self.function_signature(
                     function,
                     super::owned_contract::FunctionArguments {
@@ -1851,6 +2112,8 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         requirements: &requirement_arguments,
                         implementations: &[],
                     },
+                    &read_scope_arguments,
+                    metadata_authority,
                     context,
                     record.contract_version,
                 )?;
@@ -2206,17 +2469,27 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         depth: usize,
     ) -> Result<TypeObjectDigest, Diagnostic> {
         self.consume_work()?;
-        if !matches!(
-            self.read.owner(OwnerKey::Expression(expression))?,
-            Some(OwnerRecord::Expression(record))
-                if matches!(record.operation, ExpressionOperation::Local { .. })
-        ) {
+        let Some(OwnerRecord::Expression(record)) =
+            self.read.owner(OwnerKey::Expression(expression))?
+        else {
+            return Err(type_error(
+                "kernel_owned_borrow",
+                "missing exact local borrow source",
+            ));
+        };
+        let ExpressionOperation::Local { value } = record.operation else {
             return Err(type_error(
                 "kernel_owned_borrow",
                 "scoped borrowing requires an exact local source",
             ));
+        };
+        let ty = self.raw_local_type(value, context, depth)?;
+        if let Some((selected, selected_ty)) = &mut self.selected_expression
+            && *selected == expression
+        {
+            *selected_ty = Some(ty);
         }
-        self.infer(expression, context, depth)
+        Ok(ty)
     }
 
     fn require_borrow_binding(
@@ -2246,12 +2519,58 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         Ok(())
     }
 
+    fn require_typed_loan_binding(
+        &mut self,
+        binding: BindingId,
+        ty: TypeObjectDigest,
+        kind: BindingKind,
+        context: &ExecutionContext,
+    ) -> Result<(), Diagnostic> {
+        self.consume_work()?;
+        let Some(OwnerRecord::Binding(record)) = self.read.owner(OwnerKey::Binding(binding))?
+        else {
+            return Err(type_error(
+                "kernel_read_view_binding",
+                "missing source-tied result binding",
+            ));
+        };
+        self.validate_type_occurrence(ty, context, record.header.contract_version)?;
+        if record.header.owner != OwnerKey::Binding(binding)
+            || record.header.kind != OwnerKind::Binding
+            || record.kind != kind
+            || record.value.is_some()
+            || record.declared_type != Some(ty)
+        {
+            return Err(type_error(
+                "kernel_read_view_binding",
+                "source-tied result binding kind or exact type mismatch",
+            ));
+        }
+        let view = self.type_object(ty)?.form.is_read_view();
+        if (kind == BindingKind::ReadView) != view {
+            return Err(type_error(
+                "kernel_read_view_binding",
+                "source-tied result binding must preserve positive view category",
+            ));
+        }
+        Ok(())
+    }
+
     fn local_type(
         &mut self,
         reference: LocalValueReference,
         context: &ExecutionContext,
         _depth: usize,
     ) -> Result<TypeObjectDigest, Diagnostic> {
+        if !matches!(reference, LocalValueReference::TransactionBinding(_)) {
+            let raw = self.raw_local_type(reference, context, _depth)?;
+            if self.type_object(raw)?.form.is_read_view() {
+                return Err(type_error(
+                    "kernel_read_view_copy",
+                    "view handles require explicit borrow, reborrow, move or drop",
+                ));
+            }
+        }
         match reference {
             LocalValueReference::FunctionParameter(parameter) => {
                 let record = match self.read.owner(OwnerKey::Parameter(parameter))? {
@@ -2739,7 +3058,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             }
             let children = match self.type_object(ty)?.form {
                 TypeForm::AssociatedContractMember { .. }
-                | TypeForm::AssociatedWitnessProjection { .. } => {
+                | TypeForm::AssociatedWitnessProjection { .. }
+                | TypeForm::ReadViewApplied { .. }
+                | TypeForm::AssociatedReadViewMember { .. }
+                | TypeForm::AssociatedReadViewProjection { .. } => {
                     return Err(type_error(
                         "kernel_type_bind_capture",
                         "an associated Owned bound does not establish capture safety",
@@ -3008,6 +3330,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         &mut self,
         reference: DeclarationReference,
         arguments: super::owned_contract::FunctionArguments<'_>,
+        read_scope_arguments: &[ReadScopeArgument],
+        metadata_authority: Option<
+            super::owned_associated::read_view_admission::ScopeAuthority<'_>,
+        >,
         context: &ExecutionContext,
         consumer_generation: u16,
     ) -> Result<FunctionSignature, Diagnostic> {
@@ -3074,7 +3400,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             function.requirement_parameters,
                             function.effect_parameters,
                             function.parameters,
-                            function.result,
+                            function.result.ty,
                             requirements,
                             task,
                             symbolic,
@@ -3139,7 +3465,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         function.requirement_parameters,
                         function.effect_parameters,
                         function.parameters,
-                        function.result,
+                        function.result.ty,
                         requirements,
                         task,
                         symbolic,
@@ -3277,6 +3603,14 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     "owned memory cannot substitute an ordinary generic parameter",
                 ));
             }
+            if self.owned_read_with_associated(|read, admission| {
+                super::owned_associated::read_view_admission::contains(read, *supplied, admission)
+            })? {
+                return Err(type_error(
+                    "kernel_read_view_generic",
+                    "ordinary and Owned generic actuals cannot conceal views, including phantom actuals",
+                ));
+            }
             if owner.constraints.requires_capture_safe() {
                 self.require_capture_safe(*supplied, context).map_err(|error| {
                     if error.code != "kernel_type_bind_capture" { return error; }
@@ -3304,19 +3638,22 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             .collect::<BTreeMap<_, _>>();
         // Preserve the public arity and category diagnostics above. Complete raw
         // source/witness admission still precedes every signature substitution.
+        let authority = metadata_authority.unwrap_or_else(|| self.scope_authority(context));
         let mut application = if graph_function {
             Some(self.owned_read_with_associated(|read, admission| {
-                super::owned_contract::admit_function_application(
+                super::owned_contract::admit_function_application_with_scopes(
                     read,
                     reference,
                     type_arguments,
                     implementations,
+                    read_scope_arguments,
+                    authority,
                     occurrence,
                     admission,
                 )
             })?)
         } else {
-            if !implementations.is_empty() {
+            if !implementations.is_empty() || !read_scope_arguments.is_empty() {
                 return Err(type_error(
                     "kernel_owned_contract",
                     "external cannot accept implementation witnesses",
@@ -3381,6 +3718,41 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             effect_parameters: row.parameters.into_iter().collect(),
             task,
         })
+    }
+
+    fn require_unrestricted_named_callable(
+        &mut self,
+        reference: DeclarationReference,
+    ) -> Result<(), Diagnostic> {
+        let signature = self.owned_read(|read| {
+            super::owned_contract::optional_function_contract(read, reference)
+        })?;
+        if let Some(signature) = signature {
+            if !signature.read_scope_parameters.is_empty()
+                || !signature.read_scope_sources.is_empty()
+                || !matches!(signature.result.relation, ResultRelation::Value)
+            {
+                return Err(type_error(
+                    "kernel_read_view_callable",
+                    "source-tied or scope-quantified functions cannot become first-class values",
+                ));
+            }
+            for ty in self
+                .parameter_types(reference.package, &signature.parameters)?
+                .into_iter()
+                .chain([signature.result.ty])
+            {
+                if self.owned_read_with_associated(|read, admission| {
+                    super::owned_associated::read_view_admission::contains(read, ty, admission)
+                })? {
+                    return Err(type_error(
+                        "kernel_read_view_callable",
+                        "first-class callable types cannot contain read views",
+                    ));
+                }
+            }
+        }
+        Ok(())
     }
 
     fn parameter_types(
@@ -3516,7 +3888,31 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             ));
         }
         for (argument, expected) in arguments.iter().zip(expected) {
-            let actual = self.infer(*argument, context, depth)?;
+            let actual = if self.type_object(*expected)?.form.is_read_view() {
+                match self.read.owner(OwnerKey::Expression(*argument))? {
+                    Some(OwnerRecord::Expression(record)) => match record.operation {
+                        ExpressionOperation::Local { value } => {
+                            let ty = self.raw_local_type(value, context, depth)?;
+                            self.require_read_view_type(ty, context, record.contract_version)?;
+                            if let Some((selected, selected_ty)) = &mut self.selected_expression
+                                && *selected == *argument
+                            {
+                                *selected_ty = Some(ty);
+                            }
+                            ty
+                        }
+                        _ => self.infer(*argument, context, depth)?,
+                    },
+                    _ => {
+                        return Err(type_error(
+                            "kernel_type_expression_missing",
+                            "missing exact view argument expression",
+                        ));
+                    }
+                }
+            } else {
+                self.infer(*argument, context, depth)?
+            };
             require_same(*expected, actual, "kernel_type_argument", "argument")?;
         }
         Ok(())
@@ -3691,6 +4087,12 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 ));
             }
             let object = self.type_object(ty)?;
+            if object.form.is_read_view() {
+                return Err(type_error(
+                    "kernel_read_view_equality",
+                    "affine view descriptors cannot participate in ordinary data equality",
+                ));
+            }
             let children = match &object.form {
                 TypeForm::Applied {
                     declaration,
@@ -3874,6 +4276,119 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         // dead branches. Signature and nominal templates also require admission when unused.
         if matches!(owner, OwnerRecord::Expression(_) | OwnerRecord::Binding(_)) {
             return Ok(());
+        }
+        if let OwnerRecord::Declaration(record) = owner {
+            let OwnerKey::Declaration(declaration) = record.header.owner else {
+                return Err(type_error(
+                    "kernel_type_parameter_scope",
+                    "declaration has a foreign identity domain",
+                ));
+            };
+            let reference = DeclarationReference {
+                package: self.read.package_id(),
+                declaration,
+            };
+            if let DeclarationPayload::ReadView(_) = &record.payload {
+                return self.owned_read_with_associated(|read, admission| {
+                    super::owned_associated::read_view_admission::validate_declaration_at(
+                        read, reference, admission,
+                    )
+                });
+            }
+            if let DeclarationPayload::OwnedImplementation(implementation) = &record.payload
+                && implementation.associated_types.iter().any(|binding| {
+                    matches!(
+                        binding.value,
+                        super::AssociatedTypeBindingValue::ReadViewFamily { .. }
+                    )
+                })
+            {
+                // Inline family roots belong to the binding that physically owns
+                // them. Equal digests in ordinary roles gain no binding authority.
+                self.owned_read_with_associated(|read, admission| {
+                    admission.validate_bindings(read, reference, implementation)
+                })?;
+                let context = pure_context(Some(declaration));
+                let ordinary = super::owned_associated::OwnedTypeOccurrence::authored(
+                    Some(reference),
+                    record.header.contract_version,
+                );
+                self.validate_nominal_type(implementation.self_type, &context, ordinary, 0)?;
+                for binding in &implementation.associated_types {
+                    let occurrence = if matches!(
+                        binding.value,
+                        super::AssociatedTypeBindingValue::ReadViewFamily { .. }
+                    ) {
+                        super::owned_associated::OwnedTypeOccurrence {
+                            associated:
+                                super::owned_associated::AssociatedTypeContext::AssociatedBinding {
+                                    implementation: reference,
+                                    member: binding.member,
+                                },
+                            ..ordinary
+                        }
+                    } else {
+                        ordinary
+                    };
+                    self.validate_nominal_type(binding.ty(), &context, occurrence, 0)?;
+                }
+                // Preserve every remaining physical root, including unused
+                // prerequisite and nested mapped-operand actuals, in authored order.
+                for ty in
+                    implementation
+                        .type_arguments
+                        .iter()
+                        .copied()
+                        .chain(implementation.implementation_parameters.iter().flat_map(
+                            |parameter| {
+                                std::iter::once(parameter.self_type)
+                                    .chain(parameter.type_arguments.iter().copied())
+                            },
+                        ))
+                        .chain(implementation.methods.iter().flat_map(|method| {
+                            method.type_arguments.iter().copied().chain(
+                                method.implementations.iter().flat_map(|operand| {
+                                    operand
+                                        .walk()
+                                        .flat_map(|node| node.type_arguments().iter().copied())
+                                }),
+                            )
+                        }))
+                {
+                    self.validate_nominal_type(ty, &context, ordinary, 0)?;
+                }
+                return Ok(());
+            }
+            if let DeclarationPayload::OwnedContract(contract) = &record.payload {
+                self.owned_read_with_associated(|read, admission| {
+                    super::owned_contract::validate_contract_at_with(
+                        read, reference, contract, admission,
+                    )
+                })?;
+                let context = pure_context(Some(declaration));
+                for method in &contract.methods {
+                    let occurrence = super::owned_associated::OwnedTypeOccurrence {
+                        associated:
+                            super::owned_associated::AssociatedTypeContext::ContractMethod {
+                                contract: reference,
+                                method: method.id,
+                            },
+                        ..super::owned_associated::OwnedTypeOccurrence::contract(
+                            reference,
+                            record.header.contract_version,
+                        )
+                    };
+                    for ty in method
+                        .parameters
+                        .iter()
+                        .map(|parameter| parameter.ty)
+                        .chain([method.result.ty])
+                    {
+                        self.validate_nominal_type(ty, &context, occurrence, 0)?;
+                    }
+                }
+                return Ok(());
+            }
         }
         if let OwnerRecord::RequirementParameter(parameter) = owner {
             let OwnerKey::RequirementParameter(id) = parameter.header.owner else {
@@ -4078,6 +4593,18 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             self.validate_type_occurrence_at(ty, occurrence)?;
         }
         let object = self.type_object(ty)?;
+        if object.form.is_read_view() {
+            return self.owned_read_with_associated(|read, admission| {
+                if super::memory::view_at(read, ty, occurrence, admission)? {
+                    Ok(())
+                } else {
+                    Err(type_error(
+                        "kernel_read_view_category",
+                        "view occurrence lacks complete positive admission",
+                    ))
+                }
+            });
+        }
         let nominal_owned = matches!(
             object.form,
             TypeForm::Named { .. } | TypeForm::Applied { .. }
@@ -4218,16 +4745,18 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             if self.owned_read(|read| super::owned_record::is_owned(read, read.package_id(), ty))? {
                 return Ok(true);
             }
-            if matches!(
-                object.form,
-                TypeForm::ByteBuffer
-                    | TypeForm::OwnedI64Cell
-                    | TypeForm::OwnedProduct { .. }
-                    | TypeForm::OwnedChoice { .. }
-                    | TypeForm::OwnedSequence { .. }
-                    | TypeForm::AssociatedContractMember { .. }
-                    | TypeForm::AssociatedWitnessProjection { .. }
-            ) || matches!(object.form, TypeForm::TypeParameter { parameter } if matches!(self.read.owner(OwnerKey::TypeParameter(parameter))?, Some(OwnerRecord::TypeParameter(p)) if p.constraints.has_owned()))
+            if object.form.is_read_view()
+                || matches!(
+                    object.form,
+                    TypeForm::ByteBuffer
+                        | TypeForm::OwnedI64Cell
+                        | TypeForm::OwnedProduct { .. }
+                        | TypeForm::OwnedChoice { .. }
+                        | TypeForm::OwnedSequence { .. }
+                        | TypeForm::AssociatedContractMember { .. }
+                        | TypeForm::AssociatedWitnessProjection { .. }
+                )
+                || matches!(object.form, TypeForm::TypeParameter { parameter } if matches!(self.read.owner(OwnerKey::TypeParameter(parameter))?, Some(OwnerRecord::TypeParameter(p)) if p.constraints.has_owned()))
             {
                 return Ok(true);
             }
@@ -4263,6 +4792,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 | TypeForm::OwnedSequence { .. }
                 | TypeForm::AssociatedContractMember { .. }
                 | TypeForm::AssociatedWitnessProjection { .. }
+                | TypeForm::ReadViewApplied { .. }
+                | TypeForm::AssociatedReadViewMember { .. }
+                | TypeForm::AssociatedReadViewProjection { .. }
                 | TypeForm::CapabilityResource { .. }
                 | TypeForm::Stream { .. } => {
                     return Err(type_error(
@@ -4308,7 +4840,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         let next = depth.saturating_add(1);
         let form = match object.form {
             TypeForm::AssociatedContractMember { .. }
-            | TypeForm::AssociatedWitnessProjection { .. } => {
+            | TypeForm::AssociatedWitnessProjection { .. }
+            | TypeForm::ReadViewApplied { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. } => {
                 return Err(
                     crate::platform::kernel::owned_associated_wire::unsupported_semantics(),
                 );
@@ -4808,10 +5343,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
 fn pure_context(declaration: Option<DeclarationId>) -> ExecutionContext {
     ExecutionContext {
         declaration,
+        callable: None,
         pure: true,
         requirements: BTreeSet::new(),
         effect_parameters: BTreeSet::new(),
         bindings: BTreeMap::new(),
+        live_read_scopes: BTreeSet::new(),
+        read_scope_order: Vec::new(),
     }
 }
 

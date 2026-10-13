@@ -231,6 +231,7 @@ fn task_control_oracle_detects_disabled_production_transfers() {
     };
     for instruction in Arc::make_mut(&mut code.instructions) {
         if let NormalizedInstruction::TailCall {
+            read_scope_arguments,
             function,
             type_arguments,
             effect_arguments,
@@ -239,6 +240,7 @@ fn task_control_oracle_detects_disabled_production_transfers() {
         } = instruction
         {
             *instruction = NormalizedInstruction::Call {
+                read_scope_arguments: read_scope_arguments.clone(),
                 requirement_arguments: requirement_arguments.clone(),
                 function: *function,
                 type_arguments: type_arguments.clone(),

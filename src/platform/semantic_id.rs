@@ -238,6 +238,12 @@ semantic_id!(DocumentationId, "doc_", "documentation", 15u8);
 semantic_id!(AnnotationId, "annotation_", "annotation", 16u8);
 semantic_id!(MethodId, "method_", "owned_method", 21u8);
 semantic_id!(
+    ReadScopeParameterId,
+    "read_scope_",
+    "read_scope_parameter",
+    24u8
+);
+semantic_id!(
     AssociatedTypeMemberId,
     "assoc_type_",
     "owned_associated_type",

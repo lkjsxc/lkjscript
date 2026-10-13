@@ -362,7 +362,7 @@ fn invoke(
                 prepared.program.as_ref()
             },
             &value,
-            signature.result,
+            signature.result.ty,
             Default::default(),
         )?;
         let expected_output = match target {
@@ -436,7 +436,7 @@ fn invoke(
                     prepared.program.as_ref()
                 },
                 &value,
-                signature.result,
+                signature.result.ty,
                 Default::default(),
             )?;
             require(
@@ -516,7 +516,7 @@ fn invoke(
                 prepared.program.as_ref()
             },
             &recovered,
-            signature.result,
+            signature.result.ty,
             Default::default(),
         )?;
         require(

@@ -243,7 +243,7 @@ fn associated_memory_closure_checks_imported_selection_and_owner_authority() {
         .dependencies
         .get_mut(&package)
         .unwrap()
-        .graph_contract_version = 34;
+        .graph_contract_version = 35;
     // Encoding validity is a whole-oracle boundary, not a supplier-generation
     // allowance inferred by the associated occurrence resolver.
     assert!(!accepts(&unsupported_encoding));
@@ -260,7 +260,7 @@ fn associated_memory_closure_checks_imported_selection_and_owner_authority() {
         Resolver::new(&orphan).admit_canonical_closure(),
         Err(Failure::Authority)
     );
-    for generation in [32, 34] {
+    for generation in [32, 35] {
         let mut old_owner = older_encoding.clone();
         let records =
             std::sync::Arc::make_mut(old_owner.dependency_interfaces.get_mut(&revision).unwrap());
@@ -305,6 +305,8 @@ fn associated_memory_closure_checks_unused_method_actuals() {
             type_arguments: vec![f.cell],
             implementations: vec![],
         }],
+
+        read_scope_arguments: Vec::new(),
     };
     Resolver::new(&f.source).admit_canonical_closure().unwrap();
     assert!(Oracle(&f.source, Some(f.caller_scope)).valid_implementation_at(f.scheme));
@@ -333,9 +335,14 @@ fn associated_memory_prerequisites_match_projected_arguments_by_exact_witness() 
                 id: MethodId::migrate(SEED, 60),
                 name: name("observe"),
                 parameters: vec![],
-                result: f.scalar,
-                result_borrow: None,
+                result: crate::platform::kernel::CallableResult {
+                    ty: f.scalar,
+                    relation: crate::platform::kernel::ResultRelation::Value,
+                },
                 effect: FunctionEffect::Pure,
+
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             }],
         }),
     );
@@ -458,7 +465,7 @@ fn associated_memory_parallel_resolves_carriers_without_granting_phantom_rights(
             requirements: vec![],
             effect_parameters: vec![],
         };
-        source_function.result = if mode == ParameterUse::Consume {
+        source_function.result.ty = if mode == ParameterUse::Consume {
             f.source_projection
         } else {
             f.scalar
@@ -485,6 +492,8 @@ fn associated_memory_parallel_resolves_carriers_without_granting_phantom_rights(
                 arguments: vec![local],
                 effect_arguments: vec![],
                 requirement_arguments: vec![],
+
+                read_scope_arguments: Vec::new(),
             },
         );
         function_mut(&mut f.source, f.caller_scope).parameters = vec![caller_value];

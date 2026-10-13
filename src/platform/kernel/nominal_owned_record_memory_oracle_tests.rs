@@ -145,7 +145,7 @@ fn nominal_reference_accepts_intrinsic_empty_data_only_and_nested_generic_custod
     validate_full(&snapshot).unwrap();
     let phantom = reference(&snapshot, "phantom");
     let oracle = Oracle(&snapshot, Some(phantom));
-    let ty = function(&snapshot, "phantom").result;
+    let ty = function(&snapshot, "phantom").result.ty;
     assert!(oracle.buffer(ty));
     assert!(oracle.product_shape(ty));
     let mut remaining = contract::MAXIMUM_VALIDATION_WORK;
@@ -255,6 +255,8 @@ fn nominal_reference_rejects_guessed_field_ids_unordered_unpacks_and_parent_cons
         requirement_arguments: vec![],
         effect_arguments: vec![],
         arguments: vec![source],
+
+        read_scope_arguments: Vec::new(),
     };
     assert!(
         !accepts(&changed),
@@ -266,7 +268,7 @@ fn nominal_reference_rejects_guessed_field_ids_unordered_unpacks_and_parent_cons
 fn nominal_reference_rejects_recursive_sequence_layouts_and_old_generation() {
     let baseline = source();
     let mut changed = baseline.clone();
-    let packet = function(&baseline, "pack").result;
+    let packet = function(&baseline, "pack").result.ty;
     let object = TypeObject::new(TypeForm::OwnedSequence { item: packet }).unwrap();
     let ty = encode_type_object(&object).unwrap().0;
     changed.types.insert(ty, object);
@@ -374,6 +376,8 @@ fn nominal_reference_freezes_every_ancestor_and_rejects_structural_field_aliases
         requirement_arguments: vec![],
         effect_arguments: vec![],
         arguments: vec![source],
+
+        read_scope_arguments: Vec::new(),
     };
     assert!(
         !accepts(&changed),
@@ -420,7 +424,7 @@ fn nominal_reference_counts_one_combined_layout_depth_through_record_and_sequenc
         field.ty = child;
         let oracle = Oracle(&changed, None);
         assert_eq!(
-            oracle.product_shape(function(&baseline, "tagged").result),
+            oracle.product_shape(function(&baseline, "tagged").result.ty),
             extra == 0,
             "the declaration field edge and the structural sequence depth share one bound"
         );

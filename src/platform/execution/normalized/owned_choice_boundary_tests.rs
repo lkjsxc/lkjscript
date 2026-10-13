@@ -142,7 +142,7 @@ declarations.end"#).unwrap();
     let DeclarationPayload::Function(f) = &d.payload else {
         panic!("factory function");
     };
-    let ty = f.result;
+    let ty = f.result.ty;
     let control = ExecutionControl::uncancelled();
     for reference in [false, true] {
         let composites = super::super::owned_product::StorageObservation::start();

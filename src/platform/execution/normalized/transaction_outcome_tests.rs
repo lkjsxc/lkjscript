@@ -612,7 +612,7 @@ fn transaction_outcome_completed_choices_preserve_legacy_and_body_once() {
             super::super::data_codec::encode_typed(
                 &program,
                 &value,
-                program.functions[function.0 as usize].result
+                program.functions[function.0 as usize].result.ty
             )
             .is_err(),
             "completion grants no durable encoding to callables"

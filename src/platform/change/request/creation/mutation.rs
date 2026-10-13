@@ -222,9 +222,17 @@ pub(in crate::platform::change::request) fn lower_mutation<
         AuthoredChange::SetFunctionContract {
             function,
             result,
-            result_borrow,
+            read_scope_parameters,
+            read_scope_sources,
             effect,
-        } => lower_set_function_contract(lowerer, function, result, result_borrow.as_ref(), effect),
+        } => lower_set_function_contract(
+            lowerer,
+            function,
+            result,
+            read_scope_parameters,
+            read_scope_sources,
+            effect,
+        ),
         AuthoredChange::SetExternalContract {
             external,
             result,
@@ -487,6 +495,7 @@ fn lower_add_type_parameter<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + 
         | DeclarationPayload::Variant {
             type_parameters, ..
         } => type_parameters.push(parameter_id),
+        DeclarationPayload::ReadView(view) => view.type_parameters.push(parameter_id),
         DeclarationPayload::OwnedContract(c) => {
             if c.self_parameter != parameter_id && !c.type_parameters.contains(&parameter_id) {
                 c.type_parameters.push(parameter_id);
@@ -753,15 +762,15 @@ fn lower_set_visibility<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Siz
 fn lower_set_function_contract<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     lowerer: &mut AuthoredLowerer<'_, B, W>,
     selector: &DeclarationSelector,
-    result: &AuthoredType,
-    result_borrow: Option<&AuthoredLocalReference>,
+    result: &AuthoredCallableResult<AuthoredLocalReference>,
+    read_scope_parameters: &[crate::platform::kernel::ReadScopeParameter],
+    read_scope_sources: &[AuthoredReadScopeSource<AuthoredLocalReference>],
     effect: &AuthoredFunctionEffect,
 ) -> Result<(), Diagnostic> {
     let declaration = lowerer.resolve_declaration(selector)?;
-    let result = lowerer.lower_type(result)?;
-    let result_borrow = result_borrow
-        .map(|source| lowerer.lower_result_borrow(source))
-        .transpose()?;
+    let result = lowerer.lower_named_result(result)?;
+    let read_scope_parameters = lowerer.lower_read_scope_parameters(read_scope_parameters)?;
+    let read_scope_sources = lowerer.lower_named_scope_sources(read_scope_sources)?;
     let effect = lowerer.lower_effect(effect)?;
     let OwnerRecord::Declaration(record) =
         lowerer.candidate_mut(OwnerKey::Declaration(declaration))?
@@ -779,7 +788,8 @@ fn lower_set_function_contract<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead
         FunctionEffect::Task { .. } => OwnerKind::TaskFunction,
     };
     function.result = result;
-    function.result_borrow = result_borrow;
+    function.read_scope_parameters = read_scope_parameters;
+    function.read_scope_sources = read_scope_sources;
     function.effect = effect;
     let parameters = function.parameters.clone();
     for parameter in parameters {

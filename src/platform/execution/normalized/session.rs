@@ -9,9 +9,12 @@ use super::resource::NormalizedResourceScope;
 use super::value::{
     NormalizedMapKey, NormalizedRecord, NormalizedValue, RecordLayoutIndex, VariantLayoutIndex,
 };
+use super::value_schema::NormalizedValueSchema;
 use crate::platform::builtin_standard::BuiltinStandard;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
-use crate::platform::execution::{ExecutionError, ExecutionFailureClass, mailbox};
+use crate::platform::execution::{
+    ExecutionControl, ExecutionError, ExecutionFailureClass, mailbox,
+};
 use crate::platform::http::{
     HttpHeader, HttpResponse, encode_live_response, safe_error_response, static_response,
 };
@@ -1109,6 +1112,11 @@ impl SessionRuntimeContract {
                 "interactive target and port disagree on their component",
             ));
         }
+        // This immutable contract covers retained state and every inactive protocol
+        // case, so repeated state reads need only their ordinary value admission.
+        program
+            .reject_read_view_escape(port.function_type, &ExecutionControl::uncancelled())
+            .map_err(super::runner::execution_diagnostic)?;
         let standard = BuiltinStandard::load()?.session_contract()?;
         let relation = validate_session_function_type(
             &ProgramSessionRead { program },
@@ -1145,6 +1153,7 @@ impl SessionRuntimeContract {
         phase: SessionPhase,
         limits: &SessionLimits,
     ) -> Result<DecodedDecision, ExecutionError> {
+        value.reject_read_view_escape(&ExecutionControl::uncancelled())?;
         let fields = exact_structural(
             &value,
             &["closing", "kind", "messages", "rejection", "state"],
@@ -1853,6 +1862,9 @@ pub(super) fn retained_map_meter_probe(
     maximum_nodes: usize,
     maximum_bytes: usize,
 ) -> Result<(usize, usize), ExecutionError> {
+    let control = ExecutionControl::uncancelled();
+    program.reject_read_view_escape(ty, &control)?;
+    value.reject_read_view_escape(&control)?;
     let mut meter = ValueMeter::new(maximum_nodes, maximum_bytes);
     meter.validate(program, value, ty, 0)?;
     Ok((meter.nodes, meter.bytes))

@@ -34,6 +34,7 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct ArtifactLinkWork {
     pub repository: RepositoryReadWork,
+    pub(crate) read_reuse: crate::platform::publication::LinkReadReuseObservation,
     pub compilation_map: MapWork,
     pub store: StoreWork,
     pub dependency_artifacts: u64,
@@ -66,11 +67,28 @@ pub fn link_artifact(
     compilation: super::manifest::CompilationManifestDigest,
     dependencies: &[LoadedArtifact],
 ) -> Result<ArtifactLinkReceipt, Diagnostic> {
-    let view = repository.view_current()?;
+    link_artifact_with_control(
+        repository,
+        compilation,
+        dependencies,
+        &crate::platform::execution::ExecutionControl::uncancelled(),
+    )
+}
+
+pub(crate) fn link_artifact_with_control(
+    repository: &GraphRepository,
+    compilation: super::manifest::CompilationManifestDigest,
+    dependencies: &[LoadedArtifact],
+    control: &crate::platform::execution::ExecutionControl,
+) -> Result<ArtifactLinkReceipt, Diagnostic> {
+    let view = repository.view_current_with_control(control)?;
     let cached = load_exact_current_compilation(repository, compilation)?;
     let exported = view.build_package_revision()?;
     let store = repository.object_store()?;
-    let mut linked = link_prepared(&view, &store, &cached, &exported, dependencies)?;
+    let (mut linked, recheck_work, read_reuse) = view
+        .with_link_read_reuse(|| link_prepared(&view, &store, &cached, &exported, dependencies))?;
+    add_repository_work(&mut linked.work.repository, recheck_work);
+    linked.work.read_reuse = read_reuse;
     add_repository_work(&mut linked.work.repository, exported.read_work);
     Ok(linked)
 }

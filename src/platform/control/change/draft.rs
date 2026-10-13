@@ -392,6 +392,108 @@ impl Renderer<'_> {
         Ok(text)
     }
 
+    fn read_scope(&mut self, scope: &AuthoredReadScopeArgument) -> Result<String, Diagnostic> {
+        self.reader.check()?;
+        Ok(match scope {
+            AuthoredReadScopeArgument::Parameter { binder, parameter } => {
+                let binder = match binder {
+                    AuthoredReadScopeBinder::Declaration(d) => {
+                        format!("(declaration {})", self.declaration(d)?)
+                    }
+                    AuthoredReadScopeBinder::ContractMethod { contract, method } => {
+                        format!("(contract-method {} {method})", self.declaration(contract)?)
+                    }
+                    AuthoredReadScopeBinder::AssociatedMember { contract, member } => format!(
+                        "(associated-member {} {member})",
+                        self.declaration(contract)?
+                    ),
+                    AuthoredReadScopeBinder::AssociatedBinding {
+                        implementation,
+                        member,
+                    } => format!(
+                        "(associated-binding {} {member})",
+                        self.declaration(implementation)?
+                    ),
+                };
+                format!("(read-scope {binder} {parameter})")
+            }
+            AuthoredReadScopeArgument::Lexical { callable, binding } => format!(
+                "(lexical-read-scope {} {})",
+                self.declaration(callable)?,
+                self.local_token(binding)?
+            ),
+        })
+    }
+    fn canonical_read_scope(&mut self, scope: k::ReadScopeArgument) -> Result<String, Diagnostic> {
+        let scope = self.reader.read_scope(scope)?;
+        self.read_scope(&scope)
+    }
+    fn local_token(&self, local: &AuthoredLocalReference) -> Result<String, Diagnostic> {
+        Ok(match local {
+            AuthoredLocalReference::FunctionParameter { parameter }
+            | AuthoredLocalReference::OperationParameter { parameter } => {
+                format!("(exact {parameter})")
+            }
+            AuthoredLocalReference::Symbol { symbol } => symbol.clone(),
+            _ => {
+                return Err(error(
+                    "canonical local is not an exact or lexical reference",
+                ));
+            }
+        })
+    }
+    fn read_scope_arguments(
+        &mut self,
+        scopes: &[AuthoredReadScopeArgument],
+    ) -> Result<String, Diagnostic> {
+        let mut text = String::from(" (scopes");
+        for scope in scopes {
+            append(
+                &mut text,
+                &format!(" {}", self.read_scope(scope)?),
+                self.maximum,
+            )?;
+        }
+        append(&mut text, ")", self.maximum)?;
+        Ok(text)
+    }
+    fn parameter_name(&mut self, id: ParameterId) -> Result<String, Diagnostic> {
+        let O::Parameter(parameter) = self.reader.owner(OwnerKey::Parameter(id))? else {
+            return Err(error("result or scope source is not a parameter"));
+        };
+        Ok(parameter.name.to_string())
+    }
+    fn named_result(
+        &mut self,
+        result: &k::CallableResult<ParameterId>,
+    ) -> Result<String, Diagnostic> {
+        let ty = self.type_digest(result.ty)?;
+        let relation = match &result.relation {
+            k::ResultRelation::Value => "(value)".to_owned(),
+            k::ResultRelation::ReadFrom { source } => {
+                format!("(read-from {})", self.parameter_name(*source)?)
+            }
+            k::ResultRelation::ViewFrom { source, scope } => format!(
+                "(view-from {} {})",
+                self.parameter_name(*source)?,
+                self.canonical_read_scope(*scope)?
+            ),
+        };
+        Ok(format!("(returns {ty} {relation})"))
+    }
+    fn method_result(&mut self, result: &k::CallableResult<u32>) -> Result<String, Diagnostic> {
+        let ty = self.type_digest(result.ty)?;
+        let relation = match &result.relation {
+            k::ResultRelation::Value => "(value)".to_owned(),
+            k::ResultRelation::ReadFrom { source } => format!("(read-from {source})"),
+            k::ResultRelation::ViewFrom { source, scope } => format!(
+                "(view-from {source} {})",
+                self.canonical_read_scope(*scope)?
+            ),
+        };
+        Ok(format!("(returns {ty} {relation})"))
+    }
+
     fn ty(&mut self, ty: &AuthoredType) -> Result<String, Diagnostic> {
         use AuthoredType as T;
         let primitive = match ty {
@@ -415,6 +517,37 @@ impl Renderer<'_> {
                 parameter: AuthoredTypeParameterReference::Id { parameter },
             } => format!("(parameter-type {parameter})"),
             T::Named { declaration } => self.declaration(declaration)?,
+            T::ReadViewApplied {
+                declaration,
+                arguments,
+                read_scope,
+            } => format!(
+                "(read-view-application {} (types {}) {})",
+                self.declaration(declaration)?,
+                self.type_items(arguments)?,
+                self.read_scope(read_scope)?
+            ),
+            T::AssociatedReadViewMember {
+                contract,
+                member,
+                read_scope,
+            } => format!(
+                "(associated-read-view-member {} {member} {})",
+                self.declaration(contract)?,
+                self.read_scope(read_scope)?
+            ),
+            T::AssociatedReadViewProjection {
+                scope,
+                parameter,
+                contract,
+                member,
+                read_scope,
+            } => format!(
+                "(associated-read-view-projection {} {parameter} {} {member} {})",
+                self.declaration(scope)?,
+                self.declaration(contract)?,
+                self.read_scope(read_scope)?
+            ),
             T::AssociatedContractMember { contract, member } => format!(
                 "(associated-contract-member {} {member})",
                 self.declaration(contract)?
@@ -635,10 +768,14 @@ impl Renderer<'_> {
                         clauses.push(format!("(self {self_type})"));
                         for member in self.reader.associated_members(&c.associated_types)? {
                             let bound = match member.bound {
-                                AssociatedTypeBound::Owned => "owned",
+                                AssociatedTypeBound::Owned => "(bound owned)".to_owned(),
+                                AssociatedTypeBound::ReadViewFamily { scope_parameter } => format!(
+                                    "(read-view-family (scope-parameter {} {}))",
+                                    scope_parameter.id, scope_parameter.name
+                                ),
                             };
                             clauses.push(format!(
-                                "(associated-type {} {} (bound {bound}))",
+                                "(associated-type {} {} {bound})",
                                 member.id, member.name
                             ));
                         }
@@ -666,18 +803,35 @@ impl Renderer<'_> {
                                     self.row(&canonical::row(effect.row()), "task")?
                                 ),
                             };
-                            clauses.push(format!(
-                                "(method {} {} (parameters{}) (returns {}{}){})",
-                                method.id,
-                                method.name,
-                                parameters,
-                                self.type_digest(method.result)?,
-                                method
-                                    .result_borrow
-                                    .map(|p| format!(" (borrow-from {p})"))
-                                    .unwrap_or_default(),
-                                effect
-                            ));
+                            self.reader
+                                .admit_associated_inventory(method.read_scope_parameters.len())?;
+                            self.reader
+                                .admit_associated_inventory(method.read_scope_sources.len())?;
+                            let mut scope_parameters = String::new();
+                            for parameter in method.read_scope_parameters {
+                                self.reader.check()?;
+                                append(
+                                    &mut scope_parameters,
+                                    &format!(
+                                        " (scope-parameter {} {})",
+                                        parameter.id, parameter.name
+                                    ),
+                                    self.maximum,
+                                )?;
+                            }
+                            let mut scope_sources = String::new();
+                            for source in method.read_scope_sources {
+                                append(
+                                    &mut scope_sources,
+                                    &format!(
+                                        " (scope-source {} {})",
+                                        source.source,
+                                        self.canonical_read_scope(source.scope)?
+                                    ),
+                                    self.maximum,
+                                )?;
+                            }
+                            clauses.push(format!("(method {} {} (parameters{}) {}{} (scope-parameters{}) (scope-sources{}))", method.id, method.name, parameters, self.method_result(&method.result)?, effect, scope_parameters, scope_sources));
                         }
                     }
                     D::OwnedImplementation(i) => {
@@ -699,11 +853,19 @@ impl Renderer<'_> {
                             clauses.push(self.implementation_parameter(parameter)?);
                         }
                         for binding in self.reader.associated_bindings(&i.associated_types)? {
-                            clauses.push(format!(
-                                "(associated-type {} {})",
-                                binding.member,
-                                self.ty(&binding.ty)?
-                            ));
+                            let value = match binding.value {
+                                AuthoredAssociatedTypeBindingValue::Owned { ty } => self.ty(&ty)?,
+                                AuthoredAssociatedTypeBindingValue::ReadViewFamily {
+                                    scope_parameter,
+                                    ty,
+                                } => format!(
+                                    "(read-view-family (scope-parameter {} {}) {})",
+                                    scope_parameter.id,
+                                    scope_parameter.name,
+                                    self.ty(&ty)?
+                                ),
+                            };
+                            clauses.push(format!("(associated-type {} {value})", binding.member));
                         }
                         for m in i.methods {
                             let arguments = if m.type_arguments.is_empty() {
@@ -724,11 +886,40 @@ impl Renderer<'_> {
                             let implementations =
                                 self.implementation_arguments(&implementations)?;
                             clauses.push(format!(
-                                "(method {} {}{}{})",
+                                "(method {} {}{}{}{})",
                                 m.method,
                                 self.declaration(&canonical::declaration(m.function))?,
                                 arguments,
                                 implementations,
+                                {
+                                    let scopes = self.reader.read_scopes(m.read_scope_arguments)?;
+                                    self.read_scope_arguments(&scopes)?
+                                },
+                            ));
+                        }
+                    }
+                    D::ReadView(view) => {
+                        children.extend(
+                            view.type_parameters
+                                .into_iter()
+                                .map(OwnerKey::TypeParameter),
+                        );
+                        clauses.push(format!(
+                            "(scope-parameter {} {})",
+                            view.scope_parameter.id, view.scope_parameter.name
+                        ));
+                        for field in self.reader.view_fields(view.fields)? {
+                            let kind = match field.kind {
+                                AuthoredReadViewFieldKind::Ordinary => "(ordinary)".to_owned(),
+                                AuthoredReadViewFieldKind::ReadReference { read_scope } => {
+                                    format!("(read-reference {})", self.read_scope(&read_scope)?)
+                                }
+                            };
+                            clauses.push(format!(
+                                "(view-field {} {} (type {}) {kind})",
+                                field.id,
+                                field.name,
+                                self.ty(&field.ty)?
                             ));
                         }
                     }
@@ -776,18 +967,24 @@ impl Renderer<'_> {
                                 .map(OwnerKey::RequirementParameter),
                         );
                         children.extend(f.parameters.iter().copied().map(OwnerKey::Parameter));
-                        let source = f
-                            .result_borrow
-                            .map(|id| {
-                                let O::Parameter(p) = self.reader.owner(OwnerKey::Parameter(id))?
-                                else {
-                                    return Err(error("borrowed result source is not a parameter"));
-                                };
-                                Ok(format!(" (borrow-from {})", p.name))
-                            })
-                            .transpose()?
-                            .unwrap_or_default();
-                        clauses.push(format!("(returns {}{source})", self.type_digest(f.result)?));
+                        clauses.push(self.named_result(&f.result)?);
+                        self.reader
+                            .admit_associated_inventory(f.read_scope_parameters.len())?;
+                        self.reader
+                            .admit_associated_inventory(f.read_scope_sources.len())?;
+                        for parameter in f.read_scope_parameters {
+                            clauses.push(format!(
+                                "(scope-parameter {} {})",
+                                parameter.id, parameter.name
+                            ));
+                        }
+                        for source in f.read_scope_sources {
+                            clauses.push(format!(
+                                "(scope-source {} {})",
+                                self.parameter_name(source.source)?,
+                                self.canonical_read_scope(source.scope)?
+                            ));
+                        }
                         let effect = match f.effect {
                             k::FunctionEffect::Pure => "pure".to_owned(),
                             effect => self.row(&canonical::row(effect.row()), "task")?,
@@ -1333,6 +1530,93 @@ impl Renderer<'_> {
                 }
                 text
             }
+            E::CreateReadView {
+                declaration,
+                type_arguments,
+                read_scope,
+                source,
+                fields,
+            } => {
+                let mut text = format!(
+                    "(view-create {} (types {}) (scope {}) (source {})",
+                    self.declaration(declaration)?,
+                    self.type_items(type_arguments)?,
+                    self.read_scope(read_scope)?,
+                    self.local_token(source)?
+                );
+                for field in fields {
+                    append(
+                        &mut text,
+                        &format!(
+                            " (field {} {})",
+                            field.field,
+                            self.expression(&field.value, env)?
+                        ),
+                        self.maximum,
+                    )?;
+                }
+                append(&mut text, ")", self.maximum)?;
+                text
+            }
+            E::BorrowReadView {
+                value,
+                binding,
+                body,
+            }
+            | E::BorrowReadViewField {
+                value,
+                binding,
+                body,
+                ..
+            } => {
+                let selector = match &expression.operation {
+                    E::BorrowReadViewField { field, .. } => {
+                        format!(" {} {}", self.declaration(&field.declaration)?, field.field)
+                    }
+                    _ => String::new(),
+                };
+                let head = if matches!(&expression.operation, E::BorrowReadView { .. }) {
+                    "view-borrow"
+                } else {
+                    "borrow-view-field"
+                };
+                let ty = binding
+                    .declared_type
+                    .as_ref()
+                    .map(|t| self.ty(t))
+                    .transpose()?
+                    .map(|t| format!(" (type {t})"))
+                    .unwrap_or_default();
+                let value = self.local_token(value)?;
+                env.entry(binding.name.to_string())
+                    .or_default()
+                    .push(binding.symbol.clone());
+                let body = self.expression(body, env)?;
+                if let Some(values) = env.get_mut(binding.name.as_str()) {
+                    values.pop();
+                }
+                format!(
+                    "({head} (local {value}){selector} (binding {} (as {}){ty}) (in {body}))",
+                    binding.name, binding.symbol
+                )
+            }
+            E::ReborrowReadView { value, read_scope } => format!(
+                "(view-reborrow (local {}) {})",
+                self.local_token(value)?,
+                self.read_scope(read_scope)?
+            ),
+            E::MoveReadView { value } => {
+                format!("(view-move (local {}))", self.local_token(value)?)
+            }
+            E::DropReadView { value } => {
+                format!("(view-drop (local {}))", self.local_token(value)?)
+            }
+            E::ReadViewDataField { value, field } => format!(
+                "(view-data-field (local {}) {} {})",
+                self.local_token(value)?,
+                self.declaration(&field.declaration)?,
+                field.field
+            ),
             E::BorrowCall {
                 call,
                 binding,
@@ -1497,6 +1781,7 @@ impl Renderer<'_> {
                 type_arguments,
                 effect_arguments,
                 requirement_arguments,
+                read_scope_arguments,
                 implementations,
                 arguments,
             } => {
@@ -1513,6 +1798,11 @@ impl Renderer<'_> {
                     )?;
                 }
                 text.push(')');
+                append(
+                    &mut text,
+                    &self.read_scope_arguments(read_scope_arguments)?,
+                    self.maximum,
+                )?;
                 for arg in arguments {
                     append(
                         &mut text,
@@ -1527,13 +1817,15 @@ impl Renderer<'_> {
                 witness,
                 contract,
                 method,
+                read_scope_arguments,
                 arguments,
             } => {
                 let mut text = format!(
-                    "(method-call {} {} {}",
+                    "(method-call {} {} {}{}",
                     self.implementation_operand(witness)?,
                     self.declaration(contract)?,
-                    method
+                    method,
+                    self.read_scope_arguments(read_scope_arguments)?
                 );
                 for arg in arguments {
                     append(
@@ -1550,12 +1842,14 @@ impl Renderer<'_> {
                 type_arguments,
                 effect_arguments,
                 requirement_arguments,
+                read_scope_arguments,
                 arguments,
             } => {
                 let mut text = format!(
-                    "(call {}{}",
+                    "(call {}{}{}",
                     self.declaration(function)?,
-                    self.application(type_arguments, effect_arguments, requirement_arguments)?
+                    self.application(type_arguments, effect_arguments, requirement_arguments)?,
+                    self.read_scope_arguments(read_scope_arguments)?
                 );
                 for arg in arguments {
                     append(
@@ -1572,10 +1866,12 @@ impl Renderer<'_> {
                 type_arguments,
                 effect_arguments,
                 requirement_arguments,
+                read_scope_arguments,
             } => format!(
-                "(function-value {}{})",
+                "(function-value {}{}{})",
                 self.declaration(function)?,
-                self.application(type_arguments, effect_arguments, requirement_arguments)?
+                self.application(type_arguments, effect_arguments, requirement_arguments)?,
+                self.read_scope_arguments(read_scope_arguments)?
             ),
             E::Invoke { callee, arguments } | E::Bind { callee, arguments } => {
                 let mut text = format!(

@@ -12,12 +12,15 @@ mod recursive;
 use super::{CallableFlowWork, MAXIMUM_ANALYSIS_BYTES, MAXIMUM_DIAGNOSTIC_PATH, semantic};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    DeclarationPayload, DeclarationRecord, DeclarationReference, ExpressionOperation,
-    ImplementationOperand, KernelSnapshot, OwnedImplementation, OwnedMethodImplementation,
-    OwnerKey, OwnerRecord, PackageId, TypeForm, TypeObject, TypeObjectDigest,
+    AssociatedTypeBindingValue, AssociatedTypeBound, BindingKind, DeclarationPayload,
+    DeclarationRecord, DeclarationReference, ExpressionOperation, ImplementationOperand,
+    KernelSnapshot, OwnedImplementation, OwnedMethodImplementation, OwnerKey, OwnerRecord,
+    PackageId, ReadScopeArgument, ReadScopeBinder, ReadScopeParameter, ReadScopeReference,
+    ReadScopeSource, ResultRelation, TypeForm, TypeObject, TypeObjectDigest,
 };
 use crate::platform::semantic_id::{
-    AssociatedTypeMemberId, ExpressionId, ImplementationParameterId, MethodId, TypeParameterId,
+    AssociatedTypeMemberId, BindingId, ExpressionId, ImplementationParameterId, MethodId,
+    TypeParameterId,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -226,6 +229,59 @@ struct Edge {
     path: Vec<usize>,
     expanding: bool,
 }
+// Only membership/insertion is consumed. These disjoint key shapes preserve the
+// full occurrence identity within one scan, without comparing known empty metadata.
+type ScopedSyntaxOccurrence = (ExpressionId, BTreeSet<BindingId>, Option<BindingId>);
+
+#[derive(Default)]
+struct VisitedSyntax {
+    plain: BTreeSet<ExpressionId>,
+    scoped: BTreeSet<ScopedSyntaxOccurrence>,
+}
+
+impl VisitedSyntax {
+    fn plain_key(loans: &BTreeSet<BindingId>, establishing: Option<BindingId>) -> bool {
+        loans.is_empty() && establishing.is_none()
+    }
+
+    fn comparison_shape(
+        &self,
+        loans: &BTreeSet<BindingId>,
+        establishing: Option<BindingId>,
+    ) -> (usize, usize) {
+        if Self::plain_key(loans, establishing) {
+            (0, self.plain.len())
+        } else {
+            (loans.len() + 2, self.scoped.len())
+        }
+    }
+
+    fn contains(&self, occurrence: &ScopedSyntaxOccurrence) -> bool {
+        if Self::plain_key(&occurrence.1, occurrence.2) {
+            self.plain.contains(&occurrence.0)
+        } else {
+            self.scoped.contains(occurrence)
+        }
+    }
+
+    fn insert(&mut self, occurrence: ScopedSyntaxOccurrence) {
+        if Self::plain_key(&occurrence.1, occurrence.2) {
+            self.plain.insert(occurrence.0);
+        } else {
+            self.scoped.insert(occurrence);
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct WorkContext {
+    phase: &'static str,
+    owner: Option<DeclarationReference>,
+    context: Option<usize>,
+    expression: Option<ExpressionId>,
+    query: Option<(PackageId, TypeObjectDigest)>,
+}
+
 struct Analysis<'a, R: ?Sized> {
     read: &'a R,
     work: &'a mut usize,
@@ -241,6 +297,8 @@ struct Analysis<'a, R: ?Sized> {
     slot_owners: Vec<(usize, usize)>,
     edges: Vec<Edge>,
     associated: associated::State,
+    completed_view_queries: BTreeMap<(PackageId, TypeObjectDigest), bool>,
+    diagnostic_context: WorkContext,
 }
 fn implementation_parameters(
     payload: &DeclarationPayload,
@@ -254,6 +312,805 @@ fn implementation_parameters(
     }
 }
 impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
+    fn scope_parameters(
+        &mut self,
+        binder: ReadScopeBinder,
+    ) -> Result<Vec<ReadScopeParameter>, Diagnostic> {
+        let declaration = self.declaration(binder.declaration())?;
+        let generation = declaration.header.contract_version;
+        let kind_matches = match &declaration.payload {
+            DeclarationPayload::Function(_) => matches!(
+                declaration.header.kind,
+                crate::platform::kernel::OwnerKind::PureFunction
+                    | crate::platform::kernel::OwnerKind::TaskFunction
+            ),
+            DeclarationPayload::External(_) => {
+                declaration.header.kind == crate::platform::kernel::OwnerKind::External
+            }
+            DeclarationPayload::ReadView(_) => {
+                declaration.header.kind == crate::platform::kernel::OwnerKind::ReadView
+            }
+            DeclarationPayload::OwnedContract(_) => {
+                declaration.header.kind == crate::platform::kernel::OwnerKind::OwnedContract
+            }
+            DeclarationPayload::OwnedImplementation(_) => {
+                declaration.header.kind == crate::platform::kernel::OwnerKind::OwnedImplementation
+            }
+            _ => false,
+        };
+        if !kind_matches {
+            return Err(associated::invalid());
+        }
+        let parameters = match (binder, declaration.payload) {
+            (ReadScopeBinder::Declaration(_), DeclarationPayload::Function(function)) => {
+                function.read_scope_parameters
+            }
+            (ReadScopeBinder::Declaration(_), DeclarationPayload::External(_)) => Vec::new(),
+            (ReadScopeBinder::Declaration(_), DeclarationPayload::ReadView(view)) => {
+                self.reserve::<ReadScopeParameter>(1)?;
+                vec![view.scope_parameter]
+            }
+            (
+                ReadScopeBinder::ContractMethod { method, .. },
+                DeclarationPayload::OwnedContract(contract),
+            ) => {
+                let mut found = None;
+                for entry in contract.methods {
+                    self.tick()?;
+                    if entry.id == method && found.replace(entry.read_scope_parameters).is_some() {
+                        return Err(associated::invalid());
+                    }
+                }
+                found.ok_or_else(associated::invalid)?
+            }
+            (
+                ReadScopeBinder::AssociatedMember { member, .. },
+                DeclarationPayload::OwnedContract(contract),
+            ) => {
+                let mut found = None;
+                for entry in contract.associated_types {
+                    self.tick()?;
+                    if entry.id == member {
+                        let AssociatedTypeBound::ReadViewFamily { scope_parameter } = entry.bound
+                        else {
+                            return Err(associated::invalid());
+                        };
+                        if found.replace(scope_parameter).is_some() {
+                            return Err(associated::invalid());
+                        }
+                    }
+                }
+                self.reserve::<ReadScopeParameter>(1)?;
+                vec![found.ok_or_else(associated::invalid)?]
+            }
+            (
+                ReadScopeBinder::AssociatedBinding { member, .. },
+                DeclarationPayload::OwnedImplementation(implementation),
+            ) => {
+                let mut found = None;
+                for entry in implementation.associated_types {
+                    self.tick()?;
+                    if entry.member == member {
+                        let AssociatedTypeBindingValue::ReadViewFamily {
+                            scope_parameter, ..
+                        } = entry.value
+                        else {
+                            return Err(associated::invalid());
+                        };
+                        if found.replace(scope_parameter).is_some() {
+                            return Err(associated::invalid());
+                        }
+                    }
+                }
+                self.reserve::<ReadScopeParameter>(1)?;
+                vec![found.ok_or_else(associated::invalid)?]
+            }
+            _ => return Err(associated::invalid()),
+        };
+        if parameters.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN {
+            return Err(associated::invalid());
+        }
+        if generation < 34 && !parameters.is_empty() {
+            return Err(associated::invalid());
+        }
+        self.reserve::<ReadScopeParameter>(parameters.len())?;
+        self.reserve::<crate::platform::semantic_id::ReadScopeParameterId>(parameters.len())?;
+        self.reserve::<crate::platform::kernel::Name>(parameters.len())?;
+        let mut ids = BTreeSet::new();
+        let mut names = BTreeSet::new();
+        for parameter in &parameters {
+            self.tick()?;
+            self.reserve::<u8>(parameter.name.as_str().len())?;
+            if !ids.insert(parameter.id) || !names.insert(&parameter.name) {
+                return Err(associated::invalid());
+            }
+        }
+        Ok(parameters)
+    }
+
+    fn context_binder(&mut self, context: usize) -> Result<Option<ReadScopeBinder>, Diagnostic> {
+        let key = &self.contexts[context].key;
+        let owner = key.owner;
+        let method = key.method;
+        let declaration = self.declaration(owner)?;
+        Ok(match declaration.payload {
+            DeclarationPayload::Function(_) => Some(ReadScopeBinder::Declaration(owner)),
+            DeclarationPayload::OwnedImplementation(implementation) => {
+                Some(ReadScopeBinder::ContractMethod {
+                    contract: implementation.contract,
+                    method: method.ok_or_else(associated::invalid)?,
+                })
+            }
+            _ => None,
+        })
+    }
+
+    fn validate_scope(
+        &mut self,
+        scope: ReadScopeArgument,
+        binder: Option<ReadScopeBinder>,
+        loans: &BTreeSet<BindingId>,
+    ) -> Result<(), Diagnostic> {
+        self.tick()?;
+        self.associated.enabled = true;
+        match scope {
+            ReadScopeArgument::Parameter(reference) => {
+                if Some(reference.binder) != binder {
+                    return Err(associated::invalid());
+                }
+                let parameters = self.scope_parameters(reference.binder)?;
+                let mut found = false;
+                for parameter in parameters {
+                    self.tick()?;
+                    found |= parameter.id == reference.parameter;
+                }
+                if !found {
+                    return Err(associated::invalid());
+                }
+            }
+            ReadScopeArgument::Lexical { callable, binding } => {
+                if binder != Some(ReadScopeBinder::Declaration(callable))
+                    || !loans.contains(&binding)
+                {
+                    return Err(associated::invalid());
+                }
+                let declaration = self.declaration(callable)?;
+                let DeclarationPayload::Function(function) = declaration.payload else {
+                    return Err(associated::invalid());
+                };
+                let expected_kind = match function.effect {
+                    crate::platform::kernel::FunctionEffect::Pure => {
+                        crate::platform::kernel::OwnerKind::PureFunction
+                    }
+                    crate::platform::kernel::FunctionEffect::Task { .. } => {
+                        crate::platform::kernel::OwnerKind::TaskFunction
+                    }
+                };
+                if declaration.header.contract_version < 34
+                    || declaration.header.kind != expected_kind
+                {
+                    return Err(associated::invalid());
+                }
+                self.tick()?;
+                let Some(OwnerRecord::Binding(record)) = self
+                    .read
+                    .owner(callable.package, OwnerKey::Binding(binding))?
+                else {
+                    return Err(associated::invalid());
+                };
+                if record.header.owner != OwnerKey::Binding(binding)
+                    || record.header.contract_version
+                        < if record.kind == BindingKind::OwnedBorrow {
+                            24
+                        } else {
+                            34
+                        }
+                    || (record.value.is_some() && record.kind != BindingKind::ReadView)
+                    || record.header.kind != crate::platform::kernel::OwnerKind::Binding
+                    || record.declared_type.is_none()
+                    || !matches!(
+                        record.kind,
+                        BindingKind::OwnedBorrow
+                            | BindingKind::ReadView
+                            | BindingKind::ReadViewBorrow
+                    )
+                {
+                    return Err(associated::invalid());
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn context_scope_actuals(
+        &mut self,
+        context: usize,
+    ) -> Result<Vec<ReadScopeArgument>, Diagnostic> {
+        let Some(binder) = self.context_binder(context)? else {
+            return Ok(Vec::new());
+        };
+        let declaration = self.declaration(binder.declaration())?;
+        if declaration.header.contract_version < 34 {
+            return Ok(Vec::new());
+        }
+        let parameters = self.scope_parameters(binder)?;
+        self.reserve::<ReadScopeArgument>(parameters.len())?;
+        Ok(parameters
+            .into_iter()
+            .map(|parameter| {
+                ReadScopeArgument::Parameter(ReadScopeReference {
+                    binder,
+                    parameter: parameter.id,
+                })
+            })
+            .collect())
+    }
+
+    fn application_scopes(
+        &mut self,
+        source: usize,
+        target: ReadScopeBinder,
+        arguments: &[ReadScopeArgument],
+        loans: &BTreeSet<BindingId>,
+    ) -> Result<BTreeMap<ReadScopeReference, ReadScopeArgument>, Diagnostic> {
+        let parameters = self.scope_parameters(target)?;
+        if parameters.len() != arguments.len() {
+            return Err(semantic(
+                "kernel_callable_flow_arity",
+                "callable scope substitution requires every ordered actual, including unused formals",
+            ));
+        }
+        let binder = self.context_binder(source)?;
+        self.reserve::<(ReadScopeReference, ReadScopeArgument)>(arguments.len())?;
+        let mut scopes = BTreeMap::new();
+        for (parameter, argument) in parameters.into_iter().zip(arguments) {
+            self.validate_scope(*argument, binder, loans)?;
+            scopes.insert(
+                ReadScopeReference {
+                    binder: target,
+                    parameter: parameter.id,
+                },
+                *argument,
+            );
+        }
+        Ok(scopes)
+    }
+
+    fn retain_call_scopes(
+        &mut self,
+        source: usize,
+        target: usize,
+        expression: Option<ExpressionId>,
+        scopes: BTreeMap<ReadScopeReference, ReadScopeArgument>,
+    ) -> Result<(), Diagnostic> {
+        let key = (source, target, expression);
+        self.comparison_work(scopes.len() + 3, self.associated.call_scopes.len())?;
+        if let Some(previous) = self.associated.call_scopes.get(&key) {
+            if previous != &scopes {
+                return Err(associated::invalid());
+            }
+            return Ok(());
+        }
+        self.reserve::<(
+            (usize, usize, Option<ExpressionId>),
+            BTreeMap<ReadScopeReference, ReadScopeArgument>,
+        )>(1)?;
+        self.associated.call_scopes.insert(key, scopes);
+        Ok(())
+    }
+
+    fn call_scope(
+        &mut self,
+        call: recursive::CallSite,
+        scope: ReadScopeArgument,
+    ) -> Result<ReadScopeArgument, Diagnostic> {
+        self.tick()?;
+        let scopes = self
+            .associated
+            .call_scopes
+            .get(&(call.from, call.to, call.expression))
+            .ok_or_else(associated::invalid)?;
+        // Replace only the exact callee formal once; inserted caller coordinates are opaque.
+        match scope {
+            ReadScopeArgument::Parameter(reference) => scopes
+                .get(&reference)
+                .copied()
+                .ok_or_else(associated::invalid),
+            ReadScopeArgument::Lexical { .. } => Ok(scope),
+        }
+    }
+
+    fn scoped_inputs(
+        &mut self,
+        call: recursive::CallSite,
+    ) -> Result<recursive::Inputs, Diagnostic> {
+        self.diagnostic_context = WorkContext {
+            phase: "recursive call inputs",
+            owner: Some(self.contexts[call.from].key.owner),
+            context: Some(call.from),
+            expression: call.expression,
+            query: None,
+        };
+        self.tick()?;
+        // Scope validation is performed for every syntax placement before calls are recorded.
+        // The disposable operand cache is reachable only after that complete scope admission.
+        let owner = self.contexts[call.from].key.owner;
+        let (binder, arguments) = if let Some(expression) = call.expression {
+            self.tick()?;
+            let Some(OwnerRecord::Expression(record)) = self
+                .read
+                .owner(owner.package, OwnerKey::Expression(expression))?
+            else {
+                return Err(associated::invalid());
+            };
+            match record.operation {
+                ExpressionOperation::Call {
+                    function,
+                    read_scope_arguments,
+                    ..
+                }
+                | ExpressionOperation::FunctionValue {
+                    function,
+                    read_scope_arguments,
+                    ..
+                }
+                | ExpressionOperation::ImplementationCall {
+                    function,
+                    read_scope_arguments,
+                    ..
+                } => (ReadScopeBinder::Declaration(function), read_scope_arguments),
+                ExpressionOperation::MethodCall {
+                    contract,
+                    method,
+                    read_scope_arguments,
+                    ..
+                } => (
+                    ReadScopeBinder::ContractMethod { contract, method },
+                    read_scope_arguments,
+                ),
+                _ => return Err(associated::invalid()),
+            }
+        } else {
+            let declaration = self.declaration(owner)?;
+            let DeclarationPayload::OwnedImplementation(implementation) = declaration.payload
+            else {
+                return Err(associated::invalid());
+            };
+            let mapping = self.mapping(&implementation, self.contexts[call.from].key.method)?;
+            self.reserve::<ReadScopeArgument>(mapping.read_scope_arguments.len())?;
+            (
+                ReadScopeBinder::Declaration(mapping.function),
+                mapping.read_scope_arguments.clone(),
+            )
+        };
+        let parameters = self.scope_parameters(binder)?;
+        self.steps(parameters.len())?;
+        let scopes = self
+            .associated
+            .call_scopes
+            .get(&(call.from, call.to, call.expression))
+            .ok_or_else(associated::invalid)?;
+        if arguments.len() != parameters.len()
+            || scopes.len() != parameters.len()
+            || parameters.iter().zip(arguments).any(|(formal, actual)| {
+                scopes.get(&ReadScopeReference {
+                    binder,
+                    parameter: formal.id,
+                }) != Some(&actual)
+            })
+        {
+            return Err(associated::invalid());
+        }
+        recursive::load_inputs(self, call)
+    }
+
+    fn type_contains_view(
+        &mut self,
+        package: PackageId,
+        ty: TypeObjectDigest,
+    ) -> Result<bool, Diagnostic> {
+        let previous = self.diagnostic_context;
+        self.diagnostic_context.phase = "view root closure";
+        self.diagnostic_context.query = Some((package, ty));
+        let result = (|| {
+            // Preserve the initial query checkpoint/work and metadata charge.
+            self.reserve::<(PackageId, TypeObjectDigest, usize)>(1)?;
+            self.tick()?;
+            self.reserve::<(PackageId, TypeObjectDigest)>(1)?;
+            let object = self.read.type_object(package, ty)?.ok_or_else(|| {
+                semantic(
+                    "kernel_callable_flow_type",
+                    "complete callable source is missing a type in the view occurrence closure",
+                )
+            })?;
+            if object.form.is_read_view() {
+                return Ok(true);
+            }
+            // Primitive/closed leaves need no cache search. Nominals still require
+            // their complete raw fields/cases, even when they have no type actuals.
+            if object.child_type_count() == 0
+                && !matches!(
+                    object.form,
+                    TypeForm::Named { .. } | TypeForm::Applied { .. }
+                )
+            {
+                return Ok(false);
+            }
+            let key = (package, ty);
+            // Fixed-size identity keys require no linear loan/witness comparison.
+            // Account a finite B-tree search before lookup, and before insertion.
+            let levels = (usize::BITS
+                - self
+                    .completed_view_queries
+                    .len()
+                    .saturating_add(1)
+                    .leading_zeros()) as usize;
+            self.steps(levels.saturating_mul(24).saturating_add(2))?;
+            if let Some(result) = self.completed_view_queries.get(&key) {
+                return Ok(*result);
+            }
+            let result = self.type_contains_view_uncached(package, ty, object)?;
+            self.reserve::<((PackageId, TypeObjectDigest), bool)>(1)?;
+            self.steps(levels.saturating_mul(24).saturating_add(2))?;
+            // Only this successful complete root result is published. Internal
+            // visited nodes and in-progress cyclic paths are never memo entries.
+            self.completed_view_queries.insert(key, result);
+            Ok(result)
+        })();
+        if result.is_ok() {
+            self.diagnostic_context = previous;
+        }
+        result
+    }
+
+    fn type_contains_view_uncached(
+        &mut self,
+        package: PackageId,
+        ty: TypeObjectDigest,
+        root: TypeObject,
+    ) -> Result<bool, Diagnostic> {
+        let mut root = Some(root);
+        let mut pending = vec![(package, ty, 0usize)];
+        let mut visited = BTreeSet::new();
+        while let Some((package, ty, depth)) = pending.pop() {
+            if root.is_none() {
+                self.tick()?;
+            }
+            if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+                return Err(Diagnostic::new(
+                    DiagnosticClass::Resource,
+                    "kernel_callable_flow_type_depth",
+                    "view occurrence exceeds finite structural admission",
+                ));
+            }
+            if visited.contains(&(package, ty)) {
+                continue;
+            }
+            if root.is_none() {
+                self.reserve::<(PackageId, TypeObjectDigest)>(1)?;
+            }
+            visited.insert((package, ty));
+            let object = match root.take() {
+                Some(root) => root,
+                None => self.read.type_object(package, ty)?.ok_or_else(|| {
+                    semantic(
+                        "kernel_callable_flow_type",
+                        "complete callable source is missing a type in the view occurrence closure",
+                    )
+                })?,
+            };
+            if object.form.is_read_view() {
+                return Ok(true);
+            }
+            self.reserve::<(PackageId, TypeObjectDigest, usize)>(object.child_type_count())?;
+            pending.extend(
+                object
+                    .child_types()
+                    .into_iter()
+                    .map(|child| (package, child, depth + 1)),
+            );
+            if let TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } =
+                object.form
+            {
+                let record = self.declaration(declaration)?;
+                let (fields, cases) = match record.payload {
+                    DeclarationPayload::Record { fields, .. }
+                    | DeclarationPayload::OwnedRecord { fields, .. } => (fields, Vec::new()),
+                    DeclarationPayload::Variant { cases, .. } => (Vec::new(), cases),
+                    DeclarationPayload::ReadView(_) => return Ok(true),
+                    _ => continue,
+                };
+                for field in fields {
+                    self.tick()?;
+                    let Some(OwnerRecord::Field(record)) = self
+                        .read
+                        .owner(declaration.package, OwnerKey::Field(field))?
+                    else {
+                        return Err(associated::invalid());
+                    };
+                    if record.declaration != declaration.declaration
+                        || record.header.owner != OwnerKey::Field(field)
+                    {
+                        return Err(associated::invalid());
+                    }
+                    self.reserve::<(PackageId, TypeObjectDigest, usize)>(1)?;
+                    pending.push((declaration.package, record.ty, depth + 1));
+                }
+                for case in cases {
+                    self.tick()?;
+                    let Some(OwnerRecord::Case(record)) =
+                        self.read.owner(declaration.package, OwnerKey::Case(case))?
+                    else {
+                        return Err(associated::invalid());
+                    };
+                    if record.declaration != declaration.declaration
+                        || record.header.owner != OwnerKey::Case(case)
+                    {
+                        return Err(associated::invalid());
+                    }
+                    if let Some(ty) = record.payload {
+                        self.reserve::<(PackageId, TypeObjectDigest, usize)>(1)?;
+                        pending.push((declaration.package, ty, depth + 1));
+                    }
+                }
+            }
+        }
+        Ok(false)
+    }
+
+    fn signature_type(
+        &mut self,
+        context: usize,
+        ty: TypeObjectDigest,
+        binder: Option<ReadScopeBinder>,
+        allow_view: bool,
+        loans: &BTreeSet<BindingId>,
+    ) -> Result<(), Diagnostic> {
+        let package = self.contexts[context].key.owner.package;
+        let object = self
+            .read
+            .type_object(package, ty)?
+            .ok_or_else(associated::invalid)?;
+        if !object.form.is_read_view() {
+            if self.type_contains_view(package, ty)? {
+                return Err(semantic(
+                    "kernel_callable_flow_category",
+                    "ordinary signature closure cannot hide a ReadView",
+                ));
+            }
+            return Ok(());
+        }
+        if !allow_view {
+            return Err(semantic(
+                "kernel_callable_flow_category",
+                "ReadView signature occurrence requires an explicit view position",
+            ));
+        }
+        self.associated.enabled = true;
+        let scope = match &object.form {
+            TypeForm::ReadViewApplied { read_scope, .. }
+            | TypeForm::AssociatedReadViewMember { read_scope, .. }
+            | TypeForm::AssociatedReadViewProjection { read_scope, .. } => *read_scope,
+            _ => return Err(associated::invalid()),
+        };
+        self.validate_scope(scope, binder, loans)?;
+        match object.form {
+            TypeForm::AssociatedReadViewProjection {
+                scope,
+                parameter,
+                contract,
+                member,
+                read_scope,
+            } => {
+                self.projection_slot(
+                    context,
+                    scope,
+                    parameter,
+                    contract,
+                    member,
+                    Some(read_scope),
+                )?;
+            }
+            TypeForm::AssociatedReadViewMember {
+                contract, member, ..
+            } => {
+                if !matches!(binder, Some(ReadScopeBinder::ContractMethod { contract: expected, .. }) if expected == contract)
+                    || !matches!(
+                        self.associated_member(contract, member)?,
+                        AssociatedTypeBound::ReadViewFamily { .. }
+                    )
+                {
+                    return Err(associated::invalid());
+                }
+            }
+            TypeForm::ReadViewApplied {
+                declaration,
+                arguments,
+                ..
+            } => {
+                let nominal = self.declaration(declaration)?;
+                let DeclarationPayload::ReadView(view) = nominal.payload else {
+                    return Err(associated::invalid());
+                };
+                if nominal.header.contract_version < 34
+                    || view.type_parameters.len() != arguments.len()
+                {
+                    return Err(associated::invalid());
+                }
+                for argument in arguments {
+                    self.tick()?;
+                    if self.type_contains_view(package, argument)? {
+                        return Err(semantic(
+                            "kernel_callable_flow_category",
+                            "read-view nominal type actuals must have complete ordinary or Owned closure",
+                        ));
+                    }
+                }
+            }
+            _ => return Err(associated::invalid()),
+        }
+        Ok(())
+    }
+
+    fn signature_scopes<S: Copy + Ord>(
+        &mut self,
+        binder: ReadScopeBinder,
+        parameters: &[ReadScopeParameter],
+        sources: &[ReadScopeSource<S>],
+        source_exists: impl FnMut(S) -> bool,
+    ) -> Result<(), Diagnostic> {
+        if parameters.is_empty() && sources.is_empty() {
+            return Ok(());
+        }
+        self.associated.enabled = true;
+        self.reserve::<ReadScopeParameter>(parameters.len())?;
+        self.reserve::<ReadScopeSource<S>>(sources.len())?;
+        crate::platform::kernel::validate_read_scope_inventory_at(
+            binder,
+            parameters,
+            sources,
+            source_exists,
+        )?;
+        for source in sources {
+            self.validate_scope(source.scope, Some(binder), &BTreeSet::new())?;
+        }
+        let exact = self.scope_parameters(binder)?;
+        if exact != parameters {
+            return Err(associated::invalid());
+        }
+        Ok(())
+    }
+
+    fn declaration_scope_inventory(
+        &mut self,
+        owner: DeclarationReference,
+        payload: &DeclarationPayload,
+    ) -> Result<(), Diagnostic> {
+        match payload {
+            DeclarationPayload::Function(function) => {
+                let binder = ReadScopeBinder::Declaration(owner);
+                self.signature_scopes(
+                    binder,
+                    &function.read_scope_parameters,
+                    &function.read_scope_sources,
+                    |source| function.parameters.contains(&source),
+                )?;
+                if let ResultRelation::ViewFrom { scope, .. } = function.result.relation {
+                    self.validate_scope(scope, Some(binder), &BTreeSet::new())?;
+                }
+            }
+            DeclarationPayload::OwnedContract(contract) => {
+                for member in &contract.associated_types {
+                    self.tick()?;
+                    if matches!(member.bound, AssociatedTypeBound::ReadViewFamily { .. }) {
+                        self.associated.enabled = true;
+                        self.scope_parameters(ReadScopeBinder::AssociatedMember {
+                            contract: owner,
+                            member: member.id,
+                        })?;
+                    }
+                }
+                for method in &contract.methods {
+                    self.tick()?;
+                    let binder = ReadScopeBinder::ContractMethod {
+                        contract: owner,
+                        method: method.id,
+                    };
+                    self.signature_scopes(
+                        binder,
+                        &method.read_scope_parameters,
+                        &method.read_scope_sources,
+                        |source| (source as usize) < method.parameters.len(),
+                    )?;
+                    if let ResultRelation::ViewFrom { scope, .. } = method.result.relation {
+                        self.validate_scope(scope, Some(binder), &BTreeSet::new())?;
+                    }
+                }
+            }
+            DeclarationPayload::ReadView(view) => {
+                self.associated.enabled = true;
+                self.scope_parameters(ReadScopeBinder::Declaration(owner))?;
+                view.validate_local_at(owner)?;
+                for field in &view.fields {
+                    self.tick()?;
+                    if let crate::platform::kernel::ReadViewFieldKind::ReadReference {
+                        read_scope,
+                    } = field.kind
+                    {
+                        self.validate_scope(
+                            read_scope,
+                            Some(ReadScopeBinder::Declaration(owner)),
+                            &BTreeSet::new(),
+                        )?;
+                    }
+                }
+            }
+            DeclarationPayload::Record { fields, .. }
+            | DeclarationPayload::OwnedRecord { fields, .. } => {
+                for id in fields {
+                    self.tick()?;
+                    let Some(OwnerRecord::Field(field)) =
+                        self.read.owner(owner.package, OwnerKey::Field(*id))?
+                    else {
+                        return Err(associated::invalid());
+                    };
+                    if field.declaration != owner.declaration
+                        || field.header.owner != OwnerKey::Field(*id)
+                    {
+                        return Err(associated::invalid());
+                    }
+                    if self.type_contains_view(owner.package, field.ty)? {
+                        return Err(semantic(
+                            "kernel_callable_flow_category",
+                            "ordinary and Owned field inventories cannot contain a ReadView, including unused fields",
+                        ));
+                    }
+                }
+            }
+            DeclarationPayload::Variant { cases, .. } => {
+                for id in cases {
+                    self.tick()?;
+                    let Some(OwnerRecord::Case(case)) =
+                        self.read.owner(owner.package, OwnerKey::Case(*id))?
+                    else {
+                        return Err(associated::invalid());
+                    };
+                    if case.declaration != owner.declaration
+                        || case.header.owner != OwnerKey::Case(*id)
+                    {
+                        return Err(associated::invalid());
+                    }
+                    if let Some(ty) = case.payload {
+                        if self.type_contains_view(owner.package, ty)? {
+                            return Err(semantic(
+                                "kernel_callable_flow_category",
+                                "ordinary variant cases cannot contain a ReadView",
+                            ));
+                        }
+                    }
+                }
+            }
+            DeclarationPayload::External(function) => {
+                if self.type_contains_view(owner.package, function.result)? {
+                    return Err(associated::invalid());
+                }
+                for id in &function.parameters {
+                    self.tick()?;
+                    let Some(OwnerRecord::Parameter(parameter)) =
+                        self.read.owner(owner.package, OwnerKey::Parameter(*id))?
+                    else {
+                        return Err(associated::invalid());
+                    };
+                    if self.type_contains_view(owner.package, parameter.ty)? {
+                        return Err(associated::invalid());
+                    }
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
     fn tick(&mut self) -> Result<(), Diagnostic> {
         self.steps(1)
     }
@@ -264,11 +1121,21 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
             .checked_add(count)
             .filter(|n| *n <= self.maximum_work)
             .ok_or_else(|| {
-                Diagnostic::new(
+                let mut diagnostic = Diagnostic::new(
                     DiagnosticClass::Resource,
                     "kernel_callable_flow_work",
                     "composed callable flow exhausted its work admission",
-                )
+                );
+                let context = self.diagnostic_context;
+                let root_context = context.context.and_then(|index| self.contexts.get(index));
+                let method = root_context.and_then(|info| info.key.method);
+                let root_owner = root_context.map(|info| info.key.owner);
+                diagnostic.notes.push(format!(
+                    "operation={} owner={:?} context={:?} context_owner={:?} method={:?} expression={:?} root={:?} consumed={} requested={} maximum={}",
+                    context.phase, context.owner, context.context, root_owner, method,
+                    context.expression, context.query, *self.work, count, self.maximum_work,
+                ));
+                diagnostic
             })?;
         Ok(())
     }
@@ -382,12 +1249,17 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         &mut self,
         reference: DeclarationReference,
     ) -> Result<DeclarationRecord, Diagnostic> {
+        self.diagnostic_context.owner = Some(reference);
         self.tick()?;
         match self.read.owner(
             reference.package,
             OwnerKey::Declaration(reference.declaration),
         )? {
-            Some(OwnerRecord::Declaration(record)) => Ok(record),
+            Some(OwnerRecord::Declaration(record))
+                if record.header.owner == OwnerKey::Declaration(reference.declaration) =>
+            {
+                Ok(record)
+            }
             _ => Err(semantic(
                 "kernel_callable_flow_target",
                 "complete callable source is missing an exact declaration",
@@ -679,6 +1551,12 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         }
         let caller = self.contexts[source].key.owner;
         for (argument, ty) in arguments.iter().enumerate() {
+            if self.type_contains_view(caller.package, *ty)? {
+                return Err(semantic(
+                    "kernel_callable_flow_category",
+                    "ReadView cannot be an ordinary type actual, including hidden or unused nominal content",
+                ));
+            }
             self.reserve::<(TypeObjectDigest, Vec<usize>)>(1)?;
             let mut pending = vec![(*ty, Vec::new())];
             let mut visited = BTreeSet::new();
@@ -696,6 +1574,12 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                         "complete callable source is missing an application type",
                     )
                 })?;
+                if object.form.is_read_view() {
+                    return Err(semantic(
+                        "kernel_callable_flow_category",
+                        "ReadView cannot be an ordinary type actual, including a phantom or nested actual",
+                    ));
+                }
                 if let TypeForm::AssociatedWitnessProjection {
                     scope,
                     parameter,
@@ -703,7 +1587,8 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                     member,
                 } = object.form
                 {
-                    let from = self.projection_slot(source, scope, parameter, contract, member)?;
+                    let from =
+                        self.projection_slot(source, scope, parameter, contract, member, None)?;
                     if let Some(targets) = targets {
                         self.edge(from, targets[argument], caller, expression, argument, path)?;
                     }
@@ -955,6 +1840,10 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         }
         Ok(())
     }
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "ordinary, witness and scope actuals retain their exact caller lexical authority"
+    )]
     fn application(
         &mut self,
         source: usize,
@@ -962,9 +1851,18 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         function: DeclarationReference,
         arguments: &[TypeObjectDigest],
         operands: &[ImplementationOperand],
+        scope_arguments: &[ReadScopeArgument],
+        loans: &BTreeSet<BindingId>,
     ) -> Result<(), Diagnostic> {
         self.tick()?;
         self.observation.applications += 1;
+        // Admit the full scope map before a function/witness context can be reused.
+        let scopes = self.application_scopes(
+            source,
+            ReadScopeBinder::Declaration(function),
+            scope_arguments,
+            loans,
+        )?;
         self.reserve::<SelectionId>(operands.len())?;
         let mut implementations = Vec::new();
         for operand in operands {
@@ -982,6 +1880,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
             arguments,
             expression,
         )?;
+        self.retain_call_scopes(source, target, expression, scopes)?;
         self.record_call(source, target, expression)
     }
     #[cfg(test)]
@@ -1015,7 +1914,216 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         }
         Ok(())
     }
+    fn scan_signature(
+        &mut self,
+        source: usize,
+        payload: &DeclarationPayload,
+    ) -> Result<(), Diagnostic> {
+        let owner = self.contexts[source].key.owner;
+        match payload {
+            DeclarationPayload::Function(function) => {
+                let binder = Some(ReadScopeBinder::Declaration(owner));
+                for id in &function.parameters {
+                    self.tick()?;
+                    let Some(OwnerRecord::Parameter(parameter)) =
+                        self.read.owner(owner.package, OwnerKey::Parameter(*id))?
+                    else {
+                        return Err(associated::invalid());
+                    };
+                    if parameter.header.owner != OwnerKey::Parameter(*id)
+                        || parameter.parent
+                            != crate::platform::kernel::ParameterParent::Function(owner.declaration)
+                    {
+                        return Err(associated::invalid());
+                    }
+                    if parameter.header.contract_version < 34
+                        && self.type_contains_view(owner.package, parameter.ty)?
+                    {
+                        return Err(associated::invalid());
+                    }
+                    self.signature_type(
+                        source,
+                        parameter.ty,
+                        binder,
+                        parameter.use_mode == crate::platform::kernel::ParameterUse::Borrow,
+                        &BTreeSet::new(),
+                    )?;
+                }
+                self.signature_type(
+                    source,
+                    function.result.ty,
+                    binder,
+                    matches!(function.result.relation, ResultRelation::ViewFrom { .. }),
+                    &BTreeSet::new(),
+                )?;
+                let result = self
+                    .read
+                    .type_object(owner.package, function.result.ty)?
+                    .ok_or_else(associated::invalid)?;
+                if let Some(source_parameter) = function.result.relation.source() {
+                    if function.effect != crate::platform::kernel::FunctionEffect::Pure
+                        || !function.parameters.contains(source_parameter)
+                    {
+                        return Err(associated::invalid());
+                    }
+                    let Some(OwnerRecord::Parameter(source)) = self
+                        .read
+                        .owner(owner.package, OwnerKey::Parameter(*source_parameter))?
+                    else {
+                        return Err(associated::invalid());
+                    };
+                    if source.use_mode != crate::platform::kernel::ParameterUse::Borrow {
+                        return Err(associated::invalid());
+                    }
+                }
+                if let ResultRelation::ViewFrom { scope, .. } = function.result.relation {
+                    match result.form {
+                        TypeForm::ReadViewApplied { read_scope, .. }
+                        | TypeForm::AssociatedReadViewMember { read_scope, .. }
+                        | TypeForm::AssociatedReadViewProjection { read_scope, .. }
+                            if read_scope == scope => {}
+                        _ => return Err(associated::invalid()),
+                    }
+                }
+                if result.form.is_read_view()
+                    != matches!(function.result.relation, ResultRelation::ViewFrom { .. })
+                {
+                    return Err(associated::invalid());
+                }
+            }
+            DeclarationPayload::OwnedContract(contract) => {
+                for method in &contract.methods {
+                    self.tick()?;
+                    let binder = Some(ReadScopeBinder::ContractMethod {
+                        contract: owner,
+                        method: method.id,
+                    });
+                    for parameter in &method.parameters {
+                        self.tick()?;
+                        self.signature_type(
+                            source,
+                            parameter.ty,
+                            binder,
+                            parameter.use_mode == crate::platform::kernel::ParameterUse::Borrow,
+                            &BTreeSet::new(),
+                        )?;
+                    }
+                    self.signature_type(
+                        source,
+                        method.result.ty,
+                        binder,
+                        matches!(method.result.relation, ResultRelation::ViewFrom { .. }),
+                        &BTreeSet::new(),
+                    )?;
+                    let result = self
+                        .read
+                        .type_object(owner.package, method.result.ty)?
+                        .ok_or_else(associated::invalid)?;
+                    if let Some(source) = method.result.relation.source() {
+                        if method.effect != crate::platform::kernel::FunctionEffect::Pure
+                            || method
+                                .parameters
+                                .get(*source as usize)
+                                .is_none_or(|parameter| {
+                                    parameter.use_mode
+                                        != crate::platform::kernel::ParameterUse::Borrow
+                                })
+                        {
+                            return Err(associated::invalid());
+                        }
+                    }
+                    if let ResultRelation::ViewFrom { scope, .. } = method.result.relation {
+                        match result.form {
+                            TypeForm::ReadViewApplied { read_scope, .. }
+                            | TypeForm::AssociatedReadViewMember { read_scope, .. }
+                            | TypeForm::AssociatedReadViewProjection { read_scope, .. }
+                                if read_scope == scope => {}
+                            _ => return Err(associated::invalid()),
+                        }
+                    }
+                    if result.form.is_read_view()
+                        != matches!(method.result.relation, ResultRelation::ViewFrom { .. })
+                    {
+                        return Err(associated::invalid());
+                    }
+                }
+            }
+            DeclarationPayload::ReadView(view) => {
+                let binder = Some(ReadScopeBinder::Declaration(owner));
+                for field in &view.fields {
+                    self.tick()?;
+                    self.signature_type(
+                        source,
+                        field.ty,
+                        binder,
+                        matches!(
+                            field.kind,
+                            crate::platform::kernel::ReadViewFieldKind::ReadReference { .. }
+                        ),
+                        &BTreeSet::new(),
+                    )?;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn function_value(&mut self, function: DeclarationReference) -> Result<(), Diagnostic> {
+        let declaration = self.declaration(function)?;
+        let (parameters, result) = match declaration.payload {
+            DeclarationPayload::Function(function) => {
+                if !function.read_scope_parameters.is_empty()
+                    || !function.read_scope_sources.is_empty()
+                    || matches!(function.result.relation, ResultRelation::ViewFrom { .. })
+                {
+                    return Err(semantic(
+                        "kernel_callable_flow_category",
+                        "first-class callable values cannot carry read-scope or view contracts",
+                    ));
+                }
+                (function.parameters, function.result.ty)
+            }
+            DeclarationPayload::External(function) => (function.parameters, function.result),
+            _ => return Err(associated::invalid()),
+        };
+        if self.type_contains_view(function.package, result)? {
+            return Err(associated::invalid());
+        }
+        for id in parameters {
+            self.tick()?;
+            let Some(OwnerRecord::Parameter(parameter)) =
+                self.read.owner(function.package, OwnerKey::Parameter(id))?
+            else {
+                return Err(associated::invalid());
+            };
+            if self.type_contains_view(function.package, parameter.ty)? {
+                return Err(semantic(
+                    "kernel_callable_flow_category",
+                    "first-class callable values cannot expose a ReadView parameter",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn loan_copy(
+        &mut self,
+        loans: &BTreeSet<BindingId>,
+    ) -> Result<BTreeSet<BindingId>, Diagnostic> {
+        self.steps(loans.len())?;
+        self.reserve::<BindingId>(loans.len())?;
+        Ok(loans.clone())
+    }
+
     fn scan(&mut self, source: usize) -> Result<(), Diagnostic> {
+        self.diagnostic_context = WorkContext {
+            phase: "callable scan",
+            owner: Some(self.contexts[source].key.owner),
+            context: Some(source),
+            expression: None,
+            query: None,
+        };
         self.tick()?;
         let info = self.info(source)?;
         let declaration = self.declaration(info.key.owner)?;
@@ -1027,15 +2135,22 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                 mapping.function,
                 &mapping.type_arguments,
                 &mapping.implementations,
+                &mapping.read_scope_arguments,
+                &BTreeSet::new(),
             )?;
             return Ok(());
         }
+        self.scan_signature(source, &declaration.payload)?;
         self.observation.functions += usize::from(matches!(
             declaration.payload,
             DeclarationPayload::Function(_)
         ));
-        let mut pending = declaration.expression_roots();
-        self.reserve::<ExpressionId>(pending.len())?;
+        let roots = declaration.expression_roots();
+        self.reserve::<(ExpressionId, BTreeSet<BindingId>, Option<BindingId>)>(roots.len())?;
+        let mut pending: Vec<_> = roots
+            .into_iter()
+            .map(|id| (id, BTreeSet::new(), None))
+            .collect();
         if let DeclarationPayload::Component { ports, .. } = &declaration.payload {
             for port in ports {
                 self.tick()?;
@@ -1049,18 +2164,33 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                     ));
                 };
                 let roots = OwnerRecord::Port(record).expression_roots();
-                self.reserve::<ExpressionId>(roots.len())?;
-                pending.extend(roots);
+                self.reserve::<(ExpressionId, BTreeSet<BindingId>, Option<BindingId>)>(
+                    roots.len(),
+                )?;
+                pending.extend(roots.into_iter().map(|id| (id, BTreeSet::new(), None)));
             }
         }
-        let mut visited = BTreeSet::new();
-        while let Some(expression) = pending.pop() {
+        let source_binder = self.context_binder(source)?;
+        let mut visited = VisitedSyntax::default();
+        while let Some((expression, loans, establishing)) = pending.pop() {
+            self.diagnostic_context.phase = "syntax-key comparison";
+            self.diagnostic_context.expression = Some(expression);
             self.tick()?;
-            if visited.contains(&expression) {
+            let (width, keys) = visited.comparison_shape(&loans, establishing);
+            self.comparison_work(width, keys)?;
+            self.diagnostic_context.phase = "expression admission";
+            let occurrence = (expression, loans, establishing);
+            if visited.contains(&occurrence) {
                 continue;
             }
-            self.reserve::<ExpressionId>(1)?;
-            visited.insert(expression);
+            if VisitedSyntax::plain_key(&occurrence.1, occurrence.2) {
+                self.reserve::<ExpressionId>(1)?;
+            } else {
+                self.reserve::<ScopedSyntaxOccurrence>(1)?;
+            }
+            // Keep current loan-copy work/checkpoint even for the empty fast path.
+            let loans = self.loan_copy(&occurrence.1)?;
+            visited.insert(occurrence);
             let Some(OwnerRecord::Expression(record)) = self
                 .read
                 .owner(info.key.owner.package, OwnerKey::Expression(expression))?
@@ -1070,23 +2200,48 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                     "complete callable source is missing body syntax",
                 ));
             };
+            if record.contract_version < 34
+                && (record.operation.is_read_view_operation()
+                    || !record.operation.read_scope_arguments().is_empty())
+            {
+                return Err(associated::invalid());
+            }
+            let mut metadata_loans = self.loan_copy(&loans)?;
+            if let Some(binding) = establishing {
+                self.reserve::<BindingId>(1)?;
+                metadata_loans.insert(binding);
+            }
             match &record.operation {
                 ExpressionOperation::Call {
                     function,
                     type_arguments,
+                    read_scope_arguments,
                     ..
                 }
                 | ExpressionOperation::FunctionValue {
                     function,
                     type_arguments,
+                    read_scope_arguments,
                     ..
                 } => {
-                    self.application(source, Some(expression), *function, type_arguments, &[])?;
+                    if matches!(record.operation, ExpressionOperation::FunctionValue { .. }) {
+                        self.function_value(*function)?;
+                    }
+                    self.application(
+                        source,
+                        Some(expression),
+                        *function,
+                        type_arguments,
+                        &[],
+                        read_scope_arguments,
+                        &metadata_loans,
+                    )?;
                 }
                 ExpressionOperation::ImplementationCall {
                     function,
                     type_arguments,
                     implementations,
+                    read_scope_arguments,
                     ..
                 } => {
                     self.application(
@@ -1095,12 +2250,30 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                         *function,
                         type_arguments,
                         implementations,
+                        read_scope_arguments,
+                        &metadata_loans,
                     )?;
                 }
                 ExpressionOperation::MethodCall {
-                    witness, method, ..
+                    witness,
+                    contract,
+                    method,
+                    read_scope_arguments,
+                    ..
                 } => {
+                    let scopes = self.application_scopes(
+                        source,
+                        ReadScopeBinder::ContractMethod {
+                            contract: *contract,
+                            method: *method,
+                        },
+                        read_scope_arguments,
+                        &metadata_loans,
+                    )?;
                     let selection = self.selection(source, witness)?;
+                    if self.selection_contract(selection)? != *contract {
+                        return Err(associated::invalid());
+                    }
                     if let Selection::Scheme {
                         implementation,
                         prerequisites,
@@ -1111,14 +2284,153 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                             method: Some(*method),
                             implementations: prerequisites,
                         })?;
+                        self.retain_call_scopes(source, target, Some(expression), scopes)?;
                         self.record_call(source, target, Some(expression))?;
                     }
                 }
+                ExpressionOperation::CreateReadView {
+                    declaration,
+                    type_arguments,
+                    read_scope,
+                    ..
+                } => {
+                    self.validate_scope(*read_scope, source_binder, &loans)?;
+                    let record = self.declaration(*declaration)?;
+                    let DeclarationPayload::ReadView(view) = record.payload else {
+                        return Err(associated::invalid());
+                    };
+                    self.argument_types(
+                        source,
+                        view.type_parameters.len(),
+                        None,
+                        type_arguments,
+                        Some(expression),
+                    )?;
+                }
+                ExpressionOperation::ReborrowReadView { read_scope, .. } => {
+                    self.validate_scope(*read_scope, source_binder, &loans)?;
+                }
                 _ => {}
             }
+            if let ExpressionOperation::Let { bindings, body } = &record.operation {
+                let mut completed = self.loan_copy(&loans)?;
+                self.reserve::<(ExpressionId, BTreeSet<BindingId>, Option<BindingId>)>(
+                    bindings.len(),
+                )?;
+                let mut initializers = Vec::new();
+                for binding in bindings {
+                    self.tick()?;
+                    let Some(OwnerRecord::Binding(binding_record)) = self
+                        .read
+                        .owner(info.key.owner.package, OwnerKey::Binding(*binding))?
+                    else {
+                        return Err(associated::invalid());
+                    };
+                    if binding_record.header.owner != OwnerKey::Binding(*binding)
+                        || !matches!(
+                            binding_record.kind,
+                            BindingKind::Let | BindingKind::ReadView
+                        )
+                    {
+                        return Err(associated::invalid());
+                    }
+                    let value = binding_record.value.ok_or_else(associated::invalid)?;
+                    let mut initializer_loans = self.loan_copy(&completed)?;
+                    if binding_record.kind == BindingKind::ReadView {
+                        if record.contract_version < 34
+                            || binding_record.header.contract_version < 34
+                        {
+                            return Err(associated::invalid());
+                        }
+                        let ty = binding_record
+                            .declared_type
+                            .ok_or_else(associated::invalid)?;
+                        let object = self
+                            .read
+                            .type_object(info.key.owner.package, ty)?
+                            .ok_or_else(associated::invalid)?;
+                        let declared_scope = match object.form {
+                            TypeForm::ReadViewApplied { read_scope, .. }
+                            | TypeForm::AssociatedReadViewMember { read_scope, .. }
+                            | TypeForm::AssociatedReadViewProjection { read_scope, .. } => {
+                                read_scope
+                            }
+                            _ => return Err(associated::invalid()),
+                        };
+                        if declared_scope
+                            == (ReadScopeArgument::Lexical {
+                                callable: info.key.owner,
+                                binding: *binding,
+                            })
+                        {
+                            self.reserve::<BindingId>(1)?;
+                            initializer_loans.insert(*binding);
+                        }
+                        self.signature_type(source, ty, source_binder, true, &initializer_loans)?;
+                        self.reserve::<BindingId>(1)?;
+                        completed.insert(*binding);
+                    } else if let Some(ty) = binding_record.declared_type {
+                        if self.type_contains_view(info.key.owner.package, ty)? {
+                            return Err(semantic(
+                                "kernel_callable_flow_category",
+                                "ordinary let annotations cannot hide a ReadView",
+                            ));
+                        }
+                    }
+                    // Only a prospective source scope is available during initialization.
+                    // This walk grants no readable local value before initializer completion.
+                    initializers.push((value, initializer_loans, None));
+                }
+                self.reserve::<(ExpressionId, BTreeSet<BindingId>, Option<BindingId>)>(1)?;
+                pending.push((*body, completed, None));
+                pending.extend(initializers.into_iter().rev());
+                continue;
+            }
             let children = record.children();
-            self.reserve::<ExpressionId>(children.len())?;
-            pending.extend(children.into_iter().map(|c| c.expression));
+            self.reserve::<(ExpressionId, BTreeSet<BindingId>, Option<BindingId>)>(children.len())?;
+            for child in children.into_iter().rev() {
+                let mut child_loans = self.loan_copy(&loans)?;
+                let mut establishing = None;
+                match &record.operation {
+                    ExpressionOperation::BorrowCall {
+                        call,
+                        binding,
+                        body,
+                    } => {
+                        if child.expression == *body {
+                            self.reserve::<BindingId>(1)?;
+                            child_loans.insert(*binding);
+                        } else if child.expression == *call {
+                            establishing = Some(*binding);
+                        }
+                    }
+                    ExpressionOperation::BorrowOwnedField { binding, body, .. }
+                    | ExpressionOperation::BorrowOwnedRecordField { binding, body, .. }
+                    | ExpressionOperation::BorrowOwnedItem { binding, body, .. }
+                    | ExpressionOperation::BorrowReadView { binding, body, .. }
+                    | ExpressionOperation::BorrowReadViewField { binding, body, .. }
+                        if child.expression == *body =>
+                    {
+                        self.reserve::<BindingId>(1)?;
+                        child_loans.insert(*binding);
+                    }
+                    ExpressionOperation::MatchBorrowedOwned { arms, .. }
+                        if child.role
+                            == crate::platform::kernel::ExpressionChildRole::OwnedChoiceArmBody =>
+                    {
+                        let ordinal =
+                            usize::try_from(child.ordinal).map_err(|_| associated::invalid())?;
+                        let arm = arms.get(ordinal).ok_or_else(associated::invalid)?;
+                        if arm.body != child.expression {
+                            return Err(associated::invalid());
+                        }
+                        self.reserve::<BindingId>(1)?;
+                        child_loans.insert(arm.binding);
+                    }
+                    _ => {}
+                }
+                pending.push((child.expression, child_loans, establishing));
+            }
         }
         Ok(())
     }
@@ -1237,77 +2549,757 @@ fn validate_callable_closure_with_limits<R: CallableClosureRead + ?Sized>(
     maximum_metadata_bytes: usize,
     scope: recursive::ProofScope,
 ) -> Result<CallableFlowWork, Diagnostic> {
-    let mut analysis = Analysis {
-        read,
-        work,
-        maximum_work,
-        maximum_metadata_bytes,
-        observation: CallableFlowWork::default(),
-        contexts: Vec::new(),
-        indexes: BTreeMap::new(),
-        selections: Vec::new(),
-        selection_indexes: BTreeMap::new(),
-        pending: Vec::new(),
-        calls: Vec::new(),
-        slot_owners: Vec::new(),
-        edges: Vec::new(),
-        associated: associated::State::default(),
-    };
-    analysis.tick()?;
-    prerequisites::validate(&mut analysis)?;
-    read.visit_callable_owners(&mut |owner| {
-        let declaration = analysis.declaration(owner)?;
-        match declaration.payload {
-            DeclarationPayload::OwnedImplementation(i) => {
-                analysis.validate_associated_scheme(owner, &i)?;
-                analysis.reserve::<SelectionId>(i.implementation_parameters.len())?;
-                let unknown = analysis.unknown_parameters(&i.implementation_parameters)?;
-                for mapping in i.methods {
+    // The caller may enter with work already spent admitting exact supplier sources.
+    // Retain only scalar phase boundaries; this is error context, never proof reuse.
+    let entry_work = *work;
+    let mut after_prerequisites = None;
+    let mut after_inventory = None;
+    let mut after_scan = None;
+    let mut after_recursive = None;
+    let result = (|| {
+        let mut analysis = Analysis {
+            read,
+            work: &mut *work,
+            maximum_work,
+            maximum_metadata_bytes,
+            observation: CallableFlowWork::default(),
+            contexts: Vec::new(),
+            indexes: BTreeMap::new(),
+            selections: Vec::new(),
+            selection_indexes: BTreeMap::new(),
+            pending: Vec::new(),
+            calls: Vec::new(),
+            slot_owners: Vec::new(),
+            edges: Vec::new(),
+            associated: associated::State::default(),
+            completed_view_queries: BTreeMap::new(),
+            diagnostic_context: WorkContext {
+                phase: "initialization",
+                owner: None,
+                context: None,
+                expression: None,
+                query: None,
+            },
+        };
+        analysis.tick()?;
+        analysis.diagnostic_context.phase = "prerequisite closure";
+        prerequisites::validate(&mut analysis)?;
+        after_prerequisites = Some(*analysis.work);
+        read.visit_callable_owners(&mut |owner| {
+            analysis.diagnostic_context = WorkContext {
+                phase: "declaration inventory",
+                owner: Some(owner),
+                context: None,
+                expression: None,
+                query: None,
+            };
+            let declaration = analysis.declaration(owner)?;
+            analysis.declaration_scope_inventory(owner, &declaration.payload)?;
+            match declaration.payload {
+                DeclarationPayload::OwnedImplementation(i) => {
+                    analysis.validate_associated_scheme(owner, &i)?;
                     analysis.reserve::<SelectionId>(i.implementation_parameters.len())?;
+                    let unknown = analysis.unknown_parameters(&i.implementation_parameters)?;
+                    for mapping in i.methods {
+                        analysis.reserve::<SelectionId>(i.implementation_parameters.len())?;
+                        analysis.context(Context {
+                            owner,
+                            method: Some(mapping.method),
+                            implementations: unknown.clone(),
+                        })?;
+                    }
+                }
+                DeclarationPayload::Function(f) => {
+                    analysis.reserve::<SelectionId>(f.implementation_parameters.len())?;
+                    let unknown = analysis.unknown_parameters(&f.implementation_parameters)?;
                     analysis.context(Context {
                         owner,
-                        method: Some(mapping.method),
-                        implementations: unknown.clone(),
+                        method: None,
+                        implementations: unknown,
+                    })?;
+                }
+                DeclarationPayload::OwnedContract(c) => {
+                    analysis.associated.enabled |= !c.associated_types.is_empty();
+                    analysis.context(Context {
+                        owner,
+                        method: None,
+                        implementations: Vec::new(),
+                    })?;
+                }
+                _ => {
+                    analysis.context(Context {
+                        owner,
+                        method: None,
+                        implementations: Vec::new(),
                     })?;
                 }
             }
-            DeclarationPayload::Function(f) => {
-                analysis.reserve::<SelectionId>(f.implementation_parameters.len())?;
-                let unknown = analysis.unknown_parameters(&f.implementation_parameters)?;
-                analysis.context(Context {
-                    owner,
-                    method: None,
-                    implementations: unknown,
-                })?;
-            }
-            DeclarationPayload::OwnedContract(c) => {
-                analysis.associated.enabled |= !c.associated_types.is_empty();
-                analysis.context(Context {
-                    owner,
-                    method: None,
-                    implementations: Vec::new(),
-                })?;
-            }
-            _ => {
-                analysis.context(Context {
-                    owner,
-                    method: None,
-                    implementations: Vec::new(),
-                })?;
-            }
+            Ok(())
+        })?;
+        after_inventory = Some(*analysis.work);
+        while let Some(context) = analysis.pending.pop() {
+            analysis.scan(context)?;
         }
-        Ok(())
-    })?;
-    while let Some(context) = analysis.pending.pop() {
-        analysis.scan(context)?;
-    }
-    recursive::connect(&mut analysis, scope)?;
-    analysis.admit()?;
-    analysis.observation.slots = analysis.slot_owners.len();
-    analysis.observation.edges = analysis.edges.len();
-    Ok(analysis.observation)
+        after_scan = Some(*analysis.work);
+        analysis.diagnostic_context = WorkContext {
+            phase: "recursive callable relation",
+            owner: None,
+            context: None,
+            expression: None,
+            query: None,
+        };
+        recursive::connect(&mut analysis, scope)?;
+        after_recursive = Some(*analysis.work);
+        analysis.diagnostic_context.phase = "composed type SCC";
+        analysis.admit()?;
+        analysis.observation.slots = analysis.slot_owners.len();
+        analysis.observation.edges = analysis.edges.len();
+        Ok(analysis.observation)
+    })();
+    result.map_err(|mut diagnostic: Diagnostic| {
+        if diagnostic.code == "kernel_callable_flow_work" {
+            diagnostic.notes.push(format!(
+                "composed_work entry={} after_prerequisites={:?} after_inventory={:?} after_scan={:?} after_recursive={:?} consumed={}",
+                entry_work, after_prerequisites, after_inventory, after_scan, after_recursive, *work,
+            ));
+        }
+        diagnostic
+    })
 }
 
 #[cfg(test)]
 #[path = "composed_callable_flow_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod read_view_tests {
+    use super::super::read_view_tests::{Read, function, scope};
+    use super::*;
+    use crate::platform::kernel::*;
+    use crate::platform::semantic_id::{
+        DeclarationId, ModuleId, ParameterId, ReadScopeParameterId,
+    };
+
+    const SEED: &[u8] = b"composed-read-view-scopes";
+
+    impl CallableClosureRead for Read {
+        fn visit_callable_owners(
+            &self,
+            visitor: &mut dyn FnMut(DeclarationReference) -> Result<(), Diagnostic>,
+        ) -> Result<(), Diagnostic> {
+            for owner in self.owners.keys() {
+                if let OwnerKey::Declaration(declaration) = owner {
+                    visitor(DeclarationReference {
+                        package: function().package,
+                        declaration: *declaration,
+                    })?;
+                }
+            }
+            Ok(())
+        }
+        fn owner(
+            &self,
+            package: PackageId,
+            owner: OwnerKey,
+        ) -> Result<Option<OwnerRecord>, Diagnostic> {
+            Ok((package == function().package)
+                .then(|| self.owners.get(&owner).cloned())
+                .flatten())
+        }
+        fn type_object(
+            &self,
+            package: PackageId,
+            ty: TypeObjectDigest,
+        ) -> Result<Option<TypeObject>, Diagnostic> {
+            Ok((package == function().package)
+                .then(|| self.types.get(ty).cloned())
+                .flatten())
+        }
+    }
+
+    fn proof(read: &Read, eager: bool) -> Result<CallableFlowWork, Diagnostic> {
+        validate_callable_closure_with_scope(
+            read,
+            &mut 0,
+            1_000_000,
+            if eager {
+                recursive::ProofScope::All
+            } else {
+                recursive::ProofScope::Recursive
+            },
+        )
+    }
+
+    fn reference(ordinal: u64) -> DeclarationReference {
+        DeclarationReference {
+            package: function().package,
+            declaration: DeclarationId::migrate(SEED, ordinal),
+        }
+    }
+
+    fn formal(owner: DeclarationReference) -> ReadScopeArgument {
+        ReadScopeArgument::Parameter(ReadScopeReference {
+            binder: ReadScopeBinder::Declaration(owner),
+            parameter: ReadScopeParameterId::migrate(SEED, 0),
+        })
+    }
+
+    fn payload(read: &mut Read) -> &mut FunctionDeclaration {
+        let Some(OwnerRecord::Declaration(record)) = read
+            .owners
+            .get_mut(&OwnerKey::Declaration(function().declaration))
+        else {
+            panic!("caller");
+        };
+        let DeclarationPayload::Function(function) = &mut record.payload else {
+            panic!("caller function");
+        };
+        function
+    }
+
+    // This fixture checks symbolic source closure. Custody and runtime result adoption have
+    // independent admission owners; no growth result here is used as an access certificate.
+    fn view_fixture() -> (Read, DeclarationReference, TypeObjectDigest, BindingId) {
+        let mut read = Read::new();
+        let view = reference(1);
+        let helper = reference(2);
+        let cell = read.types.intern(TypeForm::OwnedI64Cell).expect("cell");
+        let caller_parameter = ParameterId::migrate(SEED, 0);
+        let source = ParameterId::migrate(SEED, 1);
+        for (id, owner) in [(caller_parameter, function()), (source, helper)] {
+            let key = OwnerKey::Parameter(id);
+            read.owners.insert(
+                key,
+                OwnerRecord::Parameter(ParameterRecord {
+                    header: OwnerHeader::new(key, OwnerKind::Parameter),
+                    parent: ParameterParent::Function(owner.declaration),
+                    name: Name::new("source").expect("name"),
+                    ty: cell,
+                    use_mode: ParameterUse::Borrow,
+                    resource_requirement: None,
+                }),
+            );
+        }
+        let caller = payload(&mut read);
+        caller.parameters = vec![caller_parameter];
+        caller.read_scope_sources = vec![ReadScopeSource {
+            source: caller_parameter,
+            scope: scope(),
+        }];
+        let key = OwnerKey::Declaration(view.declaration);
+        read.owners.insert(
+            key,
+            OwnerRecord::Declaration(DeclarationRecord {
+                header: OwnerHeader::new(key, OwnerKind::ReadView),
+                module: ModuleId::migrate(SEED, 0),
+                name: Name::new("EmptyView").expect("name"),
+                visibility: DeclarationVisibility::Private,
+                payload: DeclarationPayload::ReadView(ReadViewDeclaration {
+                    type_parameters: Vec::new(),
+                    scope_parameter: ReadScopeParameter {
+                        id: ReadScopeParameterId::migrate(SEED, 0),
+                        name: Name::new("s").expect("scope name"),
+                    },
+                    fields: Vec::new(),
+                }),
+            }),
+        );
+        let result = read
+            .types
+            .intern(TypeForm::ReadViewApplied {
+                declaration: view,
+                arguments: Vec::new(),
+                read_scope: formal(helper),
+            })
+            .expect("helper view");
+        let body = read.expression(ExpressionOperation::CreateReadView {
+            declaration: view,
+            type_arguments: Vec::new(),
+            read_scope: formal(helper),
+            source: LocalValueReference::FunctionParameter(source),
+            fields: Vec::new(),
+        });
+        let key = OwnerKey::Declaration(helper.declaration);
+        read.owners.insert(
+            key,
+            OwnerRecord::Declaration(DeclarationRecord {
+                header: OwnerHeader::new(key, OwnerKind::PureFunction),
+                module: ModuleId::migrate(SEED, 0),
+                name: Name::new("empty").expect("name"),
+                visibility: DeclarationVisibility::Private,
+                payload: DeclarationPayload::Function(FunctionDeclaration {
+                    implementation_parameters: Vec::new(),
+                    requirement_parameters: Vec::new(),
+                    effect_parameters: Vec::new(),
+                    type_parameters: Vec::new(),
+                    parameters: vec![source],
+                    result: CallableResult {
+                        ty: result,
+                        relation: ResultRelation::ViewFrom {
+                            source,
+                            scope: formal(helper),
+                        },
+                    },
+                    read_scope_parameters: vec![ReadScopeParameter {
+                        id: ReadScopeParameterId::migrate(SEED, 0),
+                        name: Name::new("s").expect("scope name"),
+                    }],
+                    read_scope_sources: vec![ReadScopeSource {
+                        source,
+                        scope: formal(helper),
+                    }],
+                    effect: FunctionEffect::Pure,
+                    body,
+                }),
+            }),
+        );
+        let binding = BindingId::migrate(SEED, 0);
+        let lexical = ReadScopeArgument::Lexical {
+            callable: function(),
+            binding,
+        };
+        let ty = read
+            .types
+            .intern(TypeForm::ReadViewApplied {
+                declaration: view,
+                arguments: Vec::new(),
+                read_scope: lexical,
+            })
+            .expect("caller view");
+        (read, helper, ty, binding)
+    }
+
+    #[test]
+    fn complete_flow_keeps_scope_forwarding_separate_from_type_expansion() {
+        for expanding in [false, true] {
+            let mut read = Read::new();
+            let actual = if expanding {
+                read.types
+                    .intern(TypeForm::List {
+                        item: read.parameter_type,
+                    })
+                    .expect("list")
+            } else {
+                read.parameter_type
+            };
+            let body = read.call(0, actual, vec![scope()]);
+            read.body(body);
+            for eager in [false, true] {
+                let result = proof(&read, eager);
+                if expanding {
+                    assert_eq!(
+                        result
+                            .expect_err("scope forwarding cannot reset growth")
+                            .code,
+                        "kernel_callable_expansion"
+                    );
+                } else {
+                    result.expect("finite explicit scope forwarding");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn complete_flow_rejects_foreign_scope_and_scoped_function_value() {
+        for foreign_scope in [false, true] {
+            let mut read = Read::new();
+            let body = if foreign_scope {
+                read.call(0, read.parameter_type, vec![formal(reference(99))])
+            } else {
+                read.call(1, read.parameter_type, Vec::new())
+            };
+            read.body(body);
+            for eager in [false, true] {
+                assert!(proof(&read, eager).is_err());
+            }
+        }
+    }
+
+    #[test]
+    fn complete_flow_rejects_view_actual_even_when_parameter_is_phantom() {
+        let mut read = Read::new();
+        let view = read
+            .types
+            .intern(TypeForm::ReadViewApplied {
+                declaration: reference(1),
+                arguments: vec![read.parameter_type],
+                read_scope: scope(),
+            })
+            .expect("view");
+        let body = read.call(0, view, vec![scope()]);
+        read.body(body);
+        for eager in [false, true] {
+            assert_eq!(
+                proof(&read, eager)
+                    .expect_err("ordinary formal cannot admit a view")
+                    .code,
+                "kernel_callable_flow_category"
+            );
+        }
+    }
+
+    #[test]
+    fn complete_flow_family_demands_keep_distinct_exact_scopes() {
+        let mut counts = Vec::new();
+        for alias in [true, false] {
+            let mut read = Read::new();
+            let contract = reference(3);
+            let member = AssociatedTypeMemberId::migrate(SEED, 0);
+            let witness = ImplementationParameterId::migrate(SEED, 0);
+            let self_parameter = TypeParameterId::migrate(SEED, 99);
+            let self_type = read
+                .types
+                .intern(TypeForm::TypeParameter {
+                    parameter: self_parameter,
+                })
+                .expect("contract self");
+            let result_type = read.types.intern(TypeForm::I64).expect("ordinary result");
+            let self_owner = OwnerKey::TypeParameter(self_parameter);
+            read.owners.insert(
+                self_owner,
+                OwnerRecord::TypeParameter(TypeParameterRecord {
+                    header: OwnerHeader::new(self_owner, OwnerKind::TypeParameter),
+                    declaration: contract.declaration,
+                    name: Name::new("Self").expect("name"),
+                    constraints: TypeParameterConstraints::Owned,
+                }),
+            );
+            let key = OwnerKey::Declaration(contract.declaration);
+            read.owners.insert(
+                key,
+                OwnerRecord::Declaration(DeclarationRecord {
+                    header: OwnerHeader::new(key, OwnerKind::OwnedContract),
+                    module: ModuleId::migrate(SEED, 0),
+                    name: Name::new("Views").expect("name"),
+                    visibility: DeclarationVisibility::Private,
+                    payload: DeclarationPayload::OwnedContract(OwnedContract {
+                        self_parameter,
+                        type_parameters: Vec::new(),
+                        methods: vec![OwnedMethod {
+                            id: MethodId::migrate(SEED, 0),
+                            name: Name::new("size").expect("name"),
+                            parameters: vec![OwnedMethodParameter {
+                                ty: self_type,
+                                use_mode: ParameterUse::Borrow,
+                            }],
+                            result: CallableResult {
+                                ty: result_type,
+                                relation: ResultRelation::Value,
+                            },
+                            read_scope_parameters: Vec::new(),
+                            read_scope_sources: Vec::new(),
+                            effect: FunctionEffect::Pure,
+                        }],
+                        associated_types: vec![AssociatedTypeMember {
+                            id: member,
+                            name: Name::new("View").expect("name"),
+                            bound: AssociatedTypeBound::ReadViewFamily {
+                                scope_parameter: ReadScopeParameter {
+                                    id: ReadScopeParameterId::migrate(SEED, 99),
+                                    name: Name::new("v").expect("name"),
+                                },
+                            },
+                        }],
+                    }),
+                }),
+            );
+            let other = ReadScopeArgument::Parameter(ReadScopeReference {
+                binder: ReadScopeBinder::Declaration(function()),
+                parameter: ReadScopeParameterId::migrate(SEED, 1),
+            });
+            let cell = read.types.intern(TypeForm::OwnedI64Cell).expect("self");
+            let mut parameters = Vec::new();
+            for (ordinal, read_scope) in [scope(), if alias { scope() } else { other }]
+                .into_iter()
+                .enumerate()
+            {
+                let ty = read
+                    .types
+                    .intern(TypeForm::AssociatedReadViewProjection {
+                        scope: function(),
+                        parameter: witness,
+                        contract,
+                        member,
+                        read_scope,
+                    })
+                    .expect("family projection");
+                let id = ParameterId::migrate(SEED, ordinal as u64);
+                let key = OwnerKey::Parameter(id);
+                read.owners.insert(
+                    key,
+                    OwnerRecord::Parameter(ParameterRecord {
+                        header: OwnerHeader::new(key, OwnerKind::Parameter),
+                        parent: ParameterParent::Function(function().declaration),
+                        name: Name::new(format!("view{ordinal}")).expect("name"),
+                        ty,
+                        use_mode: ParameterUse::Borrow,
+                        resource_requirement: None,
+                    }),
+                );
+                parameters.push(id);
+            }
+            let function = payload(&mut read);
+            function.parameters = parameters;
+            function.read_scope_parameters.push(ReadScopeParameter {
+                id: ReadScopeParameterId::migrate(SEED, 1),
+                name: Name::new("other").expect("name"),
+            });
+            function.implementation_parameters = vec![ImplementationParameter {
+                id: witness,
+                name: Name::new("W").expect("name"),
+                contract,
+                self_type: cell,
+                type_arguments: Vec::new(),
+            }];
+            let normal = proof(&read, false).expect("finite family demands");
+            let eager = proof(&read, true).expect("eager family demands");
+            assert_eq!(normal.slots, eager.slots);
+            counts.push(normal.slots);
+        }
+        assert_eq!(
+            counts[1],
+            counts[0] + 1,
+            "equal witness paths retain a separate output for each exact scope"
+        );
+    }
+
+    #[test]
+    fn complete_flow_does_not_reuse_a_call_after_its_lexical_scope_ends() {
+        let (mut read, helper, ty, binding) = view_fixture();
+        let argument = read.expression(ExpressionOperation::Local {
+            value: LocalValueReference::FunctionParameter(ParameterId::migrate(SEED, 0)),
+        });
+        let call = read.expression(ExpressionOperation::Call {
+            requirement_arguments: Vec::new(),
+            effect_arguments: Vec::new(),
+            function: helper,
+            type_arguments: Vec::new(),
+            read_scope_arguments: vec![ReadScopeArgument::Lexical {
+                callable: function(),
+                binding,
+            }],
+            arguments: vec![argument],
+        });
+        let key = OwnerKey::Binding(binding);
+        read.owners.insert(
+            key,
+            OwnerRecord::Binding(BindingRecord {
+                header: OwnerHeader::new(key, OwnerKind::Binding),
+                name: Name::new("view").expect("name"),
+                kind: BindingKind::ReadView,
+                value: None,
+                declared_type: Some(ty),
+            }),
+        );
+        let seven = read.expression(ExpressionOperation::I64 { value: 7 });
+        let borrow = read.expression(ExpressionOperation::BorrowCall {
+            call,
+            binding,
+            body: seven,
+        });
+        read.body(borrow);
+        for eager in [false, true] {
+            proof(&read, eager).expect("direct invocation metadata establishes its source scope");
+        }
+        let body = read.expression(ExpressionOperation::Sequence {
+            items: vec![borrow, call],
+        });
+        read.body(body);
+        for eager in [false, true] {
+            assert_eq!(
+                proof(&read, eager)
+                    .expect_err("same syntax outside loan cannot reuse its admission")
+                    .code,
+                "kernel_callable_associated_scope"
+            );
+        }
+
+        // A predecessor OwnedBorrow remains a valid loan coordinate in a current
+        // consuming function. Its scope is introduced by only its exact match arm.
+        let (mut read, helper, _, binding) = view_fixture();
+        let parameter = ParameterId::migrate(SEED, 0);
+        let cell = match &read.owners[&OwnerKey::Parameter(parameter)] {
+            OwnerRecord::Parameter(record) => record.ty,
+            _ => panic!("source parameter"),
+        };
+        let choice = read
+            .types
+            .intern(TypeForm::OwnedChoice {
+                cases: vec![StructuralTypeField {
+                    name: Name::new("item").expect("case name"),
+                    ty: cell,
+                }],
+            })
+            .expect("owned choice");
+        let Some(OwnerRecord::Parameter(record)) =
+            read.owners.get_mut(&OwnerKey::Parameter(parameter))
+        else {
+            panic!("source parameter");
+        };
+        record.ty = choice;
+        let arm_binding = BindingId::migrate(SEED, 10);
+        let scope = ReadScopeArgument::Lexical {
+            callable: function(),
+            binding: arm_binding,
+        };
+        let key = OwnerKey::Binding(arm_binding);
+        let mut header = OwnerHeader::new(key, OwnerKind::Binding);
+        header.contract_version = 24;
+        read.owners.insert(
+            key,
+            OwnerRecord::Binding(BindingRecord {
+                header,
+                name: Name::new("item").expect("binding name"),
+                kind: BindingKind::OwnedBorrow,
+                value: None,
+                declared_type: Some(cell),
+            }),
+        );
+        let ty = read
+            .types
+            .intern(TypeForm::ReadViewApplied {
+                declaration: reference(1),
+                arguments: Vec::new(),
+                read_scope: scope,
+            })
+            .expect("arm view");
+        let key = OwnerKey::Binding(binding);
+        read.owners.insert(
+            key,
+            OwnerRecord::Binding(BindingRecord {
+                header: OwnerHeader::new(key, OwnerKind::Binding),
+                name: Name::new("view").expect("binding name"),
+                kind: BindingKind::ReadView,
+                value: None,
+                declared_type: Some(ty),
+            }),
+        );
+        let argument = read.expression(ExpressionOperation::Local {
+            value: LocalValueReference::LexicalBinding(arm_binding),
+        });
+        let call = read.expression(ExpressionOperation::Call {
+            requirement_arguments: Vec::new(),
+            effect_arguments: Vec::new(),
+            function: helper,
+            type_arguments: Vec::new(),
+            read_scope_arguments: vec![scope],
+            arguments: vec![argument],
+        });
+        let seven = read.expression(ExpressionOperation::I64 { value: 7 });
+        let body = read.expression(ExpressionOperation::BorrowCall {
+            call,
+            binding,
+            body: seven,
+        });
+        let source = read.expression(ExpressionOperation::Local {
+            value: LocalValueReference::FunctionParameter(parameter),
+        });
+        let matched = read.expression(ExpressionOperation::MatchBorrowedOwned {
+            choice_type: choice,
+            source,
+            arms: vec![OwnedChoiceArm {
+                name: Name::new("item").expect("case name"),
+                binding: arm_binding,
+                body,
+            }],
+        });
+        read.body(matched);
+        for eager in [false, true] {
+            proof(&read, eager).expect("exact predecessor loan in its current consuming match arm");
+        }
+        let body = read.expression(ExpressionOperation::Sequence {
+            items: vec![matched, call],
+        });
+        read.body(body);
+        for eager in [false, true] {
+            assert_eq!(
+                proof(&read, eager)
+                    .expect_err("an arm loan cannot become ambient after its body")
+                    .code,
+                "kernel_callable_associated_scope"
+            );
+        }
+    }
+
+    #[test]
+    fn complete_flow_visits_owning_view_initializer_with_exact_prospective_scope() {
+        let (mut read, _, ty, binding) = view_fixture();
+        let value = read.expression(ExpressionOperation::CreateReadView {
+            declaration: reference(1),
+            type_arguments: Vec::new(),
+            read_scope: ReadScopeArgument::Lexical {
+                callable: function(),
+                binding,
+            },
+            source: LocalValueReference::FunctionParameter(ParameterId::migrate(SEED, 0)),
+            fields: Vec::new(),
+        });
+        let key = OwnerKey::Binding(binding);
+        read.owners.insert(
+            key,
+            OwnerRecord::Binding(BindingRecord {
+                header: OwnerHeader::new(key, OwnerKind::Binding),
+                name: Name::new("view").expect("name"),
+                kind: BindingKind::ReadView,
+                value: Some(value),
+                declared_type: Some(ty),
+            }),
+        );
+        let seven = read.expression(ExpressionOperation::I64 { value: 7 });
+        let body = read.expression(ExpressionOperation::Let {
+            bindings: vec![binding],
+            body: seven,
+        });
+        read.body(body);
+        for eager in [false, true] {
+            proof(&read, eager).expect("owning initializer exact source scope");
+        }
+        let body = read.expression(ExpressionOperation::Sequence {
+            items: vec![body, value],
+        });
+        read.body(body);
+        for eager in [false, true] {
+            assert_eq!(
+                proof(&read, eager)
+                    .expect_err("initializer scope cannot become ambient")
+                    .code,
+                "kernel_callable_associated_scope"
+            );
+        }
+    }
+
+    #[test]
+    fn complete_flow_checks_unused_view_result_scope_without_type_actuals() {
+        let (mut read, helper, _, _) = view_fixture();
+        let Some(OwnerRecord::Declaration(declaration)) = read
+            .owners
+            .get_mut(&OwnerKey::Declaration(helper.declaration))
+        else {
+            panic!("helper");
+        };
+        let DeclarationPayload::Function(function) = &mut declaration.payload else {
+            panic!("helper function");
+        };
+        let parameter = ReadScopeParameterId::migrate(SEED, 1);
+        function.read_scope_parameters.push(ReadScopeParameter {
+            id: parameter,
+            name: Name::new("other").expect("name"),
+        });
+        let ResultRelation::ViewFrom { scope, .. } = &mut function.result.relation else {
+            panic!("view result");
+        };
+        *scope = ReadScopeArgument::Parameter(ReadScopeReference {
+            binder: ReadScopeBinder::Declaration(helper),
+            parameter,
+        });
+        for eager in [false, true] {
+            assert_eq!(
+                proof(&read, eager)
+                    .expect_err("unused result relation cannot swap its exact scope")
+                    .code,
+                "kernel_callable_associated_scope"
+            );
+        }
+    }
+}

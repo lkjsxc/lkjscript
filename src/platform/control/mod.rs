@@ -14,12 +14,12 @@ pub(crate) use change::{
     COMPACT_CHANGE_PRECONDITIONS, COMPACT_DECLARATION_VISIBILITIES, COMPACT_DELETE_POLICIES,
     COMPACT_EFFECT_FORM_FIELDS, COMPACT_EFFECT_FORMS, COMPACT_EXPRESSION_FORM_FIELDS,
     COMPACT_EXPRESSION_FORMS, COMPACT_FUNCTION_EFFECTS, COMPACT_NAMESPACE_CLASSES,
-    COMPACT_REFERENCE_NAMESPACES, COMPACT_TYPE_FORM_FIELDS, COMPACT_TYPE_FORMS,
-    ChangeRequestCommitment, CompactChangeFieldForm, CompactChangeOperation,
-    MAXIMUM_STRUCTURAL_SYNTAX_NODES, MAXIMUM_STRUCTURAL_TOKENS, NativeDraftSelection,
-    NormalizedChangeRequest, compact_change_operation_descriptor, compact_change_origin,
-    decode_compact_change_in_repository, decode_compact_change_in_view, normalize_change_request,
-    render_native_draft,
+    COMPACT_READ_SCOPE_FORM_FIELDS, COMPACT_READ_SCOPE_FORMS, COMPACT_REFERENCE_NAMESPACES,
+    COMPACT_TYPE_FORM_FIELDS, COMPACT_TYPE_FORMS, ChangeRequestCommitment, CompactChangeFieldForm,
+    CompactChangeOperation, MAXIMUM_STRUCTURAL_SYNTAX_NODES, MAXIMUM_STRUCTURAL_TOKENS,
+    NativeDraftSelection, NormalizedChangeRequest, compact_change_operation_descriptor,
+    compact_change_origin, decode_compact_change_in_repository, decode_compact_change_in_view,
+    normalize_change_request, render_native_draft,
 };
 pub use compact::{
     CompactField, CompactRecord, CompactResponseLimits, CompactResponseWriter,

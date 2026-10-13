@@ -12,13 +12,14 @@ use crate::platform::kernel::owned_associated::{
     AssociatedAdmissionLimits, OwnedAssociatedAdmission,
 };
 use crate::platform::kernel::{
-    AssociatedTypeBound, AssociatedTypeMember, DeclarationPayload, DeclarationRecord,
-    DeclarationReference, DeclarationVisibility, DependencyRecord, ExpressionRead,
-    FunctionDeclaration, FunctionEffect, ImplementationParameter, Name, OwnedContract, OwnedMethod,
-    OwnedMethodParameter, OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, PackageId,
-    PackageInterfaceDeclaration, PackageInterfaceDeclarationPayload, PackageInterfaceRecord,
-    PackageRevisionDigest, ParameterUse, StructuralTypeField, TypeForm, TypeObject,
-    TypeObjectDigest, TypeParameterConstraints, TypeParameterRecord, encode_type_object,
+    AssociatedTypeBound, AssociatedTypeMember, CallableResult, DeclarationPayload,
+    DeclarationRecord, DeclarationReference, DeclarationVisibility, DependencyRecord,
+    ExpressionRead, FunctionDeclaration, FunctionEffect, ImplementationParameter, Name,
+    OwnedContract, OwnedMethod, OwnedMethodParameter, OwnerHeader, OwnerKey, OwnerKind,
+    OwnerRecord, PackageId, PackageInterfaceDeclaration, PackageInterfaceDeclarationPayload,
+    PackageInterfaceRecord, PackageRevisionDigest, ParameterUse, ResultRelation,
+    StructuralTypeField, TypeForm, TypeObject, TypeObjectDigest, TypeParameterConstraints,
+    TypeParameterRecord, encode_type_object,
 };
 use crate::platform::semantic_id::{
     AssociatedTypeMemberId, DeclarationId, ExpressionId, ImplementationParameterId, MethodId,
@@ -189,8 +190,12 @@ fn empty_function(result: TypeObjectDigest) -> FunctionDeclaration {
         requirement_parameters: vec![],
         effect_parameters: vec![],
         parameters: vec![],
-        result,
-        result_borrow: None,
+        result: CallableResult {
+            ty: result,
+            relation: ResultRelation::Value,
+        },
+        read_scope_parameters: vec![],
+        read_scope_sources: vec![],
         effect: FunctionEffect::Pure,
         body: ExpressionId::migrate(SEED, 0),
     }
@@ -243,8 +248,12 @@ fn fixture() -> Fixture {
                         ty: self_type,
                         use_mode: ParameterUse::Borrow,
                     }],
-                    result: abstract_member,
-                    result_borrow: Some(0),
+                    result: CallableResult {
+                        ty: abstract_member,
+                        relation: ResultRelation::ReadFrom { source: 0 }
+                    },
+                    read_scope_parameters: vec![],
+                    read_scope_sources: vec![],
                     effect: FunctionEffect::Pure,
                 }],
             }),
@@ -347,8 +356,12 @@ fn unit(f: &Fixture, scope: DeclarationReference, types: Vec<TypeObjectDigest>) 
                     function.type_parameters.len()
                 ],
                 parameters: vec![],
-                result: types.iter().position(|ty| *ty == f.unit_type).unwrap() as u32,
-                result_borrow: None,
+                result: CallableResult {
+                    ty: types.iter().position(|ty| *ty == f.unit_type).unwrap() as u32,
+                    relation: ResultRelation::Value,
+                },
+                read_scope_parameters: vec![],
+                read_scope_sources: vec![],
                 task_requirements: vec![],
             },
             code: CompiledCode {
@@ -360,6 +373,9 @@ fn unit(f: &Fixture, scope: DeclarationReference, types: Vec<TypeObjectDigest>) 
         DeclarationPayload::OwnedContract(contract) => {
             CompilationPayload::OwnedContract(contract.clone())
         }
+        DeclarationPayload::OwnedImplementation(implementation) => {
+            CompilationPayload::OwnedImplementation(implementation.clone())
+        }
         _ => unreachable!(),
     };
     let optimization = OptimizationPolicy::DeterministicBaseline;
@@ -370,7 +386,11 @@ fn unit(f: &Fixture, scope: DeclarationReference, types: Vec<TypeObjectDigest>) 
         key: CompilationUnitKey::derive_for_tag(
             &source,
             optimization,
-            matches!(payload, CompilationPayload::OwnedContract(_)).then_some(1),
+            match &payload {
+                CompilationPayload::OwnedContract(_) => Some(1),
+                CompilationPayload::OwnedImplementation(_) => Some(2),
+                _ => None,
+            },
         )
         .unwrap(),
         source,
@@ -378,6 +398,7 @@ fn unit(f: &Fixture, scope: DeclarationReference, types: Vec<TypeObjectDigest>) 
         tables: CompilationTables {
             declarations: vec![],
             fields: vec![],
+            read_view_fields: vec![],
             cases: vec![],
             requirements: vec![],
             operations: vec![],
@@ -498,7 +519,7 @@ fn artifact_associated_table_helper_current_unit_does_not_upgrade_canonical_owne
             vec![f.unit_type, f.projection]
         };
         let unit = unit(&f, scope, roots);
-        assert_eq!(unit.graph_contract_version, 33);
+        assert_eq!(unit.graph_contract_version, 34);
         validate_unit_types(&f.read, &unit, &OwnedAssociatedAdmission::new()).unwrap();
         f.read
             .owners
@@ -550,6 +571,252 @@ fn artifact_associated_table_helper_walks_nested_and_phantom_unused_actuals() {
     for root in [phantom, nested] {
         assert_bad_table(&f, &unit(&f, f.lexical, vec![f.unit_type, root]));
     }
+}
+
+#[test]
+fn artifact_aggregate_table_admission_keeps_each_inline_method_scope_exact() {
+    use crate::platform::kernel::{
+        ReadScopeArgument, ReadScopeBinder, ReadScopeParameter, ReadScopeReference, ReadScopeSource,
+    };
+    use crate::platform::semantic_id::ReadScopeParameterId;
+    let mut f = fixture();
+    let member = AssociatedTypeMemberId::migrate(SEED, 90);
+    // Equal formal IDs in distinct binders remain distinct scope coordinates.
+    let scope_parameter = ReadScopeParameter {
+        id: ReadScopeParameterId::migrate(SEED, 90),
+        name: Name::new("read_scope").unwrap(),
+    };
+    let methods = [MethodId::migrate(SEED, 90), MethodId::migrate(SEED, 91)];
+    let scopes = methods.map(|method| {
+        ReadScopeArgument::Parameter(ReadScopeReference {
+            binder: ReadScopeBinder::ContractMethod {
+                contract: f.contract,
+                method,
+            },
+            parameter: scope_parameter.id,
+        })
+    });
+    let views = scopes.map(|read_scope| {
+        f.read.add_type(TypeForm::AssociatedReadViewMember {
+            contract: f.contract,
+            member,
+            read_scope,
+        })
+    });
+    let key = OwnerKey::Declaration(f.contract.declaration);
+    let self_type;
+    {
+        let OwnerRecord::Declaration(record) = f.read.owners.get_mut(&key).unwrap() else {
+            unreachable!()
+        };
+        let DeclarationPayload::OwnedContract(contract) = &mut record.payload else {
+            unreachable!()
+        };
+        self_type = contract.methods[0].parameters[0].ty;
+        contract.associated_types.push(AssociatedTypeMember {
+            id: member,
+            name: Name::new("View").unwrap(),
+            bound: AssociatedTypeBound::ReadViewFamily {
+                scope_parameter: scope_parameter.clone(),
+            },
+        });
+        for index in 0..2 {
+            contract.methods.push(OwnedMethod {
+                id: methods[index],
+                name: Name::new(format!("view_{index}")).unwrap(),
+                parameters: vec![OwnedMethodParameter {
+                    ty: self_type,
+                    use_mode: ParameterUse::Borrow,
+                }],
+                result: CallableResult {
+                    ty: views[index],
+                    relation: ResultRelation::ViewFrom {
+                        source: 0,
+                        scope: scopes[index],
+                    },
+                },
+                read_scope_parameters: vec![scope_parameter.clone()],
+                read_scope_sources: vec![ReadScopeSource {
+                    source: 0,
+                    scope: scopes[index],
+                }],
+                effect: FunctionEffect::Pure,
+            });
+        }
+    }
+    let current = unit(
+        &f,
+        f.contract,
+        vec![self_type, f.abstract_member, views[0], views[1]],
+    );
+    let admission = OwnedAssociatedAdmission::new();
+    validate_unit_types(&f.read, &current, &admission).unwrap();
+    {
+        let OwnerRecord::Declaration(record) = f.read.owners.get_mut(&key).unwrap() else {
+            unreachable!()
+        };
+        let DeclarationPayload::OwnedContract(contract) = &mut record.payload else {
+            unreachable!()
+        };
+        // Both roots occur in the table, but the first method's scope cannot
+        // certify the second method's root. Aggregate admission checks each
+        // canonical occurrence before considering complete unused table entries.
+        contract.methods.last_mut().unwrap().result.ty = views[0];
+    }
+    let error = validate_unit_types(&f.read, &current, &admission).unwrap_err();
+    assert_eq!(error.class, DiagnosticClass::Corrupt);
+    assert_eq!(error.code, "artifact_associated_type");
+}
+
+#[test]
+fn artifact_aggregate_table_admission_keeps_each_family_binding_scope_exact() {
+    use crate::platform::kernel::{
+        AssociatedTypeBinding, AssociatedTypeBindingValue, OwnedImplementation,
+        OwnedMethodImplementation, ReadScopeArgument, ReadScopeBinder, ReadScopeParameter,
+        ReadScopeReference, ReadViewDeclaration,
+    };
+    use crate::platform::semantic_id::ReadScopeParameterId;
+    let mut f = fixture();
+    let members = [
+        AssociatedTypeMemberId::migrate(SEED, 92),
+        AssociatedTypeMemberId::migrate(SEED, 93),
+    ];
+    let scope_parameter = ReadScopeParameter {
+        id: ReadScopeParameterId::migrate(SEED, 92),
+        name: Name::new("read_scope").unwrap(),
+    };
+    let view = f.read.add_declaration(
+        92,
+        "BindingView",
+        OwnerKind::ReadView,
+        DeclarationPayload::ReadView(ReadViewDeclaration {
+            type_parameters: vec![],
+            scope_parameter: scope_parameter.clone(),
+            fields: vec![],
+        }),
+    );
+    let implementation = DeclarationReference {
+        package: f.read.package,
+        declaration: DeclarationId::migrate(SEED, 93),
+    };
+    let templates = members.map(|member| {
+        f.read.add_type(TypeForm::ReadViewApplied {
+            declaration: view,
+            arguments: vec![],
+            read_scope: ReadScopeArgument::Parameter(ReadScopeReference {
+                binder: ReadScopeBinder::AssociatedBinding {
+                    implementation,
+                    member,
+                },
+                parameter: scope_parameter.id,
+            }),
+        })
+    });
+    {
+        let OwnerRecord::Declaration(record) = f
+            .read
+            .owners
+            .get_mut(&OwnerKey::Declaration(f.contract.declaration))
+            .unwrap()
+        else {
+            unreachable!()
+        };
+        let DeclarationPayload::OwnedContract(contract) = &mut record.payload else {
+            unreachable!()
+        };
+        // Keep a valid complete unused method inventory while isolating the
+        // two family bindings. No empty-method malformed control is admitted.
+        contract.methods = vec![OwnedMethod {
+            id: MethodId::migrate(SEED, 92),
+            name: Name::new("unused").unwrap(),
+            parameters: vec![],
+            result: CallableResult {
+                ty: f.unit_type,
+                relation: ResultRelation::Value,
+            },
+            read_scope_parameters: vec![],
+            read_scope_sources: vec![],
+            effect: FunctionEffect::Pure,
+        }];
+        contract.associated_types = members
+            .into_iter()
+            .enumerate()
+            .map(|(index, id)| AssociatedTypeMember {
+                id,
+                name: Name::new(format!("View_{index}")).unwrap(),
+                bound: AssociatedTypeBound::ReadViewFamily {
+                    scope_parameter: scope_parameter.clone(),
+                },
+            })
+            .collect();
+    }
+    let self_type = f.read.add_type(TypeForm::ByteBuffer);
+    let mut bindings = members
+        .into_iter()
+        .zip(templates)
+        .map(|(member, ty)| AssociatedTypeBinding {
+            member,
+            value: AssociatedTypeBindingValue::ReadViewFamily {
+                scope_parameter: scope_parameter.clone(),
+                ty,
+            },
+        })
+        .collect::<Vec<_>>();
+    bindings.sort_by_key(|binding| binding.member);
+    assert_eq!(
+        f.read.add_declaration(
+            93,
+            "ViewSupplier",
+            OwnerKind::OwnedImplementation,
+            DeclarationPayload::OwnedImplementation(OwnedImplementation {
+                type_parameters: vec![],
+                implementation_parameters: vec![],
+                contract: f.contract,
+                self_type,
+                type_arguments: vec![],
+                methods: vec![OwnedMethodImplementation {
+                    method: MethodId::migrate(SEED, 92),
+                    function: f.ordinary,
+                    type_arguments: vec![],
+                    implementations: vec![],
+                    read_scope_arguments: vec![],
+                }],
+                associated_types: bindings,
+            }),
+        ),
+        implementation
+    );
+    let current = unit(
+        &f,
+        implementation,
+        vec![self_type, templates[0], templates[1]],
+    );
+    let admission = OwnedAssociatedAdmission::new();
+    validate_unit_types(&f.read, &current, &admission).unwrap();
+    {
+        let OwnerRecord::Declaration(record) =
+            f.read.owners.get_mut(&current.source.owner).unwrap()
+        else {
+            unreachable!()
+        };
+        let DeclarationPayload::OwnedImplementation(body) = &mut record.payload else {
+            unreachable!()
+        };
+        let second = body
+            .associated_types
+            .iter_mut()
+            .find(|binding| binding.member == members[1])
+            .unwrap();
+        let AssociatedTypeBindingValue::ReadViewFamily { ty, .. } = &mut second.value else {
+            unreachable!()
+        };
+        // The template exists and is otherwise valid; its exact binding owner is
+        // the first member. Equal formal IDs cannot certify the second binding.
+        *ty = templates[0];
+    }
+    let error = validate_unit_types(&f.read, &current, &admission).unwrap_err();
+    assert_eq!(error.class, DiagnosticClass::Corrupt);
+    assert_eq!(error.code, "artifact_associated_type");
 }
 
 #[test]

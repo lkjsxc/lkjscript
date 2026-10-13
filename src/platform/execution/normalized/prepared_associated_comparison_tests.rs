@@ -151,6 +151,7 @@ fn raw_code(
                 instructions[jump] = NormalizedInstruction::Jump(instructions.len() as u32);
             }
             ExpressionOperation::Call {
+                read_scope_arguments,
                 function,
                 type_arguments,
                 arguments,
@@ -161,6 +162,7 @@ fn raw_code(
                     emit(source, definition, *argument, targets, instructions, sites);
                 }
                 instructions.push(NormalizedInstruction::Call {
+                    read_scope_arguments: read_scope_arguments.clone().into(),
                     function: targets[function],
                     type_arguments: type_arguments.clone().into(),
                     arguments: arguments.len() as u32,
@@ -170,6 +172,7 @@ fn raw_code(
                 single = true;
             }
             ExpressionOperation::ImplementationCall {
+                read_scope_arguments,
                 function,
                 type_arguments,
                 implementations,
@@ -181,6 +184,7 @@ fn raw_code(
                     emit(source, definition, *argument, targets, instructions, sites);
                 }
                 instructions.push(NormalizedInstruction::ImplementationCall {
+                    read_scope_arguments: read_scope_arguments.clone().into(),
                     function: targets[function],
                     type_arguments: type_arguments.clone().into(),
                     implementations: implementations.clone().into(),
@@ -191,12 +195,14 @@ fn raw_code(
                 single = true;
             }
             ExpressionOperation::FunctionValue {
+                read_scope_arguments,
                 function,
                 type_arguments,
                 effect_arguments,
                 requirement_arguments,
             } => {
                 instructions.push(NormalizedInstruction::FunctionValue {
+                    read_scope_arguments: read_scope_arguments.clone().into(),
                     function: targets[function],
                     type_arguments: type_arguments.clone().into(),
                     effect_arguments: effect_arguments.clone().into(),
@@ -205,6 +211,7 @@ fn raw_code(
                 single = true;
             }
             ExpressionOperation::MethodCall {
+                read_scope_arguments,
                 witness,
                 contract,
                 method,
@@ -214,6 +221,7 @@ fn raw_code(
                     emit(source, definition, *argument, targets, instructions, sites);
                 }
                 instructions.push(NormalizedInstruction::MethodCall {
+                    read_scope_arguments: read_scope_arguments.clone().into(),
                     witness: witness.clone(),
                     contract: *contract,
                     method: *method,
@@ -228,34 +236,46 @@ fn raw_code(
                         type_arguments,
                         implementations,
                         arguments,
+                        read_scope_arguments,
                         ..
                     } => (
                         *function,
                         type_arguments.clone(),
                         implementations.clone(),
                         arguments.clone(),
+                        read_scope_arguments.clone(),
                     ),
                     ExpressionOperation::Call {
                         function,
                         type_arguments,
                         arguments,
+                        read_scope_arguments,
                         ..
                     } => (
                         *function,
                         type_arguments.clone(),
                         Vec::new(),
                         arguments.clone(),
+                        read_scope_arguments.clone(),
                     ),
                     _ => panic!("fixture parallel child must be a literal call"),
                 };
-                let (left_function, left_types, left_implementations, left_arguments) = call(*left);
-                let (right_function, right_types, right_implementations, right_arguments) =
-                    call(*right);
+                let (left_function, left_types, left_implementations, left_arguments, left_scopes) =
+                    call(*left);
+                let (
+                    right_function,
+                    right_types,
+                    right_implementations,
+                    right_arguments,
+                    right_scopes,
+                ) = call(*right);
                 for argument in left_arguments.iter().chain(&right_arguments) {
                     emit(source, definition, *argument, targets, instructions, sites);
                 }
                 sites.insert(instructions.len() as u32, Site::Parallel(*left, *right));
                 instructions.push(NormalizedInstruction::Parallel {
+                    left_read_scope_arguments: left_scopes.into(),
+                    right_read_scope_arguments: right_scopes.into(),
                     left: targets[&left_function],
                     left_types: left_types.into(),
                     left_implementations: left_implementations.into(),
@@ -266,7 +286,7 @@ fn raw_code(
                     right_arguments: right_arguments.len() as u32,
                     // This is an unexecuted preparation-only model. Its projected
                     // result root is retained, not a fabricated transfer proof.
-                    result_type: definition.result,
+                    result_type: definition.result.ty,
                 });
             }
             _ => panic!("syntax outside the finite raw fixture projection"),
@@ -374,10 +394,27 @@ fn raw_templates(
             type_parameter_constraints: constraints.into(),
             parameter_count: parameters.len() as u32,
             parameters: parameters.into(),
-            result: definition.result,
-            result_borrow: definition
-                .result_borrow
-                .map(|id| definition.parameters.iter().position(|p| *p == id).unwrap() as u32),
+            result: definition
+                .result
+                .try_map_source(|id| {
+                    Ok(definition.parameters.iter().position(|p| *p == id).unwrap() as u32)
+                })
+                .unwrap(),
+            read_scope_parameters: definition.read_scope_parameters.clone().into(),
+            read_scope_sources: definition
+                .read_scope_sources
+                .iter()
+                .cloned()
+                .map(|source| {
+                    source
+                        .try_map_source(|id| {
+                            Ok(definition.parameters.iter().position(|p| *p == id).unwrap() as u32)
+                        })
+                        .unwrap()
+                })
+                .collect::<Vec<_>>()
+                .into(),
+            read_scope_arguments: Arc::from([]),
             task_requirements: Arc::from([]),
             body: NormalizedFunctionBody::Code(body),
         });
@@ -416,6 +453,7 @@ fn produce(
             .position(|f| f.declaration == entry.function)
             .unwrap();
         instructions.push(NormalizedInstruction::ImplementationCall {
+            read_scope_arguments: entry.read_scope_arguments.to_vec().into(),
             function: FunctionIndex(index as u32, program.value_origin),
             type_arguments: entry.types.to_vec().into(),
             implementations: entry.implementations.to_vec().into(),
@@ -494,6 +532,7 @@ fn produce(
         implementations,
         contracts,
         runtime_owners: &runtime_owners,
+        producer_profiles: None,
         owned_records: program.owned_record_declarations.clone(),
         targets,
         instances: BTreeMap::new(),
@@ -515,6 +554,7 @@ fn produce(
                 FunctionIndex(index as u32, program.value_origin),
                 Vec::new(),
                 Vec::new(),
+                Vec::new(),
             )?;
         }
     }
@@ -523,6 +563,7 @@ fn produce(
         None,
         &Bindings::new(),
         &BTreeMap::new(),
+        &ScopeBindings::new(),
     )?;
     closing.close_pending()?;
     let applications = closing.instances.values().copied().collect();
@@ -570,6 +611,7 @@ fn expected_key(
         })
         .collect();
     ExpectedApplication {
+        read_scope_arguments: function.read_scope_arguments.to_vec(),
         function: function.declaration,
         types: function.type_arguments.to_vec(),
         witnesses,
@@ -654,7 +696,7 @@ fn compare(proof: &Proof, produced: &mut Produced, control: &ExecutionControl, s
         let raw = &produced.raw[&function.declaration];
         assert_eq!(function.source_generation, raw.source_generation);
         assert_eq!(function.effect.row(), expected.effect);
-        assert_eq!(function.result_borrow, expected.result_borrow);
+        assert_eq!(function.result.relation, expected.result.relation);
         let bindings = function
             .type_parameters
             .iter()
@@ -663,10 +705,12 @@ fn compare(proof: &Proof, produced: &mut Produced, control: &ExecutionControl, s
             .collect();
         let environment = ClosedTypeEnvironment::for_function(&function).unwrap();
         let mut work = Budget::new(control);
+        let scopes = function_scope_bindings(&function, &mut work).unwrap();
         let application = TypeApplication {
             bindings: &bindings,
             associated: Some(&environment),
             function: Some(index),
+            scopes: Some(&scopes),
         };
         let effects = raw
             .effect_parameters
@@ -719,13 +763,13 @@ fn compare(proof: &Proof, produced: &mut Produced, control: &ExecutionControl, s
         }
         let result = substitute_in(
             &mut produced.program.types,
-            function.result,
+            function.result.ty,
             &application,
             0,
             &mut work,
         )
         .unwrap();
-        assert_eq!(result, expected.result);
+        assert_eq!(result, expected.result.ty);
         assert_eq!(function.parameters.len(), expected.parameters.len());
         for (parameter, (expected_type, use_mode)) in
             function.parameters.iter().zip(&expected.parameters)
@@ -840,6 +884,7 @@ fn with_entries<R>(
     let entries = witnesses
         .iter()
         .map(|implementations| Entry {
+            read_scope_arguments: &[],
             function: fixture.consumer,
             types: &types,
             implementations,
@@ -932,6 +977,7 @@ fn add_body_targets(fixture: &mut Fixture) {
         &mut fixture.source,
         11,
         ExpressionOperation::MethodCall {
+            read_scope_arguments: vec![],
             witness,
             contract: fixture.contract,
             method,
@@ -942,6 +988,7 @@ fn add_body_targets(fixture: &mut Fixture) {
         &mut fixture.source,
         12,
         ExpressionOperation::FunctionValue {
+            read_scope_arguments: vec![],
             function: fixture.reader,
             type_arguments: vec![fixture.projection],
             effect_arguments: vec![],
@@ -952,6 +999,7 @@ fn add_body_targets(fixture: &mut Fixture) {
         &mut fixture.source,
         13,
         ExpressionOperation::FunctionValue {
+            read_scope_arguments: vec![],
             function: fixture.reader,
             type_arguments: vec![fixture.cell],
             effect_arguments: vec![],
@@ -978,6 +1026,7 @@ fn add_body_targets(fixture: &mut Fixture) {
             &mut fixture.source,
             id,
             ExpressionOperation::Call {
+                read_scope_arguments: vec![],
                 function: fixture.reader,
                 type_arguments: vec![fixture.projection],
                 arguments: vec![local],
@@ -1001,6 +1050,7 @@ fn add_body_targets(fixture: &mut Fixture) {
         &mut fixture.source,
         20,
         ExpressionOperation::ImplementationCall {
+            read_scope_arguments: vec![],
             function: fixture.consumer,
             type_arguments: vec![fixture.projection],
             implementations: vec![ImplementationOperand::Concrete {
@@ -1071,8 +1121,9 @@ fn add_unused_method(fixture: &mut Fixture) {
     );
     definition.type_parameters = vec![formal];
     definition.parameters = vec![parameter];
-    definition.result = ty;
-    definition.result_borrow = Some(parameter);
+    definition.result.ty = ty;
+    definition.result.relation =
+        crate::platform::kernel::ResultRelation::ReadFrom { source: parameter };
     definition.body = add_expression(
         &mut fixture.source,
         30,
@@ -1116,7 +1167,7 @@ fn add_unused_method(fixture: &mut Fixture) {
     signature.id = method;
     signature.name = Name::new("unused").unwrap();
     signature.parameters[0].ty = abstract_member;
-    signature.result = abstract_member;
+    signature.result.ty = abstract_member;
     contract.methods.push(signature);
     for implementation in fixture.implementations {
         let OwnerRecord::Declaration(owner) = fixture
@@ -1137,6 +1188,7 @@ fn add_unused_method(fixture: &mut Fixture) {
                 function: reference,
                 type_arguments: vec![fixture.cell],
                 implementations: vec![],
+                read_scope_arguments: vec![],
             });
         scheme.methods.sort_by_key(|mapping| mapping.method);
     }
@@ -1190,7 +1242,7 @@ fn composed_operand(fixture: &mut Fixture) -> ImplementationOperand {
         .collect();
     for binding in &mut scheme.associated_types {
         if binding.member == fixture.member {
-            binding.ty = ty;
+            *binding.value.ty_mut() = ty;
         }
     }
     scheme
@@ -1227,6 +1279,7 @@ fn actual_closing_matches_complete_shared_prerequisites_and_an_uncalled_distinct
     let types = [fixture.cell];
     let implementations = [selected];
     let entries = [Entry {
+        read_scope_arguments: &[],
         function: fixture.consumer,
         types: &types,
         implementations: &implementations,
@@ -1292,12 +1345,13 @@ fn actual_closing_and_canonical_reference_refuse_unused_binding_and_child_obliga
             let DeclarationPayload::OwnedImplementation(scheme) = &mut owner.payload else {
                 unreachable!()
             };
-            scheme
+            *scheme
                 .associated_types
                 .iter_mut()
                 .find(|binding| binding.member == fixture.spare)
                 .unwrap()
-                .ty = scalar;
+                .value
+                .ty_mut() = scalar;
         } else if fault == 1 {
             let ImplementationOperand::Concrete { type_arguments, .. } = &mut implementations[1]
             else {
@@ -1318,6 +1372,7 @@ fn actual_closing_and_canonical_reference_refuse_unused_binding_and_child_obliga
         let types = [fixture.cell];
         let implementations = [selected];
         let entries = [Entry {
+            read_scope_arguments: &[],
             function: fixture.consumer,
             types: &types,
             implementations: &implementations,
@@ -1489,7 +1544,7 @@ fn actual_closing_preserves_source_effect_scope_before_witness_selected_signatur
         effect_parameters: vec![reference],
     };
     value.parameters.push(parameter);
-    value.result_borrow = None;
+    value.result.relation = crate::platform::kernel::ResultRelation::Value;
     let control = ExecutionControl::uncancelled();
     with_entries(&fixture, &[0, 1], &[EffectRow::default()], |entries| {
         let proof =

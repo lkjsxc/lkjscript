@@ -369,7 +369,7 @@ fn invoke(
                 prepared.program.as_ref()
             },
             &value,
-            signature.result,
+            signature.result.ty,
             Default::default(),
         )?;
         let updates = (threshold + stride - 1) / stride;

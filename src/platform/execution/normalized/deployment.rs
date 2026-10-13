@@ -18,11 +18,12 @@ use super::resource::NormalizedResourceScope;
 use super::secret::NormalizedSecretVerifierAdapter;
 use super::security::NormalizedSecurityAdapter;
 use super::value::NormalizedValue;
+use super::value_schema::NormalizedValueSchema;
 use crate::platform::compiler::ArtifactManifestDigest;
 use crate::platform::configuration::{ConfigurationOperation, ConfigurationValue};
 use crate::platform::data::{DataLimits, DataStore};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
-use crate::platform::execution::{ExecutionError, ExecutionFailureClass};
+use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::http_client::{
     HttpClient, HttpClientAddressPolicy, HttpClientLimits, HttpClientTrust,
 };
@@ -601,6 +602,29 @@ fn adapter(
     let interface = requirement.interface;
     if preparation.is_none_or(|host| host.enforce_standard_interface) {
         require_standard_interface(interface, descriptor.kind())?;
+    }
+    // Admit the complete stable operation inventory before any descriptor branch
+    // resolves secrets, prepares an adapter, or opens its backing service. Unused
+    // operations and inactive/phantom type occurrences remain boundary content.
+    let control = ExecutionControl::uncancelled();
+    for index in requirement.operations.iter() {
+        let operation = program.operations.get(index.0 as usize).ok_or_else(|| {
+            deployment_error(
+                DiagnosticClass::Corrupt,
+                "normalized_deployment_operation",
+                "requirement operation escaped the exact artifact table",
+            )
+        })?;
+        for ty in operation
+            .parameters
+            .iter()
+            .map(|parameter| parameter.ty)
+            .chain(std::iter::once(operation.result))
+        {
+            program
+                .reject_read_view_escape(ty, &control)
+                .map_err(super::runner::execution_diagnostic)?;
+        }
     }
     let adapter: Result<Arc<dyn NormalizedCapabilityAdapter>, Diagnostic> = match descriptor {
         NormalizedAdapterDescriptor::Configuration { values } => {

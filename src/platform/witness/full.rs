@@ -69,6 +69,18 @@ pub(crate) fn rebuild_full_witness_with_limit(
     rebuild_full_witness_checked(snapshot, maximum_work, &|| Ok(()))
 }
 
+#[cfg(test)]
+std::thread_local! {
+    static CHECKED_FULL_VALIDATIONS: std::cell::Cell<usize> = const {
+        std::cell::Cell::new(0)
+    };
+}
+
+#[cfg(test)]
+pub(crate) fn checked_full_validation_invocations() -> usize {
+    CHECKED_FULL_VALIDATIONS.with(std::cell::Cell::get)
+}
+
 pub(crate) fn rebuild_full_witness_checked(
     snapshot: &KernelSnapshot,
     maximum_work: usize,
@@ -76,8 +88,104 @@ pub(crate) fn rebuild_full_witness_checked(
 ) -> Result<FullWitness, Vec<Diagnostic>> {
     let validation =
         crate::platform::kernel::validate_full_checked(snapshot, maximum_work, &mut 0, checkpoint)?;
+    #[cfg(test)]
+    CHECKED_FULL_VALIDATIONS.with(|count| count.set(count.get().saturating_add(1)));
     let witness =
         build_validated_witness(snapshot, validation).map_err(|diagnostic| vec![diagnostic])?;
+    checkpoint().map_err(|error| vec![error])?;
+    Ok(witness)
+}
+
+/// A successful current full validation, scoped by the source reader's opaque exact binding.
+/// Its report cannot be supplied by a caller or a historical producer certificate.
+#[derive(Debug)]
+pub(crate) struct CompletedSourceValidation {
+    binding: crate::platform::package_transport::source::SourceValidationBinding,
+    report: FullValidationReport,
+    modeled_rebuild_work: u64,
+}
+
+impl CompletedSourceValidation {
+    pub(crate) fn source_binding(
+        &self,
+    ) -> &crate::platform::package_transport::source::SourceValidationBinding {
+        &self.binding
+    }
+
+    pub(crate) fn modeled_rebuild_work(&self) -> u64 {
+        self.modeled_rebuild_work
+    }
+}
+
+fn modeled_source_rebuild_work(witness: &FullWitness) -> Result<u64, Diagnostic> {
+    let report = &witness.report;
+    // Reserve current construction using complete accepted cardinalities and actual canonical
+    // map work. This is a modeled cardinality/map-work reservation, not an exact observation of every
+    // legacy summary/ownership traversal or host allocation. Existing current source/profile
+    // and projection reservations remain; no witness bytes or variable records are cached.
+    [
+        (report.owners_summarized, 16),
+        (report.full_validation.type_objects_checked, 8),
+        (report.full_validation.expression_records_checked, 4),
+        (report.full_validation.dependencies_checked, 4),
+        (report.full_validation.retirements_checked, 4),
+        (report.namespace_entries, 2),
+        (report.ownership_entries, 2),
+        (report.relation_edges, 8),
+        (report.test_dependency_entries, 4),
+        (report.summary_objects, 2),
+        (report.map_pages, 4),
+        (report.map_work.key_comparisons, 1),
+        (report.map_work.entries_visited, 1),
+    ]
+    .into_iter()
+    .try_fold(8_u64, |total, (count, weight)| {
+        count.checked_mul(weight)?.checked_add(total)
+    })
+    .ok_or_else(|| {
+        witness_error(
+            crate::platform::diagnostic::DiagnosticClass::Resource,
+            "witness_source_rebuild_work",
+            "modeled current source witness reconstruction work overflowed",
+        )
+    })
+}
+
+pub(crate) fn rebuild_full_witness_checked_for_source(
+    snapshot: &KernelSnapshot,
+    maximum_work: usize,
+    checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
+    binding: crate::platform::package_transport::source::SourceValidationBinding,
+) -> Result<(FullWitness, CompletedSourceValidation), Vec<Diagnostic>> {
+    let witness = rebuild_full_witness_checked(snapshot, maximum_work, checkpoint)?;
+    // Mint only after real full validation, canonical facts and the end checkpoint succeed.
+    let completed = CompletedSourceValidation {
+        binding,
+        report: witness.report.full_validation.clone(),
+        modeled_rebuild_work: modeled_source_rebuild_work(&witness).map_err(|error| vec![error])?,
+    };
+    Ok((witness, completed))
+}
+
+pub(crate) fn rebuild_full_witness_from_source_validation(
+    snapshot: &KernelSnapshot,
+    binding: &crate::platform::package_transport::source::SourceValidationBinding,
+    completed: &CompletedSourceValidation,
+    checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
+) -> Result<FullWitness, Vec<Diagnostic>> {
+    checkpoint().map_err(|error| vec![error])?;
+    if &completed.binding != binding {
+        return Err(vec![witness_error(
+            crate::platform::diagnostic::DiagnosticClass::Corrupt,
+            "witness_source_validation_binding",
+            "a completed local validation cannot certify another exact source binding",
+        )]);
+    }
+    // The source collector independently reconstructed all current local and attached foreign
+    // inputs before this call. Rebuild canonical facts and current bytes, retaining the original
+    // report as historical proof metadata; the collector charges current executed work separately.
+    let witness =
+        build_validated_witness(snapshot, completed.report.clone()).map_err(|error| vec![error])?;
     checkpoint().map_err(|error| vec![error])?;
     Ok(witness)
 }

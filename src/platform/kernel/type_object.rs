@@ -1,5 +1,6 @@
 //! Content-addressed, structural version-10 type objects.
 
+use super::ReadScopeArgument;
 use super::contract::{MAXIMUM_CHILDREN, TYPE_OBJECT_CONTRACT_VERSION};
 use super::digest::TypeObjectDigest;
 use super::name::Name;
@@ -22,7 +23,9 @@ pub struct TypeObject {
 impl TypeObject {
     pub fn new(form: TypeForm) -> Result<Self, Diagnostic> {
         let object = Self {
-            contract_version: if form.is_associated() {
+            contract_version: if form.is_read_view() {
+                super::contract::ASSOCIATED_READ_VIEW_CONTRACT_VERSION
+            } else if form.is_owned_associated() {
                 super::contract::OWNED_ASSOCIATED_CONTRACT_VERSION
             } else if matches!(form, TypeForm::OwnedSequence { .. }) {
                 super::contract::OWNED_SEQUENCE_TYPE_CONTRACT_VERSION
@@ -50,7 +53,9 @@ impl TypeObject {
     }
 
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
-        let expected = if self.form.is_associated() {
+        let expected = if self.form.is_read_view() {
+            super::contract::ASSOCIATED_READ_VIEW_CONTRACT_VERSION
+        } else if self.form.is_owned_associated() {
             super::contract::OWNED_ASSOCIATED_CONTRACT_VERSION
         } else if matches!(self.form, TypeForm::OwnedSequence { .. }) {
             super::contract::OWNED_SEQUENCE_TYPE_CONTRACT_VERSION
@@ -83,6 +88,9 @@ impl TypeObject {
         match &self.form {
             TypeForm::Applied { arguments, .. } => {
                 require_count("nominal type arguments", arguments.len(), false)?;
+            }
+            TypeForm::ReadViewApplied { arguments, .. } => {
+                require_count("read-view type arguments", arguments.len(), true)?;
             }
             TypeForm::StructuralRecord { fields }
             | TypeForm::OwnedProduct { fields }
@@ -123,7 +131,9 @@ impl TypeObject {
             | TypeForm::Result { .. }
             | TypeForm::Stream { .. } => {}
             TypeForm::AssociatedContractMember { .. }
-            | TypeForm::AssociatedWitnessProjection { .. } => {}
+            | TypeForm::AssociatedWitnessProjection { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. } => {}
             TypeForm::OwnedSequence { .. } => {}
         }
         Ok(())
@@ -131,7 +141,9 @@ impl TypeObject {
 
     pub fn child_type_count(&self) -> usize {
         match &self.form {
-            TypeForm::Applied { arguments, .. } => arguments.len(),
+            TypeForm::Applied { arguments, .. } | TypeForm::ReadViewApplied { arguments, .. } => {
+                arguments.len()
+            }
             TypeForm::StructuralRecord { fields }
             | TypeForm::OwnedProduct { fields }
             | TypeForm::OwnedChoice { cases: fields } => fields.len(),
@@ -149,7 +161,9 @@ impl TypeObject {
 
     pub fn child_types(&self) -> Vec<TypeObjectDigest> {
         match &self.form {
-            TypeForm::Applied { arguments, .. } => arguments.clone(),
+            TypeForm::Applied { arguments, .. } | TypeForm::ReadViewApplied { arguments, .. } => {
+                arguments.clone()
+            }
             TypeForm::StructuralRecord { fields }
             | TypeForm::OwnedProduct { fields }
             | TypeForm::OwnedChoice { cases: fields } => {
@@ -190,7 +204,9 @@ impl TypeObject {
             | TypeForm::Named { .. }
             | TypeForm::CapabilityResource { .. } => Vec::new(),
             TypeForm::AssociatedContractMember { .. }
-            | TypeForm::AssociatedWitnessProjection { .. } => Vec::new(),
+            | TypeForm::AssociatedWitnessProjection { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. } => Vec::new(),
         }
     }
 }
@@ -279,13 +295,48 @@ pub enum TypeForm {
         contract: DeclarationReference,
         member: AssociatedTypeMemberId,
     },
+    /// Positive affine descriptor identity, including its complete source-scope actual.
+    ReadViewApplied {
+        declaration: DeclarationReference,
+        arguments: Vec<TypeObjectDigest>,
+        read_scope: ReadScopeArgument,
+    },
+    AssociatedReadViewMember {
+        contract: DeclarationReference,
+        member: AssociatedTypeMemberId,
+        read_scope: ReadScopeArgument,
+    },
+    AssociatedReadViewProjection {
+        scope: DeclarationReference,
+        parameter: ImplementationParameterId,
+        contract: DeclarationReference,
+        member: AssociatedTypeMemberId,
+        read_scope: ReadScopeArgument,
+    },
 }
 
 impl TypeForm {
     pub(crate) fn is_associated(&self) -> bool {
+        self.is_owned_associated()
+            || matches!(
+                self,
+                Self::AssociatedReadViewMember { .. } | Self::AssociatedReadViewProjection { .. }
+            )
+    }
+
+    pub(crate) fn is_owned_associated(&self) -> bool {
         matches!(
             self,
             Self::AssociatedContractMember { .. } | Self::AssociatedWitnessProjection { .. }
+        )
+    }
+
+    pub(crate) fn is_read_view(&self) -> bool {
+        matches!(
+            self,
+            Self::ReadViewApplied { .. }
+                | Self::AssociatedReadViewMember { .. }
+                | Self::AssociatedReadViewProjection { .. }
         )
     }
 }

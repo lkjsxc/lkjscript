@@ -58,6 +58,14 @@ fn associated_alias_provenance_does_not_make_a_constructor_cycle() {
             slot_owners: vec![(0, 0), (0, 1)],
             edges: Vec::new(),
             associated: State::default(),
+            completed_view_queries: BTreeMap::new(),
+            diagnostic_context: WorkContext {
+                phase: "fixture initialization",
+                owner: None,
+                context: None,
+                expression: None,
+                query: None,
+            },
         };
         analysis
             .push_edge(Edge {

@@ -1,0 +1,7 @@
+[
+  {"name":"cross-chunk-range-and-relative-subrange","range":{"observations":{"left":{"left":4,"right":6},"right":{"left":4,"right":6}},"drained":[13,19,5,23,7,11]},"metadata":{"observations":{"left":{"left":6,"right":6},"right":{"left":6,"right":6}},"drained":[13,19,5,23,7,11]}},
+  {"name":"empty-range-retains-source-custody","range":{"observations":{"left":{"left":0,"right":6},"right":{"left":0,"right":6}},"drained":[13,19,5,23,7,11]},"metadata":{"observations":{"left":{"left":6,"right":6},"right":{"left":6,"right":6}},"drained":[13,19,5,23,7,11]}},
+  {"name":"whole-range","range":{"observations":{"left":{"left":6,"right":6},"right":{"left":6,"right":6}},"drained":[13,19,5,23,7,11]},"metadata":{"observations":{"left":{"left":6,"right":6},"right":{"left":6,"right":6}},"drained":[13,19,5,23,7,11]}},
+  {"name":"single-element-range","range":{"observations":{"left":{"left":1,"right":6},"right":{"left":1,"right":6}},"drained":[13,19,5,23,7,11]},"metadata":{"observations":{"left":{"left":6,"right":6},"right":{"left":6,"right":6}},"drained":[13,19,5,23,7,11]}},
+  {"name":"empty-owner-and-reuse","range":{"observations":{"left":{"left":0,"right":0},"right":{"left":0,"right":0}},"drained":[]},"metadata":{"observations":{"left":{"left":0,"right":0},"right":{"left":0,"right":0}},"drained":[]}}
+]

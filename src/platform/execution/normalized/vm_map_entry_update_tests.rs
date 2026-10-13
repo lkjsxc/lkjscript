@@ -80,8 +80,9 @@ fn map_entries_path_updates_preserve_every_retained_version_in_distinct_shapes()
                         assert_eq!(&fields[1], &(Name::new("value").unwrap(), value.clone()));
                     }
                     if !reference {
-                        // Raw map admission visits n nodes; projection visits n more.
-                        assert_eq!(observed.work.maps.node_visits, 2 * oracle.len() as u64);
+                        // Complete negative view inspection, raw map admission and
+                        // entry projection each visit every actual map node once.
+                        assert_eq!(observed.work.maps.node_visits, 3 * oracle.len() as u64);
                         assert_eq!(observed.work.raw_result_admission_nodes, 0);
                     }
                 }

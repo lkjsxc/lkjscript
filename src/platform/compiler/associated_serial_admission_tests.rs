@@ -87,12 +87,12 @@ fn encoded_source(
             };
             unit.payload = CompilationPayload::OwnedImplementation(implementation.clone());
             for associated in &implementation.associated_types {
-                if !unit.tables.types.contains(&associated.ty) {
-                    unit.tables.types.push(associated.ty);
+                if !unit.tables.types.contains(&associated.ty()) {
+                    unit.tables.types.push(associated.ty());
                 }
-                let object = &source.types[&associated.ty];
+                let object = &source.types[&associated.ty()];
                 let (ty, bytes) = encode_type_object(object).unwrap();
-                assert_eq!(ty, associated.ty);
+                assert_eq!(ty, associated.ty());
                 loaded.objects.insert(
                     ObjectKey::from_digest(ObjectDomain::Type, ty.bytes()),
                     bytes,
@@ -209,13 +209,15 @@ fn associated_serial_unused_owned_binding_rejects_after_complete_reencoding() {
         .iter_mut()
         .find(|binding| binding.member.to_string() == "assoc_type_c7000000000000000000000000000002")
         .unwrap();
-    assert_ne!(spare.ty, scalar);
-    spare.ty = scalar;
+    assert_ne!(spare.ty(), scalar);
+    spare.value = crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty: scalar };
     let bytes = encoded_source(&fixture.loaded, &source, owner);
     let error =
         load_artifact(&bytes).expect_err("unused associated member still requires its Owned bound");
     assert_eq!(error.class, DiagnosticClass::Corrupt, "{error:?}");
-    assert_eq!(error.code, "artifact_affine_meaning", "{error:?}");
+    // Complete associated-unit inventory admission rejects the unused Owned
+    // binding before the later body/affine validation phase.
+    assert_eq!(error.code, "artifact_associated_type", "{error:?}");
     assert!(error.message.contains("kernel_owned_contract"), "{error:?}");
     fixture.loaded.require_current_admission(|| Ok(())).unwrap();
 }
@@ -229,7 +231,11 @@ fn associated_serial_actual_parameter_generation_rejects_after_complete_reencodi
     let OwnerRecord::Parameter(parameter) = record else {
         unreachable!()
     };
-    assert_eq!(parameter.header.contract_version, 33);
+    assert_eq!(
+        parameter.header.contract_version,
+        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+        "the fixture was freshly authored under the selected current source profile",
+    );
     assert!(matches!(
         source.types[&parameter.ty].form,
         TypeForm::AssociatedWitnessProjection { .. }

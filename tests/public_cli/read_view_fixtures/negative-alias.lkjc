@@ -1,0 +1,21 @@
+declarations.begin
+(units
+  (module create bad-alias
+    (function create first-anchor (visibility private) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_d8600000000000000000000000000001 reader readview-consumer::RangeRead W (types I64))
+      (scope-parameter read_scope_d8600000000000000000000000000001 s)
+      (parameter create first (type (associated-read-view-projection first-anchor implparam_d8600000000000000000000000000001
+        readview-consumer::RangeRead assoc_type_d8100000000000000000000000000001
+        (read-scope (declaration first-anchor) read_scope_d8600000000000000000000000000001))) (use borrow))
+      (parameter create second (type (associated-read-view-projection first-anchor implparam_d8600000000000000000000000000001
+        readview-consumer::RangeRead assoc_type_d8100000000000000000000000000001
+        (read-scope (declaration first-anchor) read_scope_d8600000000000000000000000000001))) (use borrow))
+      (scope-source first (read-scope (declaration first-anchor) read_scope_d8600000000000000000000000000001))
+      (scope-source second (read-scope (declaration first-anchor) read_scope_d8600000000000000000000000000001))
+      (returns (associated-read-view-projection first-anchor implparam_d8600000000000000000000000000001
+        readview-consumer::RangeRead assoc_type_d8100000000000000000000000000001
+        (read-scope (declaration first-anchor) read_scope_d8600000000000000000000000000001))
+        (view-from first (read-scope (declaration first-anchor) read_scope_d8600000000000000000000000000001)))
+      (body (view-reborrow (local second) (read-scope (declaration first-anchor) read_scope_d8600000000000000000000000000001))))))
+declarations.end

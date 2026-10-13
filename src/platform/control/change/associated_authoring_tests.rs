@@ -22,14 +22,14 @@ type.associated-contract-member as=@member contract=$contract member={FIRST}
 type.owned-sequence as=@block item=byte-buffer
 type.associated-witness-projection as=@projection scope=$consumer parameter={WITNESS} contract=$contract member={FIRST}
 create.owned-contract as=$contract module=$module name=Storage visibility=public self=@self
-owned.associated-member parent=$contract index=0 id={FIRST} name=Block bound=owned
-owned.associated-member parent=$contract index=1 id={SECOND} name=Spare bound=owned
+owned.associated-member parent=$contract index=0 id={FIRST} name=Block kind=owned
+owned.associated-member parent=$contract index=1 id={SECOND} name=Spare kind=owned
 owned.method parent=$contract index=0 as=%method id=method_95000000000000000000000000000001 name=produce result=@member
 owned.parameter parent=%method index=0 type=@self use=consume
 add.type-parameter as=$self declaration=$contract name=Self constraint=owned
 create.owned-implementation as=$implementation module=$module name=Cells visibility=public contract=$contract self=@block
-owned.associated-binding parent=$implementation index=0 member={FIRST} type=@block
-owned.associated-binding parent=$implementation index=1 member={SECOND} type=owned-i64-cell
+owned.associated-binding parent=$implementation index=0 member={FIRST} kind=owned type=@block
+owned.associated-binding parent=$implementation index=1 member={SECOND} kind=owned type=owned-i64-cell
 owned.mapping parent=$implementation index=0 method=method_95000000000000000000000000000001 function=$make
 add.parameter as=$cell function=$make name=cell type=@block use=consume
 create.function as=$make module=$module name=make visibility=public result=@block effect=pure body=$cell-value
@@ -87,7 +87,7 @@ fn associated_surface_native_intent_matches_literal_compact_complete_coordinates
     let compact = decode(&compact_body());
     let native = decode(&native_body());
     let bytes = canonical_authored_intent_bytes(&compact.semantic).unwrap();
-    assert_eq!(&bytes[..8], b"LKJACR38");
+    assert_eq!(&bytes[..8], b"LKJACR39");
     assert_eq!(
         bytes,
         canonical_authored_intent_bytes(&native.semantic).unwrap()
@@ -95,7 +95,7 @@ fn associated_surface_native_intent_matches_literal_compact_complete_coordinates
     assert_eq!(compact.request_commitment, native.request_commitment);
     assert_eq!(
         commitment_codec_identity(&bytes),
-        "lkjscript-authored-change-codec-38"
+        "lkjscript-authored-change-codec-39"
     );
     let AuthoredChange::CreateOwnedContract {
         associated_types,
@@ -113,12 +113,13 @@ fn associated_surface_native_intent_matches_literal_compact_complete_coordinates
         [FIRST, SECOND]
     );
     assert!(
-        matches!(&methods[0].result, AuthoredType::AssociatedContractMember { contract: AuthoredDeclarationReference::Local { declaration: DeclarationSelector::Symbol { symbol } }, member } if symbol == "$contract" && member.to_string() == FIRST)
+        matches!(&methods[0].result.ty, AuthoredType::AssociatedContractMember { contract: AuthoredDeclarationReference::Local { declaration: DeclarationSelector::Symbol { symbol } }, member } if symbol == "$contract" && member.to_string() == FIRST)
     );
     let AuthoredChange::CreateFunction { result, .. } = compact.semantic.changes.iter().find(|change| matches!(change, AuthoredChange::CreateFunction { symbol, .. } if symbol == "$consumer")).unwrap() else { panic!("consumer") };
     assert!(
-        matches!(result, AuthoredType::AssociatedWitnessProjection { scope: AuthoredDeclarationReference::Local { declaration: DeclarationSelector::Symbol { symbol } }, parameter, contract: AuthoredDeclarationReference::Local { declaration: DeclarationSelector::Symbol { symbol: contract } }, member } if symbol == "$consumer" && parameter.to_string() == WITNESS && contract == "$contract" && member.to_string() == FIRST)
+        matches!(&result.ty, AuthoredType::AssociatedWitnessProjection { scope: AuthoredDeclarationReference::Local { declaration: DeclarationSelector::Symbol { symbol } }, parameter, contract: AuthoredDeclarationReference::Local { declaration: DeclarationSelector::Symbol { symbol: contract } }, member } if symbol == "$consumer" && parameter.to_string() == WITNESS && contract == "$contract" && member.to_string() == FIRST)
     );
+    assert_eq!(result.relation, AuthoredResultRelation::Value);
 }
 
 #[test]
@@ -141,8 +142,8 @@ fn associated_surface_explicit_coordinates_and_complete_inventory_order_bind_int
 fn associated_surface_rejects_missing_wrong_domain_and_unconsumed_coordinates() {
     let input = compact_body();
     for invalid in [
-        input.replace(" bound=owned", ""),
-        input.replace("bound=owned", "bound=transferable"),
+        input.replace(" kind=owned", ""),
+        input.replace("kind=owned", "kind=transferable"),
         input.replace("scope=$consumer ", ""),
         input.replace(&format!("parameter={WITNESS} "), ""),
         input.replace(
@@ -491,7 +492,7 @@ fn associated_surface_raw_candidate_draft_normalization_preserves_full_bytes() {
         lowered.allocated["$make"]
     );
     assert!(
-        matches!(&final_types[&contract.methods[0].result].form, k::TypeForm::AssociatedContractMember { contract, member } if contract.package == view.package() && OwnerKey::Declaration(contract.declaration) == lowered.allocated["$contract"] && *member == first)
+        matches!(&final_types[&contract.methods[0].result.ty].form, k::TypeForm::AssociatedContractMember { contract, member } if contract.package == view.package() && OwnerKey::Declaration(contract.declaration) == lowered.allocated["$contract"] && *member == first)
     );
     let O::Declaration(consumer) = &final_owners[&lowered.allocated["$consumer"]] else {
         panic!("consumer")
@@ -500,11 +501,11 @@ fn associated_surface_raw_candidate_draft_normalization_preserves_full_bytes() {
         panic!("consumer")
     };
     assert!(
-        matches!(&final_types[&consumer.result].form, k::TypeForm::AssociatedWitnessProjection { scope, parameter, contract, member } if OwnerKey::Declaration(scope.declaration) == lowered.allocated["$consumer"] && scope.package == view.package() && parameter.to_string() == WITNESS && OwnerKey::Declaration(contract.declaration) == lowered.allocated["$contract"] && contract.package == view.package() && *member == first)
+        matches!(&final_types[&consumer.result.ty].form, k::TypeForm::AssociatedWitnessProjection { scope, parameter, contract, member } if OwnerKey::Declaration(scope.declaration) == lowered.allocated["$consumer"] && scope.package == view.package() && parameter.to_string() == WITNESS && OwnerKey::Declaration(contract.declaration) == lowered.allocated["$contract"] && contract.package == view.package() && *member == first)
     );
     assert_eq!(implementation.associated_types[0].member, second);
     assert!(matches!(
-        final_types[&implementation.associated_types[0].ty].form,
+        final_types[&implementation.associated_types[0].value.ty()].form,
         k::TypeForm::OwnedI64Cell
     ));
     // Omitting a complete inventory in an edit means empty replacement, never retention.

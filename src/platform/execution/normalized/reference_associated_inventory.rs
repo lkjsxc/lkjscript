@@ -4,16 +4,32 @@ use super::*;
 impl Derivation<'_> {
     pub(super) fn associated_bound(&mut self, ty: TypeObjectDigest) -> Result<(), ExecutionError> {
         self.budget.tick()?;
+        let view = matches!(
+            self.types.get(&ty).ok_or_else(reject)?.form,
+            TypeForm::AssociatedReadViewMember { .. }
+                | TypeForm::AssociatedReadViewProjection { .. }
+        );
         let (contract, member) = match self.types.get(&ty).ok_or_else(reject)?.form {
-            TypeForm::AssociatedContractMember { contract, member } => (contract, member),
+            TypeForm::AssociatedContractMember { contract, member }
+            | TypeForm::AssociatedReadViewMember {
+                contract, member, ..
+            } => (contract, member),
             TypeForm::AssociatedWitnessProjection {
                 scope,
                 parameter,
                 contract,
                 member,
+            }
+            | TypeForm::AssociatedReadViewProjection {
+                scope,
+                parameter,
+                contract,
+                member,
+                ..
             } => {
                 let owner = self.declaration(scope, None)?;
-                self.current(scope, owner.header.contract_version)?;
+                let source_view = view || self.read_view_owner(scope)?;
+                self.associated_generation(scope, owner.header.contract_version, source_view)?;
                 let parameters = match &owner.payload {
                     DeclarationPayload::Function(function) => &function.implementation_parameters,
                     DeclarationPayload::OwnedImplementation(scheme) => {
@@ -54,14 +70,20 @@ impl Derivation<'_> {
             _ => return Err(reject()),
         };
         let owner = self.declaration(contract, None)?;
-        self.current(contract, owner.header.contract_version)?;
+        let contract_view = view || self.read_view_contract(contract)?;
+        self.associated_generation(contract, owner.header.contract_version, contract_view)?;
         let DeclarationPayload::OwnedContract(contract) = &owner.payload else {
             return Err(reject());
         };
         let mut found = false;
         for candidate in &contract.associated_types {
             self.budget.tick()?;
-            if candidate.id == member && candidate.bound == AssociatedTypeBound::Owned {
+            if candidate.id == member
+                && match &candidate.bound {
+                    AssociatedTypeBound::Owned => !view,
+                    AssociatedTypeBound::ReadViewFamily { .. } => view,
+                }
+            {
                 if found {
                     return Err(reject());
                 }
@@ -212,6 +234,24 @@ impl Derivation<'_> {
             symbolic: true,
             ..Environment::default()
         };
+        if let DeclarationPayload::Function(function) = &owner.payload {
+            let scopes = function
+                .read_scope_parameters
+                .iter()
+                .map(|formal| {
+                    ReadScopeArgument::Parameter(ReadScopeReference {
+                        binder: ReadScopeBinder::Declaration(scope),
+                        parameter: formal.id,
+                    })
+                })
+                .collect::<Vec<_>>();
+            self.scope_bindings(
+                ReadScopeBinder::Declaration(scope),
+                &function.read_scope_parameters,
+                &scopes,
+                &mut env,
+            )?;
+        }
         for parameter in parameters.iter() {
             let ty = self.intern_type(TypeForm::TypeParameter {
                 parameter: *parameter,
@@ -410,16 +450,45 @@ impl Derivation<'_> {
                 self.reserve_operand(operand, 0)?;
                 self.reserve_operand(operand, 0)?;
             }
+            self.budget.reserve::<ReadScopeArgument>(
+                mapping
+                    .read_scope_arguments
+                    .len()
+                    .checked_mul(2)
+                    .ok_or_else(capacity)?,
+            )?;
             let operation = ExpressionOperation::ImplementationCall {
                 function: mapping.function,
                 type_arguments: mapping.type_arguments.clone(),
                 implementations: mapping.implementations.clone(),
                 effect_arguments: Vec::new(),
                 requirement_arguments: Vec::new(),
+                read_scope_arguments: mapping.read_scope_arguments.clone(),
                 arguments: Vec::new(),
             };
             let target = self.symbolic_target(&operation, &env)?.ok_or_else(reject)?;
-            let expected = self.scoped_method_signature(&selected, mapping.method)?;
+            let method = contract
+                .methods
+                .iter()
+                .find(|method| method.id == mapping.method)
+                .ok_or_else(reject)?;
+            let expected = self.scoped_method_signature(
+                &selected,
+                mapping.method,
+                &method
+                    .read_scope_parameters
+                    .iter()
+                    .map(|formal| {
+                        ReadScopeArgument::Parameter(ReadScopeReference {
+                            binder: ReadScopeBinder::ContractMethod {
+                                contract: scheme.contract,
+                                method: mapping.method,
+                            },
+                            parameter: formal.id,
+                        })
+                    })
+                    .collect::<Vec<_>>(),
+            )?;
             self.compare_scoped_method(&expected, &target)?;
             self.budget
                 .node::<((DeclarationReference, MethodId), SymbolicTarget)>()?;
@@ -448,6 +517,10 @@ impl Derivation<'_> {
         let DeclarationPayload::OwnedContract(contract) = &owner.payload else {
             return Err(reject());
         };
+        let contract_view = self.read_view_contract(scope)?;
+        if !contract.associated_types.is_empty() || contract_view {
+            self.associated_generation(scope, owner.header.contract_version, contract_view)?;
+        }
         self.budget
             .node::<(DeclarationReference, crate::platform::kernel::OwnedContract)>()?;
         self.budget
@@ -459,12 +532,23 @@ impl Derivation<'_> {
         for member in &contract.associated_types {
             self.budget.tick()?;
             self.budget.reserve::<u8>(member.name.as_str().len())?;
+            if let AssociatedTypeBound::ReadViewFamily { scope_parameter } = &member.bound {
+                self.budget
+                    .reserve::<u8>(scope_parameter.name.as_str().len())?;
+            }
         }
         self.budget
             .reserve::<crate::platform::kernel::OwnedMethod>(contract.methods.len())?;
         for method in &contract.methods {
             self.budget.tick()?;
             self.budget.reserve::<u8>(method.name.as_str().len())?;
+            self.budget
+                .reserve::<ReadScopeParameter>(method.read_scope_parameters.len())?;
+            self.budget
+                .reserve::<ReadScopeSource<u32>>(method.read_scope_sources.len())?;
+            for parameter in &method.read_scope_parameters {
+                self.budget.reserve::<u8>(parameter.name.as_str().len())?;
+            }
             self.budget
                 .reserve::<crate::platform::kernel::OwnedMethodParameter>(
                     method.parameters.len(),
@@ -481,7 +565,9 @@ impl Derivation<'_> {
             }
         }
         self.contract_templates.insert(scope, contract.clone());
-        let env = self.symbolic_environment(scope)?;
+        // Validate and intern every contract formal even if no method uses it.
+        // Each method then gets its own environment for its qualified scope formals.
+        self.symbolic_environment(scope)?;
         let assumptions = self.assumptions(scope, owner.payload.type_parameters().iter())?;
         if !assumptions
             .get(&contract.self_parameter)
@@ -492,6 +578,29 @@ impl Derivation<'_> {
         let mut ids = BTreeSet::new();
         let mut names = BTreeSet::new();
         for method in &contract.methods {
+            let mut env = self.symbolic_environment(scope)?;
+            let scopes = method
+                .read_scope_parameters
+                .iter()
+                .map(|formal| {
+                    ReadScopeArgument::Parameter(ReadScopeReference {
+                        binder: ReadScopeBinder::ContractMethod {
+                            contract: scope,
+                            method: method.id,
+                        },
+                        parameter: formal.id,
+                    })
+                })
+                .collect::<Vec<_>>();
+            self.scope_bindings(
+                ReadScopeBinder::ContractMethod {
+                    contract: scope,
+                    method: method.id,
+                },
+                &method.read_scope_parameters,
+                &scopes,
+                &mut env,
+            )?;
             if ids.contains(&method.id) || names.contains(&method.name) {
                 return Err(reject());
             }
@@ -509,7 +618,7 @@ impl Derivation<'_> {
             let result = self.root(
                 &mut roots,
                 OwnerKey::Declaration(scope.declaration),
-                method.result,
+                method.result.ty,
                 &env,
             )?;
             self.budget
@@ -523,10 +632,11 @@ impl Derivation<'_> {
                     parameter.ty,
                     &env,
                 )?;
+                let view = self.view_type(ty)?;
                 let owned =
                     self.classify_scoped(ty, false, 0, &mut BTreeSet::new(), &assumptions)?;
                 if seen_owned && !owned
-                    || if owned {
+                    || if owned || view {
                         !matches!(
                             parameter.use_mode,
                             ParameterUse::Consume | ParameterUse::Borrow
@@ -540,17 +650,26 @@ impl Derivation<'_> {
                 seen_owned |= owned;
                 parameters.push((ty, parameter.use_mode));
             }
-            if let Some(position) = method.result_borrow {
+            if let Some(position) = method.result.relation.source().copied() {
                 let parameter = parameters.get(position as usize).ok_or_else(reject)?;
                 if parameter.1 != ParameterUse::Borrow {
                     return Err(reject());
                 }
             }
             let effect = self.row(&method.effect.row(), &env)?;
-            let mut requires_associated_generation = self.associated_type(method.result, 0)?;
+            let mut requires_read_view_generation = contract_view;
+            let mut requires_associated_generation = contract_view
+                || !contract.associated_types.is_empty()
+                || self.associated_type(method.result.ty, 0)?;
+            requires_read_view_generation |= self.read_view_type(method.result.ty, 0)?;
             for parameter in &method.parameters {
                 requires_associated_generation |= self.associated_type(parameter.ty, 0)?;
+                requires_read_view_generation |= self.read_view_type(parameter.ty, 0)?;
             }
+            let read_scope_parameters =
+                self.copy_scope_parameters(&method.read_scope_parameters)?;
+            let result = self.closed_result(method.result, result, &env, Ok)?;
+            let read_scope_sources = self.closed_sources(&method.read_scope_sources, &env, Ok)?;
             self.budget
                 .node::<((DeclarationReference, MethodId), Function)>()?;
             self.contract_methods.insert(
@@ -561,10 +680,12 @@ impl Derivation<'_> {
                         crate::platform::kernel::FunctionEffect::Task { .. }
                     ),
                     requires_associated_generation,
+                    requires_read_view_generation,
                     implementation_templates: Vec::new(),
                     parameters,
                     result,
-                    result_borrow: method.result_borrow,
+                    read_scope_parameters,
+                    read_scope_sources,
                     effect,
                     roots,
                     targets: BTreeMap::new(),
@@ -572,6 +693,7 @@ impl Derivation<'_> {
                     occurrences,
                     symbolic_targets: BTreeMap::new(),
                     associated_targets: BTreeSet::new(),
+                    read_view_targets: BTreeSet::new(),
                 },
             );
         }
@@ -583,23 +705,29 @@ impl Derivation<'_> {
         scope: DeclarationReference,
     ) -> Result<(), ExecutionError> {
         let owner = self.declaration(scope, None)?;
-        let (parameters, result, result_borrow, effect, body) = match &owner.payload {
-            DeclarationPayload::Function(function) => (
-                &function.parameters[..],
-                function.result,
-                function.result_borrow,
-                function.effect.row(),
-                Some(function.body),
-            ),
-            DeclarationPayload::External(function) => (
-                &function.parameters[..],
-                function.result,
-                None,
-                EffectRow::default(),
-                None,
-            ),
-            _ => return Err(reject()),
-        };
+        let (parameters, result, scope_parameters, scope_sources, effect, body) =
+            match &owner.payload {
+                DeclarationPayload::Function(function) => (
+                    &function.parameters[..],
+                    function.result,
+                    &function.read_scope_parameters[..],
+                    &function.read_scope_sources[..],
+                    function.effect.row(),
+                    Some(function.body),
+                ),
+                DeclarationPayload::External(function) => (
+                    &function.parameters[..],
+                    CallableResult {
+                        ty: function.result,
+                        relation: ResultRelation::Value,
+                    },
+                    &[][..],
+                    &[][..],
+                    EffectRow::default(),
+                    None,
+                ),
+                _ => return Err(reject()),
+            };
         let mut env = self.symbolic_environment(scope)?;
         let effect = self.row(&effect, &env)?;
         let mut roots = BTreeMap::new();
@@ -612,7 +740,7 @@ impl Derivation<'_> {
         let result = self.root(
             &mut roots,
             OwnerKey::Declaration(scope.declaration),
-            result,
+            result.ty,
             &env,
         )?;
         self.budget
@@ -647,19 +775,32 @@ impl Derivation<'_> {
             )?;
             actual_parameters.push((ty, parameter.use_mode));
         }
-        let result_borrow = result_borrow
-            .map(|id| {
-                parameters
-                    .iter()
-                    .position(|candidate| *candidate == id)
-                    .and_then(|position| u32::try_from(position).ok())
-                    .ok_or_else(reject)
-            })
-            .transpose()?;
+        let ordinal = |source| {
+            parameters
+                .iter()
+                .position(|id| *id == source)
+                .and_then(|position| u32::try_from(position).ok())
+                .ok_or_else(reject)
+        };
+        let result = self.closed_result(
+            match &owner.payload {
+                DeclarationPayload::Function(function) => function.result,
+                DeclarationPayload::External(function) => CallableResult {
+                    ty: function.result,
+                    relation: ResultRelation::Value,
+                },
+                _ => return Err(reject()),
+            },
+            result,
+            &env,
+            ordinal,
+        )?;
+        let read_scope_sources = self.closed_sources(scope_sources, &env, ordinal)?;
         let mut targets = BTreeMap::new();
         let mut invocations = BTreeMap::new();
         let mut symbolic_targets = BTreeMap::new();
         let mut associated_targets = BTreeSet::new();
+        let mut read_view_targets = BTreeSet::new();
         if let Some(body) = body {
             self.body(
                 scope.package,
@@ -672,21 +813,34 @@ impl Derivation<'_> {
                     occurrences: &mut occurrences,
                     symbolic_targets: &mut symbolic_targets,
                     associated_targets: &mut associated_targets,
+                    read_view_targets: &mut read_view_targets,
                 },
             )?;
         }
         self.budget.node::<(DeclarationReference, Function)>()?;
         let implementation_templates = self.implementation_templates(scope)?;
-        let requires_associated_generation = self.associated_function(scope)?;
+        let requires_read_view_generation = self.read_view_owner(scope)?;
+        let requires_associated_generation =
+            self.associated_function(scope)? || requires_read_view_generation;
+        if requires_associated_generation || requires_read_view_generation {
+            self.associated_generation(
+                scope,
+                owner.header.contract_version,
+                requires_read_view_generation,
+            )?;
+        }
+        let read_scope_parameters = self.copy_scope_parameters(scope_parameters)?;
         self.symbolic.insert(
             scope,
             Function {
                 is_task: matches!(&owner.payload, DeclarationPayload::Function(function) if matches!(function.effect, crate::platform::kernel::FunctionEffect::Task { .. })),
                 requires_associated_generation,
+                requires_read_view_generation,
                 implementation_templates,
                 parameters: actual_parameters,
                 result,
-                result_borrow,
+                read_scope_parameters,
+                read_scope_sources,
                 effect,
                 roots,
                 targets,
@@ -694,6 +848,7 @@ impl Derivation<'_> {
                 occurrences,
                 symbolic_targets,
                 associated_targets,
+                read_view_targets,
             },
         );
         Ok(())
@@ -770,11 +925,14 @@ impl Derivation<'_> {
                 if env.scope != Some(*scope) || !env.lexical {
                     return Err(reject());
                 }
-                self.current(*scope, env.generation)?;
-                env.symbolic_witnesses
+                let selected = env
+                    .symbolic_witnesses
                     .get(parameter)
                     .cloned()
-                    .ok_or_else(reject)
+                    .ok_or_else(reject)?;
+                let view = self.symbolic_selection_read_view(&selected, depth)?;
+                self.associated_generation(*scope, env.generation, view)?;
+                Ok(selected)
             }
             ImplementationOperand::Concrete {
                 implementation,
@@ -849,14 +1007,34 @@ impl Derivation<'_> {
                     .reserve::<Member>(scheme.associated_types.len())?;
                 let mut members = Vec::new();
                 for binding in &scheme.associated_types {
-                    let ty = self.ty(binding.ty, &selected_env, 0)?;
-                    if !self.classify_scoped(ty, false, 0, &mut BTreeSet::new(), &assumptions)? {
+                    let ty = self.ty(binding.ty(), &selected_env, 0)?;
+                    if matches!(binding.value, AssociatedTypeBindingValue::Owned { .. })
+                        && !self.classify_scoped(
+                            ty,
+                            false,
+                            0,
+                            &mut BTreeSet::new(),
+                            &assumptions,
+                        )?
+                    {
                         return Err(reject());
                     }
                     members.push(Member {
                         member: binding.member,
-                        template: binding.ty,
+                        template: binding.ty(),
                         ty,
+                        scope_parameter: match &binding.value {
+                            AssociatedTypeBindingValue::Owned { .. } => None,
+                            AssociatedTypeBindingValue::ReadViewFamily {
+                                scope_parameter, ..
+                            } => Some(ReadScopeReference {
+                                binder: ReadScopeBinder::AssociatedBinding {
+                                    implementation: *implementation,
+                                    member: binding.member,
+                                },
+                                parameter: scope_parameter.id,
+                            }),
+                        },
                     });
                 }
                 self.budget.reserve::<SymbolicSelection>(1)?;
@@ -881,76 +1059,93 @@ impl Derivation<'_> {
         operation: &ExpressionOperation,
         env: &Environment,
     ) -> Result<Option<SymbolicTarget>, ExecutionError> {
-        let (function, types, implementations, effects, requirements) = match operation {
-            ExpressionOperation::Call {
-                function,
-                type_arguments,
-                effect_arguments,
-                requirement_arguments,
-                ..
-            }
-            | ExpressionOperation::FunctionValue {
-                function,
-                type_arguments,
-                effect_arguments,
-                requirement_arguments,
-            } => (
-                *function,
-                &type_arguments[..],
-                &[][..],
-                &effect_arguments[..],
-                &requirement_arguments[..],
-            ),
-            ExpressionOperation::ImplementationCall {
-                function,
-                type_arguments,
-                implementations,
-                effect_arguments,
-                requirement_arguments,
-                ..
-            } => (
-                *function,
-                &type_arguments[..],
-                &implementations[..],
-                &effect_arguments[..],
-                &requirement_arguments[..],
-            ),
-            ExpressionOperation::MethodCall {
-                witness,
-                contract,
-                method,
-                ..
-            } => {
-                let selected = self.symbolic_operand(witness, env, 0)?;
-                if selected.contract != *contract {
-                    return Err(reject());
+        let (function, types, implementations, effects, requirements, read_scope_arguments) =
+            match operation {
+                ExpressionOperation::Call {
+                    function,
+                    type_arguments,
+                    effect_arguments,
+                    requirement_arguments,
+                    read_scope_arguments,
+                    ..
                 }
-                let owner = self.declaration(
-                    *contract,
-                    env.scope.map(|scope| scope.package).or(env.source_package),
-                )?;
-                let DeclarationPayload::OwnedContract(_) = &owner.payload else {
-                    return Err(reject());
-                };
-                let signature = self.scoped_method_signature(&selected, *method)?;
-                if signature.requires_associated_generation
-                    && env.generation != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
-                {
-                    return Err(reject());
+                | ExpressionOperation::FunctionValue {
+                    function,
+                    type_arguments,
+                    effect_arguments,
+                    requirement_arguments,
+                    read_scope_arguments,
+                } => (
+                    *function,
+                    &type_arguments[..],
+                    &[][..],
+                    &effect_arguments[..],
+                    &requirement_arguments[..],
+                    &read_scope_arguments[..],
+                ),
+                ExpressionOperation::ImplementationCall {
+                    function,
+                    type_arguments,
+                    implementations,
+                    effect_arguments,
+                    requirement_arguments,
+                    read_scope_arguments,
+                    ..
+                } => (
+                    *function,
+                    &type_arguments[..],
+                    &implementations[..],
+                    &effect_arguments[..],
+                    &requirement_arguments[..],
+                    &read_scope_arguments[..],
+                ),
+                ExpressionOperation::MethodCall {
+                    witness,
+                    contract,
+                    method,
+                    read_scope_arguments,
+                    ..
+                } => {
+                    let selected = self.symbolic_operand(witness, env, 0)?;
+                    if selected.contract != *contract {
+                        return Err(reject());
+                    }
+                    let owner = self.declaration(
+                        *contract,
+                        env.scope.map(|scope| scope.package).or(env.source_package),
+                    )?;
+                    let DeclarationPayload::OwnedContract(_) = &owner.payload else {
+                        return Err(reject());
+                    };
+                    self.budget
+                        .reserve::<ReadScopeArgument>(read_scope_arguments.len())?;
+                    let scopes = read_scope_arguments
+                        .iter()
+                        .map(|scope| self.read_scope(*scope, env))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let mut signature =
+                        self.scoped_method_signature(&selected, *method, &scopes)?;
+                    signature.requires_read_view_generation |=
+                        self.symbolic_selection_read_view(&selected, 0)?;
+                    if signature.requires_associated_generation
+                        || signature.requires_read_view_generation
+                    {
+                        self.call_generation(env, signature.requires_read_view_generation)?;
+                    }
+                    self.budget.reserve::<Arc<SymbolicSelection>>(1)?;
+                    return Ok(Some(SymbolicTarget {
+                        signature,
+                        function: None,
+                        method: Some((selected.contract, *method)),
+                        types: Vec::new(),
+                        witnesses: vec![selected],
+                        effects: Vec::new(),
+                        requirements: Vec::new(),
+                        read_scope_arguments: scopes,
+                    }));
                 }
-                self.budget.reserve::<Arc<SymbolicSelection>>(1)?;
-                return Ok(Some(SymbolicTarget {
-                    signature,
-                    function: None,
-                    method: Some((selected.contract, *method)),
-                    types: Vec::new(),
-                    witnesses: vec![selected],
-                    effects: Vec::new(),
-                    requirements: Vec::new(),
-                }));
-            }
-            _ => return Ok(None),
-        };
+                _ => return Ok(None),
+            };
         let owner = self.declaration(
             function,
             env.scope.map(|scope| scope.package).or(env.source_package),
@@ -988,6 +1183,9 @@ impl Derivation<'_> {
         let mut actuals = Vec::new();
         for (formal, actual) in formals.iter().zip(types) {
             let actual = self.ty(*actual, env, 0)?;
+            if self.view_type(actual)? {
+                return Err(reject());
+            }
             let OwnerRecord::TypeParameter(parameter) =
                 self.owner(function.package, OwnerKey::TypeParameter(*formal))?
             else {
@@ -1068,13 +1266,32 @@ impl Derivation<'_> {
                 }
             }
         }
+        self.budget
+            .reserve::<ReadScopeArgument>(read_scope_arguments.len())?;
+        let read_scope_arguments = read_scope_arguments
+            .iter()
+            .map(|scope| self.read_scope(*scope, env))
+            .collect::<Result<Vec<_>, _>>()?;
+        let scope_parameters = match &owner.payload {
+            DeclarationPayload::Function(function) => &function.read_scope_parameters[..],
+            _ => &[][..],
+        };
+        self.scope_bindings(
+            ReadScopeBinder::Declaration(function),
+            scope_parameters,
+            &read_scope_arguments,
+            &mut target_env,
+        )?;
         let mut signature = self.scoped_signature(function, &mut target_env)?;
         signature.requires_associated_generation |=
             self.associated_operation(operation, function)?;
-        if signature.requires_associated_generation
-            && env.generation != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
-        {
-            return Err(reject());
+        signature.requires_read_view_generation |= self.read_view_operation(operation, function)?;
+        for selected in &supplied {
+            signature.requires_read_view_generation |=
+                self.symbolic_selection_read_view(selected, 0)?;
+        }
+        if signature.requires_associated_generation || signature.requires_read_view_generation {
+            self.call_generation(env, signature.requires_read_view_generation)?;
         }
         Ok(Some(SymbolicTarget {
             signature,
@@ -1084,6 +1301,7 @@ impl Derivation<'_> {
             witnesses: supplied,
             effects,
             requirements: closed_requirements,
+            read_scope_arguments,
         }))
     }
 
@@ -1105,7 +1323,7 @@ impl Derivation<'_> {
         };
         // Executable declarations have no lexical associated authority. Their bodies
         // close concrete applications; nominal templates retain scoped ordinary formals.
-        env.symbolic = matches!(owner, OwnerRecord::Declaration(declaration) if matches!(declaration.payload, DeclarationPayload::Record { .. } | DeclarationPayload::OwnedRecord { .. } | DeclarationPayload::Variant { .. }));
+        env.symbolic = matches!(owner, OwnerRecord::Declaration(declaration) if matches!(declaration.payload, DeclarationPayload::Record { .. } | DeclarationPayload::OwnedRecord { .. } | DeclarationPayload::Variant { .. } | DeclarationPayload::ReadView(_)));
         let mut roots = BTreeMap::new();
         let mut occurrences = BTreeMap::new();
         self.occurrence(&mut occurrences, package, key)?;
@@ -1115,6 +1333,22 @@ impl Derivation<'_> {
             self.root(&mut roots, key, ty, &env)?;
         }
         if let OwnerRecord::Declaration(declaration) = owner {
+            if let DeclarationPayload::ReadView(view) = &declaration.payload {
+                self.current(
+                    env.scope.ok_or_else(reject)?,
+                    declaration.header.contract_version,
+                )?;
+                self.scope_parameters(ReadScopeBinder::Declaration(env.scope.ok_or_else(reject)?))?;
+                for field in &view.fields {
+                    self.budget.tick()?;
+                    if let crate::platform::kernel::ReadViewFieldKind::ReadReference {
+                        read_scope,
+                    } = field.kind
+                    {
+                        self.read_scope(read_scope, &env)?;
+                    }
+                }
+            }
             let (fields, cases): (&[_], &[_]) = match &declaration.payload {
                 DeclarationPayload::Record { fields, .. }
                 | DeclarationPayload::OwnedRecord { fields, .. } => (fields, &[]),
@@ -1153,6 +1387,7 @@ impl Derivation<'_> {
         let mut invocations = BTreeMap::new();
         let mut symbolic_targets = BTreeMap::new();
         let mut associated_targets = BTreeSet::new();
+        let mut read_view_targets = BTreeSet::new();
         self.budget
             .reserve::<ExpressionId>(owner.expression_roots().len())?;
         for root in owner.expression_roots() {
@@ -1167,6 +1402,7 @@ impl Derivation<'_> {
                     occurrences: &mut occurrences,
                     symbolic_targets: &mut symbolic_targets,
                     associated_targets: &mut associated_targets,
+                    read_view_targets: &mut read_view_targets,
                 },
             )?;
         }
@@ -1176,11 +1412,16 @@ impl Derivation<'_> {
             (package, key),
             Function {
                 is_task: false,
-                requires_associated_generation: false,
+                requires_associated_generation: matches!(owner, OwnerRecord::Declaration(declaration) if declaration.payload.has_read_view_metadata()),
+                requires_read_view_generation: matches!(owner, OwnerRecord::Declaration(declaration) if declaration.payload.has_read_view_metadata()),
                 implementation_templates: Vec::new(),
                 parameters: Vec::new(),
-                result,
-                result_borrow: None,
+                result: CallableResult {
+                    ty: result,
+                    relation: ResultRelation::Value,
+                },
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
                 effect: EffectRow::default(),
                 roots,
                 targets,
@@ -1188,6 +1429,7 @@ impl Derivation<'_> {
                 occurrences,
                 symbolic_targets,
                 associated_targets,
+                read_view_targets,
             },
         );
         Ok(())

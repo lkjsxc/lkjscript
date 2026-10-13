@@ -317,10 +317,10 @@ fn cached_owned_sequence_expansion_admits_nested_products_and_choices_completely
     let DeclarationPayload::Function(function) = record.payload else {
         panic!("pop function");
     };
-    reader.ty(function.result).unwrap();
+    reader.ty(function.result.ty).unwrap();
     reader.remaining_type_nodes = 3;
     assert_eq!(
-        reader.ty(function.result).unwrap_err().code,
+        reader.ty(function.result.ty).unwrap_err().code,
         "change_draft_capacity"
     );
 }

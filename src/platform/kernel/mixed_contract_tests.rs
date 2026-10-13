@@ -120,14 +120,17 @@ fn mixed_contracts_admit_ordinary_results_products_and_forwarded_prerequisites()
         None,
     )
     .unwrap();
-    assert!(result.method.result_borrow.is_none());
+    assert!(matches!(
+        result.method.result.relation,
+        ResultRelation::Value
+    ));
     assert_eq!(result.method.parameters[1].use_mode, ParameterUse::Borrow);
     let overlay = AppliedTypeRead {
         read: &snapshot,
         types: &result.types,
     };
-    assert!(ordinary_closed(&overlay, result.method.result).unwrap());
-    assert!(!super::super::memory::direct(&overlay, result.method.result).unwrap());
+    assert!(ordinary_closed(&overlay, result.method.result.ty).unwrap());
+    assert!(!super::super::memory::direct(&overlay, result.method.result.ty).unwrap());
     let replacement = method_signature(
         &snapshot,
         &operand,
@@ -148,7 +151,7 @@ fn mixed_contracts_admit_ordinary_results_products_and_forwarded_prerequisites()
         read: &snapshot,
         types: &replacement.types,
     };
-    validate_owned_type(&overlay, replacement.method.result, None).unwrap();
+    validate_owned_type(&overlay, replacement.method.result.ty, None).unwrap();
 }
 
 #[test]
@@ -217,7 +220,7 @@ fn mixed_contracts_enforce_exact_self_bounds_modes_and_borrowed_result_sources()
     changed.methods[1].parameters.swap(1, 2);
     assert!(validate_contract_at(&baseline, reference, &changed).is_err());
     let mut changed = original;
-    changed.methods[0].result_borrow = Some(1);
+    changed.methods[0].result.relation = ResultRelation::ReadFrom { source: 1 };
     assert!(validate_contract_at(&baseline, reference, &changed).is_err());
 }
 

@@ -75,7 +75,7 @@ fn witness_contract_domains_are_closed_and_unique() {
     for (name, version) in [
         ("opaque_nominal_owned_records", 1),
         ("scoped_shareable_owned_inputs", 1),
-        ("source_tied_owned_read_results", 1),
+        ("source_tied_owned_read_results", 2),
         ("parameterized_owned_contracts", 2),
         ("structural_owned_sequences", 2),
         ("lexical_owned_child_borrows", 1),
@@ -86,11 +86,12 @@ fn witness_contract_domains_are_closed_and_unique() {
         ("symbolic_owned_parameters", 6),
         ("explicit_owned_implementation_witnesses", 9),
         ("finite_generic_callable_instantiation", 3),
-        ("single_relation_extractor", 6),
-        ("owner_summary_dimensions", 4),
+        ("single_relation_extractor", 7),
+        ("owner_summary_dimensions", 5),
         ("same_task_owned_transfer", 2),
         ("sealed_owned_i64_cells", 1),
         ("witness_selected_owned_associated_types", 2),
+        ("associated_source_tied_read_view_families", 1),
     ] {
         assert_eq!(
             contract::VALIDATOR_FEATURES
@@ -202,8 +203,14 @@ fn witness_contract_domains_are_closed_and_unique() {
         digest,
         "validator_contract_c3c9a4a3504b3d2f6a54d6d0b352b4e9c2fc620c62fa6172c5b30f4219d48034"
     );
-    assert_eq!(contract::VALIDATOR_CONTRACT_VERSION, 40);
-    assert_eq!(contract::VALIDATOR_FEATURES.len(), 43);
+    assert_ne!(
+        digest,
+        "validator_contract_ea8c20af48782006db98956f90c3a19916b130571f6837f4f8c8414ba3bb3ea4"
+    );
+    assert_eq!(contract::VALIDATOR_CONTRACT_VERSION, 41);
+    assert_eq!(contract::VALIDATOR_FEATURES.len(), 44);
+    assert_eq!(contract::WITNESS_CONTRACT_VERSION, 10);
+    assert_eq!(contract::OWNER_SUMMARY_CONTRACT_VERSION, 12);
 }
 
 #[test]
@@ -233,7 +240,8 @@ fn validator_40_contract_digest_matches_frozen_identity() {
     // The independent reconstruction also reproduces the frozen Validator 38
     // and 39 predecessors. This expected identity is not a producer output.
     assert_eq!(
-        contract::validator_contract_digest().to_string(),
+        ValidatorContractDigest::of(include_bytes!("fixtures/validator_40_material.bin"))
+            .to_string(),
         "validator_contract_ea8c20af48782006db98956f90c3a19916b130571f6837f4f8c8414ba3bb3ea4"
     );
 }

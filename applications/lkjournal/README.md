@@ -16,7 +16,7 @@ Its stable modules are:
   exact-requirement-bound helper processing, metadata borrow, renewal, completion, and retry/failure
   meaning.
 
-Current normalized identity:
+Accepted source and preceding normalized artifact identity:
 
 - repository: `repo_95f988c5423fe3eb823c329ef0832d51`;
 - package: `pkg_20000000000000000000000000000001`;
@@ -93,9 +93,9 @@ empty 404 and invokes none of them.
 
 ## Current service, interactive, and worker boundary
 
-All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,375,561-byte
-artifact bundle above (SHA-256
-`5f24a98db8f37a269eb94c3203c09678af537ae471c1992621d4df976a6c0b71`). The service descriptor
+All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,376,596-byte
+current compiled bundle (SHA-256
+`c4b845bb015775d00708aaf71690dee785a8f234dbd6f6a1dc75594d1d1375ec`). The service descriptor
 resolves `serve`, the worker descriptor resolves `work`, and `live.deployment.json` resolves
 `lkjournal-live-1`. Preparation strictly loads the standalone bundle,
 validates the runner, route-indexed handler and component requirement closure, grants, secrets, and adapters, and emits
@@ -222,10 +222,12 @@ compiler 30, bytecode 25 and artifact 37 through public check/build. All 44 test
 agree between production and reference execution. Accepted HEAD, exact historical
 standard supplier, application behavior and operational data remain unchanged.
 
-The current derived bundle uses compiler 33, bytecode 27 and artifact 40 through
+The preceding derived bundle used compiler 33, bytecode 27 and artifact 40 through
 ordinary public check/build. All 44 application and exact-supplier tests pass
 with zero failures and agreement between both evaluators. Accepted HEAD and its
 pinned standard supplier remain unchanged; this application does not yet adopt
 nominal owned records. Running deployments and operational data retain their
 separate authority. The [release notes](../../docs/releases/v0.1.92.md)
 identify the format cut; [status](../../docs/status.md) owns delivery and publication.
+
+The .96 compilation refresh selects artifact_bundle_3d41df53e672b30dbfd7f1bd558fea33feeb5842b874a2b20b6930cbb1d5e326 (1,376,596 bytes, SHA-256 c4b845bb015775d00708aaf71690dee785a8f234dbd6f6a1dc75594d1d1375ec), using compiler 34, bytecode 28 and artifact 41. Its two public builds are byte-identical and all 44 source/supplier checks report zero failures and differential equality; the [separate rebuild receipt](../../.artifacts/associated-read-views/consumer-assets-installation-proposals/sourcef87c8b-four-families-first/receipt.json) binds their original source f87c8b7fa80e03bb8e3901746aa14a845fc509161916ca07eef92c55d32ed550. Accepted HEAD and exact suppliers remain unchanged. This compilation refresh supplies no final source, release or additional runtime acceptance.

@@ -1,0 +1,15 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create bad-protected
+    (function create protected-owner (visibility private) (effect pure) (returns Unit (value))
+      (body (let
+        (binding owner (type (owned-sequence I64)) (call readview-flat::build (list I64 (i64 11) (i64 7))))
+        (binding view (as $protected-view-scope)
+          (type (read-view-application readview-flat::Metadata (types) (lexical-read-scope protected-owner $protected-view-scope)))
+          (borrow-call
+            (call readview-flat::make-metadata (scopes (lexical-read-scope protected-owner $protected-view-scope)) (local owner))
+            (binding constructed (type (read-view-application readview-flat::Metadata (types) (lexical-read-scope protected-owner $protected-view-scope))))
+            (in (view-move (local constructed)))))
+        (in (call readview-consumer::discard (types (owned-sequence I64)) (local owner))))))))
+declarations.end

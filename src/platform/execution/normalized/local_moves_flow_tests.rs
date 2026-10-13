@@ -236,6 +236,7 @@ fn local_bitset_words_do_not_alias_and_exact_tail_exits_do_not_fall_through() {
     for exit in [
         I::Return,
         I::TailCall {
+            read_scope_arguments: Arc::from([]),
             function: super::super::value::FunctionIndex(
                 0,
                 super::super::value::ValueOrigin::default(),

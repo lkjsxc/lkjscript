@@ -311,14 +311,22 @@ impl DeclarationRecord {
     fn validate_local(&self) -> Result<(), Diagnostic> {
         validate_header_domain(self.header, self.expected_kind())?;
         if self.payload.has_associated_types()
-            && self.header.contract_version != super::contract::GRAPH_CONTRACT_VERSION
+            && self.header.contract_version < super::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
         {
             return Err(owner_error(
                 "kernel_associated_encoding_generation",
-                "associated parents require the exact Graph 33 base profile",
+                "associated parents require Graph 33 or a supported successor profile",
             ));
         }
         validate_names([&self.name])?;
+        if self.header.contract_version < super::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+            && self.payload.has_read_view_metadata()
+        {
+            return Err(owner_error(
+                "kernel_read_view_generation",
+                "view declarations and scope metadata require Graph 34",
+            ));
+        }
         if self.header.contract_version < 32
             && matches!(self.payload, DeclarationPayload::OwnedRecord { .. })
         {
@@ -344,10 +352,13 @@ impl DeclarationRecord {
         }
         if self.header.contract_version < 27
             && match &self.payload {
-                DeclarationPayload::Function(f) => f.result_borrow.is_some(),
-                DeclarationPayload::OwnedContract(c) => {
-                    c.methods.iter().any(|m| m.result_borrow.is_some())
+                DeclarationPayload::Function(f) => {
+                    !matches!(f.result.relation, super::ResultRelation::Value)
                 }
+                DeclarationPayload::OwnedContract(c) => c
+                    .methods
+                    .iter()
+                    .any(|m| !matches!(m.result.relation, super::ResultRelation::Value)),
                 _ => false,
             }
         {
@@ -368,6 +379,7 @@ impl DeclarationRecord {
             ));
         }
         match &self.payload {
+            DeclarationPayload::ReadView(view) => view.validate_local(),
             DeclarationPayload::OwnedContract(c) => c.validate_local(),
             DeclarationPayload::OwnedImplementation(i) => i.validate_local(),
             DeclarationPayload::OwnedRecord {
@@ -410,6 +422,7 @@ impl DeclarationRecord {
 
     pub fn expected_kind(&self) -> OwnerKind {
         match &self.payload {
+            DeclarationPayload::ReadView(_) => OwnerKind::ReadView,
             DeclarationPayload::OwnedContract(_) => OwnerKind::OwnedContract,
             DeclarationPayload::OwnedImplementation(_) => OwnerKind::OwnedImplementation,
             DeclarationPayload::Record { .. } => OwnerKind::Record,
@@ -436,8 +449,11 @@ impl DeclarationRecord {
                 .implementation_parameters
                 .iter()
                 .flat_map(|p| std::iter::once(p.self_type).chain(p.type_arguments.iter().copied()))
-                .chain([function.result])
+                .chain([function.result.ty])
                 .collect(),
+            DeclarationPayload::ReadView(view) => {
+                view.fields.iter().map(|field| field.ty).collect()
+            }
             DeclarationPayload::OwnedContract(c) => c.type_roots(),
             DeclarationPayload::OwnedImplementation(i) => i.type_roots(),
             DeclarationPayload::Constant { ty, .. } => vec![*ty],
@@ -505,9 +521,41 @@ pub enum DeclarationPayload {
         type_parameters: Vec<TypeParameterId>,
         fields: Vec<FieldId>,
     },
+    ReadView(super::ReadViewDeclaration),
 }
 
 impl DeclarationPayload {
+    pub(crate) fn has_read_view_metadata(&self) -> bool {
+        match self {
+            Self::ReadView(_) => true,
+            Self::Function(f) => {
+                !f.read_scope_parameters.is_empty()
+                    || !f.read_scope_sources.is_empty()
+                    || matches!(f.result.relation, super::ResultRelation::ViewFrom { .. })
+            }
+            Self::OwnedContract(c) => {
+                c.associated_types.iter().any(|member| {
+                    matches!(
+                        member.bound,
+                        super::AssociatedTypeBound::ReadViewFamily { .. }
+                    )
+                }) || c.methods.iter().any(|m| {
+                    !m.read_scope_parameters.is_empty()
+                        || !m.read_scope_sources.is_empty()
+                        || matches!(m.result.relation, super::ResultRelation::ViewFrom { .. })
+                })
+            }
+            Self::OwnedImplementation(i) => {
+                i.associated_types.iter().any(|binding| {
+                    matches!(
+                        binding.value,
+                        super::AssociatedTypeBindingValue::ReadViewFamily { .. }
+                    )
+                }) || i.methods.iter().any(|m| !m.read_scope_arguments.is_empty())
+            }
+            _ => false,
+        }
+    }
     pub(crate) fn has_associated_types(&self) -> bool {
         match self {
             Self::OwnedContract(c) => !c.associated_types.is_empty(),
@@ -532,6 +580,7 @@ impl DeclarationPayload {
                 c.type_parameters.as_slice(),
             ),
             Self::OwnedImplementation(i) => (i.type_parameters.as_slice(), &[][..]),
+            Self::ReadView(view) => (view.type_parameters.as_slice(), &[][..]),
             Self::Function(function) => (function.type_parameters.as_slice(), &[][..]),
             Self::External(function) => (function.type_parameters.as_slice(), &[][..]),
             _ => (&[][..], &[][..]),
@@ -595,10 +644,9 @@ pub struct FunctionDeclaration {
     pub effect_parameters: Vec<EffectParameterId>,
     pub type_parameters: Vec<TypeParameterId>,
     pub parameters: Vec<ParameterId>,
-    pub result: TypeObjectDigest,
-    /// Exact borrowed input whose custody protects the read-only result.
-    #[serde(default)]
-    pub result_borrow: Option<ParameterId>,
+    pub result: super::CallableResult<ParameterId>,
+    pub read_scope_parameters: Vec<super::ReadScopeParameter>,
+    pub read_scope_sources: Vec<super::ReadScopeSource<ParameterId>>,
     pub effect: FunctionEffect,
     pub body: ExpressionId,
 }
@@ -612,13 +660,21 @@ impl FunctionDeclaration {
         )?;
         validate_ordered_unique("function type parameters", &self.type_parameters, true)?;
         validate_ordered_unique("function parameters", &self.parameters, true)?;
-        if let Some(source) = self.result_borrow
-            && (!self.parameters.contains(&source) || self.effect != FunctionEffect::Pure)
+        super::validate_read_scope_inventory(
+            &self.read_scope_parameters,
+            &self.read_scope_sources,
+            |source| self.parameters.contains(&source),
+        )?;
+        if let Some(source) = self.result.relation.source()
+            && (!self.parameters.contains(source) || self.effect != FunctionEffect::Pure)
         {
             return Err(owner_error(
                 "kernel_borrow_result",
                 "a borrowed result requires an exact parameter of a pure function",
             ));
+        }
+        if let super::ResultRelation::ViewFrom { scope, .. } = self.result.relation {
+            super::validate_formal_scope(scope, &self.read_scope_parameters, None)?;
         }
         validate_ordered_unique("function effect parameters", &self.effect_parameters, true)?;
         self.effect.row().validate()?;
@@ -989,6 +1045,17 @@ impl BindingRecord {
     fn validate_local(&self) -> Result<(), Diagnostic> {
         validate_header_domain(self.header, OwnerKind::Binding)?;
         validate_names([&self.name])?;
+        if matches!(
+            self.kind,
+            BindingKind::ReadView | BindingKind::ReadViewBorrow
+        ) && (self.header.contract_version < super::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+            || self.declared_type.is_none())
+        {
+            return Err(owner_error(
+                "kernel_read_view_generation",
+                "view bindings require Graph 34 and an exact declared view type",
+            ));
+        }
         if self.kind == BindingKind::OwnedBorrow
             && (self.header.contract_version < 24 || self.declared_type.is_none())
         {
@@ -1013,10 +1080,13 @@ impl BindingRecord {
                 "unpack bindings require Graph 19 and exact type annotations",
             ));
         }
-        if matches!(self.kind, BindingKind::Let) != self.value.is_some() {
+        if (self.kind == BindingKind::Let && self.value.is_none())
+            || (self.value.is_some()
+                && !matches!(self.kind, BindingKind::Let | BindingKind::ReadView))
+        {
             return Err(owner_error(
                 "kernel_binding_value",
-                "only a let binding owns a value expression",
+                "only ordinary let and owning read-view bindings may own initializer expressions",
             ));
         }
         Ok(())
@@ -1032,6 +1102,8 @@ pub enum BindingKind {
     OwnedUnpack,
     OwnedChoicePayload,
     OwnedBorrow,
+    ReadView,
+    ReadViewBorrow,
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
@@ -2089,6 +2161,7 @@ fn validate_header_domain(header: OwnerHeader, kind: OwnerKind) -> Result<(), Di
             | (OwnerKey::Declaration(_), OwnerKind::OwnedImplementation)
             | (OwnerKey::Declaration(_), OwnerKind::Record)
             | (OwnerKey::Declaration(_), OwnerKind::OwnedRecord)
+            | (OwnerKey::Declaration(_), OwnerKind::ReadView)
             | (OwnerKey::Declaration(_), OwnerKind::Variant)
             | (OwnerKey::Declaration(_), OwnerKind::Interface)
             | (OwnerKey::Declaration(_), OwnerKind::External)

@@ -136,9 +136,14 @@ fn fixture() -> Fixture {
                 id: method,
                 name: name("inspect"),
                 parameters: vec![],
-                result: scalar,
-                result_borrow: None,
+                result: crate::platform::kernel::CallableResult {
+                    ty: scalar,
+                    relation: crate::platform::kernel::ResultRelation::Value,
+                },
                 effect: FunctionEffect::Pure,
+
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             }],
         }),
     );
@@ -153,10 +158,15 @@ fn fixture() -> Fixture {
             effect_parameters: vec![],
             requirement_parameters: vec![],
             parameters: vec![],
-            result: scalar,
-            result_borrow: None,
+            result: crate::platform::kernel::CallableResult {
+                ty: scalar,
+                relation: crate::platform::kernel::ResultRelation::Value,
+            },
             effect: FunctionEffect::Pure,
             body,
+
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
         }),
     );
     let scheme_parameter = TypeParameterId::migrate(SEED, 1);
@@ -169,11 +179,13 @@ fn fixture() -> Fixture {
     let mut bindings = vec![
         AssociatedTypeBinding {
             member,
-            ty: scheme_parameter_type,
+            value: crate::platform::kernel::AssociatedTypeBindingValue::Owned {
+                ty: scheme_parameter_type,
+            },
         },
         AssociatedTypeBinding {
             member: spare,
-            ty: cell,
+            value: crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty: cell },
         },
     ];
     bindings.sort_by_key(|b| b.member);
@@ -193,16 +205,21 @@ fn fixture() -> Fixture {
                 function: observer,
                 type_arguments: vec![],
                 implementations: vec![],
+
+                read_scope_arguments: Vec::new(),
             }],
         }),
     );
     insert_parameter(&mut source, scheme, 1);
     let other_parameter = TypeParameterId::migrate(SEED, 2);
     let mut other_bindings = vec![
-        AssociatedTypeBinding { member, ty: buffer },
+        AssociatedTypeBinding {
+            member,
+            value: crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty: buffer },
+        },
         AssociatedTypeBinding {
             member: spare,
-            ty: cell,
+            value: crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty: cell },
         },
     ];
     other_bindings.sort_by_key(|b| b.member);
@@ -222,6 +239,8 @@ fn fixture() -> Fixture {
                 function: observer,
                 type_arguments: vec![],
                 implementations: vec![],
+
+                read_scope_arguments: Vec::new(),
             }],
         }),
     );
@@ -247,10 +266,15 @@ fn fixture() -> Fixture {
                 effect_parameters: vec![],
                 requirement_parameters: vec![],
                 parameters: vec![],
-                result: scalar,
-                result_borrow: None,
+                result: crate::platform::kernel::CallableResult {
+                    ty: scalar,
+                    relation: crate::platform::kernel::ResultRelation::Value,
+                },
                 effect: FunctionEffect::Pure,
                 body,
+
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             }),
         );
         insert_parameter(&mut source, scope, p_ordinal);
@@ -389,7 +413,7 @@ fn associated_memory_reference_resolves_forwarded_empty_and_inserted_caller_actu
         .iter_mut()
         .find(|b| b.member == f.member)
         .unwrap()
-        .ty = template;
+        .value = AssociatedTypeBindingValue::Owned { ty: template };
     let expected = intern(
         &mut f.source,
         TypeForm::OwnedProduct {
@@ -511,7 +535,9 @@ fn associated_memory_reference_rejects_occurrence_and_unused_binding_mutants() {
         .iter_mut()
         .find(|b| b.member == f.spare)
         .unwrap()
-        .ty = f.caller_projection;
+        .value = AssociatedTypeBindingValue::Owned {
+        ty: f.caller_projection,
+    };
     assert_eq!(
         Resolver::new(&hidden).admit_bindings(f.scheme),
         Err(Failure::BindingProjection)
@@ -618,7 +644,7 @@ fn associated_memory_reference_agrees_on_projected_calls_and_exact_borrowed_sour
         let DeclarationPayload::Function(function) = &mut record.payload else {
             unreachable!()
         };
-        function.result_borrow = Some(f.second);
+        function.result.relation = ResultRelation::ReadFrom { source: f.second };
         assert!(check_caller(&f).is_err());
         assert!(!accepts(&f.source));
     }
@@ -628,7 +654,7 @@ fn associated_memory_reference_agrees_on_projected_calls_and_exact_borrowed_sour
 fn associated_memory_reference_agrees_on_child_generations_and_absent_transport_rights() {
     use super::super::memory::associated_tests::{FlowKind, check_caller, fixture as flow_fixture};
     for kind in [FlowKind::Direct, FlowKind::Witness, FlowKind::Method] {
-        for generation in [32, 34] {
+        for generation in [32, 35] {
             for target in 0..6 {
                 let mut f = flow_fixture(kind);
                 let key = match target {
@@ -652,7 +678,7 @@ fn associated_memory_reference_agrees_on_child_generations_and_absent_transport_
             }
         }
         let mut future_root = flow_fixture(kind);
-        future_root.source.root.graph_contract_version = 34;
+        future_root.source.root.graph_contract_version = 35;
         assert_eq!(
             Resolver::new(&future_root.source).admit_canonical_closure(),
             Err(Failure::Generation)

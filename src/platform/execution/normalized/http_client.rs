@@ -74,6 +74,9 @@ impl NormalizedCapabilityAdapter for NormalizedHttpClientAdapter {
                 "HTTP client call policy disagrees with its exact interface operation",
             ));
         }
+        for argument in &arguments {
+            argument.reject_read_view_escape(control)?;
+        }
         let [NormalizedValue::List(headers)] = arguments.as_slice() else {
             return Err(http_client_argument(
                 "HTTP client get expects one ordered header list",

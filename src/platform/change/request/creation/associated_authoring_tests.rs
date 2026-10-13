@@ -186,11 +186,15 @@ fn associated_create_and_set_preserve_member_identity_order_unused_bindings_and_
     let bindings = vec![
         AuthoredAssociatedTypeBinding {
             member: members[0].id,
-            ty: AuthoredType::OwnedI64Cell {},
+            value: AuthoredAssociatedTypeBindingValue::Owned {
+                ty: AuthoredType::OwnedI64Cell {},
+            },
         },
         AuthoredAssociatedTypeBinding {
             member: members[1].id,
-            ty: AuthoredType::ByteBuffer {},
+            value: AuthoredAssociatedTypeBindingValue::Owned {
+                ty: AuthoredType::ByteBuffer {},
+            },
         },
     ];
     lower(
@@ -214,11 +218,11 @@ fn associated_create_and_set_preserve_member_identity_order_unused_bindings_and_
         contract
             .associated_types
             .iter()
-            .map(|m| (m.id, &m.name, m.bound))
+            .map(|m| (m.id, &m.name, &m.bound))
             .collect::<Vec<_>>(),
         members
             .iter()
-            .map(|m| (m.id, &m.name, m.bound))
+            .map(|m| (m.id, &m.name, &m.bound))
             .collect::<Vec<_>>()
     );
     lower(
@@ -253,7 +257,11 @@ fn associated_create_and_set_preserve_member_identity_order_unused_bindings_and_
         } else {
             TypeForm::ByteBuffer
         };
-        assert_eq!(lowerer.types.get(binding.ty).unwrap().form, expected);
+        let crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty } = &binding.value
+        else {
+            panic!("owned binding")
+        };
+        assert_eq!(lowerer.types.get(*ty).unwrap().form, expected);
     }
     lower(
         &mut lowerer,
@@ -353,11 +361,15 @@ fn associated_lowering_rejects_duplicate_erasure_and_admits_cumulative_work_befo
     let bindings = vec![
         AuthoredAssociatedTypeBinding {
             member: members[0].id,
-            ty: AuthoredType::OwnedI64Cell {},
+            value: AuthoredAssociatedTypeBindingValue::Owned {
+                ty: AuthoredType::OwnedI64Cell {},
+            },
         },
         AuthoredAssociatedTypeBinding {
             member: members[1].id,
-            ty: AuthoredType::ByteBuffer {},
+            value: AuthoredAssociatedTypeBindingValue::Owned {
+                ty: AuthoredType::ByteBuffer {},
+            },
         },
     ];
     for maximum in [11, 12] {
@@ -466,11 +478,15 @@ fn associated_inventory_cancellation_precedes_retained_owner_and_type_growth() {
     let bindings = vec![
         AuthoredAssociatedTypeBinding {
             member: members[0].id,
-            ty: AuthoredType::OwnedI64Cell {},
+            value: AuthoredAssociatedTypeBindingValue::Owned {
+                ty: AuthoredType::OwnedI64Cell {},
+            },
         },
         AuthoredAssociatedTypeBinding {
             member: members[1].id,
-            ty: AuthoredType::ByteBuffer {},
+            value: AuthoredAssociatedTypeBindingValue::Owned {
+                ty: AuthoredType::ByteBuffer {},
+            },
         },
     ];
     let contract = AuthoredDeclarationReference::Exact {

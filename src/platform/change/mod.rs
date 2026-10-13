@@ -64,30 +64,34 @@ pub(crate) use refresh::{
     remaining_refresh_budget,
 };
 pub(crate) use repair::prepare_repair_analysis;
-#[cfg(test)]
-pub(crate) use request::authored_source_owners;
 pub use request::{
-    AuthoredAnnotationValue, AuthoredAssociatedTypeBinding, AuthoredAssociatedTypeMember,
-    AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference, AuthoredChange,
-    AuthoredChangeSet, AuthoredDeclarationReference, AuthoredDeletePolicy, AuthoredEffectParameter,
-    AuthoredEffectParameterReference, AuthoredEffectRow, AuthoredExistingOwner, AuthoredExpression,
-    AuthoredExpressionOperation, AuthoredField, AuthoredFieldReference, AuthoredFieldSelector,
-    AuthoredFunctionEffect, AuthoredImplementationOperand, AuthoredImplementationParameter,
-    AuthoredLetBinding, AuthoredLiteralUpdate, AuthoredLiteralValue, AuthoredLocalReference,
-    AuthoredLowering, AuthoredLoweringWork, AuthoredMapExpressionEntry, AuthoredMatchExpressionArm,
+    AuthoredAnnotationValue, AuthoredAssociatedTypeBinding, AuthoredAssociatedTypeBindingValue,
+    AuthoredAssociatedTypeMember, AuthoredBindingDefinition, AuthoredCallableResult, AuthoredCase,
+    AuthoredCaseReference, AuthoredChange, AuthoredChangeSet, AuthoredDeclarationReference,
+    AuthoredDeletePolicy, AuthoredEffectParameter, AuthoredEffectParameterReference,
+    AuthoredEffectRow, AuthoredExistingOwner, AuthoredExpression, AuthoredExpressionOperation,
+    AuthoredField, AuthoredFieldReference, AuthoredFieldSelector, AuthoredFunctionEffect,
+    AuthoredImplementationOperand, AuthoredImplementationParameter, AuthoredLetBinding,
+    AuthoredLiteralUpdate, AuthoredLiteralValue, AuthoredLocalReference, AuthoredLowering,
+    AuthoredLoweringWork, AuthoredMapExpressionEntry, AuthoredMatchExpressionArm,
     AuthoredOperation, AuthoredOperationReference, AuthoredOwnedMethod,
     AuthoredOwnedMethodImplementation, AuthoredOwnerParent, AuthoredOwnerReferenceSelection,
     AuthoredOwnerReferenceSelector, AuthoredParameter, AuthoredPort, AuthoredPortImplementation,
-    AuthoredPortReference, AuthoredPrecondition, AuthoredRecordExpressionField, AuthoredReference,
-    AuthoredReferenceBindings, AuthoredReferenceOrigin, AuthoredReferencePackage,
-    AuthoredRequirement, AuthoredRequirementParameter, AuthoredRequirementReference,
-    AuthoredResourceLimit, AuthoredSelectedPrecondition, AuthoredStructuralTypeField,
+    AuthoredPortReference, AuthoredPrecondition, AuthoredReadScopeArgument,
+    AuthoredReadScopeBinder, AuthoredReadScopeSource, AuthoredReadViewField,
+    AuthoredReadViewFieldInitializer, AuthoredReadViewFieldKind, AuthoredReadViewFieldReference,
+    AuthoredRecordExpressionField, AuthoredReference, AuthoredReferenceBindings,
+    AuthoredReferenceOrigin, AuthoredReferencePackage, AuthoredRequirement,
+    AuthoredRequirementParameter, AuthoredRequirementReference, AuthoredResourceLimit,
+    AuthoredResultRelation, AuthoredSelectedPrecondition, AuthoredStructuralTypeField,
     AuthoredTransactionOutcomeContract, AuthoredType, AuthoredTypeParameter,
     AuthoredTypeParameterReference, DeclarationSelector, MAXIMUM_AUTHORED_CHANGE_BYTES,
     MAXIMUM_AUTHORED_CHANGES, ModuleSelector, OwnerSelector, ParameterParentSelector,
     ResolvedOwnerReference, ResolvedReferenceBindings, ResolvedReferencePackage,
     lower_authored_changes,
 };
+#[cfg(test)]
+pub(crate) use request::{authored_source_owners, authored_source_owners_from_frozen_intent};
 pub(crate) use request::{
     canonical_authored_budget_bytes, canonical_authored_intent_bytes,
     lower_authored_changes_with_publication_base, lower_authored_changes_with_source_owners,

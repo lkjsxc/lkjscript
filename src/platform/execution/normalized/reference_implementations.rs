@@ -500,9 +500,12 @@ impl ReferenceState<'_> {
             if !ids.insert(method.id)
                 || !names.insert(&method.name)
                 || method.parameters.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN
+                || !method.read_scope_parameters.is_empty()
+                || !method.read_scope_sources.is_empty()
+                || matches!(method.result.relation, ResultRelation::ViewFrom { .. })
             {
                 return Err(reference_type_error(
-                    "invalid method identity or callable kind",
+                    "method identity, callable kind or source scopes lack canonical admission",
                 ));
             }
             if let FunctionEffect::Task {
@@ -545,8 +548,8 @@ impl ReferenceState<'_> {
                     return Err(reference_type_error("method is not first order"));
                 }
             }
-            let result_owned = self.owned_method_type(method.result, &declared)?;
-            if let Some(position) = method.result_borrow {
+            let result_owned = self.owned_method_type(method.result.ty, &declared)?;
+            if let ResultRelation::ReadFrom { source: position } = method.result.relation {
                 let source = method.parameters.get(position as usize).ok_or_else(|| {
                     reference_type_error("method result borrows from a foreign parameter position")
                 })?;
@@ -586,16 +589,29 @@ impl ReferenceState<'_> {
                     "method implementation must be a graph function",
                 ));
             };
+            let expected_relation = match method.result.relation {
+                ResultRelation::Value => ResultRelation::Value,
+                ResultRelation::ReadFrom { source } => ResultRelation::ReadFrom {
+                    source: *function.parameters.get(source as usize).ok_or_else(|| {
+                        reference_type_error("method result has a foreign target source position")
+                    })?,
+                },
+                ResultRelation::ViewFrom { .. } => {
+                    return Err(reference_type_error(
+                        "method view result requires exact canonical scope admission",
+                    ));
+                }
+            };
             if function.effect != method.effect
                 || function.type_parameters.len() != mapping.type_arguments.len()
                 || !function.effect_parameters.is_empty()
                 || !function.requirement_parameters.is_empty()
                 || function.implementation_parameters.len() != mapping.implementations.len()
                 || function.parameters.len() != method.parameters.len()
-                || function.result_borrow
-                    != method
-                        .result_borrow
-                        .and_then(|position| function.parameters.get(position as usize).copied())
+                || function.result.relation != expected_relation
+                || !function.read_scope_parameters.is_empty()
+                || !function.read_scope_sources.is_empty()
+                || !mapping.read_scope_arguments.is_empty()
             {
                 return Err(reference_type_error(
                     "method implementation must have exact applied type, callable kind and effects",
@@ -673,9 +689,9 @@ impl ReferenceState<'_> {
                     return Err(reference_type_error("method parameter contract mismatch"));
                 }
             }
-            self.owned_method_type(function.result, &target_parameters)?;
-            if self.method_type(function.result, &target_bindings)?
-                != self.method_type(method.result, &substitutions)?
+            self.owned_method_type(function.result.ty, &target_parameters)?;
+            if self.method_type(function.result.ty, &target_bindings)?
+                != self.method_type(method.result.ty, &substitutions)?
             {
                 return Err(reference_type_error("method result contract mismatch"));
             }
@@ -874,6 +890,7 @@ impl ReferenceState<'_> {
         Ok(bindings)
     }
 
+    #[cfg(test)]
     pub(super) fn method_target(
         &mut self,
         witness: ImplementationOperand,
@@ -887,6 +904,27 @@ impl ReferenceState<'_> {
         ),
         ExecutionError,
     > {
+        let (function, types, implementations, _) =
+            self.method_target_scoped(witness, contract, method, &[])?;
+        Ok((function, types, implementations))
+    }
+
+    pub(super) fn method_target_scoped(
+        &mut self,
+        witness: ImplementationOperand,
+        contract: DeclarationReference,
+        method: crate::platform::semantic_id::MethodId,
+        scopes: &[ReadScopeArgument],
+    ) -> Result<
+        (
+            DeclarationReference,
+            Vec<TypeObjectDigest>,
+            Vec<AppliedReferenceImplementation>,
+            Vec<ReadScopeArgument>,
+        ),
+        ExecutionError,
+    > {
+        let scopes = self.resolve_read_scope_arguments(scopes)?;
         let selected = self.resolve_implementation(witness)?;
         let implementation = self.checked_implementation(&selected)?;
         if implementation.contract != contract {
@@ -898,13 +936,19 @@ impl ReferenceState<'_> {
                 .associated_proof()
                 .cloned()
                 .ok_or_else(|| reference_type_error("canonical method proof is missing"))?;
-            let raw_target = proof.method_target(canonical, method, self.control)?;
+            let raw_target = proof.method_target(canonical, method, &scopes, self.control)?;
             let mapping = implementation
                 .methods
                 .iter()
                 .find(|mapping| mapping.method == method)
                 .ok_or_else(|| reference_type_error("canonical selected method is missing"))?;
-            self.associated_step(mapping.type_arguments.len().saturating_add(1))?;
+            self.associated_step(
+                mapping
+                    .type_arguments
+                    .len()
+                    .saturating_add(mapping.read_scope_arguments.len())
+                    .saturating_add(1),
+            )?;
             self.bound_mapping_operands(&mapping.implementations, 0)?;
             if mapping != proof.mapping_template(canonical, method, self.control)? {
                 return Err(reference_type_error(
@@ -916,6 +960,7 @@ impl ReferenceState<'_> {
                     .types
                     .len()
                     .saturating_add(raw_target.witnesses.len())
+                    .saturating_add(raw_target.read_scope_arguments.len())
                     .saturating_add(1),
             )?;
             self.charge_items(
@@ -923,6 +968,10 @@ impl ReferenceState<'_> {
                 std::mem::size_of::<TypeObjectDigest>(),
             )?;
             self.charge_items(raw_target.witnesses.len(), std::mem::size_of::<usize>())?;
+            self.charge_items(
+                raw_target.read_scope_arguments.len(),
+                std::mem::size_of::<ReadScopeArgument>(),
+            )?;
             let target = raw_target.clone();
             if !implementation
                 .methods
@@ -943,7 +992,17 @@ impl ReferenceState<'_> {
             for id in &target.witnesses {
                 witnesses.push(self.selected_by_canonical_id(*id, 0, &mut visits)?);
             }
-            return Ok((target.function, target.types, witnesses));
+            return Ok((
+                target.function,
+                target.types,
+                witnesses,
+                target.read_scope_arguments,
+            ));
+        }
+        if !scopes.is_empty() {
+            return Err(reference_type_error(
+                "method scope actuals require exact canonical application admission",
+            ));
         }
         let scheme_bindings = implementation
             .type_parameters
@@ -981,19 +1040,25 @@ impl ReferenceState<'_> {
                         )
                     })
                     .collect::<Result<_, _>>()?;
-                return Ok((m.function, m.type_arguments.clone(), implementations));
+                return Ok((
+                    m.function,
+                    m.type_arguments.clone(),
+                    implementations,
+                    Vec::new(),
+                ));
             }
         }
         Err(reference_type_error("method absent from implementation"))
     }
 
-    pub(super) fn witness_call(
+    pub(super) fn witness_call_scoped(
         &mut self,
         function: DeclarationReference,
         types: &[TypeObjectDigest],
         effects: &[EffectRow],
         requirements: &[RequirementOperand],
         operands: &[ImplementationOperand],
+        scopes: &[ReadScopeArgument],
         arguments: Vec<CheckedValue>,
     ) -> Result<AdmittedGraphCall, ExecutionError> {
         self.charge_allocation(
@@ -1006,16 +1071,19 @@ impl ReferenceState<'_> {
         let types = self.resolve_type_arguments(types)?;
         let effects = self.resolve_effect_arguments(effects)?;
         let requirements = self.resolve_requirement_arguments(requirements)?;
-        self.admit_resolved_witness_call(
+        let scopes = self.resolve_read_scope_arguments(scopes)?;
+        self.admit_resolved_witness_call_scoped(
             function,
             &types,
             &effects,
             &requirements,
             &selected,
+            &scopes,
             arguments,
         )
     }
 
+    #[cfg(test)]
     pub(super) fn admit_resolved_witness_call(
         &mut self,
         function: DeclarationReference,
@@ -1023,6 +1091,27 @@ impl ReferenceState<'_> {
         effects: &[EffectRow],
         requirements: &[RequirementOperand],
         implementations: &[AppliedReferenceImplementation],
+        arguments: Vec<CheckedValue>,
+    ) -> Result<AdmittedGraphCall, ExecutionError> {
+        self.admit_resolved_witness_call_scoped(
+            function,
+            types,
+            effects,
+            requirements,
+            implementations,
+            &[],
+            arguments,
+        )
+    }
+
+    pub(super) fn admit_resolved_witness_call_scoped(
+        &mut self,
+        function: DeclarationReference,
+        types: &[TypeObjectDigest],
+        effects: &[EffectRow],
+        requirements: &[RequirementOperand],
+        implementations: &[AppliedReferenceImplementation],
+        scopes: &[ReadScopeArgument],
         arguments: Vec<CheckedValue>,
     ) -> Result<AdmittedGraphCall, ExecutionError> {
         let DeclarationPayload::Function(declaration) = self.declaration(function)?.payload else {
@@ -1039,6 +1128,7 @@ impl ReferenceState<'_> {
                 effects,
                 requirements,
                 implementations,
+                scopes,
             },
         )
     }
@@ -1388,6 +1478,9 @@ impl ReferenceState<'_> {
                 | TypeForm::OwnedProduct { .. }
                 | TypeForm::OwnedChoice { .. }
                 | TypeForm::OwnedSequence { .. }
+                | TypeForm::ReadViewApplied { .. }
+                | TypeForm::AssociatedReadViewMember { .. }
+                | TypeForm::AssociatedReadViewProjection { .. }
                 | TypeForm::Secret
                 | TypeForm::Stream { .. } => return Ok(false),
                 TypeForm::StructuralRecord { fields } => fields.len(),
@@ -1428,6 +1521,9 @@ impl ReferenceState<'_> {
                 | TypeForm::OwnedProduct { .. }
                 | TypeForm::OwnedChoice { .. }
                 | TypeForm::OwnedSequence { .. }
+                | TypeForm::ReadViewApplied { .. }
+                | TypeForm::AssociatedReadViewMember { .. }
+                | TypeForm::AssociatedReadViewProjection { .. }
                 | TypeForm::Secret
                 | TypeForm::Stream { .. } => return Ok(false),
                 TypeForm::TypeParameter { parameter } => {

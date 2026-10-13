@@ -125,6 +125,12 @@ mod transfer_tests;
 #[path = "memory_witness_reference.rs"]
 mod witnesses;
 struct Oracle<'a>(&'a KernelSnapshot, Option<DeclarationReference>);
+fn owned_read_source<S: Copy>(result: &CallableResult<S>) -> Option<S> {
+    match result.relation {
+        ResultRelation::ReadFrom { source } => Some(source),
+        _ => None,
+    }
+}
 #[derive(Clone, Copy)]
 enum Demand {
     Data,
@@ -170,7 +176,7 @@ impl Oracle<'_> {
             else {
                 return false;
             };
-            if object.form.is_associated() {
+            if object.form.is_associated() || object.form.is_read_view() {
                 return true;
             }
             pending.extend(object.child_types());
@@ -202,7 +208,9 @@ impl Oracle<'_> {
             else {
                 return false;
             };
-            if object.form.is_associated() && generation < 33 {
+            if object.form.is_associated() && generation < 33
+                || object.form.is_read_view() && generation != 34
+            {
                 return false;
             }
             if generation < 32 && self.nominal_owner(ty).is_some() {
@@ -320,6 +328,7 @@ impl Oracle<'_> {
             };
             if matches!(t.form, TypeForm::ByteBuffer | TypeForm::OwnedI64Cell)
                 || t.form.is_associated()
+                || t.form.is_read_view()
             {
                 return true;
             }
@@ -481,7 +490,7 @@ impl Oracle<'_> {
             match &d.payload {
                 DeclarationPayload::Function(f) => (
                     f.parameters.clone(),
-                    f.result,
+                    f.result.ty,
                     matches!(f.effect, FunctionEffect::Pure),
                     None,
                 ),
@@ -502,7 +511,7 @@ impl Oracle<'_> {
             match &d.payload {
                 PackageInterfaceDeclarationPayload::Function(f) => (
                     f.parameters.clone(),
-                    f.result,
+                    f.result.ty,
                     matches!(f.effect, FunctionEffect::Pure),
                     None,
                 ),
@@ -533,7 +542,7 @@ impl Oracle<'_> {
         function: DeclarationReference,
     ) -> Option<Option<crate::platform::semantic_id::ParameterId>> {
         if let Some(signature) = self.function(function) {
-            return Some(signature.result_borrow);
+            return Some(owned_read_source(&signature.result));
         }
         self.signature(function).map(|_| None)
     }
@@ -912,6 +921,7 @@ impl Oracle<'_> {
                 type_arguments,
                 requirement_arguments,
                 effect_arguments,
+                ..
             } if requirement_arguments.is_empty() && effect_arguments.is_empty() => {
                 (*function, arguments, type_arguments, &[][..])
             }
@@ -922,6 +932,7 @@ impl Oracle<'_> {
                 implementations,
                 requirement_arguments,
                 effect_arguments,
+                ..
             } if requirement_arguments.is_empty() && effect_arguments.is_empty() => (
                 *function,
                 arguments,
@@ -937,7 +948,7 @@ impl Oracle<'_> {
                 || !signature.effect_parameters.is_empty()
                 || !matches!(&signature.effect, FunctionEffect::Task { requirements, effect_parameters } if requirements.is_empty() && effect_parameters.is_empty())
                 || signature.parameters.len() != arguments.len()
-                || signature.result_borrow.is_some()
+                || owned_read_source(&signature.result).is_some()
             {
                 return None;
             }
@@ -976,7 +987,7 @@ impl Oracle<'_> {
             || !signature.effect_parameters.is_empty()
             || !matches!(&signature.effect, FunctionEffect::Task { requirements, effect_parameters } if requirements.is_empty() && effect_parameters.is_empty())
             || signature.parameters.len() != arguments.len()
-            || signature.result_borrow.is_some()
+            || owned_read_source(&signature.result).is_some()
         {
             return None;
         }
@@ -985,7 +996,7 @@ impl Oracle<'_> {
             .into_iter()
             .zip(types.iter().copied())
             .collect();
-        let result = self.parallel_shape(signature.result, &bindings, 0, &mut remaining)?;
+        let result = self.parallel_shape(signature.result.ty, &bindings, 0, &mut remaining)?;
         let mut owned = false;
         for id in signature.parameters {
             let p = self.parameter(function.package, id)?;
@@ -1164,6 +1175,7 @@ impl Oracle<'_> {
                 arguments,
                 requirement_arguments,
                 effect_arguments,
+                ..
             } => {
                 let f = self.function(*function)?;
                 if !f.implementation_parameters.is_empty()
@@ -1173,7 +1185,7 @@ impl Oracle<'_> {
                 {
                     return None;
                 }
-                let selected = f.result_borrow?;
+                let selected = owned_read_source(&f.result)?;
                 let source = f.parameters.iter().position(|p| *p == selected)?;
                 let template = self.signature(*function)?;
                 let applied = self.applied_signature(*function, type_arguments)?;
@@ -1189,7 +1201,7 @@ impl Oracle<'_> {
                         .collect::<Vec<_>>(),
                     arguments,
                     source,
-                    f.result,
+                    f.result.ty,
                     self.application_bindings(*function, type_arguments)?,
                 )
             }
@@ -1200,6 +1212,7 @@ impl Oracle<'_> {
                 arguments,
                 requirement_arguments,
                 effect_arguments,
+                ..
             } => {
                 let f = self.function(*function)?;
                 if !self.valid_parameters(*function, &f)
@@ -1209,7 +1222,7 @@ impl Oracle<'_> {
                 {
                     return None;
                 }
-                let selected = f.result_borrow?;
+                let selected = owned_read_source(&f.result)?;
                 let source = f.parameters.iter().position(|p| *p == selected)?;
                 let template = self.signature(*function)?;
                 let applied = self.applied_signature(*function, type_arguments)?;
@@ -1225,7 +1238,7 @@ impl Oracle<'_> {
                         .collect::<Vec<_>>(),
                     arguments,
                     source,
-                    f.result,
+                    f.result.ty,
                     self.application_bindings(*function, type_arguments)?,
                 )
             }
@@ -1234,9 +1247,10 @@ impl Oracle<'_> {
                 contract,
                 method,
                 arguments,
+                ..
             } => {
                 let (m, substitutions) = self.method(witness.clone(), *contract, *method)?;
-                let source = m.result_borrow? as usize;
+                let source = owned_read_source(&m.result)? as usize;
                 (
                     m.parameters
                         .iter()
@@ -1244,7 +1258,7 @@ impl Oracle<'_> {
                         .collect::<Vec<_>>(),
                     arguments,
                     source,
-                    m.result,
+                    m.result.ty,
                     substitutions,
                 )
             }
@@ -1409,6 +1423,15 @@ impl Oracle<'_> {
                 }
                 false
             }
+            // These affine categories have their own positive raw-canonical
+            // flow model. They cannot fall through the ordinary/Owned oracle.
+            ExpressionOperation::CreateReadView { .. }
+            | ExpressionOperation::BorrowReadView { .. }
+            | ExpressionOperation::ReborrowReadView { .. }
+            | ExpressionOperation::MoveReadView { .. }
+            | ExpressionOperation::DropReadView { .. }
+            | ExpressionOperation::ReadViewDataField { .. }
+            | ExpressionOperation::BorrowReadViewField { .. } => return None,
             ExpressionOperation::SequencePush {
                 sequence_type,
                 value,
@@ -2089,7 +2112,8 @@ impl Oracle<'_> {
                 ..
             } => {
                 if self.function(*function).is_some_and(|f| {
-                    !f.implementation_parameters.is_empty() || f.result_borrow.is_some()
+                    !f.implementation_parameters.is_empty()
+                        || owned_read_source(&f.result).is_some()
                 }) || !self.application(*function, type_arguments)
                 {
                     return None;
@@ -2203,9 +2227,10 @@ impl Oracle<'_> {
                 contract,
                 method,
                 arguments,
+                ..
             } => {
                 let (m, bindings) = self.method(witness.clone(), *contract, *method)?;
-                if m.result_borrow.is_some() {
+                if owned_read_source(&m.result).is_some() {
                     return None;
                 }
                 self.arguments(
@@ -2218,7 +2243,7 @@ impl Oracle<'_> {
                     depth,
                     &bindings,
                 )?;
-                self.buffer(self.method_type(m.result, &bindings))
+                self.buffer(self.method_type(m.result.ty, &bindings))
             }
             ExpressionOperation::BorrowCall {
                 call,
@@ -2256,7 +2281,8 @@ impl Oracle<'_> {
                 ..
             } => {
                 if self.function(*function).is_some_and(|f| {
-                    !f.implementation_parameters.is_empty() || f.result_borrow.is_some()
+                    !f.implementation_parameters.is_empty()
+                        || owned_read_source(&f.result).is_some()
                 }) || type_arguments.iter().any(|t| self.contains(*t))
                 {
                     return None;
@@ -2407,6 +2433,9 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
     materialized.types.extend(associated_closure.derived);
     let snapshot = &materialized;
     let oracle = Oracle(snapshot, None);
+    let has_views = snapshot.types.values().chain(snapshot.dependency_types.values()).any(|object| object.form.is_read_view())
+        || snapshot.owners.values().any(|owner| matches!(owner, OwnerRecord::Declaration(d) if d.payload.has_read_view_metadata()));
+    let mut view_flow = associated::Resolver::new(snapshot);
     for (package, selection) in &snapshot.representation_dependencies {
         if selection.package != *package
             || !contract::supported_graph_contract(selection.graph_contract_version)
@@ -2527,7 +2556,7 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                                     || i.methods.iter().any(|m| !m.implementations.is_empty())))
                     }
                     PackageInterfaceDeclarationPayload::Function(f) => {
-                        (generation < 27 && f.result_borrow.is_some())
+                        (generation < 27 && owned_read_source(&f.result).is_some())
                             || generation < 26
                                 && f.implementation_parameters
                                     .iter()
@@ -2599,6 +2628,20 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                             .is_some()
                             && matches!(key, OwnerKey::TypeParameter(id) if type_parameters.contains(id)) =>
                             {}
+                        PackageInterfaceDeclarationPayload::ReadView(v)
+                            if matches!(key, OwnerKey::TypeParameter(id) if v.type_parameters.contains(id))
+                                && Oracle(
+                                    snapshot,
+                                    Some(DeclarationReference {
+                                        package: *package,
+                                        declaration: p.declaration,
+                                    }),
+                                )
+                                .scoped_parameter(match key {
+                                    OwnerKey::TypeParameter(id) => *id,
+                                    _ => return false,
+                                })
+                                .is_some() => {}
                         _ => return false,
                     }
                 }
@@ -2651,6 +2694,19 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                             declaration: *id,
                         };
                         let imported = Oracle(snapshot, Some(function));
+                        let mut view_reader = associated::Resolver::new(snapshot);
+                        let view_signature = match view_reader.function_uses_read_view(function) {
+                            Ok(value) => value,
+                            Err(_) => return false,
+                        };
+                        if view_signature {
+                            if !imported.valid_parameters(function, f)
+                                || view_reader.read_view_function_signature(function).is_err()
+                            {
+                                return false;
+                            }
+                            continue;
+                        }
                         if !imported.valid_parameters(function, f)
                             || imported.signature(function).is_none_or(|s| {
                                 !imported.legal_signature(&s)
@@ -2739,7 +2795,7 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                                 || i.methods.iter().any(|m| !m.implementations.is_empty())))
                 }
                 DeclarationPayload::Function(f) => {
-                    (generation < 27 && f.result_borrow.is_some())
+                    (generation < 27 && owned_read_source(&f.result).is_some())
                         || generation < 26
                             && f.implementation_parameters
                                 .iter()
@@ -2864,6 +2920,7 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                 TypeForm::OwnedProduct { .. }
                     | TypeForm::OwnedChoice { .. }
                     | TypeForm::OwnedSequence { .. }
+                    | TypeForm::ReadViewApplied { .. }
             ) && t.child_types().iter().any(|t| oracle.contains(*t))
         })
     {
@@ -2904,6 +2961,20 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                         .is_some()
                         && matches!(key, OwnerKey::TypeParameter(id) if type_parameters.contains(id)) =>
                         {}
+                    DeclarationPayload::ReadView(v)
+                        if matches!(key, OwnerKey::TypeParameter(id) if v.type_parameters.contains(id))
+                            && Oracle(
+                                snapshot,
+                                Some(DeclarationReference {
+                                    package: snapshot.root.package_id,
+                                    declaration: p.declaration,
+                                }),
+                            )
+                            .scoped_parameter(match key {
+                                OwnerKey::TypeParameter(id) => *id,
+                                _ => return false,
+                            })
+                            .is_some() => {}
                     _ => return false,
                 }
             }
@@ -3027,6 +3098,18 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                         package: snapshot.root.package_id,
                         declaration: *id,
                     };
+                    if has_views {
+                        match view_flow.function_uses_read_view(function) {
+                            Ok(true) => {
+                                if view_flow.validate_read_view_function(function).is_err() {
+                                    return false;
+                                }
+                                continue;
+                            }
+                            Ok(false) => {}
+                            Err(_) => return false,
+                        }
+                    }
                     if oracle
                         .function(function)
                         .is_none_or(|f| !oracle.valid_parameters(function, &f))
@@ -3067,16 +3150,18 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                             }
                         }
                     }
-                    let demand = match f.result_borrow {
+                    let demand = match owned_read_source(&f.result) {
                         Some(source) => Demand::Borrow {
                             source: LocalValueReference::FunctionParameter(source),
-                            ty: f.result,
+                            ty: f.result.ty,
                         },
-                        None if oracle.buffer(f.result) => Demand::Owner,
+                        None if oracle.buffer(f.result.ty) => Demand::Owner,
                         None => Demand::Data,
                     };
                     if oracle.flow(f.body, &mut rights, demand, 0)
-                        != Some(f.result_borrow.is_none() && oracle.buffer(f.result))
+                        != Some(
+                            owned_read_source(&f.result).is_none() && oracle.buffer(f.result.ty),
+                        )
                         || !rights.provenance.is_empty()
                         || !rights.loans.is_empty()
                     {

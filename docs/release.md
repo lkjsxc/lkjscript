@@ -54,7 +54,8 @@ case matching `native_owned_`, `native_byte_buffer_`, `native_byte_ranges_`,
 `native_declarations::native_data_sequences::` and
 `native_declarations::native_owned_nominals::` and
 `native_declarations::native_indexed_data::` and
-`native_declarations::native_associated_blockread::` families, plus the exact
+`native_declarations::native_associated_blockread::` and
+`native_declarations::native_associated_read_views::` families, plus the exact
 `copied_binary_authors_builds_and_serves_interactive_topology_from_minimal` case.
 The Map family must include the exact
 `native_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment`
@@ -86,8 +87,8 @@ substitute for final-byte acceptance. Normal promotion and anonymous acquisition
 still use the unchanged assets and existing authority; no credentials, protections,
 immutable tags or prior assets are changed.
 
-`lkjscript-final-candidate-acceptance-11` and workload
-`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-11`
+`lkjscript-final-candidate-acceptance-12` and workload
+`release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-12`
 require the complete Map matrix, the exact native-fold, incremental-compiler,
 FIFO, generalized-sequence, nominal-owned-record and mixed indexed-storage behavior witnesses and native-public proof in addition
 to all previous source, six target-owner, two userland and installation boundaries.
@@ -98,6 +99,21 @@ BlockRead case and every present/future test in its namespace. Its four literal
 cases, three targets and attached/detached executions retain 24 complete-result
 comparisons and three rejected authored proposals; see the
 [maintained example](../examples/associated-blockread/README.md).
+Generation 12 additionally requires all four exact source-tied read-view cases in
+`native_declarations::native_associated_read_views::` and every present/future case
+in that namespace: consumer-first literal results and detached bytes, complete
+source/category refusals, joined reads and passive custody, and trap/fuel cleanup
+with subsequent invocation recovery. Real finalized inventory totals come from the
+fresh source-bound harness listing; source or synthetic fixture counts supply no
+acceptance credit.
+
+The unpublished .95 generation 11 attempt is superseded by the selected .96
+generation 12 successor. Complete its source, maintained assets and any preparation
+remedy justified by measurements, then obtain fresh dependency-complete local acceptance
+and select one new producer from integrated main. An intermediate .95 publication
+is not required. Its local proofs and failed candidate retain their original source
+and outcomes, with no acceptance credit for .96. Promotion still requires the new
+producer’s accepted final bytes and exact source/tag authority.
 The current controller rejects predecessor contracts, predecessor workloads and mixed generations
 rather than relabelling them. Their original contracts and evidence remain historical facts;
 a corrected successor requires a fresh producer. In particular, producer 37046478616
@@ -119,7 +135,8 @@ and joined-cleanup requirement. Exact selected-name libtest long-running notices
 have no pass credit; every unique passing case and the complete exact summary
 remain required. Receipt commands bind the fixed worker selection. The .94
 scheduling correction retained acceptance/workload generation 10. The additional
-associated coverage above selects generation 11; neither change relabels failed
+Owned BlockRead coverage selects generation 11; source-tied read-view coverage
+selects generation 12. Neither successor relabels failed
 originals or proves that hosted execution will finish within its unchanged
 allowance. Failed producers remain unpromotable.
 

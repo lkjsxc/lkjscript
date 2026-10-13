@@ -38,7 +38,13 @@ fn flow(instruction: &I) -> Flow<'_> {
         I::LoadLocal { local, .. } | I::MoveLocal(local) => (Some(*local), None, Edges::Next),
         I::SequenceLength { source_local, .. }
         | I::SequenceGet { source_local, .. }
+        | I::BeginReadView { source_local, .. }
+        | I::ReborrowReadView { source_local, .. }
+        | I::ReadViewDataField { source_local, .. }
         | I::BeginBorrowCall { source_local, .. } => (Some(*source_local), None, Edges::Next),
+        I::MoveReadView { source_local, .. } | I::DropReadView { source_local, .. } => {
+            (Some(*source_local), Some(*source_local), Edges::Next)
+        }
         I::SequencePush { source_local, .. }
         | I::SequencePop { source_local, .. }
         | I::SequenceReplace { source_local, .. } => {
@@ -73,18 +79,40 @@ fn flow(instruction: &I) -> Flow<'_> {
             source_local,
             binding_local,
             ..
+        }
+        | I::BorrowReadView {
+            source_local,
+            binding_local,
+            ..
+        }
+        | I::BorrowReadViewField {
+            source_local,
+            binding_local,
+            ..
+        }
+        | I::AdoptViewResult {
+            source_local,
+            binding_local,
+            ..
         } => (Some(*source_local), Some(*binding_local), Edges::Next),
         I::MatchBorrowedOwned {
             source_local,
             cases,
             ..
         } => (Some(*source_local), None, Edges::BorrowedChoice(cases)),
-        I::EndOwnedBorrow { binding_local } => (None, Some(*binding_local), Edges::Next),
-        I::Return | I::ReturnBorrowed | I::TailCall { .. } => (None, None, Edges::Exit),
+        I::EndOwnedBorrow { binding_local } | I::EndReadViewBorrow { binding_local } => {
+            (None, Some(*binding_local), Edges::Next)
+        }
+        I::Return | I::ReturnBorrowed | I::ReturnView | I::TailCall { .. } => {
+            (None, None, Edges::Exit)
+        }
         // Dynamic external callees return to this frame; graph callees transfer.
         // Without callee proof, preserve the possible continuation's live values.
         I::TailInvoke { .. } => (None, None, Edges::Next),
         I::Unit
+        | I::BeginReadViewScope { .. }
+        | I::EndReadViewScope { .. }
+        | I::FinishReadView { .. }
         | I::SequenceEmpty { .. }
         | I::ChooseOwned { .. }
         | I::PackOwned { .. }
@@ -121,7 +149,10 @@ fn flow(instruction: &I) -> Flow<'_> {
         read_extra: match instruction {
             I::BorrowOwnedField { binding_local, .. }
             | I::BorrowOwnedItem { binding_local, .. }
-            | I::AdoptBorrowResult { binding_local, .. } => Some(*binding_local),
+            | I::AdoptBorrowResult { binding_local, .. }
+            | I::BorrowReadView { binding_local, .. }
+            | I::BorrowReadViewField { binding_local, .. }
+            | I::AdoptViewResult { binding_local, .. } => Some(*binding_local),
             _ => None,
         },
         write,

@@ -18,17 +18,20 @@ pub use references::{
 };
 
 pub use creation::{
-    AuthoredAnnotationValue, AuthoredAssociatedTypeBinding, AuthoredAssociatedTypeMember,
-    AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference, AuthoredDeclarationReference,
-    AuthoredEffectParameter, AuthoredEffectParameterReference, AuthoredEffectRow,
-    AuthoredExpression, AuthoredExpressionOperation, AuthoredField, AuthoredFieldReference,
-    AuthoredFieldSelector, AuthoredFunctionEffect, AuthoredImplementationOperand,
-    AuthoredImplementationParameter, AuthoredLetBinding, AuthoredLocalReference,
-    AuthoredMapExpressionEntry, AuthoredMatchExpressionArm, AuthoredOperation,
-    AuthoredOperationReference, AuthoredOwnedMethod, AuthoredOwnedMethodImplementation,
-    AuthoredParameter, AuthoredPort, AuthoredPortImplementation, AuthoredPortReference,
-    AuthoredRecordExpressionField, AuthoredRequirement, AuthoredRequirementParameter,
-    AuthoredRequirementReference, AuthoredResourceLimit, AuthoredStructuralTypeField,
+    AuthoredAnnotationValue, AuthoredAssociatedTypeBinding, AuthoredAssociatedTypeBindingValue,
+    AuthoredAssociatedTypeMember, AuthoredBindingDefinition, AuthoredCallableResult, AuthoredCase,
+    AuthoredCaseReference, AuthoredDeclarationReference, AuthoredEffectParameter,
+    AuthoredEffectParameterReference, AuthoredEffectRow, AuthoredExpression,
+    AuthoredExpressionOperation, AuthoredField, AuthoredFieldReference, AuthoredFieldSelector,
+    AuthoredFunctionEffect, AuthoredImplementationOperand, AuthoredImplementationParameter,
+    AuthoredLetBinding, AuthoredLocalReference, AuthoredMapExpressionEntry,
+    AuthoredMatchExpressionArm, AuthoredOperation, AuthoredOperationReference, AuthoredOwnedMethod,
+    AuthoredOwnedMethodImplementation, AuthoredParameter, AuthoredPort, AuthoredPortImplementation,
+    AuthoredPortReference, AuthoredReadScopeArgument, AuthoredReadScopeBinder,
+    AuthoredReadScopeSource, AuthoredReadViewField, AuthoredReadViewFieldInitializer,
+    AuthoredReadViewFieldKind, AuthoredReadViewFieldReference, AuthoredRecordExpressionField,
+    AuthoredRequirement, AuthoredRequirementParameter, AuthoredRequirementReference,
+    AuthoredResourceLimit, AuthoredResultRelation, AuthoredStructuralTypeField,
     AuthoredTransactionOutcomeContract, AuthoredType, AuthoredTypeParameter,
     AuthoredTypeParameterReference,
 };
@@ -128,8 +131,9 @@ pub enum AuthoredChange {
         visibility: crate::platform::kernel::DeclarationVisibility,
         type_parameters: Vec<AuthoredTypeParameter>,
         parameters: Vec<AuthoredParameter>,
-        result: AuthoredType,
-        result_borrow: Option<AuthoredLocalReference>,
+        result: AuthoredCallableResult<AuthoredLocalReference>,
+        read_scope_parameters: Vec<crate::platform::kernel::ReadScopeParameter>,
+        read_scope_sources: Vec<AuthoredReadScopeSource<AuthoredLocalReference>>,
         effect: AuthoredFunctionEffect,
         body: AuthoredExpression,
     },
@@ -156,6 +160,21 @@ pub enum AuthoredChange {
         visibility: crate::platform::kernel::DeclarationVisibility,
         type_parameters: Vec<AuthoredTypeParameter>,
         cases: Vec<AuthoredCase>,
+    },
+    CreateReadView {
+        symbol: String,
+        module: ModuleSelector,
+        name: Name,
+        visibility: crate::platform::kernel::DeclarationVisibility,
+        type_parameters: Vec<AuthoredTypeParameter>,
+        scope_parameter: crate::platform::kernel::ReadScopeParameter,
+        fields: Vec<AuthoredReadViewField>,
+    },
+    SetReadView {
+        declaration: DeclarationSelector,
+        type_parameters: Vec<AuthoredTypeParameterReference>,
+        scope_parameter: crate::platform::kernel::ReadScopeParameter,
+        fields: Vec<AuthoredReadViewField>,
     },
     CreateInterface {
         symbol: String,
@@ -276,8 +295,9 @@ pub enum AuthoredChange {
     },
     SetFunctionContract {
         function: DeclarationSelector,
-        result: AuthoredType,
-        result_borrow: Option<AuthoredLocalReference>,
+        result: AuthoredCallableResult<AuthoredLocalReference>,
+        read_scope_parameters: Vec<crate::platform::kernel::ReadScopeParameter>,
+        read_scope_sources: Vec<AuthoredReadScopeSource<AuthoredLocalReference>>,
         effect: AuthoredFunctionEffect,
     },
     SetExternalContract {
@@ -771,6 +791,23 @@ pub(crate) fn lower_authored_changes_with_publication_base<
             | AuthoredChange::CreateOwnedImplementation { .. } => {
                 creation::owned::lower(&mut lowerer, change)?
             }
+            AuthoredChange::CreateReadView {
+                symbol,
+                module,
+                name,
+                visibility,
+                type_parameters,
+                scope_parameter,
+                fields,
+            } => lowerer.lower_create_read_view(
+                symbol,
+                module,
+                name,
+                *visibility,
+                type_parameters,
+                scope_parameter,
+                fields,
+            )?,
             AuthoredChange::CreateRecord {
                 symbol,
                 module,
@@ -854,7 +891,8 @@ pub(crate) fn lower_authored_changes_with_publication_base<
                 type_parameters,
                 parameters,
                 result,
-                result_borrow,
+                read_scope_parameters,
+                read_scope_sources,
                 effect,
                 body,
             } => creation::lower_function(
@@ -866,7 +904,8 @@ pub(crate) fn lower_authored_changes_with_publication_base<
                 type_parameters,
                 parameters,
                 result,
-                result_borrow.as_ref(),
+                read_scope_parameters,
+                read_scope_sources,
                 effect,
                 body,
             )?,
@@ -977,12 +1016,24 @@ pub(crate) fn lower_authored_changes_with_publication_base<
             | AuthoredChange::SetImplementationParameters { .. } => {
                 creation::owned::lower(&mut lowerer, change)?
             }
+            AuthoredChange::SetReadView {
+                declaration,
+                type_parameters,
+                scope_parameter,
+                fields,
+            } => lowerer.lower_set_read_view(
+                declaration,
+                type_parameters,
+                scope_parameter,
+                fields,
+            )?,
             AuthoredChange::CreateOwnedContract { .. }
             | AuthoredChange::CreateOwnedImplementation { .. }
             | AuthoredChange::ReferenceBindings { .. }
             | AuthoredChange::CreateModule { .. }
             | AuthoredChange::CreateRecord { .. }
             | AuthoredChange::CreateOwnedRecord { .. }
+            | AuthoredChange::CreateReadView { .. }
             | AuthoredChange::CreateVariant { .. }
             | AuthoredChange::CreateInterface { .. }
             | AuthoredChange::CreateExternal { .. }
@@ -1206,6 +1257,21 @@ fn collect_symbol_definitions(
                 creation::owned::collect(change, &mut definitions)?
             }
             AuthoredChange::ReferenceBindings { .. } => {}
+            AuthoredChange::CreateReadView {
+                symbol,
+                type_parameters,
+                ..
+            } => {
+                define_symbol(&mut definitions, symbol, SymbolKind::Declaration)?;
+                for parameter in type_parameters {
+                    define_symbol(
+                        &mut definitions,
+                        &parameter.symbol,
+                        SymbolKind::TypeParameter,
+                    )?;
+                }
+            }
+            AuthoredChange::SetReadView { .. } => {}
             AuthoredChange::CreateModule { symbol, .. } => {
                 define_symbol(&mut definitions, symbol, SymbolKind::Module)?;
             }
@@ -1537,6 +1603,24 @@ pub(crate) fn authored_source_owners<B: CanonicalBaseRead + ?Sized>(
     budget.check_allocated_identities(total_identity_count)?;
     let bytes = codec::encode_authored_intent(request, &definitions)?;
     let seed = allocation_seed(base, &bytes)?;
+    allocate_symbols(&seed, &definitions)
+}
+
+/// Literal historical allocation evidence, never used by public request lowering.
+#[cfg(test)]
+pub(crate) fn authored_source_owners_from_frozen_intent<B: CanonicalBaseRead + ?Sized>(
+    base: &B,
+    request: &AuthoredChangeSet,
+    frozen_intent: &[u8],
+) -> Result<BTreeMap<String, OwnerKey>, Diagnostic> {
+    let operation_count = references::admitted_operations(request)?;
+    let budget = request
+        .budget
+        .validate_request_counts(operation_count, request.preconditions.len())?;
+    let (definitions, count) =
+        collect_symbol_definitions(request, budget.authored.maximum_allocated_identities)?;
+    budget.check_allocated_identities(count)?;
+    let seed = allocation_seed(base, frozen_intent)?;
     allocate_symbols(&seed, &definitions)
 }
 

@@ -172,7 +172,7 @@ declarations.end"#,
                 OwnerRecord::Declaration(d) => {
                     if let crate::platform::kernel::DeclarationPayload::Function(f) = &mut d.payload
                     {
-                        f.result = ty;
+                        f.result.ty = ty;
                     }
                 }
                 _ => {}
@@ -1256,7 +1256,7 @@ fn owned_products_raw_capture_and_persistence_boundaries() {
     let DeclarationPayload::Function(f) = &d.payload else {
         panic!("function");
     };
-    let ty = f.result;
+    let ty = f.result.ty;
     let control = ExecutionControl::uncancelled();
     for reference in [false, true] {
         let products = super::super::owned_product::StorageObservation::start();

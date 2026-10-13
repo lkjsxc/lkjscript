@@ -31,7 +31,7 @@ declarations.end
     let flat = decode(flat);
     let native = decode(native);
     let bytes = canonical_authored_intent_bytes(&native.semantic).unwrap();
-    assert_eq!(&bytes[..8], b"LKJACR36");
+    assert_eq!(&bytes[..8], b"LKJACR39");
     assert_eq!(
         bytes,
         canonical_authored_intent_bytes(&flat.semantic).unwrap()
@@ -39,7 +39,7 @@ declarations.end
     assert_eq!(native.request_commitment, flat.request_commitment);
     assert_eq!(
         commitment_codec_identity(&bytes),
-        "lkjscript-authored-change-codec-36"
+        "lkjscript-authored-change-codec-39"
     );
     assert!(
         native

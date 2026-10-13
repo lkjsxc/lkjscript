@@ -1111,10 +1111,12 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
                     NormalizedInstruction::TailCall {
                         effect_arguments,
                         requirement_arguments,
+                        read_scope_arguments,
                         function,
                         type_arguments,
                         arguments,
                     } => NormalizedInstruction::Call {
+                        read_scope_arguments: Arc::clone(read_scope_arguments),
                         requirement_arguments: Arc::clone(requirement_arguments),
                         effect_arguments: Arc::clone(effect_arguments),
                         function: *function,

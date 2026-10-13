@@ -66,6 +66,7 @@ pub(super) fn ordinary_assumptions_in(
                 scope_generation = declaration.header.contract_version;
                 match declaration.payload {
                     DeclarationPayload::Function(function) => function.type_parameters,
+                    DeclarationPayload::ReadView(view) => view.type_parameters,
                     DeclarationPayload::OwnedContract(contract) => {
                         mixed_scope = true;
                         contract.type_parameters
@@ -102,6 +103,7 @@ pub(super) fn ordinary_assumptions_in(
                     PackageInterfaceDeclarationPayload::Function(function) => {
                         function.type_parameters
                     }
+                    PackageInterfaceDeclarationPayload::ReadView(view) => view.type_parameters,
                     PackageInterfaceDeclarationPayload::OwnedContract(contract) => {
                         mixed_scope = true;
                         contract.type_parameters
@@ -222,6 +224,7 @@ fn owned_parameter_in(
                 DeclarationPayload::OwnedImplementation(implementation) => {
                     implementation.type_parameters
                 }
+                DeclarationPayload::ReadView(view) => view.type_parameters,
                 _ => {
                     return Err(reject(
                         "transferable owner assumptions require a function or scheme",
@@ -243,6 +246,7 @@ fn owned_parameter_in(
                 PackageInterfaceDeclarationPayload::OwnedImplementation(implementation) => {
                     implementation.type_parameters
                 }
+                PackageInterfaceDeclarationPayload::ReadView(view) => view.type_parameters,
                 _ => {
                     return Err(reject(
                         "imported transferable assumptions require a function or scheme",
@@ -304,6 +308,11 @@ pub(crate) fn admit_at(
     associated: &OwnedAssociatedAdmission,
 ) -> Result<bool, Diagnostic> {
     associated.validate_occurrence_at(read, &[ty], occurrence)?;
+    if super::owned_associated::read_view_admission::contains(read, ty, associated)? {
+        return Err(reject(
+            "ReadView supplies no ordinary or Owned Transferable permission",
+        ));
+    }
     admit_inner(
         read,
         ty,

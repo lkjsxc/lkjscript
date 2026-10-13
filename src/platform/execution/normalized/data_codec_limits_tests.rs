@@ -15,6 +15,7 @@ struct Fixture {
     list: TypeObjectDigest,
     map: TypeObjectDigest,
     nested: TypeObjectDigest,
+    nested_map: TypeObjectDigest,
 }
 
 fn fixture() -> Fixture {
@@ -26,6 +27,7 @@ fn fixture() -> Fixture {
     (parameter create list (type (list Unit)))
     (parameter create map (type (map I64 Unit)))
     (parameter create nested (type (list (list Unit))))
+    (parameter create nested-map (type (map I64 (list Unit))))
     (returns Unit) (body (unit)))))
 declarations.end"#,
     )
@@ -55,6 +57,7 @@ declarations.end"#,
         list: declared("list"),
         map: declared("map"),
         nested: declared("nested"),
+        nested_map: declared("nested-map"),
     }
 }
 
@@ -134,17 +137,36 @@ fn typed_data_blob_lengths_use_byte_limits_not_collection_limits() {
 #[test]
 fn typed_data_collections_charge_nodes_once_and_preflight_nested_allocations() {
     let f = fixture();
-    for count in [500_000, ITEM_LIMIT - 1] {
+    // Flat raw storage has its own finite bound. Keep its wire-count checks small;
+    // use shared nested carriers to reach the codec's independent logical limit.
+    for count in [0, 1, 32, 1024] {
         let value = NormalizedValue::list(vec![NormalizedValue::Unit; count]).unwrap();
         let encoded = round_trip(&f, &value, f.list);
         assert_eq!(encoded.len(), ENVELOPE_BYTES);
         assert_eq!(&encoded[42..46], &(count as u32).to_be_bytes());
     }
-    let excessive = NormalizedValue::list(vec![NormalizedValue::Unit; ITEM_LIMIT]).unwrap();
+    let nested_units = |outer, inner| {
+        let child = NormalizedValue::list(vec![NormalizedValue::Unit; inner]).unwrap();
+        NormalizedValue::list(vec![child; outer]).unwrap()
+    };
+    for (outer, inner, nodes) in [(500, 999, 500_001), (999, 1000, ITEM_LIMIT)] {
+        // Each alias remains a complete logical occurrence in both codecs.
+        assert_eq!(1 + outer * (1 + inner), nodes);
+        let value = nested_units(outer, inner);
+        let encoded = round_trip(&f, &value, f.nested);
+        assert_eq!(encoded.len(), ENVELOPE_BYTES + outer * 4);
+        assert_eq!(&encoded[42..46], &(outer as u32).to_be_bytes());
+        for count in encoded[46..encoded.len() - 32].chunks_exact(4) {
+            assert_eq!(count, &(inner as u32).to_be_bytes());
+        }
+    }
+    assert_eq!(1 + 1000 * (1 + 999), ITEM_LIMIT + 1);
+    let excessive = nested_units(1000, 999);
     for error in [
-        data_codec::encode_typed(&f.program, &excessive, f.list).unwrap_err(),
-        data_codec_reference::encode_typed(&f.reference, &excessive, f.list).unwrap_err(),
+        data_codec::encode_typed(&f.program, &excessive, f.nested).unwrap_err(),
+        data_codec_reference::encode_typed(&f.reference, &excessive, f.nested).unwrap_err(),
     ] {
+        assert_eq!(error.class, DiagnosticClass::Resource);
         assert_eq!(error.code, "normalized_data_value_items");
     }
     drop(excessive);
@@ -166,22 +188,40 @@ fn typed_data_collections_charge_nodes_once_and_preflight_nested_allocations() {
         "normalized_data_value_items",
     );
 
-    // These 500001 semantic nodes fit. The former decoder charged them twice.
-    let count = 250_000;
-    let entries = (0..count)
+    let flat_entries = (0..1024)
         .map(|n| {
             (
-                super::super::value::NormalizedMapKey::I64(n as i64),
+                super::super::value::NormalizedMapKey::I64(n),
                 NormalizedValue::Unit,
             )
         })
         .collect();
+    let flat =
+        NormalizedValue::map_controlled(flat_entries, &ExecutionControl::uncancelled()).unwrap();
+    let flat_encoded = round_trip(&f, &flat, f.map);
+    assert_eq!(flat_encoded.len(), ENVELOPE_BYTES + 1024 * 8);
+
+    // These 500001 semantic nodes fit. The former decoder charged them twice.
+    // Shared list backing bounds raw carrier storage without deduplicating keys,
+    // list nodes, or Unit occurrences in the serialized value or either decoder.
+    let count = 1000;
+    let inner = 498;
+    assert_eq!(1 + count * (1 + 1 + inner), 500_001);
+    let child = NormalizedValue::list(vec![NormalizedValue::Unit; inner]).unwrap();
+    let entries = (0..count)
+        .map(|n| {
+            (
+                super::super::value::NormalizedMapKey::I64(n as i64),
+                child.clone(),
+            )
+        })
+        .collect();
     let value = NormalizedValue::map_controlled(entries, &ExecutionControl::uncancelled()).unwrap();
-    let encoded = round_trip(&f, &value, f.map);
-    assert_eq!(encoded.len(), ENVELOPE_BYTES + count * 8);
+    let encoded = round_trip(&f, &value, f.nested_map);
+    assert_eq!(encoded.len(), ENVELOPE_BYTES + count * (8 + 4));
     rejects(
         &f,
-        &counted_envelope(&encoded, &500_000_u32.to_be_bytes()),
+        &counted_envelope(&flat_encoded, &500_000_u32.to_be_bytes()),
         f.map,
         "normalized_data_value_items",
     );

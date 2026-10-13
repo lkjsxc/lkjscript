@@ -6,6 +6,14 @@ use crate::platform::semantic_id::*;
 
 const SEED: &[u8] = b"associated-interface-authority";
 
+fn frozen_header(owner: OwnerKey, kind: OwnerKind) -> OwnerHeader {
+    OwnerHeader {
+        contract_version: 33,
+        owner,
+        kind,
+    }
+}
+
 struct Fixture {
     consumer: PackageId,
     supplier: PackageId,
@@ -48,7 +56,7 @@ fn declaration(
 ) -> PackageInterfaceOwner {
     owner(PackageInterfaceRecord::Declaration(
         PackageInterfaceDeclaration {
-            header: OwnerHeader::new(OwnerKey::Declaration(id), kind),
+            header: frozen_header(OwnerKey::Declaration(id), kind),
             name: Name::new(name).unwrap(),
             payload,
         },
@@ -150,8 +158,12 @@ fn fixture() -> Fixture {
                 effect_parameters: vec![],
                 type_parameters: vec![ordinary],
                 parameters: vec![parameter],
-                result: projection,
-                result_borrow: Some(parameter),
+                result: CallableResult {
+                    ty: projection,
+                    relation: ResultRelation::ReadFrom { source: parameter },
+                },
+                read_scope_parameters: vec![],
+                read_scope_sources: vec![],
                 effect: FunctionEffect::Pure,
             }),
         ),
@@ -159,7 +171,7 @@ fn fixture() -> Fixture {
     consumer_owners.insert(
         OwnerKey::TypeParameter(ordinary),
         owner(PackageInterfaceRecord::TypeParameter(TypeParameterRecord {
-            header: OwnerHeader::new(OwnerKey::TypeParameter(ordinary), OwnerKind::TypeParameter),
+            header: frozen_header(OwnerKey::TypeParameter(ordinary), OwnerKind::TypeParameter),
             declaration: function.declaration,
             name: Name::new("T").unwrap(),
             constraints: TypeParameterConstraints::Owned,
@@ -168,7 +180,7 @@ fn fixture() -> Fixture {
     consumer_owners.insert(
         OwnerKey::Parameter(parameter),
         owner(PackageInterfaceRecord::Parameter(ParameterRecord {
-            header: OwnerHeader::new(OwnerKey::Parameter(parameter), OwnerKind::Parameter),
+            header: frozen_header(OwnerKey::Parameter(parameter), OwnerKind::Parameter),
             parent: ParameterParent::Function(function.declaration),
             name: Name::new("value").unwrap(),
             ty: projection,
@@ -205,8 +217,12 @@ fn fixture() -> Fixture {
                         ty: contract_member,
                         use_mode: ParameterUse::Borrow,
                     }],
-                    result: contract_member,
-                    result_borrow: Some(0),
+                    result: CallableResult {
+                        ty: contract_member,
+                        relation: ResultRelation::ReadFrom { source: 0 },
+                    },
+                    read_scope_parameters: vec![],
+                    read_scope_sources: vec![],
                     effect: FunctionEffect::Pure,
                 }],
             }),
@@ -215,7 +231,7 @@ fn fixture() -> Fixture {
     supplier_owners.insert(
         OwnerKey::TypeParameter(contract_self),
         owner(PackageInterfaceRecord::TypeParameter(TypeParameterRecord {
-            header: OwnerHeader::new(
+            header: frozen_header(
                 OwnerKey::TypeParameter(contract_self),
                 OwnerKind::TypeParameter,
             ),
@@ -227,11 +243,11 @@ fn fixture() -> Fixture {
     let mut associated_types = vec![
         AssociatedTypeBinding {
             member: out,
-            ty: cell,
+            value: AssociatedTypeBindingValue::Owned { ty: cell },
         },
         AssociatedTypeBinding {
             member: spare,
-            ty: buffer,
+            value: AssociatedTypeBindingValue::Owned { ty: buffer },
         },
     ];
     associated_types.sort_by_key(|binding| binding.member);
@@ -249,6 +265,7 @@ fn fixture() -> Fixture {
                 type_arguments: vec![],
                 associated_types,
                 methods: vec![OwnedMethodImplementation {
+                    read_scope_arguments: vec![],
                     method,
                     function: mapped_function,
                     type_arguments: vec![],
@@ -269,8 +286,14 @@ fn fixture() -> Fixture {
                 effect_parameters: vec![],
                 type_parameters: vec![],
                 parameters: vec![mapped_parameter],
-                result: cell,
-                result_borrow: Some(mapped_parameter),
+                result: CallableResult {
+                    ty: cell,
+                    relation: ResultRelation::ReadFrom {
+                        source: mapped_parameter,
+                    },
+                },
+                read_scope_parameters: vec![],
+                read_scope_sources: vec![],
                 effect: FunctionEffect::Pure,
             }),
         ),
@@ -278,7 +301,7 @@ fn fixture() -> Fixture {
     supplier_owners.insert(
         OwnerKey::Parameter(mapped_parameter),
         owner(PackageInterfaceRecord::Parameter(ParameterRecord {
-            header: OwnerHeader::new(OwnerKey::Parameter(mapped_parameter), OwnerKind::Parameter),
+            header: frozen_header(OwnerKey::Parameter(mapped_parameter), OwnerKind::Parameter),
             parent: ParameterParent::Function(mapped_function.declaration),
             name: Name::new("cell").unwrap(),
             ty: cell,
@@ -388,7 +411,7 @@ fn private_output(f: &mut Fixture) -> (TypeObjectDigest, FieldId) {
     f.supplier_interface.owners.insert(
         OwnerKey::Field(field_id),
         owner(PackageInterfaceRecord::Field(FieldRecord {
-            header: OwnerHeader::new(OwnerKey::Field(field_id), OwnerKind::Field),
+            header: frozen_header(OwnerKey::Field(field_id), OwnerKind::Field),
             declaration: declaration_id,
             name: Name::new("cell").unwrap(),
             ty: f.cell,
@@ -399,7 +422,7 @@ fn private_output(f: &mut Fixture) -> (TypeObjectDigest, FieldId) {
         .iter_mut()
         .find(|binding| binding.member == out)
         .unwrap()
-        .ty = ty;
+        .value = AssociatedTypeBindingValue::Owned { ty };
     let mapped = DeclarationId::migrate(SEED, 3);
     let PackageInterfaceRecord::Declaration(record) = &mut f
         .supplier_interface
@@ -413,7 +436,7 @@ fn private_output(f: &mut Fixture) -> (TypeObjectDigest, FieldId) {
     let PackageInterfaceDeclarationPayload::Function(signature) = &mut record.payload else {
         unreachable!()
     };
-    signature.result = ty;
+    signature.result.ty = ty;
     let PackageInterfaceRecord::Parameter(parameter) = &mut f
         .supplier_interface
         .owners
@@ -457,7 +480,7 @@ fn public_private_output(f: &mut Fixture) -> (TypeObjectDigest, FieldId) {
     f.supplier_interface.owners.insert(
         OwnerKey::Field(field_id),
         owner(PackageInterfaceRecord::Field(FieldRecord {
-            header: OwnerHeader::new(OwnerKey::Field(field_id), OwnerKind::Field),
+            header: frozen_header(OwnerKey::Field(field_id), OwnerKind::Field),
             declaration: declaration_id,
             name: Name::new("private_cell").unwrap(),
             ty: private,
@@ -468,7 +491,7 @@ fn public_private_output(f: &mut Fixture) -> (TypeObjectDigest, FieldId) {
         .iter_mut()
         .find(|binding| binding.member == out)
         .unwrap()
-        .ty = ty;
+        .value = AssociatedTypeBindingValue::Owned { ty };
     let mapped = DeclarationId::migrate(SEED, 3);
     let PackageInterfaceRecord::Declaration(record) = &mut f
         .supplier_interface
@@ -482,7 +505,7 @@ fn public_private_output(f: &mut Fixture) -> (TypeObjectDigest, FieldId) {
     let PackageInterfaceDeclarationPayload::Function(signature) = &mut record.payload else {
         unreachable!()
     };
-    signature.result = ty;
+    signature.result.ty = ty;
     let PackageInterfaceRecord::Parameter(parameter) = &mut f
         .supplier_interface
         .owners
@@ -603,7 +626,7 @@ fn associated_interface_local_proof_retains_foreign_obligation_and_exact_lexical
 #[test]
 fn associated_interface_occurrences_check_each_owner_generation_and_forbid_private_field_authority()
 {
-    for version in [32, 34] {
+    for version in [32, 35] {
         for key_kind in 0..3 {
             let mut f = fixture();
             let key = match key_kind {
@@ -633,7 +656,7 @@ fn associated_interface_occurrences_check_each_owner_generation_and_forbid_priva
     f.consumer_interface.owners.insert(
         OwnerKey::Field(field),
         owner(PackageInterfaceRecord::Field(FieldRecord {
-            header: OwnerHeader::new(OwnerKey::Field(field), OwnerKind::Field),
+            header: frozen_header(OwnerKey::Field(field), OwnerKind::Field),
             declaration: f.function.declaration,
             name: Name::new("private_view").unwrap(),
             ty: f.projection,
@@ -698,11 +721,12 @@ fn associated_interface_exact_closure_discharges_foreign_obligations_and_checks_
                     .iter_mut()
                     .find(|binding| binding.member == spare)
                     .unwrap()
-                    .ty = scalar;
+                    .value = AssociatedTypeBindingValue::Owned { ty: scalar };
             }
             2 => {
                 let projection = f.contract_member;
-                bindings_mut(&mut f)[0].ty = projection;
+                bindings_mut(&mut f)[0].value =
+                    AssociatedTypeBindingValue::Owned { ty: projection };
             }
             3 => {
                 bindings_mut(&mut f).reverse();
@@ -721,14 +745,14 @@ fn associated_interface_exact_closure_discharges_foreign_obligations_and_checks_
                         member: AssociatedTypeMemberId::migrate(SEED, 99),
                     },
                 );
-                function_mut(&mut f).result = projection;
+                function_mut(&mut f).result.ty = projection;
             }
             _ => {
                 let id = ParameterId::migrate(SEED, 99);
                 f.consumer_interface.owners.insert(
                     OwnerKey::Parameter(id),
                     owner(PackageInterfaceRecord::Parameter(ParameterRecord {
-                        header: OwnerHeader::new(OwnerKey::Parameter(id), OwnerKind::Parameter),
+                        header: frozen_header(OwnerKey::Parameter(id), OwnerKind::Parameter),
                         parent: ParameterParent::Function(f.function.declaration),
                         name: Name::new("orphan").unwrap(),
                         ty: f.projection,
@@ -750,7 +774,7 @@ fn associated_interface_exact_closure_discharges_foreign_obligations_and_checks_
 
 #[test]
 fn associated_interface_exact_closure_rejects_selection_generation_and_representation_authority() {
-    for version in [32, 34] {
+    for version in [32, 35] {
         for mutation in 0..2 {
             let (mut revisions, interfaces, consumer, supplier) = closure(fixture());
             let selected = revisions
@@ -1012,7 +1036,7 @@ fn associated_interface_public_descriptors_preserve_contextual_owned_authority_b
     let mut inventory_only = fixture();
     let cell = inventory_only.cell;
     method_mut(&mut inventory_only).parameters[0].ty = cell;
-    method_mut(&mut inventory_only).result = cell;
+    method_mut(&mut inventory_only).result.ty = cell;
     let (_, supplier) =
         load_public_interface(inventory_only.supplier, &inventory_only.supplier_interface).unwrap();
     assert!(
@@ -1115,7 +1139,7 @@ fn local_function_fixture() -> Fixture {
     // Preserve a complete, structurally valid local contract. Its borrowed method uses the local
     // member coordinate; the symbolic function needs no selected concrete implementation.
     contract.methods[0].parameters[0].ty = local_member;
-    contract.methods[0].result = local_member;
+    contract.methods[0].result.ty = local_member;
     contract.validate_local().unwrap();
     let parameter = OwnerKey::TypeParameter(contract.self_parameter);
     f.consumer_interface
@@ -1140,7 +1164,7 @@ fn local_function_fixture() -> Fixture {
         },
     );
     f.projection = projection;
-    function_mut(&mut f).result = projection;
+    function_mut(&mut f).result.ty = projection;
     let PackageInterfaceRecord::Parameter(parameter) = &mut f
         .consumer_interface
         .owners
@@ -1179,7 +1203,7 @@ fn associated_interface_borrow_checks_route_contract_and_function_owned_requirem
         match mutation {
             0 => selected.parameters[0].use_mode = ParameterUse::Consume,
             1 => selected.parameters[0].ty = scalar,
-            2 => selected.result = scalar,
+            2 => selected.result.ty = scalar,
             _ => {
                 selected.effect = FunctionEffect::Task {
                     effect_parameters: vec![],
@@ -1213,7 +1237,7 @@ fn associated_interface_borrow_checks_route_contract_and_function_owned_requirem
                     parameter.ty = scalar;
                 }
             }
-            2 => function_mut(&mut function).result = scalar,
+            2 => function_mut(&mut function).result.ty = scalar,
             _ => {
                 function_mut(&mut function).effect = FunctionEffect::Task {
                     effect_parameters: vec![],
@@ -1286,7 +1310,7 @@ fn associated_interface_borrow_foreign_requirements_remain_deferred_until_exact_
                 },
             },
         );
-        function_mut(&mut f).result = projection;
+        function_mut(&mut f).result.ty = projection;
         // Equal Self does not choose the first witness or infer a member. The unresolved exact
         // foreign member is a requirement only; the retained closure decides its validity.
         assert_eq!(
@@ -1360,7 +1384,7 @@ fn associated_interface_borrow_function_uses_exact_source_parameter_owner() {
                 else {
                     unreachable!()
                 };
-                parameter.header.contract_version = if mutation == 3 { 32 } else { 34 };
+                parameter.header.contract_version = if mutation == 3 { 32 } else { 35 };
             }
             5 => {
                 let PackageInterfaceRecord::Parameter(parameter) = &mut f
@@ -1376,7 +1400,7 @@ fn associated_interface_borrow_function_uses_exact_source_parameter_owner() {
             }
             _ => {
                 let scalar = intern(&mut f.consumer_interface.type_objects, TypeForm::ByteBuffer);
-                function_mut(&mut f).result = scalar;
+                function_mut(&mut f).result.ty = scalar;
                 let PackageInterfaceRecord::Parameter(parameter) = &mut f
                     .consumer_interface
                     .owners
@@ -1466,7 +1490,9 @@ fn associated_interface_borrow_source_and_result_share_capacity_and_cancellation
     assert_eq!(charged, source_work);
     // Entry cancellation also precedes a malformed source lookup, retaining no proof growth.
     let mut malformed = fixture();
-    function_mut(&mut malformed).result_borrow = Some(ParameterId::migrate(SEED, 99));
+    function_mut(&mut malformed).result.relation = ResultRelation::ReadFrom {
+        source: ParameterId::migrate(SEED, 99),
+    };
     let control = ExecutionControl::uncancelled();
     control.cancel();
     let mut visit = |_| control.check().map_err(execution_diagnostic);
@@ -1517,10 +1543,19 @@ struct PublicFixtureClosure {
 }
 
 fn public_fixture_closure(f: Fixture) -> Result<PublicFixtureClosure, Diagnostic> {
-    let (supplier_root, supplier_interface) =
-        load_public_interface(f.supplier, &f.supplier_interface)?;
-    let (consumer_root, consumer_interface) =
-        load_public_interface(f.consumer, &f.consumer_interface)?;
+    public_fixture_closure_with(f, load_public_interface)
+}
+
+fn public_fixture_closure_with(
+    f: Fixture,
+    mut load: impl FnMut(
+        PackageId,
+        &PackageInterfaceValidation,
+    )
+        -> Result<(PackageInterfaceDigest, PackageInterfaceValidation), Diagnostic>,
+) -> Result<PublicFixtureClosure, Diagnostic> {
+    let (supplier_root, supplier_interface) = load(f.supplier, &f.supplier_interface)?;
+    let (consumer_root, consumer_interface) = load(f.consumer, &f.consumer_interface)?;
     let mut supplier = revision(f.supplier, 1, vec![]);
     supplier.interface = supplier_root;
     let supplier_id = supplier.encode()?.0;
@@ -1581,8 +1616,8 @@ fn nonborrow_nested_fixture() -> Fixture {
             }],
         },
     );
-    function_mut(&mut f).result_borrow = None;
-    function_mut(&mut f).result = product;
+    function_mut(&mut f).result.relation = ResultRelation::Value;
+    function_mut(&mut f).result.ty = product;
     let PackageInterfaceRecord::Parameter(parameter) = &mut f
         .consumer_interface
         .owners
@@ -1624,7 +1659,7 @@ fn associated_interface_complete_type_phase_checks_nonborrow_nested_and_each_own
                 f.consumer_interface.owners.insert(
                     OwnerKey::Parameter(id),
                     owner(PackageInterfaceRecord::Parameter(ParameterRecord {
-                        header: OwnerHeader::new(OwnerKey::Parameter(id), OwnerKind::Parameter),
+                        header: frozen_header(OwnerKey::Parameter(id), OwnerKind::Parameter),
                         parent: ParameterParent::Function(f.function.declaration),
                         name: Name::new("orphan").unwrap(),
                         ty: f.projection,
@@ -1643,7 +1678,7 @@ fn associated_interface_complete_type_phase_checks_nonborrow_nested_and_each_own
                 else {
                     unreachable!()
                 };
-                parameter.header.contract_version = if mutation == 1 { 32 } else { 34 };
+                parameter.header.contract_version = if mutation == 1 { 32 } else { 35 };
             }
             _ => {
                 let malformed = intern(
@@ -1658,15 +1693,35 @@ fn associated_interface_complete_type_phase_checks_nonborrow_nested_and_each_own
                         member: f.out,
                     },
                 );
-                function_mut(&mut f).result = malformed;
+                function_mut(&mut f).result.ty = malformed;
             }
         }
         let error = load_public_interface(f.consumer, &f.consumer_interface).unwrap_err();
-        assert_eq!(error.class, DiagnosticClass::Semantic);
         if mutation == 2 {
-            // Unsupported Graph34 is refused by canonical owner encoding before occurrence proof.
+            // The frozen interface21 envelope rejects Graph35 at the newer interface floor.
+            // Retain that refusal, then isolate the unsupported owner header behind a valid
+            // current envelope. Neither failure reaches semantic occurrence admission.
+            assert_eq!(error.class, DiagnosticClass::Corrupt);
+            assert_eq!(error.code, "package_interface_closure");
+            assert!(
+                error
+                    .message
+                    .contains("Graph 34 owners require interface generation 22")
+            );
+            f.consumer_interface
+                .owners
+                .get_mut(&OwnerKey::Parameter(f.parameter))
+                .unwrap()
+                .contract_version = PACKAGE_INTERFACE_CONTRACT_VERSION;
+            let error = load_public_interface(f.consumer, &f.consumer_interface).unwrap_err();
+            assert_eq!(error.class, DiagnosticClass::Semantic);
             assert_eq!(error.code, "kernel_owner_header");
         } else {
+            assert_eq!(
+                error.class,
+                DiagnosticClass::Semantic,
+                "mutation {mutation}: {error:?}"
+            );
             assert_eq!(error.code, "package_interface_associated_authority");
         }
     }
@@ -1704,13 +1759,41 @@ fn associated_interface_loaded_foreign_nonborrow_closure_discharges_unused_bindi
                     .iter_mut()
                     .find(|binding| binding.member == spare)
                     .unwrap()
-                    .ty = scalar;
+                    .value = AssociatedTypeBindingValue::Owned { ty: scalar };
             }
             _ => {}
         }
-        // Full public descriptor validation remains distinct from exact selected closure
-        // discharge. Even an unused binding must satisfy the selected complete contract.
-        let selected = public_fixture_closure(f).unwrap();
+        // Even an unused binding must satisfy the complete selected contract. The scalar
+        // RHS now fails the independent descriptor loader as well as selected discharge.
+        let selected = if mutation == 2 {
+            let error = load_public_interface(f.supplier, &f.supplier_interface).unwrap_err();
+            assert_eq!(error.class, DiagnosticClass::Semantic);
+            assert_eq!(error.code, "package_interface_read_view");
+            assert!(error.message.contains("Owned binding RHS"));
+            let supplier = f.supplier;
+            public_fixture_closure_with(f, |package, interface| {
+                if package != supplier {
+                    return load_public_interface(package, interface);
+                }
+                // Neutral hostile fixture: preserve canonical bytes and recompute the exact
+                // interface/revision bindings while bypassing only descriptor admission, so
+                // the separate selected-closure validator must also refuse the invalid RHS.
+                let built = immutable_type_phase_build(interface);
+                let mut raw = interface.clone();
+                raw.type_objects = load_interface_type_phase(
+                    package,
+                    interface,
+                    &mut AssociatedInterfaceAdmission::new(&mut |_| Ok(())),
+                )?;
+                Ok((
+                    package_interface_digest(package, built.root.content_root())?,
+                    raw,
+                ))
+            })
+            .unwrap()
+        } else {
+            public_fixture_closure(f).unwrap()
+        };
         let result = validate_package_interface_closure(&selected.revisions, &selected.interfaces);
         if mutation == 0 {
             result.unwrap();

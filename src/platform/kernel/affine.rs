@@ -403,7 +403,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                     }
                 }
                 DeclarationPayload::Function(function) => {
-                    if self.type_contains_resource(function.result)? {
+                    if self.type_contains_resource(function.result.ty)? {
                         return Err(owner_affine_error(
                             "kernel_affine_function_result",
                             owner,
@@ -476,6 +476,43 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
         self.step(expression, depth)?;
         let record = self.expression(expression)?;
         match record.operation {
+            ExpressionOperation::CreateReadView { source, fields, .. } => {
+                if resource_owner(source).is_some_and(|owner| state.contains_key(&owner)) {
+                    return Err(affine_error(
+                        "kernel_affine_view_source",
+                        expression,
+                        "capability resources cannot supply read-view custody",
+                    ));
+                }
+                for field in fields {
+                    self.require_unrestricted(field.value, state, depth + 1, "read-view field")?;
+                }
+                Ok(EvaluatedValue::Unrestricted)
+            }
+            ExpressionOperation::BorrowReadView { value, body, .. }
+            | ExpressionOperation::BorrowReadViewField { value, body, .. } => {
+                if resource_owner(value).is_some_and(|owner| state.contains_key(&owner)) {
+                    return Err(affine_error(
+                        "kernel_affine_view_source",
+                        expression,
+                        "capability resources cannot supply a view lease",
+                    ));
+                }
+                self.evaluate(body, state, depth + 1)
+            }
+            ExpressionOperation::ReborrowReadView { value, .. }
+            | ExpressionOperation::MoveReadView { value }
+            | ExpressionOperation::DropReadView { value }
+            | ExpressionOperation::ReadViewDataField { value, .. } => {
+                if resource_owner(value).is_some_and(|owner| state.contains_key(&owner)) {
+                    return Err(affine_error(
+                        "kernel_affine_view_source",
+                        expression,
+                        "view operations carry no resource use authority",
+                    ));
+                }
+                Ok(EvaluatedValue::Unrestricted)
+            }
             ExpressionOperation::BorrowCall { call, body, .. } => {
                 self.require_unrestricted(call, state, depth + 1, "borrowed invocation")?;
                 self.evaluate(body, state, depth + 1)
@@ -1486,7 +1523,11 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
 
     fn binding(&mut self, binding: BindingId) -> Result<BindingRecord, Diagnostic> {
         match self.read.owner(OwnerKey::Binding(binding))? {
-            Some(OwnerRecord::Binding(record)) if record.kind == BindingKind::Let => Ok(record),
+            Some(OwnerRecord::Binding(record))
+                if matches!(record.kind, BindingKind::Let | BindingKind::ReadView) =>
+            {
+                Ok(record)
+            }
             _ => Err(Diagnostic::new(
                 DiagnosticClass::Corrupt,
                 "kernel_affine_binding_missing",
@@ -1591,7 +1632,8 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                                 type_parameters: function.type_parameters,
                                 parameters: function.parameters,
                                 result: function.result,
-                                result_borrow: function.result_borrow,
+                                read_scope_parameters: function.read_scope_parameters,
+                                read_scope_sources: function.read_scope_sources,
                                 effect: function.effect,
                             },
                         )
@@ -1743,7 +1785,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 "resource-bearing task function cannot have requirement parameters",
             ));
         }
-        if self.type_contains_resource(function.result)? {
+        if self.type_contains_resource(function.result.ty)? {
             return Err(owner_affine_error(
                 "kernel_affine_function_result",
                 owner,

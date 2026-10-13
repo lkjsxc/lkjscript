@@ -3,7 +3,7 @@
 use super::super::prepare::{
     ClosedTypeEnvironment, NormalizedAssociatedTypeBinding, NormalizedFunction,
     NormalizedImplementationApplication, NormalizedImplementationArgument,
-    NormalizedImplementationConstraint,
+    NormalizedImplementationConstraint, producer_covers_source_generation,
 };
 use super::*;
 use crate::platform::compiler::{CompilationPayload, CompilationUnit};
@@ -52,7 +52,12 @@ impl Ord for AppliedWitness {
 
 type WitnessIdentity = (DeclarationReference, Vec<TypeObjectDigest>, Vec<u32>);
 
-type Application = (FunctionIndex, Vec<TypeObjectDigest>, Vec<AppliedWitness>);
+type Application = (
+    FunctionIndex,
+    Vec<TypeObjectDigest>,
+    Vec<AppliedWitness>,
+    Vec<ReadScopeArgument>,
+);
 type Bindings = BTreeMap<ImplementationParameterId, AppliedWitness>;
 
 struct Closing<'a, 'b> {
@@ -61,6 +66,7 @@ struct Closing<'a, 'b> {
     implementations: BTreeMap<DeclarationReference, &'a OwnedImplementation>,
     contracts: BTreeMap<DeclarationReference, &'a OwnedContract>,
     runtime_owners: &'a BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
+    producer_profiles: Option<&'a BTreeMap<(PackageId, OwnerKey), CompilationUnit>>,
     owned_records: BTreeSet<DeclarationReference>,
     targets: BTreeMap<DeclarationReference, FunctionIndex>,
     instances: BTreeMap<Application, FunctionIndex>,
@@ -73,6 +79,33 @@ struct Closing<'a, 'b> {
 }
 
 impl Closing<'_, '_> {
+    fn scopes(
+        &mut self,
+        arguments: &[ReadScopeArgument],
+        source: Option<DeclarationReference>,
+        bindings: &ScopeBindings,
+    ) -> Result<Vec<ReadScopeArgument>, Diagnostic> {
+        self.work.reserve::<ReadScopeArgument>(arguments.len())?;
+        arguments
+            .iter()
+            .map(|argument| {
+                step(self.work)?;
+                match argument {
+                    ReadScopeArgument::Parameter(reference)
+                        if Some(reference.binder.declaration()) != source =>
+                    {
+                        Err(missing())
+                    }
+                    ReadScopeArgument::Lexical { callable, .. }
+                        if source.is_some_and(|source| source != *callable) =>
+                    {
+                        Err(missing())
+                    }
+                    _ => resolve_scope(*argument, Some(bindings)),
+                }
+            })
+            .collect()
+    }
     fn close_pending(&mut self) -> Result<(), Diagnostic> {
         loop {
             if let Some(selected) = self.pending_methods.pop() {
@@ -90,11 +123,29 @@ impl Closing<'_, '_> {
                 }
                 for method in &contract.methods {
                     step(self.work)?;
-                    self.method_application(&selected, implementation.contract, method.id)?;
+                    let scopes = method
+                        .read_scope_parameters
+                        .iter()
+                        .map(|parameter| {
+                            ReadScopeArgument::Parameter(ReadScopeReference {
+                                binder: ReadScopeBinder::ContractMethod {
+                                    contract: implementation.contract,
+                                    method: method.id,
+                                },
+                                parameter: parameter.id,
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    self.method_application(
+                        &selected,
+                        implementation.contract,
+                        method.id,
+                        &scopes,
+                    )?;
                 }
                 continue;
             }
-            let Some(((template, arguments, selected), index)) = self.pending.pop() else {
+            let Some(((template, arguments, selected, _), index)) = self.pending.pop() else {
                 break;
             };
             step(self.work)?;
@@ -116,8 +167,9 @@ impl Closing<'_, '_> {
                 .zip(selected)
                 .collect();
             let scope = function.declaration;
+            let scopes = function_scope_bindings(&self.functions[index.0 as usize], self.work)?;
             if let NormalizedFunctionBody::Code(mut code) = function.body.clone() {
-                self.code(&mut code, Some(scope), &bindings, &type_bindings)?;
+                self.code(&mut code, Some(scope), &bindings, &type_bindings, &scopes)?;
                 self.functions[index.0 as usize].body = NormalizedFunctionBody::Code(code);
             }
         }
@@ -168,6 +220,7 @@ impl Closing<'_, '_> {
                         bindings,
                         associated,
                         function: None,
+                        scopes: None,
                     },
                     0,
                     self.work,
@@ -184,6 +237,20 @@ impl Closing<'_, '_> {
             Some(OwnerRecord::Declaration(declaration))
                 if declaration.header.owner == OwnerKey::Declaration(reference.declaration) =>
             {
+                match self.producer_profiles {
+                    Some(units)
+                        if units
+                            .get(&(reference.package, declaration.header.owner))
+                            .is_some_and(|unit| {
+                                producer_covers_source_generation(
+                                    unit,
+                                    declaration.header.contract_version,
+                                )
+                            }) => {}
+                    None if declaration.header.contract_version
+                        == crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION => {}
+                    _ => return Err(missing()),
+                }
                 Ok(declaration.header.contract_version)
             }
             _ => Err(missing()),
@@ -216,7 +283,9 @@ impl Closing<'_, '_> {
         let object = self.types.get(&ty).ok_or_else(missing)?;
         match object.form {
             TypeForm::AssociatedContractMember { .. }
-            | TypeForm::AssociatedWitnessProjection { .. } => return Err(missing()),
+            | TypeForm::AssociatedWitnessProjection { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. } => return Err(missing()),
             TypeForm::TypeParameter { parameter } if !parameters.contains(&parameter) => {
                 return Err(missing());
             }
@@ -227,6 +296,30 @@ impl Closing<'_, '_> {
         let children = object.child_types();
         for child in children {
             self.binding_template(child, parameters, depth + 1)?;
+        }
+        Ok(())
+    }
+
+    fn family_template(
+        &mut self,
+        ty: TypeObjectDigest,
+        expected: ReadScopeReference,
+        depth: usize,
+    ) -> Result<(), Diagnostic> {
+        step(self.work)?;
+        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+            return Err(missing());
+        }
+        let object = self.types.get(&ty).ok_or_else(missing)?;
+        if let TypeForm::ReadViewApplied { read_scope, .. } = &object.form
+            && *read_scope != ReadScopeArgument::Parameter(expected)
+        {
+            return Err(missing());
+        }
+        self.work
+            .reserve::<TypeObjectDigest>(object.child_type_count())?;
+        for child in object.child_types() {
+            self.family_template(child, expected, depth + 1)?;
         }
         Ok(())
     }
@@ -313,6 +406,10 @@ impl Closing<'_, '_> {
                 for (ty, constraint) in arguments.iter().zip(&constraints) {
                     let owned = self.owned(*ty);
                     if owned != constraint.has_owned()
+                        || matches!(
+                            self.types.get(ty).map(|object| &object.form),
+                            Some(TypeForm::ReadViewApplied { .. })
+                        )
                         || !instantiated_type(self.types, *ty, &mut closed, 0, self.work)?
                     {
                         return Err(missing());
@@ -449,6 +546,7 @@ impl Closing<'_, '_> {
             bindings: &types,
             associated: Some(&environment),
             function: None,
+            scopes: None,
         };
         let self_type = substitute_in(
             self.types,
@@ -485,9 +583,8 @@ impl Closing<'_, '_> {
             return Err(missing());
         }
         if !contract.associated_types.is_empty()
-            && (implementation_generation
-                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
-                || contract_generation != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
+            && (!matches!(implementation_generation, 33 | 34)
+                || !matches!(contract_generation, 33 | 34))
         {
             return Err(missing());
         }
@@ -520,15 +617,52 @@ impl Closing<'_, '_> {
                 return Err(missing());
             }
             let binding = binding_index.get(&member.id).ok_or_else(missing)?;
-            self.binding_template(binding.ty, &implementation.type_parameters, 0)?;
-            let ty = substitute(self.types, binding.ty, &types, 0, self.work)?;
-            if !self.owned(ty) || !instantiated_type(self.types, ty, &mut closed, 0, self.work)? {
+            self.binding_template(binding.ty(), &implementation.type_parameters, 0)?;
+            let ty = substitute(self.types, binding.ty(), &types, 0, self.work)?;
+            let scope_parameter = match (&member.bound, &binding.value) {
+                (
+                    crate::platform::kernel::AssociatedTypeBound::Owned,
+                    crate::platform::kernel::AssociatedTypeBindingValue::Owned { .. },
+                ) if self.owned(ty) => None,
+                (
+                    crate::platform::kernel::AssociatedTypeBound::ReadViewFamily { .. },
+                    crate::platform::kernel::AssociatedTypeBindingValue::ReadViewFamily {
+                        scope_parameter,
+                        ..
+                    },
+                ) if matches!(
+                    self.types.get(&ty).map(|object| &object.form),
+                    Some(TypeForm::ReadViewApplied { .. })
+                ) =>
+                {
+                    if implementation_generation != 34 || contract_generation != 34 {
+                        return Err(missing());
+                    }
+                    self.family_template(
+                        ty,
+                        ReadScopeReference {
+                            binder: ReadScopeBinder::AssociatedBinding {
+                                implementation: witness.implementation,
+                                member: member.id,
+                            },
+                            parameter: scope_parameter.id,
+                        },
+                        0,
+                    )?;
+                    self.work
+                        .reserve::<u8>(scope_parameter.name.as_str().len())?;
+                    Some(scope_parameter.clone())
+                }
+                _ => return Err(missing()),
+            };
+            if !instantiated_type(self.types, ty, &mut closed, 0, self.work)? {
                 return Err(missing());
             }
             associated_types.push(NormalizedAssociatedTypeBinding {
                 member: member.id,
-                template: binding.ty,
+                template: binding.ty(),
                 ty,
+                scope_parameter,
             });
         }
         self.work
@@ -585,6 +719,7 @@ impl Closing<'_, '_> {
                     bindings: types,
                     associated,
                     function: None,
+                    scopes: None,
                 },
                 0,
                 self.work,
@@ -605,6 +740,7 @@ impl Closing<'_, '_> {
                     bindings: types,
                     associated,
                     function: None,
+                    scopes: None,
                 },
                 0,
                 self.work,
@@ -621,22 +757,28 @@ impl Closing<'_, '_> {
         function: FunctionIndex,
         types: Vec<TypeObjectDigest>,
         implementations: Vec<AppliedWitness>,
+        scopes: Vec<ReadScopeArgument>,
     ) -> Result<FunctionIndex, Diagnostic> {
         step(self.work)?;
         let templates = Arc::clone(&self.templates);
         let template = templates.get(function.0 as usize).ok_or_else(missing)?;
         if template.implementation_parameters.len() != implementations.len()
             || template.type_parameters.len() != types.len()
+            || template.read_scope_parameters.len() != scopes.len()
         {
             return Err(missing());
         }
         let mut closed = BTreeMap::new();
         for ty in &types {
-            if !instantiated_type(self.types, *ty, &mut closed, 0, self.work)? {
+            if matches!(
+                self.types.get(ty).map(|object| &object.form),
+                Some(TypeForm::ReadViewApplied { .. })
+            ) || !instantiated_type(self.types, *ty, &mut closed, 0, self.work)?
+            {
                 return Err(missing());
             }
         }
-        let key = (function, types, implementations);
+        let key = (function, types, implementations, scopes);
         if let Some(index) = self.instances.get(&key) {
             return Ok(*index);
         }
@@ -667,7 +809,7 @@ impl Closing<'_, '_> {
         self.work.node::<(Application, FunctionIndex)>()?;
         self.work.reserve::<TypeObjectDigest>(key.1.len())?;
         self.work.reserve::<AppliedWitness>(key.2.len())?;
-        let index = if key.1.is_empty() && key.2.is_empty() {
+        let index = if key.1.is_empty() && key.2.is_empty() && key.3.is_empty() {
             function
         } else {
             self.work.reserve::<NormalizedFunction>(1)?;
@@ -684,6 +826,8 @@ impl Closing<'_, '_> {
             self.work.reserve::<usize>(2)?;
             instance.type_arguments = key.1.clone().into();
             instance.implementation_arguments = supplied.into();
+            self.work.reserve::<ReadScopeArgument>(key.3.len())?;
+            instance.read_scope_arguments = key.3.clone().into();
             self.functions.push(instance);
             index
         };
@@ -697,6 +841,7 @@ impl Closing<'_, '_> {
         selected: &AppliedWitness,
         contract: DeclarationReference,
         method: crate::platform::semantic_id::MethodId,
+        read_scopes: &[ReadScopeArgument],
     ) -> Result<(FunctionIndex, Vec<TypeObjectDigest>), Diagnostic> {
         let normalized_selected = self.normalize_witness(selected, 0)?;
         let implementation_environment = ClosedTypeEnvironment::for_selected(&normalized_selected)?;
@@ -716,6 +861,34 @@ impl Closing<'_, '_> {
             }
         }
         let mapping = mapping.ok_or_else(missing)?;
+        let contract_definition = self.contracts.get(&contract).ok_or_else(missing)?;
+        let method_definition = contract_definition
+            .methods
+            .iter()
+            .find(|definition| definition.id == method)
+            .ok_or_else(missing)?;
+        if method_definition.read_scope_parameters.len() != read_scopes.len() {
+            return Err(missing());
+        }
+        let scope_bindings = method_definition
+            .read_scope_parameters
+            .iter()
+            .zip(read_scopes)
+            .map(|(parameter, argument)| {
+                (
+                    ReadScopeReference {
+                        binder: ReadScopeBinder::ContractMethod { contract, method },
+                        parameter: parameter.id,
+                    },
+                    *argument,
+                )
+            })
+            .collect::<ScopeBindings>();
+        let mapped_scopes = mapping
+            .read_scope_arguments
+            .iter()
+            .map(|scope| resolve_scope(*scope, Some(&scope_bindings)))
+            .collect::<Result<Vec<_>, _>>()?;
         let target = *self.targets.get(&mapping.function).ok_or_else(missing)?;
         self.work
             .reserve::<TypeObjectDigest>(mapping.type_arguments.len())?;
@@ -767,7 +940,7 @@ impl Closing<'_, '_> {
         }
         self.work.reserve::<TypeObjectDigest>(applied.len())?;
         self.work.reserve::<usize>(2)?;
-        let function = self.application(target, applied.clone(), prerequisites)?;
+        let function = self.application(target, applied.clone(), prerequisites, mapped_scopes)?;
         Ok((function, applied))
     }
 
@@ -777,6 +950,7 @@ impl Closing<'_, '_> {
         scope: Option<DeclarationReference>,
         bindings: &Bindings,
         types: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+        scopes: &ScopeBindings,
     ) -> Result<(), Diagnostic> {
         let templates = Arc::clone(&self.templates);
         let source = scope
@@ -820,7 +994,13 @@ impl Closing<'_, '_> {
         for instruction in Arc::make_mut(&mut code.instructions) {
             step(self.work)?;
             match instruction {
+                NormalizedInstruction::BeginReadViewScope { read_scope }
+                | NormalizedInstruction::EndReadViewScope { read_scope } => {
+                    *read_scope = self.scopes(std::slice::from_ref(read_scope), scope, scopes)?[0];
+                }
                 NormalizedInstruction::Parallel {
+                    left_read_scope_arguments,
+                    right_read_scope_arguments,
                     left,
                     left_types,
                     left_implementations,
@@ -829,9 +1009,19 @@ impl Closing<'_, '_> {
                     right_implementations,
                     ..
                 } => {
-                    for (function, arguments, implementations) in [
-                        (left, left_types, left_implementations),
-                        (right, right_types, right_implementations),
+                    for (function, arguments, implementations, read_scopes) in [
+                        (
+                            left,
+                            left_types,
+                            left_implementations,
+                            left_read_scope_arguments,
+                        ),
+                        (
+                            right,
+                            right_types,
+                            right_implementations,
+                            right_read_scope_arguments,
+                        ),
                     ] {
                         self.work.reserve::<AppliedWitness>(implementations.len())?;
                         let mut selected = Vec::new();
@@ -848,11 +1038,15 @@ impl Closing<'_, '_> {
                         self.work.reserve::<TypeObjectDigest>(applied.len())?;
                         self.work.reserve::<usize>(2)?;
                         *arguments = Arc::from(applied.clone());
-                        *function = self.application(*function, applied, selected)?;
+                        let applied_scopes = self.scopes(read_scopes, scope, scopes)?;
+                        *read_scopes = applied_scopes.clone().into();
+                        *function =
+                            self.application(*function, applied, selected, applied_scopes)?;
                         *implementations = Arc::from([]);
                     }
                 }
                 NormalizedInstruction::ImplementationCall {
+                    read_scope_arguments,
                     effect_arguments,
                     requirement_arguments,
                     function,
@@ -874,8 +1068,15 @@ impl Closing<'_, '_> {
                     let applied = self.arguments(type_arguments, types, Some(&environment))?;
                     self.work.reserve::<TypeObjectDigest>(applied.len())?;
                     self.work.reserve::<usize>(2)?;
-                    let function = self.application(*function, applied.clone(), selected)?;
+                    let applied_scopes = self.scopes(read_scope_arguments, scope, scopes)?;
+                    let function = self.application(
+                        *function,
+                        applied.clone(),
+                        selected,
+                        applied_scopes.clone(),
+                    )?;
                     *instruction = NormalizedInstruction::Call {
+                        read_scope_arguments: applied_scopes.into(),
                         function,
                         type_arguments: Arc::from(applied),
                         arguments: *arguments,
@@ -884,6 +1085,7 @@ impl Closing<'_, '_> {
                     };
                 }
                 NormalizedInstruction::MethodCall {
+                    read_scope_arguments,
                     witness,
                     contract,
                     method,
@@ -891,9 +1093,13 @@ impl Closing<'_, '_> {
                 } => {
                     let selected =
                         self.operand_in(witness, scope, bindings, types, Some(&environment))?;
+                    let applied_scopes = self.scopes(read_scope_arguments, scope, scopes)?;
                     let (function, applied) =
-                        self.method_application(&selected, *contract, *method)?;
+                        self.method_application(&selected, *contract, *method, &applied_scopes)?;
                     *instruction = NormalizedInstruction::Call {
+                        read_scope_arguments: Arc::clone(
+                            &self.functions[function.0 as usize].read_scope_arguments,
+                        ),
                         function,
                         type_arguments: Arc::from(applied),
                         arguments: *arguments,
@@ -902,16 +1108,19 @@ impl Closing<'_, '_> {
                     };
                 }
                 NormalizedInstruction::Call {
+                    read_scope_arguments,
                     function,
                     type_arguments,
                     ..
                 }
                 | NormalizedInstruction::TailCall {
+                    read_scope_arguments,
                     function,
                     type_arguments,
                     ..
                 }
                 | NormalizedInstruction::FunctionValue {
+                    read_scope_arguments,
                     function,
                     type_arguments,
                     ..
@@ -920,7 +1129,44 @@ impl Closing<'_, '_> {
                     self.work.reserve::<TypeObjectDigest>(applied.len())?;
                     self.work.reserve::<usize>(2)?;
                     *type_arguments = Arc::from(applied.clone());
-                    *function = self.application(*function, applied, Vec::new())?;
+                    let applied_scopes = self.scopes(read_scope_arguments, scope, scopes)?;
+                    *read_scope_arguments = applied_scopes.clone().into();
+                    *function = self.application(*function, applied, Vec::new(), applied_scopes)?;
+                }
+                _ => {}
+            }
+            let application = TypeApplication {
+                bindings: types,
+                associated: Some(&environment),
+                function: None,
+                scopes: Some(scopes),
+            };
+            match instruction {
+                NormalizedInstruction::BeginReadView { view_type, .. }
+                | NormalizedInstruction::FinishReadView { view_type, .. }
+                | NormalizedInstruction::ReborrowReadView { view_type, .. }
+                | NormalizedInstruction::MoveReadView { view_type, .. }
+                | NormalizedInstruction::DropReadView { view_type, .. }
+                | NormalizedInstruction::ReadViewDataField { view_type, .. } => {
+                    *view_type = substitute_in(self.types, *view_type, &application, 0, self.work)?;
+                }
+                NormalizedInstruction::BorrowReadView {
+                    view_type,
+                    binding_type,
+                    ..
+                }
+                | NormalizedInstruction::BorrowReadViewField {
+                    view_type,
+                    binding_type,
+                    ..
+                } => {
+                    *view_type = substitute_in(self.types, *view_type, &application, 0, self.work)?;
+                    *binding_type =
+                        substitute_in(self.types, *binding_type, &application, 0, self.work)?;
+                }
+                NormalizedInstruction::AdoptViewResult { binding_type, .. } => {
+                    *binding_type =
+                        substitute_in(self.types, *binding_type, &application, 0, self.work)?;
                 }
                 _ => {}
             }
@@ -969,6 +1215,7 @@ fn requires_specialization(
         step(work)?;
         if !function.implementation_parameters.is_empty()
             || !function.implementation_arguments.is_empty()
+            || !function.read_scope_parameters.is_empty()
         {
             return Ok(true);
         }
@@ -1079,6 +1326,7 @@ pub(super) fn close(
         implementations,
         contracts,
         runtime_owners,
+        producer_profiles: Some(units),
         owned_records,
         targets,
         instances: BTreeMap::new(),
@@ -1094,6 +1342,7 @@ pub(super) fn close(
             && closing.templates[i].type_parameters.is_empty()
             && closing.templates[i].effect_parameters.is_empty()
             && closing.templates[i].requirement_parameters.is_empty()
+            && closing.templates[i].read_scope_parameters.is_empty()
         {
             closing.application(
                 FunctionIndex(
@@ -1102,12 +1351,25 @@ pub(super) fn close(
                 ),
                 Vec::new(),
                 Vec::new(),
+                Vec::new(),
             )?;
         }
     }
     for test in program.tests.values_mut() {
-        closing.code(&mut test.actual, None, &Bindings::new(), &BTreeMap::new())?;
-        closing.code(&mut test.expected, None, &Bindings::new(), &BTreeMap::new())?;
+        closing.code(
+            &mut test.actual,
+            None,
+            &Bindings::new(),
+            &BTreeMap::new(),
+            &ScopeBindings::new(),
+        )?;
+        closing.code(
+            &mut test.expected,
+            None,
+            &Bindings::new(),
+            &BTreeMap::new(),
+            &ScopeBindings::new(),
+        )?;
     }
     closing
         .work
@@ -1116,7 +1378,13 @@ pub(super) fn close(
         if let NormalizedEntryPoint::Code(code) | NormalizedEntryPoint::PortExpression(code, _) =
             &mut port.entry
         {
-            closing.code(code, None, &Bindings::new(), &BTreeMap::new())?;
+            closing.code(
+                code,
+                None,
+                &Bindings::new(),
+                &BTreeMap::new(),
+                &ScopeBindings::new(),
+            )?;
         }
     }
     closing.close_pending()?;
@@ -1192,6 +1460,7 @@ mod tests {
         let control = crate::platform::execution::ExecutionControl::uncancelled();
         for instruction in [
             NormalizedInstruction::ImplementationCall {
+                read_scope_arguments: Arc::from([]),
                 function: FunctionIndex(0, base.value_origin),
                 type_arguments: Arc::from([]),
                 effect_arguments: Arc::from([]),
@@ -1200,6 +1469,7 @@ mod tests {
                 arguments: 0,
             },
             NormalizedInstruction::MethodCall {
+                read_scope_arguments: Arc::from([]),
                 witness: ImplementationOperand::Concrete {
                     implementation: reference,
                     type_arguments: Vec::new(),
@@ -1229,7 +1499,7 @@ mod tests {
                     1 => program.tests.values_mut().next().unwrap().actual = code.clone(),
                     2 => program.tests.values_mut().next().unwrap().expected = code.clone(),
                     _ => {
-                        let ty = program.functions[0].result;
+                        let ty = program.functions[0].result.ty;
                         program.ports = Arc::from([NormalizedPort {
                             reference: PortReference {
                                 package: program.root_package,
@@ -1270,7 +1540,7 @@ mod tests {
                         implementation_parameter_ids: Arc::from([]),
                         implementation_type_arguments: Arc::from([]),
                         implementation_type_parameter_constraints: Arc::from([]),
-                        self_type: f.result,
+                        self_type: f.result.ty,
                         type_arguments: Arc::from([]),
                         contract_type_parameter_constraints: Arc::from([]),
                         implementations: Arc::from([]),
@@ -1283,7 +1553,7 @@ mod tests {
                         id: ImplementationParameterId::migrate(b"witness-absence-probe", 0),
                         name: crate::platform::kernel::Name::new("ops").unwrap(),
                         contract: reference,
-                        self_type: f.result,
+                        self_type: f.result.ty,
                         type_arguments: Vec::new(),
                     }]);
             }
@@ -1421,6 +1691,7 @@ mod tests {
             implementations,
             contracts,
             runtime_owners: &runtime_owners,
+            producer_profiles: None,
             owned_records: BTreeSet::new(),
             targets: BTreeMap::new(),
             instances: BTreeMap::new(),

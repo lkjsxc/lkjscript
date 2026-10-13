@@ -438,7 +438,7 @@ fn literal_edit_cannot_hide_a_simultaneous_invalid_function_contract() {
     let mut changed = false;
     for change in &mut request.semantic.changes {
         if let AuthoredChange::SetFunctionContract { result, .. } = change {
-            *result = AuthoredType::Bool {};
+            result.ty = AuthoredType::Bool {};
             changed = true;
         }
     }
@@ -556,7 +556,7 @@ fn literal_edit_codec_keeps_legacy_body_identity_and_observes_float_bits() {
             literals: vec![update.clone()],
         }];
         let bytes = crate::platform::change::canonical_authored_intent_bytes(&request).unwrap();
-        assert_eq!(&bytes[..8], b"LKJACR19");
+        assert_eq!(&bytes[..8], b"LKJACR39");
         assert!(fingerprints.insert(bytes));
     }
     request.changes = vec![AuthoredChange::ReplaceFunctionBody {
@@ -569,7 +569,7 @@ fn literal_edit_codec_keeps_legacy_body_identity_and_observes_float_bits() {
     let bytes = crate::platform::change::canonical_authored_intent_bytes(&request).unwrap();
     assert_eq!(
         &bytes[..8],
-        b"LKJACR14",
-        "legacy requests retain their original encoding domain"
+        b"LKJACR39",
+        "fresh requests use the current authored encoding domain"
     );
 }

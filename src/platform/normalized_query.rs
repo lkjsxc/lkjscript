@@ -3728,6 +3728,59 @@ mod tests {
     }
 
     #[test]
+    fn query_read_view_uses_its_declaration_namespace_without_inline_field_or_scope_owners() {
+        let declaration = crate::platform::semantic_id::DeclarationId::from_bytes([1; 16]).unwrap();
+        let module = crate::platform::semantic_id::ModuleId::from_bytes([2; 16]).unwrap();
+        let record = super::super::kernel::OwnerRecord::Declaration(
+            super::super::kernel::DeclarationRecord {
+                header: super::super::kernel::OwnerHeader::new(
+                    OwnerKey::Declaration(declaration),
+                    OwnerKind::ReadView,
+                ),
+                module,
+                name: Name::new("Window").unwrap(),
+                visibility: super::super::kernel::DeclarationVisibility::Public,
+                payload: super::super::kernel::DeclarationPayload::ReadView(
+                    super::super::kernel::ReadViewDeclaration {
+                        type_parameters: Vec::new(),
+                        scope_parameter: super::super::kernel::ReadScopeParameter {
+                            id: crate::platform::semantic_id::ReadScopeParameterId::from_bytes(
+                                [3; 16],
+                            )
+                            .unwrap(),
+                            name: Name::new("source").unwrap(),
+                        },
+                        fields: Vec::new(),
+                    },
+                ),
+            },
+        );
+        assert_eq!(
+            OwnerProjection::from_record(OwnerKey::Declaration(declaration), &record).fields(),
+            vec![
+                ("id", "decl_01010101010101010101010101010101".to_owned()),
+                ("kind", "read_view".to_owned()),
+                ("named", "true".to_owned()),
+                ("name", "Window".to_owned()),
+                ("class", "declaration".to_owned()),
+                ("parent", "mod_02020202020202020202020202020202".to_owned())
+            ]
+        );
+        let request = parse_query_arguments(&[
+            "owners".to_owned(),
+            "--kind".to_owned(),
+            "read_view".to_owned(),
+        ])
+        .unwrap();
+        assert!(matches!(
+            request.selection,
+            QuerySelection::Owners {
+                kind: Some(OwnerKind::ReadView)
+            }
+        ));
+    }
+
+    #[test]
     fn query_parser_is_descriptor_closed_and_rejects_predecessor_grammar() {
         for descriptor in QUERY_OPERATION_DESCRIPTORS {
             assert!(matches!(

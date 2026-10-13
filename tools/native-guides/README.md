@@ -126,10 +126,12 @@ pages through public capabilities. The native program remains their content owne
 The [current release notes](../../docs/releases/v0.1.92.md) identify the selected
 compatibility boundary; [status](../../docs/status.md) owns actual acceptance.
 
-The current derived bundle uses compiler 33, bytecode 27 and artifact 40:
+The preceding derived bundle used compiler 33, bytecode 27 and artifact 40:
 `artifact_bundle_ebc76b9c1c108648f62e19809fe6f878aa2793867d1bb128d4363f8962aaa891`,
 1,178,170 bytes. The [canonical edit](requests/20261004-structural-forms.lkjc)
 replaces a stale structural-form count with “All supported structural forms”,
 updating exactly one Text expression while preserving owner identities and the exact
 standard supplier. Public check/build runs all 79 native and supplier tests with
 agreement between the two evaluators.
+
+The .96 compilation refresh selects artifact_bundle_bd6647daaa0e509ea4bde30df66bde8a146527f38fb1b8a0085467d8c357ebc0 (1,179,039 bytes, SHA-256 3cc8a0f8382bd507cbfd0636d0fefdd888aa7e3f3fb15f77e28066f2f09f9f15), using compiler 34, bytecode 28 and artifact 41. Its two public builds are byte-identical and all 79 source/supplier checks report zero failures and differential equality; the [separate rebuild receipt](../../.artifacts/associated-read-views/consumer-assets-installation-proposals/sourcef87c8b-four-families-first/receipt.json) binds their original source f87c8b7fa80e03bb8e3901746aa14a845fc509161916ca07eef92c55d32ed550. Accepted HEAD and exact suppliers remain unchanged. This compilation refresh supplies no final source, release or additional runtime acceptance.

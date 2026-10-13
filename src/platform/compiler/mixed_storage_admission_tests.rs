@@ -89,7 +89,11 @@ fn mixed_storage_artifact_retains_exact_phantom_contract_and_scheme_bounds() {
                 unreachable!()
             };
             assert_eq!(record.constraints, constraint);
-            assert_eq!(record.header.contract_version, 33);
+            assert_eq!(
+                record.header.contract_version,
+                source.owners[&owner].header().contract_version,
+                "runtime metadata preserves the actual canonical owner generation"
+            );
         }
     }
 }

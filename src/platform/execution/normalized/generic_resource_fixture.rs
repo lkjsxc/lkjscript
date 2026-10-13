@@ -88,7 +88,7 @@ pub(super) fn generalize(snapshot: &mut KernelSnapshot) {
             },
         );
         function.type_parameters = vec![parameter];
-        function.result = ty;
+        function.result.ty = ty;
         let OwnerRecord::Declaration(record) = snapshot.owners.get_mut(&key).unwrap() else {
             panic!("helper")
         };
@@ -126,6 +126,7 @@ pub(super) fn generalize(snapshot: &mut KernelSnapshot) {
             };
             pending.extend(record.children().into_iter().map(|child| child.expression));
             let ExpressionOperation::Call {
+                read_scope_arguments: _,
                 function,
                 mut type_arguments,
                 effect_arguments,
@@ -158,6 +159,7 @@ pub(super) fn generalize(snapshot: &mut KernelSnapshot) {
                     ExpressionRecord::new(
                         id,
                         ExpressionOperation::Call {
+                            read_scope_arguments: Vec::new(),
                             function,
                             type_arguments,
                             effect_arguments,

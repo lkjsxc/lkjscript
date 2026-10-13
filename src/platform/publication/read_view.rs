@@ -1,6 +1,9 @@
 //! Revision-pinned, bounded reads over accepted Graph 10 authority and its committed witness.
 
 use super::validation::{RevalidatedBase, ViewStore};
+
+#[path = "link_read_reuse.rs"]
+mod link_read_reuse;
 use super::{CurrentPublication, PreparedPublication, PublicationOptions};
 use crate::platform::change::{
     AuthoredAllocation, AuthoredChangeSet, AuthoredLoweringWork, AuthoredReadFootprint,
@@ -58,6 +61,8 @@ use crate::platform::witness::{
     forward_relation_prefix, owner_key_bytes, reverse_relation_package_owner_prefix,
     reverse_relation_prefix, test_dependency_forward_prefix,
 };
+pub(crate) use link_read_reuse::LinkReadReuseObservation;
+use link_read_reuse::LinkTransportReuse;
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 
@@ -821,6 +826,7 @@ pub struct RepositoryView {
     validation_steps: u64,
     idempotent_result: Option<super::HeadRecord>,
     hidden_type_objects: BTreeSet<TypeObjectDigest>,
+    link_transport_reuse: RefCell<Option<LinkTransportReuse>>,
 }
 
 impl RepositoryView {
@@ -843,6 +849,7 @@ impl RepositoryView {
             validation_steps: 0,
             idempotent_result: None,
             hidden_type_objects: BTreeSet::new(),
+            link_transport_reuse: RefCell::new(None),
         }
     }
 
@@ -870,6 +877,7 @@ impl RepositoryView {
             validation_steps: 0,
             idempotent_result: Some(idempotent_result),
             hidden_type_objects,
+            link_transport_reuse: RefCell::new(None),
         }
     }
 
@@ -1699,22 +1707,27 @@ impl RepositoryView {
         owner: OwnerKey,
         admission: &mut RepositoryReadAdmission,
     ) -> Result<RevisionRead<Option<PackageInterfaceRecord>>, Diagnostic> {
-        let mut work = RepositoryReadWork::default();
-        let resolved =
-            self.resolve_package_transport_admitted(dependency.package_revision, admission)?;
-        work.add(resolved.work);
-        resolved
-            .value
-            .root_revision
-            .matches_dependency(dependency.package_revision, dependency)?;
-        let value = resolved
-            .value
-            .root_interface
-            .owners
-            .get(&owner)
-            .map(|value| value.record.clone());
-        work.items_returned = u64::from(value.is_some());
-        Ok(self.read(value, work))
+        self.with_link_transport(
+            dependency.package_revision,
+            admission,
+            |resolved, admission, work, cached| {
+                resolved
+                    .root_revision
+                    .matches_dependency(dependency.package_revision, dependency)?;
+                let selected = resolved.root_interface.owners.get(&owner);
+                if cached && selected.is_some() {
+                    self.admit_cached_owner_copy(
+                        dependency.package_revision,
+                        owner,
+                        admission,
+                        work,
+                    )?;
+                }
+                let value = selected.map(|value| value.record.clone());
+                work.items_returned = u64::from(value.is_some());
+                Ok(value)
+            },
+        )
     }
 
     /// Reconstructs the complete logical Graph 10 view for independent full validation and
@@ -2019,15 +2032,20 @@ impl RepositoryView {
         self.require_current_validation()?;
         let dependencies = self.package_dependencies()?;
         let mut selection = PackageInterfaceSelection::new(self.package());
-        let mut has_owned_layouts = false;
+        // Views and implementations can seed private nominal representations
+        // through their exact exported field, Self, binding and actual roots.
+        let mut needs_owned_representations = false;
         let mut interactive_ports = BTreeSet::new();
         let mut read_work = dependencies.work;
         read_work.add(self.for_each_owner_record(|_, record| {
             selection.observe_declaration(record)?;
-            has_owned_layouts |= matches!(&record,
+            needs_owned_representations |= matches!(&record,
                 OwnerRecord::Declaration(declaration)
                     if declaration.visibility == crate::platform::kernel::DeclarationVisibility::Public
-                        && matches!(declaration.payload, crate::platform::kernel::DeclarationPayload::OwnedRecord { .. }));
+                        && matches!(declaration.payload,
+                            crate::platform::kernel::DeclarationPayload::OwnedRecord { .. }
+                                | crate::platform::kernel::DeclarationPayload::ReadView(_)
+                                | crate::platform::kernel::DeclarationPayload::OwnedImplementation(_)));
             if let OwnerRecord::Target(target) = record
                 && target.runner == RunnerKind::Interactive
             {
@@ -2043,7 +2061,7 @@ impl RepositoryView {
             Ok(())
         })?);
         read_work.add(self.for_each_owner_record(|_, record| selection.observe_operation(record))?);
-        if has_owned_layouts {
+        if needs_owned_representations {
             let indexed_work = std::cell::RefCell::new(RepositoryReadWork::default());
             selection.observe_owned_representations_indexed(
                 |owner| {
@@ -3840,37 +3858,45 @@ impl CanonicalBaseRead for RepositoryView {
         package: PackageId,
         admission: CanonicalReadAdmission,
     ) -> Result<CanonicalRead<Option<DependencyRecord>>, Diagnostic> {
-        let resolved = self.resolve_package_transport_admitted(
+        let mut admission = RepositoryReadAdmission::canonical(admission);
+        self.with_link_transport(
             root.package_revision,
-            &mut RepositoryReadAdmission::canonical(admission),
-        )?;
-        resolved
-            .value
-            .root_revision
-            .matches_dependency(root.package_revision, root)?;
-        let selected = if package == root.package {
-            let mut selected = root.clone();
-            selected.graph_contract_version =
-                crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
-            Some(selected)
-        } else {
-            resolved
-                .value
-                .representation_revisions
-                .iter()
-                .find(|(_, revision)| revision.package == package)
-                .map(|(digest, revision)| {
-                    Ok(DependencyRecord {
-                        graph_contract_version:
-                            crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-                        package,
-                        semantic_revision: revision.revision.revision_id()?,
-                        package_revision: *digest,
-                    })
-                })
-                .transpose()?
-        };
-        Ok(canonical_read(self.read(selected, resolved.work)))
+            &mut admission,
+            |resolved, admission, work, cached| {
+                resolved
+                    .root_revision
+                    .matches_dependency(root.package_revision, root)?;
+                if package == root.package {
+                    if cached {
+                        self.admit_link_memory_records(admission, work, 1)?;
+                    }
+                    let mut selected = root.clone();
+                    selected.graph_contract_version =
+                        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+                    return Ok(Some(selected));
+                }
+                for (digest, revision) in &resolved.representation_revisions {
+                    let reuse_active = self.link_transport_reuse.borrow().is_some();
+                    if cached || reuse_active {
+                        self.admit_link_lookup(admission, work)?;
+                    }
+                    if revision.package == package {
+                        if cached {
+                            self.admit_link_memory_records(admission, work, 1)?;
+                        }
+                        return Ok(Some(DependencyRecord {
+                            graph_contract_version:
+                                crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+                            package,
+                            semantic_revision: revision.revision.revision_id()?,
+                            package_revision: *digest,
+                        }));
+                    }
+                }
+                Ok(None)
+            },
+        )
+        .map(canonical_read)
     }
 
     fn accepted_retry_encoding(&self) -> Option<u16> {

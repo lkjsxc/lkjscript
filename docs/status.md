@@ -1,111 +1,15 @@
 # Current status
 
-Snapshot: 2026-10-12. Development **0.1.95** admits witness-selected associated
-Owned types in the isolated checkout. The serial public BlockRead example has
-passed consumer-first authoring, export/import, compilation and attached/detached
-execution. Maintained stage traversal has also completed public author/build and
-**90** attached/detached result comparisons. The coordinated working assembly
-installs that maintained replacement and the reviewed integration inputs; fresh
-integrated-source validation, .95 mainline delivery and finalized-byte acceptance
-remain pending.
+Snapshot: 2026-10-13. **0.1.96 remains local and unaccepted** in worktree `lkjscript-associated-read-views-20261012`, branch `work/associated-read-views-20261012`. The [read-view specification](spec/associated-read-views.md) owns source, scope, custody and permission boundaries; [Release](release.md) owns generation 12 candidate and publication requirements.
 
-Native package planning **0.1.94** is separate: main `f0872272` reports tested
-commit `0fbf2796` and its **29/29** fresh full gates. The hosted candidate is
-still in source acceptance; candidate acceptance and publication are pending.
+Source `e4c788fca8f101092f5529bf8d72461f828a012f37c95e3b8834d333fa0825b5` passed [workspace compilation 52](../.artifacts/associated-read-views/fiftysecond-compile/workspace-check-fiftysecond/original-tool-terminal.json) with zero errors and warnings, fresh library/public/copied-CLI builds and [all eighteen native regressions](../.artifacts/associated-read-views/focused-execution-runs/sourcee4c788-library18-diagnostic-first/original-tool-terminal.json). View-containing Lets release later descriptors and their exact scopes before earlier owned sources; ordinary-only instruction order and strict active-loan guards remain enforced. Native metadata and zero-view cases passed both engines on nonempty and empty literal inputs.
 
-## Selected source and capability
+The first public case passed all **75 literal executions** across project, attached artifact and detached artifact routes. The [range/fuel control](../.artifacts/associated-read-views/public-traps74-evidence-sourcee4c788-first/handoff.json) passed **74 calls**, including 36 range refusals, 36 paired healthy recoveries, fuel refusal and recovery. Project positives reported differential equality; deployment positives reported production-only execution, no differential replay and complete exposed custody/task/worker cleanup.
 
-The checkout is
-`/home/coder/workspace/lkjscript-associated-admission-20261011`. Its latest tested
-pre-integration inventory is
-`0cf12a33d267d0a75ecae0b6923c861cc0c6013fcd87ea8088ce98c9170c17d6`,
-with **2,250 files**, based on HEAD `01394bef`. The
-[immutable library selection](../.artifacts/associated-owned-types/build/selected-library-reference-catalogue-first-library.json)
-retains that exact executable/source binding. The combined integration and asset
-replacement require a new complete source capture and fresh validation; the
-pre-integration proof does not attest the newly assembled inputs.
+Two public fixture defects prevented complete acceptance: a successful alias insertion preceded negative cases that reused its name, and joined Task targets incorrectly used the pure project route. [Source53's reviewed test correction](../.artifacts/associated-read-views/public-task-route-order-proposal-successor01/handoff.json) moves the unchanged successful insertion after those refusals, asserts four exact project capability refusals and runs joined positives through attached/detached foreground deployments. Independent literal oracles, failure/recovery controls, grants and cleanup assertions remain intact. The [five-call foreground diagnostic](../.artifacts/associated-read-views/focused-execution-runs/sourcee4c788-foreground-joined5-diagnostic-successor01/original-tool-terminal.json) passed flat, chunked, metadata, joined division failure and recovery on the retained source52 artifact; this is diagnostic evidence, not harness acceptance.
 
-A contract can declare `Block: Owned`; each exact implementation binds its
-representation, and generic code selects it through an exact lexical witness.
-Admission checks complete member/binding inventories, ordinary and witness
-actuals, scope and consuming generations. Equal Self types or outputs do not
-authorize witness substitution. Stored binding templates remain projection-free;
-caller projections substitute without capture.
+[Installation53](../.artifacts/associated-read-views/fiftythird-compile/source-installation-first.json) changes only the public test driver and this status. Production source, fixtures, selectors and compatibility profiles are unchanged. **Next action:** compile frozen source53, build four fresh producers and execute all **159 focused obligations**, including all eighteen native regressions and all four public cases. Then integrate normal mainline and complete **29 fresh full gates**. Generation 12 finalized-byte candidate admission, immutable publication and public closure remain pending. Earlier failures and their original evidence remain separately preserved.
 
-Pure borrowed results retain source-tied ReadFrom rules and actual descendant
-provenance. Associated Owned grants no Transfer, Share, private-field or capture
-permission. External projection scopes, escaping composite views, general regions,
-binding equations and new recursive Owned layouts remain outside this increment.
-The [specification](spec/associated-owned-types.md) owns these boundaries.
+Historical support remains: normal CLI 10/source 28 passed **361 maintained checks**, and [four Artifact 41 byte pairs](../.artifacts/associated-read-views/consumer-assets-installation-proposals/sourcef87c8b-four-families-first/receipt.json) matched exactly. Nine consumer asset changes were installed; CLI 11 generated [eight documentation pages](../.artifacts/associated-read-views/native-docs-installation-runs/sourcec5564c-eight-docs-first/receipt.json). The real planner's **nine authored direct dependencies** remain distinct from the **five-direct synthetic fixture**. Earlier results do not replace successor validation; default budgets remain unchanged.
 
-## Evidence and remaining work
-
-- The [full-library authentication](../.artifacts/associated-owned-types/build/auth-full-reference-catalogue-first-memory.json)
-  binds all **2,137** parent names and the **2,129/0/8** result to stable
-  pre-integration `0cf12a33`. The [13 focused checks](../.artifacts/associated-owned-types/build/auth-focused-reference-catalogue-first-memory.json)
-  and [strict Clippy terminal](../.artifacts/associated-owned-types/build/reference-catalogue-first-clippy-terminal.json)
-  are separate originals. Fresh dependency-complete **29-gate** acceptance remains
-  required.
-- The [public BlockRead authentication](../.artifacts/associated-owned-types/public-blockread-successor/public-blockread-second-independent-auth.json)
-  retains predecessor source `0b026f56`: **110 CLI commands**, four handwritten
-  cases across three targets, **12 attached + 12 detached** complete comparisons
-  and three authored refusals. Independent flat/private nominal suppliers,
-  canonical drafts/replans, identical rebuild bytes, source protection, loan
-  escape and private-field authority were exercised outside the checkout.
-- The [maintained author/build authentication](../.artifacts/associated-owned-types/native-blockread-asset-rebuild-proposal/finish-reference-catalogue-second-independent-authentication-extraction.json)
-  binds stable `0cf12a33`: **285 commands**, six passing checks
-  (**116/116/127/149/175/176**, production/reference equal), five independent
-  checker claims and three byte-identical **3,710,645-byte** candidate artifacts.
-  The **149-test** planner check uses the corrected bounded flow catalogue.
-- The [independent maintained runtime authentication](../.artifacts/associated-owned-types/reviews/native-blockread-runtime-reference-catalogue-first/authentication.json)
-  binds the same source and candidate artifact: **30 attached project differential
-  + 30 attached artifact production + 30 detached artifact production** complete
-  results. Six literal cases cover five exact targets, including all four
-  integer/Boolean Flat/Chunk32 choices and the actual Flat/Flat native entry.
-  All 60 production runs report zero exposed cleanup counters; project/reference
-  cleanup was not observed. Four archives preserve exact source/proof bytes.
-
-The [maintained planner](../tools/native-package-plan/README.md) now selects the
-publicly rebuilt **3,710,645-byte** asset `5bd6a956`, its accepted editable
-project and **27** current requests under `requests/blockread-adoption/`.
-The original 51 maintained files, including the 25 historical requests and refused
-consumer proposal, remain preserved in their
-[original inventory](../.artifacts/associated-owned-types/maintained-originals-before-blockread-20261012T0601/inventory.json).
-The embedded compiler and integrated controls still require fresh rebuild/proof.
-
-The [reviewed 37-path integration set](../.artifacts/associated-owned-types/final-integration-proposals/source0cf-2026-10-12T051204163Z/application-plan.json)
-is included in the coordinated assembly. Its nine added library controls, six
-developer controls, genuine associated-parallel checks and expanded IndexedData
-case await execution. The IndexedData **310 runs / 646 progress records** remain
-pending workload expectations; the separate completed runtime90 proof does not
-supply those outcomes.
-
-The resulting complete source must integrate current-main ancestry and pass
-fresh **29/29** full gates. Paired generation **11** requires the
-BlockRead case, retains two public workers and complete outcomes, and selects
-**103** finalized-byte cases. Finalized-byte acceptance remains pending.
-Generation 11 mainline push is held until .94 promotion and its fresh public
-closure complete, preserving the pending generation 10 resume contract.
-
-The [failed first public attempt](../.artifacts/associated-owned-types/public-blockread-first-run02/original-evidence-inventory.json),
-[earlier failed maintained finish](../.artifacts/associated-owned-types/native-blockread-asset-rebuild-proposal/finish-reference-catalogue-first-independent-authentication-extraction.json),
-original build terminals and reviewed capsule lineage remain preserved with their
-own source identities.
-
-## Separate .94 handoff
-
-Main `f0872272d1bc60392a3a3e852c67ab27a292152a` is the reporting descendant of
-tested commit `0fbf2796a15250bfa4b4638d40fe4c7b0749c3c1`.
-The [original full receipt](../../lkjscript-native-package-planner-20261011/.artifacts/lkjscript-dev/check/1791775574045354563-3409548-0/receipt.json)
-and [independent authentication](../../lkjscript-native-package-planner-20261011/.artifacts/native-package-planner/diagnostic-successor/two-worker-full-first-independent-authentication-1791780841413.json)
-record **29 fresh, 0 reused, 0 unrun**, exit 0. Its two-worker policy and strict
-zero-credit notices retain generation **10**. The isolated .95 assembly selects
-associated generation **11**, whose fresh acceptance remains pending.
-
-The single [candidate 38206417799/1](https://github.com/lkjsxc/lkjscript/actions/runs/38206417799),
-job `114670788991`, was still in source acceptance at the
-[06:41:08 UTC authenticated snapshot](../../lkjscript-native-package-planner-20261011/.artifacts/native-package-planner/delivery/two-worker-mainline-20261012T0447/candidate-dispatch-first/independent-monitor-1791787268153/snapshot.json),
-active since 05:12:56. Finalization and **102-case** finalized-byte admission
-remain pending. Latest fully verified public release remains **v0.1.92**;
-historical producers and accepted assets retain their original identities.
-[Release](release.md) owns the remaining candidate and publication gates.
+The [.95 hosted failure](../../lkjscript-associated-delivery-20261012/.artifacts/associated-delivery/candidate-first/failure-diagnosis-first/diagnosis.json) exhausted the 9,600-second aggregate allowance with its matrix incomplete. No accepted .95 candidate or publication resulted. The last authenticated public closure is **v0.1.94**, release **410450135**, in its [immutable/public receipt](../../lkjscript-native-package-planner-20261011/.artifacts/native-package-planner/delivery/promotion-v0.1.94-38206417799-first/terminal-handoffs-1791798863283/independent-promotion-authentication-1791799615495.json).

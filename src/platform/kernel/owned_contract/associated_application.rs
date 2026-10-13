@@ -25,6 +25,7 @@ pub(crate) struct AdmittedFunctionApplication {
     pub(crate) types: BTreeMap<TypeObjectDigest, TypeObject>,
     function: DeclarationReference,
     ordinary: BTreeMap<TypeParameterId, TypeObjectDigest>,
+    scopes: BTreeMap<ReadScopeReference, ReadScopeArgument>,
     implementations: BTreeMap<ImplementationParameterId, ImplementationOperand>,
     caller: OwnedTypeOccurrence,
 }
@@ -33,6 +34,7 @@ impl AdmittedFunctionApplication {
     pub(crate) fn environment(&self) -> AssociatedTypeEnvironment<'_> {
         AssociatedTypeEnvironment {
             ordinary: &self.ordinary,
+            scopes: &self.scopes,
             source: AssociatedTypeContext::Lexical(self.function),
             caller: self.caller.associated,
             consumer_generation: self.caller.consumer_generation,
@@ -68,6 +70,39 @@ pub(crate) fn admit_function_application(
     caller: OwnedTypeOccurrence,
     associated: &OwnedAssociatedAdmission,
 ) -> Result<AdmittedFunctionApplication, Diagnostic> {
+    let loans = BTreeSet::new();
+    admit_function_application_with_scopes(
+        read,
+        function,
+        type_actuals,
+        operands,
+        &[],
+        crate::platform::kernel::owned_associated::read_view_admission::ScopeAuthority {
+            binder: crate::platform::kernel::owned_associated::read_view_admission::binder(
+                caller.associated,
+            ),
+            lexical: crate::platform::kernel::owned_associated::read_view_admission::lexical(
+                caller.associated,
+            ),
+            live_loans: &loans,
+        },
+        caller,
+        associated,
+    )
+}
+
+pub(crate) fn admit_function_application_with_scopes(
+    read: &(impl ExpressionRead + ?Sized),
+    function: DeclarationReference,
+    type_actuals: &[TypeObjectDigest],
+    operands: &[ImplementationOperand],
+    scope_actuals: &[ReadScopeArgument],
+    scope_authority: crate::platform::kernel::owned_associated::read_view_admission::ScopeAuthority<
+        '_,
+    >,
+    caller: OwnedTypeOccurrence,
+    associated: &OwnedAssociatedAdmission,
+) -> Result<AdmittedFunctionApplication, Diagnostic> {
     // A sized forwarding view preserves the original reader's authority while
     // permitting the shared witness checker to consume a trait-object reader.
     let empty_types = BTreeMap::new();
@@ -78,6 +113,17 @@ pub(crate) fn admit_function_application(
     let read: &dyn ExpressionRead = &source_read;
     caller.validate_context()?;
     let signature = function_contract(read, function)?;
+    let scopes = if signature.read_scope_parameters.is_empty() && scope_actuals.is_empty() {
+        BTreeMap::new()
+    } else {
+        crate::platform::kernel::owned_associated::read_view_admission::scope_bindings(
+            read,
+            ReadScopeBinder::Declaration(function),
+            scope_actuals,
+            scope_authority,
+            associated,
+        )?
+    };
     let source = defining_occurrence(read, Some(function))?;
     associated.reserve::<PackageFunctionSignature>(1)?;
     associated.reserve::<TypeParameterId>(signature.type_parameters.len())?;
@@ -130,7 +176,7 @@ pub(crate) fn admit_function_application(
         associated.reserve_bytes(parameter.name.as_str().len())?;
         parameters.push(parameter);
     }
-    associated.validate_occurrence_at(read, &[signature.result], source)?;
+    associated.validate_occurrence_at(read, &[signature.result.ty], source)?;
     validate_witness_parameters(
         read,
         &signature.implementation_parameters,
@@ -158,11 +204,12 @@ pub(crate) fn admit_function_application(
         admit_actual_tree(read, operand, caller, associated)?;
     }
     let mut admission = WitnessAdmission::new(associated);
-    let types = validate_witness_arguments(
+    let types = validate_witness_arguments_with_scopes(
         read,
         function,
         &signature.implementation_parameters,
         &ordinary,
+        &scopes,
         operands,
         caller,
         &mut admission,
@@ -180,6 +227,7 @@ pub(crate) fn admit_function_application(
         types,
         function,
         ordinary,
+        scopes,
         implementations,
         caller,
     })
@@ -190,6 +238,37 @@ pub(crate) fn admit_method_application(
     operand: &ImplementationOperand,
     reference: DeclarationReference,
     id: MethodId,
+    caller: OwnedTypeOccurrence,
+    associated: &OwnedAssociatedAdmission,
+) -> Result<AdmittedMethodApplication, Diagnostic> {
+    let loans = BTreeSet::new();
+    admit_method_application_with_scopes(
+        read,
+        operand,
+        reference,
+        id,
+        &[],
+        crate::platform::kernel::owned_associated::read_view_admission::ScopeAuthority {
+            binder: crate::platform::kernel::owned_associated::read_view_admission::binder(
+                caller.associated,
+            ),
+            lexical: caller.associated.scope(),
+            live_loans: &loans,
+        },
+        caller,
+        associated,
+    )
+}
+
+pub(crate) fn admit_method_application_with_scopes(
+    read: &(impl ExpressionRead + ?Sized),
+    operand: &ImplementationOperand,
+    reference: DeclarationReference,
+    id: MethodId,
+    scope_actuals: &[ReadScopeArgument],
+    scope_authority: crate::platform::kernel::owned_associated::read_view_admission::ScopeAuthority<
+        '_,
+    >,
     caller: OwnedTypeOccurrence,
     associated: &OwnedAssociatedAdmission,
 ) -> Result<AdmittedMethodApplication, Diagnostic> {
@@ -232,9 +311,27 @@ pub(crate) fn admit_method_application(
         read,
         types: &application.types,
     };
+    let scopes = if method.read_scope_parameters.is_empty() && scope_actuals.is_empty() {
+        BTreeMap::new()
+    } else {
+        crate::platform::kernel::owned_associated::read_view_admission::scope_bindings(
+            read,
+            ReadScopeBinder::ContractMethod {
+                contract: reference,
+                method: id,
+            },
+            scope_actuals,
+            scope_authority,
+            associated,
+        )?
+    };
     let environment = AssociatedTypeEnvironment {
         ordinary: &ordinary,
-        source: AssociatedTypeContext::ContractSignature(reference),
+        scopes: &scopes,
+        source: AssociatedTypeContext::ContractMethod {
+            contract: reference,
+            method: id,
+        },
         caller: caller.associated,
         consumer_generation: caller.consumer_generation,
         contract_selection: Some(AssociatedContractSelection::Witness(operand)),
@@ -244,11 +341,17 @@ pub(crate) fn admit_method_application(
     for parameter in &mut method.parameters {
         parameter.ty = derived.substitute(parameter.ty, 0)?;
     }
-    method.result = derived.substitute(method.result, 0)?;
+    method.result.ty = derived.substitute(method.result.ty, 0)?;
+    if let ResultRelation::ViewFrom { scope, .. } = &mut method.result.relation {
+        *scope = derived.substitute_scope(*scope)?;
+    }
+    for source in &mut method.read_scope_sources {
+        source.scope = derived.substitute_scope(source.scope)?;
+    }
     for parameter in &method.parameters {
         associated.validate_occurrence_at(&derived, &[parameter.ty], caller)?;
     }
-    associated.validate_occurrence_at(&derived, &[method.result], caller)?;
+    associated.validate_occurrence_at(&derived, &[method.result.ty], caller)?;
     let derived_types = derived.into_types();
     let mut types = application.types;
     extend_application_types(read, &mut types, derived_types, associated)?;

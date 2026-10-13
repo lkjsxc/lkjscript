@@ -10,12 +10,13 @@ use super::unit::{
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    CaseReference, DeclarationPayload, DeclarationReference, EncodedOwnerKey, ExpressionOperation,
-    ExternalVisibility, FieldReference, FunctionEffect, Idempotency, LocalValueReference, Name,
-    OperationReference, OwnerKey, OwnerKind, OwnerObjectDigest, OwnerRecord, PackageId,
-    PackageInterfaceDeclarationPayload, PackageInterfaceDigest, PackageInterfaceRecord,
-    PackageRevisionDigest, ParameterParent, PortImplementation, PortReference, RequirementRecord,
-    RequirementReference, ResourceLimit, SemanticStateDigest, TypeForm, TypeObject,
+    CallableResult, CaseReference, DeclarationPayload, DeclarationReference, EncodedOwnerKey,
+    ExpressionOperation, ExternalVisibility, FieldReference, FunctionEffect, Idempotency,
+    LocalValueReference, Name, OperationReference, OwnerKey, OwnerKind, OwnerObjectDigest,
+    OwnerRecord, PackageId, PackageInterfaceDeclarationPayload, PackageInterfaceDigest,
+    PackageInterfaceRecord, PackageRevisionDigest, ParameterParent, PortImplementation,
+    PortReference, ReadScopeArgument, ReadScopeParameter, ReadScopeSource, RequirementRecord,
+    RequirementReference, ResourceLimit, ResultRelation, SemanticStateDigest, TypeForm, TypeObject,
     TypeObjectDigest, decode_owner, decode_owner_binding, decode_type_object, encode_type_object,
     requirement_is_covered_by,
 };
@@ -52,16 +53,16 @@ mod code_admission;
 #[path = "artifact_flow.rs"]
 mod flow_admission;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-40";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-40";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 40;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF40";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART40";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN40";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-41";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-41";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 41;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF41";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART41";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN41";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v40";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v40";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v40";
+    "lkjscript.artifact-manifest-envelope.v41";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v41";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v41";
 pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v18";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
@@ -71,8 +72,9 @@ pub(crate) const MAXIMUM_ARTIFACT_SEGMENTS: usize = 1_000_000;
 pub(crate) const MAXIMUM_ARTIFACT_BUNDLE_BYTES: u64 = 16 * 1024 * 1024 * 1024;
 pub(crate) const TARGET_ARTIFACT_SEGMENT_BYTES: usize = 4 * 1024 * 1024;
 
-// Historical envelopes retain their own domains. Generations whose embedded compiler or
-// canonical owner shapes changed are refused before decoding and require a source rebuild.
+// Historical envelopes retain their original domains and declared compiler profiles.
+// The exact retained .95 profile has an ordinary version-specific unit reader and still
+// traverses every current closure, authority, source, affine and canonical-code gate.
 struct ArtifactWire {
     version: u16,
     manifest_magic: [u8; 8],
@@ -160,6 +162,15 @@ fn artifact_wire(version: u16) -> Result<ArtifactWire, Diagnostic> {
             manifest_domain: "lkjscript.artifact-manifest-envelope.v29",
             digest_domain: "lkjscript.artifact-bundle.v29",
             checksum_domain: "lkjscript.artifact-bundle.complete.v29",
+        }),
+        40 => Ok(ArtifactWire {
+            version,
+            manifest_magic: *b"LKJAMF40",
+            bundle_magic: *b"LKJART40",
+            end_magic: *b"LKJAEN40",
+            manifest_domain: "lkjscript.artifact-manifest-envelope.v40",
+            digest_domain: "lkjscript.artifact-bundle.v40",
+            checksum_domain: "lkjscript.artifact-bundle.complete.v40",
         }),
         ARTIFACT_CONTRACT_VERSION => Ok(ArtifactWire {
             version,
@@ -356,6 +367,7 @@ const fn runtime_owner_kind(kind: OwnerKind) -> bool {
             | OwnerKind::Component
             | OwnerKind::Record
             | OwnerKind::OwnedRecord
+            | OwnerKind::ReadView
             | OwnerKind::Variant
             | OwnerKind::Interface
             | OwnerKind::TypeParameter
@@ -439,6 +451,10 @@ impl ArtifactManifest {
             37
         } else if bytes.starts_with(b"LKJAMF38") {
             38
+        } else if bytes.starts_with(b"LKJAMF39") {
+            39
+        } else if bytes.starts_with(b"LKJAMF40") {
+            40
         } else {
             ARTIFACT_CONTRACT_VERSION
         })?;
@@ -474,7 +490,7 @@ impl ArtifactManifest {
     fn validate(&self) -> Result<(), Diagnostic> {
         if !matches!(
             self.contract_version,
-            18 | 19 | 20 | 25 | 26 | 27 | 28 | 29 | ARTIFACT_CONTRACT_VERSION
+            18 | 19 | 20 | 25 | 26 | 27 | 28 | 29 | 40 | ARTIFACT_CONTRACT_VERSION
         ) || (self.contract_version == 18
             && (
                 self.graph_contract_version,
@@ -506,6 +522,18 @@ impl ArtifactManifest {
                 && (self.compiler_contract_version > 21 || self.graph_contract_version > 21))
             || (self.contract_version == 29
                 && (self.compiler_contract_version > 22 || self.graph_contract_version > 22))
+            || (self.contract_version == 40
+                && (
+                    self.graph_contract_version,
+                    self.compiler_contract_version,
+                    self.bytecode_contract_version,
+                ) != (33, 33, 27))
+            || (self.contract_version == ARTIFACT_CONTRACT_VERSION
+                && (
+                    self.graph_contract_version,
+                    self.compiler_contract_version,
+                    self.bytecode_contract_version,
+                ) != (34, 34, 28))
             || !matches!(
                 (
                     self.graph_contract_version,
@@ -534,6 +562,7 @@ impl ArtifactManifest {
                     | (31, 31, 26)
                     | (32, 32, 27)
                     | (33, 33, 27)
+                    | (34, 34, 28)
             )
             || self.compilation_manifest_contract_version != COMPILATION_MANIFEST_CONTRACT_VERSION
         {
@@ -1307,6 +1336,7 @@ fn validate_declared_closure(
 pub(crate) enum RuntimeOwnerExpectation {
     OwnedContract(crate::platform::kernel::OwnedContract),
     OwnedImplementation(crate::platform::kernel::OwnedImplementation),
+    ReadView(crate::platform::kernel::ReadViewDeclaration),
     Interface {
         operations: Vec<crate::platform::semantic_id::OperationId>,
     },
@@ -1333,8 +1363,9 @@ pub(crate) enum RuntimeOwnerExpectation {
         effect_parameters: Vec<crate::platform::semantic_id::EffectParameterId>,
         effect: FunctionEffect,
         parameters: Vec<ParameterId>,
-        result: TypeObjectDigest,
-        result_borrow: Option<ParameterId>,
+        read_scope_parameters: Vec<ReadScopeParameter>,
+        read_scope_sources: Vec<ReadScopeSource<ParameterId>>,
+        result: CallableResult<ParameterId>,
         requirements: Vec<RequirementReference>,
     },
     MemoryExternal {
@@ -1420,6 +1451,7 @@ impl RuntimeOwnerExpectation {
         match self {
             Self::OwnedContract(_) => OwnerKind::OwnedContract,
             Self::OwnedImplementation(_) => OwnerKind::OwnedImplementation,
+            Self::ReadView(_) => OwnerKind::ReadView,
             Self::MemoryExternal { .. } => OwnerKind::External,
             Self::Interface { .. } => OwnerKind::Interface,
             Self::Component { .. } => OwnerKind::Component,
@@ -1456,6 +1488,9 @@ impl RuntimeOwnerExpectation {
             }
             (Self::OwnedImplementation(i), OwnerRecord::Declaration(d)) => {
                 matches!(&d.payload, DeclarationPayload::OwnedImplementation(actual) if actual == i)
+            }
+            (Self::ReadView(view), OwnerRecord::Declaration(record)) => {
+                matches!(&record.payload, DeclarationPayload::ReadView(actual) if actual == view)
             }
             (Self::Interface { operations }, OwnerRecord::Declaration(record)) => {
                 matches!(&record.payload, DeclarationPayload::Interface { operations: actual } if actual == operations)
@@ -1505,8 +1540,9 @@ impl RuntimeOwnerExpectation {
                     effect_parameters,
                     effect,
                     parameters,
+                    read_scope_parameters,
+                    read_scope_sources,
                     result,
-                    result_borrow,
                     requirements,
                 },
                 OwnerRecord::Declaration(record),
@@ -1520,8 +1556,9 @@ impl RuntimeOwnerExpectation {
                         && function.effect == *effect
                         && function.requirement_parameters == *requirement_parameters
                         && function.parameters == *parameters
+                        && function.read_scope_parameters == *read_scope_parameters
+                        && function.read_scope_sources == *read_scope_sources
                         && function.result == *result
-                        && function.result_borrow == *result_borrow
                         && (matches!(function.effect, FunctionEffect::Pure) && requirements.is_empty() || matches!(
                             &function.effect,
                             FunctionEffect::Task { effect_parameters: _,
@@ -1774,6 +1811,24 @@ pub(crate) fn runtime_owner_expectations(
                     )?;
                 }
             }
+            CompilationPayload::ReadView {
+                declaration: view,
+                type_parameter_constraints,
+            } => {
+                let declaration = declaration_owner(*owner, "read view")?;
+                insert_runtime_expectation(
+                    &mut expected,
+                    (*package, *owner),
+                    RuntimeOwnerExpectation::ReadView(view.clone()),
+                )?;
+                insert_nominal_parameter_expectations(
+                    &mut expected,
+                    *package,
+                    declaration,
+                    &view.type_parameters,
+                    type_parameter_constraints,
+                )?;
+            }
             CompilationPayload::OwnedRecord {
                 fields,
                 type_parameters,
@@ -1952,7 +2007,7 @@ pub(crate) fn runtime_owner_expectations(
                     .iter()
                     .any(|p| p.use_mode != crate::platform::kernel::ParameterUse::Unrestricted)
                     || memory_result_type(
-                        unit.tables.types.get(signature.result as usize).copied(),
+                        unit.tables.types.get(signature.result.ty as usize).copied(),
                         &mut type_object,
                         &mut nominal_owned,
                     )?
@@ -1965,7 +2020,7 @@ pub(crate) fn runtime_owner_expectations(
                             parameters: signature.parameters.iter().map(|p| p.parameter).collect(),
                             result: table_value(
                                 &unit.tables.types,
-                                signature.result,
+                                signature.result.ty,
                                 "memory external result",
                             )?,
                             implementation: implementation.clone(),
@@ -1996,7 +2051,7 @@ pub(crate) fn runtime_owner_expectations(
                                 != crate::platform::kernel::ParameterUse::Unrestricted
                     })
                     || memory_result_type(
-                        unit.tables.types.get(signature.result as usize).copied(),
+                        unit.tables.types.get(signature.result.ty as usize).copied(),
                         &mut type_object,
                         &mut nominal_owned,
                     )?
@@ -2006,11 +2061,9 @@ pub(crate) fn runtime_owner_expectations(
                         .iter()
                         .map(|parameter| parameter.parameter)
                         .collect();
-                    let result = table_value(
-                        &unit.tables.types,
-                        signature.result,
-                        "resource function result type",
-                    )?;
+                    let result = signature.result.try_map_type(|index| {
+                        table_value(&unit.tables.types, index, "resource function result type")
+                    })?;
                     let requirements = signature
                         .task_requirements
                         .iter()
@@ -2032,8 +2085,9 @@ pub(crate) fn runtime_owner_expectations(
                             effect_parameters: signature.effect_parameters.clone(),
                             effect: signature.effect.clone(),
                             parameters,
+                            read_scope_parameters: signature.read_scope_parameters.clone(),
+                            read_scope_sources: signature.read_scope_sources.clone(),
                             result,
-                            result_borrow: signature.result_borrow,
                             requirements,
                         },
                     )?;
@@ -2296,7 +2350,7 @@ fn validate_artifact_http_route_contracts(
                 .transpose()?;
             let result = table_value(
                 &function_unit.tables.types,
-                signature.result,
+                signature.result.ty,
                 "HTTP response result type",
             )?;
             if !signature.type_parameters.is_empty()
@@ -2616,6 +2670,7 @@ fn trace_object_closure(
     let mut preproduct_type_roots = BTreeSet::new();
     let mut prechoice_type_roots = BTreeSet::new();
     let mut presequence_type_roots = BTreeSet::new();
+    let mut preview_type_roots = BTreeSet::new();
     let mut predecessor_packages = BTreeSet::new();
     let mut source_generations = BTreeMap::new();
     let mut blobs = BTreeMap::new();
@@ -2673,6 +2728,8 @@ fn trace_object_closure(
         )?;
         let compilation = CompilationManifest::decode(&compilation_bytes, package.compilation)?;
         if compilation.graph_contract_version > manifest.graph_contract_version
+            || compilation.compiler_contract_version > manifest.compiler_contract_version
+            || compilation.bytecode_contract_version > manifest.bytecode_contract_version
             || revision.graph_contract_version > manifest.graph_contract_version
             || package.repository_id != revision.revision.repository_id
             || package.package != revision.package
@@ -2724,6 +2781,9 @@ fn trace_object_closure(
                         ));
                     }
                     type_roots.extend(unit.tables.types.iter().copied());
+                    if unit.graph_contract_version < 34 || source_generation < 34 {
+                        preview_type_roots.extend(unit.tables.types.iter().copied());
+                    }
                     if unit.graph_contract_version < 25 || source_generation < 25 {
                         presequence_type_roots.extend(unit.tables.types.iter().copied());
                     }
@@ -2820,6 +2880,9 @@ fn trace_object_closure(
             &mut store_work,
         )?;
         let object = decode_type_object(&bytes, digest)?;
+        if manifest.graph_contract_version < 34 && object.form.is_read_view() {
+            return Err(read_view_generation_error());
+        }
         if manifest.graph_contract_version < 25
             && matches!(object.form, TypeForm::OwnedSequence { .. })
         {
@@ -2851,7 +2914,9 @@ fn trace_object_closure(
             return Err(f64_generation_error());
         }
         match &object.form {
-            TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. }
+            TypeForm::Named { declaration }
+            | TypeForm::Applied { declaration, .. }
+            | TypeForm::ReadViewApplied { declaration, .. }
                 if !relocations
                     .declarations
                     .contains(&(declaration.package, declaration.declaration)) =>
@@ -2876,6 +2941,7 @@ fn trace_object_closure(
         type_roots.extend(object.child_types());
         types.insert(digest, object);
     }
+    validate_read_view_generation_closure(preview_type_roots, &types)?;
     validate_loaded_http_route_requirement_closure(&units, &runtime_owners, &types)?;
     validate_interface_source_coherence(manifest, &interfaces, &runtime_owners, &reference_owners)?;
     validate_predecessor_type_closure(predecessor_type_roots, &types)?;
@@ -3016,6 +3082,7 @@ fn validate_nominal_instruction_inventory(
             Vec<TypeObjectDigest>,
             Vec<crate::platform::kernel::EffectRow>,
             Vec<crate::platform::kernel::RequirementOperand>,
+            Vec<ReadScopeArgument>,
             usize,
         ),
         Perform(
@@ -3035,6 +3102,7 @@ fn validate_nominal_instruction_inventory(
             Vec<TypeObjectDigest>,
             Vec<crate::platform::kernel::EffectRow>,
             Vec<crate::platform::kernel::RequirementOperand>,
+            Vec<ReadScopeArgument>,
         ),
     }
     let mut work = 0usize;
@@ -3126,6 +3194,7 @@ fn validate_nominal_instruction_inventory(
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
+                    Vec::new(),
                     0,
                 )),
                 ExpressionOperation::Call {
@@ -3133,12 +3202,14 @@ fn validate_nominal_instruction_inventory(
                     type_arguments,
                     effect_arguments,
                     requirement_arguments,
+                    read_scope_arguments,
                     arguments,
                 } => Some(Constructor::Call(
                     *function,
                     type_arguments.clone(),
                     effect_arguments.clone(),
                     requirement_arguments.clone(),
+                    read_scope_arguments.clone(),
                     arguments.len(),
                 )),
                 ExpressionOperation::ImplementationCall {
@@ -3146,6 +3217,7 @@ fn validate_nominal_instruction_inventory(
                     type_arguments,
                     effect_arguments,
                     requirement_arguments,
+                    read_scope_arguments,
                     arguments,
                     ..
                 } => Some(Constructor::Call(
@@ -3153,6 +3225,7 @@ fn validate_nominal_instruction_inventory(
                     type_arguments.clone(),
                     effect_arguments.clone(),
                     requirement_arguments.clone(),
+                    read_scope_arguments.clone(),
                     arguments.len(),
                 )),
                 ExpressionOperation::FunctionValue {
@@ -3160,11 +3233,13 @@ fn validate_nominal_instruction_inventory(
                     type_arguments,
                     effect_arguments,
                     requirement_arguments,
+                    read_scope_arguments,
                 } => Some(Constructor::FunctionValue(
                     *function,
                     type_arguments.clone(),
                     effect_arguments.clone(),
                     requirement_arguments.clone(),
+                    read_scope_arguments.clone(),
                 )),
                 ExpressionOperation::Record {
                     nominal_type,
@@ -3258,15 +3333,27 @@ fn validate_nominal_instruction_inventory(
                     CompiledInstruction::Parallel {
                         left,
                         left_types,
+                        left_read_scope_arguments,
                         left_arguments,
                         right,
                         right_types,
+                        right_read_scope_arguments,
                         right_arguments,
                         ..
                     } => {
-                        for (function, arguments, types) in [
-                            (*left, *left_arguments, left_types),
-                            (*right, *right_arguments, right_types),
+                        for (function, arguments, types, scopes) in [
+                            (
+                                *left,
+                                *left_arguments,
+                                left_types,
+                                left_read_scope_arguments,
+                            ),
+                            (
+                                *right,
+                                *right_arguments,
+                                right_types,
+                                right_read_scope_arguments,
+                            ),
                         ] {
                             tick()?;
                             let types = types
@@ -3285,6 +3372,7 @@ fn validate_nominal_instruction_inventory(
                                 types,
                                 Vec::new(),
                                 Vec::new(),
+                                scopes.clone(),
                                 arguments as usize,
                             );
                             let count = actual.entry(call).or_insert(0usize);
@@ -3303,6 +3391,7 @@ fn validate_nominal_instruction_inventory(
                         type_arguments,
                         effect_arguments,
                         requirement_arguments,
+                        read_scope_arguments,
                         arguments,
                         ..
                     } => Some(Constructor::Call(
@@ -3323,6 +3412,7 @@ fn validate_nominal_instruction_inventory(
                             .collect::<Result<_, _>>()?,
                         effect_arguments.clone(),
                         requirement_arguments.clone(),
+                        read_scope_arguments.clone(),
                         *arguments as usize,
                     )),
                     CompiledInstruction::Call {
@@ -3330,6 +3420,7 @@ fn validate_nominal_instruction_inventory(
                         type_arguments,
                         effect_arguments,
                         requirement_arguments,
+                        read_scope_arguments,
                         arguments,
                     } => Some(Constructor::Call(
                         table_value(&unit.tables.declarations, *function, "call target")?,
@@ -3341,6 +3432,7 @@ fn validate_nominal_instruction_inventory(
                             .collect::<Result<_, _>>()?,
                         effect_arguments.clone(),
                         requirement_arguments.clone(),
+                        read_scope_arguments.clone(),
                         *arguments as usize,
                     )),
                     CompiledInstruction::FunctionValue {
@@ -3348,6 +3440,7 @@ fn validate_nominal_instruction_inventory(
                         type_arguments,
                         effect_arguments,
                         requirement_arguments,
+                        read_scope_arguments,
                     } => Some(Constructor::FunctionValue(
                         table_value(&unit.tables.declarations, *function, "callable target")?,
                         type_arguments
@@ -3358,6 +3451,7 @@ fn validate_nominal_instruction_inventory(
                             .collect::<Result<_, _>>()?,
                         effect_arguments.clone(),
                         requirement_arguments.clone(),
+                        read_scope_arguments.clone(),
                     )),
                     CompiledInstruction::Perform {
                         requirement,
@@ -3786,6 +3880,7 @@ fn validate_artifact_nominal_meaning(
             unit.payload,
             CompilationPayload::Record { .. }
                 | CompilationPayload::OwnedRecord { .. }
+                | CompilationPayload::ReadView { .. }
                 | CompilationPayload::OwnedContract(_)
                 | CompilationPayload::OwnedImplementation(_)
                 | CompilationPayload::Variant { .. }
@@ -4983,6 +5078,9 @@ fn reference_payload_matches(unit: &CompilationUnit, canonical: &DeclarationPayl
         // by runtime-owner admission. Bind their inventory, result and intrinsic identity here
         // for ordinary externals as well as memory externals.
         return signature.implementation_parameters.is_empty()
+            && signature.read_scope_parameters.is_empty()
+            && signature.read_scope_sources.is_empty()
+            && matches!(signature.result.relation, ResultRelation::Value)
             && signature.requirement_parameters.is_empty()
             && signature.effect_parameters.is_empty()
             && signature.effect == FunctionEffect::Pure
@@ -4993,7 +5091,7 @@ fn reference_payload_matches(unit: &CompilationUnit, canonical: &DeclarationPayl
                 .iter()
                 .map(|p| p.parameter)
                 .eq(external.parameters.iter().copied())
-            && unit.tables.types.get(signature.result as usize) == Some(&external.result)
+            && unit.tables.types.get(signature.result.ty as usize) == Some(&external.result)
             && implementation == &external.implementation;
     }
     if let (
@@ -5006,13 +5104,15 @@ fn reference_payload_matches(unit: &CompilationUnit, canonical: &DeclarationPayl
             && signature.type_parameters == function.type_parameters
             && signature.effect_parameters == function.effect_parameters
             && signature.effect == function.effect
+            && signature.read_scope_parameters == function.read_scope_parameters
+            && signature.read_scope_sources == function.read_scope_sources
             && signature
                 .parameters
                 .iter()
                 .map(|p| p.parameter)
                 .eq(function.parameters.iter().copied())
-            && unit.tables.types.get(signature.result as usize) == Some(&function.result)
-            && signature.result_borrow == function.result_borrow;
+            && unit.tables.types.get(signature.result.ty as usize) == Some(&function.result.ty)
+            && signature.result.relation == function.result.relation;
     }
     matches!(
         (compiled, canonical),
@@ -5085,7 +5185,9 @@ fn reference_expression_bindings(operation: &ExpressionOperation) -> Vec<Binding
         ExpressionOperation::BorrowOwnedField { binding, .. }
         | ExpressionOperation::BorrowOwnedRecordField { binding, .. }
         | ExpressionOperation::BorrowOwnedItem { binding, .. }
-        | ExpressionOperation::BorrowCall { binding, .. } => bindings.push(*binding),
+        | ExpressionOperation::BorrowCall { binding, .. }
+        | ExpressionOperation::BorrowReadView { binding, .. }
+        | ExpressionOperation::BorrowReadViewField { binding, .. } => bindings.push(*binding),
         ExpressionOperation::Match { arms, .. } => bindings.extend(
             arms.iter()
                 .filter_map(|arm| arm.payload_binding)
@@ -5116,6 +5218,7 @@ fn validate_unit_relocations(
         .collect::<BTreeSet<_>>();
     let mut type_parameters = BTreeSet::new();
     let mut fields = BTreeSet::new();
+    let mut read_view_fields = BTreeSet::new();
     let mut cases = BTreeSet::new();
     let mut requirements = BTreeSet::new();
     let mut operations = BTreeSet::new();
@@ -5129,6 +5232,25 @@ fn validate_unit_relocations(
             }
             CompilationPayload::OwnedImplementation(i) => {
                 type_parameters.extend(i.type_parameters.iter().copied());
+            }
+            CompilationPayload::ReadView { declaration, .. } => {
+                type_parameters.extend(declaration.type_parameters.iter().copied());
+                let OwnerKey::Declaration(id) = unit.source.owner else {
+                    return Err(artifact_error(
+                        DiagnosticClass::Corrupt,
+                        "artifact_read_view_owner",
+                        "read-view compiler payload is not bound to an exact declaration",
+                    ));
+                };
+                read_view_fields.extend(declaration.fields.iter().map(|field| {
+                    crate::platform::kernel::ReadViewFieldReference {
+                        declaration: DeclarationReference {
+                            package: unit.source.package,
+                            declaration: id,
+                        },
+                        field: field.id,
+                    }
+                }));
             }
             CompilationPayload::OwnedRecord {
                 fields: layouts,
@@ -5202,6 +5324,13 @@ fn validate_unit_relocations(
                     .iter()
                     .find(|reference| !fields.contains(reference))
                     .map(|reference| format!("field {reference:?}"))
+            })
+            .or_else(|| {
+                unit.tables
+                    .read_view_fields
+                    .iter()
+                    .find(|reference| !read_view_fields.contains(reference))
+                    .map(|reference| format!("read-view field {reference:?}"))
             })
             .or_else(|| {
                 unit.tables
@@ -5460,12 +5589,58 @@ fn memory_result_type(
         | TypeForm::OwnedI64Cell
         | TypeForm::OwnedProduct { .. }
         | TypeForm::OwnedChoice { .. }
-        | TypeForm::OwnedSequence { .. } => Ok(true),
+        | TypeForm::OwnedSequence { .. }
+        | TypeForm::ReadViewApplied { .. }
+        | TypeForm::AssociatedReadViewMember { .. }
+        | TypeForm::AssociatedReadViewProjection { .. } => Ok(true),
         TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
             nominal_owned(declaration)
         }
         _ => Ok(false),
     }
+}
+
+fn read_view_generation_error() -> Diagnostic {
+    artifact_error(
+        DiagnosticClass::Semantic,
+        "kernel_read_view_generation",
+        "read-view type closure requires Graph 34 source and compilation",
+    )
+}
+
+fn validate_read_view_generation_closure(
+    mut pending: BTreeSet<TypeObjectDigest>,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+) -> Result<(), Diagnostic> {
+    let mut seen = BTreeSet::new();
+    let mut work = 0usize;
+    while let Some(ty) = pending.pop_first() {
+        if !seen.insert(ty) {
+            continue;
+        }
+        let object = types.get(&ty).ok_or_else(|| {
+            artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_read_view_type",
+                "read-view generation admission omits a graph-bound type",
+            )
+        })?;
+        work = work
+            .checked_add(object.child_type_count() + 1)
+            .filter(|next| *next <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
+            .ok_or_else(|| {
+                artifact_error(
+                    DiagnosticClass::Resource,
+                    "artifact_read_view_work",
+                    "read-view generation closure exhausted its existing work budget",
+                )
+            })?;
+        if object.form.is_read_view() {
+            return Err(read_view_generation_error());
+        }
+        pending.extend(object.child_types());
+    }
+    Ok(())
 }
 
 fn validate_sequence_generation_closure(
@@ -5557,3 +5732,7 @@ fn validate_product_generation_closure(
 #[cfg(test)]
 #[path = "artifact_contract_tests.rs"]
 mod contract_tests;
+
+#[cfg(test)]
+#[path = "artifact_read_view_tests.rs"]
+mod read_view_tests;

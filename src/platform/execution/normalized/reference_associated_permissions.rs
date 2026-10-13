@@ -117,6 +117,7 @@ fn scope(
                 DeclarationPayload::Record { .. } => OwnerKind::Record,
                 DeclarationPayload::OwnedRecord { .. } => OwnerKind::OwnedRecord,
                 DeclarationPayload::Variant { .. } => OwnerKind::Variant,
+                DeclarationPayload::ReadView(_) => OwnerKind::ReadView,
                 _ => return Ok(None),
             };
             if owner.header.kind != kind
@@ -220,6 +221,8 @@ impl Collector<'_, '_, '_, '_> {
                 }
             }
             ExpressionOperation::Let { body, .. }
+            | ExpressionOperation::BorrowReadView { body, .. }
+            | ExpressionOperation::BorrowReadViewField { body, .. }
             | ExpressionOperation::Transaction { body, .. }
             | ExpressionOperation::TransactionOutcome { body, .. } => {
                 self.parent(package, *body, parent)?
@@ -245,6 +248,11 @@ impl Collector<'_, '_, '_, '_> {
                 }
             }
             ExpressionOperation::Record { fields, .. } => {
+                for field in fields {
+                    self.parent(package, field.value, parent)?;
+                }
+            }
+            ExpressionOperation::CreateReadView { fields, .. } => {
                 for field in fields {
                     self.parent(package, field.value, parent)?;
                 }
@@ -344,6 +352,10 @@ impl Collector<'_, '_, '_, '_> {
             | ExpressionOperation::Constant { .. }
             | ExpressionOperation::FunctionValue { .. }
             | ExpressionOperation::SequenceEmpty { .. } => {}
+            ExpressionOperation::ReborrowReadView { .. }
+            | ExpressionOperation::MoveReadView { .. }
+            | ExpressionOperation::DropReadView { .. }
+            | ExpressionOperation::ReadViewDataField { .. } => {}
         }
         Ok(())
     }
@@ -424,6 +436,11 @@ impl Collector<'_, '_, '_, '_> {
             if let TypeForm::Applied {
                 declaration,
                 arguments,
+            }
+            | TypeForm::ReadViewApplied {
+                declaration,
+                arguments,
+                ..
             } = &object.form
             {
                 self.meter.reserve::<Constraint>(1)?;
@@ -497,7 +514,7 @@ impl Collector<'_, '_, '_, '_> {
         for selected in &target.witnesses {
             self.symbolic_selection(origin, owner, selected, scope, 0)?;
         }
-        self.types(origin, owner, target.signature.result, scope)?;
+        self.types(origin, owner, target.signature.result.ty, scope)?;
         for (ty, _) in &target.signature.parameters {
             self.types(origin, owner, *ty, scope)?;
         }
@@ -617,6 +634,11 @@ pub(super) fn collect(
             .reserve::<crate::platform::kernel::RequirementReference>(
                 application.requirements.len(),
             )?;
+        collector
+            .meter
+            .reserve::<crate::platform::kernel::ReadScopeArgument>(
+                application.read_scope_arguments.len(),
+            )?;
         collector.read(ReadContext::Application(application.clone()))?;
     }
     for reference in proof.symbolic.keys() {
@@ -673,7 +695,7 @@ pub(super) fn collect(
                         scope,
                     )?;
                     for member in &implementation.associated_types {
-                        collector.types(origin, *key, member.ty, scope)?;
+                        collector.types(origin, *key, member.ty(), scope)?;
                     }
                     for prerequisite in &implementation.implementation_parameters {
                         collector.contract(
@@ -689,6 +711,7 @@ pub(super) fn collect(
                         let target = proof.symbolic_mapping(
                             reference,
                             mapping.method,
+                            &mapping.read_scope_arguments,
                             collector.meter.control,
                         )?;
                         let mapping_origin =
@@ -706,6 +729,12 @@ pub(super) fn collect(
                             &prerequisite.type_arguments,
                             scope,
                         )?;
+                    }
+                }
+                DeclarationPayload::ReadView(view) => {
+                    for field in &view.fields {
+                        collector.meter.tick()?;
+                        collector.types(origin, *key, field.ty, scope)?;
                     }
                 }
                 DeclarationPayload::Record { fields, .. }
@@ -787,6 +816,9 @@ fn constraint(
         else {
             return Err(failure());
         };
+        if schema.is_read_view_type(*actual) {
+            return Err(failure());
+        }
         if record.declaration != target.declaration
             || indexed_owned(schema, sources, *actual, scope, meter)?
                 != record.constraints.has_owned()
@@ -892,6 +924,9 @@ fn capture(
                     return Err(failure());
                 }
             }
+            TypeForm::ReadViewApplied { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. } => return Err(failure()),
             _ => return Err(failure()),
         }
     }
@@ -923,7 +958,13 @@ pub(super) fn discharge(
                 return Err(failure());
             }
         } else if let Origin::Mapping(reference, method) = origin {
-            proof.symbolic_mapping(*reference, *method, meter.control)?;
+            let template = proof.mapping_template_at(*reference, *method, meter.control)?;
+            proof.symbolic_mapping(
+                *reference,
+                *method,
+                &template.read_scope_arguments,
+                meter.control,
+            )?;
             if obligation.owner != OwnerKey::Declaration(reference.declaration) {
                 return Err(failure());
             }
@@ -1016,7 +1057,7 @@ pub(super) fn discharge(
             {
                 return Err(failure());
             }
-            let (parameters, result, borrowed, is_task, mut associated, effect) =
+            let (parameters, result, borrowed, is_task, mut associated, mut read_view, effect) =
                 if let Some(application) = function.targets.get(&child) {
                     if application.function != target {
                         return Err(failure());
@@ -1024,10 +1065,11 @@ pub(super) fn discharge(
                     let signature = proof.application(application, meter.control)?;
                     (
                         &signature.parameters,
-                        signature.result,
-                        signature.result_borrow,
+                        signature.result.ty,
+                        signature.result.relation.source().copied(),
                         signature.is_task,
                         signature.requires_associated_generation,
+                        signature.requires_read_view_generation,
                         &signature.effect,
                     )
                 } else {
@@ -1039,33 +1081,43 @@ pub(super) fn discharge(
                     let signature = &target_descriptor.signature;
                     (
                         &signature.parameters,
-                        signature.result,
-                        signature.result_borrow,
+                        signature.result.ty,
+                        signature.result.relation.source().copied(),
                         signature.is_task,
                         signature.requires_associated_generation,
+                        signature.requires_read_view_generation,
                         &signature.effect,
                     )
                 };
             for ty in type_arguments {
                 meter.tick()?;
                 associated |= proof.raw_templates.contains(ty);
+                read_view |= proof.raw_read_view_templates.contains(ty);
             }
             associated |= function.associated_targets.contains(&child);
+            read_view |= function.read_view_targets.contains(&child)
+                || !expression.operation.read_scope_arguments().is_empty();
             associated |= proof.raw_templates.contains(&result);
+            read_view |= proof.raw_read_view_templates.contains(&result);
             for (ty, _) in parameters {
                 meter.tick()?;
                 associated |= proof.raw_templates.contains(ty);
+                read_view |= proof.raw_read_view_templates.contains(ty);
             }
             if !is_task
                 || borrowed.is_some()
                 || !effect.parameters.is_empty()
                 || !effect.requirements.is_empty()
                 || parameters.len() != raw.parameters.len()
-                || associated
-                    && (parent.contract_version
-                        != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
-                        || expression.contract_version
-                            != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
+                || (associated || read_view)
+                    && (!associated_generation_admitted(parent.contract_version, read_view)
+                        || !associated_generation_admitted(expression.contract_version, read_view)
+                        || !associated_generation_admitted(
+                            source.root.graph_contract_version,
+                            read_view,
+                        )
+                        || parent.contract_version > source.root.graph_contract_version
+                        || expression.contract_version > source.root.graph_contract_version)
             {
                 return Err(failure());
             }
@@ -1089,11 +1141,12 @@ pub(super) fn discharge(
                     return Err(failure());
                 };
                 let owned = indexed_owned(schema, sources, *ty, scope, meter)?;
+                let view = schema.is_read_view_type(*ty);
                 if parameter.parent != ParameterParent::Function(target.declaration)
                     || parameter.resource_requirement.is_some()
                     || parameter.use_mode != *use_mode
                     || seen_owned && !owned
-                    || if owned {
+                    || if owned || view {
                         !matches!(use_mode, ParameterUse::Consume | ParameterUse::Borrow)
                     } else {
                         *use_mode != ParameterUse::Unrestricted

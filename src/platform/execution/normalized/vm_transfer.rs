@@ -20,7 +20,9 @@ pub(in super::super) use types::{
 
 #[path = "scoped_read.rs"]
 mod scoped_read;
-pub(in super::super) use scoped_read::{ScopedArgument, ScopedReadCustody, ScopedReadLease};
+pub(in super::super) use scoped_read::{
+    ScopedArgument, ScopedReadCustody, ScopedReadLease, ScopedReadScope,
+};
 
 /// No Clone, payload projection or unchecked constructor. Pending custody owns
 /// both the exact application and every argument, including partial adoptions.
@@ -227,6 +229,54 @@ impl TransferArguments {
                         application,
                         index,
                         &value,
+                        custody,
+                        control,
+                    )?;
+                    (value, Some(lease), true)
+                }
+                (
+                    ParameterUse::Borrow,
+                    ScopedArgument::ReadScoped {
+                        value,
+                        custody,
+                        scopes,
+                    },
+                ) => {
+                    if !validate_shareable_type(program, ty, 0, &mut work)? {
+                        return Err(reject());
+                    }
+                    let lease = ScopedReadLease::seal_with_scopes(
+                        program,
+                        source,
+                        destination,
+                        application,
+                        index,
+                        &value,
+                        custody,
+                        scopes,
+                        control,
+                    )?;
+                    (value, Some(lease), true)
+                }
+                (
+                    ParameterUse::Borrow,
+                    ScopedArgument::View {
+                        value,
+                        source: parent,
+                        custody,
+                    },
+                ) => {
+                    if !validate_shareable_type(program, ty, 0, &mut work)? {
+                        return Err(reject());
+                    }
+                    let lease = ScopedReadLease::seal_view(
+                        program,
+                        source,
+                        destination,
+                        application,
+                        index,
+                        &value,
+                        parent,
                         custody,
                         control,
                     )?;
@@ -508,6 +558,14 @@ fn validate_type(
     work: &mut Work<'_>,
 ) -> Result<bool, ExecutionError> {
     work.visit(depth)?;
+    if program.read_view_layout(ty).is_some()
+        || program
+            .types
+            .get(&ty)
+            .is_some_and(|object| object.form.is_read_view())
+    {
+        return Err(reject());
+    }
     if let Some(layout) = program.owned_record_layout(ty) {
         for argument in layout.arguments.iter() {
             validate_type(program, *argument, depth + 1, work)?;
@@ -546,30 +604,114 @@ fn validate_shareable_type(
     work: &mut Work<'_>,
 ) -> Result<bool, ExecutionError> {
     work.visit(depth)?;
-    if let Some(layout) = program.owned_record_layout(ty) {
-        for argument in layout.arguments.iter() {
-            validate_shareable_type(program, *argument, depth + 1, work)?;
+    if let Some(layout) = program.read_view_layout(ty) {
+        let TypeForm::ReadViewApplied {
+            declaration,
+            arguments,
+            read_scope,
+        } = &program.types.get(&ty).ok_or_else(reject)?.form
+        else {
+            return Err(reject());
+        };
+        if *declaration != layout.declaration
+            || arguments.as_slice() != layout.arguments.as_ref()
+            || *read_scope != layout.read_scope
+            || layout.arguments.len() != layout.type_parameters.len()
+            || layout.arguments.len() != layout.type_parameter_constraints.len()
+        {
+            return Err(reject());
+        }
+        // A positive read contract includes every declared field, including
+        // unused fields and references behind unselected nominal cases.
+        for (argument, constraint) in layout
+            .arguments
+            .iter()
+            .zip(layout.type_parameter_constraints.iter())
+        {
+            work.visit(depth + 1)?;
+            let owned = program.is_owned_type(*argument);
+            if !program.types.contains_key(argument)
+                || program.read_view_layout(*argument).is_some()
+                || owned != constraint.has_owned()
+                || (!owned && !program.buffer_free_types.contains(argument))
+                || (constraint.requires_capture_safe()
+                    && !program.capture_safe_types.contains(argument))
+            {
+                return Err(reject());
+            }
+            if constraint.requires_transfer() {
+                validate_type(program, *argument, depth + 1, work)?;
+            }
+            if constraint.requires_share()
+                && !validate_shareable_owned_child(program, *argument, depth + 1, work)?
+            {
+                return Err(reject());
+            }
         }
         for field in layout.fields.iter() {
-            validate_shareable_type(program, field.ty, depth + 1, work)?;
+            match field.kind {
+                crate::platform::kernel::ReadViewFieldKind::Ordinary => {
+                    if validate_type(program, field.ty, depth + 1, work)? {
+                        return Err(reject());
+                    }
+                }
+                crate::platform::kernel::ReadViewFieldKind::ReadReference { read_scope } => {
+                    if read_scope != layout.read_scope
+                        || !validate_shareable_type(program, field.ty, depth + 1, work)?
+                    {
+                        return Err(reject());
+                    }
+                    if let Some(nested) = program.read_view_layout(field.ty)
+                        && nested.read_scope != read_scope
+                    {
+                        return Err(reject());
+                    }
+                }
+            }
+        }
+        return Ok(true);
+    }
+    if let Some(layout) = program.owned_record_layout(ty) {
+        for argument in layout.arguments.iter() {
+            validate_shareable_owned_child(program, *argument, depth + 1, work)?;
+        }
+        for field in layout.fields.iter() {
+            validate_shareable_owned_child(program, field.ty, depth + 1, work)?;
         }
         return Ok(true);
     }
     match &program.types.get(&ty).ok_or_else(reject)?.form {
         TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Ok(true),
         TypeForm::OwnedSequence { item } => {
-            validate_shareable_type(program, *item, depth + 1, work)?;
+            validate_shareable_owned_child(program, *item, depth + 1, work)?;
             Ok(true)
         }
         TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {
             for field in fields {
-                validate_shareable_type(program, field.ty, depth + 1, work)?;
+                validate_shareable_owned_child(program, field.ty, depth + 1, work)?;
             }
             Ok(true)
         }
         _ if program.comparable_types.contains(&ty) => Ok(false),
         _ => Err(reject()),
     }
+}
+
+fn validate_shareable_owned_child(
+    program: &NormalizedProgram,
+    ty: TypeObjectDigest,
+    depth: usize,
+    work: &mut Work<'_>,
+) -> Result<bool, ExecutionError> {
+    if program.read_view_layout(ty).is_some()
+        || program
+            .types
+            .get(&ty)
+            .is_some_and(|object| object.form.is_read_view())
+    {
+        return Err(reject());
+    }
+    validate_shareable_type(program, ty, depth, work)
 }
 
 fn inspect_value(
@@ -582,6 +724,9 @@ fn inspect_value(
     ordinary: &mut impl FnMut(&NormalizedValue, TypeObjectDigest) -> Result<(), ExecutionError>,
 ) -> Result<(), ExecutionError> {
     work.visit(depth)?;
+    if matches!(value, NormalizedValue::ReadView(_)) {
+        return Err(reject());
+    }
     match (value, &program.types.get(&ty).ok_or_else(reject)?.form) {
         (NormalizedValue::ByteBuffer(token), TypeForm::ByteBuffer) => token.validate(source, true),
         (NormalizedValue::OwnedI64Cell(token), TypeForm::OwnedI64Cell) => {
@@ -667,6 +812,7 @@ fn adopt_value(
 ) -> Result<(), ExecutionError> {
     work.visit(depth)?;
     match value {
+        NormalizedValue::ReadView(_) => Err(reject()),
         NormalizedValue::ByteBuffer(token) => token.adopt_transfer(source, destination),
         NormalizedValue::OwnedI64Cell(token) => token.adopt_transfer(source, destination),
         NormalizedValue::OwnedSequence(token) => {
@@ -705,3 +851,7 @@ fn reject() -> ExecutionError {
 #[cfg(test)]
 #[path = "vm_transfer_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "vm_joined_read_view_tests.rs"]
+mod joined_read_view_tests;

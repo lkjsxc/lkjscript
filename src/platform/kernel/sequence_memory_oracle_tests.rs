@@ -87,6 +87,8 @@ fn dispose(snapshot: &KernelSnapshot, argument: ExpressionId) -> ExpressionOpera
         requirement_arguments: Vec::new(),
         effect_arguments: Vec::new(),
         arguments: vec![argument],
+
+        read_scope_arguments: Vec::new(),
     }
 }
 
@@ -111,7 +113,7 @@ fn sequence_oracle_rejects_counterfeit_views_orphans_and_moved_index_sources() {
         assert!(!accepts(&changed), "forged sequence read view {role:?}");
     }
     let mut changed = snapshot.clone();
-    binding(&mut changed, view).declared_type = Some(function(&snapshot, "read").result);
+    binding(&mut changed, view).declared_type = Some(function(&snapshot, "read").result.ty);
     assert!(
         !accepts(&changed),
         "a sequence view has its exact element type"
@@ -197,7 +199,7 @@ fn sequence_oracle_rejects_wrong_pop_envelopes_and_push_element_types() {
         unreachable!()
     };
     let ty = Oracle(&snapshot, None).local_type(*value).unwrap();
-    let i64 = function(&snapshot, "read").result;
+    let i64 = function(&snapshot, "read").result.ty;
     changed.types.get_mut(&ty).unwrap().form = TypeForm::OwnedSequence { item: i64 };
     assert!(
         !accepts(&changed),

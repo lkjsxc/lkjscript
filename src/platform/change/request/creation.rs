@@ -218,10 +218,19 @@ mod declarations;
 mod mutation;
 pub(super) mod owned;
 #[cfg(test)]
+mod read_view_authoring_tests;
+mod read_views;
+#[cfg(test)]
 mod record_order_tests;
 pub use owned::{
-    AuthoredAssociatedTypeBinding, AuthoredAssociatedTypeMember, AuthoredImplementationOperand,
-    AuthoredImplementationParameter, AuthoredOwnedMethod, AuthoredOwnedMethodImplementation,
+    AuthoredAssociatedTypeBinding, AuthoredAssociatedTypeBindingValue,
+    AuthoredAssociatedTypeMember, AuthoredImplementationOperand, AuthoredImplementationParameter,
+    AuthoredOwnedMethod, AuthoredOwnedMethodImplementation,
+};
+pub use read_views::{
+    AuthoredCallableResult, AuthoredReadScopeArgument, AuthoredReadScopeBinder,
+    AuthoredReadScopeSource, AuthoredReadViewField, AuthoredReadViewFieldInitializer,
+    AuthoredReadViewFieldKind, AuthoredReadViewFieldReference, AuthoredResultRelation,
 };
 
 pub use declarations::{
@@ -317,6 +326,23 @@ pub enum AuthoredFunctionEffect {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredType {
+    ReadViewApplied {
+        declaration: AuthoredDeclarationReference,
+        arguments: Vec<AuthoredType>,
+        read_scope: AuthoredReadScopeArgument,
+    },
+    AssociatedReadViewMember {
+        contract: AuthoredDeclarationReference,
+        member: AssociatedTypeMemberId,
+        read_scope: AuthoredReadScopeArgument,
+    },
+    AssociatedReadViewProjection {
+        scope: AuthoredDeclarationReference,
+        parameter: ImplementationParameterId,
+        contract: AuthoredDeclarationReference,
+        member: AssociatedTypeMemberId,
+        read_scope: AuthoredReadScopeArgument,
+    },
     AssociatedContractMember {
         contract: AuthoredDeclarationReference,
         member: AssociatedTypeMemberId,
@@ -502,6 +528,38 @@ pub struct AuthoredExpression {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredExpressionOperation {
+    CreateReadView {
+        declaration: AuthoredDeclarationReference,
+        type_arguments: Vec<AuthoredType>,
+        read_scope: AuthoredReadScopeArgument,
+        source: AuthoredLocalReference,
+        fields: Vec<AuthoredReadViewFieldInitializer>,
+    },
+    BorrowReadView {
+        value: AuthoredLocalReference,
+        binding: Box<AuthoredBindingDefinition>,
+        body: Box<AuthoredExpression>,
+    },
+    ReborrowReadView {
+        value: AuthoredLocalReference,
+        read_scope: AuthoredReadScopeArgument,
+    },
+    MoveReadView {
+        value: AuthoredLocalReference,
+    },
+    DropReadView {
+        value: AuthoredLocalReference,
+    },
+    ReadViewDataField {
+        value: AuthoredLocalReference,
+        field: AuthoredReadViewFieldReference,
+    },
+    BorrowReadViewField {
+        value: AuthoredLocalReference,
+        field: AuthoredReadViewFieldReference,
+        binding: Box<AuthoredBindingDefinition>,
+        body: Box<AuthoredExpression>,
+    },
     BorrowCall {
         call: Box<AuthoredExpression>,
         binding: Box<AuthoredBindingDefinition>,
@@ -597,6 +655,7 @@ pub enum AuthoredExpressionOperation {
     ImplementationCall {
         function: AuthoredDeclarationReference,
         type_arguments: Vec<AuthoredType>,
+        read_scope_arguments: Vec<AuthoredReadScopeArgument>,
         effect_arguments: Vec<AuthoredEffectRow>,
         requirement_arguments: Vec<AuthoredRequirementReference>,
         implementations: Vec<AuthoredImplementationOperand>,
@@ -606,6 +665,7 @@ pub enum AuthoredExpressionOperation {
         witness: AuthoredImplementationOperand,
         contract: AuthoredDeclarationReference,
         method: crate::platform::semantic_id::MethodId,
+        read_scope_arguments: Vec<AuthoredReadScopeArgument>,
         arguments: Vec<AuthoredExpression>,
     },
     Unit {},
@@ -647,6 +707,7 @@ pub enum AuthoredExpressionOperation {
         effect_arguments: Vec<AuthoredEffectRow>,
         function: AuthoredDeclarationReference,
         type_arguments: Vec<AuthoredType>,
+        read_scope_arguments: Vec<AuthoredReadScopeArgument>,
         arguments: Vec<AuthoredExpression>,
     },
     FunctionValue {
@@ -654,6 +715,7 @@ pub enum AuthoredExpressionOperation {
         effect_arguments: Vec<AuthoredEffectRow>,
         function: AuthoredDeclarationReference,
         type_arguments: Vec<AuthoredType>,
+        read_scope_arguments: Vec<AuthoredReadScopeArgument>,
     },
     Invoke {
         callee: Box<AuthoredExpression>,
@@ -827,6 +889,20 @@ pub(super) fn collect_expression_symbols(
         let next = depth + 1;
         // Reverse pushes preserve the original preorder and per-kind allocation ordinals.
         match &expression.operation {
+            AuthoredExpressionOperation::CreateReadView { fields, .. } => {
+                for field in fields.iter().rev() {
+                    stack.push(Visit::Expression(&field.value, next));
+                }
+            }
+            AuthoredExpressionOperation::BorrowReadView { binding, body, .. }
+            | AuthoredExpressionOperation::BorrowReadViewField { binding, body, .. } => {
+                stack.push(Visit::Expression(body, next));
+                stack.push(Visit::Binding(&binding.symbol, SymbolKind::LexicalBinding));
+            }
+            AuthoredExpressionOperation::ReborrowReadView { .. }
+            | AuthoredExpressionOperation::MoveReadView { .. }
+            | AuthoredExpressionOperation::DropReadView { .. }
+            | AuthoredExpressionOperation::ReadViewDataField { .. } => {}
             AuthoredExpressionOperation::BorrowCall {
                 call,
                 binding,
@@ -1042,8 +1118,9 @@ pub(super) fn lower_function<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead +
     visibility: DeclarationVisibility,
     type_parameters: &[AuthoredTypeParameter],
     parameters: &[AuthoredParameter],
-    result: &AuthoredType,
-    result_borrow: Option<&AuthoredLocalReference>,
+    result: &AuthoredCallableResult<AuthoredLocalReference>,
+    read_scope_parameters: &[crate::platform::kernel::ReadScopeParameter],
+    read_scope_sources: &[AuthoredReadScopeSource<AuthoredLocalReference>],
     effect: &AuthoredFunctionEffect,
     body: &AuthoredExpression,
 ) -> Result<(), Diagnostic> {
@@ -1079,10 +1156,9 @@ pub(super) fn lower_function<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead +
             resource_requirement,
         }))?;
     }
-    let result = lowerer.lower_type(result)?;
-    let result_borrow = result_borrow
-        .map(|source| lowerer.lower_result_borrow(source))
-        .transpose()?;
+    let result = lowerer.lower_named_result(result)?;
+    let read_scope_parameters = lowerer.lower_read_scope_parameters(read_scope_parameters)?;
+    let read_scope_sources = lowerer.lower_named_scope_sources(read_scope_sources)?;
     let effect = lowerer.lower_effect(effect)?;
     let body = lowerer.lower_expression(body)?;
     let kind = match effect {
@@ -1101,7 +1177,8 @@ pub(super) fn lower_function<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead +
             type_parameters: type_parameter_ids,
             parameters: parameter_ids,
             result,
-            result_borrow,
+            read_scope_parameters,
+            read_scope_sources,
             effect,
             body,
         }),
@@ -1144,6 +1221,37 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         authored: &AuthoredType,
     ) -> Result<TypeObjectDigest, Diagnostic> {
         let form = match authored {
+            AuthoredType::ReadViewApplied {
+                declaration,
+                arguments,
+                read_scope,
+            } => TypeForm::ReadViewApplied {
+                declaration: self.lower_declaration_reference(declaration)?,
+                arguments: self.lower_types(arguments)?,
+                read_scope: self.lower_read_scope(read_scope)?,
+            },
+            AuthoredType::AssociatedReadViewMember {
+                contract,
+                member,
+                read_scope,
+            } => TypeForm::AssociatedReadViewMember {
+                contract: self.lower_declaration_reference(contract)?,
+                member: *member,
+                read_scope: self.lower_read_scope(read_scope)?,
+            },
+            AuthoredType::AssociatedReadViewProjection {
+                scope,
+                parameter,
+                contract,
+                member,
+                read_scope,
+            } => TypeForm::AssociatedReadViewProjection {
+                scope: self.lower_declaration_reference(scope)?,
+                parameter: *parameter,
+                contract: self.lower_declaration_reference(contract)?,
+                member: *member,
+                read_scope: self.lower_read_scope(read_scope)?,
+            },
             AuthoredType::AssociatedContractMember { contract, member } => {
                 TypeForm::AssociatedContractMember {
                     contract: self.lower_declaration_reference(contract)?,
@@ -1479,6 +1587,93 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
     ) -> Result<crate::platform::semantic_id::ExpressionId, Diagnostic> {
         let id = self.expression_identity(authored.symbol.as_deref())?;
         let operation = match &authored.operation {
+            AuthoredExpressionOperation::CreateReadView {
+                declaration,
+                type_arguments,
+                read_scope,
+                source,
+                fields,
+            } => {
+                self.admit_associated_inventory(fields.len())?;
+                let mut lowered = Vec::new();
+                lowered
+                    .try_reserve_exact(fields.len())
+                    .map_err(|_| owned::associated_capacity())?;
+                for field in fields {
+                    self.base.validation_checkpoint()?;
+                    lowered.push(crate::platform::kernel::ReadViewFieldInitializer {
+                        field: field.field,
+                        value: self.lower_expression(&field.value)?,
+                    });
+                }
+                ExpressionOperation::CreateReadView {
+                    declaration: self.lower_declaration_reference(declaration)?,
+                    type_arguments: self.lower_types(type_arguments)?,
+                    read_scope: self.lower_read_scope(read_scope)?,
+                    source: self.lower_local_reference(source)?,
+                    fields: lowered,
+                }
+            }
+            AuthoredExpressionOperation::BorrowReadView {
+                value,
+                binding,
+                body,
+            } => ExpressionOperation::BorrowReadView {
+                value: self.lower_local_reference(value)?,
+                binding: self.lower_view_read_binding(
+                    binding,
+                    crate::platform::kernel::BindingKind::ReadViewBorrow,
+                )?,
+                body: self.lower_expression(body)?,
+            },
+            AuthoredExpressionOperation::ReborrowReadView { value, read_scope } => {
+                ExpressionOperation::ReborrowReadView {
+                    value: self.lower_local_reference(value)?,
+                    read_scope: self.lower_read_scope(read_scope)?,
+                }
+            }
+            AuthoredExpressionOperation::MoveReadView { value } => {
+                ExpressionOperation::MoveReadView {
+                    value: self.lower_local_reference(value)?,
+                }
+            }
+            AuthoredExpressionOperation::DropReadView { value } => {
+                ExpressionOperation::DropReadView {
+                    value: self.lower_local_reference(value)?,
+                }
+            }
+            AuthoredExpressionOperation::ReadViewDataField { value, field } => {
+                ExpressionOperation::ReadViewDataField {
+                    value: self.lower_local_reference(value)?,
+                    field: self.lower_view_field_reference(field)?,
+                }
+            }
+            AuthoredExpressionOperation::BorrowReadViewField {
+                value,
+                field,
+                binding,
+                body,
+            } => {
+                let declared = binding
+                    .declared_type
+                    .as_ref()
+                    .map(|ty| self.lower_type(ty))
+                    .transpose()?;
+                let kind = if declared
+                    .and_then(|ty| self.types.get(ty))
+                    .is_some_and(|ty| ty.form.is_read_view())
+                {
+                    crate::platform::kernel::BindingKind::ReadViewBorrow
+                } else {
+                    crate::platform::kernel::BindingKind::OwnedBorrow
+                };
+                ExpressionOperation::BorrowReadViewField {
+                    value: self.lower_local_reference(value)?,
+                    field: self.lower_view_field_reference(field)?,
+                    binding: self.lower_view_read_binding(binding, kind)?,
+                    body: self.lower_expression(body)?,
+                }
+            }
             AuthoredExpressionOperation::BorrowCall {
                 call,
                 binding,
@@ -1491,11 +1686,19 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                     .as_ref()
                     .map(|ty| self.lower_type(ty))
                     .transpose()?;
+                let kind = if declared_type
+                    .and_then(|ty| self.types.get(ty))
+                    .is_some_and(|ty| ty.form.is_read_view())
+                {
+                    crate::platform::kernel::BindingKind::ReadView
+                } else {
+                    crate::platform::kernel::BindingKind::OwnedBorrow
+                };
                 self.insert_created(OwnerRecord::Binding(
                     crate::platform::kernel::BindingRecord {
                         header: OwnerHeader::new(OwnerKey::Binding(id), OwnerKind::Binding),
                         name: binding.name.clone(),
-                        kind: crate::platform::kernel::BindingKind::OwnedBorrow,
+                        kind,
                         value: None,
                         declared_type,
                     },
@@ -1613,6 +1816,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             AuthoredExpressionOperation::ImplementationCall {
                 function,
                 type_arguments,
+                read_scope_arguments,
                 effect_arguments,
                 requirement_arguments,
                 implementations,
@@ -1620,6 +1824,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             } => ExpressionOperation::ImplementationCall {
                 function: self.lower_declaration_reference(function)?,
                 type_arguments: self.lower_types(type_arguments)?,
+                read_scope_arguments: self.lower_read_scopes(read_scope_arguments)?,
                 effect_arguments: self.lower_effect_rows(effect_arguments)?,
                 requirement_arguments: requirement_arguments
                     .iter()
@@ -1635,11 +1840,13 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 witness,
                 contract,
                 method,
+                read_scope_arguments,
                 arguments,
             } => ExpressionOperation::MethodCall {
                 witness: self.lower_implementation_operand(witness)?,
                 contract: self.lower_declaration_reference(contract)?,
                 method: *method,
+                read_scope_arguments: self.lower_read_scopes(read_scope_arguments)?,
                 arguments: self.lower_expressions(arguments)?,
             },
             AuthoredExpressionOperation::Unit {} => ExpressionOperation::Unit {},
@@ -1929,11 +2136,19 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                         .as_ref()
                         .map(|value| self.lower_type(value))
                         .transpose()?;
+                    let kind = if declared_type
+                        .and_then(|ty| self.types.get(ty))
+                        .is_some_and(|ty| ty.form.is_read_view())
+                    {
+                        crate::platform::kernel::BindingKind::ReadView
+                    } else {
+                        crate::platform::kernel::BindingKind::Let
+                    };
                     self.insert_created(OwnerRecord::Binding(
                         crate::platform::kernel::BindingRecord {
                             header: OwnerHeader::new(OwnerKey::Binding(id), OwnerKind::Binding),
                             name: binding.name.clone(),
-                            kind: crate::platform::kernel::BindingKind::Let,
+                            kind,
                             value: Some(value),
                             declared_type,
                         },
@@ -1953,6 +2168,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 effect_arguments,
                 function,
                 type_arguments,
+                read_scope_arguments,
                 arguments,
             } => ExpressionOperation::Call {
                 requirement_arguments: requirement_arguments
@@ -1962,6 +2178,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 effect_arguments: self.lower_effect_rows(effect_arguments)?,
                 function: self.lower_declaration_reference(function)?,
                 type_arguments: self.lower_types(type_arguments)?,
+                read_scope_arguments: self.lower_read_scopes(read_scope_arguments)?,
                 arguments: self.lower_expressions(arguments)?,
             },
             AuthoredExpressionOperation::FunctionValue {
@@ -1969,6 +2186,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 effect_arguments,
                 function,
                 type_arguments,
+                read_scope_arguments,
             } => ExpressionOperation::FunctionValue {
                 requirement_arguments: requirement_arguments
                     .iter()
@@ -1977,6 +2195,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 effect_arguments: self.lower_effect_rows(effect_arguments)?,
                 function: self.lower_declaration_reference(function)?,
                 type_arguments: self.lower_types(type_arguments)?,
+                read_scope_arguments: self.lower_read_scopes(read_scope_arguments)?,
             },
             AuthoredExpressionOperation::Invoke { callee, arguments } => {
                 ExpressionOperation::Invoke {

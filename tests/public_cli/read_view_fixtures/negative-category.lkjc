@@ -1,0 +1,10 @@
+declarations.begin
+(units
+  (module create bad-category
+    (record create Phantom (visibility private)
+      (type-parameter create T) (field create tag (type I64)))
+    (function create ignored (visibility private) (effect pure)
+      (scope-parameter read_scope_d8600000000000000000000000000004 s)
+      (parameter create hidden (type CATEGORY))
+      (returns Unit (value)) (body (unit)))))
+declarations.end

@@ -474,6 +474,7 @@ pub(crate) fn complete_expression_snapshot() -> crate::platform::kernel::KernelS
         ExpressionOperation::FunctionValue {
             requirement_arguments: Vec::new(),
             effect_arguments: Vec::new(),
+            read_scope_arguments: Vec::new(),
             function: crate::platform::kernel::DeclarationReference {
                 package,
                 declaration: callee,
@@ -487,6 +488,7 @@ pub(crate) fn complete_expression_snapshot() -> crate::platform::kernel::KernelS
         ExpressionOperation::FunctionValue {
             requirement_arguments: Vec::new(),
             effect_arguments: Vec::new(),
+            read_scope_arguments: Vec::new(),
             function: crate::platform::kernel::DeclarationReference {
                 package,
                 declaration: callee,
@@ -1104,7 +1106,7 @@ fn compiler_unit_decoder_rejects_foreign_identity_predecessor_and_bad_dense_inde
         );
     }
 
-    for generation in 10..COMPILER_UNIT_CONTRACT_VERSION {
+    for generation in 10..33 {
         let magic = format!("LKJCUN{generation}");
         let mut previous = receipt.bytes.clone();
         previous[..8].copy_from_slice(magic.as_bytes());
@@ -1116,6 +1118,18 @@ fn compiler_unit_decoder_rejects_foreign_identity_predecessor_and_bad_dense_inde
             "compiler_unit_contract"
         );
     }
+
+    // Genuine33 has a strict frozen reader. Relabeling current34 bytes as33
+    // still fails its exact envelope checksum before gaining predecessor meaning.
+    let mut mislabeled = receipt.bytes.clone();
+    mislabeled[..8].copy_from_slice(&super::unit::FROZEN_COMPILER_UNIT_MAGIC);
+    let mislabeled_key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &mislabeled);
+    let error = CompilationUnit::decode(&mislabeled, mislabeled_key).unwrap_err();
+    assert_eq!(error.code, "packed_checksum");
+    assert_eq!(
+        error.class,
+        crate::platform::diagnostic::DiagnosticClass::Corrupt
+    );
 
     let mut invalid = receipt.unit;
     let CompilationPayload::Function { code, .. } = &mut invalid.payload else {
@@ -2718,7 +2732,8 @@ impl PayloadCodes for CompilationPayload {
             Self::Test {
                 actual, expected, ..
             } => Box::new([actual, expected].into_iter()),
-            Self::OwnedContract(_)
+            Self::ReadView { .. }
+            | Self::OwnedContract(_)
             | Self::OwnedImplementation(_)
             | Self::OwnedRecord { .. }
             | Self::Record { .. }

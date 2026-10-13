@@ -213,6 +213,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
     };
     let (length, length_declaration) = find("core.list.length");
     let length_closure = |ty, elements| NormalizedValue::Function {
+        read_scope_arguments: Arc::from([]),
         requirement_arguments: std::sync::Arc::from([]),
         effect_arguments: Arc::from([]),
         function: length,
@@ -270,7 +271,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
         .find(|(_, function)| {
             function.type_parameters.is_empty()
                 && function.parameters.len() == 2
-                && function.result == integer
+                && function.result.ty == integer
                 && function
                     .parameters
                     .iter()
@@ -298,6 +299,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
         .map(|(index, _)| FunctionIndex(u32::try_from(index).unwrap(), program.value_origin))
         .unwrap();
     let leaf = || NormalizedValue::Function {
+        read_scope_arguments: Arc::from([]),
         requirement_arguments: std::sync::Arc::from([]),
         effect_arguments: Arc::from([]),
         function: add,
@@ -308,6 +310,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
         let mut value = leaf();
         for _ in 0..count {
             value = NormalizedValue::Function {
+                read_scope_arguments: Arc::from([]),
                 requirement_arguments: std::sync::Arc::from([]),
                 effect_arguments: Arc::from([]),
                 function: helper,
@@ -474,6 +477,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                 "wrong-prefix",
                 unary,
                 NormalizedValue::Function {
+                    read_scope_arguments: Arc::from([]),
                     requirement_arguments: std::sync::Arc::from([]),
                     effect_arguments: Arc::from([]),
                     function: add,
@@ -485,6 +489,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                 "too-long-prefix",
                 unary,
                 NormalizedValue::Function {
+                    read_scope_arguments: Arc::from([]),
                     requirement_arguments: std::sync::Arc::from([]),
                     effect_arguments: Arc::from([]),
                     function: add,
@@ -496,6 +501,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                 "noncanonical-empty",
                 unary,
                 NormalizedValue::Function {
+                    read_scope_arguments: Arc::from([]),
                     requirement_arguments: std::sync::Arc::from([]),
                     effect_arguments: Arc::from([]),
                     function: add,
@@ -507,6 +513,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                 "unexpected-substitution",
                 unary,
                 NormalizedValue::Function {
+                    read_scope_arguments: Arc::from([]),
                     requirement_arguments: std::sync::Arc::from([]),
                     effect_arguments: Arc::from([]),
                     function: add,
@@ -519,6 +526,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                 "absent-target",
                 unary,
                 NormalizedValue::Function {
+                    read_scope_arguments: Arc::from([]),
                     requirement_arguments: std::sync::Arc::from([]),
                     effect_arguments: Arc::from([]),
                     function: FunctionIndex(u32::MAX, program.value_origin),
@@ -530,6 +538,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                 "foreign-origin",
                 unary,
                 NormalizedValue::Function {
+                    read_scope_arguments: Arc::from([]),
                     requirement_arguments: std::sync::Arc::from([]),
                     effect_arguments: Arc::from([]),
                     function: FunctionIndex(add.0, ValueOrigin::default()),
@@ -567,13 +576,17 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                 "nested environment {depth}, reference {reference}"
             );
             if let Err(error) = result {
+                // Complete negative view inspection precedes captured environment
+                // admission; the same depth-256 boundary applies to both engines.
                 assert_eq!(
-                    error.code,
-                    if reference {
-                        "normalized_reference_value_depth"
-                    } else {
-                        "normalized_value_depth"
-                    }
+                    error.class,
+                    crate::platform::execution::ExecutionFailureClass::Resource
+                );
+                assert_eq!(error.code, "normalized_value_depth");
+                assert!(
+                    error
+                        .message
+                        .contains("view escape inspection exceeds finite value depth 256")
                 );
             }
         }
@@ -634,6 +647,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
 fn aggregate_equality_cannot_skip_a_callable_after_an_unequal_prefix_or_shape() {
     let (program, _) = fixture();
     let callable = NormalizedValue::Function {
+        read_scope_arguments: Arc::from([]),
         requirement_arguments: std::sync::Arc::from([]),
         effect_arguments: Arc::from([]),
         function: FunctionIndex(0, program.value_origin),
@@ -1226,17 +1240,32 @@ fn admission_limits_and_deterministic_cancellation_retain_progress_and_allow_reu
             if depth == 255 {
                 assert_eq!(result.0.unwrap(), NormalizedValue::I64(1));
             } else {
+                let error = result.0.unwrap_err();
                 assert_eq!(
-                    result.0.unwrap_err().code,
-                    if reference {
-                        "normalized_reference_value_depth"
-                    } else {
-                        "normalized_value_depth"
-                    }
+                    error.class,
+                    crate::platform::execution::ExecutionFailureClass::Resource
+                );
+                assert_eq!(error.code, "normalized_value_depth");
+                assert!(
+                    error
+                        .message
+                        .contains("view escape inspection exceeds finite value depth 256")
                 );
             }
         }
-        let cancelled = ExecutionControl::cancel_after_checks(37);
+        // Check-count cancellation covers the earlier complete negative guard.
+        // It cannot stand in for a deterministic partial input-admission probe.
+        let (early, early_work, _) = invoke(
+            reference,
+            integer,
+            list(4096),
+            Default::default(),
+            &ExecutionControl::cancel_after_checks(37),
+        );
+        assert_eq!(early.unwrap_err().code, "execution_cancelled");
+        assert_eq!(early_work.input_admission_nodes, 0);
+        assert_eq!(early_work.raw_result_admission_nodes, 0);
+        let cancelled = ExecutionControl::cancel_after_input_nodes(37);
         let (result, work, _) = invoke(
             reference,
             integer,
@@ -1245,7 +1274,7 @@ fn admission_limits_and_deterministic_cancellation_retain_progress_and_allow_reu
             &cancelled,
         );
         assert_eq!(result.unwrap_err().code, "execution_cancelled");
-        assert!(work.input_admission_nodes > 0 && work.input_admission_nodes < 4097);
+        assert_eq!(work.input_admission_nodes, 37);
         assert_eq!(work.raw_result_admission_nodes, 0);
         println!(
             "{}",
@@ -1498,6 +1527,7 @@ fn independent_oracle_covers_scalar_and_nominal_constructors_and_foreign_callbac
         .unwrap();
     let foreign = NormalizedProgram::prepare(program.artifact().clone()).unwrap();
     let invalid_callback = NormalizedValue::Function {
+        read_scope_arguments: Arc::from([]),
         requirement_arguments: std::sync::Arc::from([]),
         effect_arguments: Arc::from([]),
         function: FunctionIndex(0, foreign.value_origin),
@@ -1614,6 +1644,7 @@ fn constrained_raw_factory_checks_types_and_real_environments_before_body() {
     let length = program.functions.iter().enumerate().find(|(_, function)| function.type_parameters.len() == 1 && function.parameters.len() == 1 && matches!(&function.body, super::super::super::prepare::NormalizedFunctionBody::External(name) if name.as_str() == "core.list.length"))
         .map(|(i,_)| FunctionIndex(u32::try_from(i).unwrap(), program.value_origin)).unwrap();
     let hidden = || NormalizedValue::Function {
+        read_scope_arguments: Arc::from([]),
         requirement_arguments: std::sync::Arc::from([]),
         effect_arguments: Arc::from([]),
         function: length,

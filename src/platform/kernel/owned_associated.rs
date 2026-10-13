@@ -10,6 +10,16 @@ use crate::platform::semantic_id::{
 use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 
+#[path = "read_view_admission.rs"]
+pub(crate) mod read_view_admission;
+
+#[path = "read_view_admission_aggregate.rs"]
+mod read_view_admission_aggregate;
+
+#[cfg(test)]
+#[path = "read_view_admission_tests.rs"]
+mod read_view_admission_tests;
+
 #[cfg(test)]
 #[path = "owned_associated_tests.rs"]
 mod tests;
@@ -17,14 +27,27 @@ mod tests;
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum AssociatedTypeContext {
     ContractSignature(DeclarationReference),
+    ContractMethod {
+        contract: DeclarationReference,
+        method: crate::platform::semantic_id::MethodId,
+    },
     Lexical(DeclarationReference),
+    ReadViewDeclaration(DeclarationReference),
+    AssociatedBinding {
+        implementation: DeclarationReference,
+        member: AssociatedTypeMemberId,
+    },
     Forbidden,
 }
 
 impl AssociatedTypeContext {
-    fn scope(self) -> Option<DeclarationReference> {
+    pub(crate) fn scope(self) -> Option<DeclarationReference> {
         match self {
-            Self::ContractSignature(scope) | Self::Lexical(scope) => Some(scope),
+            Self::ContractSignature(scope)
+            | Self::Lexical(scope)
+            | Self::ReadViewDeclaration(scope) => Some(scope),
+            Self::ContractMethod { contract, .. } => Some(contract),
+            Self::AssociatedBinding { implementation, .. } => Some(implementation),
             Self::Forbidden => None,
         }
     }
@@ -123,6 +146,16 @@ impl Default for AssociatedAdmissionLimits {
 /// under the implementation's lexical scope. No derived object is allocated here.
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) enum AssociatedResolution {
+    ReadViewBinding {
+        template: TypeObjectDigest,
+        bindings: BTreeMap<TypeParameterId, TypeObjectDigest>,
+        scope_parameter: ReadScopeReference,
+        scope: ReadScopeArgument,
+    },
+    ReadViewLexical {
+        form: TypeForm,
+        scope: ReadScopeArgument,
+    },
     Binding {
         implementation: DeclarationReference,
         template: TypeObjectDigest,
@@ -148,7 +181,12 @@ struct AssociatedRead<'a, R: ?Sized> {
     admission: &'a OwnedAssociatedAdmission,
 }
 
-type WalkContext = (AssociatedTypeContext, Option<DeclarationReference>, u16);
+type WalkContext = (
+    AssociatedTypeContext,
+    Option<DeclarationReference>,
+    u16,
+    bool,
+);
 type WalkPending = (TypeObjectDigest, usize, usize);
 
 /// Coordinates are local to one immutable traversal. They retain every authority
@@ -233,6 +271,23 @@ fn exhausted(message: &'static str) -> Diagnostic {
 }
 
 impl OwnedAssociatedAdmission {
+    pub(crate) fn validate_aggregate_type_at(
+        &self,
+        read: &(impl ExpressionRead + ?Sized),
+        owner: DeclarationReference,
+        record: &OwnerRecord,
+        roots: &[TypeObjectDigest],
+    ) -> Result<(), Diagnostic> {
+        read_view_admission_aggregate::validate(read, owner, record, roots, self)
+    }
+    /// View, witness and Owned occurrence admission share one cumulative meter.
+    pub(crate) fn step(&self, read: &(impl ExpressionRead + ?Sized)) -> Result<(), Diagnostic> {
+        AssociatedRead {
+            read,
+            admission: self,
+        }
+        .validation_work()
+    }
     pub(crate) fn new() -> Self {
         Self::with_limits(AssociatedAdmissionLimits::default())
     }
@@ -380,10 +435,18 @@ impl OwnedAssociatedAdmission {
             admission: self,
         };
         session.validate_form(form, source_context, consumer_generation)?;
-        let TypeForm::AssociatedContractMember { contract, member } = form else {
-            return Err(reject(
-                "own-definition selection requires a contract-local member",
-            ));
+        let (contract, member, read_scope) = match form {
+            TypeForm::AssociatedContractMember { contract, member } => (contract, member, None),
+            TypeForm::AssociatedReadViewMember {
+                contract,
+                member,
+                read_scope,
+            } => (contract, member, Some(*read_scope)),
+            _ => {
+                return Err(reject(
+                    "own-definition selection requires a contract-local member",
+                ));
+            }
         };
         if *contract != implementation.contract {
             return Err(reject(
@@ -396,9 +459,44 @@ impl OwnedAssociatedAdmission {
             .iter()
             .find(|binding| binding.member == *member)
             .ok_or_else(|| reject("own-definition selection has no exact member binding"))?;
+        if let Some(scope) = read_scope {
+            let AssociatedTypeBindingValue::ReadViewFamily {
+                scope_parameter,
+                ty,
+            } = &binding.value
+            else {
+                return Err(reject(
+                    "selected member has no exact read-view family binding",
+                ));
+            };
+            self.reserve::<(TypeParameterId, TypeObjectDigest)>(
+                implementation.type_parameters.len(),
+            )?;
+            let mut bindings = BTreeMap::new();
+            for parameter in &implementation.type_parameters {
+                session.validation_work()?;
+                let object = TypeObject::new(TypeForm::TypeParameter {
+                    parameter: *parameter,
+                })?;
+                let digest = encode_type_object(&object)?.0;
+                bindings.insert(*parameter, digest);
+            }
+            return Ok(AssociatedResolution::ReadViewBinding {
+                template: *ty,
+                bindings,
+                scope_parameter: ReadScopeReference {
+                    binder: ReadScopeBinder::AssociatedBinding {
+                        implementation: implementation_scope,
+                        member: *member,
+                    },
+                    parameter: scope_parameter.id,
+                },
+                scope,
+            });
+        }
         Ok(AssociatedResolution::DefinitionTemplate {
             implementation: implementation_scope,
-            template: binding.ty,
+            template: binding.ty(),
         })
     }
 
@@ -463,11 +561,11 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
     }
 
     fn current_generation(&self, generation: u16) -> Result<(), Diagnostic> {
-        if generation != contract::GRAPH_CONTRACT_VERSION {
+        if !matches!(generation, 33 | 34) {
             return Err(Diagnostic::new(
                 DiagnosticClass::Semantic,
                 "kernel_owned_associated_generation",
-                "associated type use requires Graph 33 at its consuming owner",
+                "associated type use requires supported Graph 33 or 34 at its consuming owner",
             ));
         }
         Ok(())
@@ -510,6 +608,15 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
         reference: DeclarationReference,
         member: AssociatedTypeMemberId,
     ) -> Result<(), Diagnostic> {
+        self.member_kind(reference, member, false)
+    }
+
+    fn member_kind(
+        &self,
+        reference: DeclarationReference,
+        member: AssociatedTypeMemberId,
+        view: bool,
+    ) -> Result<(), Diagnostic> {
         let record = self.declaration(reference)?;
         self.current_generation(record.header.contract_version)?;
         if record.header.kind != OwnerKind::OwnedContract {
@@ -518,11 +625,22 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
             ));
         }
         let contract = owned_contract::contract_record(self, reference)?;
-        if self.member_inventory(&contract)?.contains(&member) {
-            Ok(())
-        } else {
-            Err(reject("member is absent from its exact contract inventory"))
+        self.member_inventory(&contract)?;
+        for entry in &contract.associated_types {
+            self.validation_work()?;
+            if entry.id == member {
+                if matches!(&entry.bound, AssociatedTypeBound::ReadViewFamily { .. }) != view {
+                    return Err(reject(
+                        "associated member kind differs from its exact type form",
+                    ));
+                }
+                if view {
+                    read_view_admission::require_generation(record.header.contract_version)?;
+                }
+                return Ok(());
+            }
         }
+        Err(reject("member is absent from its exact contract inventory"))
     }
 
     fn member_inventory(
@@ -543,8 +661,9 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
                     "associated members require distinct identities and names",
                 ));
             }
-            match entry.bound {
+            match &entry.bound {
                 AssociatedTypeBound::Owned => {}
+                AssociatedTypeBound::ReadViewFamily { .. } => {}
             }
         }
         Ok(ids)
@@ -634,7 +753,9 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
         match form {
             TypeForm::AssociatedContractMember { contract, member } => {
                 self.current_generation(consumer_generation)?;
-                if context != AssociatedTypeContext::ContractSignature(*contract) {
+                if context != AssociatedTypeContext::ContractSignature(*contract)
+                    && !matches!(context, AssociatedTypeContext::ContractMethod { contract: owner, .. } if owner == *contract)
+                {
                     return Err(reject(
                         "contract-local member is outside its exact method-signature context",
                     ));
@@ -655,6 +776,60 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
                 }
                 self.lexical_parameter(*scope, *parameter, *contract)?;
                 self.member(*contract, *member)
+            }
+            TypeForm::ReadViewApplied { read_scope, .. }
+            | TypeForm::AssociatedReadViewMember { read_scope, .. }
+            | TypeForm::AssociatedReadViewProjection { read_scope, .. } => {
+                read_view_admission::require_generation(consumer_generation)?;
+                match *read_scope {
+                    ReadScopeArgument::Lexical { callable, binding } => {
+                        read_view_admission::lexical_owner(
+                            self.read,
+                            callable,
+                            binding,
+                            context,
+                            self.admission,
+                        )?;
+                    }
+                    _ => {
+                        let live_loans = BTreeSet::new();
+                        read_view_admission::ScopeAuthority {
+                            binder: read_view_admission::binder(context),
+                            lexical: read_view_admission::lexical(context),
+                            live_loans: &live_loans,
+                        }
+                        .validate(self, *read_scope, self.admission)?;
+                    }
+                }
+                match form {
+                    TypeForm::AssociatedReadViewMember {
+                        contract, member, ..
+                    } => {
+                        if !matches!(context, AssociatedTypeContext::ContractMethod { contract: owner, .. } if owner == *contract)
+                        {
+                            return Err(reject(
+                                "read-view member escaped its exact contract method context",
+                            ));
+                        }
+                        self.member_kind(*contract, *member, true)
+                    }
+                    TypeForm::AssociatedReadViewProjection {
+                        scope,
+                        parameter,
+                        contract,
+                        member,
+                        ..
+                    } => {
+                        if context != AssociatedTypeContext::Lexical(*scope) {
+                            return Err(reject(
+                                "read-view projection escaped its exact lexical witness scope",
+                            ));
+                        }
+                        self.lexical_parameter(*scope, *parameter, *contract)?;
+                        self.member_kind(*contract, *member, true)
+                    }
+                    _ => Ok(()),
+                }
             }
             _ => Ok(()),
         }
@@ -681,13 +856,22 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
         let mut pending = WalkQueue::new(self.admission);
         for ty in roots {
             self.validation_work()?;
-            pending.push(*ty, 0, (context, context.scope(), consumer_generation))?;
+            pending.push(
+                *ty,
+                0,
+                (
+                    context,
+                    context.scope(),
+                    consumer_generation,
+                    context != AssociatedTypeContext::Forbidden,
+                ),
+            )?;
         }
         let mut depths = BTreeMap::new();
         let mut expanded_nominals = BTreeSet::new();
         while let Some((ty, depth, context_id)) = pending.pop() {
             self.validation_work()?;
-            let (context, parameter_scope, generation) = pending.contexts[context_id];
+            let (context, parameter_scope, generation, view_allowed) = pending.contexts[context_id];
             if depth > self.admission.limits.maximum_depth {
                 return Err(exhausted(
                     "associated type traversal exceeds its depth admission",
@@ -705,12 +889,33 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
                 .type_object(ty)?
                 .ok_or_else(|| reject("missing associated type closure object"))?;
             object.validate_local()?;
+            if read_view_admission::direct(&object.form) {
+                read_view_admission::require_generation(generation)?;
+                if !view_allowed {
+                    return Err(reject(
+                        "read view escaped into a container, descriptor or forbidden occurrence",
+                    ));
+                }
+            }
             if projection_free && object.form.is_associated() {
                 return Err(reject(
                     "stored associated binding contains an associated type form",
                 ));
             }
             self.validate_form(&object.form, context, generation)?;
+            if matches!(object.form, TypeForm::ReadViewApplied { .. }) {
+                read_view_admission::validate_nominal_at(
+                    self.read,
+                    ty,
+                    OwnedTypeOccurrence {
+                        parameters: parameter_scope
+                            .map_or(TypeParameterContext::Closed, TypeParameterContext::Authored),
+                        associated: context,
+                        consumer_generation: generation,
+                    },
+                    self.admission,
+                )?;
+            }
             if projection_free && let TypeForm::TypeParameter { parameter } = object.form {
                 let scope = parameter_scope
                     .ok_or_else(|| reject("binding parameter has no exact scheme scope"))?;
@@ -758,7 +963,11 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
             self.reserve::<TypeObjectDigest>(object.child_type_count())?;
             for child in object.child_types() {
                 self.validation_work()?;
-                pending.push(child, child_depth, (context, parameter_scope, generation))?;
+                pending.push(
+                    child,
+                    child_depth,
+                    (context, parameter_scope, generation, false),
+                )?;
             }
             if let TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } =
                 object.form
@@ -770,7 +979,7 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
                 if !expanded_nominals.contains(&declaration) {
                     self.reserve::<DeclarationReference>(1)?;
                     expanded_nominals.insert(declaration);
-                    self.nominal_children(declaration, child_depth, &mut pending)?;
+                    self.nominal_children(declaration, child_depth, projection_free, &mut pending)?;
                 }
             }
         }
@@ -783,9 +992,15 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
         &self,
         reference: DeclarationReference,
         depth: usize,
+        projection_free: bool,
         pending: &mut WalkQueue<'_>,
     ) -> Result<(), Diagnostic> {
         self.validation_work()?;
+        // The exact raw declaration is needed for stored-RHS parameter membership.
+        // In a non-projection-free absence walk, Forbidden plus false view permission
+        // rejects special forms before that scope can grant authority. Keep each
+        // field/case generation and the normal depth checks as separate dimensions.
+        let parameter_scope = projection_free.then_some(reference);
         let payload = self.representation_declaration(reference)?.payload;
         let (fields, cases) = match payload {
             PackageInterfaceDeclarationPayload::OwnedRecord { fields, .. }
@@ -822,8 +1037,9 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
                 depth,
                 (
                     AssociatedTypeContext::Forbidden,
-                    Some(reference),
+                    parameter_scope,
                     field.header.contract_version,
+                    false,
                 ),
             )?;
         }
@@ -852,8 +1068,9 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
                     depth,
                     (
                         AssociatedTypeContext::Forbidden,
-                        Some(reference),
+                        parameter_scope,
                         case.header.contract_version,
+                        false,
                     ),
                 )?;
             }
@@ -940,16 +1157,74 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
             if !members.contains(&binding.member) {
                 return Err(reject("associated binding names a foreign contract member"));
             }
+            let mut bound = None;
+            for member in &contract.associated_types {
+                self.validation_work()?;
+                if member.id == binding.member {
+                    bound = Some(&member.bound);
+                }
+            }
+            let bound = bound.ok_or_else(|| reject("binding has no exact member kind"))?;
+            if let AssociatedTypeBindingValue::ReadViewFamily {
+                scope_parameter,
+                ty,
+            } = &binding.value
+            {
+                if !matches!(bound, AssociatedTypeBound::ReadViewFamily { .. }) {
+                    return Err(reject("view family binding changes its exact member kind"));
+                }
+                read_view_admission::require_generation(record.header.contract_version)?;
+                let context = AssociatedTypeContext::AssociatedBinding {
+                    implementation: scope,
+                    member: binding.member,
+                };
+                let formal = ReadScopeArgument::Parameter(ReadScopeReference {
+                    binder: ReadScopeBinder::AssociatedBinding {
+                        implementation: scope,
+                        member: binding.member,
+                    },
+                    parameter: scope_parameter.id,
+                });
+                let Some(TypeObject {
+                    form: TypeForm::ReadViewApplied { read_scope, .. },
+                    ..
+                }) = self.type_object(*ty)?
+                else {
+                    return Err(reject(
+                        "view-family binding requires a projection-free nominal view RHS",
+                    ));
+                };
+                if read_scope != formal {
+                    return Err(reject(
+                        "view-family RHS does not apply its exact binding scope formal",
+                    ));
+                }
+                self.walk(&[*ty], context, record.header.contract_version, true)?;
+                read_view_admission::validate_nominal_at(
+                    self.read,
+                    *ty,
+                    OwnedTypeOccurrence {
+                        parameters: TypeParameterContext::Authored(scope),
+                        associated: context,
+                        consumer_generation: record.header.contract_version,
+                    },
+                    self.admission,
+                )?;
+                continue;
+            }
+            if !matches!(bound, AssociatedTypeBound::Owned) {
+                return Err(reject("Owned binding changes its exact member kind"));
+            }
             self.member(implementation.contract, binding.member)?;
             self.walk(
-                &[binding.ty],
+                &[binding.ty()],
                 AssociatedTypeContext::Lexical(scope),
                 record.header.contract_version,
                 true,
             )?;
             owned_contract::validate_owned_type_at(
                 self.read,
-                binding.ty,
+                binding.ty(),
                 OwnedTypeOccurrence::authored(Some(scope), record.header.contract_version),
                 self.admission,
             )?;
@@ -971,6 +1246,21 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
             | TypeForm::AssociatedWitnessProjection {
                 contract, member, ..
             } => (*contract, *member),
+            TypeForm::AssociatedReadViewMember {
+                contract, member, ..
+            }
+            | TypeForm::AssociatedReadViewProjection {
+                contract, member, ..
+            } => {
+                return self.resolve_view_member(
+                    form,
+                    *contract,
+                    *member,
+                    operand,
+                    caller_context,
+                    consumer_generation,
+                );
+            }
             _ => return Err(reject("member resolution requires an associated type form")),
         };
         self.resolve_member(
@@ -1059,9 +1349,121 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
                 // witness admission. Their identities are not inferred from types.
                 Ok(AssociatedResolution::Binding {
                     implementation: *implementation,
-                    template: binding.ty,
+                    template: binding.ty(),
                     bindings,
                 })
+            }
+        }
+    }
+
+    fn resolve_view_member(
+        &self,
+        form: &TypeForm,
+        reference: DeclarationReference,
+        member: AssociatedTypeMemberId,
+        operand: &ImplementationOperand,
+        caller: AssociatedTypeContext,
+        generation: u16,
+    ) -> Result<AssociatedResolution, Diagnostic> {
+        read_view_admission::require_generation(generation)?;
+        self.member_kind(reference, member, true)?;
+        let scope = match form {
+            TypeForm::AssociatedReadViewMember { read_scope, .. }
+            | TypeForm::AssociatedReadViewProjection { read_scope, .. } => *read_scope,
+            _ => {
+                return Err(reject(
+                    "read-view resolution requires a read-view member form",
+                ));
+            }
+        };
+        match operand {
+            ImplementationOperand::Parameter {
+                scope: owner,
+                parameter,
+            } => {
+                if caller != AssociatedTypeContext::Lexical(*owner) {
+                    return Err(reject(
+                        "selected view witness escaped its original caller scope",
+                    ));
+                }
+                self.lexical_parameter(*owner, *parameter, reference)?;
+                Ok(AssociatedResolution::ReadViewLexical {
+                    form: TypeForm::AssociatedReadViewProjection {
+                        scope: *owner,
+                        parameter: *parameter,
+                        contract: reference,
+                        member,
+                        read_scope: scope,
+                    },
+                    scope,
+                })
+            }
+            ImplementationOperand::Concrete {
+                implementation,
+                type_arguments,
+                implementations,
+            } => {
+                let value = owned_contract::implementation_record(self, *implementation)?;
+                if value.contract != reference
+                    || value.type_parameters.len() != type_arguments.len()
+                    || value.implementation_parameters.len() != implementations.len()
+                {
+                    return Err(reject(
+                        "read-view witness exact contract or complete argument arity mismatch",
+                    ));
+                }
+                self.validate_bindings(*implementation, &value)?;
+                self.validate_occurrences(type_arguments, caller, generation)?;
+                self.reserve::<(TypeParameterId, TypeObjectDigest)>(type_arguments.len())?;
+                let mut bindings = BTreeMap::new();
+                for (id, ty) in value.type_parameters.iter().zip(type_arguments) {
+                    self.validation_work()?;
+                    let formal = owned_contract::type_parameter_at(self, *implementation, *id)?;
+                    owned_contract::validate_type_argument_constraints_at(
+                        self.read,
+                        formal.constraints,
+                        *ty,
+                        OwnedTypeOccurrence {
+                            parameters: caller.scope().map_or(
+                                TypeParameterContext::Closed,
+                                TypeParameterContext::Authored,
+                            ),
+                            associated: caller,
+                            consumer_generation: generation,
+                        },
+                        self.admission,
+                    )?;
+                    if bindings.insert(*id, *ty).is_some() {
+                        return Err(reject("duplicate exact view witness type formal"));
+                    }
+                }
+                for binding in &value.associated_types {
+                    self.validation_work()?;
+                    if binding.member == member {
+                        let AssociatedTypeBindingValue::ReadViewFamily {
+                            scope_parameter,
+                            ty,
+                        } = &binding.value
+                        else {
+                            return Err(reject("exact view member resolved to an Owned binding"));
+                        };
+                        return Ok(AssociatedResolution::ReadViewBinding {
+                            template: *ty,
+                            bindings,
+                            scope_parameter: ReadScopeReference {
+                                binder: ReadScopeBinder::AssociatedBinding {
+                                    implementation: *implementation,
+                                    member,
+                                },
+                                parameter: scope_parameter.id,
+                            },
+                            scope,
+                        });
+                    }
+                }
+                Err(reject(
+                    "read-view witness lacks the exact selected member binding",
+                ))
             }
         }
     }
@@ -1085,10 +1487,12 @@ fn local_declaration(record: DeclarationRecord) -> Result<PackageInterfaceDeclar
                 type_parameters: value.type_parameters,
                 parameters: value.parameters,
                 result: value.result,
-                result_borrow: value.result_borrow,
+                read_scope_parameters: value.read_scope_parameters,
+                read_scope_sources: value.read_scope_sources,
                 effect: value.effect,
             })
         }
+        DeclarationPayload::ReadView(value) => PackageInterfaceDeclarationPayload::ReadView(value),
         DeclarationPayload::External(value) => {
             PackageInterfaceDeclarationPayload::External(PackageExternalSignature {
                 type_parameters: value.type_parameters,

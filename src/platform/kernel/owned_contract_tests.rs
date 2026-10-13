@@ -237,6 +237,8 @@ fn owned_witness_inference_and_affine_metadata_stop_before_unadmitted_reads() {
                         function,
                         type_arguments: vec![],
                         implementations: vec![],
+
+                        read_scope_arguments: Vec::new(),
                     }));
                 i.methods.sort_by_key(|m| m.method);
             }

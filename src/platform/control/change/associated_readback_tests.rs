@@ -54,7 +54,7 @@ fn raw_candidate_associated_readback_preserves_exact_coordinates_unused_inventor
         types.insert(digest, k::decode_type_object(&bytes, digest).unwrap());
         bindings.push(AssociatedTypeBinding {
             member: member.id,
-            ty: digest,
+            value: k::AssociatedTypeBindingValue::Owned { ty: digest },
         });
     }
     let mut reader = Reader::for_raw_lowered_candidate(
@@ -67,11 +67,11 @@ fn raw_candidate_associated_readback_preserves_exact_coordinates_unused_inventor
     assert_eq!(
         authored_members
             .iter()
-            .map(|m| (m.id, &m.name, m.bound))
+            .map(|m| (m.id, &m.name, m.bound.clone()))
             .collect::<Vec<_>>(),
         members
             .iter()
-            .map(|m| (m.id, &m.name, m.bound))
+            .map(|m| (m.id, &m.name, m.bound.clone()))
             .collect::<Vec<_>>()
     );
     let authored_bindings = reader.associated_bindings(&bindings).unwrap();
@@ -79,9 +79,11 @@ fn raw_candidate_associated_readback_preserves_exact_coordinates_unused_inventor
         authored_bindings[0],
         AuthoredAssociatedTypeBinding {
             member: members[0].id,
-            ty: AuthoredType::AssociatedContractMember {
-                contract: declaration(contract),
-                member: members[0].id
+            value: AuthoredAssociatedTypeBindingValue::Owned {
+                ty: AuthoredType::AssociatedContractMember {
+                    contract: declaration(contract),
+                    member: members[0].id
+                }
             },
         }
     );
@@ -89,11 +91,13 @@ fn raw_candidate_associated_readback_preserves_exact_coordinates_unused_inventor
         authored_bindings[1],
         AuthoredAssociatedTypeBinding {
             member: members[1].id,
-            ty: AuthoredType::AssociatedWitnessProjection {
-                scope: declaration(scope),
-                parameter,
-                contract: declaration(contract),
-                member: members[1].id
+            value: AuthoredAssociatedTypeBindingValue::Owned {
+                ty: AuthoredType::AssociatedWitnessProjection {
+                    scope: declaration(scope),
+                    parameter,
+                    contract: declaration(contract),
+                    member: members[1].id
+                }
             },
         }
     );

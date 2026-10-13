@@ -72,6 +72,8 @@ pub enum BindingContainerRole {
     OwnedUnpack,
     OwnedChoicePayload,
     OwnedBorrow,
+    ReadView,
+    ReadViewBorrow,
 }
 
 #[derive(Clone, Copy, Debug, Decode, Encode, Eq, Ord, PartialEq, PartialOrd)]

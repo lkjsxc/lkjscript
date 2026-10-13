@@ -119,6 +119,14 @@ fn derive_linear(code: &mut NormalizedCode, work: &mut Budget<'_>) -> Result<(),
             | I::BorrowOwnedItem { source_local, .. }
             | I::BeginBorrowCall { source_local, .. }
             | I::AdoptBorrowResult { source_local, .. }
+            | I::BeginReadView { source_local, .. }
+            | I::BorrowReadView { source_local, .. }
+            | I::BorrowReadViewField { source_local, .. }
+            | I::AdoptViewResult { source_local, .. }
+            | I::ReborrowReadView { source_local, .. }
+            | I::MoveReadView { source_local, .. }
+            | I::DropReadView { source_local, .. }
+            | I::ReadViewDataField { source_local, .. }
             | I::SequenceLength { source_local, .. }
             | I::SequenceGet { source_local, .. }
             | I::SequencePush { source_local, .. }
@@ -137,7 +145,7 @@ fn derive_linear(code: &mut NormalizedCode, work: &mut Budget<'_>) -> Result<(),
                 }
                 Some(*source_local)
             }
-            I::EndOwnedBorrow { .. } => None,
+            I::EndOwnedBorrow { .. } | I::EndReadViewBorrow { .. } => None,
             I::SwitchVariant(jumps) => {
                 for jump in jumps.iter() {
                     edge(&mut ends, index, jump.target, work)?;
@@ -145,6 +153,9 @@ fn derive_linear(code: &mut NormalizedCode, work: &mut Budget<'_>) -> Result<(),
                 None
             }
             I::Unit
+            | I::BeginReadViewScope { .. }
+            | I::EndReadViewScope { .. }
+            | I::FinishReadView { .. }
             | I::SequenceEmpty { .. }
             | I::ChooseOwned { .. }
             | I::PackOwned { .. }
@@ -175,12 +186,16 @@ fn derive_linear(code: &mut NormalizedCode, work: &mut Budget<'_>) -> Result<(),
             | I::Perform { .. }
             | I::PerformParameter { .. }
             | I::Return
+            | I::ReturnView
             | I::ReturnBorrowed => None,
         };
         let extra = match instruction {
             I::BorrowOwnedField { binding_local, .. }
             | I::BorrowOwnedItem { binding_local, .. }
-            | I::AdoptBorrowResult { binding_local, .. } => Some(*binding_local),
+            | I::AdoptBorrowResult { binding_local, .. }
+            | I::BorrowReadView { binding_local, .. }
+            | I::BorrowReadViewField { binding_local, .. }
+            | I::AdoptViewResult { binding_local, .. } => Some(*binding_local),
             _ => None,
         };
         for local in [read, extra].into_iter().flatten() {

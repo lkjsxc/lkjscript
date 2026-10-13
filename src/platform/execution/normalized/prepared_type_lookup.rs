@@ -7,11 +7,13 @@ type Bindings = BTreeMap<TypeParameterId, TypeObjectDigest>;
 type ResolvedTypes = BTreeMap<TypeObjectDigest, TypeObjectDigest>;
 type Contexts = BTreeMap<Bindings, ResolvedTypes>;
 type Applications = BTreeMap<FunctionIndex, Contexts>;
+type ScopedApplications = BTreeMap<FunctionIndex, BTreeMap<ScopeBindings, Contexts>>;
 
 #[derive(Default)]
 pub(super) struct TypeLookupBuilder {
     contexts: Contexts,
     applications: Applications,
+    scoped_applications: ScopedApplications,
 }
 
 #[derive(Clone, Debug)]
@@ -19,6 +21,7 @@ pub(in super::super) struct PreparedTypeLookup {
     origin: ValueOrigin,
     contexts: Contexts,
     applications: Applications,
+    scoped_applications: ScopedApplications,
 }
 
 impl PreparedTypeLookup {
@@ -27,6 +30,7 @@ impl PreparedTypeLookup {
             origin,
             contexts: BTreeMap::new(),
             applications: BTreeMap::new(),
+            scoped_applications: BTreeMap::new(),
         }
     }
 
@@ -64,6 +68,54 @@ impl PreparedTypeLookup {
             .and_then(|contexts| contexts.get(bindings))
             .and_then(|types| types.get(&template))
             .copied())
+    }
+
+    pub(in super::super) fn get_scoped_application_arguments(
+        &self,
+        origin: ValueOrigin,
+        function: FunctionIndex,
+        declaration: crate::platform::kernel::DeclarationReference,
+        template: TypeObjectDigest,
+        bindings: &Bindings,
+        parameters: &[crate::platform::kernel::ReadScopeParameter],
+        arguments: &[ReadScopeArgument],
+    ) -> Result<Option<TypeObjectDigest>, ()> {
+        if self.origin != origin || function.1 != origin || parameters.len() != arguments.len() {
+            return Err(());
+        }
+        let Some(scoped) = self.scoped_applications.get(&function) else {
+            return Ok(None);
+        };
+        let mut result = None;
+        for (scopes, contexts) in scoped {
+            if scopes.len() != parameters.len() {
+                continue;
+            }
+            let matches = scopes.iter().all(|(reference, actual)| {
+                if reference.binder != ReadScopeBinder::Declaration(declaration) {
+                    return false;
+                }
+                let mut positions = parameters
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, parameter)| parameter.id == reference.parameter);
+                let Some((position, _)) = positions.next() else {
+                    return false;
+                };
+                positions.next().is_none() && arguments[position] == *actual
+            });
+            if matches {
+                let found = contexts
+                    .get(bindings)
+                    .and_then(|types| types.get(&template))
+                    .copied();
+                if result.is_some() && found.is_some() {
+                    return Err(());
+                }
+                result = found.or(result);
+            }
+        }
+        Ok(result)
     }
 
     #[cfg(test)]
@@ -132,6 +184,7 @@ impl Budget<'_> {
             origin,
             contexts: std::mem::take(&mut self.type_lookup.contexts),
             applications: std::mem::take(&mut self.type_lookup.applications),
+            scoped_applications: std::mem::take(&mut self.type_lookup.scoped_applications),
         }
     }
 
@@ -180,6 +233,81 @@ impl Budget<'_> {
             types.insert(template, result);
         } else {
             contexts.insert(bindings.clone(), BTreeMap::from([(template, result)]));
+        }
+        Ok(())
+    }
+
+    pub(super) fn remember_scoped_application_substitution(
+        &mut self,
+        function: FunctionIndex,
+        template: TypeObjectDigest,
+        result: TypeObjectDigest,
+        bindings: &Bindings,
+        scopes: &ScopeBindings,
+    ) -> Result<(), Diagnostic> {
+        step(self)?;
+        if let Some(existing) = self
+            .type_lookup
+            .scoped_applications
+            .get(&function)
+            .and_then(|scoped| scoped.get(scopes))
+            .and_then(|contexts| contexts.get(bindings))
+            .and_then(|types| types.get(&template))
+        {
+            return if *existing == result {
+                Ok(())
+            } else {
+                Err(missing())
+            };
+        }
+        if !self.type_lookup.scoped_applications.contains_key(&function) {
+            self.node::<(FunctionIndex, BTreeMap<ScopeBindings, Contexts>)>()?;
+        }
+        if !self
+            .type_lookup
+            .scoped_applications
+            .get(&function)
+            .is_some_and(|scoped| scoped.contains_key(scopes))
+        {
+            self.node::<(ScopeBindings, Contexts)>()?;
+            for _ in scopes {
+                self.node::<(ReadScopeReference, ReadScopeArgument)>()?;
+            }
+        }
+        if !self
+            .type_lookup
+            .scoped_applications
+            .get(&function)
+            .and_then(|scoped| scoped.get(scopes))
+            .is_some_and(|contexts| contexts.contains_key(bindings))
+        {
+            self.node::<(Bindings, ResolvedTypes)>()?;
+            for _ in bindings {
+                self.node::<(TypeParameterId, TypeObjectDigest)>()?;
+            }
+        }
+        self.node::<(TypeObjectDigest, TypeObjectDigest)>()?;
+        if let Some(scoped) = self.type_lookup.scoped_applications.get_mut(&function) {
+            if let Some(contexts) = scoped.get_mut(scopes) {
+                if let Some(types) = contexts.get_mut(bindings) {
+                    types.insert(template, result);
+                } else {
+                    contexts.insert(bindings.clone(), BTreeMap::from([(template, result)]));
+                }
+            } else {
+                scoped.insert(
+                    scopes.clone(),
+                    BTreeMap::from([(bindings.clone(), BTreeMap::from([(template, result)]))]),
+                );
+            }
+        } else {
+            self.type_lookup.scoped_applications.insert(
+                function,
+                BTreeMap::from([(
+                    scopes.clone(),
+                    BTreeMap::from([(bindings.clone(), BTreeMap::from([(template, result)]))]),
+                )]),
+            );
         }
         Ok(())
     }

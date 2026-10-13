@@ -40,11 +40,12 @@ use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::execution::ExecutionControl;
 use super::execution::normalized::NormalizedCommandPolicy;
 use super::kernel::{
-    BindingKind, DeclarationPayload, DeclarationReference, DeclarationVisibility, EncodedOwnerKey,
-    ExactOwnerKey, ExpressionChildRole, ExpressionOperation, FieldSelector, FunctionEffect,
-    HttpRouteSelector, LocalValueReference, Name, OperationReference, OwnerKey as KernelOwnerKey,
-    OwnerKind as KernelOwnerKind, OwnerRecord, PackageId, PackageTransportDigest, ParameterParent,
-    ParameterUse, PortImplementation, RelationEndpoint, RelationKind, ResourceUnit, TextValue,
+    BindingKind, CallableResult, DeclarationPayload, DeclarationReference, DeclarationVisibility,
+    EncodedOwnerKey, ExactOwnerKey, ExpressionChildRole, ExpressionOperation, FieldSelector,
+    FunctionEffect, HttpRouteSelector, LocalValueReference, Name, OperationReference,
+    OwnerKey as KernelOwnerKey, OwnerKind as KernelOwnerKind, OwnerRecord, PackageId,
+    PackageTransportDigest, ParameterParent, ParameterUse, PortImplementation, ReadScopeArgument,
+    ReadScopeBinder, RelationEndpoint, RelationKind, ResourceUnit, ResultRelation, TextValue,
     TypeObjectDigest, analyze_http_route_set, encode_owner, http_route_set_digest,
 };
 use super::normalized_lifecycle::{PreparedApplication, prepare_repository};
@@ -3841,6 +3842,198 @@ fn execute_inspect_owner_with_limits(
     Ok(output.finish())
 }
 
+pub(crate) fn read_scope_coordinate(scope: ReadScopeArgument) -> String {
+    let declaration = |d: DeclarationReference| format!("{}/{}", d.package, d.declaration);
+    match scope {
+        ReadScopeArgument::Parameter(reference) => {
+            let binder = match reference.binder {
+                ReadScopeBinder::Declaration(d) => format!("declaration:{}", declaration(d)),
+                ReadScopeBinder::ContractMethod { contract, method } => {
+                    format!("contract-method:{}:{method}", declaration(contract))
+                }
+                ReadScopeBinder::AssociatedMember { contract, member } => {
+                    format!("associated-member:{}:{member}", declaration(contract))
+                }
+                ReadScopeBinder::AssociatedBinding {
+                    implementation,
+                    member,
+                } => format!(
+                    "associated-binding:{}:{member}",
+                    declaration(implementation)
+                ),
+            };
+            format!("parameter:{binder}:{}", reference.parameter)
+        }
+        ReadScopeArgument::Lexical { callable, binding } => {
+            format!("lexical:{}:{binding}", declaration(callable))
+        }
+    }
+}
+
+fn callable_result_fields<S: fmt::Display>(
+    result: &CallableResult<S>,
+) -> [(&'static str, String); 3] {
+    match &result.relation {
+        ResultRelation::Value => [
+            ("result-kind", "value".to_owned()),
+            ("result-source", "-".to_owned()),
+            ("result-scope", "-".to_owned()),
+        ],
+        ResultRelation::ReadFrom { source } => [
+            ("result-kind", "read-from".to_owned()),
+            ("result-source", source.to_string()),
+            ("result-scope", "-".to_owned()),
+        ],
+        ResultRelation::ViewFrom { source, scope } => [
+            ("result-kind", "view-from".to_owned()),
+            ("result-source", source.to_string()),
+            ("result-scope", read_scope_coordinate(*scope)),
+        ],
+    }
+}
+
+fn append_scope_inventory<S: fmt::Display>(
+    output: &mut CompactResponseWriter,
+    parent: String,
+    parameters: &[crate::platform::kernel::ReadScopeParameter],
+    sources: &[crate::platform::kernel::ReadScopeSource<S>],
+) -> Result<(), Diagnostic> {
+    for (index, parameter) in parameters.iter().enumerate() {
+        append_compact_record(
+            output,
+            "definition.read-scope-parameter",
+            &[
+                ("id", parameter.id.to_string()),
+                ("parent", parent.clone()),
+                ("index", index.to_string()),
+                ("name", parameter.name.to_string()),
+            ],
+        )?;
+    }
+    for (index, source) in sources.iter().enumerate() {
+        append_compact_record(
+            output,
+            "definition.read-scope-source",
+            &[
+                ("parent", parent.clone()),
+                ("index", index.to_string()),
+                ("source", source.source.to_string()),
+                ("scope", read_scope_coordinate(source.scope)),
+            ],
+        )?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod read_view_projection_contract_tests {
+    use super::*;
+    use crate::platform::kernel::{ReadScopeReference, TypeForm, TypeObject, encode_type_object};
+    use crate::platform::semantic_id::{
+        AssociatedTypeMemberId, BindingId, MethodId, ParameterId, ReadScopeParameterId,
+    };
+
+    #[test]
+    fn definition_result_and_scope_records_keep_complete_static_authority_coordinates() {
+        let declaration = DeclarationReference {
+            package: PackageId::from_bytes([1; 16]).unwrap(),
+            declaration: DeclarationId::from_bytes([2; 16]).unwrap(),
+        };
+        let parameter = ReadScopeParameterId::from_bytes([3; 16]).unwrap();
+        let binders = [
+            ReadScopeBinder::Declaration(declaration),
+            ReadScopeBinder::ContractMethod {
+                contract: declaration,
+                method: MethodId::from_bytes([4; 16]).unwrap(),
+            },
+            ReadScopeBinder::AssociatedMember {
+                contract: declaration,
+                member: AssociatedTypeMemberId::from_bytes([5; 16]).unwrap(),
+            },
+            ReadScopeBinder::AssociatedBinding {
+                implementation: declaration,
+                member: AssociatedTypeMemberId::from_bytes([5; 16]).unwrap(),
+            },
+        ];
+        let prefix = "pkg_01010101010101010101010101010101/decl_02020202020202020202020202020202";
+        let expected = [
+            format!("parameter:declaration:{prefix}:read_scope_03030303030303030303030303030303"),
+            format!(
+                "parameter:contract-method:{prefix}:method_04040404040404040404040404040404:read_scope_03030303030303030303030303030303"
+            ),
+            format!(
+                "parameter:associated-member:{prefix}:assoc_type_05050505050505050505050505050505:read_scope_03030303030303030303030303030303"
+            ),
+            format!(
+                "parameter:associated-binding:{prefix}:assoc_type_05050505050505050505050505050505:read_scope_03030303030303030303030303030303"
+            ),
+        ];
+        for (binder, expected) in binders.into_iter().zip(expected) {
+            assert_eq!(
+                read_scope_coordinate(ReadScopeArgument::Parameter(ReadScopeReference {
+                    binder,
+                    parameter
+                })),
+                expected
+            );
+        }
+        let scope = ReadScopeArgument::Lexical {
+            callable: declaration,
+            binding: BindingId::from_bytes([6; 16]).unwrap(),
+        };
+        assert_eq!(
+            read_scope_coordinate(scope),
+            format!("lexical:{prefix}:bind_06060606060606060606060606060606")
+        );
+        let ty = encode_type_object(&TypeObject::new(TypeForm::I64).unwrap())
+            .unwrap()
+            .0;
+        let source = ParameterId::from_bytes([7; 16]).unwrap();
+        assert_eq!(
+            callable_result_fields(&CallableResult::<ParameterId> {
+                ty,
+                relation: ResultRelation::Value
+            }),
+            [
+                ("result-kind", "value".to_owned()),
+                ("result-source", "-".to_owned()),
+                ("result-scope", "-".to_owned())
+            ]
+        );
+        assert_eq!(
+            callable_result_fields(&CallableResult {
+                ty,
+                relation: ResultRelation::ReadFrom { source }
+            }),
+            [
+                ("result-kind", "read-from".to_owned()),
+                (
+                    "result-source",
+                    "param_07070707070707070707070707070707".to_owned()
+                ),
+                ("result-scope", "-".to_owned())
+            ]
+        );
+        assert_eq!(
+            callable_result_fields(&CallableResult {
+                ty,
+                relation: ResultRelation::ViewFrom { source, scope }
+            }),
+            [
+                ("result-kind", "view-from".to_owned()),
+                (
+                    "result-source",
+                    "param_07070707070707070707070707070707".to_owned()
+                ),
+                (
+                    "result-scope",
+                    format!("lexical:{prefix}:bind_06060606060606060606060606060606")
+                )
+            ]
+        );
+    }
+}
+
 fn append_owned_inspection(
     output: &mut CompactResponseWriter,
     record: &OwnerRecord,
@@ -3873,6 +4066,28 @@ fn append_owned_inspection(
                         ("id", parameter.to_string()),
                     ],
                 )?;
+            }
+            for (index, member) in contract.associated_types.iter().enumerate() {
+                let mut fields = vec![
+                    ("owner", declaration.header.owner.to_string()),
+                    ("id", member.id.to_string()),
+                    ("index", index.to_string()),
+                    ("name", member.name.to_string()),
+                ];
+                match &member.bound {
+                    crate::platform::kernel::AssociatedTypeBound::Owned => {
+                        fields.extend([("kind", "owned".to_owned()), ("arity", "0".to_owned())])
+                    }
+                    crate::platform::kernel::AssociatedTypeBound::ReadViewFamily {
+                        scope_parameter,
+                    } => fields.extend([
+                        ("kind", "read-view-family".to_owned()),
+                        ("arity", "1".to_owned()),
+                        ("scope-parameter", scope_parameter.id.to_string()),
+                        ("scope-name", scope_parameter.name.to_string()),
+                    ]),
+                }
+                append_compact_record(output, "owned.associated-type", &fields)?;
             }
             for (index, method) in contract.methods.iter().enumerate() {
                 for (requirement_index, requirement) in
@@ -3911,24 +4126,25 @@ fn append_owned_inspection(
                             method.effect.row().requirements.len().to_string(),
                         ),
                         ("parameters", method.parameters.len().to_string()),
-                        ("result", method.result.to_string()),
+                        ("result", method.result.ty.to_string()),
+                        callable_result_fields(&method.result)[0].clone(),
+                        callable_result_fields(&method.result)[1].clone(),
+                        callable_result_fields(&method.result)[2].clone(),
                         (
-                            "result-mode",
-                            if method.result_borrow.is_some() {
-                                "read-from"
-                            } else {
-                                "value"
-                            }
-                            .to_owned(),
+                            "read-scope-parameters",
+                            method.read_scope_parameters.len().to_string(),
                         ),
                         (
-                            "borrow-from",
-                            method
-                                .result_borrow
-                                .map(|id| id.to_string())
-                                .unwrap_or_else(|| "-".to_owned()),
+                            "read-scope-sources",
+                            method.read_scope_sources.len().to_string(),
                         ),
                     ],
+                )?;
+                append_scope_inventory(
+                    output,
+                    method.id.to_string(),
+                    &method.read_scope_parameters,
+                    &method.read_scope_sources,
                 )?;
                 for (index, p) in method.parameters.iter().enumerate() {
                     append_compact_record(
@@ -4013,6 +4229,32 @@ fn append_owned_inspection(
                     parameter,
                 )?;
             }
+            for (index, binding) in implementation.associated_types.iter().enumerate() {
+                let mut fields = vec![
+                    ("owner", declaration.header.owner.to_string()),
+                    ("member", binding.member.to_string()),
+                    ("index", index.to_string()),
+                ];
+                match &binding.value {
+                    crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty } => fields
+                        .extend([
+                            ("kind", "owned".to_owned()),
+                            ("arity", "0".to_owned()),
+                            ("type", ty.to_string()),
+                        ]),
+                    crate::platform::kernel::AssociatedTypeBindingValue::ReadViewFamily {
+                        scope_parameter,
+                        ty,
+                    } => fields.extend([
+                        ("kind", "read-view-family".to_owned()),
+                        ("arity", "1".to_owned()),
+                        ("scope-parameter", scope_parameter.id.to_string()),
+                        ("scope-name", scope_parameter.name.to_string()),
+                        ("type", ty.to_string()),
+                    ]),
+                }
+                append_compact_record(output, "owned.associated-binding", &fields)?;
+            }
             for mapping in &implementation.methods {
                 append_compact_record(
                     output,
@@ -4030,6 +4272,18 @@ fn append_owned_inspection(
                         ),
                     ],
                 )?;
+                for (index, scope) in mapping.read_scope_arguments.iter().enumerate() {
+                    append_compact_record(
+                        output,
+                        "definition.read-scope-argument",
+                        &[
+                            ("parent", mapping.method.to_string()),
+                            ("slot", "method-mapping".to_owned()),
+                            ("index", index.to_string()),
+                            ("scope", read_scope_coordinate(*scope)),
+                        ],
+                    )?;
+                }
                 for (index, ty) in mapping.type_arguments.iter().enumerate() {
                     append_compact_record(
                         output,
@@ -4053,17 +4307,72 @@ fn append_owned_inspection(
                 }
             }
         }
-        DeclarationPayload::Function(function) => {
-            if let Some(source) = function.result_borrow {
+        DeclarationPayload::ReadView(view) => {
+            append_compact_record(
+                output,
+                "read-view",
+                &[
+                    ("owner", declaration.header.owner.to_string()),
+                    ("type-parameters", view.type_parameters.len().to_string()),
+                    ("scope-parameter", view.scope_parameter.id.to_string()),
+                    ("scope-name", view.scope_parameter.name.to_string()),
+                    ("fields", view.fields.len().to_string()),
+                ],
+            )?;
+            for (index, parameter) in view.type_parameters.iter().enumerate() {
                 append_compact_record(
                     output,
-                    "function.result-borrow",
+                    "read-view.type-parameter",
                     &[
-                        ("owner", declaration.header.owner.to_string()),
-                        ("source", source.to_string()),
+                        ("parent", declaration.header.owner.to_string()),
+                        ("index", index.to_string()),
+                        ("parameter", parameter.to_string()),
                     ],
                 )?;
             }
+            for (index, field) in view.fields.iter().enumerate() {
+                let mut fields = vec![
+                    ("parent", declaration.header.owner.to_string()),
+                    ("id", field.id.to_string()),
+                    ("index", index.to_string()),
+                    ("name", field.name.to_string()),
+                    ("type", field.ty.to_string()),
+                ];
+                match field.kind {
+                    crate::platform::kernel::ReadViewFieldKind::Ordinary => {
+                        fields.push(("kind", "ordinary".to_owned()))
+                    }
+                    crate::platform::kernel::ReadViewFieldKind::ReadReference { read_scope } => {
+                        fields.extend([
+                            ("kind", "read-reference".to_owned()),
+                            ("read-scope", read_scope_coordinate(read_scope)),
+                        ])
+                    }
+                }
+                append_compact_record(output, "read-view.field", &fields)?;
+            }
+        }
+        DeclarationPayload::Function(function) => {
+            let mut result_fields = vec![
+                ("owner", declaration.header.owner.to_string()),
+                ("result", function.result.ty.to_string()),
+                (
+                    "read-scope-parameters",
+                    function.read_scope_parameters.len().to_string(),
+                ),
+                (
+                    "read-scope-sources",
+                    function.read_scope_sources.len().to_string(),
+                ),
+            ];
+            result_fields.extend(callable_result_fields(&function.result));
+            append_compact_record(output, "function.result", &result_fields)?;
+            append_scope_inventory(
+                output,
+                declaration.header.owner.to_string(),
+                &function.read_scope_parameters,
+                &function.read_scope_sources,
+            )?;
             for (index, p) in function.implementation_parameters.iter().enumerate() {
                 append_compact_record(
                     output,
@@ -4390,9 +4699,9 @@ fn http_topology_inspection_fields(
 const FUNCTION_DEFINITION_ORDERING: u8 = 1;
 const FUNCTION_DEFINITION_ORDERING_NAME: &str =
     "header-contract-structural-preorder-reference-fact-v1";
-const FUNCTION_DEFINITION_CONTINUATION_MAGIC: [u8; 8] = *b"LKJICT03";
-const FUNCTION_DEFINITION_CONTINUATION_VERSION: u16 = 3;
-const FUNCTION_DEFINITION_CONTINUATION_ENVELOPE_VERSION: u16 = 3;
+const FUNCTION_DEFINITION_CONTINUATION_MAGIC: [u8; 8] = *b"LKJICT04";
+const FUNCTION_DEFINITION_CONTINUATION_VERSION: u16 = 4;
+const FUNCTION_DEFINITION_CONTINUATION_ENVELOPE_VERSION: u16 = 4;
 const FUNCTION_DEFINITION_CONTINUATION_HEADER_BYTES: usize = 18;
 const FUNCTION_DEFINITION_CONTINUATION_CHECKSUM_BYTES: usize = 32;
 const MAXIMUM_FUNCTION_DEFINITION_CONTINUATION_DECODED_BYTES: usize = 224;
@@ -5249,6 +5558,102 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
         )
     }
 
+    fn add_read_scope_reference(
+        &mut self,
+        owner: KernelOwnerKey,
+        role: &str,
+        index: usize,
+        scope: ReadScopeArgument,
+    ) -> Result<(), Diagnostic> {
+        self.add_declaration_reference(
+            format!("{role}_binder"),
+            owner,
+            index,
+            scope.declaration(),
+        )?;
+        match scope {
+            ReadScopeArgument::Parameter(reference) => {
+                self.add_reference(
+                    role,
+                    owner,
+                    index,
+                    "read_scope_parameter",
+                    read_scope_coordinate(scope),
+                )?;
+                match reference.binder {
+                    ReadScopeBinder::ContractMethod { method, .. } => self.add_reference(
+                        format!("{role}_method"),
+                        owner,
+                        index,
+                        "method",
+                        method.to_string(),
+                    )?,
+                    ReadScopeBinder::AssociatedMember { member, .. }
+                    | ReadScopeBinder::AssociatedBinding { member, .. } => self.add_reference(
+                        format!("{role}_member"),
+                        owner,
+                        index,
+                        "associated_type_member",
+                        member.to_string(),
+                    )?,
+                    ReadScopeBinder::Declaration(_) => {}
+                }
+            }
+            ReadScopeArgument::Lexical { callable, binding } => self.add_reference(
+                role,
+                owner,
+                index,
+                "binding",
+                format!("{}/{}", callable.package, binding),
+            )?,
+        }
+        Ok(())
+    }
+    fn add_read_scope_arguments(
+        &mut self,
+        owner: KernelOwnerKey,
+        slot: &str,
+        scopes: &[ReadScopeArgument],
+    ) -> Result<(), Diagnostic> {
+        for (index, scope) in scopes.iter().enumerate() {
+            self.push_fields(
+                DefinitionSection::Body,
+                "definition.read-scope-argument",
+                &[
+                    ("parent", owner.to_string()),
+                    ("slot", slot.to_owned()),
+                    ("index", index.to_string()),
+                    ("scope", read_scope_coordinate(*scope)),
+                ],
+            )?;
+            self.add_read_scope_reference(owner, slot, index, *scope)?;
+        }
+        Ok(())
+    }
+    fn exact_view_binding_kind(
+        &mut self,
+        binding: super::semantic_id::BindingId,
+        allowed: &[BindingKind],
+    ) -> Result<BindingKind, Diagnostic> {
+        self.check()?;
+        let Some(OwnerRecord::Binding(record)) =
+            self.reader.owner(KernelOwnerKey::Binding(binding))?
+        else {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_owner_binding",
+                "read-view wrapper binding is absent",
+            ));
+        };
+        if !allowed.contains(&record.kind) {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_owner_binding",
+                "read-view wrapper binding has another canonical kind",
+            ));
+        }
+        Ok(record.kind)
+    }
     fn add_type_reference(
         &mut self,
         role: impl Into<String>,
@@ -5704,6 +6109,141 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
         fields.push(("depth", position.depth.to_string()));
         let mut literal_fragments = None;
         match &record.operation {
+            ExpressionOperation::CreateReadView {
+                declaration,
+                type_arguments,
+                read_scope,
+                source,
+                fields: values,
+            } => {
+                fields.extend([
+                    ("form", "read_view_create".to_owned()),
+                    (
+                        "declaration",
+                        format!("{}/{}", declaration.package, declaration.declaration),
+                    ),
+                    ("read-scope", read_scope_coordinate(*read_scope)),
+                    (
+                        "source",
+                        local_definition_reference(
+                            self.package,
+                            definition_local_value_owner(*source),
+                        ),
+                    ),
+                    ("fields", values.len().to_string()),
+                    ("type-arguments", type_arguments.len().to_string()),
+                ]);
+                self.add_declaration_reference("read_view_declaration", owner, 0, *declaration)?;
+                self.add_read_scope_reference(owner, "read_view_scope", 0, *read_scope)?;
+                self.add_local_reference(
+                    "read_view_source",
+                    owner,
+                    0,
+                    definition_local_value_owner(*source),
+                )?;
+                for (index, ty) in type_arguments.iter().enumerate() {
+                    self.add_type_reference("read_view_type_argument", owner, index, *ty)?;
+                }
+            }
+            ExpressionOperation::BorrowReadView { value, .. }
+            | ExpressionOperation::MoveReadView { value }
+            | ExpressionOperation::DropReadView { value } => {
+                let form = match record.operation {
+                    ExpressionOperation::BorrowReadView { .. } => "read_view_borrow",
+                    ExpressionOperation::MoveReadView { .. } => "read_view_move",
+                    _ => "read_view_drop",
+                };
+                fields.extend([
+                    ("form", form.to_owned()),
+                    (
+                        "value",
+                        local_definition_reference(
+                            self.package,
+                            definition_local_value_owner(*value),
+                        ),
+                    ),
+                ]);
+                self.add_local_reference(
+                    "read_view_value",
+                    owner,
+                    0,
+                    definition_local_value_owner(*value),
+                )?;
+            }
+            ExpressionOperation::ReborrowReadView { value, read_scope } => {
+                fields.extend([
+                    ("form", "read_view_reborrow".to_owned()),
+                    (
+                        "value",
+                        local_definition_reference(
+                            self.package,
+                            definition_local_value_owner(*value),
+                        ),
+                    ),
+                    ("read-scope", read_scope_coordinate(*read_scope)),
+                ]);
+                self.add_local_reference(
+                    "read_view_value",
+                    owner,
+                    0,
+                    definition_local_value_owner(*value),
+                )?;
+                self.add_read_scope_reference(owner, "read_view_scope", 0, *read_scope)?;
+            }
+            ExpressionOperation::ReadViewDataField { value, field }
+            | ExpressionOperation::BorrowReadViewField { value, field, .. } => {
+                fields.extend([
+                    (
+                        "form",
+                        if matches!(
+                            record.operation,
+                            ExpressionOperation::ReadViewDataField { .. }
+                        ) {
+                            "read_view_data_field"
+                        } else {
+                            "read_view_borrow_field"
+                        }
+                        .to_owned(),
+                    ),
+                    (
+                        "value",
+                        local_definition_reference(
+                            self.package,
+                            definition_local_value_owner(*value),
+                        ),
+                    ),
+                    (
+                        "declaration",
+                        format!(
+                            "{}/{}",
+                            field.declaration.package, field.declaration.declaration
+                        ),
+                    ),
+                    ("field", field.field.to_string()),
+                ]);
+                self.add_local_reference(
+                    "read_view_value",
+                    owner,
+                    0,
+                    definition_local_value_owner(*value),
+                )?;
+                self.add_declaration_reference(
+                    "read_view_field_declaration",
+                    owner,
+                    0,
+                    field.declaration,
+                )?;
+                self.add_reference(
+                    "read_view_field",
+                    owner,
+                    0,
+                    "read_view_field",
+                    format!(
+                        "{}/{}/{}",
+                        field.declaration.package, field.declaration.declaration, field.field
+                    ),
+                )?;
+            }
             ExpressionOperation::Parallel { .. } => fields.push(("form", "parallel".into())),
             ExpressionOperation::BorrowCall { .. } => fields.push(("form", "borrow_call".into())),
             ExpressionOperation::ChooseOwned {
@@ -5917,10 +6457,16 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                 type_arguments,
                 effect_arguments,
                 requirement_arguments,
+                read_scope_arguments,
                 implementations,
                 arguments,
             } => {
                 fields.push(("form", "implementation_call".into()));
+                fields.push((
+                    "read-scope-arguments",
+                    read_scope_arguments.len().to_string(),
+                ));
+                self.add_read_scope_arguments(owner, "implementation-call", read_scope_arguments)?;
                 fields.push((
                     "function",
                     format!("{}/{}", function.package, function.declaration),
@@ -5949,9 +6495,15 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                 witness,
                 contract,
                 method,
+                read_scope_arguments,
                 arguments,
             } => {
                 fields.push(("form", "method_call".into()));
+                fields.push((
+                    "read-scope-arguments",
+                    read_scope_arguments.len().to_string(),
+                ));
+                self.add_read_scope_arguments(owner, "method-call", read_scope_arguments)?;
                 fields.push(("method", method.to_string()));
                 fields.push(("arguments", arguments.len().to_string()));
                 self.add_declaration_reference("owned_contract", owner, 0, *contract)?;
@@ -5980,12 +6532,18 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
             }
             ExpressionOperation::Call {
                 requirement_arguments,
+                read_scope_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
                 arguments,
             } => {
                 fields.push(("form", "call".to_owned()));
+                fields.push((
+                    "read-scope-arguments",
+                    read_scope_arguments.len().to_string(),
+                ));
+                self.add_read_scope_arguments(owner, "call", read_scope_arguments)?;
                 fields.push((
                     "function",
                     format!("{}/{}", function.package, function.declaration),
@@ -6008,11 +6566,17 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
             }
             ExpressionOperation::FunctionValue {
                 requirement_arguments,
+                read_scope_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
             } => {
                 fields.push(("form", "function_value".to_owned()));
+                fields.push((
+                    "read-scope-arguments",
+                    read_scope_arguments.len().to_string(),
+                ));
+                self.add_read_scope_arguments(owner, "function-value", read_scope_arguments)?;
                 fields.push((
                     "function",
                     format!("{}/{}", function.package, function.declaration),
@@ -6258,12 +6822,72 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
             record.operation,
             ExpressionOperation::MatchBorrowedOwned { .. }
         );
+        let borrows_view = matches!(record.operation, ExpressionOperation::BorrowReadView { .. });
         match record.operation {
+            ExpressionOperation::CreateReadView { fields, .. } => {
+                for (index, field) in fields.into_iter().enumerate() {
+                    self.visit_expression_child(
+                        owner,
+                        field.value,
+                        (ExpressionChildRole::ReadViewField, "read_view_field"),
+                        index,
+                        Some(field.field.to_string()),
+                        child_depth,
+                    )?;
+                }
+            }
+            ExpressionOperation::BorrowReadView { binding, body, .. }
+            | ExpressionOperation::BorrowReadViewField { binding, body, .. } => {
+                let allowed = if borrows_view {
+                    &[BindingKind::ReadViewBorrow][..]
+                } else {
+                    &[BindingKind::OwnedBorrow, BindingKind::ReadViewBorrow][..]
+                };
+                let kind = self.exact_view_binding_kind(binding, allowed)?;
+                let role = match kind {
+                    BindingKind::ReadViewBorrow => BindingContainerRole::ReadViewBorrow,
+                    BindingKind::OwnedBorrow => BindingContainerRole::OwnedBorrow,
+                    _ => unreachable!(),
+                };
+                self.visit_binding(
+                    binding,
+                    DefinitionPosition {
+                        parent: owner,
+                        ownership_role: OwnershipRole::ExpressionBinding { role, ordinal: 0 },
+                        slot: "read_view_binding",
+                        index: 0,
+                        label: None,
+                        depth: child_depth,
+                    },
+                    kind,
+                )?;
+                self.visit_expression_child(
+                    owner,
+                    body,
+                    (ExpressionChildRole::ReadViewBody, "read_view_body"),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+            }
+            ExpressionOperation::ReborrowReadView { .. }
+            | ExpressionOperation::MoveReadView { .. }
+            | ExpressionOperation::DropReadView { .. }
+            | ExpressionOperation::ReadViewDataField { .. } => {}
             ExpressionOperation::BorrowCall {
                 call,
                 binding,
                 body,
             } => {
+                let kind = self.exact_view_binding_kind(
+                    binding,
+                    &[BindingKind::OwnedBorrow, BindingKind::ReadView],
+                )?;
+                let role = if kind == BindingKind::ReadView {
+                    BindingContainerRole::ReadView
+                } else {
+                    BindingContainerRole::OwnedBorrow
+                };
                 self.visit_expression_child(
                     owner,
                     call,
@@ -6279,16 +6903,13 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                     binding,
                     DefinitionPosition {
                         parent: owner,
-                        ownership_role: OwnershipRole::ExpressionBinding {
-                            role: BindingContainerRole::OwnedBorrow,
-                            ordinal: 0,
-                        },
+                        ownership_role: OwnershipRole::ExpressionBinding { role, ordinal: 0 },
                         slot: "borrow_call_binding",
                         index: 0,
                         label: None,
                         depth: child_depth,
                     },
-                    BindingKind::OwnedBorrow,
+                    kind,
                 )?;
                 self.visit_expression_child(
                     owner,
@@ -6750,12 +7371,21 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
             }
             ExpressionOperation::Let { bindings, body } => {
                 for (index, binding) in bindings.into_iter().enumerate() {
+                    let kind = self.exact_view_binding_kind(
+                        binding,
+                        &[BindingKind::Let, BindingKind::ReadView],
+                    )?;
+                    let role = if kind == BindingKind::ReadView {
+                        BindingContainerRole::ReadView
+                    } else {
+                        BindingContainerRole::Let
+                    };
                     self.visit_binding(
                         binding,
                         DefinitionPosition {
                             parent: owner,
                             ownership_role: OwnershipRole::ExpressionBinding {
-                                role: BindingContainerRole::Let,
+                                role,
                                 ordinal: definition_ordinal(index)?,
                             },
                             slot: "let_binding",
@@ -6763,7 +7393,7 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                             label: None,
                             depth: child_depth,
                         },
-                        BindingKind::Let,
+                        kind,
                     )?;
                 }
                 self.visit_expression_child(
@@ -7353,22 +7983,17 @@ fn materialize_function_definition(
                 function.implementation_parameters.len().to_string(),
             ),
             ("parameters", function.parameters.len().to_string()),
-            ("result", function.result.to_string()),
+            ("result", function.result.ty.to_string()),
+            callable_result_fields(&function.result)[0].clone(),
+            callable_result_fields(&function.result)[1].clone(),
+            callable_result_fields(&function.result)[2].clone(),
             (
-                "result-mode",
-                if function.result_borrow.is_some() {
-                    "read-from"
-                } else {
-                    "value"
-                }
-                .to_owned(),
+                "read-scope-parameters",
+                function.read_scope_parameters.len().to_string(),
             ),
             (
-                "borrow-from",
-                function
-                    .result_borrow
-                    .map(|id| id.to_string())
-                    .unwrap_or_else(|| "-".to_owned()),
+                "read-scope-sources",
+                function.read_scope_sources.len().to_string(),
             ),
             ("effect", effect_name.to_owned()),
             ("requirements", requirements.len().to_string()),
@@ -7381,13 +8006,52 @@ fn materialize_function_definition(
         0,
         KernelOwnerKey::Module(declaration.module),
     )?;
-    materializer.add_type_reference("function_result", function_owner, 0, function.result)?;
-    if let Some(source) = function.result_borrow {
+    materializer.add_type_reference("function_result", function_owner, 0, function.result.ty)?;
+    if let Some(source) = function.result.relation.source() {
         materializer.add_local_reference(
-            "borrow_result_source",
+            "result_source",
             function_owner,
             0,
-            KernelOwnerKey::Parameter(source),
+            KernelOwnerKey::Parameter(*source),
+        )?;
+    }
+    if let ResultRelation::ViewFrom { scope, .. } = function.result.relation {
+        materializer.add_read_scope_reference(function_owner, "result_scope", 0, scope)?;
+    }
+    for (index, parameter) in function.read_scope_parameters.iter().enumerate() {
+        materializer.push_fields(
+            DefinitionSection::Contract,
+            "definition.read-scope-parameter",
+            &[
+                ("id", parameter.id.to_string()),
+                ("parent", function_owner.to_string()),
+                ("index", index.to_string()),
+                ("name", parameter.name.to_string()),
+            ],
+        )?;
+    }
+    for (index, source) in function.read_scope_sources.iter().enumerate() {
+        materializer.push_fields(
+            DefinitionSection::Contract,
+            "definition.read-scope-source",
+            &[
+                ("parent", function_owner.to_string()),
+                ("index", index.to_string()),
+                ("source", source.source.to_string()),
+                ("scope", read_scope_coordinate(source.scope)),
+            ],
+        )?;
+        materializer.add_local_reference(
+            "read_scope_source",
+            function_owner,
+            index,
+            KernelOwnerKey::Parameter(source.source),
+        )?;
+        materializer.add_read_scope_reference(
+            function_owner,
+            "read_scope_source_scope",
+            index,
+            source.scope,
         )?;
     }
     materializer.add_local_reference(
@@ -7852,6 +8516,8 @@ fn definition_binding_kind_name(value: BindingKind) -> &'static str {
         BindingKind::OwnedUnpack => "owned_unpack",
         BindingKind::OwnedChoicePayload => "owned_choice_payload",
         BindingKind::OwnedBorrow => "owned_borrow",
+        BindingKind::ReadView => "read_view",
+        BindingKind::ReadViewBorrow => "read_view_borrow",
     }
 }
 
@@ -10014,16 +10680,16 @@ mod tests {
             &bytes[..8],
             FUNCTION_DEFINITION_CONTINUATION_MAGIC_TEXT.as_bytes()
         );
-        assert_eq!(&bytes[..8], b"LKJICT03");
-        assert_eq!(u16::from_le_bytes([bytes[8], bytes[9]]), 3);
+        assert_eq!(&bytes[..8], b"LKJICT04");
+        assert_eq!(u16::from_le_bytes([bytes[8], bytes[9]]), 4);
         let payload_start = FUNCTION_DEFINITION_CONTINUATION_HEADER_BYTES;
         assert_eq!(
             u16::from_be_bytes([bytes[payload_start], bytes[payload_start + 1]]),
-            3
+            4
         );
         assert_eq!(
             u16::from_be_bytes([bytes[payload_start + 2], bytes[payload_start + 3]]),
-            21
+            22
         );
         let decoded = decode_definition_continuation(&token).expect("decode continuation");
         assert_eq!(decoded.binding, binding);
@@ -10031,27 +10697,41 @@ mod tests {
         assert_eq!(decoded.index, 7);
         assert_eq!(decoded.section, DefinitionSection::Body);
         assert_eq!(decoded.resume_key, record.key);
-        let mut predecessor = bytes.clone();
-        predecessor[..8].copy_from_slice(b"LKJICT02");
-        predecessor[8..10].copy_from_slice(&2_u16.to_le_bytes());
-        predecessor[payload_start..payload_start + 2].copy_from_slice(&2_u16.to_be_bytes());
-        predecessor[payload_start + 2..payload_start + 4].copy_from_slice(&20_u16.to_be_bytes());
-        let checksum_start = predecessor.len() - FUNCTION_DEFINITION_CONTINUATION_CHECKSUM_BYTES;
-        let checksum = definition_domain_digest(
-            "lkjscript.function-definition.continuation-integrity.v2",
-            &predecessor[..checksum_start],
-        );
-        predecessor[checksum_start..].copy_from_slice(&checksum);
-        let predecessor_token = format!(
-            "{FUNCTION_DEFINITION_CONTINUATION_PREFIX}{}",
-            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(predecessor)
-        );
-        assert_eq!(
-            decode_definition_continuation(&predecessor_token)
-                .expect_err("predecessor definition continuation")
-                .code,
-            "definition_continuation_contract"
-        );
+        for (magic, version, projection, domain) in [
+            (
+                *b"LKJICT02",
+                2_u16,
+                20_u16,
+                "lkjscript.function-definition.continuation-integrity.v2",
+            ),
+            (
+                *b"LKJICT03",
+                3_u16,
+                21_u16,
+                "lkjscript.function-definition.continuation-integrity.v3",
+            ),
+        ] {
+            let mut predecessor = bytes.clone();
+            predecessor[..8].copy_from_slice(&magic);
+            predecessor[8..10].copy_from_slice(&version.to_le_bytes());
+            predecessor[payload_start..payload_start + 2].copy_from_slice(&version.to_be_bytes());
+            predecessor[payload_start + 2..payload_start + 4]
+                .copy_from_slice(&projection.to_be_bytes());
+            let checksum_start =
+                predecessor.len() - FUNCTION_DEFINITION_CONTINUATION_CHECKSUM_BYTES;
+            let checksum = definition_domain_digest(domain, &predecessor[..checksum_start]);
+            predecessor[checksum_start..].copy_from_slice(&checksum);
+            let predecessor_token = format!(
+                "{FUNCTION_DEFINITION_CONTINUATION_PREFIX}{}",
+                base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(predecessor)
+            );
+            assert_eq!(
+                decode_definition_continuation(&predecessor_token)
+                    .expect_err("predecessor definition continuation")
+                    .code,
+                "definition_continuation_contract"
+            );
+        }
         let mut mutated = token.into_bytes();
         let last = mutated.last_mut().expect("token byte");
         *last = if *last == b'A' { b'B' } else { b'A' };

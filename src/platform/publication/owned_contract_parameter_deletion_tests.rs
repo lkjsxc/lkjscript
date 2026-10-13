@@ -91,15 +91,19 @@ fn phantom_fixture() -> (KernelSnapshot, Ids) {
         (
             declaration,
             DeclarationPayload::Function(FunctionDeclaration {
-                result_borrow: None,
                 implementation_parameters,
                 requirement_parameters: vec![],
                 effect_parameters: vec![],
                 type_parameters,
                 parameters: vec![],
-                result: unit,
+                result: crate::platform::kernel::CallableResult {
+                    ty: unit,
+                    relation: crate::platform::kernel::ResultRelation::Value,
+                },
                 effect: FunctionEffect::Pure,
                 body,
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             }),
         )
     };
@@ -125,12 +129,16 @@ fn phantom_fixture() -> (KernelSnapshot, Ids) {
                 self_parameter: ids.self_parameter,
                 type_parameters: vec![ids.item_parameter],
                 methods: vec![OwnedMethod {
-                    result_borrow: None,
                     id: ids.method,
                     name: Name::new("inspect").unwrap(),
                     parameters: vec![],
-                    result: unit,
+                    result: crate::platform::kernel::CallableResult {
+                        ty: unit,
+                        relation: crate::platform::kernel::ResultRelation::Value,
+                    },
                     effect: FunctionEffect::Pure,
+                    read_scope_parameters: Vec::new(),
+                    read_scope_sources: Vec::new(),
                 }],
                 associated_types: Vec::new(),
             }),
@@ -150,6 +158,7 @@ fn phantom_fixture() -> (KernelSnapshot, Ids) {
                     type_arguments: vec![],
                     method: ids.method,
                     function: reference(ids.method_function),
+                    read_scope_arguments: Vec::new(),
                 }],
                 associated_types: Vec::new(),
             }),
@@ -222,6 +231,7 @@ fn phantom_owned_parameter_deletion_requires_complete_application_repair_and_ret
                 },
             },
             type_arguments: vec![],
+            read_scope_arguments: Vec::new(),
         }],
     };
     let parameter_repair = AuthoredChange::SetImplementationParameters {

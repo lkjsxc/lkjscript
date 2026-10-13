@@ -7,9 +7,9 @@ use super::entry::{
 use super::witness_error;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    DeclarationPayload, ExactOwnerKey, ExpressionOperation, KernelSnapshot, OwnerKey, OwnerKind,
-    OwnerRecord, ParameterParent, PortImplementation, PropagationClass, RelationEdge,
-    RelationEndpoint, owner_namespace,
+    BindingKind, BindingRecord, DeclarationPayload, ExactOwnerKey, ExpressionOperation,
+    ExpressionRecord, KernelSnapshot, OwnerKey, OwnerKind, OwnerRecord, ParameterParent,
+    PortImplementation, PropagationClass, RelationEdge, RelationEndpoint, owner_namespace,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -42,22 +42,41 @@ pub(super) fn derive_ownership(
 ) -> Result<BTreeMap<OwnerKey, OwnershipEntry>, Diagnostic> {
     let mut ownership = BTreeMap::new();
     for record in snapshot.owners.values() {
-        for (owner, entry) in ownership_contributions(record)? {
+        for (owner, entry) in
+            ownership_contributions_with_bindings(record, |binding| {
+                match snapshot.owners.get(&OwnerKey::Binding(binding)) {
+                    Some(OwnerRecord::Binding(record)) => Ok(Some(record.clone())),
+                    Some(_) => Err(witness_error(
+                        DiagnosticClass::Corrupt,
+                        "witness_binding_record",
+                        "binding identity has a foreign owner record",
+                    )),
+                    None => Ok(None),
+                }
+            })?
+        {
             insert_ownership(&mut ownership, owner, entry)?;
         }
     }
 
-    if ownership.len() != snapshot.owners.len() {
+    if ownership.keys().ne(snapshot.owners.keys()) {
         let missing = snapshot
             .owners
             .keys()
             .filter(|owner| !ownership.contains_key(owner))
             .copied()
             .collect::<Vec<_>>();
+        let unexpected = ownership
+            .keys()
+            .filter(|owner| !snapshot.owners.contains_key(owner))
+            .copied()
+            .collect::<Vec<_>>();
         return Err(witness_error(
             DiagnosticClass::Corrupt,
             "witness_ownership_incomplete",
-            format!("ownership derivation omitted owners {missing:?}"),
+            format!(
+                "ownership derivation omitted owners {missing:?} and invented owners {unexpected:?}"
+            ),
         ));
     }
     Ok(ownership)
@@ -68,6 +87,17 @@ pub(super) fn derive_ownership(
 /// exact removals and insertions without scanning unrelated owners.
 pub(crate) fn ownership_contributions(
     record: &OwnerRecord,
+) -> Result<BTreeMap<OwnerKey, OwnershipEntry>, Diagnostic> {
+    ownership_contributions_with_bindings(record, |_| Ok(None))
+}
+
+/// Derives exact container roles from canonical bindings. These facts do not certify
+/// expression/result/referent validity; complete kernel admission remains mandatory.
+pub(crate) fn ownership_contributions_with_bindings(
+    record: &OwnerRecord,
+    mut binding_record: impl FnMut(
+        crate::platform::semantic_id::BindingId,
+    ) -> Result<Option<BindingRecord>, Diagnostic>,
 ) -> Result<BTreeMap<OwnerKey, OwnershipEntry>, Diagnostic> {
     let mut ownership = BTreeMap::new();
     let self_entry = match record {
@@ -177,6 +207,7 @@ pub(crate) fn ownership_contributions(
             | DeclarationPayload::OwnedImplementation(_)
             | DeclarationPayload::Record { .. }
             | DeclarationPayload::OwnedRecord { .. }
+            | DeclarationPayload::ReadView(_)
             | DeclarationPayload::Variant { .. }
             | DeclarationPayload::Interface { .. }
             | DeclarationPayload::External(_)
@@ -219,14 +250,19 @@ pub(crate) fn ownership_contributions(
             match &record.operation {
                 ExpressionOperation::BorrowOwnedField { binding, .. }
                 | ExpressionOperation::BorrowOwnedRecordField { binding, .. }
-                | ExpressionOperation::BorrowOwnedItem { binding, .. }
-                | ExpressionOperation::BorrowCall { binding, .. } => insert_binding_parent(
+                | ExpressionOperation::BorrowOwnedItem { binding, .. } => insert_binding_parent(
                     &mut ownership,
                     *binding,
                     record.id,
                     BindingContainerRole::OwnedBorrow,
                     0,
                 )?,
+                ExpressionOperation::BorrowCall { binding, .. }
+                | ExpressionOperation::BorrowReadView { binding, .. }
+                | ExpressionOperation::BorrowReadViewField { binding, .. } => {
+                    let role = read_binding_container_role(record, *binding, &mut binding_record)?;
+                    insert_binding_parent(&mut ownership, *binding, record.id, role, 0)?;
+                }
                 ExpressionOperation::MatchBorrowedOwned { arms, .. } => {
                     for (ordinal, arm) in arms.iter().enumerate() {
                         insert_binding_parent(
@@ -273,13 +309,9 @@ pub(crate) fn ownership_contributions(
                 }
                 ExpressionOperation::Let { bindings, .. } => {
                     for (ordinal, binding) in bindings.iter().enumerate() {
-                        insert_binding_parent(
-                            &mut ownership,
-                            *binding,
-                            record.id,
-                            BindingContainerRole::Let,
-                            ordinal,
-                        )?;
+                        let role =
+                            read_binding_container_role(record, *binding, &mut binding_record)?;
+                        insert_binding_parent(&mut ownership, *binding, record.id, role, ordinal)?;
                     }
                 }
                 ExpressionOperation::Match { arms, .. } => {
@@ -309,6 +341,82 @@ pub(crate) fn ownership_contributions(
         _ => {}
     }
     Ok(ownership)
+}
+
+pub(super) fn read_binding_container_role(
+    expression: &ExpressionRecord,
+    binding: crate::platform::semantic_id::BindingId,
+    binding_record: &mut impl FnMut(
+        crate::platform::semantic_id::BindingId,
+    ) -> Result<Option<BindingRecord>, Diagnostic>,
+) -> Result<BindingContainerRole, Diagnostic> {
+    if matches!(expression.operation, ExpressionOperation::BorrowCall { .. })
+        && expression.contract_version
+            < crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+    {
+        return Ok(BindingContainerRole::OwnedBorrow);
+    }
+    // BorrowReadView has one unambiguous declared binding kind. Record-only
+    // traversal may derive its shape, while full admission checks its exact binding.
+    let record = binding_record(binding)?;
+    if record.is_none()
+        && matches!(expression.operation, ExpressionOperation::Let { .. })
+        && expression.contract_version
+            < crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+    {
+        return Ok(BindingContainerRole::Let);
+    }
+    if record.is_none()
+        && matches!(
+            expression.operation,
+            ExpressionOperation::BorrowReadView { .. }
+        )
+    {
+        return Ok(BindingContainerRole::ReadViewBorrow);
+    }
+    let record = record.ok_or_else(|| witness_error(
+        DiagnosticClass::Corrupt, "witness_read_binding_missing",
+        "current let, read-result or view-field container requires its exact canonical binding record",
+    ))?;
+    OwnerRecord::Binding(record.clone()).validate_local()?;
+    if record.header.owner != OwnerKey::Binding(binding) || record.header.kind != OwnerKind::Binding
+    {
+        return Err(witness_error(
+            DiagnosticClass::Corrupt,
+            "witness_read_binding_identity",
+            "read container references a binding record with another identity or owner kind",
+        ));
+    }
+    match (&expression.operation, record.kind) {
+        (ExpressionOperation::Let { .. }, BindingKind::Let) => Ok(BindingContainerRole::Let),
+        (ExpressionOperation::Let { .. }, BindingKind::ReadView)
+            if expression.contract_version
+                >= crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+                && record.value.is_some() =>
+        {
+            Ok(BindingContainerRole::ReadView)
+        }
+        (ExpressionOperation::BorrowCall { .. }, BindingKind::ReadView)
+            if record.value.is_none() =>
+        {
+            Ok(BindingContainerRole::ReadView)
+        }
+        (
+            ExpressionOperation::BorrowCall { .. }
+            | ExpressionOperation::BorrowReadViewField { .. },
+            BindingKind::OwnedBorrow,
+        ) => Ok(BindingContainerRole::OwnedBorrow),
+        (
+            ExpressionOperation::BorrowReadView { .. }
+            | ExpressionOperation::BorrowReadViewField { .. },
+            BindingKind::ReadViewBorrow,
+        ) => Ok(BindingContainerRole::ReadViewBorrow),
+        _ => Err(witness_error(
+            DiagnosticClass::Corrupt,
+            "witness_read_binding_kind",
+            "canonical binding kind/initializer is incompatible with its let, read-result or view-borrow container",
+        )),
+    }
 }
 
 pub(super) fn derive_test_dependencies(

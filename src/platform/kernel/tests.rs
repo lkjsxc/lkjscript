@@ -343,15 +343,20 @@ fn historical_prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             name: name("callee"),
             visibility: DeclarationVisibility::Package,
             payload: DeclarationPayload::Function(FunctionDeclaration {
-                result_borrow: None,
                 implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 effect_parameters: Vec::new(),
                 type_parameters: Vec::new(),
                 parameters: vec![parameter],
-                result: unit_type,
+                result: crate::platform::kernel::CallableResult {
+                    ty: unit_type,
+                    relation: crate::platform::kernel::ResultRelation::Value,
+                },
                 effect: FunctionEffect::Pure,
                 body: parameter_expression,
+
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             }),
         }),
     );
@@ -369,6 +374,8 @@ fn historical_prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             },
             type_arguments: Vec::new(),
             arguments: vec![call_argument],
+
+            read_scope_arguments: Vec::new(),
         },
     );
     let record_value = expression(&mut owners, 3, ExpressionOperation::Unit {});
@@ -477,13 +484,15 @@ fn historical_prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             name: name("caller"),
             visibility: DeclarationVisibility::Public,
             payload: DeclarationPayload::Function(FunctionDeclaration {
-                result_borrow: None,
                 implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 effect_parameters: Vec::new(),
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: unit_type,
+                result: crate::platform::kernel::CallableResult {
+                    ty: unit_type,
+                    relation: crate::platform::kernel::ResultRelation::Value,
+                },
                 effect: FunctionEffect::Task {
                     effect_parameters: Vec::new(),
                     requirements: vec![
@@ -495,6 +504,9 @@ fn historical_prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
                     ],
                 },
                 body: caller_root,
+
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             }),
         }),
     );
@@ -536,15 +548,20 @@ fn historical_prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             name: name("with_binding"),
             visibility: DeclarationVisibility::Private,
             payload: DeclarationPayload::Function(FunctionDeclaration {
-                result_borrow: None,
                 implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 effect_parameters: Vec::new(),
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: unit_type,
+                result: crate::platform::kernel::CallableResult {
+                    ty: unit_type,
+                    relation: crate::platform::kernel::ResultRelation::Value,
+                },
                 effect: FunctionEffect::Pure,
                 body: let_expression,
+
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             }),
         }),
     );
@@ -561,6 +578,8 @@ fn historical_prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             },
             type_arguments: Vec::new(),
             arguments: Vec::new(),
+
+            read_scope_arguments: Vec::new(),
         },
     );
     let test_expected = expression(&mut owners, 18, ExpressionOperation::Unit {});
@@ -1809,8 +1828,12 @@ fn canonical_kernel_codec_manifest_is_frozen() {
     }
 
     let (mut snapshot, _) = historical_prototype_snapshot();
+    snapshot.root.graph_contract_version = 33;
+    for owner in snapshot.owners.values_mut() {
+        owner.set_encoding_for_edit(33);
+    }
     assert_eq!(
-        manifest(&snapshot, contract::GRAPH_CONTRACT_IDENTITY),
+        manifest(&snapshot, "lkjscript-meaning-graph-33"),
         "245c65803b76d5bfb2a70973515378b07549c8700aad9bf58e2ae806e71f00ff"
     );
     // The current identity and owner envelopes advance together. Keep the previous
@@ -2431,7 +2454,7 @@ fn full_oracle_rejects_foreign_type_parameter_scope() {
     let DeclarationPayload::Function(function) = &mut function.payload else {
         panic!("binding function must be a function");
     };
-    function.result = type_digest;
+    function.result.ty = type_digest;
     snapshot.root.owners = map_root(snapshot.owners.len(), 1);
 
     let diagnostics = validate_full(&snapshot).expect_err("foreign type parameter use must reject");
@@ -2470,7 +2493,7 @@ fn generic_call_substitutes_the_exact_type_parameter() {
         panic!("callee must be a function");
     };
     callee.type_parameters.push(parameter);
-    callee.result = parameter_type;
+    callee.result.ty = parameter_type;
     let Some(OwnerRecord::Parameter(value)) =
         snapshot.owners.get_mut(&OwnerKey::Parameter(ids.parameter))
     else {
@@ -2629,6 +2652,8 @@ fn generic_task_functions_require_explicit_applications_at_ports() {
                     },
                     type_arguments: vec![unit],
                     effect_arguments: vec![],
+
+                    read_scope_arguments: Vec::new(),
                 },
             )
             .unwrap(),
@@ -2694,6 +2719,8 @@ fn authority_free_task_port_descriptors_can_bind_through_annotated_locals() {
                         declaration: ids.caller,
                     },
                     type_arguments: vec![],
+
+                    read_scope_arguments: Vec::new(),
                 },
             )
             .unwrap(),

@@ -2,10 +2,10 @@
 
 use super::{ProjectAuxiliary, ProjectRecipe, ProjectTemplate};
 use crate::platform::change::{
-    AuthoredChange, AuthoredDeclarationReference, AuthoredEffectRow, AuthoredExpression,
-    AuthoredExpressionOperation, AuthoredFieldSelector, AuthoredFunctionEffect, AuthoredLetBinding,
-    AuthoredLocalReference, AuthoredOperationReference, AuthoredParameter, AuthoredPort,
-    AuthoredPortImplementation, AuthoredPortReference, AuthoredRecordExpressionField,
+    AuthoredCallableResult, AuthoredChange, AuthoredDeclarationReference, AuthoredEffectRow,
+    AuthoredExpression, AuthoredExpressionOperation, AuthoredFieldSelector, AuthoredFunctionEffect,
+    AuthoredLetBinding, AuthoredLocalReference, AuthoredOperationReference, AuthoredParameter,
+    AuthoredPort, AuthoredPortImplementation, AuthoredPortReference, AuthoredRecordExpressionField,
     AuthoredRequirement, AuthoredRequirementReference, AuthoredResourceLimit,
     AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameterReference, DeclarationSelector,
     ModuleSelector,
@@ -67,14 +67,15 @@ pub(super) fn command_recipe() -> Result<ProjectRecipe, Diagnostic> {
             builtin_dependency(standard),
             module()?,
             AuthoredChange::CreateFunction {
-                result_borrow: None,
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
                 symbol: "$greet".to_owned(),
                 module: local_module(),
                 name: name("greet")?,
                 visibility: DeclarationVisibility::Private,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: AuthoredType::Text {},
+                result: AuthoredCallableResult::value(AuthoredType::Text {}),
                 effect: AuthoredFunctionEffect::Pure {},
                 body: greeting,
             },
@@ -199,38 +200,41 @@ pub(super) fn http_recipe() -> Result<ProjectRecipe, Diagnostic> {
             builtin_dependency(standard),
             module()?,
             AuthoredChange::CreateFunction {
-                result_borrow: None,
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
                 symbol: "$response_text".to_owned(),
                 module: local_module(),
                 name: name("response-text")?,
                 visibility: DeclarationVisibility::Private,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: AuthoredType::StaticText {},
+                result: AuthoredCallableResult::value(AuthoredType::StaticText {}),
                 effect: AuthoredFunctionEffect::Pure {},
                 body: response_text,
             },
             AuthoredChange::CreateFunction {
-                result_borrow: None,
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
                 symbol: "$status_code".to_owned(),
                 module: local_module(),
                 name: name("status-code")?,
                 visibility: DeclarationVisibility::Private,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: AuthoredType::I64 {},
+                result: AuthoredCallableResult::value(AuthoredType::I64 {}),
                 effect: AuthoredFunctionEffect::Pure {},
                 body: status_code,
             },
             AuthoredChange::CreateFunction {
-                result_borrow: None,
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
                 symbol: "$handle".to_owned(),
                 module: local_module(),
                 name: name("handle")?,
                 visibility: DeclarationVisibility::Private,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: response_type,
+                result: AuthoredCallableResult::value(response_type),
                 effect: AuthoredFunctionEffect::Task {
                     effect_parameters: Vec::new(),
                     requirements: vec![local_requirement(STREAMS)],
@@ -420,14 +424,15 @@ pub(super) fn nostr_relay_info_recipe(relay_url: &str) -> Result<ProjectRecipe, 
             builtin_dependency(standard),
             module()?,
             AuthoredChange::CreateFunction {
-                result_borrow: None,
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
                 symbol: "$content_type_is_nostr".to_owned(),
                 module: local_module(),
                 name: name("content-type-is-nostr")?,
                 visibility: DeclarationVisibility::Private,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: bool_type.clone(),
+                result: AuthoredCallableResult::value(bool_type.clone()),
                 effect: AuthoredFunctionEffect::Pure {},
                 body: reducer_body,
             },
@@ -444,14 +449,15 @@ pub(super) fn nostr_relay_info_recipe(relay_url: &str) -> Result<ProjectRecipe, 
                 header_type.clone(),
             )?,
             AuthoredChange::CreateFunction {
-                result_borrow: None,
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
                 symbol: "$handle".to_owned(),
                 module: local_module(),
                 name: name("handle")?,
                 visibility: DeclarationVisibility::Private,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: response_type,
+                result: AuthoredCallableResult::value(response_type),
                 effect: AuthoredFunctionEffect::Task {
                     effect_parameters: Vec::new(),
                     requirements: vec![local_requirement(STREAMS), local_requirement(RELAY)],
@@ -654,6 +660,14 @@ fn authored_type(
         | TypeForm::AssociatedWitnessProjection { .. } => {
             return Err(crate::platform::kernel::owned_associated_wire::unsupported_semantics());
         }
+        TypeForm::ReadViewApplied { .. }
+        | TypeForm::AssociatedReadViewMember { .. }
+        | TypeForm::AssociatedReadViewProjection { .. } => {
+            return Err(recipe_error(
+                "new_recipe_read_scope",
+                "ordinary starter recipes cannot import source-tied read-view types",
+            ));
+        }
         TypeForm::Unit => AuthoredType::Unit {},
         TypeForm::Bool => AuthoredType::Bool {},
         TypeForm::I64 => AuthoredType::I64 {},
@@ -843,6 +857,7 @@ impl RecipeExpressions {
         arguments: Vec<AuthoredExpression>,
     ) -> AuthoredExpression {
         self.expression(AuthoredExpressionOperation::Call {
+            read_scope_arguments: Vec::new(),
             requirement_arguments: Vec::new(),
             effect_arguments: Vec::new(),
             function,
@@ -870,6 +885,7 @@ impl RecipeExpressions {
         type_arguments: Vec<AuthoredType>,
     ) -> AuthoredExpression {
         self.expression(AuthoredExpressionOperation::FunctionValue {
+            read_scope_arguments: Vec::new(),
             requirement_arguments: Vec::new(),
             effect_arguments: Vec::new(),
             function,

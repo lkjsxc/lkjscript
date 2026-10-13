@@ -1,11 +1,11 @@
-//! Literal predecessor objects and independent frozen-layout witnesses for the additive codecs.
+//! Literal predecessor objects and independent witnesses for frozen and current codecs.
 use super::*;
 use crate::platform::compiler::{CompilationPayload, CompilationUnit, CompilationUnitKey};
 use crate::platform::diagnostic::DiagnosticClass;
 use crate::platform::package_interface::{PackageInterfaceOwner, PackageInterfaceOwnerDigest};
 use crate::platform::semantic_id::{
     AssociatedTypeMemberId, DeclarationId, ExpressionId, ImplementationParameterId, ParameterId,
-    TypeParameterId,
+    ReadScopeParameterId, TypeParameterId,
 };
 use crate::platform::storage::object::{ObjectDomain, ObjectKey};
 
@@ -86,11 +86,33 @@ fn extend(owner: &mut OwnerRecord) {
         DeclarationPayload::OwnedImplementation(implementation) => {
             implementation.associated_types.push(AssociatedTypeBinding {
                 member: member().id,
-                ty: implementation.self_type,
+                value: AssociatedTypeBindingValue::Owned {
+                    ty: implementation.self_type,
+                },
             })
         }
         _ => unreachable!(),
     }
+}
+
+fn assert_legacy_contract_scopes(contract: &OwnedContract) {
+    for method in &contract.methods {
+        assert!(method.read_scope_parameters.is_empty());
+        assert!(method.read_scope_sources.is_empty());
+        assert!(matches!(
+            &method.result.relation,
+            ResultRelation::Value | ResultRelation::ReadFrom { .. }
+        ));
+    }
+}
+
+fn assert_legacy_implementation_scopes(implementation: &OwnedImplementation) {
+    assert!(
+        implementation
+            .methods
+            .iter()
+            .all(|method| method.read_scope_arguments.is_empty())
+    );
 }
 
 #[test]
@@ -124,7 +146,17 @@ fn literal_predecessor_parent_objects_preserve_exact_bytes_and_keys() {
                 let OwnerRecord::Declaration(declaration) = &record else {
                     unreachable!()
                 };
+                assert_eq!(declaration.header.contract_version, 33);
                 assert!(!declaration.payload.has_associated_types());
+                match &declaration.payload {
+                    DeclarationPayload::OwnedContract(value) => {
+                        assert_legacy_contract_scopes(value)
+                    }
+                    DeclarationPayload::OwnedImplementation(value) => {
+                        assert_legacy_implementation_scopes(value)
+                    }
+                    _ => unreachable!(),
+                }
                 assert_eq!(
                     encode_owner(&record).unwrap(),
                     (OwnerObjectDigest::from_bytes(expected), bytes.to_vec())
@@ -137,6 +169,20 @@ fn literal_predecessor_parent_objects_preserve_exact_bytes_and_keys() {
                     PackageInterfaceOwnerDigest::from_bytes(expected),
                 )
                 .unwrap();
+                assert_eq!(record.contract_version, 21);
+                assert_eq!(record.record.header().contract_version, 33);
+                let PackageInterfaceRecord::Declaration(declaration) = &record.record else {
+                    unreachable!()
+                };
+                match &declaration.payload {
+                    PackageInterfaceDeclarationPayload::OwnedContract(value) => {
+                        assert_legacy_contract_scopes(value)
+                    }
+                    PackageInterfaceDeclarationPayload::OwnedImplementation(value) => {
+                        assert_legacy_implementation_scopes(value)
+                    }
+                    _ => unreachable!(),
+                }
                 assert_eq!(
                     record.encode().unwrap(),
                     (
@@ -149,6 +195,23 @@ fn literal_predecessor_parent_objects_preserve_exact_bytes_and_keys() {
                 let key = ObjectKey::from_digest(ObjectDomain::CompilerUnit, expected);
                 let record = CompilationUnit::decode(bytes, key).unwrap();
                 assert_eq!(record.source.owner, owner);
+                assert_eq!(
+                    (
+                        record.contract_version,
+                        record.graph_contract_version,
+                        record.bytecode_contract_version
+                    ),
+                    (33, 33, 27)
+                );
+                match &record.payload {
+                    CompilationPayload::OwnedContract(value) => {
+                        assert_legacy_contract_scopes(value)
+                    }
+                    CompilationPayload::OwnedImplementation(value) => {
+                        assert_legacy_implementation_scopes(value)
+                    }
+                    _ => unreachable!(),
+                }
                 assert_eq!(record.encode().unwrap(), (key, bytes.to_vec()));
             }
             _ => unreachable!(),
@@ -158,74 +221,112 @@ fn literal_predecessor_parent_objects_preserve_exact_bytes_and_keys() {
 
 #[test]
 fn nonempty_parent_inventories_have_disjoint_complete_envelopes() {
-    for implementation in [false, true] {
-        let mut owner = base_owner(implementation);
-        extend(&mut owner);
-        let (digest, bytes) = encode_owner(&owner).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOAT01");
-        assert_eq!(
-            decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
-            owner
-        );
-        assert!(
-            bincode::encode_to_vec(&owner, bincode::config::standard()).is_err(),
-            "base owner encoding cannot lose an associated inventory"
-        );
-        let interface = PackageInterfaceOwner {
-            contract_version: 21,
-            record: PackageInterfaceRecord::project_public(&owner)
-                .unwrap()
-                .unwrap(),
-        };
-        let (interface_digest, interface_bytes) = interface.encode().unwrap();
-        assert_eq!(&interface_bytes[..8], b"LKJPAT01");
-        assert_eq!(
-            PackageInterfaceOwner::decode(&interface_bytes, owner.owner(), interface_digest)
-                .unwrap(),
-            interface
-        );
-        assert!(
-            bincode::encode_to_vec(&interface, bincode::config::standard()).is_err(),
-            "base interface encoding cannot lose a nested inventory"
-        );
-        let unit_bytes = literal(if implementation {
-            "unit-implementation-base.bin"
-        } else {
-            "unit-contract-base.bin"
-        });
-        let mut unit = CompilationUnit::decode(
-            unit_bytes,
-            ObjectKey::for_bytes(ObjectDomain::CompilerUnit, unit_bytes),
-        )
-        .unwrap();
-        let tag = match &mut unit.payload {
-            CompilationPayload::OwnedContract(contract) => {
-                contract.associated_types.push(member());
-                1
-            }
-            CompilationPayload::OwnedImplementation(implementation) => {
-                implementation.associated_types.push(AssociatedTypeBinding {
-                    member: member().id,
-                    ty: implementation.self_type,
-                });
-                2
-            }
-            _ => unreachable!(),
-        };
-        let old_key = unit.key;
-        unit.key =
-            CompilationUnitKey::derive_for_tag(&unit.source, unit.optimization, Some(tag)).unwrap();
-        assert_ne!(unit.key, old_key);
-        let (unit_key, extended_bytes) = unit.encode().unwrap();
-        assert_eq!(&extended_bytes[..8], b"LKJCAU01");
-        assert_eq!(
-            CompilationUnit::decode(&extended_bytes, unit_key).unwrap(),
-            unit
-        );
-        assert!(
-            bincode::encode_to_vec(&unit, bincode::config::standard()).is_err(),
-            "base unit encoding cannot lose a nested inventory"
-        );
+    for graph in [33, 34] {
+        for implementation in [false, true] {
+            let mut owner = base_owner(implementation);
+            owner.set_encoding_for_edit(graph);
+            extend(&mut owner);
+            let (digest, bytes) = encode_owner(&owner).unwrap();
+            assert_eq!(
+                &bytes[..8],
+                if graph == 33 {
+                    b"LKJOAT01"
+                } else {
+                    b"LKJOAV01"
+                }
+            );
+            assert_eq!(
+                decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
+                owner
+            );
+            assert!(
+                bincode::encode_to_vec(&owner, bincode::config::standard()).is_err(),
+                "base owner encoding cannot lose an associated inventory"
+            );
+            let interface = PackageInterfaceOwner {
+                contract_version: if graph == 33 { 21 } else { 22 },
+                record: PackageInterfaceRecord::project_public(&owner)
+                    .unwrap()
+                    .unwrap(),
+            };
+            let (interface_digest, interface_bytes) = interface.encode().unwrap();
+            assert_eq!(
+                &interface_bytes[..8],
+                if graph == 33 {
+                    b"LKJPAT01"
+                } else {
+                    b"LKJPAV01"
+                }
+            );
+            assert_eq!(
+                PackageInterfaceOwner::decode(&interface_bytes, owner.owner(), interface_digest)
+                    .unwrap(),
+                interface
+            );
+            assert!(
+                bincode::encode_to_vec(&interface, bincode::config::standard()).is_err(),
+                "base interface encoding cannot lose a nested inventory"
+            );
+            let unit_bytes = literal(if implementation {
+                "unit-implementation-base.bin"
+            } else {
+                "unit-contract-base.bin"
+            });
+            let mut unit = CompilationUnit::decode(
+                unit_bytes,
+                ObjectKey::for_bytes(ObjectDomain::CompilerUnit, unit_bytes),
+            )
+            .unwrap();
+            let old_key = unit.key;
+            // A retained unit keeps its exact old profile; current units select the
+            // new profile before their key and extension bytes are derived.
+            unit.contract_version = if graph == 33 { 33 } else { 34 };
+            unit.graph_contract_version = graph;
+            unit.bytecode_contract_version = if graph == 33 { 27 } else { 28 };
+            let tag = match &mut unit.payload {
+                CompilationPayload::OwnedContract(contract) => {
+                    contract.associated_types.push(member());
+                    1
+                }
+                CompilationPayload::OwnedImplementation(implementation) => {
+                    implementation.associated_types.push(AssociatedTypeBinding {
+                        member: member().id,
+                        value: AssociatedTypeBindingValue::Owned {
+                            ty: implementation.self_type,
+                        },
+                    });
+                    2
+                }
+                _ => unreachable!(),
+            };
+            unit.key = CompilationUnitKey::derive_for_profile(
+                &unit.source,
+                unit.optimization,
+                unit.contract_version,
+                unit.bytecode_contract_version,
+                unit.graph_contract_version,
+                Some(tag),
+            )
+            .unwrap();
+            assert_ne!(unit.key, old_key);
+            let (unit_key, extended_bytes) = unit.encode().unwrap();
+            assert_eq!(
+                &extended_bytes[..8],
+                if graph == 33 {
+                    b"LKJCAU01"
+                } else {
+                    b"LKJCAU02"
+                }
+            );
+            assert_eq!(
+                CompilationUnit::decode(&extended_bytes, unit_key).unwrap(),
+                unit
+            );
+            assert!(
+                bincode::encode_to_vec(&unit, bincode::config::standard()).is_err(),
+                "base unit encoding cannot lose a nested inventory"
+            );
+        }
     }
 }
 
@@ -310,9 +411,10 @@ fn associated_types_bind_exact_contract_member_and_lexical_witness_identity() {
 
 #[test]
 fn explicit_empty_extension_and_predecessor_inventory_loss_are_refused() {
-    use super::owned_associated_wire::{AssociatedOwnedBody, AssociatedOwnerWire};
+    use super::owned_associated_wire::{AssociatedOwnedBody, FrozenAssociatedOwnedBody33};
     for implementation in [false, true] {
         let mut owner = base_owner(implementation);
+        owner.set_encoding_for_edit(34);
         extend(&mut owner);
         let OwnerRecord::Declaration(record) = owner.clone() else {
             unreachable!()
@@ -343,6 +445,22 @@ fn explicit_empty_extension_and_predecessor_inventory_loss_are_refused() {
         assert!(super::wire26::PackageInterfaceRecord26::try_from(interface.clone()).is_err());
         assert!(super::wire27::PackageInterfaceRecord27::try_from(interface.clone()).is_err());
         assert!(super::wire28::PackageInterfaceRecord28::try_from(interface).is_err());
+        let mut frozen_body = FrozenAssociatedOwnedBody33::from_payload(&record.payload)
+            .unwrap()
+            .unwrap();
+        match &mut frozen_body {
+            FrozenAssociatedOwnedBody33::Contract(_, members) => members.clear(),
+            FrozenAssociatedOwnedBody33::Implementation(_, bindings) => bindings.clear(),
+        }
+        let frozen_bytes =
+            bincode::encode_to_vec(frozen_body, bincode::config::standard()).unwrap();
+        assert!(
+            bincode::decode_from_slice::<FrozenAssociatedOwnedBody33, _>(
+                &frozen_bytes,
+                bincode::config::standard()
+            )
+            .is_err()
+        );
         let mut historical = record;
         historical.header.contract_version = 28;
         let historical_owner = OwnerRecord::Declaration(historical.clone());
@@ -350,13 +468,48 @@ fn explicit_empty_extension_and_predecessor_inventory_loss_are_refused() {
             encode_owner(&historical_owner).unwrap_err().code,
             "kernel_associated_encoding_generation"
         );
-        // An extension checksum does not grant an old logical header the new capability.
-        let raw = crate::platform::packed::encode(
-            contract::OWNED_ASSOCIATED_OWNER_MAGIC,
-            contract::OWNED_ASSOCIATED_OWNER_ENVELOPE_DOMAIN,
-            &AssociatedOwnerWire(historical),
-            contract::MAXIMUM_OWNER_OBJECT_BYTES,
-        )
+        // Independently flatten the current extension layout with a false old
+        // header. A recomputed checksum cannot grant that header the capability.
+        let raw = match &historical.payload {
+            DeclarationPayload::OwnedContract(value) => crate::platform::packed::encode(
+                contract::ASSOCIATED_READ_VIEW_OWNER_MAGIC,
+                contract::ASSOCIATED_READ_VIEW_OWNER_ENVELOPE_DOMAIN,
+                &(
+                    1_u16,
+                    1_u8,
+                    historical.header,
+                    historical.module,
+                    &historical.name,
+                    historical.visibility,
+                    value.self_parameter,
+                    &value.type_parameters,
+                    &value.methods,
+                    &value.associated_types,
+                ),
+                contract::MAXIMUM_OWNER_OBJECT_BYTES,
+            ),
+            DeclarationPayload::OwnedImplementation(value) => crate::platform::packed::encode(
+                contract::ASSOCIATED_READ_VIEW_OWNER_MAGIC,
+                contract::ASSOCIATED_READ_VIEW_OWNER_ENVELOPE_DOMAIN,
+                &(
+                    1_u16,
+                    2_u8,
+                    historical.header,
+                    historical.module,
+                    &historical.name,
+                    historical.visibility,
+                    &value.type_parameters,
+                    &value.implementation_parameters,
+                    value.contract,
+                    value.self_type,
+                    &value.type_arguments,
+                    &value.methods,
+                    &value.associated_types,
+                ),
+                contract::MAXIMUM_OWNER_OBJECT_BYTES,
+            ),
+            _ => unreachable!(),
+        }
         .unwrap();
         assert!(
             decode_owner(
@@ -366,6 +519,58 @@ fn explicit_empty_extension_and_predecessor_inventory_loss_are_refused() {
                 OwnerObjectDigest::of(&raw)
             )
             .is_err()
+        );
+    }
+}
+
+#[test]
+fn read_view_family_inventory_codecs_preserve_scope_identity_and_refuse_old_profiles() {
+    use super::owned_associated_wire::FrozenAssociatedOwnedBody33;
+    for implementation in [false, true] {
+        let mut owner = base_owner(implementation);
+        owner.set_encoding_for_edit(34);
+        let scope_parameter = ReadScopeParameter {
+            id: ReadScopeParameterId::from_bytes([72; 16]).unwrap(),
+            name: Name::new("window").unwrap(),
+        };
+        let OwnerRecord::Declaration(record) = &mut owner else {
+            unreachable!()
+        };
+        match &mut record.payload {
+            DeclarationPayload::OwnedContract(contract) => {
+                let mut family = member();
+                family.bound = AssociatedTypeBound::ReadViewFamily {
+                    scope_parameter: scope_parameter.clone(),
+                };
+                contract.associated_types.push(family);
+            }
+            DeclarationPayload::OwnedImplementation(implementation) => {
+                implementation.associated_types.push(AssociatedTypeBinding {
+                    member: member().id,
+                    value: AssociatedTypeBindingValue::ReadViewFamily {
+                        scope_parameter: scope_parameter.clone(),
+                        ty: implementation.self_type,
+                    },
+                });
+            }
+            _ => unreachable!(),
+        }
+        assert_eq!(
+            FrozenAssociatedOwnedBody33::from_payload(&record.payload)
+                .unwrap_err()
+                .code,
+            "kernel_read_view_encoding_generation",
+        );
+        let (digest, bytes) = encode_owner(&owner).unwrap();
+        assert_eq!(&bytes[..8], b"LKJOAV01");
+        assert_eq!(
+            decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
+            owner
+        );
+        owner.set_encoding_for_edit(33);
+        assert_eq!(
+            encode_owner(&owner).unwrap_err().code,
+            "kernel_read_view_generation"
         );
     }
 }
@@ -381,7 +586,7 @@ fn binding_roots_and_compiler_tables_include_every_associated_rhs() {
         unreachable!()
     };
     let rhs = TypeObjectDigest::from_bytes([217; 32]);
-    implementation.associated_types[0].ty = rhs;
+    *implementation.associated_types[0].value.ty_mut() = rhs;
     assert!(owner.type_roots().contains(&rhs));
     assert!(
         PackageInterfaceRecord::project_public(&owner)
@@ -401,10 +606,17 @@ fn binding_roots_and_compiler_tables_include_every_associated_rhs() {
     };
     implementation.associated_types.push(AssociatedTypeBinding {
         member: member().id,
-        ty: rhs,
+        value: AssociatedTypeBindingValue::Owned { ty: rhs },
     });
-    unit.key =
-        CompilationUnitKey::derive_for_tag(&unit.source, unit.optimization, Some(2)).unwrap();
+    unit.key = CompilationUnitKey::derive_for_profile(
+        &unit.source,
+        unit.optimization,
+        unit.contract_version,
+        unit.bytecode_contract_version,
+        unit.graph_contract_version,
+        Some(2),
+    )
+    .unwrap();
     assert_eq!(
         unit.encode().unwrap_err().code,
         "compiler_unit_owned_implementation_type"
@@ -537,8 +749,12 @@ fn codec_occurrence_snapshot() -> (
                         ty: scalar,
                         use_mode: ParameterUse::Unrestricted,
                     }],
-                    result: scalar,
-                    result_borrow: None,
+                    result: CallableResult {
+                        ty: scalar,
+                        relation: ResultRelation::Value,
+                    },
+                    read_scope_parameters: vec![],
+                    read_scope_sources: vec![],
                     effect: FunctionEffect::Pure,
                 }],
             }),
@@ -589,8 +805,12 @@ fn codec_occurrence_snapshot() -> (
                 requirement_parameters: vec![],
                 effect_parameters: vec![],
                 parameters: vec![parameter_id],
-                result: projection,
-                result_borrow: None,
+                result: CallableResult {
+                    ty: projection,
+                    relation: ResultRelation::Value,
+                },
+                read_scope_parameters: vec![],
+                read_scope_sources: vec![],
                 effect: FunctionEffect::Pure,
                 body,
             }),
@@ -636,7 +856,7 @@ fn codec_associated_envelopes_require_exact_occurrence_scope_and_owner_generatio
                 .expect("function")
             {
                 OwnerRecord::Declaration(function) => match &function.payload {
-                    DeclarationPayload::Function(signature) => signature.result,
+                    DeclarationPayload::Function(signature) => signature.result.ty,
                     _ => panic!("signature"),
                 },
                 _ => panic!("function"),
@@ -716,7 +936,7 @@ fn codec_associated_envelopes_require_exact_occurrence_scope_and_owner_generatio
             let DeclarationPayload::Function(signature) = &mut function.payload else {
                 panic!("signature");
             };
-            signature.result = digest;
+            signature.result.ty = digest;
             assert_ne!(
                 digest, original_result,
                 "each form mutant changes its digest"

@@ -7,6 +7,7 @@ use super::capability::{
 use super::prepare::{NormalizedOperation, NormalizedProgram, NormalizedRequirement};
 use super::resource::NormalizedResourceScope;
 use super::value::{NormalizedRecord, NormalizedValue, RecordLayoutIndex, VariantLayoutIndex};
+use super::value_schema::NormalizedValueSchema;
 use crate::platform::data::{
     DataCommitOutcome, DataEntry, DataEntryRevision, DataExpectation, DataKey, DataKeyPart,
     DataScanDirection, DataScanItem, DataScanPage, DataSchema, DataSchemaExpectation, DataStore,
@@ -534,6 +535,9 @@ impl NormalizedCapabilityAdapter for NormalizedDataAdapter {
                 "data mutation operations are available only inside transaction scope",
             ));
         }
+        for argument in &arguments {
+            argument.reject_read_view_escape(control)?;
+        }
         let mut transaction = self
             .store
             .begin()
@@ -605,6 +609,9 @@ impl NormalizedCapabilityTransaction for NormalizedDataTransaction {
                 "data transaction is already closed",
             )
         })?;
+        for argument in &arguments {
+            argument.reject_read_view_escape(control)?;
+        }
         self.adapter.call_with(transaction, operation, &arguments)
     }
 
@@ -1048,6 +1055,17 @@ fn signature(
     parameters: &[Shape],
     result: Shape,
 ) -> Result<(), Diagnostic> {
+    let control = ExecutionControl::uncancelled();
+    for ty in operation
+        .parameters
+        .iter()
+        .map(|parameter| parameter.ty)
+        .chain(std::iter::once(operation.result))
+    {
+        program
+            .reject_read_view_escape(ty, &control)
+            .map_err(super::runner::execution_diagnostic)?;
+    }
     if operation.parameters.len() != parameters.len()
         || operation
             .parameters

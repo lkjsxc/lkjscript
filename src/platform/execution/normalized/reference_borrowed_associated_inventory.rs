@@ -6,9 +6,18 @@ use crate::platform::execution::normalized::reference_types::associated_preparat
 
 struct SignatureView<'a> {
     parameters: &'a [(TypeObjectDigest, ParameterUse)],
-    result: TypeObjectDigest,
-    source: Option<u32>,
+    result: crate::platform::kernel::CallableResult<u32>,
     is_task: bool,
+}
+
+fn read_view(closure: &mut Closure<'_, '_>, ty: TypeObjectDigest) -> Result<bool, ExecutionError> {
+    closure.tick()?;
+    if let Some(proof) = &closure.read_view_proof {
+        return proof
+            .prepared_category(ty)
+            .map(|category| category == crate::platform::kernel::ValueCategory::ReadView);
+    }
+    Ok(false)
 }
 
 fn signature(
@@ -16,21 +25,32 @@ fn signature(
     scope: DeclarationReference,
     value: SignatureView<'_>,
 ) -> Result<(), ExecutionError> {
+    let mut seen_owned = false;
     for (ty, mode) in value.parameters {
         closure.tick()?;
-        if closure.scoped_owned(*ty, Some(scope))? && *mode == ParameterUse::Unrestricted {
+        let owned = closure.scoped_owned(*ty, Some(scope))?;
+        let storage = owned || read_view(closure, *ty)?;
+        if seen_owned && !owned || storage && *mode == ParameterUse::Unrestricted {
             return Err(reject());
         }
+        seen_owned |= owned;
     }
-    if let Some(source) = value.source {
+    let result_view = read_view(closure, value.result.ty)?;
+    if let Some(source) = value.result.relation.source().copied() {
         let (ty, mode) = value.parameters.get(source as usize).ok_or_else(reject)?;
-        if value.is_task
-            || *mode != ParameterUse::Borrow
-            || !closure.scoped_owned(*ty, Some(scope))?
-            || !closure.scoped_owned(value.result, Some(scope))?
-        {
+        let source_storage = closure.scoped_owned(*ty, Some(scope))? || read_view(closure, *ty)?;
+        let result_storage = match value.result.relation {
+            crate::platform::kernel::ResultRelation::ReadFrom { .. } => {
+                closure.scoped_owned(value.result.ty, Some(scope))? || result_view
+            }
+            crate::platform::kernel::ResultRelation::ViewFrom { .. } => result_view,
+            crate::platform::kernel::ResultRelation::Value => false,
+        };
+        if value.is_task || *mode != ParameterUse::Borrow || !source_storage || !result_storage {
             return Err(reject());
         }
+    } else if result_view {
+        return Err(reject());
     }
     Ok(())
 }
@@ -44,8 +64,8 @@ fn function(
     let (parameters, result, source, effect, formals) = match &owner.payload {
         DeclarationPayload::Function(function) => (
             &function.parameters,
-            function.result,
-            function.result_borrow,
+            function.result.ty,
+            function.result.relation.source().copied(),
             &function.effect,
             function.implementation_parameters.as_slice(),
         ),
@@ -84,6 +104,50 @@ fn function(
                 .ok_or_else(reject)
         })
         .transpose()?;
+    let (expected_relation, expected_scope_parameters, expected_scope_sources) =
+        match &owner.payload {
+            DeclarationPayload::Function(function) => {
+                let position = |source| {
+                    parameters
+                        .iter()
+                        .position(|parameter| *parameter == source)
+                        .and_then(|position| u32::try_from(position).ok())
+                        .ok_or_else(|| {
+                            crate::platform::diagnostic::Diagnostic::new(
+                                crate::platform::diagnostic::DiagnosticClass::Semantic,
+                                "reference_borrowed_result_contract",
+                                "source escapes complete signature inventory",
+                            )
+                        })
+                };
+                (
+                    function
+                        .result
+                        .try_map_source(position)
+                        .map_err(|_| reject())?
+                        .relation,
+                    &function.read_scope_parameters[..],
+                    function
+                        .read_scope_sources
+                        .iter()
+                        .cloned()
+                        .map(|entry| entry.try_map_source(position).map_err(|_| reject()))
+                        .collect::<Result<Vec<_>, _>>()?,
+                )
+            }
+            DeclarationPayload::External(_) => (
+                crate::platform::kernel::ResultRelation::Value,
+                &[][..],
+                Vec::new(),
+            ),
+            _ => return Err(reject()),
+        };
+    if value.result.relation != expected_relation
+        || value.read_scope_parameters != expected_scope_parameters
+        || value.read_scope_sources != expected_scope_sources
+    {
+        return Err(reject());
+    }
     let effect_matches = match effect {
         FunctionEffect::Pure => {
             value.effect.parameters.is_empty() && value.effect.requirements.is_empty()
@@ -107,11 +171,19 @@ fn function(
         || formals != value.implementation_templates.as_slice()
         || value.is_task != matches!(effect, FunctionEffect::Task { .. })
         || !effect_matches
-        || (value.requires_associated_generation
-            && owner.header.contract_version
-                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
-        || value.roots.get(&(owner.header.owner, result)) != Some(&value.result)
-        || source_position != value.result_borrow.map(|position| position as usize)
+        || ((value.requires_associated_generation || value.requires_read_view_generation)
+            && !super::super::associated_generation_admitted(
+                owner.header.contract_version,
+                value.requires_read_view_generation,
+            ))
+        || value.roots.get(&(owner.header.owner, result)) != Some(&value.result.ty)
+        || source_position
+            != value
+                .result
+                .relation
+                .source()
+                .copied()
+                .map(|position| position as usize)
     {
         return Err(reject());
     }
@@ -128,7 +200,7 @@ fn function(
             || value.occurrences.get(&parameter.header.owner)
                 != Some(&parameter.header.contract_version)
             || value.roots.get(&(parameter.header.owner, parameter.ty)) != Some(ty)
-            || (value.result_borrow == Some(position as u32)
+            || (value.result.relation.source().copied() == Some(position as u32)
                 && parameter.resource_requirement.is_some())
             || (value.is_task
                 && *mode == ParameterUse::Borrow
@@ -147,7 +219,6 @@ fn function(
         SignatureView {
             parameters: &value.parameters,
             result: value.result,
-            source: value.result_borrow,
             is_task: value.is_task,
         },
     )
@@ -250,7 +321,9 @@ pub(super) fn inventory(
                             .ok_or_else(reject)?;
                         if value.occurrences.get(key) != Some(&owner.header.contract_version)
                             || value.is_task != matches!(method.effect, FunctionEffect::Task { .. })
-                            || value.result_borrow != method.result_borrow
+                            || value.result.relation != method.result.relation
+                            || value.read_scope_parameters != method.read_scope_parameters
+                            || value.read_scope_sources != method.read_scope_sources
                         {
                             return Err(reject());
                         }
@@ -260,7 +333,6 @@ pub(super) fn inventory(
                             SignatureView {
                                 parameters: &value.parameters,
                                 result: value.result,
-                                source: value.result_borrow,
                                 is_task: value.is_task,
                             },
                         )?;
@@ -289,7 +361,12 @@ pub(super) fn inventory(
                             return Err(reject());
                         }
                         let value = &proof
-                            .symbolic_mapping(scope, mapping.method, closure.control)?
+                            .symbolic_mapping(
+                                scope,
+                                mapping.method,
+                                &mapping.read_scope_arguments,
+                                closure.control,
+                            )?
                             .signature;
                         signature(
                             closure,
@@ -297,7 +374,6 @@ pub(super) fn inventory(
                             SignatureView {
                                 parameters: &value.parameters,
                                 result: value.result,
-                                source: value.result_borrow,
                                 is_task: value.is_task,
                             },
                         )?;

@@ -1,6 +1,7 @@
 # Associated source-tied read-view families
 
-Status: selected, independently reviewed design; unimplemented.
+Status: selected semantic contract for associated source-tied read-view families.
+[Current availability, validation and publication](../status.md) are tracked separately.
 [The decision](../decisions/associated-read-views.md) owns the selection and custody
 rationale. Existing [associated Owned types](associated-owned-types.md),
 [borrowed results](owned-read-results.md) and
@@ -112,6 +113,13 @@ methods. Ordinary type substitution being empty does not skip scope/witness
 substitution. Parameter aliases to the same scope are allowed only with explicit
 substitution evidence; they never merge their runtime source anchors.
 
+The existing actual-Owned suffix rule remains. Ordinary metadata and borrowed
+ReadView parameters may interleave in the prefix, including `view_get(view,index)`;
+a view does not start the Owned suffix or become ordinary data. After an actual
+Owned parameter, neither ordinary metadata nor a borrowed view may follow. Preserve
+authored argument evaluation order. A view read's selected source protection is
+admitted before subsequent argument expressions/effects, without reordering them.
+
 Prepared type/application identity uses these finite symbolic coordinates and the
 complete witness environment. It does not allocate a new type for every dynamic
 invocation. Each invocation nevertheless mints fresh runtime access/return seals.
@@ -119,6 +127,36 @@ Shared prepared bodies/caches cannot store live source tokens, descriptor handle
 lease IDs or permissions from a previous invocation.
 
 ## Descriptor backing, moves, reads and release
+
+An owning descriptor has the positive `ReadView` binding category. It owns an
+initializer expression under an ordinary lexical `Let` container, or has no
+initializer when a `BorrowCall` adopts its `ViewFrom` result. An ordinary `Let`
+binding category cannot hide a view. Authoring requires an exact positive view
+annotation where it cannot safely infer this distinction. Borrowed descriptors
+use `ReadViewBorrow`; neither category becomes ordinary data through type erasure.
+
+A current Graph34 `BorrowCall` in its exact Graph34 named Function opens its prospective
+`Lexical(callable,binding)` loan scope before invocation and closes that scope
+after its body. Its destination value is inaccessible until successful adoption.
+An owning view initializer can open that same prospective source scope when its
+positive annotation names this exact lexical coordinate. The constructor then
+protects its separately proved selected source before evaluating fields, including
+zero-reference construction. Initialization does not grant a self-readable local.
+After successful initialization, the owning view's `Let` body has its checked
+lexical boundary even when the descriptor carries an already forwarded parent
+scope. Ending this boundary closes only the newly opened scope owner; it cannot
+close a forwarded parent scope or grant source access from the scope identity.
+Descriptor drop and this source validity boundary remain separate events. Frozen
+Graph33 borrowed calls retain their original encoding without these new markers.
+The exact enclosing Function34 supplies this new scope authority. Unchanged
+ordinary loan expressions and bindings may retain their individually valid native
+headers under that function: their existing lexical lifetime is used after exact
+body ownership, source and liveness admission. New view forms/binding kinds and
+scope-argument-bearing expressions themselves require Graph34. A Function33
+rebuilt into compiler unit34 remains marker-free and gains no new scope authority.
+Ordinary Owned loans in Test, Constant and Port roots keep their existing protocol;
+they do not gain view scopes through fabricated callable identities. This narrow
+mixed-source rule does not widen predecessor readers to new payloads or profiles.
 
 Construction produces an affine view handle. Immutable backing owns its ordinary
 field values, reference-field read tokens, an explicit selected-source custody
@@ -358,11 +396,39 @@ execution acquires no invented cumulative instruction budget.
 A clean versioned cut may replace predecessor field shapes, including legacy
 result_borrow metadata, with one explicit result contract. There is no requirement
 to preserve feature-free .95 bytes if that obstructs a cleaner authoritative model.
-Assign exact Graph/interface/compiler/bytecode/artifact/authoring/validator/reader
-generations together at their maintained owners before implementation. Refuse
+The selected coordinated encoding and proof owners are:
+
+| Owner | Current selected value |
+| --- | --- |
+| Meaning graph | Graph34 |
+| Closed ordinary base type object | TypeObject10, `LKJTYP10` |
+| Associated read-view extension | capability1, `LKJTAV01` / `LKJOAV01` |
+| Package interface | Interface22 |
+| Compiler unit / bytecode / artifact | 34 / 28 / 41 |
+| Native authored / compact authored | 39 / 42 |
+| Summary / ownership witness / validator | 12 / 10 / 41 |
+| Registry / CLI / function-definition projection | 26 / 47 / 22 |
+
+The ordinary base type fields and variant payloads are unchanged and encoded
+through the strict closed TypeObject10 schema. New view forms use the dedicated
+extension envelope; they are never accepted as additional base discriminants.
+TypeObject11 is unsupported. Primitive identities remain singular across current
+and retained owners; there are no contextual primitive profile constructors.
+The graph and callable-result/scope cut remains explicit. Refuse
 unsupported profiles before decoding new fields; do not erase scope/member/result
 data or patch headers. Rebuild maintained assets through ordinary product owners
 where required. Historical .95 evidence and immutable publication are preserved.
+
+Bootstrap may use bounded version-specific decoding of genuine predecessor
+Graph33/interface21/compiler33/bytecode27/artifact40 records into the single current
+model, with empty historical scope inventories and only historical Value/ReadFrom
+relations. Validate original bytes, identities and historical proof material under
+their exact profiles, then perform complete current semantic admission. This is an
+ordinary reader path for every matching input, never an embedded-asset bypass.
+Rebuild native planner and guide assets through new ordinary authoring/compilation,
+independently load the resulting current artifacts, then remove or narrow the
+transitional reader if the selected clean cut requires it. Header patching, trusted
+graph rewriting and relabeling old proof as new acceptance are forbidden.
 
 ## Cleanup and failure order
 

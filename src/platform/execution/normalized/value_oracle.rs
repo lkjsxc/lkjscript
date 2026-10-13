@@ -9,6 +9,7 @@ use crate::platform::kernel::{TypeForm, TypeObjectDigest};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Affinity {
     Free,
+    ReadView,
     Handle,
     Variant,
 }
@@ -26,6 +27,12 @@ pub(super) fn inspect(
         value: &NormalizedValue,
     ) -> Result<Affinity, &'static str> {
         match value {
+            NormalizedValue::ReadView(view) => {
+                if view.identity().program != origin {
+                    return Err("foreign view preparation");
+                }
+                Ok(Affinity::ReadView)
+            }
             NormalizedValue::Resource(handle) if handle.is_affine_capability() => {
                 Ok(Affinity::Handle)
             }
@@ -87,6 +94,12 @@ pub(super) fn inspect(
             .ok_or("oracle items")?;
         let mut children = Vec::with_capacity(count);
         match (value, form) {
+            (NormalizedValue::ReadView(view), TypeForm::ReadViewApplied { .. }) => {
+                if view.identity().ty != ty {
+                    return Err("foreign view type");
+                }
+                view.validate(control).map_err(|_| "invalid view custody")?;
+            }
             (NormalizedValue::Unit, TypeForm::Unit)
             | (NormalizedValue::Bool(_), TypeForm::Bool)
             | (NormalizedValue::I64(_), TypeForm::I64)

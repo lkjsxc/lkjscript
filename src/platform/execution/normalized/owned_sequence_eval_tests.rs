@@ -368,7 +368,9 @@ fn owned_sequence_evaluators_tail_destructure_and_nested_borrows_remain_bounded_
         schema,
     };
     let entry = declaration_named(&source, "main");
-    let result_type = program.functions[program.function(entry).unwrap().0 as usize].result;
+    let result_type = program.functions[program.function(entry).unwrap().0 as usize]
+        .result
+        .ty;
     for reference in [false, true] {
         let products = owned_product::StorageObservation::start();
         let cells = owned_i64_cell::StorageObservation::start();

@@ -189,6 +189,14 @@ pub(super) struct ViewStore {
     derived: BTreeMap<ObjectKey, Vec<u8>>,
     rebuild_reads: std::cell::Cell<StoreReadAdmission>,
     rebuild_objects: std::cell::RefCell<Option<BTreeSet<ObjectKey>>>,
+    link_read_set: std::cell::RefCell<Option<LinkReadSet>>,
+}
+
+#[derive(Debug, Default)]
+struct LinkReadSet {
+    objects: BTreeSet<ObjectKey>,
+    visits: u64,
+    modeled_bytes: usize,
 }
 
 const REBUILD_LIMITS: StoreReadLimits = StoreReadLimits {
@@ -208,7 +216,79 @@ impl ViewStore {
             derived: BTreeMap::new(),
             rebuild_reads: std::cell::Cell::new(StoreReadAdmission::unbounded()),
             rebuild_objects: std::cell::RefCell::new(None),
+            link_read_set: std::cell::RefCell::new(None),
         }
+    }
+
+    pub(super) fn begin_link_read_set(&self) -> Result<(), StoreError> {
+        let mut recorded = self.link_read_set.borrow_mut();
+        if recorded.is_some() {
+            return Err(StoreError::new(
+                StoreErrorClass::Corrupt,
+                "publication_link_read_scope",
+                "link read-set recording is already active",
+            ));
+        }
+        *recorded = Some(LinkReadSet::default());
+        Ok(())
+    }
+
+    pub(super) fn take_link_read_set(&self) -> BTreeSet<ObjectKey> {
+        self.link_read_set
+            .borrow_mut()
+            .take()
+            .map(|set| set.objects)
+            .unwrap_or_default()
+    }
+
+    fn record_link_read(&self, key: ObjectKey) -> Result<(), StoreError> {
+        let mut recorded = self.link_read_set.borrow_mut();
+        let Some(recorded) = recorded.as_mut() else {
+            return Ok(());
+        };
+        let visits = recorded
+            .visits
+            .checked_add(1)
+            .filter(|visits| {
+                *visits <= crate::platform::package_transport::source::MAXIMUM_VALIDATION_VISITS
+            })
+            .ok_or_else(|| {
+                StoreError::new(
+                    StoreErrorClass::Resource,
+                    "publication_link_read_set_work",
+                    "link read-set recording exceeds the source validation visit bound",
+                )
+            })?;
+        recorded.visits = visits;
+        if !recorded.objects.contains(&key) {
+            let bytes = recorded
+                .modeled_bytes
+                .checked_add(std::mem::size_of::<ObjectKey>() + 3 * std::mem::size_of::<usize>())
+                .filter(|bytes| {
+                    *bytes <= crate::platform::package_transport::source::MAXIMUM_CONTAINER_BYTES
+                })
+                .ok_or_else(|| {
+                    StoreError::new(
+                        StoreErrorClass::Resource,
+                        "publication_link_read_set_bytes",
+                        "link read-set metadata exceeds the source container byte bound",
+                    )
+                })?;
+            if recorded.objects.len()
+                >= crate::platform::package_transport::source::MAXIMUM_CONTAINER_OBJECTS
+            {
+                return Err(StoreError::new(
+                    StoreErrorClass::Resource,
+                    "publication_link_read_set_objects",
+                    "link read-set metadata exceeds the source container object bound",
+                ));
+            }
+            // Reserve modeled key/node growth before inserting. Separate from the
+            // current-validation rebuild tracker and disabled before final recheck.
+            recorded.modeled_bytes = bytes;
+            recorded.objects.insert(key);
+        }
+        Ok(())
     }
 
     pub fn bound_current_rebuild(&self, bounded: bool) {
@@ -324,6 +404,9 @@ impl ImmutableObjectStore for ViewStore {
         };
         *admission = charge(caller);
         self.rebuild_reads.set(charge(rebuild));
+        if matches!(&result, Ok(Some(_))) {
+            self.record_link_read(key)?;
+        }
         result
     }
 

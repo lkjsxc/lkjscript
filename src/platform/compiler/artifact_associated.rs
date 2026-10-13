@@ -1,9 +1,12 @@
-//! Associated authority for complete compiler-unit type tables, including unused entries.
+//! Occurrence authority for complete compiler-unit type tables, including unused entries.
 
 use super::{CompilationUnit, artifact_error};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::owned_associated::OwnedAssociatedAdmission;
-use crate::platform::kernel::{ExpressionRead, TypeObject, TypeObjectDigest};
+use crate::platform::kernel::{
+    DeclarationPayload, DeclarationReference, ExpressionRead, OwnerKey, OwnerRecord, TypeObject,
+    TypeObjectDigest,
+};
 use std::collections::BTreeMap;
 
 pub(super) fn admit_work(work: &mut usize, maximum: usize) -> Result<(), Diagnostic> {
@@ -29,7 +32,7 @@ pub(super) fn contains_associated_types(
     // no temporary inventory or per-unit feature scan is needed.
     for object in types.values() {
         admit_work(work, maximum)?;
-        if object.form.is_associated() {
+        if object.form.is_associated() || object.form.is_read_view() {
             return Ok(true);
         }
     }
@@ -65,8 +68,32 @@ pub(super) fn validate_unit_types(
     }
     // Keep the canonical owner's actual generation. A current compiler unit does
     // not upgrade a historical source owner or grant it associated authority.
-    let occurrence =
-        crate::platform::kernel::memory::owner_occurrence(read, unit.source.owner, &record)?
+    let result = match (&record, unit.source.owner) {
+        (OwnerRecord::Declaration(declaration), OwnerKey::Declaration(id))
+            if matches!(
+                declaration.payload,
+                DeclarationPayload::OwnedContract(_) | DeclarationPayload::OwnedImplementation(_)
+            ) =>
+        {
+            // The kernel enumerates and proves each actual inline method/member/
+            // binding occurrence and its complete equations. A shared table does
+            // not grant one inline root another root's binder authority.
+            admission.validate_aggregate_type_at(
+                read,
+                DeclarationReference {
+                    package: unit.source.package,
+                    declaration: id,
+                },
+                &record,
+                &unit.tables.types,
+            )
+        }
+        _ => {
+            let occurrence = crate::platform::kernel::memory::owner_occurrence(
+                read,
+                unit.source.owner,
+                &record,
+            )?
             .ok_or_else(|| {
                 artifact_error(
                     DiagnosticClass::Corrupt,
@@ -74,25 +101,26 @@ pub(super) fn validate_unit_types(
                     "compiler-unit source has no independent type occurrence context",
                 )
             })?;
-    admission
-        .validate_occurrence_at(read, &unit.tables.types, occurrence)
-        .map_err(|error| {
-            if matches!(
-                error.class,
-                DiagnosticClass::Resource | DiagnosticClass::Cancelled
-            ) {
-                error
-            } else {
-                artifact_error(
-                    DiagnosticClass::Corrupt,
-                    "artifact_associated_type",
-                    format!(
-                        "compiler-unit type authority is invalid: {}: {}",
-                        error.code, error.message
-                    ),
-                )
-            }
-        })
+            admission.validate_occurrence_at(read, &unit.tables.types, occurrence)
+        }
+    };
+    result.map_err(|error| {
+        if matches!(
+            error.class,
+            DiagnosticClass::Resource | DiagnosticClass::Cancelled
+        ) {
+            error
+        } else {
+            artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_associated_type",
+                format!(
+                    "compiler-unit type authority is invalid: {}: {}",
+                    error.code, error.message
+                ),
+            )
+        }
+    })
 }
 
 #[cfg(test)]

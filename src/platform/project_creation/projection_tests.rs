@@ -447,7 +447,14 @@ fn visit_expression(
         | ExpressionOperation::SequenceReplace { .. }
         | ExpressionOperation::BorrowOwnedItem { .. }
         | ExpressionOperation::BorrowCall { .. }
-        | ExpressionOperation::MatchBorrowedOwned { .. } => {
+        | ExpressionOperation::MatchBorrowedOwned { .. }
+        | ExpressionOperation::CreateReadView { .. }
+        | ExpressionOperation::BorrowReadView { .. }
+        | ExpressionOperation::ReborrowReadView { .. }
+        | ExpressionOperation::MoveReadView { .. }
+        | ExpressionOperation::DropReadView { .. }
+        | ExpressionOperation::ReadViewDataField { .. }
+        | ExpressionOperation::BorrowReadViewField { .. } => {
             panic!("owned products are outside the ordinary web template projection");
         }
         ExpressionOperation::If {
@@ -713,6 +720,37 @@ fn recipe_projection_preserves_actual_borrowed_result_sources() {
     assert_ne!(observe(json!({})), observe(json!({"result_borrow": null})));
 }
 
+#[test]
+fn recipe_projection_retains_view_relation_and_unused_scope_meaning() {
+    use serde_json::json;
+    let observe = |mut value: Value| {
+        normalize_strings(&mut value, &BTreeMap::new());
+        value
+    };
+    let ordinary = json!({"kind":"function","result":"T"});
+    let current = json!({"kind":"function","result":{"ty":"T","relation":{"kind":"value"}},"read_scope_parameters":[],"read_scope_sources":[]});
+    assert_eq!(observe(ordinary.clone()), observe(current.clone()));
+    let read = json!({"kind":"function","result":{"ty":"T","relation":{"kind":"read_from","source":"source-a"}}});
+    assert_eq!(
+        observe(read),
+        observe(json!({"kind":"function","result":"T","result_borrow":"source-a"}))
+    );
+    let view = json!({"kind":"function","result":{"ty":"T","relation":{"kind":"view_from","source":"source-a","scope":"scope-a"}}});
+    assert_ne!(observe(ordinary), observe(view.clone()));
+    for (field, replacement) in [("source", "source-b"), ("scope", "scope-b")] {
+        let mut changed = view.clone();
+        changed["result"]["relation"][field] = json!(replacement);
+        assert_ne!(observe(view.clone()), observe(changed));
+    }
+    let mut unused = current.clone();
+    unused["read_scope_parameters"] = json!([{"id":"unused","name":"scope"}]);
+    assert_ne!(observe(current), observe(unused));
+    assert_ne!(
+        observe(json!({})),
+        observe(json!({"read_scope_parameters":[]}))
+    );
+}
+
 fn normalize_strings(value: &mut Value, identities: &BTreeMap<String, String>) {
     if value["kind"] == "concrete" && value["reference"].get("requirement").is_some() {
         *value = value["reference"].clone();
@@ -733,6 +771,50 @@ fn normalize_strings(value: &mut Value, identities: &BTreeMap<String, String>) {
             // changes with maintained materialization; its stable package identity remains here.
             values.remove("contract_version");
             values.remove("graph_contract_version");
+            if values.get("kind").and_then(Value::as_str) == Some("function") {
+                // Only the two unchanged historical result relationships have a neutral
+                // carrier spelling. View results and real scope inventories stay distinct.
+                if !values.contains_key("result_borrow") {
+                    let historical = values.get("result").and_then(|value| {
+                        let result = value.as_object()?;
+                        if result.len() != 2 {
+                            return None;
+                        }
+                        let ty = result.get("ty")?.clone();
+                        let relation = result.get("relation")?.as_object()?;
+                        match relation.get("kind")?.as_str()? {
+                            "value" if relation.len() == 1 => Some((ty, None)),
+                            "read_from" if relation.len() == 2 => {
+                                Some((ty, Some(relation.get("source")?.clone())))
+                            }
+                            _ => None,
+                        }
+                    });
+                    if let Some((ty, source)) = historical {
+                        values.insert("result".to_owned(), ty);
+                        if let Some(source) = source {
+                            values.insert("result_borrow".to_owned(), source);
+                        }
+                    }
+                }
+                for key in ["read_scope_parameters", "read_scope_sources"] {
+                    if values
+                        .get(key)
+                        .is_some_and(|value| value.as_array().is_some_and(Vec::is_empty))
+                    {
+                        values.remove(key);
+                    }
+                }
+            }
+            if matches!(
+                values.get("kind").and_then(Value::as_str),
+                Some("call" | "implementation_call" | "function_value" | "method_call")
+            ) && values
+                .get("read_scope_arguments")
+                .is_some_and(|value| value.as_array().is_some_and(Vec::is_empty))
+            {
+                values.remove("read_scope_arguments");
+            }
             // Empty function witnesses mean the same as their pre-18 absence.
             // Nonempty operands and unrelated data fields must remain observable.
             if values.get("kind").and_then(Value::as_str) == Some("function")

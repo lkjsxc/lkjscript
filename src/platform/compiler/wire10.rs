@@ -15,7 +15,7 @@ pub struct CompilationUnit10 {
     pub key: CompilationUnitKey,
     pub source: CompilationSource,
     pub optimization: OptimizationPolicy,
-    pub tables: CompilationTables,
+    pub(super) tables: crate::platform::compiler::wire33::Tables33,
     pub payload: CompilationPayload10,
 }
 
@@ -188,7 +188,7 @@ impl From<CompilationUnit10> for CompilationUnit {
             key,
             source,
             optimization,
-            tables,
+            tables: tables.into(),
             payload: payload.into(),
         }
     }
@@ -279,8 +279,12 @@ impl From<CompiledSignature10> for CompiledSignature {
             type_parameters,
             type_parameter_constraints,
             parameters,
-            result,
-            result_borrow: None,
+            result: CallableResult {
+                ty: result,
+                relation: ResultRelation::Value,
+            },
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
             task_requirements,
             implementation_parameters: Vec::new(),
             requirement_parameters: Vec::new(),
@@ -329,6 +333,7 @@ impl From<CompiledInstruction10> for CompiledInstruction {
                 type_arguments,
                 arguments,
                 requirement_arguments: Vec::new(),
+                read_scope_arguments: Vec::new(),
             },
             CompiledInstruction10::FunctionValue {
                 effect_arguments,
@@ -339,6 +344,7 @@ impl From<CompiledInstruction10> for CompiledInstruction {
                 function,
                 type_arguments,
                 requirement_arguments: Vec::new(),
+                read_scope_arguments: Vec::new(),
             },
             CompiledInstruction10::Invoke { arguments } => Self::Invoke { arguments },
             CompiledInstruction10::Record {

@@ -9,6 +9,9 @@ use super::prepare::{
 };
 use super::value::FunctionIndex;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
+use crate::platform::kernel::{
+    ReadScopeArgument, ReadScopeBinder, ReadScopeReference, ReadViewFieldKind,
+};
 use crate::platform::kernel::{TypeForm, TypeObject, TypeObjectDigest, encode_type_object};
 use crate::platform::semantic_id::TypeParameterId;
 use std::collections::{BTreeMap, BTreeSet};
@@ -29,7 +32,12 @@ pub(super) use type_lookup::PreparedTypeLookup;
 #[path = "prepared_associated_type_tests.rs"]
 mod associated_tests;
 
+#[cfg(test)]
+#[path = "prepared_read_view_tests.rs"]
+mod read_view_tests;
+
 type Context = (FunctionIndex, Vec<TypeObjectDigest>);
+pub(super) type ScopeBindings = BTreeMap<ReadScopeReference, ReadScopeArgument>;
 /// Source selection is borrowed from an exact closed DAG. Only executable roots
 /// carry a function index; intermediate implementation mappings cannot populate
 /// a different caller application's lookup.
@@ -37,6 +45,7 @@ struct TypeApplication<'a> {
     bindings: &'a BTreeMap<TypeParameterId, TypeObjectDigest>,
     associated: Option<&'a ClosedTypeEnvironment<'a>>,
     function: Option<FunctionIndex>,
+    scopes: Option<&'a ScopeBindings>,
 }
 
 impl<'a> TypeApplication<'a> {
@@ -45,6 +54,7 @@ impl<'a> TypeApplication<'a> {
             bindings,
             associated: None,
             function: None,
+            scopes: None,
         }
     }
 }
@@ -152,7 +162,7 @@ impl<'a> Budget<'a> {
                     self.reserve::<u8>(field.name.as_str().len())?;
                 }
             }
-            TypeForm::Applied { arguments, .. } => {
+            TypeForm::Applied { arguments, .. } | TypeForm::ReadViewApplied { arguments, .. } => {
                 self.reserve::<TypeObjectDigest>(arguments.len())?
             }
             TypeForm::TaskFunction {
@@ -238,7 +248,7 @@ pub(super) fn complete_with_implementations(
     // operation's ledger and control; no phase creates a replacement allowance.
     close_effect_applications(program, work)?;
     implementations::close(program, units, runtime_owners, work)?;
-    complete_budgeted(program, work)
+    complete_budgeted(program, work, true)
 }
 
 pub(super) fn share_code(
@@ -265,12 +275,13 @@ pub(super) fn complete_controlled(
 ) -> Result<(), Diagnostic> {
     let mut work = Budget::new(control);
     close_effect_applications(program, &mut work)?;
-    complete_budgeted(program, &mut work)
+    complete_budgeted(program, &mut work, false)
 }
 
 fn complete_budgeted(
     program: &mut NormalizedProgram,
     work: &mut Budget<'_>,
+    body_scopes_applied: bool,
 ) -> Result<(), Diagnostic> {
     let mut pending = BTreeSet::new();
     // Derive dispatch only after each exact effect application and its callees are closed.
@@ -279,6 +290,8 @@ fn complete_budgeted(
         if function.type_parameters.is_empty()
             && function.effect_parameters.is_empty()
             && function.requirement_parameters.is_empty()
+            && (function.read_scope_parameters.is_empty()
+                || function.read_scope_parameters.len() == function.read_scope_arguments.len())
         {
             step(work)?;
             work.node::<Context>()?;
@@ -293,19 +306,20 @@ fn complete_budgeted(
     }
     let empty = BTreeMap::new();
     let standalone = TypeApplication::ordinary(&empty);
+    let standalone_scopes = body_scopes_applied.then(ScopeBindings::new);
     for test in program.tests.values() {
-        calls(
+        calls_at(
             &test.actual,
-            &standalone,
+            (&standalone, standalone_scopes.as_ref()),
             &mut program.types,
             &mut pending,
             work,
             &program.records,
             &program.variants,
         )?;
-        calls(
+        calls_at(
             &test.expected,
-            &standalone,
+            (&standalone, standalone_scopes.as_ref()),
             &mut program.types,
             &mut pending,
             work,
@@ -317,9 +331,9 @@ fn complete_budgeted(
         if let NormalizedEntryPoint::Code(code) | NormalizedEntryPoint::PortExpression(code, _) =
             &port.entry
         {
-            calls(
+            calls_at(
                 code,
-                &standalone,
+                (&standalone, standalone_scopes.as_ref()),
                 &mut program.types,
                 &mut pending,
                 work,
@@ -360,14 +374,21 @@ fn complete_budgeted(
             .zip(arguments)
             .collect();
         let environment = ClosedTypeEnvironment::for_function(function)?;
+        let scopes = function_scope_bindings(function, work)?;
+        let applied_scopes = if body_scopes_applied {
+            Some(applied_scope_identities(&scopes, work)?)
+        } else {
+            None
+        };
         let application_types = TypeApplication {
             bindings: &bindings,
             associated: Some(&environment),
             function: Some(index),
+            scopes: Some(&scopes),
         };
         substitute_in(
             &mut program.types,
-            function.result,
+            function.result.ty,
             &application_types,
             0,
             work,
@@ -415,9 +436,9 @@ fn complete_budgeted(
             }
         }
         if let NormalizedFunctionBody::Code(code) = &function.body {
-            calls(
+            calls_at(
                 code,
-                &application_types,
+                (&application_types, applied_scopes.as_ref()),
                 &mut program.types,
                 &mut pending,
                 work,
@@ -427,6 +448,16 @@ fn complete_budgeted(
         }
     }
     complete_nominal_layouts(program, work)?;
+    loop {
+        let before = program.types.len();
+        complete_read_view_layouts(program, work)?;
+        if program.types.len() == before {
+            break;
+        }
+        // Instantiated private reference fields can introduce an Owned nominal
+        // application absent from every callable signature and authored opcode.
+        complete_nominal_layouts(program, work)?;
+    }
     program.owned_record_declarations.clear();
     for layout in program.records.iter().filter(|layout| layout.owned) {
         step(work)?;
@@ -498,7 +529,9 @@ fn instantiated_type(
     let mut closed = match &object.form {
         TypeForm::TypeParameter { .. }
         | TypeForm::AssociatedContractMember { .. }
-        | TypeForm::AssociatedWitnessProjection { .. } => false,
+        | TypeForm::AssociatedWitnessProjection { .. }
+        | TypeForm::AssociatedReadViewMember { .. }
+        | TypeForm::AssociatedReadViewProjection { .. } => false,
         TypeForm::TaskFunction { effect, .. } => effect.is_closed(),
         _ => true,
     };
@@ -787,6 +820,177 @@ fn complete_nominal_layouts(
     Ok(())
 }
 
+fn complete_read_view_layouts(
+    program: &mut NormalizedProgram,
+    work: &mut Budget<'_>,
+) -> Result<(), Diagnostic> {
+    use super::prepare::{NormalizedReadViewField, NormalizedReadViewLayout};
+    work.reserve::<NormalizedReadViewLayout>(program.read_views.len())?;
+    for layout in program.read_views.iter() {
+        step(work)?;
+        work.node::<(
+            crate::platform::kernel::DeclarationReference,
+            NormalizedReadViewLayout,
+        )>()?;
+        work.reserve::<u8>(layout.scope_parameter.name.as_str().len())?;
+    }
+    let templates = program
+        .read_views
+        .iter()
+        .filter(|layout| {
+            layout.read_scope
+                == ReadScopeArgument::Parameter(ReadScopeReference {
+                    binder: ReadScopeBinder::Declaration(layout.declaration),
+                    parameter: layout.scope_parameter.id,
+                })
+        })
+        .cloned()
+        .map(|layout| (layout.declaration, layout))
+        .collect::<BTreeMap<_, _>>();
+    work.reserve::<NormalizedReadViewLayout>(templates.len())?;
+    for template in templates.values() {
+        work.reserve::<u8>(template.scope_parameter.name.as_str().len())?;
+    }
+    let mut layouts = templates.values().cloned().collect::<Vec<_>>();
+    program.read_view_instances.clear();
+    let mut pending = BTreeSet::new();
+    for (ty, object) in &program.types {
+        step(work)?;
+        if matches!(object.form, TypeForm::ReadViewApplied { .. }) {
+            work.node::<TypeObjectDigest>()?;
+            pending.insert(*ty);
+        }
+    }
+    let mut visited = BTreeSet::new();
+    let mut closed = BTreeMap::new();
+    while let Some(ty) = pending.pop_first() {
+        step(work)?;
+        if visited.contains(&ty) {
+            continue;
+        }
+        work.node::<TypeObjectDigest>()?;
+        visited.insert(ty);
+        if !instantiated_type(&program.types, ty, &mut closed, 0, work)? {
+            continue;
+        }
+        work.cloned_type(program.types.get(&ty).ok_or_else(missing)?)?;
+        let TypeForm::ReadViewApplied {
+            declaration,
+            arguments,
+            read_scope,
+        } = program.types.get(&ty).ok_or_else(missing)?.form.clone()
+        else {
+            return Err(missing());
+        };
+        let template = templates.get(&declaration).ok_or_else(missing)?;
+        if arguments.len() != template.type_parameters.len()
+            || arguments.len() != template.type_parameter_constraints.len()
+        {
+            return Err(missing());
+        }
+        for (argument, constraint) in arguments
+            .iter()
+            .zip(template.type_parameter_constraints.iter())
+        {
+            step(work)?;
+            if program.is_owned_type(*argument) != constraint.has_owned()
+                || matches!(
+                    program.types.get(argument).map(|object| &object.form),
+                    Some(TypeForm::ReadViewApplied { .. })
+                )
+            {
+                return Err(missing());
+            }
+        }
+        work.reserve::<(TypeParameterId, TypeObjectDigest)>(arguments.len())?;
+        work.reserve::<TypeObjectDigest>(arguments.len())?;
+        work.reserve::<NormalizedReadViewField>(template.fields.len())?;
+        let bindings = template
+            .type_parameters
+            .iter()
+            .copied()
+            .zip(arguments.iter().copied())
+            .collect();
+        work.node::<(ReadScopeReference, ReadScopeArgument)>()?;
+        let scopes = BTreeMap::from([(
+            ReadScopeReference {
+                binder: ReadScopeBinder::Declaration(declaration),
+                parameter: template.scope_parameter.id,
+            },
+            read_scope,
+        )]);
+        let application = TypeApplication {
+            bindings: &bindings,
+            associated: None,
+            function: None,
+            scopes: Some(&scopes),
+        };
+        let mut fields = Vec::new();
+        for field in template.fields.iter() {
+            step(work)?;
+            work.reserve::<u8>(field.name.as_str().len())?;
+            let mut field = field.clone();
+            field.ty = substitute_in(&mut program.types, field.ty, &application, 0, work)?;
+            if let ReadViewFieldKind::ReadReference { read_scope } = &mut field.kind {
+                *read_scope = resolve_scope(*read_scope, Some(&scopes))?;
+            }
+            fields.push(field);
+        }
+        // Descend every generic actual and inline field, including unused fields.
+        work.reserve::<(TypeObjectDigest, usize)>(
+            arguments
+                .len()
+                .checked_add(fields.len())
+                .ok_or_else(missing)?,
+        )?;
+        let mut roots = arguments
+            .iter()
+            .copied()
+            .chain(fields.iter().map(|field| field.ty))
+            .map(|ty| (ty, 0usize))
+            .collect::<Vec<_>>();
+        let mut reached = BTreeSet::new();
+        while let Some((root, depth)) = roots.pop() {
+            step(work)?;
+            if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+                return Err(missing());
+            }
+            if reached.contains(&root) {
+                continue;
+            }
+            work.node::<TypeObjectDigest>()?;
+            reached.insert(root);
+            let object = program.types.get(&root).ok_or_else(missing)?;
+            if matches!(object.form, TypeForm::ReadViewApplied { .. }) && !visited.contains(&root) {
+                work.node::<TypeObjectDigest>()?;
+                pending.insert(root);
+            }
+            work.reserve::<(TypeObjectDigest, usize)>(object.child_type_count())?;
+            roots.extend(
+                object
+                    .child_types()
+                    .into_iter()
+                    .map(|child| (child, depth + 1)),
+            );
+        }
+        work.node::<(TypeObjectDigest, u32)>()?;
+        work.reserve::<NormalizedReadViewLayout>(1)?;
+        work.reserve::<u8>(template.scope_parameter.name.as_str().len())?;
+        program
+            .read_view_instances
+            .insert(ty, u32::try_from(layouts.len()).map_err(|_| missing())?);
+        layouts.push(NormalizedReadViewLayout {
+            arguments: arguments.into(),
+            read_scope,
+            fields: fields.into(),
+            ..template.clone()
+        });
+    }
+    program.read_views = layouts.into();
+    program.work.read_view_layouts = program.read_views.len() as u64;
+    Ok(())
+}
+
 // Preparation-local greatest fixed point. Disqualifying leaves propagate through reverse
 // dependencies, including every argument/member of a cyclic component. No persistent cache.
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -879,7 +1083,10 @@ fn property_types(
         match &object.form {
             _ if unresolved.contains(root) => admitted = false,
             TypeForm::AssociatedContractMember { .. }
-            | TypeForm::AssociatedWitnessProjection { .. } => {
+            | TypeForm::AssociatedWitnessProjection { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. }
+            | TypeForm::ReadViewApplied { .. } => {
                 // Raw signature templates remain in the canonical table. Only
                 // their materialized application types can acquire properties.
                 admitted = false;
@@ -1006,6 +1213,7 @@ fn property_types(
     Ok(safe)
 }
 
+#[cfg(test)]
 fn calls(
     code: &NormalizedCode,
     application: &TypeApplication<'_>,
@@ -1015,8 +1223,60 @@ fn calls(
     records: &[NormalizedRecordLayout],
     variants: &[NormalizedVariantLayout],
 ) -> Result<(), Diagnostic> {
+    calls_at(
+        code,
+        (application, None),
+        types,
+        pending,
+        work,
+        records,
+        variants,
+    )
+}
+
+fn calls_at(
+    code: &NormalizedCode,
+    (application, instruction_scopes): (&TypeApplication<'_>, Option<&ScopeBindings>),
+    types: &mut BTreeMap<TypeObjectDigest, TypeObject>,
+    pending: &mut BTreeSet<Context>,
+    work: &mut Budget<'_>,
+    records: &[NormalizedRecordLayout],
+    variants: &[NormalizedVariantLayout],
+) -> Result<(), Diagnostic> {
+    // Closing rewrites these view operands once. Its exact supplied actuals
+    // stay opaque during reprocessing; signatures and other operands still
+    // use the original formal substitution and application lookup identity.
+    let view_application = TypeApplication {
+        bindings: application.bindings,
+        associated: application.associated,
+        // Rewritten view roots must not publish a function lookup keyed by
+        // identity actuals instead of its original formal application.
+        function: if instruction_scopes.is_some() {
+            None
+        } else {
+            application.function
+        },
+        scopes: instruction_scopes.or(application.scopes),
+    };
     for instruction in code.instructions.iter() {
         step(work)?;
+        match instruction {
+            NormalizedInstruction::BeginReadViewScope { read_scope }
+            | NormalizedInstruction::EndReadViewScope { read_scope } => {
+                resolve_scope(*read_scope, view_application.scopes)?;
+            }
+            NormalizedInstruction::BeginReadView { view_type, .. }
+            | NormalizedInstruction::FinishReadView { view_type, .. }
+            | NormalizedInstruction::BorrowReadView { view_type, .. }
+            | NormalizedInstruction::ReborrowReadView { view_type, .. }
+            | NormalizedInstruction::MoveReadView { view_type, .. }
+            | NormalizedInstruction::DropReadView { view_type, .. }
+            | NormalizedInstruction::ReadViewDataField { view_type, .. }
+            | NormalizedInstruction::BorrowReadViewField { view_type, .. } => {
+                substitute_in(types, *view_type, &view_application, 0, work)?;
+            }
+            _ => {}
+        }
         if let NormalizedInstruction::PackOwned { product_type, .. }
         | NormalizedInstruction::UnpackOwned { product_type, .. }
         | NormalizedInstruction::ChooseOwned {
@@ -1067,6 +1327,11 @@ fn calls(
             | NormalizedInstruction::BorrowOwnedItem { binding_type, .. }
             | NormalizedInstruction::AdoptBorrowResult { binding_type, .. } => {
                 substitute_in(types, *binding_type, application, 0, work)?;
+            }
+            NormalizedInstruction::BorrowReadView { binding_type, .. }
+            | NormalizedInstruction::BorrowReadViewField { binding_type, .. }
+            | NormalizedInstruction::AdoptViewResult { binding_type, .. } => {
+                substitute_in(types, *binding_type, &view_application, 0, work)?;
             }
             NormalizedInstruction::SequencePop { result_type, .. }
             | NormalizedInstruction::SequenceReplace { result_type, .. } => {
@@ -1163,11 +1428,13 @@ fn calls(
         if let NormalizedInstruction::Call {
             function,
             type_arguments,
+            read_scope_arguments,
             ..
         }
         | NormalizedInstruction::TailCall {
             function,
             type_arguments,
+            read_scope_arguments,
             ..
         }
         | NormalizedInstruction::FunctionValue {
@@ -1175,8 +1442,30 @@ fn calls(
             requirement_arguments: _,
             function,
             type_arguments,
+            read_scope_arguments,
         } = instruction
         {
+            // Specialization has resolved every supplied scope. Inspect the
+            // complete inventory again, including formals unused by types.
+            for read_scope in read_scope_arguments.iter() {
+                step(work)?;
+                if let ReadScopeArgument::Parameter(reference) = read_scope {
+                    let scopes = application.scopes.ok_or_else(missing)?;
+                    if !scopes.contains_key(reference) {
+                        let mut exact_actual = false;
+                        for actual in scopes.values() {
+                            step(work)?;
+                            if actual == read_scope {
+                                exact_actual = true;
+                                break;
+                            }
+                        }
+                        if !exact_actual {
+                            return Err(missing());
+                        }
+                    }
+                }
+            }
             work.reserve::<TypeObjectDigest>(type_arguments.len())?;
             let arguments = type_arguments
                 .iter()
@@ -1195,6 +1484,80 @@ fn missing() -> Diagnostic {
         "normalized_instantiation_scope",
         "prepared type closure has a missing exact type, function, or substitution",
     )
+}
+
+fn resolve_scope(
+    scope: ReadScopeArgument,
+    bindings: Option<&ScopeBindings>,
+) -> Result<ReadScopeArgument, Diagnostic> {
+    match (scope, bindings) {
+        (ReadScopeArgument::Parameter(reference), Some(bindings)) => {
+            bindings.get(&reference).copied().ok_or_else(missing)
+        }
+        _ => Ok(scope),
+    }
+}
+
+// This is derived only from an already admitted application. It grants no
+// source naming or scope authority and does not chase another formal mapping.
+fn applied_scope_identities(
+    supplied: &ScopeBindings,
+    work: &mut Budget<'_>,
+) -> Result<ScopeBindings, Diagnostic> {
+    step(work)?;
+    let mut identities = BTreeMap::new();
+    for actual in supplied.values() {
+        step(work)?;
+        if let ReadScopeArgument::Parameter(reference) = actual
+            && !identities.contains_key(reference)
+        {
+            work.node::<(ReadScopeReference, ReadScopeArgument)>()?;
+            identities.insert(*reference, *actual);
+        }
+    }
+    Ok(identities)
+}
+
+fn function_scope_bindings(
+    function: &super::prepare::NormalizedFunction,
+    work: &mut Budget<'_>,
+) -> Result<ScopeBindings, Diagnostic> {
+    if function.read_scope_parameters.len() != function.read_scope_arguments.len() {
+        return Err(missing());
+    }
+    work.reserve::<(ReadScopeReference, ReadScopeArgument)>(function.read_scope_parameters.len())?;
+    let mut bindings = BTreeMap::new();
+    for (parameter, actual) in function
+        .read_scope_parameters
+        .iter()
+        .zip(function.read_scope_arguments.iter())
+    {
+        step(work)?;
+        work.node::<(ReadScopeReference, ReadScopeArgument)>()?;
+        let reference = ReadScopeReference {
+            binder: ReadScopeBinder::Declaration(function.declaration),
+            parameter: parameter.id,
+        };
+        if bindings.insert(reference, *actual).is_some() {
+            return Err(missing());
+        }
+    }
+    for source in function.read_scope_sources.iter() {
+        step(work)?;
+        if source.source >= function.parameter_count {
+            return Err(missing());
+        }
+        resolve_scope(source.scope, Some(&bindings))?;
+    }
+    if let crate::platform::kernel::ResultRelation::ViewFrom { source, scope } =
+        function.result.relation
+    {
+        if source >= function.parameter_count {
+            return Err(missing());
+        }
+        resolve_scope(scope, Some(&bindings))?;
+    }
+    Ok(bindings)
 }
 
 #[cfg(test)]
@@ -1243,6 +1606,7 @@ pub(super) fn materialize_associated_roots(
         bindings: ordinary,
         associated: Some(&environment),
         function: None,
+        scopes: None,
     };
     let mut work = Budget::new(control);
     work.reserve::<TypeObjectDigest>(roots.len())?;
@@ -1438,6 +1802,7 @@ fn close_effect_applications(
                         type_arguments,
                         effect_arguments,
                         requirement_arguments,
+                        ..
                     } => {
                         self.work.reserve::<EffectRow>(effect_arguments.len())?;
                         let rows = effect_arguments
@@ -1514,6 +1879,30 @@ fn close_effect_applications(
                     | NormalizedInstruction::SequenceGet {
                         sequence_type: product_type,
                         ..
+                    }
+                    | NormalizedInstruction::BeginReadView {
+                        view_type: product_type,
+                        ..
+                    }
+                    | NormalizedInstruction::FinishReadView {
+                        view_type: product_type,
+                        ..
+                    }
+                    | NormalizedInstruction::ReborrowReadView {
+                        view_type: product_type,
+                        ..
+                    }
+                    | NormalizedInstruction::MoveReadView {
+                        view_type: product_type,
+                        ..
+                    }
+                    | NormalizedInstruction::DropReadView {
+                        view_type: product_type,
+                        ..
+                    }
+                    | NormalizedInstruction::ReadViewDataField {
+                        view_type: product_type,
+                        ..
                     } => {
                         *product_type = substitute_effect_type(
                             self.types,
@@ -1524,7 +1913,8 @@ fn close_effect_applications(
                             self.work,
                         )?;
                     }
-                    NormalizedInstruction::AdoptBorrowResult { binding_type, .. } => {
+                    NormalizedInstruction::AdoptBorrowResult { binding_type, .. }
+                    | NormalizedInstruction::AdoptViewResult { binding_type, .. } => {
                         *binding_type = substitute_effect_type(
                             self.types,
                             *binding_type,
@@ -1552,6 +1942,16 @@ fn close_effect_applications(
                     | NormalizedInstruction::SequenceReplace {
                         sequence_type: product_type,
                         result_type: binding_type,
+                        ..
+                    }
+                    | NormalizedInstruction::BorrowReadView {
+                        view_type: product_type,
+                        binding_type,
+                        ..
+                    }
+                    | NormalizedInstruction::BorrowReadViewField {
+                        view_type: product_type,
+                        binding_type,
                         ..
                     } => {
                         *product_type = substitute_effect_type(
@@ -1854,9 +2254,9 @@ fn close_effect_applications(
             .into();
         function.effect_parameters = Arc::from([]);
         function.effect_arguments = rows.into();
-        function.result = substitute_effect_type(
+        function.result.ty = substitute_effect_type(
             closing.types,
-            function.result,
+            function.result.ty,
             &bindings,
             &requirements,
             0,
@@ -1921,7 +2321,7 @@ fn substitute_effect_type(
         Ok(())
     };
     match &mut object.form {
-        TypeForm::Applied { arguments, .. } => {
+        TypeForm::Applied { arguments, .. } | TypeForm::ReadViewApplied { arguments, .. } => {
             for ty in arguments {
                 descend(ty)?;
             }
@@ -2045,7 +2445,22 @@ fn substitute_in(
     if depth == 0 && result != ty {
         if selected {
             if let Some(function) = application.function {
-                work.remember_application_substitution(function, ty, result, application.bindings)?;
+                if let Some(scopes) = application.scopes.filter(|scopes| !scopes.is_empty()) {
+                    work.remember_scoped_application_substitution(
+                        function,
+                        ty,
+                        result,
+                        application.bindings,
+                        scopes,
+                    )?;
+                } else {
+                    work.remember_application_substitution(
+                        function,
+                        ty,
+                        result,
+                        application.bindings,
+                    )?;
+                }
             }
         } else if !matches!(
             types.get(&ty).map(|object| &object.form),
@@ -2098,6 +2513,44 @@ fn substitute_inner(
             }
             return Ok((resolved, true));
         }
+        TypeForm::AssociatedReadViewMember { read_scope, .. }
+        | TypeForm::AssociatedReadViewProjection { read_scope, .. } => {
+            let scope = resolve_scope(*read_scope, application.scopes)?;
+            let selection = application
+                .associated
+                .ok_or_else(missing)?
+                .resolve_selection(&object.form)?
+                .ok_or_else(missing)?;
+            let parameter = selection
+                .binding()
+                .scope_parameter
+                .as_ref()
+                .ok_or_else(missing)?;
+            work.node::<(ReadScopeReference, ReadScopeArgument)>()?;
+            let bindings = BTreeMap::from([(
+                ReadScopeReference {
+                    binder: ReadScopeBinder::AssociatedBinding {
+                        implementation: selection.selected().implementation,
+                        member: selection.binding().member,
+                    },
+                    parameter: parameter.id,
+                },
+                scope,
+            )]);
+            let result = substitute_in(
+                types,
+                selection.ty(),
+                &TypeApplication {
+                    bindings: &BTreeMap::new(),
+                    associated: None,
+                    function: None,
+                    scopes: Some(&bindings),
+                },
+                depth + 1,
+                work,
+            )?;
+            return Ok((result, true));
+        }
         TypeForm::StructuralRecord { fields }
         | TypeForm::OwnedProduct { fields }
         | TypeForm::OwnedChoice { cases: fields } => {
@@ -2109,6 +2562,18 @@ fn substitute_inner(
             for argument in arguments {
                 descend(argument)?;
             }
+        }
+        TypeForm::ReadViewApplied {
+            arguments,
+            read_scope,
+            ..
+        } => {
+            for argument in arguments {
+                descend(argument)?;
+            }
+            let scope = resolve_scope(*read_scope, application.scopes)?;
+            selected |= scope != *read_scope;
+            *read_scope = scope;
         }
         TypeForm::List { item }
         | TypeForm::Option { item }

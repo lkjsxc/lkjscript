@@ -981,6 +981,35 @@ fn runtime_selection_uses_opaque_exact_tags_without_prefix_or_range_fallback() {
 
 #[test]
 fn capabilities_discovery_is_compact_focused_and_exportable() {
+    use lkjscript::platform::contract::{
+        CLI_CONTRACT_VERSION, ContractKey, FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION,
+        REGISTRY_CONTRACT_VERSION, contract_descriptors,
+    };
+    assert_eq!(CLI_CONTRACT_VERSION, 47);
+    assert_eq!(REGISTRY_CONTRACT_VERSION, 26);
+    assert_eq!(FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION, 22);
+    let base_type = contract_descriptors()
+        .iter()
+        .find(|descriptor| descriptor.key == ContractKey::TypeObject)
+        .expect("singular ordinary type profile");
+    assert_eq!(base_type.identity, "lkjscript-type-object-10");
+    assert_eq!(base_type.version, 10);
+    assert!(base_type.magic_values.contains(&"LKJTYP10"));
+    assert!(!base_type.magic_values.contains(&"LKJTYP11"));
+    let witness = contract_descriptors()
+        .iter()
+        .find(|descriptor| descriptor.key == ContractKey::SemanticFacts)
+        .expect("current witness profile");
+    assert_eq!(witness.identity, "lkjscript-validation-witness-10");
+    assert_eq!(witness.version, 10);
+    assert_eq!(witness.magic_values, &["LKJWIT10"]);
+    let summary = contract_descriptors()
+        .iter()
+        .find(|descriptor| descriptor.key == ContractKey::SemanticSummary)
+        .expect("current summary profile");
+    assert_eq!(summary.identity, "lkjscript-owner-summary-12");
+    assert_eq!(summary.version, 12);
+    assert_eq!(summary.magic_values, &["LKJSUM17"]);
     let capabilities = compact_success(&["capabilities"]);
     assert_eq!(capabilities[0].operation, "product");
     assert_eq!(
@@ -1100,7 +1129,67 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         1
     );
 
+    for form in [
+        "read-view-application",
+        "associated-read-view-member",
+        "associated-read-view-projection",
+    ] {
+        assert_eq!(
+            type_section
+                .iter()
+                .filter(|record| record.operation == "type.form"
+                    && compact_field(record, "name") == Some(form))
+                .count(),
+            1,
+            "exact view type form {form}"
+        );
+    }
+    assert_eq!(
+        type_section
+            .iter()
+            .filter(|record| record.operation == "read-scope.form")
+            .filter_map(|record| compact_field(record, "name"))
+            .collect::<Vec<_>>(),
+        vec!["parameter-actual", "lexical-actual"]
+    );
+    for (form, fields) in [
+        (
+            "parameter-actual",
+            &["as", "binder-kind", "binder", "parameter"][..],
+        ),
+        ("lexical-actual", &["as", "callable", "binding"][..]),
+    ] {
+        for name in fields {
+            assert_eq!(
+                type_section
+                    .iter()
+                    .filter(|record| record.operation == "read-scope.field"
+                        && compact_field(record, "form") == Some(form)
+                        && compact_field(record, "name") == Some(*name)
+                        && compact_field(record, "required") == Some("true"))
+                    .count(),
+                1,
+                "complete scope field {form}.{name}"
+            );
+        }
+    }
+
     let owner_section = compact_success(&["capabilities", "--section", "owners"]);
+    assert_eq!(
+        owner_section
+            .iter()
+            .filter(|record| record.operation == "owner.kind")
+            .count(),
+        16
+    );
+    assert_eq!(
+        owner_section
+            .iter()
+            .filter(|record| record.operation == "owner.kind"
+                && compact_field(record, "name") == Some("read_view"))
+            .count(),
+        1
+    );
     assert!(owner_section.iter().any(|record| {
         record.operation == "owner.kind" && compact_field(record, "name") == Some("module")
     }));
@@ -1158,6 +1247,13 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         "transaction",
         "transaction-outcome",
         "parallel",
+        "read-view-create",
+        "read-view-borrow",
+        "read-view-reborrow",
+        "read-view-move",
+        "read-view-drop",
+        "read-view-data-field",
+        "read-view-borrow-field",
     ];
     assert_eq!(
         expression_section
@@ -1270,6 +1366,25 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "(transaction-outcome REQUIREMENT (types TYPE) (outcome OUTCOME REASON COMMITTED ABORTED CONDITION-FAILED CONFLICT) (binding NAME) BODY)",
         ),
         ("parallel", "(parallel LEFT-CALL RIGHT-CALL)"),
+        (
+            "read-view-create",
+            "(view-create DECLARATION (types TYPE...) (scope SCOPE) (source LOCAL) (field field_HEX EXPR)...)",
+        ),
+        (
+            "read-view-borrow",
+            "(view-borrow (local VIEW) (binding NAME [(type TYPE)]) (in BODY))",
+        ),
+        ("read-view-reborrow", "(view-reborrow (local VIEW) SCOPE)"),
+        ("read-view-move", "(view-move (local VIEW))"),
+        ("read-view-drop", "(view-drop (local VIEW))"),
+        (
+            "read-view-data-field",
+            "(view-data-field (local VIEW) DECLARATION field_HEX)",
+        ),
+        (
+            "read-view-borrow-field",
+            "(borrow-view-field (local VIEW) DECLARATION field_HEX (binding NAME [(type TYPE)]) (in BODY))",
+        ),
     ] {
         assert!(change_section.iter().any(|record| {
             record.operation == "change.expression-syntax"
@@ -1306,6 +1421,10 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "tokens",
             "names",
             "applications",
+            "method-scope-application",
+            "read-view-construction",
+            "read-view-handles",
+            "read-view-field-access",
             "type-application",
             "requirement-argument",
             "local",
@@ -1431,6 +1550,8 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "create.module",
             "create.record",
             "create.owned-record",
+            "create.read-view",
+            "set.read-view",
             "create.variant",
             "create.owned-contract",
             "create.owned-implementation",
@@ -1475,9 +1596,9 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .iter()
         .filter(|record| record.operation == "change.operation-field")
         .collect::<Vec<_>>();
-    // Nominal owned records add four required declaration fields; borrowed results retain
-    // an optional source on both function contract operations.
-    assert_eq!(operation_fields.len(), 170);
+    // Two view declaration operations add ten fields; the unified result relation
+    // replaces each former source-only field with kind/source/scope.
+    assert_eq!(operation_fields.len(), 184);
     assert_eq!(
         operation_fields
             .iter()
@@ -1519,7 +1640,9 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             ("reference.owner", "name"),
             ("reference.owner", "parent"),
             ("reference.owner", "owner"),
-            ("create.function", "borrow-from"),
+            ("create.function", "result-kind"),
+            ("create.function", "result-source"),
+            ("create.function", "result-scope"),
             ("create.target", "port"),
             ("add.case", "payload"),
             ("add.type-parameter", "constraint"),
@@ -1532,7 +1655,9 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             ("add.port", "value"),
             ("add.http-route", "path"),
             ("add.http-route", "pattern"),
-            ("set.function-contract", "borrow-from"),
+            ("set.function-contract", "result-kind"),
+            ("set.function-contract", "result-source"),
+            ("set.function-contract", "result-scope"),
             ("set.http-route", "path"),
             ("set.http-route", "pattern"),
         ]
@@ -1619,6 +1744,12 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         record.operation == "query.owner-kind"
             && compact_field(record, "name") == Some("owned_record")
     }));
+    assert!(
+        query
+            .iter()
+            .any(|record| record.operation == "query.owner-kind"
+                && compact_field(record, "name") == Some("read_view"))
+    );
     assert!(query.iter().any(|record| {
         record.operation == "query.namespace-class"
             && compact_field(record, "name") == Some("parameter")
@@ -1636,6 +1767,11 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         "implementation_selection",
         "implementation_method",
         "borrow_result_source",
+        "associated_witness_scope_use",
+        "read_scope_use",
+        "read_view_source",
+        "read_view_field_construction",
+        "read_view_field_access",
         "http_route_target",
         "http_route_port",
         "requirement_parameter_use",
@@ -1651,7 +1787,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .iter()
             .filter(|record| record.operation == "query.owner-kind")
             .count(),
-        28
+        29
     );
     assert_eq!(
         query
@@ -1665,7 +1801,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .iter()
             .filter(|record| record.operation == "query.relation-kind")
             .count(),
-        37
+        42
     );
     assert_eq!(
         query
@@ -1855,6 +1991,26 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         ("change_block_parenthesis", "source"),
         ("change_block_local_unbound", "source"),
         ("change_block_application", "source"),
+        ("change_read_scope_undefined", "source"),
+        ("change_read_scope_binding", "source"),
+        ("change_read_scope_binder", "source"),
+        ("change_read_scope_duplicate", "source"),
+        ("change_read_view_field_duplicate", "source"),
+        ("change_read_view_field_kind", "source"),
+        ("change_read_view_binding", "source"),
+        ("change_associated_binding_kind", "source"),
+        ("change_field_not_applicable", "source"),
+        ("change_result_relation", "source"),
+        ("change_authored_read_scope_binding", "semantic"),
+        ("change_authored_read_scope_duplicate", "semantic"),
+        ("change_authored_read_view_field_duplicate", "semantic"),
+        ("change_read_view_kind", "semantic"),
+        ("kernel_read_view_scope", "semantic"),
+        ("kernel_read_view_source", "semantic"),
+        ("kernel_read_view_field", "semantic"),
+        ("kernel_read_view_result", "semantic"),
+        ("kernel_read_view_generation", "semantic"),
+        ("kernel_read_view_operation", "semantic"),
         ("change_block_private", "source"),
         ("change_block_capacity", "resource"),
         ("change_input_type_capacity", "resource"),

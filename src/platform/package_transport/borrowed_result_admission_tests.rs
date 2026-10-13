@@ -107,21 +107,41 @@ fn borrowed_results_transport_rejects_consistently_rehashed_sources_modes_guards
     let DeclarationPayload::Function(f) = &mut d.payload else {
         unreachable!()
     };
-    f.result_borrow = Some(first.parameters[1]);
+    f.result.relation = ResultRelation::ReadFrom {
+        source: first.parameters[1],
+    };
     attacks.push(("exact-source", changed_source, "kernel_buffer_ownership"));
 
-    let mut changed_mode = borrowed_transport_declaration(snapshot, "first");
+    // Isolate owning-result corruption from a caller's scoped binding parent: this
+    // function has no callers, and its existing body still returns the borrowed source.
+    let mut changed_mode = borrowed_transport_declaration(snapshot, "untaken");
     let OwnerRecord::Declaration(d) = &mut changed_mode else {
         unreachable!()
     };
     let DeclarationPayload::Function(f) = &mut d.payload else {
         unreachable!()
     };
-    f.result_borrow = None;
+    f.result.relation = ResultRelation::Value;
     attacks.push((
         "counterfeit-owning-result",
         changed_mode,
         "kernel_buffer_ownership",
+    ));
+
+    // Retain the separately malformed caller/callee boundary too: changing the called
+    // function to Value invalidates the existing BorrowCall's semantic binding container.
+    let mut changed_callee_mode = borrowed_transport_declaration(snapshot, "first");
+    let OwnerRecord::Declaration(d) = &mut changed_callee_mode else {
+        unreachable!()
+    };
+    let DeclarationPayload::Function(f) = &mut d.payload else {
+        unreachable!()
+    };
+    f.result.relation = ResultRelation::Value;
+    attacks.push((
+        "scoped-call-to-owning-result",
+        changed_callee_mode,
+        "kernel_full_binding_parent",
     ));
 
     let untaken = borrowed_transport_function(snapshot, "untaken");
@@ -189,7 +209,10 @@ fn borrowed_results_transport_rejects_consistently_rehashed_sources_modes_guards
         let DeclarationPayload::OwnedContract(contract) = &mut d.payload else {
             unreachable!()
         };
-        contract.methods[0].result_borrow = mode;
+        contract.methods[0].result.relation = match mode {
+            Some(source) => ResultRelation::ReadFrom { source },
+            None => ResultRelation::Value,
+        };
         attacks.push((fault, changed_method, "kernel_owned_contract"));
     }
 

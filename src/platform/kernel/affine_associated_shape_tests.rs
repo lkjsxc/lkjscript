@@ -105,9 +105,14 @@ fn fixture(mode: ParameterUse) -> Fixture {
                         ty: scalar,
                         use_mode: ParameterUse::Unrestricted,
                     }],
-                    result: scalar,
-                    result_borrow: None,
+                    result: crate::platform::kernel::CallableResult {
+                        ty: scalar,
+                        relation: crate::platform::kernel::ResultRelation::Value,
+                    },
                     effect: FunctionEffect::Pure,
+
+                    read_scope_parameters: Vec::new(),
+                    read_scope_sources: Vec::new(),
                 }],
             }),
         }),
@@ -166,10 +171,20 @@ fn fixture(mode: ParameterUse) -> Fixture {
                 requirement_parameters: vec![],
                 effect_parameters: vec![],
                 parameters: vec![parameter_id],
-                result: projection,
-                result_borrow: (mode == ParameterUse::Borrow).then_some(parameter_id),
+                result: crate::platform::kernel::CallableResult {
+                    ty: projection,
+                    relation: match (mode == ParameterUse::Borrow).then_some(parameter_id) {
+                        Some(source) => {
+                            crate::platform::kernel::ResultRelation::ReadFrom { source }
+                        }
+                        None => crate::platform::kernel::ResultRelation::Value,
+                    },
+                },
                 effect: FunctionEffect::Pure,
                 body,
+
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             }),
         }),
     );
@@ -441,4 +456,573 @@ fn affine_associated_shapes_keep_exact_work_late_cancellation_and_fresh_retry() 
         .0
         .expect("fresh healthy retry is unaffected by refusal");
     }
+}
+
+// Owning views are memory handles, not capability-resource values. This source
+// uses the native prepare/publication path; no admission token is fabricated.
+const OWNING_VIEW_LET_SOURCE: &str = r#"declarations.begin
+(units (module create affine-view-let
+  (read-view create Span (visibility public)
+    (scope-parameter read_scope_ca000000000000000000000000000001 s))
+  (interface create Input (visibility public)
+    (operation create read (returns I64) (idempotency idempotent) (external-visibility none)))
+  (function create ready (visibility private) (returns Unit (value)) (effect pure) (body (unit)))
+  (component create authority (visibility private)
+    (requirement create io (interface Input) (operations Input::read) (limits (maximum_calls 1 calls)))
+    (port create ready (type (function () Unit)) (function ready)))
+  (function create make (visibility private) (effect pure)
+    (scope-parameter read_scope_ca000000000000000000000000000002 s)
+    (parameter create owner (type OwnedI64Cell) (use borrow))
+    (scope-source owner (read-scope (declaration make) read_scope_ca000000000000000000000000000002))
+    (returns (read-view-application Span (types)
+      (read-scope (declaration make) read_scope_ca000000000000000000000000000002))
+      (view-from owner (read-scope (declaration make) read_scope_ca000000000000000000000000000002)))
+    (body (view-create Span (types)
+      (scope (read-scope (declaration make) read_scope_ca000000000000000000000000000002)) (source owner))))
+  (function create task-view (visibility private) (effect (task (requirement authority::io)))
+    (parameter create owner (type OwnedI64Cell) (use borrow))
+    (parameter create lease (type (resource Input)) (use borrow) (requirement authority::io))
+    (returns Unit (value))
+    (body (let
+      (binding view (as $view-scope)
+        (type (read-view-application Span (types) (lexical-read-scope task-view $view-scope)))
+        (borrow-call (call make (scopes (lexical-read-scope task-view $view-scope)) (local owner))
+          (binding constructed
+            (type (read-view-application Span (types) (lexical-read-scope task-view $view-scope))))
+          (in (view-move (local constructed)))))
+      (in (sequence (view-drop (local view)) (unit))))))))
+declarations.end
+"#;
+
+fn owning_view_affine_root_errors(source: &KernelSnapshot, root: OwnerKey) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+    let mut used = 0;
+    validate_affine_roots_with_limits(
+        source,
+        [root],
+        &mut diagnostics,
+        &mut used,
+        ExpressionValidationLimits {
+            maximum_steps: super::super::contract::MAXIMUM_VALIDATION_WORK,
+            maximum_diagnostics: 16,
+        },
+    )
+    .expect("genuine owning-view root stays within existing work limits");
+    assert!(used > 0);
+    diagnostics
+}
+
+#[test]
+fn owning_read_view_let_binding_preserves_memory_and_resource_authority() {
+    let source = crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(
+        OWNING_VIEW_LET_SOURCE,
+    )
+    .expect("genuine owning-view Task native prepare and publication");
+    super::super::validate_full(&source).unwrap();
+    let (root, function) = source
+        .owners
+        .iter()
+        .find_map(|(key, owner)| match owner {
+            OwnerRecord::Declaration(record) if record.name.as_str() == "task-view" => {
+                let DeclarationPayload::Function(function) = &record.payload else {
+                    unreachable!()
+                };
+                Some((*key, function.clone()))
+            }
+            _ => None,
+        })
+        .unwrap();
+    let view_binding = source
+        .owners
+        .iter()
+        .find_map(|(key, owner)| match owner {
+            OwnerRecord::Binding(record)
+                if record.name.as_str() == "view" && record.value.is_some() =>
+            {
+                assert_eq!(record.kind, BindingKind::ReadView);
+                assert_eq!(record.header.owner, *key);
+                assert_eq!(record.header.contract_version, 34);
+                Some(*key)
+            }
+            _ => None,
+        })
+        .unwrap();
+    let OwnerRecord::Binding(view) = &source.owners[&view_binding] else {
+        unreachable!()
+    };
+    let initializer = view.value.unwrap();
+    let OwnerRecord::Expression(initializer_record) =
+        &source.owners[&OwnerKey::Expression(initializer)]
+    else {
+        unreachable!()
+    };
+    let ExpressionOperation::BorrowCall { call, .. } = initializer_record.operation else {
+        unreachable!()
+    };
+    let OwnerRecord::Expression(call_record) = &source.owners[&OwnerKey::Expression(call)] else {
+        unreachable!()
+    };
+    let ExpressionOperation::Call { arguments, .. } = &call_record.operation else {
+        unreachable!()
+    };
+    assert_eq!(arguments.len(), 1);
+    let source_argument = arguments[0];
+    let lease = function.parameters[1];
+    let OwnerRecord::Parameter(lease_record) = &source.owners[&OwnerKey::Parameter(lease)] else {
+        unreachable!()
+    };
+    assert!(lease_record.resource_requirement.is_some());
+    let resource_type = lease_record.ty;
+    let scalar = source
+        .types
+        .iter()
+        .find_map(|(ty, object)| matches!(object.form, TypeForm::I64).then_some(*ty))
+        .unwrap();
+    assert!(owning_view_affine_root_errors(&source, root).is_empty());
+
+    // The resource walk may recognize this owning category only after the
+    // existing memory proof. It never admits a loan, annotation or source tag.
+    for fault in 0..9 {
+        let mut changed = source.clone();
+        let OwnerRecord::Binding(record) = changed.owners.get_mut(&view_binding).unwrap() else {
+            unreachable!()
+        };
+        match fault {
+            0 => record.kind = BindingKind::Let,
+            1 => record.kind = BindingKind::ReadViewBorrow,
+            2 => record.value = None,
+            3 => record.declared_type = None,
+            4 => record.declared_type = Some(scalar),
+            5 => record.declared_type = Some(resource_type),
+            6 => record.header.contract_version = 33,
+            7 => {
+                let OwnerRecord::Expression(record) = changed
+                    .owners
+                    .get_mut(&OwnerKey::Expression(initializer))
+                    .unwrap()
+                else {
+                    unreachable!()
+                };
+                record.operation = ExpressionOperation::Unit {};
+            }
+            8 => {
+                // A genuine capability parameter cannot replace the selected
+                // Owned source just because both parameters use Borrow.
+                let OwnerRecord::Expression(record) = changed
+                    .owners
+                    .get_mut(&OwnerKey::Expression(source_argument))
+                    .unwrap()
+                else {
+                    unreachable!()
+                };
+                record.operation = ExpressionOperation::Local {
+                    value: LocalValueReference::FunctionParameter(lease),
+                };
+            }
+            _ => unreachable!(),
+        }
+        let errors = owning_view_affine_root_errors(&changed, root);
+        assert!(!errors.is_empty(), "fault{fault} unexpectedly admitted");
+        assert!(
+            !errors
+                .iter()
+                .any(|e| e.code == "kernel_affine_binding_missing"),
+            "fault{fault} must fail existing memory/source admission: {errors:?}"
+        );
+        // Exact occurrence/scope admission can reject before the later memory
+        // category check; all semantic mutations and healthy inputs stay exact.
+        let (code, message) = match fault {
+            0 | 1 => (
+                "kernel_read_view",
+                "lexical scope is not an exact typed loan binding",
+            ),
+            2 => (
+                "kernel_buffer_ownership",
+                "missing memory binding initializer",
+            ),
+            3 | 4 | 5 => (
+                "kernel_buffer_ownership",
+                "owning view initializer requires its exact positive binding category",
+            ),
+            6 => (
+                "kernel_read_view_generation",
+                "view bindings require Graph 34 and an exact declared view type",
+            ),
+            7 => (
+                "kernel_buffer_ownership",
+                "affine initializer did not produce its declared handle category",
+            ),
+            8 => (
+                "kernel_buffer_ownership",
+                "child read source requires an exact typed live owner or view",
+            ),
+            _ => unreachable!(),
+        };
+        assert!(
+            errors.iter().any(|e| e.class == DiagnosticClass::Semantic
+                && e.code == code
+                && e.message == message),
+            "fault{fault}: {errors:?}"
+        );
+        assert!(
+            super::super::validate_full(&changed).is_err(),
+            "fault{fault}"
+        );
+    }
+
+    // Keep a real capability in the same Task. Copying it into an intermediate
+    // expression must still reach the independent capability-resource refusal.
+    let mut copied = source.clone();
+    let copy = ExpressionId::migrate(b"owning-view-let-resource-copy", 0);
+    let body = ExpressionId::migrate(b"owning-view-let-resource-copy", 1);
+    assert!(
+        copied
+            .owners
+            .insert(
+                OwnerKey::Expression(copy),
+                OwnerRecord::Expression(
+                    ExpressionRecord::new(
+                        copy,
+                        ExpressionOperation::Local {
+                            value: LocalValueReference::FunctionParameter(lease),
+                        }
+                    )
+                    .unwrap()
+                ),
+            )
+            .is_none()
+    );
+    let OwnerRecord::Expression(record) = copied
+        .owners
+        .get_mut(&OwnerKey::Expression(function.body))
+        .unwrap()
+    else {
+        unreachable!()
+    };
+    let ExpressionOperation::Let {
+        body: original_body,
+        ..
+    } = &mut record.operation
+    else {
+        unreachable!()
+    };
+    let previous = *original_body;
+    *original_body = body;
+    assert!(
+        copied
+            .owners
+            .insert(
+                OwnerKey::Expression(body),
+                OwnerRecord::Expression(
+                    ExpressionRecord::new(
+                        body,
+                        ExpressionOperation::Sequence {
+                            items: vec![copy, previous],
+                        }
+                    )
+                    .unwrap()
+                ),
+            )
+            .is_none()
+    );
+    // FullValidator checks logical flat-map counts before meaning. Keep this
+    // private fault inventory coherent after adding its two Expression owners;
+    // it is never published or granted a repository/admission seal.
+    let private_owner_inventory = copied.root.owners;
+    copied.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
+        private_owner_inventory.page(),
+        u64::try_from(copied.owners.len()).expect("bounded private fault owner inventory"),
+        private_owner_inventory.content(),
+    );
+    let expected_copy_message = format!(
+        "expression {copy}: function parameter {lease} can be used only by an explicit borrow, consume, variant transfer, or match"
+    );
+    let errors = owning_view_affine_root_errors(&copied, root);
+    assert!(
+        errors.iter().any(|e| e.class == DiagnosticClass::Semantic
+            && e.code == "kernel_affine_resource_copy"
+            && e.message == expected_copy_message),
+        "{errors:?}"
+    );
+    let errors = super::super::validate_full(&copied).unwrap_err();
+    assert!(
+        errors.iter().any(|e| e.class == DiagnosticClass::Semantic
+            && e.code == "kernel_affine_resource_copy"
+            && e.message == expected_copy_message),
+        "{errors:?}"
+    );
+    assert!(owning_view_affine_root_errors(&source, root).is_empty());
+    super::super::validate_full(&source).unwrap();
+}
+
+#[test]
+fn owning_read_view_sibling_annotation_uses_its_initializer_scope() {
+    // Keep the earlier genuine fixture unchanged. A later handle carries the
+    // earlier view's scope, not a new scope merely because its binding is affine.
+    let tail = "      (in (sequence (view-drop (local view)) (unit)))";
+    assert_eq!(OWNING_VIEW_LET_SOURCE.matches(tail).count(), 1);
+    let input = OWNING_VIEW_LET_SOURCE.replace(
+        tail,
+        r#"      (binding retained (as $retained-view)
+        (type (read-view-application Span (types) (lexical-read-scope task-view $view-scope)))
+        (view-reborrow (local view) (lexical-read-scope task-view $view-scope)))
+      (binding future (as $future-view)
+        (type (read-view-application Span (types) (lexical-read-scope task-view $view-scope)))
+        (view-reborrow (local retained) (lexical-read-scope task-view $view-scope)))
+      (in (sequence (view-drop (local view)) (view-drop (local retained))
+        (view-drop (local future)) (unit)))"#,
+    );
+    let source =
+        crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(&input)
+            .expect("native sibling view preparation and publication");
+    super::super::validate_full(&source)
+        .expect("full source must place a sibling annotation at its initializer");
+    let directory = tempfile::tempdir().unwrap();
+    let repository = crate::platform::publication::GraphRepository::create(
+        &directory.path().join("sibling-views"),
+        &source,
+        None,
+    )
+    .unwrap()
+    .repository;
+    let exported = repository
+        .export_package_container()
+        .expect("fresh full-source export keeps exact sibling loan context");
+    let bytes = exported.container.encode().unwrap();
+    let container = crate::platform::package_transport::source::PackageContainer::decode(
+        &bytes,
+        exported.container.root.transport,
+    )
+    .unwrap();
+    let admitted = container.admit().unwrap();
+    assert_eq!(admitted.container.encode().unwrap(), bytes);
+    assert_eq!(
+        admitted.packages[&container.root.package_revision]
+            .snapshot
+            .owners,
+        source.owners
+    );
+    let raw = crate::platform::package_transport::oracle::reconstruct(&container).unwrap();
+    assert_eq!(raw.snapshots[&source.root.package_id].owners, source.owners);
+
+    let (function_id, body) = source
+        .owners
+        .iter()
+        .find_map(|(key, record)| match (key, record) {
+            (OwnerKey::Declaration(id), OwnerRecord::Declaration(record))
+                if record.name.as_str() == "task-view" =>
+            {
+                let DeclarationPayload::Function(function) = &record.payload else {
+                    unreachable!()
+                };
+                Some((*id, function.body))
+            }
+            _ => None,
+        })
+        .unwrap();
+    let binding = |name: &str| {
+        source
+            .owners
+            .iter()
+            .find_map(|(key, record)| match (key, record) {
+                (OwnerKey::Binding(id), OwnerRecord::Binding(record))
+                    if record.name.as_str() == name && record.value.is_some() =>
+                {
+                    Some(*id)
+                }
+                _ => None,
+            })
+            .unwrap()
+    };
+    let view = binding("view");
+    let retained = binding("retained");
+    let future = binding("future");
+    let OwnerRecord::Expression(body_record) = &source.owners[&OwnerKey::Expression(body)] else {
+        unreachable!()
+    };
+    let ExpressionOperation::Let { bindings, .. } = &body_record.operation else {
+        unreachable!()
+    };
+    assert_eq!(bindings.as_slice(), [view, retained, future]);
+    let OwnerRecord::Binding(retained_record) = &source.owners[&OwnerKey::Binding(retained)] else {
+        unreachable!()
+    };
+    assert_eq!(retained_record.kind, BindingKind::ReadView);
+    let initializer = retained_record.value.unwrap();
+    let declared = retained_record.declared_type.unwrap();
+    let TypeForm::ReadViewApplied { read_scope, .. } = source.types[&declared].form else {
+        unreachable!()
+    };
+    assert_eq!(
+        read_scope,
+        super::super::ReadScopeArgument::Lexical {
+            callable: DeclarationReference {
+                package: source.root.package_id,
+                declaration: function_id
+            },
+            binding: view,
+        }
+    );
+    let OwnerRecord::Expression(initializer_record) =
+        &source.owners[&OwnerKey::Expression(initializer)]
+    else {
+        unreachable!()
+    };
+    assert!(
+        matches!(initializer_record.operation, ExpressionOperation::ReborrowReadView {
+        value: LocalValueReference::LexicalBinding(parent), read_scope: scope,
+    } if parent == view && scope == read_scope)
+    );
+
+    for fault in [
+        "future-scope",
+        "self-value",
+        "before-parent",
+        "ended-source",
+    ] {
+        // These are private raw snapshots, not container/admission seals. Flat
+        // map counts stay coherent when a fault adds exact typed/owner records.
+        let mut changed = source.clone();
+        match fault {
+            "future-scope" => {
+                let future_scope = super::super::ReadScopeArgument::Lexical {
+                    callable: DeclarationReference {
+                        package: source.root.package_id,
+                        declaration: function_id,
+                    },
+                    binding: future,
+                };
+                let mut object = source.types[&declared].clone();
+                let TypeForm::ReadViewApplied { read_scope, .. } = &mut object.form else {
+                    unreachable!()
+                };
+                *read_scope = future_scope;
+                let digest = encode_type_object(&object).unwrap().0;
+                assert!(changed.types.insert(digest, object).is_none());
+                let OwnerRecord::Binding(record) = changed
+                    .owners
+                    .get_mut(&OwnerKey::Binding(retained))
+                    .unwrap()
+                else {
+                    unreachable!()
+                };
+                record.declared_type = Some(digest);
+                let OwnerRecord::Expression(record) = changed
+                    .owners
+                    .get_mut(&OwnerKey::Expression(initializer))
+                    .unwrap()
+                else {
+                    unreachable!()
+                };
+                let ExpressionOperation::ReborrowReadView { read_scope, .. } =
+                    &mut record.operation
+                else {
+                    unreachable!()
+                };
+                *read_scope = future_scope;
+            }
+            "self-value" => {
+                let OwnerRecord::Expression(record) = changed
+                    .owners
+                    .get_mut(&OwnerKey::Expression(initializer))
+                    .unwrap()
+                else {
+                    unreachable!()
+                };
+                let ExpressionOperation::ReborrowReadView { value, .. } = &mut record.operation
+                else {
+                    unreachable!()
+                };
+                *value = LocalValueReference::LexicalBinding(retained);
+            }
+            "before-parent" => {
+                let OwnerRecord::Expression(record) =
+                    changed.owners.get_mut(&OwnerKey::Expression(body)).unwrap()
+                else {
+                    unreachable!()
+                };
+                let ExpressionOperation::Let { bindings, .. } = &mut record.operation else {
+                    unreachable!()
+                };
+                bindings.swap(0, 1);
+            }
+            "ended-source" => {
+                let drop = ExpressionId::migrate(b"sibling-view-expired-source", 0);
+                let reborrow = ExpressionId::migrate(b"sibling-view-expired-source", 1);
+                assert!(
+                    changed
+                        .owners
+                        .insert(
+                            OwnerKey::Expression(drop),
+                            OwnerRecord::Expression(
+                                ExpressionRecord::new(
+                                    drop,
+                                    ExpressionOperation::DropReadView {
+                                        value: LocalValueReference::LexicalBinding(view)
+                                    }
+                                )
+                                .unwrap(),
+                            )
+                        )
+                        .is_none()
+                );
+                assert!(
+                    changed
+                        .owners
+                        .insert(
+                            OwnerKey::Expression(reborrow),
+                            OwnerRecord::Expression(
+                                ExpressionRecord::new(
+                                    reborrow,
+                                    initializer_record.operation.clone()
+                                )
+                                .unwrap(),
+                            )
+                        )
+                        .is_none()
+                );
+                let OwnerRecord::Expression(record) = changed
+                    .owners
+                    .get_mut(&OwnerKey::Expression(initializer))
+                    .unwrap()
+                else {
+                    unreachable!()
+                };
+                record.operation = ExpressionOperation::Sequence {
+                    items: vec![drop, reborrow],
+                };
+            }
+            _ => unreachable!(),
+        }
+        let owners = changed.root.owners;
+        changed.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
+            owners.page(),
+            changed.owners.len() as u64,
+            owners.content(),
+        );
+        let errors = super::super::validate_full(&changed).unwrap_err();
+        let (code, message) = match fault {
+            "future-scope" | "before-parent" => (
+                "kernel_read_view",
+                "lexical read scope has no live containing loan",
+            ),
+            "self-value" => ("kernel_full_lexical_scope", "outside its scope"),
+            "ended-source" => (
+                "kernel_buffer_ownership",
+                "view source local handle is no longer live",
+            ),
+            _ => unreachable!(),
+        };
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.class == DiagnosticClass::Semantic
+                    && error.code == code
+                    && error.message.contains(message)),
+            "{fault}: {errors:?}"
+        );
+    }
+    // Refusal does not poison a healthy fresh source admission.
+    super::super::validate_full(&source).unwrap();
+    assert!(container.admit().is_ok());
 }

@@ -1,6 +1,7 @@
 //! Exact predecessor wire layouts, frozen from 4306ef64 (Graph 14 / interface 10).
 //! Conversion does not validate meaning or change stored bytes; the current checker owns admission.
 
+use super::frozen_read_view_wire as frozen;
 use super::*;
 use crate::platform::semantic_id::{
     BindingId, CaseId, DeclarationId, EffectParameterId, ExpressionId, FieldId, ModuleId,
@@ -18,7 +19,7 @@ pub enum OwnerRecord14 {
     Case(CaseRecord),
     Operation(OperationRecord),
     Parameter(ParameterRecord),
-    Binding(BindingRecord),
+    Binding(frozen::FrozenBindingRecord33),
     Expression(ExpressionRecord14),
     Requirement(RequirementRecord),
     Port(PortRecord),
@@ -254,7 +255,7 @@ impl From<OwnerRecord14> for super::OwnerRecord {
             OwnerRecord14::Case(value) => Self::Case(value),
             OwnerRecord14::Operation(value) => Self::Operation(value),
             OwnerRecord14::Parameter(value) => Self::Parameter(value),
-            OwnerRecord14::Binding(value) => Self::Binding(value),
+            OwnerRecord14::Binding(value) => Self::Binding(value.into()),
             OwnerRecord14::Expression(value) => Self::Expression(value.into()),
             OwnerRecord14::Requirement(value) => Self::Requirement(value),
             OwnerRecord14::Port(value) => Self::Port(value),
@@ -278,7 +279,7 @@ impl TryFrom<super::OwnerRecord> for OwnerRecord14 {
             super::OwnerRecord::Case(value) => Self::Case(value),
             super::OwnerRecord::Operation(value) => Self::Operation(value),
             super::OwnerRecord::Parameter(value) => Self::Parameter(value),
-            super::OwnerRecord::Binding(value) => Self::Binding(value),
+            super::OwnerRecord::Binding(value) => Self::Binding(value.try_into()?),
             super::OwnerRecord::Expression(value) => Self::Expression(value.try_into()?),
             super::OwnerRecord::Requirement(value) => Self::Requirement(value),
             super::OwnerRecord::Port(value) => Self::Port(value),
@@ -375,6 +376,9 @@ impl TryFrom<super::DeclarationPayload> for DeclarationPayload14 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(value: super::DeclarationPayload) -> Result<Self, Self::Error> {
         Ok(match value {
+            super::DeclarationPayload::ReadView(_) => {
+                return Err(frozen::read_view_extension());
+            }
             super::DeclarationPayload::OwnedRecord { .. } => {
                 return Err(super::owned_record::reject(
                     "nominal owned records require Graph 32",
@@ -436,8 +440,9 @@ impl From<FunctionDeclaration14> for super::FunctionDeclaration {
             effect_parameters,
             type_parameters,
             parameters,
-            result,
-            result_borrow: None,
+            result: frozen::legacy_result(result, None),
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
             effect: effect.into(),
             body,
         }
@@ -453,15 +458,19 @@ impl TryFrom<super::FunctionDeclaration> for FunctionDeclaration14 {
             type_parameters,
             parameters,
             result,
-            result_borrow,
+            read_scope_parameters,
+            read_scope_sources,
             effect,
             body,
             requirement_parameters,
         } = value;
+        frozen::require_empty_read_scope(
+            read_scope_parameters.is_empty() && read_scope_sources.is_empty(),
+        )?;
+        let (result, result_borrow) = frozen::split_result(result)?;
         if result_borrow.is_some() {
             return Err(extension());
         }
-        require_empty(&implementation_parameters)?;
         require_empty(&implementation_parameters)?;
         require_empty(&requirement_parameters)?;
         Ok(Self {
@@ -567,6 +576,7 @@ impl From<ExpressionOperation14> for super::ExpressionOperation {
                 type_arguments,
                 arguments,
             } => Self::Call {
+                read_scope_arguments: Vec::new(),
                 requirement_arguments: Vec::new(),
                 effect_arguments: effect_arguments.into_iter().map(Into::into).collect(),
                 function,
@@ -578,6 +588,7 @@ impl From<ExpressionOperation14> for super::ExpressionOperation {
                 function,
                 type_arguments,
             } => Self::FunctionValue {
+                read_scope_arguments: Vec::new(),
                 requirement_arguments: Vec::new(),
                 effect_arguments: effect_arguments.into_iter().map(Into::into).collect(),
                 function,
@@ -643,6 +654,15 @@ impl TryFrom<super::ExpressionOperation> for ExpressionOperation14 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(value: super::ExpressionOperation) -> Result<Self, Self::Error> {
         Ok(match value {
+            super::ExpressionOperation::CreateReadView { .. }
+            | super::ExpressionOperation::BorrowReadView { .. }
+            | super::ExpressionOperation::ReborrowReadView { .. }
+            | super::ExpressionOperation::MoveReadView { .. }
+            | super::ExpressionOperation::DropReadView { .. }
+            | super::ExpressionOperation::ReadViewDataField { .. }
+            | super::ExpressionOperation::BorrowReadViewField { .. } => {
+                return Err(frozen::read_view_extension());
+            }
             super::ExpressionOperation::PackOwnedRecord { .. }
             | super::ExpressionOperation::UnpackOwnedRecord { .. }
             | super::ExpressionOperation::BorrowOwnedRecordField { .. } => {
@@ -676,12 +696,14 @@ impl TryFrom<super::ExpressionOperation> for ExpressionOperation14 {
             super::ExpressionOperation::Let { bindings, body } => Self::Let { bindings, body },
             super::ExpressionOperation::Sequence { items } => Self::Sequence { items },
             super::ExpressionOperation::Call {
+                read_scope_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
                 arguments,
                 requirement_arguments,
             } => {
+                frozen::require_empty_read_scope(read_scope_arguments.is_empty())?;
                 require_empty(&requirement_arguments)?;
                 Self::Call {
                     effect_arguments: effect_arguments
@@ -694,11 +716,13 @@ impl TryFrom<super::ExpressionOperation> for ExpressionOperation14 {
                 }
             }
             super::ExpressionOperation::FunctionValue {
+                read_scope_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
                 requirement_arguments,
             } => {
+                frozen::require_empty_read_scope(read_scope_arguments.is_empty())?;
                 require_empty(&requirement_arguments)?;
                 Self::FunctionValue {
                     effect_arguments: effect_arguments
@@ -925,6 +949,9 @@ impl TryFrom<super::PackageInterfaceDeclarationPayload> for PackageInterfaceDecl
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(value: super::PackageInterfaceDeclarationPayload) -> Result<Self, Self::Error> {
         Ok(match value {
+            super::PackageInterfaceDeclarationPayload::ReadView(_) => {
+                return Err(frozen::read_view_extension());
+            }
             super::PackageInterfaceDeclarationPayload::OwnedRecord { .. } => {
                 return Err(super::owned_record::reject(
                     "nominal owned records require Graph 32",
@@ -982,8 +1009,9 @@ impl From<PackageFunctionSignature14> for super::PackageFunctionSignature {
             effect_parameters,
             type_parameters,
             parameters,
-            result,
-            result_borrow: None,
+            result: frozen::legacy_result(result, None),
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
             effect: effect.into(),
         }
     }
@@ -998,10 +1026,15 @@ impl TryFrom<super::PackageFunctionSignature> for PackageFunctionSignature14 {
             type_parameters,
             parameters,
             result,
-            result_borrow,
+            read_scope_parameters,
+            read_scope_sources,
             effect,
             requirement_parameters,
         } = value;
+        frozen::require_empty_read_scope(
+            read_scope_parameters.is_empty() && read_scope_sources.is_empty(),
+        )?;
+        let (result, result_borrow) = frozen::split_result(result)?;
         if result_borrow.is_some() {
             return Err(extension());
         }

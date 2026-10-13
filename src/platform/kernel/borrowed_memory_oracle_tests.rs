@@ -202,6 +202,8 @@ fn call(function: DeclarationReference, argument: ExpressionId) -> ExpressionOpe
         type_arguments: Vec::new(),
         requirement_arguments: Vec::new(),
         effect_arguments: Vec::new(),
+
+        read_scope_arguments: Vec::new(),
     }
 }
 
@@ -229,7 +231,7 @@ fn borrowed_memory_oracle_rejects_counterfeit_roles_annotations_and_generation()
         assert!(!accepts(&changed), "forged read-view role: {role:?}");
     }
     let mut changed = source.clone();
-    let wrong = function(&source, "product-read").result;
+    let wrong = function(&source, "product-read").result.ty;
     binding(&mut changed, view).declared_type = Some(wrong);
     assert!(
         !accepts(&changed),

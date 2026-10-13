@@ -39,6 +39,9 @@ pub(super) fn encode_typed_with_control(
     ty: TypeObjectDigest,
     control: &ExecutionControl,
 ) -> Result<Vec<u8>, Diagnostic> {
+    let mut escape = ReferenceEscapeCheck::new(control);
+    escape.value(value, 0)?;
+    ReferenceEscapeCheck::new(control).ty(program, ty, 0)?;
     let mut encoded = Vec::new();
     encoded.extend_from_slice(MAGIC);
     encoded.extend_from_slice(&VERSION.to_be_bytes());
@@ -67,7 +70,7 @@ pub(super) fn decode_typed_with_control(
     ty: TypeObjectDigest,
     control: &ExecutionControl,
 ) -> Result<NormalizedValue, Diagnostic> {
-    cancelled(control)?;
+    ReferenceEscapeCheck::new(control).ty(program, ty, 0)?;
     if encoded.len() > BYTE_LIMIT {
         return Err(resource_error(
             "typed data value exceeds the canonical byte limit",
@@ -125,6 +128,238 @@ fn cancelled(control: &ExecutionControl) -> Result<(), Diagnostic> {
         .map_err(|error| Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message))
 }
 
+/// Independently reject capabilities in the complete boundary closure before
+/// parsing input or allocating output. This grants no ordinary-value admission.
+/// In particular it does not use the production value/schema escape walker.
+struct ReferenceEscapeCheck<'a> {
+    control: &'a ExecutionControl,
+    visits: u64,
+    ancestors: [Option<TypeObjectDigest>; 257],
+}
+
+impl<'a> ReferenceEscapeCheck<'a> {
+    fn new(control: &'a ExecutionControl) -> Self {
+        Self {
+            control,
+            visits: 0,
+            ancestors: [None; 257],
+        }
+    }
+
+    fn enter(&mut self, depth: usize) -> Result<(), Diagnostic> {
+        cancelled(self.control)?;
+        if depth > 256 {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Resource,
+                "normalized_value_depth",
+                "view escape inspection exceeds finite value depth 256",
+            ));
+        }
+        self.visits = self
+            .visits
+            .checked_add(1)
+            .filter(|count| *count <= 1_000_001)
+            .ok_or_else(|| {
+                Diagnostic::new(
+                    DiagnosticClass::Resource,
+                    "normalized_collection_items",
+                    "view escape inspection exceeds finite admission items",
+                )
+            })?;
+        Ok(())
+    }
+
+    fn value(&mut self, value: &NormalizedValue, depth: usize) -> Result<(), Diagnostic> {
+        self.enter(depth)?;
+        match value {
+            NormalizedValue::ReadView(_) => return Err(view_escape()),
+            NormalizedValue::Record(NormalizedRecord::Nominal { fields, .. }) => {
+                for field in fields.iter() {
+                    self.value(field, depth + 1)?;
+                }
+            }
+            NormalizedValue::Record(NormalizedRecord::Structural { fields }) => {
+                for (_, field) in fields.iter() {
+                    self.value(field, depth + 1)?;
+                }
+            }
+            NormalizedValue::List(items) => self.list(items, depth)?,
+            NormalizedValue::Map(entries) => self.map(entries, depth)?,
+            NormalizedValue::Variant { payload, .. } | NormalizedValue::Option(payload) => {
+                if let Some(payload) = payload {
+                    self.value(payload, depth + 1)?;
+                }
+            }
+            NormalizedValue::Result { value, .. } => self.value(value, depth + 1)?,
+            NormalizedValue::Function {
+                read_scope_arguments,
+                bound_arguments,
+                ..
+            } => {
+                if !read_scope_arguments.is_empty() {
+                    return Err(view_escape());
+                }
+                if let Some(arguments) = bound_arguments {
+                    for argument in arguments.iter() {
+                        self.value(argument, depth + 1)?;
+                    }
+                }
+            }
+            // Opaque owners require their own checked category and child admission;
+            // absence of a visible view is never an ordinary-data certificate.
+            NormalizedValue::OwnedSequence(_)
+            | NormalizedValue::OwnedChoice(_)
+            | NormalizedValue::OwnedProduct(_)
+            | NormalizedValue::OwnedI64Cell(_)
+            | NormalizedValue::ByteBuffer(_)
+            | NormalizedValue::Resource(_)
+            | NormalizedValue::Unit
+            | NormalizedValue::Bool(_)
+            | NormalizedValue::I64(_)
+            | NormalizedValue::F64(_)
+            | NormalizedValue::Bytes(_)
+            | NormalizedValue::Text(_)
+            | NormalizedValue::StaticText(_) => {}
+        }
+        Ok(())
+    }
+
+    #[inline(never)]
+    fn list(&mut self, items: &super::list::List, depth: usize) -> Result<(), Diagnostic> {
+        let mut cursor = items.iter();
+        for item in &mut cursor {
+            self.value(item, depth + 1)?;
+        }
+        Ok(())
+    }
+
+    #[inline(never)]
+    fn map(&mut self, entries: &super::map::Map, depth: usize) -> Result<(), Diagnostic> {
+        let mut cursor = entries.iter();
+        for (_, item) in &mut cursor {
+            self.value(item, depth + 1)?;
+        }
+        Ok(())
+    }
+
+    fn ty(
+        &mut self,
+        program: &dyn NormalizedValueSchema,
+        ty: TypeObjectDigest,
+        depth: usize,
+    ) -> Result<(), Diagnostic> {
+        self.enter(depth)?;
+        if self.ancestors[..depth].contains(&Some(ty)) {
+            return Ok(());
+        }
+        self.ancestors[depth] = Some(ty);
+        let object = program.types().get(&ty).ok_or_else(|| {
+            Diagnostic::new(
+                DiagnosticClass::Semantic,
+                "normalized_value_admission",
+                "view escape inspection requires every exact type in the selected schema",
+            )
+        })?;
+        match &object.form {
+            TypeForm::ReadViewApplied { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. } => return Err(view_escape()),
+            TypeForm::Named { .. } | TypeForm::Applied { .. } => {
+                if let TypeForm::Applied { arguments, .. } = &object.form {
+                    for argument in arguments {
+                        self.ty(program, *argument, depth + 1)?;
+                    }
+                }
+                if let Some(index) = program.record_index(ty) {
+                    let record = program
+                        .records()
+                        .get(index)
+                        .ok_or_else(escape_layout_error)?;
+                    for argument in record.arguments.iter() {
+                        self.ty(program, *argument, depth + 1)?;
+                    }
+                    for field in record.fields.iter() {
+                        self.ty(program, field.ty, depth + 1)?;
+                    }
+                }
+                if let Some(index) = program.variant_index(ty) {
+                    let variant = program
+                        .variants()
+                        .get(index)
+                        .ok_or_else(escape_layout_error)?;
+                    for argument in variant.arguments.iter() {
+                        self.ty(program, *argument, depth + 1)?;
+                    }
+                    for case in variant.cases.iter() {
+                        if let Some(payload) = case.payload {
+                            self.ty(program, payload, depth + 1)?;
+                        }
+                    }
+                }
+            }
+            TypeForm::StructuralRecord { fields }
+            | TypeForm::OwnedProduct { fields }
+            | TypeForm::OwnedChoice { cases: fields } => {
+                for field in fields {
+                    self.ty(program, field.ty, depth + 1)?;
+                }
+            }
+            TypeForm::List { item }
+            | TypeForm::Option { item }
+            | TypeForm::OwnedSequence { item }
+            | TypeForm::Stream { item } => self.ty(program, *item, depth + 1)?,
+            TypeForm::Map { key, value }
+            | TypeForm::Result {
+                ok: key,
+                error: value,
+            } => {
+                self.ty(program, *key, depth + 1)?;
+                self.ty(program, *value, depth + 1)?;
+            }
+            TypeForm::Function { parameters, result }
+            | TypeForm::TaskFunction {
+                parameters, result, ..
+            } => {
+                for parameter in parameters {
+                    self.ty(program, *parameter, depth + 1)?;
+                }
+                self.ty(program, *result, depth + 1)?;
+            }
+            TypeForm::AssociatedContractMember { .. }
+            | TypeForm::AssociatedWitnessProjection { .. }
+            | TypeForm::TypeParameter { .. }
+            | TypeForm::Unit
+            | TypeForm::Bool
+            | TypeForm::I64
+            | TypeForm::F64
+            | TypeForm::Bytes
+            | TypeForm::Text
+            | TypeForm::StaticText
+            | TypeForm::Secret
+            | TypeForm::ByteBuffer
+            | TypeForm::OwnedI64Cell
+            | TypeForm::CapabilityResource { .. } => {}
+        }
+        Ok(())
+    }
+}
+
+fn view_escape() -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticClass::Semantic,
+        "normalized_read_view_escape",
+        "read-view values, scopes, or nested types cannot cross an ordinary value boundary",
+    )
+}
+
+fn escape_layout_error() -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticClass::Semantic,
+        "normalized_value_admission",
+        "view escape inspection found an absent nominal layout",
+    )
+}
+
 struct ReferenceBudget<'a> {
     items: usize,
     control: &'a ExecutionControl,
@@ -166,6 +401,12 @@ fn write_value(
 ) -> Result<(), Diagnostic> {
     budget.visit(depth, false)?;
     match (form(program, ty)?, value) {
+        (
+            TypeForm::ReadViewApplied { .. }
+            | TypeForm::AssociatedReadViewMember { .. }
+            | TypeForm::AssociatedReadViewProjection { .. },
+            _,
+        ) => return Err(unsupported("ReadView")),
         (TypeForm::Unit, NormalizedValue::Unit) => {}
         (TypeForm::Bool, NormalizedValue::Bool(value)) => write_bytes(output, &[u8::from(*value)])?,
         (TypeForm::I64, NormalizedValue::I64(value)) => {
@@ -318,6 +559,9 @@ fn read_reserved_value(
 ) -> Result<NormalizedValue, Diagnostic> {
     budget.visit(depth, already_charged)?;
     match form(program, ty)? {
+        TypeForm::ReadViewApplied { .. }
+        | TypeForm::AssociatedReadViewMember { .. }
+        | TypeForm::AssociatedReadViewProjection { .. } => Err(unsupported("ReadView")),
         TypeForm::AssociatedContractMember { .. }
         | TypeForm::AssociatedWitnessProjection { .. } => Err(unsupported("associated owned type")),
         TypeForm::Unit => Ok(NormalizedValue::Unit),
@@ -512,6 +756,9 @@ fn describe_type(
     }
     write_bytes(description, &ty.bytes())?;
     match form(program, ty)? {
+        TypeForm::ReadViewApplied { .. }
+        | TypeForm::AssociatedReadViewMember { .. }
+        | TypeForm::AssociatedReadViewProjection { .. } => return Err(unsupported("ReadView")),
         TypeForm::AssociatedContractMember { .. }
         | TypeForm::AssociatedWitnessProjection { .. } => {
             return Err(unsupported("associated owned type"));

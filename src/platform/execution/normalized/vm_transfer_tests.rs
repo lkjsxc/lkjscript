@@ -163,7 +163,7 @@ fn sequence_fixture() -> (NormalizedProgram, FunctionIndex, TypeObjectDigest) {
     let function = functions["buffer-result"];
     let target = &mut Arc::make_mut(&mut program.functions)[function.0 as usize];
     Arc::make_mut(&mut target.parameters)[0].ty = ty;
-    target.result = ty;
+    target.result.ty = ty;
     (program, function, ty)
 }
 
@@ -275,7 +275,7 @@ fn scoped_sequence_capture_and_adoption_work_does_not_depend_on_stored_length() 
         .0;
     let target = &mut Arc::make_mut(&mut program.functions)[function.0 as usize];
     Arc::make_mut(&mut target.parameters)[0].use_mode = ParameterUse::Borrow;
-    target.result = unit;
+    target.result.ty = unit;
     let source = ValueOrigin::fresh().unwrap();
     let mut successful_thresholds = Vec::new();
     for length in [0, 1, 4096] {
@@ -915,7 +915,7 @@ fn sealed_result_returns_nested_custody_without_copying_allocations() {
     let parent = ValueOrigin::fresh().unwrap();
     let child = ValueOrigin::fresh().unwrap();
     let function = functions["tree-result"];
-    let ty = program.functions[function.0 as usize].result;
+    let ty = program.functions[function.0 as usize].result.ty;
     let control = ExecutionControl::uncancelled();
     let (value, identities, _) = payload(&program, function, parent, parent, false, false);
     let input = TransferArguments::seal(
@@ -992,7 +992,7 @@ fn sealed_result_returns_nested_custody_without_copying_allocations() {
 fn sealed_result_rejects_foreign_domains_loans_metadata_and_inert_clones() {
     let (program, functions) = fixture();
     let function = functions["tree-result"];
-    let ty = program.functions[function.0 as usize].result;
+    let ty = program.functions[function.0 as usize].result.ty;
     for failure in ["foreign", "loan", "metadata", "clone"] {
         let buffers = Buffers::start();
         let cells = Cells::start();
@@ -1047,7 +1047,7 @@ fn sealed_result_rejects_foreign_domains_loans_metadata_and_inert_clones() {
 fn sealed_result_binds_program_target_result_type_and_destination() {
     let (program, functions) = fixture();
     let function = functions["buffer-result"];
-    let ty = program.functions[function.0 as usize].result;
+    let ty = program.functions[function.0 as usize].result.ty;
     let control = ExecutionControl::uncancelled();
     for mismatch in ["program", "target", "type", "destination", "source"] {
         let buffers = Buffers::start();
@@ -1093,7 +1093,7 @@ fn sealed_result_binds_program_target_result_type_and_destination() {
                 function
             };
             let actual_type = if mismatch == "type" {
-                program.functions[functions["buffer"].0 as usize].result
+                program.functions[functions["buffer"].0 as usize].result.ty
             } else {
                 ty
             };
@@ -1138,7 +1138,7 @@ fn sealed_result_binds_program_target_result_type_and_destination() {
 fn sealed_result_checks_unselected_cases_before_accepting_custody() {
     let (program, functions) = fixture();
     let function = functions["tree-result"];
-    let ty = program.functions[function.0 as usize].result;
+    let ty = program.functions[function.0 as usize].result.ty;
     let buffers = Buffers::start();
     let cells = Cells::start();
     let products = Products::start();
@@ -1173,7 +1173,7 @@ fn sealed_result_checks_unselected_cases_before_accepting_custody() {
 fn sealed_result_cancellation_cleans_partial_adoption_and_preserves_unrelated_owner() {
     let (program, functions) = fixture();
     let function = functions["tree-result"];
-    let ty = program.functions[function.0 as usize].result;
+    let ty = program.functions[function.0 as usize].result.ty;
     let control = ExecutionControl::uncancelled();
     for preparing in [true, false] {
         let mut failed = 0;
@@ -1247,7 +1247,7 @@ fn sealed_result_cancellation_cleans_partial_adoption_and_preserves_unrelated_ow
 fn joined_failure_disposes_a_successful_owned_result_envelope() {
     let (program, functions) = fixture();
     let function = functions["buffer-result"];
-    let ty = program.functions[function.0 as usize].result;
+    let ty = program.functions[function.0 as usize].result.ty;
     for successful_left in [true, false] {
         let buffers = Buffers::start();
         let source = ValueOrigin::fresh().unwrap();

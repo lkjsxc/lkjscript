@@ -70,9 +70,14 @@ fn common(binding: Binding) -> Common {
                 id: method,
                 name: name("step"),
                 parameters: vec![],
-                result: unit,
-                result_borrow: None,
+                result: crate::platform::kernel::CallableResult {
+                    ty: unit,
+                    relation: crate::platform::kernel::ResultRelation::Value,
+                },
                 effect: FunctionEffect::Pure,
+
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             }],
             associated_types: vec![AssociatedTypeMember {
                 id: member,
@@ -102,8 +107,13 @@ fn common(binding: Binding) -> Common {
                 function: noop,
                 type_arguments: vec![plain_self_ty],
                 implementations: vec![],
+
+                read_scope_arguments: Vec::new(),
             }],
-            associated_types: vec![AssociatedTypeBinding { member, ty: output }],
+            associated_types: vec![AssociatedTypeBinding {
+                member,
+                value: crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty: output },
+            }],
         }),
     );
     Common {
@@ -135,10 +145,15 @@ fn function(
             requirement_parameters: vec![],
             effect_parameters: vec![],
             parameters: vec![],
-            result,
-            result_borrow: None,
+            result: crate::platform::kernel::CallableResult {
+                ty: result,
+                relation: crate::platform::kernel::ResultRelation::Value,
+            },
             effect: FunctionEffect::Pure,
             body,
+
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
         }),
     )
 }
@@ -197,6 +212,8 @@ fn call(
             effect_arguments: vec![],
             requirement_arguments: vec![],
             arguments: vec![],
+
+            read_scope_arguments: Vec::new(),
         },
     )
 }
@@ -296,9 +313,14 @@ fn paths(binding: Binding, identical: bool) -> Family {
                 id: common.method,
                 name: name("step"),
                 parameters: vec![],
-                result: common.unit,
-                result_borrow: None,
+                result: crate::platform::kernel::CallableResult {
+                    ty: common.unit,
+                    relation: crate::platform::kernel::ResultRelation::Value,
+                },
                 effect: FunctionEffect::Pure,
+
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             }],
             associated_types: vec![],
         }),
@@ -320,6 +342,8 @@ fn paths(binding: Binding, identical: bool) -> Family {
                 function: relay,
                 type_arguments: vec![wrapper_self_ty],
                 implementations: vec![parameter(wrapper, first.id), parameter(wrapper, second.id)],
+
+                read_scope_arguments: Vec::new(),
             }],
             associated_types: vec![],
         }),
@@ -354,6 +378,8 @@ fn paths(binding: Binding, identical: bool) -> Family {
             contract: path_contract,
             method: common.method,
             arguments: vec![],
+
+            read_scope_arguments: Vec::new(),
         },
     );
     let right_call = expression(
@@ -364,6 +390,8 @@ fn paths(binding: Binding, identical: bool) -> Family {
             contract: path_contract,
             method: common.method,
             arguments: vec![],
+
+            read_scope_arguments: Vec::new(),
         },
     );
     let sequence = expression(
@@ -1248,6 +1276,8 @@ fn discarded_function_value(binding: Binding) -> Family {
         type_arguments,
         effect_arguments: vec![],
         requirement_arguments: vec![],
+
+        read_scope_arguments: Vec::new(),
     };
     let unit = expression(
         &mut family.common.source,
@@ -1301,9 +1331,14 @@ fn unused_mapping(binding: Binding) -> Family {
                 id: common.method,
                 name: name("step"),
                 parameters: vec![],
-                result: common.unit,
-                result_borrow: None,
+                result: crate::platform::kernel::CallableResult {
+                    ty: common.unit,
+                    relation: crate::platform::kernel::ResultRelation::Value,
+                },
                 effect: FunctionEffect::Pure,
+
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             }],
             associated_types: vec![],
         }),
@@ -1324,6 +1359,8 @@ fn unused_mapping(binding: Binding) -> Family {
                 function: relay,
                 type_arguments: vec![wrapper_self_ty, output],
                 implementations: vec![],
+
+                read_scope_arguments: Vec::new(),
             }],
             associated_types: vec![],
         }),
@@ -1341,6 +1378,8 @@ fn unused_mapping(binding: Binding) -> Family {
             contract: relay_contract,
             method: common.method,
             arguments: vec![],
+
+            read_scope_arguments: Vec::new(),
         },
     );
     function(

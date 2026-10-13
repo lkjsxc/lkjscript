@@ -6,8 +6,8 @@ use super::associated_flow_canonical_reference::{
 use super::associated_flow_reference as model;
 use super::*;
 use crate::platform::semantic_id::{
-    AssociatedTypeMemberId, DeclarationId, ExpressionId, ImplementationParameterId, MethodId,
-    ModuleId, ParameterId, TypeParameterId,
+    AssociatedTypeMemberId, DeclarationId, ExpressionId, FieldId, ImplementationParameterId,
+    MethodId, ModuleId, ParameterId, TypeParameterId,
 };
 use std::collections::BTreeSet;
 
@@ -63,6 +63,8 @@ fn repeated_method_registry(expanding: bool) -> (Fixture, usize) {
                 contract: fixture.contract,
                 method,
                 arguments: vec![local],
+
+                read_scope_arguments: Vec::new(),
             },
         ));
     }
@@ -114,10 +116,15 @@ fn repeated_method_registry(expanding: bool) -> (Fixture, usize) {
                 requirement_parameters: vec![],
                 effect_parameters: vec![],
                 parameters: vec![],
-                result: unit,
-                result_borrow: None,
+                result: crate::platform::kernel::CallableResult {
+                    ty: unit,
+                    relation: crate::platform::kernel::ResultRelation::Value,
+                },
                 effect: FunctionEffect::Pure,
                 body,
+
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             }),
         );
         let OwnerRecord::Declaration(record) = fixture
@@ -326,9 +333,14 @@ fn recurrence_in(package: PackageId, expanding: bool, reset: bool, permutation: 
                     ty: contract_self_ty,
                     use_mode: ParameterUse::Borrow,
                 }],
-                result: unit,
-                result_borrow: None,
+                result: crate::platform::kernel::CallableResult {
+                    ty: unit,
+                    relation: crate::platform::kernel::ResultRelation::Value,
+                },
                 effect: FunctionEffect::Pure,
+
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             }],
             associated_types: vec![
                 AssociatedTypeMember {
@@ -366,10 +378,15 @@ fn recurrence_in(package: PackageId, expanding: bool, reset: bool, permutation: 
             requirement_parameters: vec![],
             effect_parameters: vec![],
             parameters: vec![ping_parameter],
-            result: unit,
-            result_borrow: None,
+            result: crate::platform::kernel::CallableResult {
+                ty: unit,
+                relation: crate::platform::kernel::ResultRelation::Value,
+            },
             effect: FunctionEffect::Pure,
             body: ping_body,
+
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
         }),
     );
     let binding = if reset {
@@ -393,15 +410,21 @@ fn recurrence_in(package: PackageId, expanding: bool, reset: bool, permutation: 
                 function: ping,
                 type_arguments: vec![scheme_self_ty],
                 implementations: vec![],
+
+                read_scope_arguments: Vec::new(),
             }],
             associated_types: vec![
                 AssociatedTypeBinding {
                     member,
-                    ty: binding,
+                    value: crate::platform::kernel::AssociatedTypeBindingValue::Owned {
+                        ty: binding,
+                    },
                 },
                 AssociatedTypeBinding {
                     member: spare,
-                    ty: scheme_y_ty,
+                    value: crate::platform::kernel::AssociatedTypeBindingValue::Owned {
+                        ty: scheme_y_ty,
+                    },
                 },
             ],
         }),
@@ -444,6 +467,8 @@ fn recurrence_in(package: PackageId, expanding: bool, reset: bool, permutation: 
             requirement_arguments: vec![],
             implementations: vec![scheme_operand(scheme, arguments)],
             arguments: vec![],
+
+            read_scope_arguments: Vec::new(),
         },
     );
     declaration(
@@ -461,10 +486,15 @@ fn recurrence_in(package: PackageId, expanding: bool, reset: bool, permutation: 
             requirement_parameters: vec![],
             effect_parameters: vec![],
             parameters: vec![],
-            result: unit,
-            result_borrow: None,
+            result: crate::platform::kernel::CallableResult {
+                ty: unit,
+                relation: crate::platform::kernel::ResultRelation::Value,
+            },
             effect: FunctionEffect::Pure,
             body: recursive_call,
+
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
         }),
     );
     Fixture {
@@ -558,7 +588,9 @@ fn canonical_adapter_admits_all_unused_bindings_and_refuses_exact_authority_muta
                 else {
                     unreachable!()
                 };
-                implementation.associated_types[1].ty = fixture.projection;
+                implementation.associated_types[1].value = AssociatedTypeBindingValue::Owned {
+                    ty: fixture.projection,
+                };
                 model::Refusal::ProjectionInBinding
             }
             1 => {
@@ -672,7 +704,7 @@ fn canonical_adapter_admits_all_unused_bindings_and_refuses_exact_authority_muta
             "mutation={mutation}"
         );
     }
-    for generation in [32, 34] {
+    for generation in [32, 35] {
         let mut fixture = recurrence(false, false, false);
         let OwnerRecord::Expression(record) = fixture
             .source
@@ -751,10 +783,15 @@ fn canonical_adapter_keeps_untaken_syntax_and_unused_function_value_actuals() {
             effect_parameters: vec![],
             requirement_parameters: vec![],
             parameters: vec![],
-            result: unit,
-            result_borrow: None,
+            result: crate::platform::kernel::CallableResult {
+                ty: unit,
+                relation: crate::platform::kernel::ResultRelation::Value,
+            },
             effect: FunctionEffect::Pure,
             body,
+
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
         }),
     );
     let value = expression(
@@ -765,6 +802,8 @@ fn canonical_adapter_keeps_untaken_syntax_and_unused_function_value_actuals() {
             type_arguments: vec![fixture.projection],
             effect_arguments: vec![],
             requirement_arguments: vec![],
+
+            read_scope_arguments: Vec::new(),
         },
     );
     let sequence = expression(
@@ -909,7 +948,10 @@ fn extra_binding_atoms(fixture: &mut Fixture, count: usize) {
             name: name(&format!("Member{ordinal}")),
             bound: AssociatedTypeBound::Owned,
         });
-        bindings.push(AssociatedTypeBinding { member, ty: value });
+        bindings.push(AssociatedTypeBinding {
+            member,
+            value: crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty: value },
+        });
     }
     let OwnerRecord::Declaration(record) = fixture
         .source
@@ -1008,7 +1050,7 @@ fn canonical_contract_signature_members_remain_abstract_and_scope_checked_when_u
     let DeclarationPayload::OwnedImplementation(scheme) = &mut record.payload else {
         unreachable!()
     };
-    scheme.methods[0].type_arguments[0] = scheme.associated_types[0].ty;
+    scheme.methods[0].type_arguments[0] = scheme.associated_types[0].ty();
     let control = adapted(&fixture);
     assert_eq!(
         control.signature_members,
@@ -1023,7 +1065,7 @@ fn canonical_contract_signature_members_remain_abstract_and_scope_checked_when_u
             .unwrap()
             .finite
     );
-    for generation in [32, 34] {
+    for generation in [32, 35] {
         let mut source = fixture.source.clone();
         let OwnerRecord::Declaration(record) = source
             .owners
@@ -1204,5 +1246,423 @@ fn canonical_associated_flow_capacity_cancellation_and_healthy_retry_keep_distin
                 expected.metadata_bytes
             )
         );
+    }
+}
+
+/// Direct raw-canonical flow reader controls; these records do not claim whole
+/// source admission, artifact loading, prepared execution, or runtime leases.
+#[test]
+fn canonical_view_type_profiles_remain_distinct_from_owner_generations() {
+    use crate::platform::semantic_id::ReadScopeParameterId;
+
+    let mut source = super::tests::transport_snapshot();
+    source.root.graph_contract_version = contract::READ_VIEW_GRAPH_CONTRACT_VERSION;
+    source.owners.clear();
+    source.types.clear();
+    source.dependency_types.clear();
+    source.dependencies.clear();
+    source.representation_dependencies.clear();
+    source.dependency_interfaces.clear();
+    let module = ModuleId::migrate(SEED, 70_000);
+    source.owners.insert(
+        OwnerKey::Module(module),
+        OwnerRecord::Module(ModuleRecord {
+            header: OwnerHeader::new(OwnerKey::Module(module), OwnerKind::Module),
+            name: name("view-profile-flow"),
+        }),
+    );
+    let scalar = ty(&mut source, TypeForm::I64);
+    let cell = ty(&mut source, TypeForm::OwnedI64Cell);
+    let view = reference(&source, 70_000);
+    let callable = reference(&source, 70_001);
+    let contract_ref = reference(&source, 70_002);
+    let member = AssociatedTypeMemberId::migrate(SEED, 70_000);
+    let method = MethodId::migrate(SEED, 70_000);
+    let view_parameter = ReadScopeParameter {
+        id: ReadScopeParameterId::migrate(SEED, 70_000),
+        name: name("view_scope"),
+    };
+    let callable_parameter = ReadScopeParameter {
+        id: ReadScopeParameterId::migrate(SEED, 70_001),
+        name: name("caller_scope"),
+    };
+    let method_parameter = ReadScopeParameter {
+        id: ReadScopeParameterId::migrate(SEED, 70_002),
+        name: name("method_scope"),
+    };
+    let family_parameter = ReadScopeParameter {
+        id: ReadScopeParameterId::migrate(SEED, 70_003),
+        name: name("family_scope"),
+    };
+    let caller_scope = ReadScopeArgument::Parameter(ReadScopeReference {
+        binder: ReadScopeBinder::Declaration(callable),
+        parameter: callable_parameter.id,
+    });
+    let method_scope = ReadScopeArgument::Parameter(ReadScopeReference {
+        binder: ReadScopeBinder::ContractMethod {
+            contract: contract_ref,
+            method,
+        },
+        parameter: method_parameter.id,
+    });
+    let label = FieldId::migrate(SEED, 70_000);
+    source.owners.insert(
+        OwnerKey::Declaration(view.declaration),
+        OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(OwnerKey::Declaration(view.declaration), OwnerKind::ReadView),
+            module,
+            name: name("MetadataView"),
+            visibility: DeclarationVisibility::Public,
+            payload: DeclarationPayload::ReadView(ReadViewDeclaration {
+                type_parameters: vec![],
+                scope_parameter: view_parameter,
+                fields: vec![ReadViewField {
+                    id: label,
+                    name: name("label"),
+                    ty: scalar,
+                    kind: ReadViewFieldKind::Ordinary,
+                }],
+            }),
+        }),
+    );
+    let view_type = ty(
+        &mut source,
+        TypeForm::ReadViewApplied {
+            declaration: view,
+            arguments: vec![],
+            read_scope: caller_scope,
+        },
+    );
+    let signature_type = ty(
+        &mut source,
+        TypeForm::AssociatedReadViewMember {
+            contract: contract_ref,
+            member,
+            read_scope: method_scope,
+        },
+    );
+    let (self_parameter, self_type) = formal(&mut source, contract_ref, 70_000);
+    declaration(
+        &mut source,
+        70_002,
+        DeclarationPayload::OwnedContract(OwnedContract {
+            self_parameter,
+            type_parameters: vec![],
+            associated_types: vec![AssociatedTypeMember {
+                id: member,
+                name: name("Out"),
+                bound: AssociatedTypeBound::ReadViewFamily {
+                    scope_parameter: family_parameter,
+                },
+            }],
+            methods: vec![OwnedMethod {
+                id: method,
+                name: name("view"),
+                parameters: vec![OwnedMethodParameter {
+                    ty: self_type,
+                    use_mode: ParameterUse::Borrow,
+                }],
+                result: CallableResult {
+                    ty: signature_type,
+                    relation: ResultRelation::ViewFrom {
+                        source: 0,
+                        scope: method_scope,
+                    },
+                },
+                effect: FunctionEffect::Pure,
+                read_scope_parameters: vec![method_parameter],
+                read_scope_sources: vec![ReadScopeSource {
+                    source: 0,
+                    scope: method_scope,
+                }],
+            }],
+        }),
+    );
+    let source_parameter = ParameterId::migrate(SEED, 70_000);
+    source.owners.insert(
+        OwnerKey::Parameter(source_parameter),
+        OwnerRecord::Parameter(ParameterRecord {
+            header: OwnerHeader::new(OwnerKey::Parameter(source_parameter), OwnerKind::Parameter),
+            parent: ParameterParent::Function(callable.declaration),
+            name: name("source"),
+            ty: cell,
+            use_mode: ParameterUse::Borrow,
+            resource_requirement: None,
+        }),
+    );
+    let value = expression(&mut source, 70_000, ExpressionOperation::I64 { value: 7 });
+    let body = expression(
+        &mut source,
+        70_001,
+        ExpressionOperation::CreateReadView {
+            declaration: view,
+            type_arguments: vec![],
+            read_scope: caller_scope,
+            source: LocalValueReference::FunctionParameter(source_parameter),
+            fields: vec![ReadViewFieldInitializer {
+                field: label,
+                value,
+            }],
+        },
+    );
+    declaration(
+        &mut source,
+        70_001,
+        DeclarationPayload::Function(FunctionDeclaration {
+            type_parameters: vec![],
+            implementation_parameters: vec![],
+            requirement_parameters: vec![],
+            effect_parameters: vec![],
+            parameters: vec![source_parameter],
+            read_scope_parameters: vec![callable_parameter],
+            read_scope_sources: vec![ReadScopeSource {
+                source: source_parameter,
+                scope: caller_scope,
+            }],
+            result: CallableResult {
+                ty: view_type,
+                relation: ResultRelation::ViewFrom {
+                    source: source_parameter,
+                    scope: caller_scope,
+                },
+            },
+            effect: FunctionEffect::Pure,
+            body,
+        }),
+    );
+    // The existing declaration helper uses its fixed module coordinate.
+    for owner in source.owners.values_mut() {
+        if let OwnerRecord::Declaration(record) = owner {
+            record.module = module;
+        }
+    }
+    for digest in [view_type, signature_type] {
+        assert_eq!(
+            source.types[&digest].contract_version,
+            contract::ASSOCIATED_READ_VIEW_CONTRACT_VERSION,
+        );
+    }
+    let canonical = CanonicalProgram::read(&[&source], &[]).unwrap();
+    let callable_definition = canonical
+        .definitions
+        .iter()
+        .find_map(|(definition, identity)| {
+            (identity == &DefinitionIdentity::Declaration(callable)).then_some(*definition)
+        })
+        .unwrap();
+    assert!(
+        canonical
+            .program
+            .functions
+            .contains_key(&callable_definition)
+    );
+    assert_eq!(
+        canonical.signature_types[&(contract_ref, signature_type)],
+        associated_flow_canonical_reference::SignatureTerm::ViewMember(
+            contract_ref,
+            member,
+            method_scope,
+        ),
+    );
+    for generation in [33, 35] {
+        for reference in [callable, contract_ref, view] {
+            let mut wrong_owner = source.clone();
+            let OwnerRecord::Declaration(record) = wrong_owner
+                .owners
+                .get_mut(&OwnerKey::Declaration(reference.declaration))
+                .unwrap()
+            else {
+                unreachable!()
+            };
+            record.header.contract_version = generation;
+            assert_eq!(
+                CanonicalProgram::read(&[&wrong_owner], &[]).err().unwrap(),
+                model::Refusal::Scope,
+            );
+        }
+        let mut wrong_root = source.clone();
+        wrong_root.root.graph_contract_version = generation;
+        assert_eq!(
+            CanonicalProgram::read(&[&wrong_root], &[]).err().unwrap(),
+            model::Refusal::Scope,
+        );
+    }
+    for digest in [view_type, signature_type] {
+        let mut wrong_profile = source.clone();
+        wrong_profile
+            .types
+            .get_mut(&digest)
+            .unwrap()
+            .contract_version = contract::READ_VIEW_GRAPH_CONTRACT_VERSION;
+        // Full canonical reading independently re-encodes retained objects
+        // before either type walker; malformed object profiles refuse there.
+        assert_eq!(
+            CanonicalProgram::read(&[&wrong_profile], &[])
+                .err()
+                .unwrap(),
+            model::Refusal::Inventory,
+        );
+    }
+    let retry = CanonicalProgram::read(&[&source], &[]).unwrap();
+    assert_eq!(retry.signature_types, canonical.signature_types);
+}
+
+#[test]
+fn canonical_reference_flow_phase_ledger_preserves_exact_work_carry_and_cancellation() {
+    let fixture = recurrence(false, false, false);
+    let control = crate::platform::execution::ExecutionControl::uncancelled();
+    let mut exact = 0;
+    let healthy = associated_flow_canonical_reference::validate(
+        &[&fixture.source],
+        &control,
+        &mut exact,
+        contract::MAXIMUM_VALIDATION_WORK,
+    )
+    .unwrap();
+    let mut repeated = 0;
+    assert_eq!(
+        associated_flow_canonical_reference::validate(
+            &[&fixture.source],
+            &control,
+            &mut repeated,
+            exact,
+        )
+        .unwrap(),
+        healthy
+    );
+    assert_eq!(repeated, exact);
+    let carry = 9;
+    assert!(exact + carry <= contract::MAXIMUM_VALIDATION_WORK);
+    let mut carried = carry;
+    assert_eq!(
+        associated_flow_canonical_reference::validate(
+            &[&fixture.source],
+            &control,
+            &mut carried,
+            exact + carry,
+        )
+        .unwrap(),
+        healthy
+    );
+    assert_eq!(carried, exact + carry);
+    let mut exhausted_work = carry;
+    let exhausted = associated_flow_canonical_reference::validate(
+        &[&fixture.source],
+        &control,
+        &mut exhausted_work,
+        carry,
+    )
+    .unwrap_err();
+    assert_eq!(
+        exhausted.class,
+        crate::platform::diagnostic::DiagnosticClass::Resource
+    );
+    assert_eq!(exhausted.code, "kernel_associated_reference_capacity");
+    assert_eq!(
+        exhausted.message,
+        "independent associated flow exhausted reference work"
+    );
+    assert_eq!(exhausted_work, carry);
+    assert_eq!(exhausted.notes.len(), 1);
+    assert!(exhausted.notes[0].contains("phase=associated presence"));
+    assert!(exhausted.notes[0].contains("entry=9 consumed=9 maximum=9"));
+    assert!(exhausted.notes[0].contains("after_presence: None"));
+    let cancelled = crate::platform::execution::ExecutionControl::uncancelled();
+    cancelled.cancel();
+    let mut cancelled_work = carry;
+    let error = associated_flow_canonical_reference::validate(
+        &[&fixture.source],
+        &cancelled,
+        &mut cancelled_work,
+        exact + carry,
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.class,
+        crate::platform::diagnostic::DiagnosticClass::Cancelled
+    );
+    assert!(error.notes.is_empty());
+    assert_eq!(cancelled_work, carry);
+}
+
+#[test]
+fn canonical_borrowed_declarations_preserve_model_and_scope_with_less_work() {
+    let checkpoint = || Ok(());
+    let maximum_work = contract::MAXIMUM_VALIDATION_WORK;
+    let maximum_bytes = 64 * 1_048_576;
+    for expanding in [false, true] {
+        let mut fixture = recurrence(expanding, false, false);
+        let mut borrowed_work = 0;
+        let borrowed_budget =
+            model::Budget::new(&checkpoint, &mut borrowed_work, maximum_work, maximum_bytes);
+        let borrowed = CanonicalProgram::read_with_budget(
+            &[&fixture.source],
+            std::slice::from_ref(&fixture.entry),
+            &borrowed_budget,
+        )
+        .expect("complete borrowed translation");
+        let borrowed_bytes = borrowed_budget.bytes();
+        drop(borrowed_budget);
+        let mut copied_work = 0;
+        let copied_budget =
+            model::Budget::new(&checkpoint, &mut copied_work, maximum_work, maximum_bytes);
+        // This comparison really serializes and clones declarations, type
+        // objects and other raw owners at their lookup sites. It isolates those
+        // avoided copies, rather than reconstructing every old allocation.
+        let copied = CanonicalProgram::read_with_raw_copies(
+            &[&fixture.source],
+            std::slice::from_ref(&fixture.entry),
+            &copied_budget,
+        )
+        .expect("same input and allowance with real raw record copies");
+        let copied_bytes = copied_budget.bytes();
+        drop(copied_budget);
+        assert_eq!(
+            format!("{:?}", borrowed.program),
+            format!("{:?}", copied.program)
+        );
+        assert_eq!(borrowed.definitions, copied.definitions);
+        assert_eq!(borrowed.members, copied.members);
+        assert_eq!(borrowed.witness_parameters, copied.witness_parameters);
+        assert_eq!(borrowed.atoms, copied.atoms);
+        assert_eq!(borrowed.signature_members, copied.signature_members);
+        assert_eq!(borrowed.signature_types, copied.signature_types);
+        assert!(borrowed_work < copied_work && borrowed_bytes < copied_bytes);
+        assert_eq!(borrowed.program.entries.len(), 1);
+        assert_eq!(borrowed.program.schemes.len(), 1);
+        assert_eq!(borrowed.members.len(), 2);
+        let proof = model::reference_classify(&borrowed.program, model::Limits::default())
+            .expect("independent growth classification");
+        assert_eq!(proof.finite, !expanding);
+        assert_eq!(proof.positive_diagonal.is_some(), expanding);
+        println!(
+            "borrowed_declaration_control expanding={expanding} borrowed_work={borrowed_work} copied_work={copied_work} borrowed_bytes={borrowed_bytes} copied_bytes={copied_bytes}",
+        );
+
+        // A fresh read must still check the raw formal owner's declaration;
+        // neither lookup path can carry an admission across this mutation.
+        let TypeForm::TypeParameter { parameter } = &fixture.source.types[&fixture.formal].form
+        else {
+            unreachable!()
+        };
+        let OwnerRecord::TypeParameter(owner) = fixture
+            .source
+            .owners
+            .get_mut(&OwnerKey::TypeParameter(*parameter))
+            .unwrap()
+        else {
+            unreachable!()
+        };
+        owner.declaration = fixture.contract.declaration;
+        for copies in [false, true] {
+            let mut work = 0;
+            let budget = model::Budget::new(&checkpoint, &mut work, maximum_work, maximum_bytes);
+            let result = if copies {
+                CanonicalProgram::read_with_raw_copies(&[&fixture.source], &[], &budget)
+            } else {
+                CanonicalProgram::read_with_budget(&[&fixture.source], &[], &budget)
+            };
+            assert!(matches!(result, Err(model::Refusal::Scope)));
+        }
     }
 }

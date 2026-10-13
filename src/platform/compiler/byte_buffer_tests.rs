@@ -159,7 +159,7 @@ fn byte_buffer_forged_artifact_cannot_erase_modes_results_moves_or_cleanup() {
                 }
                 OwnerRecord::Declaration(d) if binding.kind == OwnerKind::PureFunction => {
                     if let DeclarationPayload::Function(f) = &mut d.payload {
-                        f.result = crate::platform::kernel::encode_type_object(
+                        f.result.ty = crate::platform::kernel::encode_type_object(
                             &crate::platform::kernel::TypeObject::new(TypeForm::Unit).unwrap(),
                         )
                         .unwrap()
@@ -214,7 +214,7 @@ fn byte_buffer_forged_artifact_cannot_erase_modes_results_moves_or_cleanup() {
             };
             match fault {
                 "result" => {
-                    let original = signature.result;
+                    let original = signature.result.ty;
                     let Some(other) = changed
                         .tables
                         .types
@@ -223,7 +223,7 @@ fn byte_buffer_forged_artifact_cannot_erase_modes_results_moves_or_cleanup() {
                     else {
                         continue;
                     };
-                    signature.result = other as u32;
+                    signature.result.ty = other as u32;
                 }
                 "mode" => {
                     let Some(i) = code.instructions.iter_mut().find(|i| {

@@ -97,9 +97,14 @@ fn fixture(use_mode: ParameterUse) -> Fixture {
                         ty: scalar,
                         use_mode: ParameterUse::Unrestricted,
                     }],
-                    result: scalar,
-                    result_borrow: None,
+                    result: crate::platform::kernel::CallableResult {
+                        ty: scalar,
+                        relation: crate::platform::kernel::ResultRelation::Value,
+                    },
                     effect: FunctionEffect::Pure,
+
+                    read_scope_parameters: Vec::new(),
+                    read_scope_sources: Vec::new(),
                 }],
             }),
         }),
@@ -145,10 +150,20 @@ fn fixture(use_mode: ParameterUse) -> Fixture {
                 requirement_parameters: vec![],
                 effect_parameters: vec![],
                 parameters: vec![parameter_id],
-                result: projection,
-                result_borrow: (use_mode == ParameterUse::Borrow).then_some(parameter_id),
+                result: crate::platform::kernel::CallableResult {
+                    ty: projection,
+                    relation: match (use_mode == ParameterUse::Borrow).then_some(parameter_id) {
+                        Some(source) => {
+                            crate::platform::kernel::ResultRelation::ReadFrom { source }
+                        }
+                        None => crate::platform::kernel::ResultRelation::Value,
+                    },
+                },
                 effect: FunctionEffect::Pure,
                 body: ExpressionId::migrate(SEED, 0),
+
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             }),
         }),
     );
@@ -444,7 +459,7 @@ fn full_associated_parameter_shapes_keep_ordinary_historical_unrestricted_parame
         };
         function.type_parameters.clear();
         function.implementation_parameters.clear();
-        function.result = scalar;
+        function.result.ty = scalar;
         let mut validator = validator(&f.source, MAXIMUM_VALIDATION_WORK, &healthy);
         let record = f.source.owners.get(&f.parameter).expect("parameter");
         assert!(

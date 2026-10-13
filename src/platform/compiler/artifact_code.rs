@@ -56,6 +56,7 @@ impl Read<'_> {
         for count in [
             tables.declarations.len(),
             tables.fields.len(),
+            tables.read_view_fields.len(),
             tables.cases.len(),
             tables.requirements.len(),
             tables.operations.len(),
@@ -72,6 +73,7 @@ impl Read<'_> {
             OwnerKey::Declaration(declaration) => Some(declaration),
             _ => None,
         };
+        self.check_scope_owners(unit, actual)?;
         let expected = canonical_code(self, self.package, scope, tables, root, parameters)?;
         if expected != *actual {
             return Err(artifact_error(
@@ -82,6 +84,128 @@ impl Read<'_> {
         }
         Ok(())
     }
+
+    fn check_scope_owners(
+        &self,
+        unit: &CompilationUnit,
+        code: &CompiledCode,
+    ) -> Result<(), Diagnostic> {
+        use crate::platform::kernel::owned_associated::{
+            AssociatedTypeContext, OwnedAssociatedAdmission, read_view_admission,
+        };
+        let admission = OwnedAssociatedAdmission::new();
+        let mut admitted = BTreeSet::new();
+        for instruction in &code.instructions {
+            self.reserve(1)?;
+            // Includes complete call inventories and the zero-stack-effect lexical
+            // scope markers. Every instruction is visited, including untaken syntax.
+            for argument in instruction.scope_arguments() {
+                self.reserve(1)?;
+                if admitted.contains(argument) {
+                    continue;
+                }
+                self.reserve(1)?;
+                let OwnerKey::Declaration(declaration) = unit.source.owner else {
+                    return Err(scope_error("read scope has no exact callable owner"));
+                };
+                let callable = DeclarationReference {
+                    package: unit.source.package,
+                    declaration,
+                };
+                let result = match *argument {
+                    ReadScopeArgument::Parameter(_) => read_view_admission::ScopeAuthority {
+                        binder: Some(crate::platform::kernel::ReadScopeBinder::Declaration(
+                            callable,
+                        )),
+                        lexical: Some(callable),
+                        live_loans: &BTreeSet::new(),
+                    }
+                    .validate(self, *argument, &admission),
+                    ReadScopeArgument::Lexical {
+                        callable: owner,
+                        binding,
+                    } => {
+                        if owner != callable {
+                            return Err(scope_error(
+                                "lexical read scope names another exact callable",
+                            ));
+                        }
+                        // A Binding point read is insufficient. The kernel proves its
+                        // exact occurrence in this canonical body's complete closure.
+                        // Lifetime/containment and source provenance remain full-flow gates.
+                        read_view_admission::lexical_owner(
+                            self,
+                            owner,
+                            binding,
+                            AssociatedTypeContext::Lexical(callable),
+                            &admission,
+                        )
+                    }
+                };
+                result.map_err(|error| {
+                    if matches!(
+                        error.class,
+                        DiagnosticClass::Resource | DiagnosticClass::Cancelled
+                    ) {
+                        error
+                    } else {
+                        scope_error(format!(
+                            "read-scope owner is invalid: {}: {}",
+                            error.code, error.message
+                        ))
+                    }
+                })?;
+                admitted.insert(*argument);
+            }
+        }
+        Ok(())
+    }
+}
+
+impl crate::platform::kernel::ExpressionRead for Read<'_> {
+    fn package_id(&self) -> PackageId {
+        self.package
+    }
+    fn owner(&self, owner: OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic> {
+        self.code_owner(owner).map(|record| record.value)
+    }
+    fn type_object(&self, ty: TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic> {
+        self.code_type(ty).map(|record| record.value)
+    }
+    fn package_interface_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        self.code_interface(package, owner)
+            .map(|record| record.value)
+    }
+    fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        self.code_dependency(package).map(|record| record.value)
+    }
+    fn package_representation_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        self.code_representation_owner(package, owner)
+            .map(|record| record.value)
+    }
+    fn has_representation_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        self.code_representation_dependency(package)
+            .map(|record| record.value)
+    }
+    fn validation_work(&self) -> Result<(), Diagnostic> {
+        self.reserve(1)
+    }
+}
+
+fn scope_error(message: impl Into<String>) -> Diagnostic {
+    artifact_error(
+        DiagnosticClass::Corrupt,
+        "artifact_compiled_control_scope",
+        message,
+    )
 }
 
 impl CodeRead for Read<'_> {

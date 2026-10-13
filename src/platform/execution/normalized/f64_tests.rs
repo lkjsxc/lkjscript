@@ -390,6 +390,7 @@ fn f64_numeric_equality_and_observation_remain_distinct_recursively() {
     assert!(!super::super::vm::normalized_observation_equal(&positive, &negative).unwrap());
     assert!(!super::super::reference::reference_observation_equal(&positive, &negative).unwrap());
     let callable = NormalizedValue::Function {
+        read_scope_arguments: Arc::from([]),
         function: super::super::value::FunctionIndex(0, origin),
         type_arguments: Arc::from([]),
         effect_arguments: Arc::from([]),

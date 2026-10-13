@@ -1,6 +1,7 @@
 //! Frozen Graph 26 declarations and interface signatures.
 //! Borrowed-result relationships cannot reinterpret original Graph 26 bytes.
 
+use super::frozen_read_view_wire as frozen;
 use super::*;
 use crate::platform::semantic_id::*;
 use bincode::{Decode, Encode};
@@ -15,7 +16,7 @@ pub enum OwnerRecord26 {
     Case(CaseRecord),
     Operation(OperationRecord),
     Parameter(ParameterRecord),
-    Binding(BindingRecord),
+    Binding(frozen::FrozenBindingRecord33),
     Expression(super::wire27::ExpressionRecord27),
     Requirement(RequirementRecord),
     Port(PortRecord),
@@ -177,8 +178,9 @@ impl From<FunctionDeclaration26> for FunctionDeclaration {
             effect_parameters: v.effect_parameters,
             type_parameters: v.type_parameters,
             parameters: v.parameters,
-            result: v.result,
-            result_borrow: None,
+            result: frozen::legacy_result(v.result, None),
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
             effect: v.effect,
             body: v.body,
         }
@@ -188,7 +190,11 @@ impl From<FunctionDeclaration26> for FunctionDeclaration {
 impl TryFrom<FunctionDeclaration> for FunctionDeclaration26 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: FunctionDeclaration) -> Result<Self, Self::Error> {
-        if v.result_borrow.is_some() {
+        frozen::require_empty_read_scope(
+            v.read_scope_parameters.is_empty() && v.read_scope_sources.is_empty(),
+        )?;
+        let (result, result_borrow) = frozen::split_result(v.result)?;
+        if result_borrow.is_some() {
             return Err(extension());
         }
         Ok(Self {
@@ -197,7 +203,7 @@ impl TryFrom<FunctionDeclaration> for FunctionDeclaration26 {
             effect_parameters: v.effect_parameters,
             type_parameters: v.type_parameters,
             parameters: v.parameters,
-            result: v.result,
+            result,
             effect: v.effect,
             body: v.body,
         })
@@ -233,8 +239,9 @@ impl From<PackageFunctionSignature26> for PackageFunctionSignature {
             effect_parameters: v.effect_parameters,
             type_parameters: v.type_parameters,
             parameters: v.parameters,
-            result: v.result,
-            result_borrow: None,
+            result: frozen::legacy_result(v.result, None),
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
             effect: v.effect,
         }
     }
@@ -243,7 +250,11 @@ impl From<PackageFunctionSignature26> for PackageFunctionSignature {
 impl TryFrom<PackageFunctionSignature> for PackageFunctionSignature26 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: PackageFunctionSignature) -> Result<Self, Self::Error> {
-        if v.result_borrow.is_some() {
+        frozen::require_empty_read_scope(
+            v.read_scope_parameters.is_empty() && v.read_scope_sources.is_empty(),
+        )?;
+        let (result, result_borrow) = frozen::split_result(v.result)?;
+        if result_borrow.is_some() {
             return Err(extension());
         }
         Ok(Self {
@@ -252,7 +263,7 @@ impl TryFrom<PackageFunctionSignature> for PackageFunctionSignature26 {
             effect_parameters: v.effect_parameters,
             type_parameters: v.type_parameters,
             parameters: v.parameters,
-            result: v.result,
+            result,
             effect: v.effect,
         })
     }
@@ -296,7 +307,7 @@ impl From<OwnerRecord26> for OwnerRecord {
             OwnerRecord26::Case(v) => Self::Case(v),
             OwnerRecord26::Operation(v) => Self::Operation(v),
             OwnerRecord26::Parameter(v) => Self::Parameter(v),
-            OwnerRecord26::Binding(v) => Self::Binding(v),
+            OwnerRecord26::Binding(v) => Self::Binding(v.into()),
             OwnerRecord26::Expression(v) => Self::Expression(v.into()),
             OwnerRecord26::Requirement(v) => Self::Requirement(v),
             OwnerRecord26::Port(v) => Self::Port(v),
@@ -321,7 +332,7 @@ impl TryFrom<OwnerRecord> for OwnerRecord26 {
             OwnerRecord::Case(v) => Self::Case(v),
             OwnerRecord::Operation(v) => Self::Operation(v),
             OwnerRecord::Parameter(v) => Self::Parameter(v),
-            OwnerRecord::Binding(v) => Self::Binding(v),
+            OwnerRecord::Binding(v) => Self::Binding(v.try_into()?),
             OwnerRecord::Expression(v) => Self::Expression(v.try_into()?),
             OwnerRecord::Requirement(v) => Self::Requirement(v),
             OwnerRecord::Port(v) => Self::Port(v),
@@ -421,6 +432,9 @@ impl TryFrom<DeclarationPayload> for DeclarationPayload26 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: DeclarationPayload) -> Result<Self, Self::Error> {
         Ok(match v {
+            super::DeclarationPayload::ReadView(_) => {
+                return Err(frozen::read_view_extension());
+            }
             super::DeclarationPayload::OwnedRecord { .. } => {
                 return Err(super::owned_record::reject(
                     "nominal owned records require Graph 32",
@@ -508,6 +522,9 @@ impl TryFrom<PackageInterfaceDeclarationPayload> for PackageInterfaceDeclaration
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: PackageInterfaceDeclarationPayload) -> Result<Self, Self::Error> {
         Ok(match v {
+            super::PackageInterfaceDeclarationPayload::ReadView(_) => {
+                return Err(frozen::read_view_extension());
+            }
             super::PackageInterfaceDeclarationPayload::OwnedRecord { .. } => {
                 return Err(super::owned_record::reject(
                     "nominal owned records require Graph 32",
@@ -577,8 +594,9 @@ impl From<OwnedMethod26> for OwnedMethod {
             id: v.id,
             name: v.name,
             parameters: v.parameters,
-            result: v.result,
-            result_borrow: None,
+            result: frozen::legacy_result(v.result, None),
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
             effect: v.effect,
         }
     }
@@ -586,14 +604,18 @@ impl From<OwnedMethod26> for OwnedMethod {
 impl TryFrom<OwnedMethod> for OwnedMethod26 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: OwnedMethod) -> Result<Self, Self::Error> {
-        if v.result_borrow.is_some() {
+        frozen::require_empty_read_scope(
+            v.read_scope_parameters.is_empty() && v.read_scope_sources.is_empty(),
+        )?;
+        let (result, result_borrow) = frozen::split_result(v.result)?;
+        if result_borrow.is_some() {
             return Err(extension());
         }
         Ok(Self {
             id: v.id,
             name: v.name,
             parameters: v.parameters,
-            result: v.result,
+            result,
             effect: v.effect,
         })
     }

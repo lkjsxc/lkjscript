@@ -6,6 +6,9 @@ mod recursive_tests;
 #[path = "associated_serial_artifact_tests.rs"]
 pub(in crate::platform) mod associated_serial_artifact_tests;
 
+#[path = "associated_read_view_artifact_tests.rs"]
+mod associated_read_view_artifact_tests;
+
 #[path = "associated_parallel_artifact_tests.rs"]
 mod associated_parallel_artifact_tests;
 
@@ -19,6 +22,8 @@ mod f64_codec_tests;
 mod data_codec_limits_tests;
 #[path = "map_codec_tests.rs"]
 mod map_codec_tests;
+#[path = "read_view_data_boundary_tests.rs"]
+mod read_view_data_boundary_tests;
 
 #[path = "iteration_tests.rs"]
 mod iteration_tests;
@@ -138,7 +143,7 @@ fn graph14_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
     );
     assert_eq!(
         crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-        33
+        34
     );
     assert_eq!(
         crate::platform::kernel::contract::TYPE_OBJECT_CONTRACT_VERSION,
@@ -433,22 +438,22 @@ use super::value::{NormalizedMapKey, NormalizedValue};
 use super::vm::{NormalizedRunPolicy, NormalizedVm};
 use super::worker::NormalizedWorkerApplication;
 use crate::platform::change::{
-    AuthoredChange, AuthoredChangeSet, AuthoredDeclarationReference, AuthoredExpression,
-    AuthoredExpressionOperation, AuthoredFunctionEffect, AuthoredType, ChangeBudget,
-    ModuleSelector,
+    AuthoredCallableResult, AuthoredChange, AuthoredChangeSet, AuthoredDeclarationReference,
+    AuthoredExpression, AuthoredExpressionOperation, AuthoredFunctionEffect, AuthoredType,
+    ChangeBudget, ModuleSelector,
 };
 use crate::platform::compiler::{OptimizationPolicy, build_clean, link_artifact, load_artifact};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::json::JsonLimits;
 use crate::platform::kernel::{
-    DeclarationPayload, DeclarationRecord, DeclarationReference, DeclarationVisibility,
-    ExpressionOperation, ExpressionRecord, ExternalDeclaration, ExternalVisibility, FieldSelector,
-    FunctionDeclaration, FunctionEffect, HttpRouteRecord, HttpRouteSelector, Idempotency,
-    ImplementationName, LocalValueReference, Name, OperationRecord, OwnerHeader, OwnerKey,
-    OwnerKind, OwnerRecord, ParameterParent, ParameterRecord, PortImplementation, PortRecord,
-    PortReference, RecordExpressionField, ResourceLimit, ResourceUnit, StructuralTypeField,
-    TargetRecord, TypeForm, TypeObject, TypeObjectDigest, decode_owner, encode_owner,
-    encode_type_object,
+    CallableResult, DeclarationPayload, DeclarationRecord, DeclarationReference,
+    DeclarationVisibility, ExpressionOperation, ExpressionRecord, ExternalDeclaration,
+    ExternalVisibility, FieldSelector, FunctionDeclaration, FunctionEffect, HttpRouteRecord,
+    HttpRouteSelector, Idempotency, ImplementationName, LocalValueReference, Name, OperationRecord,
+    OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, ParameterParent, ParameterRecord,
+    PortImplementation, PortRecord, PortReference, RecordExpressionField, ResourceLimit,
+    ResourceUnit, ResultRelation, StructuralTypeField, TargetRecord, TypeForm, TypeObject,
+    TypeObjectDigest, decode_owner, encode_owner, encode_type_object,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::persistent_map::{MapRoot, PageDigest};
@@ -678,13 +683,17 @@ fn nominal_phantom_identity_origin_properties_codecs_and_alias_fault_are_indepen
                 name: Name::new(format!("consume-{index}")).unwrap(),
                 visibility: DeclarationVisibility::Private,
                 payload: DeclarationPayload::Function(FunctionDeclaration {
-                    result_borrow: None,
+                    read_scope_parameters: Vec::new(),
+                    read_scope_sources: Vec::new(),
                     implementation_parameters: Vec::new(),
                     requirement_parameters: Vec::new(),
                     effect_parameters: Vec::new(),
                     type_parameters: vec![],
                     parameters: vec![input],
-                    result: unit,
+                    result: CallableResult {
+                        ty: unit,
+                        relation: ResultRelation::Value,
+                    },
                     effect: FunctionEffect::Pure,
                     body,
                 }),
@@ -1113,7 +1122,8 @@ fn linked_pure_program() -> (
                 name: Name::new("library").unwrap(),
             },
             AuthoredChange::CreateFunction {
-                result_borrow: None,
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
                 symbol: "$source_function".to_owned(),
                 module: ModuleSelector::Symbol {
                     symbol: "$source_module".to_owned(),
@@ -1122,7 +1132,7 @@ fn linked_pure_program() -> (
                 visibility: DeclarationVisibility::Public,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: AuthoredType::Unit {},
+                result: AuthoredCallableResult::value(AuthoredType::Unit {}),
                 effect: AuthoredFunctionEffect::Pure {},
                 body: AuthoredExpression {
                     symbol: Some("$source_body".to_owned()),
@@ -1193,7 +1203,8 @@ fn linked_pure_program() -> (
                 name: Name::new("application").unwrap(),
             },
             AuthoredChange::CreateFunction {
-                result_borrow: None,
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
                 symbol: "$caller".to_owned(),
                 module: ModuleSelector::Symbol {
                     symbol: "$target_module".to_owned(),
@@ -1202,11 +1213,12 @@ fn linked_pure_program() -> (
                 visibility: DeclarationVisibility::Private,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: AuthoredType::Unit {},
+                result: AuthoredCallableResult::value(AuthoredType::Unit {}),
                 effect: AuthoredFunctionEffect::Pure {},
                 body: AuthoredExpression {
                     symbol: Some("$call".to_owned()),
                     operation: AuthoredExpressionOperation::Call {
+                        read_scope_arguments: Vec::new(),
                         requirement_arguments: Vec::new(),
                         effect_arguments: Vec::new(),
                         function: AuthoredDeclarationReference::Exact {
@@ -1428,13 +1440,17 @@ fn normalized_worker_snapshot(
                     name: Name::new("worker_iteration").unwrap(),
                     visibility: DeclarationVisibility::Package,
                     payload: DeclarationPayload::Function(FunctionDeclaration {
-                        result_borrow: None,
+                        read_scope_parameters: Vec::new(),
+                        read_scope_sources: Vec::new(),
                         implementation_parameters: Vec::new(),
                         requirement_parameters: Vec::new(),
                         effect_parameters: Vec::new(),
                         type_parameters: Vec::new(),
                         parameters: Vec::new(),
-                        result: bool_type,
+                        result: CallableResult {
+                            ty: bool_type,
+                            relation: ResultRelation::Value
+                        },
                         effect: if task {
                             FunctionEffect::Task {
                                 requirements: Vec::new(),
@@ -1461,6 +1477,7 @@ fn normalized_worker_snapshot(
                 ExpressionRecord::new(
                     value,
                     ExpressionOperation::FunctionValue {
+                        read_scope_arguments: Vec::new(),
                         requirement_arguments: Vec::new(),
                         function: reference,
                         type_arguments: Vec::new(),
@@ -1540,7 +1557,7 @@ fn wall_clock_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
                 let DeclarationPayload::Function(function) = &mut declaration.payload else {
                     panic!("caller must remain a function")
                 };
-                function.result = i64_type;
+                function.result.ty = i64_type;
             }
             OwnerRecord::Port(port) => {
                 port.function_type = function_type;
@@ -1797,7 +1814,7 @@ fn byte_stream_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
         panic!("stream caller declaration kind")
     };
     function.parameters = vec![caller_stream];
-    function.result = bytes_type;
+    function.result.ty = bytes_type;
 
     assert!(
         snapshot
@@ -1971,7 +1988,7 @@ pub(crate) fn normalized_http_snapshot() -> crate::platform::kernel::KernelSnaps
     {
         OwnerRecord::Declaration(record) => match &mut record.payload {
             DeclarationPayload::Function(function) => {
-                function.result = response_type;
+                function.result.ty = response_type;
                 (function.parameters[0], function.body)
             }
             _ => panic!("HTTP handler declaration kind"),
@@ -2231,7 +2248,7 @@ fn normalized_http_pattern_snapshot() -> crate::platform::kernel::KernelSnapshot
                     record.module,
                     request,
                     request_type,
-                    function.result,
+                    function.result.ty,
                     function.body,
                 )
             }
@@ -2336,6 +2353,7 @@ fn normalized_http_pattern_snapshot() -> crate::platform::kernel::KernelSnapshot
         (
             concatenated,
             ExpressionOperation::Call {
+                read_scope_arguments: Vec::new(),
                 requirement_arguments: Vec::new(),
                 effect_arguments: Vec::new(),
                 function: DeclarationReference {
@@ -2349,6 +2367,7 @@ fn normalized_http_pattern_snapshot() -> crate::platform::kernel::KernelSnapshot
         (
             captured_body,
             ExpressionOperation::Call {
+                read_scope_arguments: Vec::new(),
                 requirement_arguments: Vec::new(),
                 effect_arguments: Vec::new(),
                 function: DeclarationReference {
@@ -3427,13 +3446,17 @@ fn nominal_and_structural_json_fields_obey_representation_limits() {
             name: Name::new("consume-framing").unwrap(),
             visibility: DeclarationVisibility::Private,
             payload: DeclarationPayload::Function(FunctionDeclaration {
-                result_borrow: None,
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
                 implementation_parameters: Vec::new(),
                 requirement_parameters: vec![],
                 effect_parameters: vec![],
                 type_parameters: vec![],
                 parameters,
-                result: unit,
+                result: CallableResult {
+                    ty: unit,
+                    relation: ResultRelation::Value,
+                },
                 effect: FunctionEffect::Pure,
                 body,
             }),
@@ -4486,8 +4509,8 @@ async fn normalized_reference_runner_uses_revision_pinned_owner_reads() {
     assert_eq!(receipt.result_json, b"null");
     assert_eq!(
         receipt.reference.canonical_owner_reads,
-        snapshot.owners.len() as u64 + 9,
-        "one independent layout inventory, one invocation admission read, one borrowed-result entry-mode admission read, and seven execution owner reads"
+        snapshot.owners.len() as u64 + 11,
+        "one independent layout inventory, one invocation admission read, one borrowed-result entry-mode admission read, seven execution owner reads, and two current Let binding reads for view inventory and classification"
     );
     assert!(receipt.reference.canonical_map_pages_read > 0);
     assert!(
@@ -4591,7 +4614,7 @@ fn dense_vm_executes_pure_external_test_and_capability_paths() {
                 program
                     .function(declaration_named(&snapshot, "identity_external"))
                     .expect("external index"),
-                Arc::from([program.functions[0].result]),
+                Arc::from([program.functions[0].result.ty]),
             ),
             Vec::new(),
             None,
@@ -5068,6 +5091,7 @@ fn pure_tail_transfer_rechecks_operand_base_exact_callee_and_caller_authority() 
         (
             vec![
                 NormalizedInstruction::TailCall {
+                    read_scope_arguments: Arc::from([]),
                     requirement_arguments: Arc::from([]),
                     effect_arguments: Arc::from([]),
                     function: super::value::FunctionIndex(u32::MAX, program.value_origin),
@@ -5082,6 +5106,7 @@ fn pure_tail_transfer_rechecks_operand_base_exact_callee_and_caller_authority() 
         (
             vec![
                 NormalizedInstruction::TailCall {
+                    read_scope_arguments: Arc::from([]),
                     requirement_arguments: Arc::from([]),
                     effect_arguments: Arc::from([]),
                     function: callee_index,
@@ -5182,6 +5207,7 @@ fn pure_tail_preparation_executes_the_current_maintained_standard_artifact() {
                 list.clone(),
                 NormalizedValue::I64(0),
                 NormalizedValue::Function {
+                    read_scope_arguments: Arc::from([]),
                     requirement_arguments: std::sync::Arc::from([]),
                     effect_arguments: Arc::from([]),
                     function: index,
@@ -5290,6 +5316,7 @@ fn pure_tail_fault_cannot_discard_an_owned_transaction() {
         .expect("transaction instruction");
     let mut instructions = code.instructions[..=begin].to_vec();
     instructions.push(NormalizedInstruction::TailCall {
+        read_scope_arguments: Arc::from([]),
         requirement_arguments: Arc::from([]),
         effect_arguments: Arc::from([]),
         function: super::value::FunctionIndex(

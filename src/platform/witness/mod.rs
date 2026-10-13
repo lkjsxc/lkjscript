@@ -12,6 +12,7 @@ mod codec;
 pub(crate) mod contract;
 mod digest;
 mod entry;
+mod frozen_summary11;
 mod full;
 mod ownership;
 mod summary;
@@ -20,6 +21,7 @@ mod summary_build;
 pub(crate) use codec::bind_witness_manifest;
 pub(crate) use codec::decode_historical_witness_manifest;
 pub(crate) use codec::encode_witness_manifest_content;
+pub(crate) use codec::{decode_historical_owner_summary, encode_owner_summary_content};
 pub use codec::{
     decode_owner_summary, decode_witness_manifest, encode_owner_summary, encode_witness_manifest,
 };
@@ -29,13 +31,20 @@ pub use digest::{
     ValidatorContractDigest,
 };
 pub use entry::*;
+#[cfg(test)]
+pub(crate) use full::checked_full_validation_invocations;
 pub(crate) use full::{CanonicalWitnessFacts, rebuild_canonical_facts};
+pub(crate) use full::{
+    CompletedSourceValidation, rebuild_full_witness_checked_for_source,
+    rebuild_full_witness_from_source_validation,
+};
 pub use full::{FullWitness, WitnessBuildReport, WitnessEntries, rebuild_full_witness};
 pub(crate) use full::{rebuild_full_witness_checked, rebuild_full_witness_with_limit};
-pub(crate) use ownership::ownership_contributions;
+pub(crate) use ownership::{ownership_contributions, ownership_contributions_with_bindings};
 pub use summary::{OwnerSummary, SummaryBinding, ValidationWitnessManifest, WitnessRoots};
 pub(crate) use summary_build::{
-    SummaryRead, aggregation_children, rebuild_selected_owner_summaries,
+    SummaryRead, aggregation_children, aggregation_children_with_bindings,
+    rebuild_selected_owner_summaries,
 };
 
 fn witness_error(
@@ -48,3 +57,6 @@ fn witness_error(
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod read_view_witness_tests;

@@ -34,8 +34,8 @@ fn incremental_inventory_selects_future_cases_and_requires_each_terminal_once() 
     let listing =
         tests::listing() + &format!("{PREFIX}future_case: test\n{PREFIX}nested::oracle: test\n");
     let inventory = inventory(&listing).unwrap();
-    assert_eq!(inventory.selected.len(), 39);
-    assert_eq!(inventory.all.len(), 40);
+    assert_eq!(inventory.selected.len(), 44);
+    assert_eq!(inventory.all.len(), 45);
     assert!(!inventory.selected.contains("unrelated_test"));
     let complete = success(&inventory);
     passed(&complete, &inventory).unwrap();

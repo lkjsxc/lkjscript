@@ -378,6 +378,7 @@ fn same_owner(
                             Source::Record { .. }
                                 | Source::OwnedRecord { .. }
                                 | Source::Variant { .. }
+                                | Source::ReadView(_)
                         )
                 }
                 _ => false,
@@ -457,7 +458,8 @@ fn same_declaration(
         }
         (Interface::Function(a), Source::Function(b)) => {
             a.result == b.result
-                && a.result_borrow == b.result_borrow
+                && budget.same(&a.read_scope_parameters, &b.read_scope_parameters)?
+                && budget.same(&a.read_scope_sources, &b.read_scope_sources)?
                 && budget.same(&a.type_parameters, &b.type_parameters)?
                 && budget.same(&a.parameters, &b.parameters)?
                 && budget.same(&a.requirement_parameters, &b.requirement_parameters)?
@@ -468,6 +470,11 @@ fn same_declaration(
                     budget,
                 )?
                 && same_effect(&a.effect, &b.effect, budget)?
+        }
+        (Interface::ReadView(a), Source::ReadView(b)) => {
+            budget.same(&a.type_parameters, &b.type_parameters)?
+                && a.scope_parameter == b.scope_parameter
+                && budget.same(&a.fields, &b.fields)?
         }
         (Interface::Constant { ty: a }, Source::Constant { ty: b, .. }) => a == b,
         (
@@ -493,7 +500,8 @@ fn same_declaration(
                 if a.id != b.id
                     || a.name != b.name
                     || a.result != b.result
-                    || a.result_borrow != b.result_borrow
+                    || !budget.same(&a.read_scope_parameters, &b.read_scope_parameters)?
+                    || !budget.same(&a.read_scope_sources, &b.read_scope_sources)?
                     || !budget.same(&a.parameters, &b.parameters)?
                     || !same_effect(&a.effect, &b.effect, budget)?
                 {
@@ -522,6 +530,7 @@ fn same_declaration(
                 if a.method != b.method
                     || a.function != b.function
                     || !budget.same(&a.type_arguments, &b.type_arguments)?
+                    || !budget.same(&a.read_scope_arguments, &b.read_scope_arguments)?
                     || !same_operands(&a.implementations, &b.implementations, 0, budget)?
                 {
                     return Ok(false);
@@ -564,7 +573,7 @@ fn check_roots(
         I::Declaration(d) | I::RepresentationDeclaration(d) => match &d.payload {
             Interface::External(f) => check(Some(f.result))?,
             Interface::Function(f) => {
-                check(Some(f.result))?;
+                check(Some(f.result.ty))?;
                 for parameter in &f.implementation_parameters {
                     check(Some(parameter.self_type))?;
                     for ty in &parameter.type_arguments {
@@ -578,7 +587,7 @@ fn check_roots(
                     for parameter in &method.parameters {
                         check(Some(parameter.ty))?;
                     }
-                    check(Some(method.result))?;
+                    check(Some(method.result.ty))?;
                 }
             }
             Interface::OwnedImplementation(i) => {
@@ -587,7 +596,7 @@ fn check_roots(
                     check(Some(*ty))?;
                 }
                 for binding in &i.associated_types {
-                    check(Some(binding.ty))?;
+                    check(Some(binding.ty()))?;
                 }
                 for parameter in &i.implementation_parameters {
                     check(Some(parameter.self_type))?;
@@ -601,6 +610,11 @@ fn check_roots(
                         check(Some(*ty))?;
                     }
                     check_operand_roots(&method.implementations, 0, &mut check)?;
+                }
+            }
+            Interface::ReadView(view) => {
+                for field in &view.fields {
+                    check(Some(field.ty))?;
                 }
             }
             Interface::Record { .. }

@@ -13,6 +13,9 @@ mod sequence_reentry_tests;
 #[cfg(test)]
 #[path = "associated_readback_tests.rs"]
 mod associated_readback_tests;
+#[cfg(test)]
+#[path = "read_view_readback_tests.rs"]
+mod read_view_readback_tests;
 
 pub(super) struct Reader<'a> {
     pub view: &'a RepositoryView,
@@ -176,7 +179,7 @@ impl<'a> Reader<'a> {
                 }
                 use AuthoredType as T;
                 match ty {
-                    T::Applied { arguments, .. } => {
+                    T::Applied { arguments, .. } | T::ReadViewApplied { arguments, .. } => {
                         pending.extend(arguments.iter().map(|t| (t, depth + 1)))
                     }
                     T::OwnedSequence { item }
@@ -212,6 +215,40 @@ impl<'a> Reader<'a> {
             .read_type_object(digest)?
             .ok_or_else(|| error("canonical type object is absent"))?;
         let ty = match object.form {
+            TypeForm::ReadViewApplied {
+                declaration: d,
+                arguments,
+                read_scope,
+            } => AuthoredType::ReadViewApplied {
+                declaration: declaration(d),
+                arguments: arguments
+                    .into_iter()
+                    .map(|t| self.ty_at(t, depth + 1))
+                    .collect::<Result<_, _>>()?,
+                read_scope: self.read_scope(read_scope)?,
+            },
+            TypeForm::AssociatedReadViewMember {
+                contract,
+                member,
+                read_scope,
+            } => AuthoredType::AssociatedReadViewMember {
+                contract: declaration(contract),
+                member,
+                read_scope: self.read_scope(read_scope)?,
+            },
+            TypeForm::AssociatedReadViewProjection {
+                scope,
+                parameter,
+                contract,
+                member,
+                read_scope,
+            } => AuthoredType::AssociatedReadViewProjection {
+                scope: declaration(scope),
+                parameter,
+                contract: declaration(contract),
+                member,
+                read_scope: self.read_scope(read_scope)?,
+            },
             TypeForm::AssociatedContractMember { contract, member } => {
                 AuthoredType::AssociatedContractMember {
                     contract: declaration(contract),
@@ -387,7 +424,7 @@ impl<'a> Reader<'a> {
             result.push(AuthoredAssociatedTypeMember {
                 id: member.id,
                 name: member.name.clone(),
-                bound: member.bound,
+                bound: member.bound.clone(),
             });
         }
         Ok(result)
@@ -409,13 +446,116 @@ impl<'a> Reader<'a> {
         for binding in bindings {
             result.push(AuthoredAssociatedTypeBinding {
                 member: binding.member,
-                ty: self.ty(binding.ty)?,
+                value: match &binding.value {
+                    k::AssociatedTypeBindingValue::Owned { ty } => {
+                        AuthoredAssociatedTypeBindingValue::Owned { ty: self.ty(*ty)? }
+                    }
+                    k::AssociatedTypeBindingValue::ReadViewFamily {
+                        scope_parameter,
+                        ty,
+                    } => AuthoredAssociatedTypeBindingValue::ReadViewFamily {
+                        scope_parameter: scope_parameter.clone(),
+                        ty: self.ty(*ty)?,
+                    },
+                },
             });
         }
         Ok(result)
     }
 
-    fn admit_associated_inventory(&mut self, count: usize) -> Result<(), Diagnostic> {
+    pub fn read_scope(
+        &mut self,
+        scope: k::ReadScopeArgument,
+    ) -> Result<AuthoredReadScopeArgument, Diagnostic> {
+        self.check()?;
+        Ok(match scope {
+            k::ReadScopeArgument::Parameter(reference) => AuthoredReadScopeArgument::Parameter {
+                binder: match reference.binder {
+                    k::ReadScopeBinder::Declaration(d) => {
+                        AuthoredReadScopeBinder::Declaration(declaration(d))
+                    }
+                    k::ReadScopeBinder::ContractMethod { contract, method } => {
+                        AuthoredReadScopeBinder::ContractMethod {
+                            contract: declaration(contract),
+                            method,
+                        }
+                    }
+                    k::ReadScopeBinder::AssociatedMember { contract, member } => {
+                        AuthoredReadScopeBinder::AssociatedMember {
+                            contract: declaration(contract),
+                            member,
+                        }
+                    }
+                    k::ReadScopeBinder::AssociatedBinding {
+                        implementation,
+                        member,
+                    } => AuthoredReadScopeBinder::AssociatedBinding {
+                        implementation: declaration(implementation),
+                        member,
+                    },
+                },
+                parameter: reference.parameter,
+            },
+            k::ReadScopeArgument::Lexical { callable, binding } => {
+                AuthoredReadScopeArgument::Lexical {
+                    callable: declaration(callable),
+                    binding: local(k::LocalValueReference::LexicalBinding(binding)),
+                }
+            }
+        })
+    }
+
+    pub fn read_scopes(
+        &mut self,
+        scopes: Vec<k::ReadScopeArgument>,
+    ) -> Result<Vec<AuthoredReadScopeArgument>, Diagnostic> {
+        self.admit_associated_inventory(scopes.len())?;
+        let mut result = Vec::new();
+        result.try_reserve_exact(scopes.len()).map_err(|_| {
+            Diagnostic::new(
+                DiagnosticClass::Resource,
+                "change_draft_capacity",
+                "read scope inventory allocation exhausted",
+            )
+        })?;
+        for scope in scopes {
+            result.push(self.read_scope(scope)?);
+        }
+        Ok(result)
+    }
+
+    pub fn view_fields(
+        &mut self,
+        fields: Vec<k::ReadViewField>,
+    ) -> Result<Vec<AuthoredReadViewField>, Diagnostic> {
+        self.admit_associated_inventory(fields.len())?;
+        let mut result = Vec::new();
+        result.try_reserve_exact(fields.len()).map_err(|_| {
+            Diagnostic::new(
+                DiagnosticClass::Resource,
+                "change_draft_capacity",
+                "read view field inventory allocation exhausted",
+            )
+        })?;
+        for field in fields {
+            result.push(AuthoredReadViewField {
+                id: field.id,
+                name: field.name,
+                ty: self.ty(field.ty)?,
+                kind: match field.kind {
+                    k::ReadViewFieldKind::Ordinary => AuthoredReadViewFieldKind::Ordinary,
+                    k::ReadViewFieldKind::ReadReference { read_scope } => {
+                        AuthoredReadViewFieldKind::ReadReference {
+                            read_scope: self.read_scope(read_scope)?,
+                        }
+                    }
+                },
+            });
+        }
+        Ok(result)
+    }
+
+    pub(super) fn admit_associated_inventory(&mut self, count: usize) -> Result<(), Diagnostic> {
         self.check()?;
         if count > k::contract::MAXIMUM_CHILDREN {
             return Err(Diagnostic::new(
@@ -461,6 +601,78 @@ impl<'a> Reader<'a> {
         use k::ExpressionOperation as E;
         let borrowed_choice = matches!(expression.operation, E::MatchBorrowedOwned { .. });
         let operation = match expression.operation {
+            E::CreateReadView {
+                declaration: d,
+                type_arguments,
+                read_scope,
+                source,
+                fields,
+            } => {
+                self.admit_associated_inventory(fields.len())?;
+                let mut authored_fields = Vec::new();
+                authored_fields
+                    .try_reserve_exact(fields.len())
+                    .map_err(|_| {
+                        Diagnostic::new(
+                            DiagnosticClass::Resource,
+                            "change_draft_capacity",
+                            "read view initializer allocation exhausted",
+                        )
+                    })?;
+                for field in fields {
+                    authored_fields.push(AuthoredReadViewFieldInitializer {
+                        field: field.field,
+                        value: self.expression_at(field.value, depth + 1)?,
+                    });
+                }
+                A::CreateReadView {
+                    declaration: declaration(d),
+                    type_arguments: self.types(type_arguments)?,
+                    read_scope: self.read_scope(read_scope)?,
+                    source: local(source),
+                    fields: authored_fields,
+                }
+            }
+            E::BorrowReadView {
+                value,
+                binding,
+                body,
+            } => A::BorrowReadView {
+                value: local(value),
+                binding: Box::new(self.binding_definition(binding)?),
+                body: Box::new(self.expression_at(body, depth + 1)?),
+            },
+            E::ReborrowReadView { value, read_scope } => A::ReborrowReadView {
+                value: local(value),
+                read_scope: self.read_scope(read_scope)?,
+            },
+            E::MoveReadView { value } => A::MoveReadView {
+                value: local(value),
+            },
+            E::DropReadView { value } => A::DropReadView {
+                value: local(value),
+            },
+            E::ReadViewDataField { value, field } => A::ReadViewDataField {
+                value: local(value),
+                field: AuthoredReadViewFieldReference {
+                    declaration: declaration(field.declaration),
+                    field: field.field,
+                },
+            },
+            E::BorrowReadViewField {
+                value,
+                field,
+                binding,
+                body,
+            } => A::BorrowReadViewField {
+                value: local(value),
+                field: AuthoredReadViewFieldReference {
+                    declaration: declaration(field.declaration),
+                    field: field.field,
+                },
+                binding: Box::new(self.binding_definition(binding)?),
+                body: Box::new(self.expression_at(body, depth + 1)?),
+            },
             E::BorrowCall {
                 call,
                 binding,
@@ -741,6 +953,21 @@ impl<'a> Reader<'a> {
                 let mut authored = Vec::new();
                 for id in bindings {
                     let b = self.binding(id)?;
+                    if !matches!(b.kind, k::BindingKind::Let | k::BindingKind::ReadView) {
+                        return Err(error("let owns a binding with another canonical kind"));
+                    }
+                    let declared_type = b.declared_type.map(|ty| self.ty(ty)).transpose()?;
+                    let is_view = declared_type.as_ref().is_some_and(|ty| {
+                        matches!(
+                            ty,
+                            AuthoredType::ReadViewApplied { .. }
+                                | AuthoredType::AssociatedReadViewMember { .. }
+                                | AuthoredType::AssociatedReadViewProjection { .. }
+                        )
+                    });
+                    if (b.kind == k::BindingKind::ReadView) != is_view {
+                        return Err(error("let view kind and exact declared type disagree"));
+                    }
                     authored.push(AuthoredLetBinding {
                         symbol: binding_symbol(id),
                         name: b.name,
@@ -749,7 +976,7 @@ impl<'a> Reader<'a> {
                                 .ok_or_else(|| error("let binder has no initializer"))?,
                             depth + 1,
                         )?,
-                        declared_type: b.declared_type.map(|ty| self.ty(ty)).transpose()?,
+                        declared_type,
                     });
                 }
                 A::Let {
@@ -765,6 +992,7 @@ impl<'a> Reader<'a> {
                 type_arguments,
                 effect_arguments,
                 requirement_arguments,
+                read_scope_arguments,
                 implementations,
                 arguments,
             } => A::ImplementationCall {
@@ -772,6 +1000,7 @@ impl<'a> Reader<'a> {
                 type_arguments: self.types(type_arguments)?,
                 effect_arguments: effect_arguments.into_iter().map(row).collect(),
                 requirement_arguments: requirement_arguments.into_iter().map(requirement).collect(),
+                read_scope_arguments: self.read_scopes(read_scope_arguments)?,
                 implementations: implementations
                     .into_iter()
                     .map(|operand| self.implementation_operand(operand))
@@ -782,11 +1011,13 @@ impl<'a> Reader<'a> {
                 witness,
                 contract,
                 method,
+                read_scope_arguments,
                 arguments,
             } => A::MethodCall {
                 witness: self.implementation_operand(witness)?,
                 contract: declaration(contract),
                 method,
+                read_scope_arguments: self.read_scopes(read_scope_arguments)?,
                 arguments: self.expressions(arguments, depth)?,
             },
             E::Call {
@@ -794,12 +1025,14 @@ impl<'a> Reader<'a> {
                 type_arguments,
                 effect_arguments,
                 requirement_arguments,
+                read_scope_arguments,
                 arguments,
             } => A::Call {
                 function: declaration(function),
                 type_arguments: self.types(type_arguments)?,
                 effect_arguments: effect_arguments.into_iter().map(row).collect(),
                 requirement_arguments: requirement_arguments.into_iter().map(requirement).collect(),
+                read_scope_arguments: self.read_scopes(read_scope_arguments)?,
                 arguments: self.expressions(arguments, depth)?,
             },
             E::FunctionValue {
@@ -807,11 +1040,13 @@ impl<'a> Reader<'a> {
                 type_arguments,
                 effect_arguments,
                 requirement_arguments,
+                read_scope_arguments,
             } => A::FunctionValue {
                 function: declaration(function),
                 type_arguments: self.types(type_arguments)?,
                 effect_arguments: effect_arguments.into_iter().map(row).collect(),
                 requirement_arguments: requirement_arguments.into_iter().map(requirement).collect(),
+                read_scope_arguments: self.read_scopes(read_scope_arguments)?,
             },
             E::Invoke { callee, arguments } => A::Invoke {
                 callee: Box::new(self.expression_at(callee, depth + 1)?),
@@ -993,6 +1228,21 @@ impl<'a> Reader<'a> {
     }
 }
 
+pub(super) fn local(value: k::LocalValueReference) -> AuthoredLocalReference {
+    match value {
+        k::LocalValueReference::FunctionParameter(parameter) => {
+            AuthoredLocalReference::FunctionParameter { parameter }
+        }
+        k::LocalValueReference::OperationParameter(parameter) => {
+            AuthoredLocalReference::OperationParameter { parameter }
+        }
+        k::LocalValueReference::LexicalBinding(binding)
+        | k::LocalValueReference::MatchPayload(binding)
+        | k::LocalValueReference::TransactionBinding(binding) => AuthoredLocalReference::Symbol {
+            symbol: binding_symbol(binding),
+        },
+    }
+}
 fn binding_symbol(id: BindingId) -> String {
     format!("$b_{id}")
 }

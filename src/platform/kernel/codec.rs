@@ -1,4 +1,4 @@
-//! Strict current/predecessor owner codecs and unchanged base TypeObject 10.
+//! Strict current codecs and exact frozen predecessor schema adapters.
 
 use super::contract::{
     DEPENDENCY_ENVELOPE_DOMAIN, DEPENDENCY_MAGIC, MAXIMUM_DEPENDENCY_BYTES,
@@ -23,6 +23,198 @@ use crate::platform::packed;
 pub const OWNER_BINDING_BYTES: usize = 33;
 pub const DEPENDENCY_BINDING_BYTES: usize = 32;
 pub const RETIREMENT_BINDING_BYTES: usize = 32;
+
+#[cfg(test)]
+mod read_view_encoding_tests {
+    use super::*;
+    use crate::platform::kernel::*;
+    use crate::platform::semantic_id::*;
+
+    fn coordinates() -> (DeclarationReference, ReadScopeParameter, ReadScopeArgument) {
+        let seed = b"read-view-canonical-inventory";
+        let declaration = DeclarationReference {
+            package: PackageId::migrate(seed, 0),
+            declaration: DeclarationId::migrate(seed, 0),
+        };
+        let parameter = ReadScopeParameter {
+            id: ReadScopeParameterId::migrate(seed, 0),
+            name: Name::new("source_scope").unwrap(),
+        };
+        let argument = ReadScopeArgument::Parameter(ReadScopeReference {
+            binder: ReadScopeBinder::Declaration(declaration),
+            parameter: parameter.id,
+        });
+        (declaration, parameter, argument)
+    }
+
+    #[test]
+    fn unchanged_base_type10_is_closed_for_both_reader_and_writer() {
+        let unit = TypeObject::new(TypeForm::Unit).unwrap();
+        assert_eq!(unit.contract_version, 10);
+        let (digest, bytes) = encode_type_object(&unit).unwrap();
+        let literal = packed::encode(
+            *b"LKJTYP10",
+            "lkjscript.kernel.type-envelope.v10",
+            &(10_u16, 0_u32),
+            MAXIMUM_TYPE_OBJECT_BYTES,
+        )
+        .unwrap();
+        assert_eq!(bytes, literal);
+        assert_eq!(decode_type_object(&bytes, digest).unwrap(), unit);
+        let type11 = TypeObject {
+            contract_version: 11,
+            form: TypeForm::Unit,
+        };
+        assert!(encode_type_object(&type11).is_err());
+        assert!(super::super::frozen_read_view_wire::FrozenTypeObject10::try_from(type11).is_err());
+        for (magic, domain, version, discriminant) in [
+            (
+                *b"LKJTYP11",
+                "lkjscript.kernel.type-envelope.v11",
+                11_u16,
+                0_u32,
+            ),
+            (*b"LKJTYP10", "lkjscript.kernel.type-envelope.v10", 11, 0),
+            (*b"LKJTYP10", "lkjscript.kernel.type-envelope.v10", 10, 27),
+            (*b"LKJTYP10", "lkjscript.kernel.type-envelope.v10", 10, 28),
+            (*b"LKJTYP10", "lkjscript.kernel.type-envelope.v10", 10, 29),
+        ] {
+            let altered = packed::encode(
+                magic,
+                domain,
+                &(version, discriminant),
+                MAXIMUM_TYPE_OBJECT_BYTES,
+            )
+            .unwrap();
+            assert!(decode_type_object(&altered, TypeObjectDigest::of(&altered)).is_err());
+        }
+    }
+
+    #[test]
+    fn complete_view_field_and_scope_inventories_are_canonical() {
+        let (declaration, scope_parameter, scope) = coordinates();
+        let ty = encode_type_object(&TypeObject::new(TypeForm::ByteBuffer).unwrap())
+            .unwrap()
+            .0;
+        let seed = b"read-view-canonical-inventory";
+        let mut owner = OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(
+                OwnerKey::Declaration(declaration.declaration),
+                OwnerKind::ReadView,
+            ),
+            module: ModuleId::migrate(seed, 0),
+            name: Name::new("RangeRead").unwrap(),
+            visibility: DeclarationVisibility::Public,
+            payload: DeclarationPayload::ReadView(ReadViewDeclaration {
+                type_parameters: Vec::new(),
+                scope_parameter,
+                fields: vec![ReadViewField {
+                    id: FieldId::migrate(seed, 0),
+                    name: Name::new("payload").unwrap(),
+                    ty,
+                    kind: ReadViewFieldKind::ReadReference { read_scope: scope },
+                }],
+            }),
+        });
+        let (digest, bytes) = encode_owner(&owner).unwrap();
+        assert_eq!(&bytes[..8], b"LKJOWN34");
+        assert_eq!(
+            decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
+            owner
+        );
+        let OwnerRecord::Declaration(record) = &mut owner else {
+            unreachable!()
+        };
+        let DeclarationPayload::ReadView(view) = &mut record.payload else {
+            unreachable!()
+        };
+        view.fields.clear();
+        assert_ne!(encode_owner(&owner).unwrap().0, digest);
+        owner.set_encoding_for_edit(33);
+        assert!(encode_owner(&owner).is_err());
+    }
+
+    #[test]
+    fn read_view_applications_have_disjoint_scope_sensitive_type_bytes() {
+        let (declaration, _, read_scope) = coordinates();
+        let object = TypeObject::new(TypeForm::ReadViewApplied {
+            declaration,
+            arguments: Vec::new(),
+            read_scope,
+        })
+        .unwrap();
+        let (digest, bytes) = encode_type_object(&object).unwrap();
+        assert_eq!(&bytes[..8], b"LKJTAV01");
+        assert_eq!(decode_type_object(&bytes, digest).unwrap(), object);
+        assert!(
+            super::super::frozen_read_view_wire::FrozenTypeObject10::try_from(object.clone())
+                .is_err()
+        );
+        let changed = TypeObject::new(TypeForm::ReadViewApplied {
+            declaration,
+            arguments: Vec::new(),
+            read_scope: ReadScopeArgument::Lexical {
+                callable: declaration,
+                binding: BindingId::migrate(b"view-other-scope", 0),
+            },
+        })
+        .unwrap();
+        assert_ne!(encode_type_object(&changed).unwrap().0, digest);
+    }
+
+    #[test]
+    fn view_result_keeps_exact_source_scope_relationship() {
+        let (declaration, scope_parameter, scope) = coordinates();
+        let source = ParameterId::migrate(b"read-view-canonical-inventory", 0);
+        let result = encode_type_object(
+            &TypeObject::new(TypeForm::ReadViewApplied {
+                declaration,
+                arguments: Vec::new(),
+                read_scope: scope,
+            })
+            .unwrap(),
+        )
+        .unwrap()
+        .0;
+        let mut owner = OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(
+                OwnerKey::Declaration(declaration.declaration),
+                OwnerKind::PureFunction,
+            ),
+            module: ModuleId::migrate(b"read-view-function", 0),
+            name: Name::new("range").unwrap(),
+            visibility: DeclarationVisibility::Public,
+            payload: DeclarationPayload::Function(FunctionDeclaration {
+                implementation_parameters: Vec::new(),
+                requirement_parameters: Vec::new(),
+                effect_parameters: Vec::new(),
+                type_parameters: Vec::new(),
+                parameters: vec![source],
+                result: CallableResult {
+                    ty: result,
+                    relation: ResultRelation::ViewFrom { source, scope },
+                },
+                read_scope_parameters: vec![scope_parameter],
+                read_scope_sources: vec![ReadScopeSource { source, scope }],
+                effect: FunctionEffect::Pure,
+                body: ExpressionId::migrate(b"read-view-function", 0),
+            }),
+        });
+        let (digest, bytes) = encode_owner(&owner).unwrap();
+        assert_eq!(
+            decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
+            owner
+        );
+        let OwnerRecord::Declaration(record) = &mut owner else {
+            unreachable!()
+        };
+        let DeclarationPayload::Function(function) = &mut record.payload else {
+            unreachable!()
+        };
+        function.read_scope_sources.clear();
+        assert_ne!(encode_owner(&owner).unwrap().0, digest);
+    }
+}
 
 #[cfg(test)]
 #[path = "codec_owned_scheme_tests.rs"]
@@ -61,7 +253,7 @@ mod shareable_encoding_tests {
                 constraints,
             });
             let (digest, bytes) = encode_owner(&record).unwrap();
-            assert_eq!(&bytes[..8], b"LKJOWN33");
+            assert_eq!(&bytes[..8], b"LKJOWN34");
             assert_eq!(
                 decode_owner(&bytes, record.owner(), record.kind(), digest).unwrap(),
                 record
@@ -115,10 +307,14 @@ mod borrowed_result_encoding_tests {
                 effect_parameters: Vec::new(),
                 type_parameters: Vec::new(),
                 parameters: vec![ParameterId::migrate(seed, 0), ParameterId::migrate(seed, 1)],
-                result: encode_type_object(&TypeObject::new(TypeForm::ByteBuffer).unwrap())
-                    .unwrap()
-                    .0,
-                result_borrow: Some(ParameterId::migrate(seed, 0)),
+                result: crate::platform::kernel::frozen_read_view_wire::legacy_result(
+                    encode_type_object(&TypeObject::new(TypeForm::ByteBuffer).unwrap())
+                        .unwrap()
+                        .0,
+                    Some(ParameterId::migrate(seed, 0)),
+                ),
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
                 effect: FunctionEffect::Pure,
                 body: ExpressionId::migrate(seed, 0),
             }),
@@ -129,7 +325,7 @@ mod borrowed_result_encoding_tests {
     fn canonical_result_relation_preserves_exact_source_identity() {
         let original = function();
         let (digest, bytes) = encode_owner(&original).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOWN33");
+        assert_eq!(&bytes[..8], b"LKJOWN34");
         assert_eq!(
             decode_owner(&bytes, original.owner(), original.kind(), digest).unwrap(),
             original
@@ -141,7 +337,9 @@ mod borrowed_result_encoding_tests {
         let DeclarationPayload::Function(f) = &mut d.payload else {
             unreachable!()
         };
-        f.result_borrow = Some(f.parameters[1]);
+        f.result.relation = crate::platform::kernel::ResultRelation::ReadFrom {
+            source: f.parameters[1],
+        };
         assert_ne!(encode_owner(&alternate).unwrap().0, digest);
         let OwnerRecord::Declaration(d) = &mut alternate else {
             unreachable!()
@@ -149,7 +347,7 @@ mod borrowed_result_encoding_tests {
         let DeclarationPayload::Function(f) = &mut d.payload else {
             unreachable!()
         };
-        f.result_borrow = None;
+        f.result.relation = crate::platform::kernel::ResultRelation::Value;
         assert_ne!(encode_owner(&alternate).unwrap().0, digest);
     }
 
@@ -167,7 +365,7 @@ mod borrowed_result_encoding_tests {
         let DeclarationPayload::Function(f) = &mut d.payload else {
             unreachable!()
         };
-        f.result_borrow = None;
+        f.result.relation = crate::platform::kernel::ResultRelation::Value;
         let literal = packed::encode(
             super::super::contract::PARAMETERIZED_CONTRACT_OWNER_MAGIC,
             super::super::contract::PARAMETERIZED_CONTRACT_OWNER_ENVELOPE_DOMAIN,
@@ -183,7 +381,7 @@ mod borrowed_result_encoding_tests {
                 &f.effect_parameters,
                 &f.type_parameters,
                 &f.parameters,
-                f.result,
+                f.result.ty,
                 &f.effect,
                 f.body,
             ),
@@ -207,7 +405,9 @@ mod borrowed_result_encoding_tests {
         let DeclarationPayload::Function(f) = &mut d.payload else {
             unreachable!()
         };
-        f.result_borrow = Some(ParameterId::migrate(b"foreign-source", 0));
+        f.result.relation = crate::platform::kernel::ResultRelation::ReadFrom {
+            source: ParameterId::migrate(b"foreign-source", 0),
+        };
         let bytes = packed::encode(
             OWNER_MAGIC,
             OWNER_ENVELOPE_DOMAIN,
@@ -252,8 +452,12 @@ mod borrowed_result_encoding_tests {
                         };
                         2
                     ],
-                    result: ty,
-                    result_borrow: Some(0),
+                    result: crate::platform::kernel::frozen_read_view_wire::legacy_result(
+                        ty,
+                        Some(0),
+                    ),
+                    read_scope_parameters: Vec::new(),
+                    read_scope_sources: Vec::new(),
                     effect: FunctionEffect::Pure,
                 }],
                 associated_types: Vec::new(),
@@ -270,7 +474,8 @@ mod borrowed_result_encoding_tests {
         let DeclarationPayload::OwnedContract(c) = &mut d.payload else {
             unreachable!()
         };
-        c.methods[0].result_borrow = Some(1);
+        c.methods[0].result.relation =
+            crate::platform::kernel::ResultRelation::ReadFrom { source: 1 };
         assert_ne!(encode_owner(&record).unwrap().0, digest);
         record.set_encoding_for_edit(26);
         assert_eq!(
@@ -283,11 +488,11 @@ mod borrowed_result_encoding_tests {
         let DeclarationPayload::OwnedContract(c) = &mut d.payload else {
             unreachable!()
         };
-        c.methods[0].result_borrow = None;
+        c.methods[0].result.relation = crate::platform::kernel::ResultRelation::Value;
         let original_methods = c
             .methods
             .iter()
-            .map(|m| (&m.id, &m.name, &m.parameters, m.result, &m.effect))
+            .map(|m| (&m.id, &m.name, &m.parameters, m.result.ty, &m.effect))
             .collect::<Vec<_>>();
         let literal = packed::encode(
             super::super::contract::PARAMETERIZED_CONTRACT_OWNER_MAGIC,
@@ -385,8 +590,9 @@ mod parameterized_contract_encoding_tests {
             id: method,
             name: Name::new("length").unwrap(),
             parameters: Vec::new(),
-            result: scalar,
-            result_borrow: None,
+            result: crate::platform::kernel::frozen_read_view_wire::legacy_result(scalar, None),
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
             effect: FunctionEffect::Pure,
         }];
 
@@ -397,7 +603,7 @@ mod parameterized_contract_encoding_tests {
                     &method.id,
                     &method.name,
                     &method.parameters,
-                    &method.result,
+                    &method.result.ty,
                     &method.effect,
                 )
             })
@@ -520,15 +726,18 @@ mod parameterized_contract_encoding_tests {
                     id: MethodId::migrate(seed, 0),
                     name: Name::new("length").unwrap(),
                     parameters: Vec::new(),
-                    result: scalar,
-                    result_borrow: None,
+                    result: crate::platform::kernel::frozen_read_view_wire::legacy_result(
+                        scalar, None,
+                    ),
+                    read_scope_parameters: Vec::new(),
+                    read_scope_sources: Vec::new(),
                     effect: FunctionEffect::Pure,
                 }],
                 associated_types: Vec::new(),
             }),
         });
         let (digest, bytes) = encode_owner(&record).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOWN33");
+        assert_eq!(&bytes[..8], b"LKJOWN34");
         assert_eq!(
             decode_owner(&bytes, owner, record.kind(), digest).unwrap(),
             record
@@ -585,6 +794,7 @@ mod parameterized_contract_encoding_tests {
                 self_type,
                 type_arguments: vec![argument, self_type],
                 methods: vec![OwnedMethodImplementation {
+                    read_scope_arguments: Vec::new(),
                     implementations: Vec::new(),
                     type_arguments: Vec::new(),
                     method: MethodId::migrate(seed, 0),
@@ -610,8 +820,9 @@ mod parameterized_contract_encoding_tests {
                 effect_parameters: Vec::new(),
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result,
-                result_borrow: None,
+                result: crate::platform::kernel::frozen_read_view_wire::legacy_result(result, None),
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
                 effect: FunctionEffect::Pure,
                 body: ExpressionId::migrate(seed, 0),
             }),
@@ -724,6 +935,7 @@ mod implementation_application_encoding_tests {
                     contract_version: generation,
                     id,
                     operation: ExpressionOperation::ImplementationCall {
+                        read_scope_arguments: Vec::new(),
                         requirement_arguments: Vec::new(),
                         effect_arguments: Vec::new(),
                         function,
@@ -806,6 +1018,7 @@ mod implementation_application_encoding_tests {
                 contract_version: generation,
                 id,
                 operation: ExpressionOperation::Call {
+                    read_scope_arguments: Vec::new(),
                     requirement_arguments,
                     effect_arguments: effect_arguments.clone(),
                     function,
@@ -839,6 +1052,7 @@ mod implementation_application_encoding_tests {
             let expression = ExpressionRecord::new(
                 id,
                 ExpressionOperation::ImplementationCall {
+                    read_scope_arguments: Vec::new(),
                     requirement_arguments,
                     effect_arguments,
                     function,
@@ -850,7 +1064,7 @@ mod implementation_application_encoding_tests {
             .unwrap();
             let current = OwnerRecord::Expression(expression.clone());
             let (digest, bytes) = encode_owner(&current).unwrap();
-            assert_eq!(&bytes[..8], b"LKJOWN33");
+            assert_eq!(&bytes[..8], b"LKJOWN34");
             assert_eq!(
                 decode_owner(&bytes, current.owner(), current.kind(), digest).unwrap(),
                 current
@@ -919,7 +1133,7 @@ mod nominal_encoding_tests {
                 constraints: constraint,
             });
             let (digest, bytes) = encode_owner(&record).unwrap();
-            assert_eq!(&bytes[..8], b"LKJOWN33");
+            assert_eq!(&bytes[..8], b"LKJOWN34");
             assert_eq!(
                 decode_owner(&bytes, key, OwnerKind::TypeParameter, digest).unwrap(),
                 record
@@ -994,7 +1208,7 @@ mod nominal_encoding_tests {
         .unwrap();
         let owner = OwnerRecord::Expression(expression.clone());
         let (digest, bytes) = encode_owner(&owner).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOWN33");
+        assert_eq!(&bytes[..8], b"LKJOWN34");
         assert_eq!(
             decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
             owner
@@ -1344,7 +1558,7 @@ mod borrow_encoding_tests {
         ];
         for record in records {
             let (digest, bytes) = encode_owner(&record).unwrap();
-            assert_eq!(&bytes[..8], b"LKJOWN33");
+            assert_eq!(&bytes[..8], b"LKJOWN34");
             assert_eq!(
                 decode_owner(&bytes, record.owner(), record.kind(), digest).unwrap(),
                 record
@@ -1455,15 +1669,24 @@ pub fn encode_owner(record: &OwnerRecord) -> Result<(OwnerObjectDigest, Vec<u8>)
         && super::owned_associated_wire::AssociatedOwnedBody::from_payload(&declaration.payload)?
             .is_some()
     {
+        if declaration.header.contract_version == 33 {
+            let bytes = packed::encode(
+                super::contract::OWNED_ASSOCIATED_OWNER_MAGIC,
+                super::contract::OWNED_ASSOCIATED_OWNER_ENVELOPE_DOMAIN,
+                &super::owned_associated_wire::FrozenAssociatedOwnerWire33(declaration.clone()),
+                MAXIMUM_OWNER_OBJECT_BYTES,
+            )?;
+            return Ok((OwnerObjectDigest::of(&bytes), bytes));
+        }
         if declaration.header.contract_version != super::contract::GRAPH_CONTRACT_VERSION {
             return Err(codec_error(
                 "kernel_associated_encoding_generation",
-                "associated parents require the exact Graph33 base profile",
+                "associated parents require an exact current or frozen base profile",
             ));
         }
         let bytes = packed::encode(
-            super::contract::OWNED_ASSOCIATED_OWNER_MAGIC,
-            super::contract::OWNED_ASSOCIATED_OWNER_ENVELOPE_DOMAIN,
+            super::contract::ASSOCIATED_READ_VIEW_OWNER_MAGIC,
+            super::contract::ASSOCIATED_READ_VIEW_OWNER_ENVELOPE_DOMAIN,
             &super::owned_associated_wire::AssociatedOwnerWire(declaration.clone()),
             MAXIMUM_OWNER_OBJECT_BYTES,
         )?;
@@ -1587,6 +1810,8 @@ pub fn encode_owner(record: &OwnerRecord) -> Result<(OwnerObjectDigest, Vec<u8>)
             super::contract::OWNED_RECORD_OWNER_MAGIC,
             super::contract::OWNED_RECORD_OWNER_ENVELOPE_DOMAIN,
         )
+    } else if record.header().contract_version == 33 {
+        (*b"LKJOWN33", "lkjscript.kernel.owner-envelope.v33")
     } else {
         (OWNER_MAGIC, OWNER_ENVELOPE_DOMAIN)
     };
@@ -1651,6 +1876,13 @@ pub fn encode_owner(record: &OwnerRecord) -> Result<(OwnerObjectDigest, Vec<u8>)
             &super::wire30::OwnerRecord30::try_from(record.clone())?,
             MAXIMUM_OWNER_OBJECT_BYTES,
         )?
+    } else if record.header().contract_version < 34 {
+        packed::encode(
+            magic,
+            domain,
+            &super::frozen_read_view_wire::FrozenOwnerRecord33::try_from(record.clone())?,
+            MAXIMUM_OWNER_OBJECT_BYTES,
+        )?
     } else {
         packed::encode(magic, domain, record, MAXIMUM_OWNER_OBJECT_BYTES)?
     };
@@ -1668,17 +1900,33 @@ pub fn decode_owner(
         OwnerObjectDigest::of(bytes).bytes(),
         "owner",
     )?;
-    let record: OwnerRecord = if bytes.starts_with(&super::contract::OWNED_ASSOCIATED_OWNER_MAGIC) {
+    let record: OwnerRecord = if bytes
+        .starts_with(&super::contract::ASSOCIATED_READ_VIEW_OWNER_MAGIC)
+    {
         let wire: super::owned_associated_wire::AssociatedOwnerWire = packed::decode(
             bytes,
-            super::contract::OWNED_ASSOCIATED_OWNER_MAGIC,
-            super::contract::OWNED_ASSOCIATED_OWNER_ENVELOPE_DOMAIN,
+            super::contract::ASSOCIATED_READ_VIEW_OWNER_MAGIC,
+            super::contract::ASSOCIATED_READ_VIEW_OWNER_ENVELOPE_DOMAIN,
             MAXIMUM_OWNER_OBJECT_BYTES,
         )?;
         if wire.0.header.contract_version != super::contract::GRAPH_CONTRACT_VERSION {
             return Err(codec_error(
                 "kernel_associated_encoding_generation",
                 "associated parent has a foreign base generation",
+            ));
+        }
+        OwnerRecord::Declaration(wire.0)
+    } else if bytes.starts_with(&super::contract::OWNED_ASSOCIATED_OWNER_MAGIC) {
+        let wire: super::owned_associated_wire::FrozenAssociatedOwnerWire33 = packed::decode(
+            bytes,
+            super::contract::OWNED_ASSOCIATED_OWNER_MAGIC,
+            super::contract::OWNED_ASSOCIATED_OWNER_ENVELOPE_DOMAIN,
+            MAXIMUM_OWNER_OBJECT_BYTES,
+        )?;
+        if wire.0.header.contract_version != 33 {
+            return Err(codec_error(
+                "kernel_associated_encoding_generation",
+                "frozen associated parent has a foreign base generation",
             ));
         }
         OwnerRecord::Declaration(wire.0)
@@ -1836,6 +2084,8 @@ pub fn decode_owner(
                 super::contract::OWNED_RECORD_OWNER_ENVELOPE_DOMAIN,
                 super::contract::OWNED_RECORD_GRAPH_CONTRACT_VERSION,
             )
+        } else if bytes.starts_with(b"LKJOWN33") {
+            (*b"LKJOWN33", "lkjscript.kernel.owner-envelope.v33", 33)
         } else {
             (
                 OWNER_MAGIC,
@@ -1869,6 +2119,10 @@ pub fn decode_owner(
             let wire: super::wire30::OwnerRecord30 =
                 packed::decode(bytes, magic, domain, MAXIMUM_OWNER_OBJECT_BYTES)?;
             wire.into()
+        } else if generation < 34 {
+            let wire: super::frozen_read_view_wire::FrozenOwnerRecord33 =
+                packed::decode(bytes, magic, domain, MAXIMUM_OWNER_OBJECT_BYTES)?;
+            wire.into()
         } else {
             packed::decode(bytes, magic, domain, MAXIMUM_OWNER_OBJECT_BYTES)?
         };
@@ -1900,7 +2154,25 @@ pub fn decode_owner(
 
 pub fn encode_type_object(object: &TypeObject) -> Result<(TypeObjectDigest, Vec<u8>), Diagnostic> {
     object.validate_local()?;
-    if object.form.is_associated() {
+    if matches!(
+        object.form,
+        super::TypeForm::ReadViewApplied { .. }
+            | super::TypeForm::AssociatedReadViewMember { .. }
+            | super::TypeForm::AssociatedReadViewProjection { .. }
+    ) {
+        let bytes = packed::encode(
+            super::contract::ASSOCIATED_READ_VIEW_TYPE_MAGIC,
+            super::contract::ASSOCIATED_READ_VIEW_TYPE_ENVELOPE_DOMAIN,
+            &super::owned_associated_wire::ReadViewTypeWire(object.clone()),
+            MAXIMUM_TYPE_OBJECT_BYTES,
+        )?;
+        return Ok((TypeObjectDigest::of(&bytes), bytes));
+    }
+    if matches!(
+        object.form,
+        super::TypeForm::AssociatedContractMember { .. }
+            | super::TypeForm::AssociatedWitnessProjection { .. }
+    ) {
         let bytes = packed::encode(
             super::contract::OWNED_ASSOCIATED_TYPE_MAGIC,
             super::contract::OWNED_ASSOCIATED_TYPE_ENVELOPE_DOMAIN,
@@ -2019,7 +2291,7 @@ pub fn encode_type_object(object: &TypeObject) -> Result<(TypeObjectDigest, Vec<
     let bytes = packed::encode(
         TYPE_OBJECT_MAGIC,
         TYPE_OBJECT_ENVELOPE_DOMAIN,
-        object,
+        &super::frozen_read_view_wire::FrozenTypeObject10::try_from(object.clone())?,
         MAXIMUM_TYPE_OBJECT_BYTES,
     )?;
     Ok((TypeObjectDigest::of(&bytes), bytes))
@@ -2051,6 +2323,23 @@ pub fn decode_type_object(
         TypeObjectDigest::of(bytes).bytes(),
         "type",
     )?;
+    if bytes.starts_with(&super::contract::ASSOCIATED_READ_VIEW_TYPE_MAGIC) {
+        let wire: super::owned_associated_wire::ReadViewTypeWire = packed::decode(
+            bytes,
+            super::contract::ASSOCIATED_READ_VIEW_TYPE_MAGIC,
+            super::contract::ASSOCIATED_READ_VIEW_TYPE_ENVELOPE_DOMAIN,
+            MAXIMUM_TYPE_OBJECT_BYTES,
+        )?;
+        let (digest, canonical) = encode_type_object(&wire.0)?;
+        verify_canonical(
+            bytes,
+            &canonical,
+            digest.bytes(),
+            expected_digest.bytes(),
+            "type",
+        )?;
+        return Ok(wire.0);
+    }
     if bytes.starts_with(&super::contract::OWNED_ASSOCIATED_TYPE_MAGIC) {
         let wire: super::owned_associated_wire::AssociatedTypeWire = packed::decode(
             bytes,
@@ -2309,12 +2598,19 @@ pub fn decode_type_object(
         )?;
         return Ok(object);
     }
-    let object: TypeObject = packed::decode(
+    let wire: super::frozen_read_view_wire::FrozenTypeObject10 = packed::decode(
         bytes,
         TYPE_OBJECT_MAGIC,
         TYPE_OBJECT_ENVELOPE_DOMAIN,
         MAXIMUM_TYPE_OBJECT_BYTES,
     )?;
+    if wire.contract_version != 10 {
+        return Err(codec_error(
+            "kernel_type_generation",
+            "base type envelope requires the exact TypeObject 10 profile",
+        ));
+    }
+    let object: TypeObject = wire.into();
     object.validate_local()?;
     let (digest, canonical) = encode_type_object(&object)?;
     verify_canonical(

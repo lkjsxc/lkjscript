@@ -258,13 +258,17 @@ pub(crate) fn library_composition() -> KernelSnapshot {
                 .unwrap(),
                 visibility: DeclarationVisibility::Public,
                 payload: DeclarationPayload::Function(FunctionDeclaration {
-                    result_borrow: None,
+                    read_scope_parameters: Vec::new(),
+                    read_scope_sources: Vec::new(),
                     implementation_parameters: Vec::new(),
                     requirement_parameters: Vec::new(),
                     type_parameters: vec![parameter],
                     effect_parameters: vec![EffectParameterId::migrate(SEED, ordinal)],
                     parameters: vec![value, callee],
-                    result,
+                    result: CallableResult {
+                        ty: result,
+                        relation: ResultRelation::Value,
+                    },
                     effect,
                     body,
                 }),
@@ -305,13 +309,17 @@ pub(crate) fn library_composition() -> KernelSnapshot {
             name: Name::new("consumer-task").unwrap(),
             visibility: DeclarationVisibility::Public,
             payload: DeclarationPayload::Function(FunctionDeclaration {
-                result_borrow: None,
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
                 implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 type_parameters: Vec::new(),
                 effect_parameters: Vec::new(),
                 parameters: params.to_vec(),
-                result: unit,
+                result: CallableResult {
+                    ty: unit,
+                    relation: ResultRelation::Value,
+                },
                 effect: FunctionEffect::Task {
                     requirements: row.requirements.clone(),
                     effect_parameters: Vec::new(),
@@ -329,6 +337,7 @@ pub(crate) fn library_composition() -> KernelSnapshot {
         &mut snapshot,
         &mut serial,
         ExpressionOperation::FunctionValue {
+            read_scope_arguments: Vec::new(),
             requirement_arguments: Vec::new(),
             function: reference(callback),
             type_arguments: Vec::new(),
@@ -339,6 +348,7 @@ pub(crate) fn library_composition() -> KernelSnapshot {
         &mut snapshot,
         &mut serial,
         ExpressionOperation::Call {
+            read_scope_arguments: Vec::new(),
             requirement_arguments: Vec::new(),
             function: reference(factory),
             type_arguments: vec![unit],
@@ -359,6 +369,7 @@ pub(crate) fn library_composition() -> KernelSnapshot {
         &mut snapshot,
         &mut serial,
         ExpressionOperation::Call {
+            read_scope_arguments: Vec::new(),
             requirement_arguments: Vec::new(),
             function: reference(wrapper),
             type_arguments: vec![unit],
@@ -704,7 +715,7 @@ fn recursive_effect_permutation_and_union_close_by_finite_set_identity() {
     let DeclarationPayload::Function(function) = &owner.payload else {
         unreachable!()
     };
-    let (module, unit, concrete) = (owner.module, function.result, function.effect.row());
+    let (module, unit, concrete) = (owner.module, function.result.ty, function.effect.row());
     let boolean = admit_snapshot_type(&mut snapshot, TypeForm::Bool);
     let recursive = DeclarationId::migrate(SEED, 20);
     let entry = DeclarationId::migrate(SEED, 21);
@@ -761,6 +772,7 @@ fn recursive_effect_permutation_and_union_close_by_finite_set_identity() {
             &mut snapshot,
             &mut ordinal,
             ExpressionOperation::Call {
+                read_scope_arguments: Vec::new(),
                 requirement_arguments: Vec::new(),
                 function: DeclarationReference {
                     package,
@@ -802,13 +814,17 @@ fn recursive_effect_permutation_and_union_close_by_finite_set_identity() {
             name: Name::new("combine-effects").unwrap(),
             visibility: DeclarationVisibility::Public,
             payload: DeclarationPayload::Function(FunctionDeclaration {
-                result_borrow: None,
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
                 implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 type_parameters: vec![],
                 effect_parameters: parameters.clone(),
                 parameters: vec![stop],
-                result: unit,
+                result: CallableResult {
+                    ty: unit,
+                    relation: ResultRelation::Value,
+                },
                 effect: FunctionEffect::Task {
                     requirements: vec![],
                     effect_parameters: both.parameters,
@@ -826,6 +842,7 @@ fn recursive_effect_permutation_and_union_close_by_finite_set_identity() {
         &mut snapshot,
         &mut ordinal,
         ExpressionOperation::Call {
+            read_scope_arguments: Vec::new(),
             requirement_arguments: Vec::new(),
             function: DeclarationReference {
                 package,
@@ -844,13 +861,17 @@ fn recursive_effect_permutation_and_union_close_by_finite_set_identity() {
             name: Name::new("row-entry").unwrap(),
             visibility: DeclarationVisibility::Public,
             payload: DeclarationPayload::Function(FunctionDeclaration {
-                result_borrow: None,
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
                 implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 type_parameters: vec![],
                 effect_parameters: vec![],
                 parameters: vec![],
-                result: unit,
+                result: CallableResult {
+                    ty: unit,
+                    relation: ResultRelation::Value,
+                },
                 effect: FunctionEffect::Task {
                     requirements: concrete.requirements.clone(),
                     effect_parameters: vec![],
@@ -990,7 +1011,7 @@ fn task_input_fixture_dispatch(
         unreachable!()
     };
     let module = owner.module;
-    let unit = original.result;
+    let unit = original.result.ty;
     let row = original.effect.row();
     let ty = admit_snapshot_type(
         &mut snapshot,
@@ -1032,6 +1053,7 @@ fn task_input_fixture_dispatch(
     } else {
         let prefix = put_expression(&mut snapshot, &mut serial, ExpressionOperation::Unit {});
         ExpressionOperation::Call {
+            read_scope_arguments: Vec::new(),
             requirement_arguments: Vec::new(),
             function: callback,
             type_arguments: vec![],
@@ -1048,13 +1070,17 @@ fn task_input_fixture_dispatch(
             name: Name::new("accept-task").unwrap(),
             visibility: DeclarationVisibility::Public,
             payload: DeclarationPayload::Function(FunctionDeclaration {
-                result_borrow: None,
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
                 implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 type_parameters: vec![],
                 effect_parameters: vec![],
                 parameters: vec![parameter],
-                result: unit,
+                result: CallableResult {
+                    ty: unit,
+                    relation: ResultRelation::Value,
+                },
                 effect: FunctionEffect::Task {
                     requirements: row.requirements,
                     effect_parameters: vec![],
@@ -1097,13 +1123,17 @@ fn task_input_fixture_dispatch(
                 name: Name::new(name).unwrap(),
                 visibility: DeclarationVisibility::Public,
                 payload: DeclarationPayload::Function(FunctionDeclaration {
-                    result_borrow: None,
+                    read_scope_parameters: Vec::new(),
+                    read_scope_sources: Vec::new(),
                     implementation_parameters: Vec::new(),
                     requirement_parameters: Vec::new(),
                     type_parameters: vec![],
                     effect_parameters: vec![],
                     parameters,
-                    result: unit,
+                    result: CallableResult {
+                        ty: unit,
+                        relation: ResultRelation::Value,
+                    },
                     effect: if pure {
                         FunctionEffect::Pure
                     } else {
@@ -1143,6 +1173,7 @@ fn task_descriptor_raw_boundaries_reject_kind_row_origin_arity_and_retained_reso
                 types: Vec<TypeObjectDigest>,
                 effects: Vec<EffectRow>,
                 prefix: Option<Vec<NormalizedValue>>| NormalizedValue::Function {
+        read_scope_arguments: Arc::from([]),
         requirement_arguments: std::sync::Arc::from([]),
         function,
         type_arguments: types.into(),
@@ -1302,7 +1333,7 @@ fn empty_and_inactive_task_containers_are_transient_but_not_serializable() {
     let DeclarationPayload::Function(signature) = &owner.payload else {
         unreachable!()
     };
-    let (module, unit) = (owner.module, signature.result);
+    let (module, unit) = (owner.module, signature.result.ty);
     let list = admit_snapshot_type(&mut snapshot, TypeForm::List { item: task });
     let declaration = DeclarationId::migrate(SEED, 30);
     let mut cases = Vec::new();
@@ -1369,13 +1400,17 @@ fn empty_and_inactive_task_containers_are_transient_but_not_serializable() {
             name: Name::new("discard-task-containers").unwrap(),
             visibility: DeclarationVisibility::Private,
             payload: DeclarationPayload::Function(FunctionDeclaration {
-                result_borrow: None,
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
                 implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 type_parameters: vec![],
                 effect_parameters: vec![],
                 parameters,
-                result: unit,
+                result: CallableResult {
+                    ty: unit,
+                    relation: ResultRelation::Value,
+                },
                 effect: FunctionEffect::Pure,
                 body,
             }),
@@ -1552,6 +1587,7 @@ fn shared_grant_allowance(direct: bool) {
         &program.requirements[narrow_index]
     ));
     let descriptor = NormalizedValue::Function {
+        read_scope_arguments: Arc::from([]),
         requirement_arguments: std::sync::Arc::from([]),
         function: program
             .function(declaration_named(&snapshot, "consumer-task"))
@@ -1750,6 +1786,7 @@ fn an_empty_task_row_requires_task_context_in_both_evaluators() {
     snapshot.types.remove(&old_type);
     let mut program = prepare_snapshot(&snapshot);
     let value = NormalizedValue::Function {
+        read_scope_arguments: Arc::from([]),
         requirement_arguments: std::sync::Arc::from([]),
         function: program
             .function(declaration_named(&snapshot, "empty-task-prefix"))

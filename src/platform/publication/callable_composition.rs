@@ -149,6 +149,7 @@ pub(super) fn validate<S: ImmutableObjectStore + ?Sized>(
         .filter(|total| *total <= MAXIMUM_VALIDATION_VISITS)
         .ok_or_else(exhausted)?;
     let mut observed = usize::try_from(observed).map_err(|_| exhausted())?;
+    let entry_work = observed;
     validate_callable_closure(
         &Candidate {
             package: root.package_id,
@@ -159,6 +160,17 @@ pub(super) fn validate<S: ImmutableObjectStore + ?Sized>(
         },
         &mut observed,
         MAXIMUM_VALIDATION_VISITS as usize,
-    )?;
+    )
+    .map_err(|mut diagnostic| {
+        if diagnostic.code == "kernel_callable_flow_work" {
+            diagnostic.notes.push(format!(
+                "candidate_composed_work prior_supplier_semantics={} collecting_visits={} entry={}",
+                prior_semantic_work,
+                store.visits(),
+                entry_work,
+            ));
+        }
+        diagnostic
+    })?;
     Ok(observed as u64)
 }

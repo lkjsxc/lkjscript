@@ -279,7 +279,6 @@ fn prepare_nested_types(created: &CreatedRepository) -> PreparedPublication {
                 preconditions: Vec::new(),
                 budget: ChangeBudget::default(),
                 changes: vec![AuthoredChange::CreateFunction {
-                    result_borrow: None,
                     symbol: "$identity".to_owned(),
                     module: ModuleSelector::Id { module },
                     name: Name::new("nested_identity").unwrap(),
@@ -292,7 +291,7 @@ fn prepare_nested_types(created: &CreatedRepository) -> PreparedPublication {
                         use_mode: crate::platform::kernel::ParameterUse::Unrestricted,
                         resource_requirement: None,
                     }],
-                    result: structural,
+                    result: crate::platform::change::AuthoredCallableResult::value(structural),
                     effect: AuthoredFunctionEffect::Pure {},
                     body: AuthoredExpression {
                         symbol: Some("$body".to_owned()),
@@ -302,6 +301,8 @@ fn prepare_nested_types(created: &CreatedRepository) -> PreparedPublication {
                             },
                         },
                     },
+                    read_scope_parameters: Vec::new(),
+                    read_scope_sources: Vec::new(),
                 }],
             },
             PublicationOptions::default(),

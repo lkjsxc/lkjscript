@@ -1,0 +1,71 @@
+declarations.begin
+(units
+  (module create readview-transformer
+    (function create subrange-and-forward (visibility public) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_d8200000000000000000000000000001 reader readview-consumer::RangeRead W (types I64))
+      (scope-parameter read_scope_d8200000000000000000000000000001 s)
+      (parameter create start (type I64)) (parameter create end (type I64))
+      (parameter create view (type (associated-read-view-projection subrange-and-forward implparam_d8200000000000000000000000000001
+        readview-consumer::RangeRead assoc_type_d8100000000000000000000000000001
+        (read-scope (declaration subrange-and-forward) read_scope_d8200000000000000000000000000001))) (use borrow))
+      (scope-source view (read-scope (declaration subrange-and-forward) read_scope_d8200000000000000000000000000001))
+      (returns (associated-read-view-projection subrange-and-forward implparam_d8200000000000000000000000000001
+        readview-consumer::RangeRead assoc_type_d8100000000000000000000000000001
+        (read-scope (declaration subrange-and-forward) read_scope_d8200000000000000000000000000001))
+        (view-from view (read-scope (declaration subrange-and-forward) read_scope_d8200000000000000000000000000001)))
+      (body (borrow-call
+        (method-call parameter@subrange-and-forward@implparam_d8200000000000000000000000000001
+          readview-consumer::RangeRead method_d8100000000000000000000000000004
+          (scopes (read-scope (declaration subrange-and-forward) read_scope_d8200000000000000000000000000001))
+          (local start) (local end) (local view))
+        (binding refined (type (associated-read-view-projection subrange-and-forward implparam_d8200000000000000000000000000001
+          readview-consumer::RangeRead assoc_type_d8100000000000000000000000000001
+          (read-scope (declaration subrange-and-forward) read_scope_d8200000000000000000000000000001))))
+        (in (view-reborrow (local refined) (read-scope (declaration subrange-and-forward) read_scope_d8200000000000000000000000000001))))))
+    (function create forward-first (visibility public) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_d8200000000000000000000000000003 reader readview-consumer::RangeRead W (types I64))
+      (scope-parameter read_scope_d8200000000000000000000000000003 s)
+      (parameter create first (type (associated-read-view-projection forward-first implparam_d8200000000000000000000000000003
+        readview-consumer::RangeRead assoc_type_d8100000000000000000000000000001
+        (read-scope (declaration forward-first) read_scope_d8200000000000000000000000000003))) (use borrow))
+      (parameter create second (type (associated-read-view-projection forward-first implparam_d8200000000000000000000000000003
+        readview-consumer::RangeRead assoc_type_d8100000000000000000000000000001
+        (read-scope (declaration forward-first) read_scope_d8200000000000000000000000000003))) (use borrow))
+      (scope-source first (read-scope (declaration forward-first) read_scope_d8200000000000000000000000000003))
+      (scope-source second (read-scope (declaration forward-first) read_scope_d8200000000000000000000000000003))
+      (returns (associated-read-view-projection forward-first implparam_d8200000000000000000000000000003
+        readview-consumer::RangeRead assoc_type_d8100000000000000000000000000001
+        (read-scope (declaration forward-first) read_scope_d8200000000000000000000000000003))
+        (view-from first (read-scope (declaration forward-first) read_scope_d8200000000000000000000000000003)))
+      (body (view-reborrow (local first) (read-scope (declaration forward-first) read_scope_d8200000000000000000000000000003))))
+    (function create outer (visibility public) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_d8200000000000000000000000000002 reader readview-consumer::RangeRead W (types I64))
+      (scope-parameter read_scope_d8200000000000000000000000000002 s)
+      (parameter create start (type I64)) (parameter create end (type I64))
+      (parameter create sub_start (type I64)) (parameter create sub_end (type I64))
+      (parameter create storage (type W) (use borrow))
+      (scope-source storage (read-scope (declaration outer) read_scope_d8200000000000000000000000000002))
+      (returns (associated-read-view-projection outer implparam_d8200000000000000000000000000002
+        readview-consumer::RangeRead assoc_type_d8100000000000000000000000000001
+        (read-scope (declaration outer) read_scope_d8200000000000000000000000000002))
+        (view-from storage (read-scope (declaration outer) read_scope_d8200000000000000000000000000002)))
+      (body (borrow-call
+        (method-call parameter@outer@implparam_d8200000000000000000000000000002 readview-consumer::RangeRead method_d8100000000000000000000000000001
+          (scopes (read-scope (declaration outer) read_scope_d8200000000000000000000000000002))
+          (local start) (local end) (local storage))
+        (binding parent (type (associated-read-view-projection outer implparam_d8200000000000000000000000000002
+          readview-consumer::RangeRead assoc_type_d8100000000000000000000000000001
+          (read-scope (declaration outer) read_scope_d8200000000000000000000000000002))))
+        (in (borrow-call
+          (implementation-call subrange-and-forward (types W)
+            (implementations parameter@outer@implparam_d8200000000000000000000000000002)
+            (scopes (read-scope (declaration outer) read_scope_d8200000000000000000000000000002))
+            (local sub_start) (local sub_end) (local parent))
+          (binding child (type (associated-read-view-projection outer implparam_d8200000000000000000000000000002
+            readview-consumer::RangeRead assoc_type_d8100000000000000000000000000001
+            (read-scope (declaration outer) read_scope_d8200000000000000000000000000002))))
+          (in (sequence (view-drop (local parent)) (view-move (local child)))))))))))
+declarations.end

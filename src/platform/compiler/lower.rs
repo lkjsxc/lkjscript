@@ -15,12 +15,14 @@ use crate::platform::change::{
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    BindingKind, BindingRecord, CaseReference, DeclarationPayload, DeclarationRecord,
-    DeclarationReference, ExactOwnerKey, ExpressionOperation, ExpressionRead, ExpressionRecord,
-    FieldReference, FieldSelector, FunctionEffect, LocalValueReference, OperationReference,
-    OwnerKey, OwnerRecord, PackageId, PackageInterfaceRecord, ParameterParent, ParameterUse,
-    PortImplementation, PortReference, RelationEndpoint, RelationKind, RequirementReference,
-    StructuralTypeField, TextValue, TypeForm, TypeObject, TypeObjectDigest, encode_type_object,
+    BindingKind, BindingRecord, CallableResult, CaseReference, DeclarationPayload,
+    DeclarationRecord, DeclarationReference, ExactOwnerKey, ExpressionOperation, ExpressionRead,
+    ExpressionRecord, FieldReference, FieldSelector, FunctionEffect, LocalValueReference,
+    OperationReference, OwnerKey, OwnerRecord, PackageId, PackageInterfaceRecord, ParameterParent,
+    ParameterUse, PortImplementation, PortReference, ReadScopeArgument, ReadScopeBinder,
+    ReadScopeParameter, ReadScopeSource, ReadViewField, ReadViewFieldKind, ReadViewFieldReference,
+    RelationEndpoint, RelationKind, RequirementReference, ResultRelation, StructuralTypeField,
+    TextValue, TypeForm, TypeObject, TypeObjectDigest, encode_type_object,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::semantic_id::{
@@ -36,6 +38,8 @@ struct SignatureGenerics<'a> {
     types: &'a [crate::platform::semantic_id::TypeParameterId],
     effects: &'a [crate::platform::semantic_id::EffectParameterId],
     requirements: &'a [crate::platform::semantic_id::RequirementParameterId],
+    read_scope_parameters: &'a [ReadScopeParameter],
+    read_scope_sources: &'a [ReadScopeSource<ParameterId>],
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -541,6 +545,7 @@ pub(super) fn reconstruct_parallel_result_types<B: CanonicalBaseRead + ?Sized>(
             unit.tables.ports.len(),
             unit.tables.types.len(),
             unit.tables.structural_names.len(),
+            unit.tables.read_view_fields.len(),
             unit.tables.texts.len(),
         ] {
             read.reserve(count)?;
@@ -690,6 +695,21 @@ pub(super) fn reconstruct_parallel_result_types<B: CanonicalBaseRead + ?Sized>(
                 .parallel
                 .reserve::<TypeObjectDigest>(children)?;
             pending.extend(object.child_types());
+            if matches!(&object.form, TypeForm::ReadViewApplied { .. }) {
+                let fields = builder
+                    .read_view_layout(
+                        ty,
+                        crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION,
+                        false,
+                    )?
+                    .fields;
+                read.reserve(fields.len())?;
+                builder
+                    .derived_type_admission
+                    .parallel
+                    .reserve::<TypeObjectDigest>(fields.len())?;
+                pending.extend(fields.into_iter().map(|field| field.ty));
+            }
             if matches!(
                 object.form,
                 TypeForm::Named { .. } | TypeForm::Applied { .. }
@@ -928,6 +948,28 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
         record: DeclarationRecord,
     ) -> Result<CompilationPayload, Diagnostic> {
         match record.payload {
+            DeclarationPayload::ReadView(view) => {
+                let reference = DeclarationReference {
+                    package: self.package,
+                    declaration,
+                };
+                view.validate_local_at(reference)?;
+                let type_parameter_constraints =
+                    self.compile_type_parameter_constraints(declaration, &view.type_parameters)?;
+                self.tables.declaration(reference)?;
+                for field in &view.fields {
+                    self.canonical.code_step()?;
+                    self.tables.ty(field.ty)?;
+                    self.tables.read_view_field(ReadViewFieldReference {
+                        declaration: reference,
+                        field: field.id,
+                    })?;
+                }
+                Ok(CompilationPayload::ReadView {
+                    declaration: view,
+                    type_parameter_constraints,
+                })
+            }
             DeclarationPayload::OwnedContract(c) => {
                 let parameters = std::iter::once(c.self_parameter)
                     .chain(c.type_parameters.iter().copied())
@@ -941,7 +983,7 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
             DeclarationPayload::OwnedImplementation(i) => {
                 self.compile_type_parameter_constraints(declaration, &i.type_parameters)?;
                 for binding in &i.associated_types {
-                    self.tables.ty(binding.ty)?;
+                    self.tables.ty(binding.value.ty())?;
                 }
                 self.tables.declaration(i.contract)?;
                 self.tables.ty(i.self_type)?;
@@ -1054,9 +1096,14 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                         types: &external.type_parameters,
                         effects: &[],
                         requirements: &[],
+                        read_scope_parameters: &[],
+                        read_scope_sources: &[],
                     },
                     &external.parameters,
-                    external.result,
+                    CallableResult {
+                        ty: external.result,
+                        relation: ResultRelation::Value,
+                    },
                     &FunctionEffect::Pure,
                 )?;
                 Ok(CompilationPayload::External {
@@ -1078,13 +1125,14 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                         types: &function.type_parameters,
                         effects: &function.effect_parameters,
                         requirements: &function.requirement_parameters,
+                        read_scope_parameters: &function.read_scope_parameters,
+                        read_scope_sources: &function.read_scope_sources,
                     },
                     &function.parameters,
                     function.result,
                     &function.effect,
                 )?;
                 signature.implementation_parameters = function.implementation_parameters;
-                signature.result_borrow = function.result_borrow;
                 let code = self.compile_code(function.body, &function.parameters)?;
                 Ok(CompilationPayload::Function { signature, code })
             }
@@ -1151,13 +1199,15 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
         declaration: DeclarationId,
         generics: SignatureGenerics<'_>,
         parameters: &[ParameterId],
-        result: TypeObjectDigest,
+        result: CallableResult<ParameterId>,
         effect: &FunctionEffect,
     ) -> Result<CompiledSignature, Diagnostic> {
         let SignatureGenerics {
             types: type_parameters,
             effects: effect_parameters,
             requirements: requirement_parameters,
+            read_scope_parameters,
+            read_scope_sources,
         } = generics;
         let type_parameter_constraints =
             self.compile_type_parameter_constraints(declaration, type_parameters)?;
@@ -1179,6 +1229,35 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                     .transpose()?,
             });
         }
+        crate::platform::kernel::read_view::validate_read_scope_inventory_at(
+            ReadScopeBinder::Declaration(DeclarationReference {
+                package: self.package,
+                declaration,
+            }),
+            read_scope_parameters,
+            read_scope_sources,
+            |source| {
+                compiled_parameters.iter().any(|parameter| {
+                    parameter.parameter == source && parameter.use_mode == ParameterUse::Borrow
+                })
+            },
+        )?;
+        self.derived_type_admission
+            .parallel
+            .reserve::<ReadScopeParameter>(read_scope_parameters.len())?;
+        self.derived_type_admission
+            .parallel
+            .reserve::<ReadScopeSource<ParameterId>>(read_scope_sources.len())?;
+        for parameter in read_scope_parameters {
+            self.canonical.code_step()?;
+            self.derived_type_admission
+                .parallel
+                .reserve_bytes(parameter.name.as_str().len())?;
+        }
+        for source in read_scope_sources {
+            self.canonical.code_step()?;
+            self.tables.declaration(source.scope.declaration())?;
+        }
         let task_requirements = match effect {
             FunctionEffect::Pure => Vec::new(),
             FunctionEffect::Task {
@@ -1198,8 +1277,9 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
             type_parameters: type_parameters.to_vec(),
             type_parameter_constraints,
             parameters: compiled_parameters,
-            result: self.tables.ty(result)?,
-            result_borrow: None,
+            result: result.try_map_type(|ty| self.tables.ty(ty))?,
+            read_scope_parameters: read_scope_parameters.to_vec(),
+            read_scope_sources: read_scope_sources.to_vec(),
             task_requirements,
         })
     }
@@ -1316,6 +1396,7 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
         };
         let implementation = match record.implementation {
             PortImplementation::Function(function) => {
+                self.require_value_callable(function)?;
                 CompiledPortImplementation::Function(self.tables.declaration(function)?)
             }
             PortImplementation::Expression(expression) => {
@@ -1423,6 +1504,9 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
     }
 
     fn complete_owned_record_type_closure(&mut self) -> Result<(), Diagnostic> {
+        self.derived_type_admission
+            .parallel
+            .reserve::<TypeObjectDigest>(self.tables.types.values.len())?;
         let mut pending = self.tables.types.values.clone();
         let mut seen = BTreeSet::new();
         while let Some(ty) = pending.pop() {
@@ -1445,7 +1529,26 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
                         "type closure omits an exact type object",
                     )
                 })?;
+            self.derived_type_admission
+                .parallel
+                .reserve::<TypeObjectDigest>(object.child_type_count())?;
+            self.derived_type_admission
+                .parallel
+                .reserve::<TypeObjectDigest>(object.child_type_count())?;
             pending.extend(object.child_types());
+            if matches!(&object.form, TypeForm::ReadViewApplied { .. }) {
+                let fields = self
+                    .read_view_layout(
+                        ty,
+                        crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION,
+                        false,
+                    )?
+                    .fields;
+                self.derived_type_admission
+                    .parallel
+                    .reserve::<TypeObjectDigest>(fields.len())?;
+                pending.extend(fields.into_iter().map(|field| field.ty));
+            }
             if matches!(
                 object.form,
                 TypeForm::Named { .. } | TypeForm::Applied { .. }
@@ -1484,6 +1587,81 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
             .owner_records_read
             .saturating_add(read.owners.get());
         result
+    }
+
+    fn with_admission_read<T>(
+        &mut self,
+        operation: impl FnOnce(
+            &CodeExpressionRead<'_, B>,
+            &crate::platform::kernel::owned_associated::OwnedAssociatedAdmission,
+        ) -> Result<T, Diagnostic>,
+    ) -> Result<T, Diagnostic> {
+        let read = CodeExpressionRead {
+            canonical: self.canonical,
+            package: self.package,
+            derived: &self.derived_type_objects,
+            work: RefCell::new(CanonicalReadWork::default()),
+            owners: Cell::new(0),
+            parallel_steps: Some(&self.derived_type_admission.parallel_steps),
+        };
+        let result = operation(&read, &self.derived_type_admission.parallel);
+        self.work.canonical.add(read.work.into_inner());
+        self.work.owner_records_read = self
+            .work
+            .owner_records_read
+            .saturating_add(read.owners.get());
+        result
+    }
+
+    fn read_view_layout(
+        &mut self,
+        ty: TypeObjectDigest,
+        generation: u16,
+        require_access: bool,
+    ) -> Result<
+        crate::platform::kernel::owned_associated::read_view_admission::ViewLayout,
+        Diagnostic,
+    > {
+        let caller = self.scope.map(|declaration| DeclarationReference {
+            package: self.package,
+            declaration,
+        });
+        let occurrence = crate::platform::kernel::owned_associated::OwnedTypeOccurrence::authored(
+            caller, generation,
+        );
+        let mut layout = self.with_admission_read(|read, admission| {
+            use crate::platform::kernel::owned_associated::read_view_admission as views;
+            let layout = views::layout(read, ty, occurrence, admission)?;
+            if require_access {
+                views::require_access(
+                    read,
+                    layout.declaration,
+                    caller.ok_or_else(|| {
+                        compiler_corrupt(
+                            "compiler_read_view_scope",
+                            "private read-view access has no exact containing declaration",
+                        )
+                    })?,
+                    admission,
+                )?;
+                views::validate_nominal_at(read, ty, occurrence, admission)?;
+            }
+            Ok(layout)
+        })?;
+        for (digest, object) in std::mem::take(&mut layout.types) {
+            self.canonical.code_step()?;
+            self.retain_derived_type(Some(digest), &object)?;
+        }
+        self.tables.declaration(layout.declaration)?;
+        for field in &layout.fields {
+            self.canonical.code_step()?;
+            self.tables.ty(field.ty)?;
+            self.tables.read_view_field(ReadViewFieldReference {
+                declaration: layout.declaration,
+                field: field.id,
+            })?;
+        }
+        Ok(layout)
     }
 
     fn owned_record_fields(
@@ -1609,27 +1787,20 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
         parameters: &[ParameterId],
     ) -> Result<CompiledCode, Diagnostic> {
         let mut compiler = CodeCompiler::new(self, parameters)?;
-        let borrowed = match compiler.unit.scope {
-            Some(declaration) => matches!(
-                compiler.unit.required_owner(OwnerKey::Declaration(declaration), "compiled return owner")?,
-                OwnerRecord::Declaration(record) if matches!(&record.payload,
-                    DeclarationPayload::Function(function) if function.result_borrow.is_some())
-            ),
-            None => false,
-        };
+        let relation = compiler.return_relation;
         compiler.expression_with_use(
             root,
             0,
-            if borrowed {
+            if matches!(relation, ResultRelation::ReadFrom { .. }) {
                 ParameterUse::Borrow
             } else {
                 ParameterUse::Unrestricted
             },
         )?;
-        compiler.push(if borrowed {
-            CompiledInstruction::ReturnBorrowed
-        } else {
-            CompiledInstruction::Return
+        compiler.push(match relation {
+            ResultRelation::Value => CompiledInstruction::Return,
+            ResultRelation::ReadFrom { .. } => CompiledInstruction::ReturnBorrowed,
+            ResultRelation::ViewFrom { .. } => CompiledInstruction::ReturnView,
         })?;
         Ok(CompiledCode {
             parameter_count: u32_count("compiled parameters", parameters.len())?,
@@ -1903,68 +2074,6 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
             .collect()
     }
 
-    fn function_borrow_position(
-        &mut self,
-        function: DeclarationReference,
-    ) -> Result<u32, Diagnostic> {
-        let (parameters, source) = if function.package == self.package {
-            match self.required_owner(
-                OwnerKey::Declaration(function.declaration),
-                "borrowed call function",
-            )? {
-                OwnerRecord::Declaration(record) => match record.payload {
-                    DeclarationPayload::Function(signature) => {
-                        (signature.parameters, signature.result_borrow)
-                    }
-                    _ => {
-                        return Err(compiler_corrupt(
-                            "compiler_borrow_call",
-                            "borrowed calls require graph functions",
-                        ));
-                    }
-                },
-                _ => {
-                    return Err(compiler_corrupt(
-                        "compiler_borrow_call",
-                        "missing borrowed call declaration",
-                    ));
-                }
-            }
-        } else {
-            match self.exact_package_interface_owner(
-                function.package,
-                OwnerKey::Declaration(function.declaration),
-            )? {
-                PackageInterfaceRecord::Declaration(record) => match record.payload {
-                    crate::platform::kernel::PackageInterfaceDeclarationPayload::Function(
-                        signature,
-                    ) => (signature.parameters, signature.result_borrow),
-                    _ => {
-                        return Err(compiler_corrupt(
-                            "compiler_borrow_call",
-                            "borrowed calls require graph functions",
-                        ));
-                    }
-                },
-                _ => {
-                    return Err(compiler_corrupt(
-                        "compiler_borrow_call",
-                        "missing borrowed call declaration",
-                    ));
-                }
-            }
-        };
-        let position = source
-            .and_then(|source| parameters.iter().position(|p| *p == source))
-            .ok_or_else(|| {
-                compiler_corrupt(
-                    "compiler_borrow_call",
-                    "borrowed call has no exact selected parameter",
-                )
-            })?;
-        u32_count("borrowed result source position", position)
-    }
-
     fn http_function_parameters(
         &mut self,
         function: DeclarationReference,
@@ -1983,9 +2092,11 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
                 OwnerRecord::Declaration(record) => match record.payload {
                     DeclarationPayload::Function(signature)
                         if signature.type_parameters.is_empty()
-                            && signature.effect_parameters.is_empty() =>
+                            && signature.effect_parameters.is_empty()
+                            && signature.read_scope_parameters.is_empty()
+                            && matches!(signature.result.relation, ResultRelation::Value) =>
                     {
-                        (signature.parameters, signature.result)
+                        (signature.parameters, signature.result.ty)
                     }
                     _ => {
                         return Err(compiler_corrupt(
@@ -2010,9 +2121,11 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
                     crate::platform::kernel::PackageInterfaceDeclarationPayload::Function(
                         signature,
                     ) if signature.type_parameters.is_empty()
-                        && signature.effect_parameters.is_empty() =>
+                        && signature.effect_parameters.is_empty()
+                        && signature.read_scope_parameters.is_empty()
+                        && matches!(signature.result.relation, ResultRelation::Value) =>
                     {
-                        (signature.parameters, signature.result)
+                        (signature.parameters, signature.result.ty)
                     }
                     _ => {
                         return Err(compiler_corrupt(
@@ -2043,6 +2156,65 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
             ));
         }
         Ok((records, result))
+    }
+
+    fn require_value_callable(&mut self, function: DeclarationReference) -> Result<(), Diagnostic> {
+        let relation = if function.package == self.package {
+            match self.required_owner(
+                OwnerKey::Declaration(function.declaration),
+                "callable result contract",
+            )? {
+                OwnerRecord::Declaration(record) => match record.payload {
+                    DeclarationPayload::Function(signature) => signature.result.relation,
+                    DeclarationPayload::External(_) => ResultRelation::Value,
+                    _ => {
+                        return Err(compiler_corrupt(
+                            "compiler_callable_kind",
+                            "callable identity has a different exact declaration kind",
+                        ));
+                    }
+                },
+                _ => {
+                    return Err(compiler_corrupt(
+                        "compiler_callable_kind",
+                        "callable identity has a different exact owner kind",
+                    ));
+                }
+            }
+        } else {
+            match self.exact_package_interface_owner(
+                function.package,
+                OwnerKey::Declaration(function.declaration),
+            )? {
+                PackageInterfaceRecord::Declaration(record) => match record.payload {
+                    crate::platform::kernel::PackageInterfaceDeclarationPayload::Function(
+                        signature,
+                    ) => signature.result.relation,
+                    crate::platform::kernel::PackageInterfaceDeclarationPayload::External(_) => {
+                        ResultRelation::Value
+                    }
+                    _ => {
+                        return Err(compiler_corrupt(
+                            "compiler_callable_kind",
+                            "imported callable has a different exact declaration kind",
+                        ));
+                    }
+                },
+                _ => {
+                    return Err(compiler_corrupt(
+                        "compiler_callable_kind",
+                        "imported callable has a different exact owner kind",
+                    ));
+                }
+            }
+        };
+        if !matches!(relation, ResultRelation::Value) {
+            return Err(compiler_corrupt(
+                "compiler_callable_result",
+                "first-class and component callables require a Value result contract",
+            ));
+        }
+        Ok(())
     }
 
     fn case_payload_is_resource(&mut self, reference: CaseReference) -> Result<bool, Diagnostic> {
@@ -2101,6 +2273,10 @@ struct CodeCompiler<'a, 'b, B: ?Sized> {
     next_local: u32,
     active: BTreeSet<ExpressionId>,
     compiled: BTreeSet<ExpressionId>,
+    live_loans: BTreeSet<BindingId>,
+    read_scope_order: Vec<BindingId>,
+    function_scope: Option<(DeclarationReference, u16)>,
+    return_relation: ResultRelation<ParameterId>,
 }
 
 impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
@@ -2108,6 +2284,28 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         unit: &'a mut UnitBuilder<'b, B>,
         parameters: &[ParameterId],
     ) -> Result<Self, Diagnostic> {
+        let (function_scope, return_relation) = match unit.scope {
+            Some(declaration) => match unit.required_owner(
+                OwnerKey::Declaration(declaration),
+                "compiled callable owner",
+            )? {
+                OwnerRecord::Declaration(record) => match record.payload {
+                    DeclarationPayload::Function(function) => (
+                        Some((
+                            DeclarationReference {
+                                package: unit.package,
+                                declaration,
+                            },
+                            record.header.contract_version,
+                        )),
+                        function.result.relation,
+                    ),
+                    _ => (None, ResultRelation::Value),
+                },
+                _ => (None, ResultRelation::Value),
+            },
+            None => (None, ResultRelation::Value),
+        };
         let mut compiler = Self {
             unit,
             instructions: Vec::new(),
@@ -2115,6 +2313,10 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
             next_local: 0,
             active: BTreeSet::new(),
             compiled: BTreeSet::new(),
+            live_loans: BTreeSet::new(),
+            read_scope_order: Vec::new(),
+            function_scope,
+            return_relation,
         };
         for parameter in parameters {
             compiler.bind(LocalValueReference::FunctionParameter(*parameter))?;
@@ -2141,6 +2343,194 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         Ok(())
     }
 
+    fn application_scopes(&mut self, scopes: &[ReadScopeArgument]) -> Result<(), Diagnostic> {
+        self.application_scopes_with_prospective(scopes, None)
+    }
+
+    fn application_scopes_with_prospective(
+        &mut self,
+        scopes: &[ReadScopeArgument],
+        prospective: Option<BindingId>,
+    ) -> Result<(), Diagnostic> {
+        let caller = self.function_scope.map(|(reference, _)| reference);
+        let mut prospective_loans = None;
+        if let Some(binding) = prospective {
+            self.unit
+                .derived_type_admission
+                .parallel
+                .reserve::<BindingId>(self.live_loans.len().saturating_add(1))?;
+            let mut loans = self.live_loans.clone();
+            if !loans.insert(binding) {
+                return Err(compiler_corrupt(
+                    "compiler_read_view_scope",
+                    "prospective invocation scope is already live",
+                ));
+            }
+            prospective_loans = Some(loans);
+        }
+        let live_loans = prospective_loans.as_ref().unwrap_or(&self.live_loans);
+        self.unit.with_admission_read(|read, admission| {
+            let authority =
+                crate::platform::kernel::owned_associated::read_view_admission::ScopeAuthority {
+                    binder: caller.map(ReadScopeBinder::Declaration),
+                    lexical: caller,
+                    live_loans,
+                };
+            for scope in scopes {
+                authority.validate(read, *scope, admission)?;
+            }
+            Ok(())
+        })?;
+        for scope in scopes {
+            self.unit.canonical.code_step()?;
+            self.unit.tables.declaration(scope.declaration())?;
+        }
+        Ok(())
+    }
+
+    fn local_slot(
+        &mut self,
+        value: LocalValueReference,
+    ) -> Result<(u32, TypeObjectDigest), Diagnostic> {
+        let local = self.locals.get(&value).copied().ok_or_else(|| {
+            compiler_corrupt(
+                "compiler_read_view_source",
+                "explicit source is outside the exact compiled lexical scope",
+            )
+        })?;
+        let ty = match value {
+            LocalValueReference::FunctionParameter(parameter) => {
+                let scope = self.unit.scope.ok_or_else(|| {
+                    compiler_corrupt(
+                        "compiler_read_view_source",
+                        "source parameter has no containing callable",
+                    )
+                })?;
+                self.unit
+                    .required_parameter(
+                        parameter,
+                        ParameterParent::Function(scope),
+                        "explicit read source",
+                    )?
+                    .ty
+            }
+            LocalValueReference::LexicalBinding(binding)
+            | LocalValueReference::MatchPayload(binding) => {
+                match self
+                    .unit
+                    .required_owner(OwnerKey::Binding(binding), "explicit read source binding")?
+                {
+                    OwnerRecord::Binding(record) => record.declared_type.ok_or_else(|| {
+                        compiler_corrupt(
+                            "compiler_read_view_source",
+                            "explicit source requires an exact type annotation",
+                        )
+                    })?,
+                    _ => {
+                        return Err(compiler_corrupt(
+                            "compiler_read_view_source",
+                            "explicit source has a different exact owner kind",
+                        ));
+                    }
+                }
+            }
+            _ => {
+                return Err(compiler_corrupt(
+                    "compiler_read_view_source",
+                    "explicit source has no callable or lexical carrier",
+                ));
+            }
+        };
+        self.unit.tables.ty(ty)?;
+        Ok((local, ty))
+    }
+
+    fn view_scope(
+        &mut self,
+        ty: TypeObjectDigest,
+        generation: u16,
+    ) -> Result<ReadScopeArgument, Diagnostic> {
+        let caller = self.function_scope.map(|(reference, _)| reference);
+        let occurrence = crate::platform::kernel::owned_associated::OwnedTypeOccurrence::authored(
+            caller, generation,
+        );
+        let scope = self.unit.with_admission_read(|read, admission| {
+            if !crate::platform::kernel::memory::view_at(read, ty, occurrence, admission)? {
+                return Err(compiler_corrupt(
+                    "compiler_read_view_type",
+                    "operation requires the positive ReadView category",
+                ));
+            }
+            let object = read.type_object(ty)?.ok_or_else(|| {
+                compiler_corrupt("compiler_read_view_type", "missing exact read-view type")
+            })?;
+            match object.form {
+                TypeForm::ReadViewApplied { read_scope, .. }
+                | TypeForm::AssociatedReadViewMember { read_scope, .. }
+                | TypeForm::AssociatedReadViewProjection { read_scope, .. } => Ok(read_scope),
+                _ => Err(compiler_corrupt(
+                    "compiler_read_view_type",
+                    "view category has no exact symbolic scope",
+                )),
+            }
+        })?;
+        self.application_scopes(std::slice::from_ref(&scope))?;
+        Ok(scope)
+    }
+
+    fn prove_reborrow_scope(
+        &mut self,
+        parent: ReadScopeArgument,
+        child: ReadScopeArgument,
+    ) -> Result<(), Diagnostic> {
+        let caller = self.function_scope.map(|(reference, _)| reference);
+        let live_loans = &self.live_loans;
+        let order = &self.read_scope_order;
+        self.unit.with_admission_read(|read, admission| {
+            crate::platform::kernel::owned_associated::read_view_admission::prove_reborrow_scope(
+                read,
+                parent,
+                child,
+                crate::platform::kernel::owned_associated::read_view_admission::ScopeAuthority {
+                    binder: caller.map(ReadScopeBinder::Declaration),
+                    lexical: caller,
+                    live_loans,
+                },
+                order,
+                admission,
+            )
+        })
+    }
+
+    fn view_field(
+        &mut self,
+        value: LocalValueReference,
+        reference: ReadViewFieldReference,
+        generation: u16,
+    ) -> Result<(u32, u32, u32, ReadViewField), Diagnostic> {
+        let (source_local, ty) = self.local_slot(value)?;
+        self.view_scope(ty, generation)?;
+        let layout = self.unit.read_view_layout(ty, generation, true)?;
+        if layout.declaration != reference.declaration {
+            return Err(compiler_corrupt(
+                "compiler_read_view_field",
+                "inline field names another exact read-view declaration",
+            ));
+        }
+        for field in layout.fields {
+            self.unit.canonical.code_step()?;
+            if field.id == reference.field {
+                let view_type = self.unit.tables.ty(ty)?;
+                let relocation = self.unit.tables.read_view_field(reference)?;
+                return Ok((source_local, view_type, relocation, field));
+            }
+        }
+        Err(compiler_corrupt(
+            "compiler_read_view_field",
+            "inline field is outside the complete exact declaration inventory",
+        ))
+    }
+
     fn local_is_memory(&mut self, value: LocalValueReference) -> Result<bool, Diagnostic> {
         let key = match value {
             LocalValueReference::FunctionParameter(p) => Some(OwnerKey::Parameter(p)),
@@ -2165,11 +2555,64 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         }
     }
 
+    fn local_is_view(&mut self, value: LocalValueReference) -> Result<bool, Diagnostic> {
+        let key = match value {
+            LocalValueReference::FunctionParameter(parameter) => OwnerKey::Parameter(parameter),
+            LocalValueReference::LexicalBinding(binding)
+            | LocalValueReference::MatchPayload(binding) => OwnerKey::Binding(binding),
+            _ => return Ok(false),
+        };
+        let ty = match self.unit.required_owner(key, "local read-view category")? {
+            OwnerRecord::Parameter(parameter) => Some(parameter.ty),
+            OwnerRecord::Binding(binding) => {
+                if matches!(
+                    binding.kind,
+                    BindingKind::ReadView | BindingKind::ReadViewBorrow
+                ) && binding.declared_type.is_none()
+                {
+                    return Err(compiler_corrupt(
+                        "compiler_read_view_type",
+                        "view local omits its exact annotation",
+                    ));
+                }
+                binding.declared_type
+            }
+            _ => {
+                return Err(compiler_corrupt(
+                    "compiler_local_type",
+                    "local type points to a different exact owner kind",
+                ));
+            }
+        };
+        match ty {
+            Some(ty) => self.unit.with_expression_read(|read| {
+                let object = read.type_object(ty)?.ok_or_else(|| {
+                    compiler_corrupt(
+                        "compiler_local_type",
+                        "local annotation omits its exact type object",
+                    )
+                })?;
+                Ok(object.form.is_read_view())
+            }),
+            None => Ok(false),
+        }
+    }
+
     fn expression_with_use(
         &mut self,
         expression: ExpressionId,
         depth: usize,
         use_mode: ParameterUse,
+    ) -> Result<(), Diagnostic> {
+        self.expression_with_prospective_scope(expression, depth, use_mode, None)
+    }
+
+    fn expression_with_prospective_scope(
+        &mut self,
+        expression: ExpressionId,
+        depth: usize,
+        use_mode: ParameterUse,
+        prospective: Option<BindingId>,
     ) -> Result<(), Diagnostic> {
         let record = self.begin_expression(expression, depth)?;
         let result = self.operation(
@@ -2177,6 +2620,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
             record.contract_version,
             depth + 1,
             use_mode,
+            prospective,
         );
         self.active.remove(&expression);
         result
@@ -2243,36 +2687,49 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
     ) -> Result<parallel_lower::Child, Diagnostic> {
         let record = self.begin_expression(expression, depth)?;
         let result = (|| {
-            let (function, arguments, type_arguments, implementations) = match record.operation {
-                ExpressionOperation::Call {
-                    function,
-                    arguments,
-                    type_arguments,
-                    effect_arguments,
-                    requirement_arguments,
-                } if effect_arguments.is_empty() && requirement_arguments.is_empty() => {
-                    (function, arguments, type_arguments, Vec::new())
-                }
-                ExpressionOperation::ImplementationCall {
-                    function,
-                    arguments,
-                    type_arguments,
-                    implementations,
-                    effect_arguments,
-                    requirement_arguments,
-                } if effect_arguments.is_empty() && requirement_arguments.is_empty() => {
-                    (function, arguments, type_arguments, implementations)
-                }
-                _ => {
-                    return Err(compiler_corrupt(
-                        "compiler_parallel_call",
-                        "parallel child must be a closed named call",
-                    ));
-                }
-            };
-            let admitted = self
-                .unit
-                .parallel_call_contract(expression, wrapper_generation)?;
+            let (function, arguments, type_arguments, implementations, read_scope_arguments) =
+                match record.operation {
+                    ExpressionOperation::Call {
+                        function,
+                        arguments,
+                        type_arguments,
+                        effect_arguments,
+                        requirement_arguments,
+                        read_scope_arguments,
+                    } if effect_arguments.is_empty() && requirement_arguments.is_empty() => (
+                        function,
+                        arguments,
+                        type_arguments,
+                        Vec::new(),
+                        read_scope_arguments,
+                    ),
+                    ExpressionOperation::ImplementationCall {
+                        function,
+                        arguments,
+                        type_arguments,
+                        implementations,
+                        effect_arguments,
+                        requirement_arguments,
+                        read_scope_arguments,
+                    } if effect_arguments.is_empty() && requirement_arguments.is_empty() => (
+                        function,
+                        arguments,
+                        type_arguments,
+                        implementations,
+                        read_scope_arguments,
+                    ),
+                    _ => {
+                        return Err(compiler_corrupt(
+                            "compiler_parallel_call",
+                            "parallel child must be a closed named call",
+                        ));
+                    }
+                };
+            let admitted = self.unit.parallel_call_contract(
+                expression,
+                wrapper_generation,
+                &self.live_loans,
+            )?;
             if admitted.function != function || admitted.arguments != arguments {
                 return Err(compiler_corrupt(
                     "compiler_parallel_call",
@@ -2304,6 +2761,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 result_owned: admitted.result_owned,
                 types,
                 implementations,
+                read_scope_arguments,
             })
         })();
         self.active.remove(&expression);
@@ -2316,8 +2774,312 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         consumer_generation: u16,
         depth: usize,
         use_mode: ParameterUse,
+        prospective: Option<BindingId>,
     ) -> Result<(), Diagnostic> {
         match operation {
+            ExpressionOperation::CreateReadView {
+                declaration,
+                type_arguments,
+                read_scope,
+                source,
+                fields,
+            } => {
+                let (source_local, source_type) = self.local_slot(source)?;
+                let caller = self.function_scope.map(|(reference, _)| reference);
+                let occurrence =
+                    crate::platform::kernel::owned_associated::OwnedTypeOccurrence::authored(
+                        caller,
+                        consumer_generation,
+                    );
+                let source_is_view = self.unit.with_admission_read(|read, admission| {
+                    let view = crate::platform::kernel::memory::view_at(
+                        read,
+                        source_type,
+                        occurrence,
+                        admission,
+                    )?;
+                    if !view
+                        && !crate::platform::kernel::memory::direct_at(
+                            read,
+                            source_type,
+                            occurrence,
+                            admission,
+                        )?
+                    {
+                        return Err(compiler_corrupt(
+                            "compiler_read_view_source",
+                            "constructor source has neither Owned nor positive ReadView category",
+                        ));
+                    }
+                    Ok(view)
+                })?;
+                self.application_scopes(std::slice::from_ref(&read_scope))?;
+                if source_is_view {
+                    let parent = self.view_scope(source_type, consumer_generation)?;
+                    self.prove_reborrow_scope(parent, read_scope)?;
+                }
+                let object = TypeObject::new(TypeForm::ReadViewApplied {
+                    declaration,
+                    arguments: type_arguments,
+                    read_scope,
+                })?;
+                let ty = self.unit.retain_derived_type(None, &object)?;
+                let layout = self.unit.read_view_layout(ty, consumer_generation, true)?;
+                if layout.fields.len() != fields.len() {
+                    return Err(compiler_corrupt(
+                        "compiler_read_view_field",
+                        "constructor must initialize the complete exact inline field inventory",
+                    ));
+                }
+                self.unit
+                    .derived_type_admission
+                    .parallel
+                    .reserve::<(FieldId, ReadViewField)>(layout.fields.len())?;
+                self.unit
+                    .derived_type_admission
+                    .parallel
+                    .reserve::<u32>(fields.len())?;
+                self.unit
+                    .derived_type_admission
+                    .parallel
+                    .reserve::<u32>(fields.len())?;
+                let mut expected = BTreeMap::new();
+                for field in layout.fields {
+                    self.unit.canonical.code_step()?;
+                    if expected.insert(field.id, field).is_some() {
+                        return Err(compiler_corrupt(
+                            "compiler_read_view_field",
+                            "canonical view layout repeats an inline field identity",
+                        ));
+                    }
+                }
+                let mut relocations = Vec::with_capacity(fields.len());
+                for initializer in &fields {
+                    self.unit.canonical.code_step()?;
+                    if !expected.contains_key(&initializer.field) {
+                        return Err(compiler_corrupt(
+                            "compiler_read_view_field",
+                            "constructor names a foreign inline field",
+                        ));
+                    }
+                    relocations.push(self.unit.tables.read_view_field(ReadViewFieldReference {
+                        declaration,
+                        field: initializer.field,
+                    })?);
+                }
+                let view_type = self.unit.tables.ty(ty)?;
+                // The explicit source is protected even for a zero-field view.
+                self.push(CompiledInstruction::BeginReadView {
+                    view_type,
+                    source_local,
+                    fields: relocations.clone(),
+                })?;
+                for initializer in fields {
+                    self.unit.canonical.code_step()?;
+                    let field = expected.remove(&initializer.field).ok_or_else(|| {
+                        compiler_corrupt(
+                            "compiler_read_view_field",
+                            "constructor repeats an exact inline field",
+                        )
+                    })?;
+                    let use_mode = match field.kind {
+                        ReadViewFieldKind::Ordinary => ParameterUse::Unrestricted,
+                        ReadViewFieldKind::ReadReference {
+                            read_scope: field_scope,
+                        } => {
+                            if field_scope != read_scope {
+                                return Err(compiler_corrupt(
+                                    "compiler_read_view_scope",
+                                    "reference initializer changes its exact instantiated scope",
+                                ));
+                            }
+                            ParameterUse::Borrow
+                        }
+                    };
+                    self.expression_with_use(initializer.value, depth, use_mode)?;
+                }
+                if !expected.is_empty() {
+                    return Err(compiler_corrupt(
+                        "compiler_read_view_field",
+                        "constructor omits an exact inline field",
+                    ));
+                }
+                self.push(CompiledInstruction::FinishReadView {
+                    view_type,
+                    fields: relocations,
+                })?;
+            }
+            ExpressionOperation::BorrowReadView {
+                value,
+                binding,
+                body,
+            } => {
+                let (source_local, ty) = self.local_slot(value)?;
+                self.view_scope(ty, consumer_generation)?;
+                let view_type = self.unit.tables.ty(ty)?;
+                let (reference, binding_local, binding_type) =
+                    self.scoped_read_binding(binding, ty, BindingKind::ReadViewBorrow)?;
+                self.push(CompiledInstruction::BorrowReadView {
+                    view_type,
+                    source_local,
+                    binding_local,
+                    binding_type,
+                })?;
+                let loan_scope = self.begin_loan_scope(binding)?;
+                self.expression_with_use(body, depth, use_mode)?;
+                self.end_loan_scope(loan_scope)?;
+                self.push(CompiledInstruction::EndReadViewBorrow { binding_local })?;
+                self.unbind(reference);
+            }
+            ExpressionOperation::ReborrowReadView { value, read_scope } => {
+                let (source_local, ty) = self.local_slot(value)?;
+                let parent = self.view_scope(ty, consumer_generation)?;
+                self.prove_reborrow_scope(parent, read_scope)?;
+                let source = self
+                    .unit
+                    .with_expression_read(|read| read.type_object(ty))?
+                    .ok_or_else(|| {
+                        compiler_corrupt(
+                            "compiler_read_view_type",
+                            "reborrow source omits its exact type",
+                        )
+                    })?;
+                let form = match source.form {
+                    TypeForm::ReadViewApplied {
+                        declaration,
+                        arguments,
+                        ..
+                    } => TypeForm::ReadViewApplied {
+                        declaration,
+                        arguments,
+                        read_scope,
+                    },
+                    TypeForm::AssociatedReadViewMember {
+                        contract, member, ..
+                    } => TypeForm::AssociatedReadViewMember {
+                        contract,
+                        member,
+                        read_scope,
+                    },
+                    TypeForm::AssociatedReadViewProjection {
+                        scope,
+                        parameter,
+                        contract,
+                        member,
+                        ..
+                    } => TypeForm::AssociatedReadViewProjection {
+                        scope,
+                        parameter,
+                        contract,
+                        member,
+                        read_scope,
+                    },
+                    _ => {
+                        return Err(compiler_corrupt(
+                            "compiler_read_view_type",
+                            "reborrow source has no positive ReadView shape",
+                        ));
+                    }
+                };
+                let result = self
+                    .unit
+                    .retain_derived_type(None, &TypeObject::new(form)?)?;
+                self.view_scope(result, consumer_generation)?;
+                let view_type = self.unit.tables.ty(result)?;
+                self.push(CompiledInstruction::ReborrowReadView {
+                    view_type,
+                    source_local,
+                })?;
+            }
+            ExpressionOperation::MoveReadView { value }
+            | ExpressionOperation::DropReadView { value } => {
+                let LocalValueReference::LexicalBinding(binding) = value else {
+                    return Err(compiler_corrupt(
+                        "compiler_read_view_source",
+                        "view move and drop require an owning lexical descriptor",
+                    ));
+                };
+                self.binding(binding, BindingKind::ReadView)?;
+                let (source_local, ty) = self.local_slot(value)?;
+                self.view_scope(ty, consumer_generation)?;
+                let view_type = self.unit.tables.ty(ty)?;
+                self.push(
+                    if matches!(operation, ExpressionOperation::MoveReadView { .. }) {
+                        CompiledInstruction::MoveReadView {
+                            view_type,
+                            source_local,
+                        }
+                    } else {
+                        CompiledInstruction::DropReadView {
+                            view_type,
+                            source_local,
+                        }
+                    },
+                )?;
+            }
+            ExpressionOperation::ReadViewDataField { value, field } => {
+                let (source_local, view_type, field, selected) =
+                    self.view_field(value, field, consumer_generation)?;
+                if selected.kind != ReadViewFieldKind::Ordinary {
+                    return Err(compiler_corrupt(
+                        "compiler_read_view_field",
+                        "data projection names a read-reference field",
+                    ));
+                }
+                self.push(CompiledInstruction::ReadViewDataField {
+                    view_type,
+                    source_local,
+                    field,
+                })?;
+            }
+            ExpressionOperation::BorrowReadViewField {
+                value,
+                field,
+                binding,
+                body,
+            } => {
+                let (source_local, view_type, field, selected) =
+                    self.view_field(value, field, consumer_generation)?;
+                if !matches!(selected.kind, ReadViewFieldKind::ReadReference { .. }) {
+                    return Err(compiler_corrupt(
+                        "compiler_read_view_field",
+                        "reference borrowing names an ordinary data field",
+                    ));
+                }
+                let caller = self.function_scope.map(|(reference, _)| reference);
+                let occurrence =
+                    crate::platform::kernel::owned_associated::OwnedTypeOccurrence::authored(
+                        caller,
+                        consumer_generation,
+                    );
+                let view = self.unit.with_admission_read(|read, admission| {
+                    crate::platform::kernel::memory::view_at(
+                        read,
+                        selected.ty,
+                        occurrence,
+                        admission,
+                    )
+                })?;
+                let kind = if view {
+                    BindingKind::ReadViewBorrow
+                } else {
+                    BindingKind::OwnedBorrow
+                };
+                let (reference, binding_local, binding_type) =
+                    self.scoped_read_binding(binding, selected.ty, kind)?;
+                self.push(CompiledInstruction::BorrowReadViewField {
+                    view_type,
+                    source_local,
+                    field,
+                    binding_local,
+                    binding_type,
+                })?;
+                let loan_scope = self.begin_loan_scope(binding)?;
+                self.expression_with_use(body, depth, use_mode)?;
+                self.end_loan_scope(loan_scope)?;
+                self.push(CompiledInstruction::EndReadViewBorrow { binding_local })?;
+                self.unbind(reference);
+            }
             ExpressionOperation::SequenceEmpty { sequence_type } => {
                 self.sequence_item_type(sequence_type)?;
                 let sequence_type = self.unit.tables.ty(sequence_type)?;
@@ -2474,54 +3236,73 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                         ));
                     }
                 };
-                let (source_position, arguments) = match operation {
-                    ExpressionOperation::Call {
-                        function,
-                        arguments,
-                        ..
-                    }
-                    | ExpressionOperation::ImplementationCall {
-                        function,
-                        arguments,
-                        ..
-                    } => (self.unit.function_borrow_position(function)?, arguments),
-                    ExpressionOperation::MethodCall {
-                        contract,
-                        method,
-                        arguments,
-                        ..
-                    } => {
-                        let signature = self.unit.owned_method(contract, method)?;
-                        (
-                            signature.result_borrow.ok_or_else(|| {
-                                compiler_corrupt(
-                                    "compiler_borrow_call",
-                                    "method has no borrowed result",
-                                )
-                            })?,
-                            arguments,
-                        )
-                    }
+                let arguments = match operation {
+                    ExpressionOperation::Call { arguments, .. }
+                    | ExpressionOperation::ImplementationCall { arguments, .. }
+                    | ExpressionOperation::MethodCall { arguments, .. } => arguments,
                     _ => {
                         return Err(compiler_corrupt(
                             "compiler_borrow_call",
-                            "borrowed invocation requires an exact call",
+                            "borrowed invocation requires an exact named call",
                         ));
                     }
                 };
-                let source = *arguments.get(source_position as usize).ok_or_else(|| {
-                    compiler_corrupt("compiler_borrow_call", "selected source argument is absent")
+                let scope = self.unit.scope;
+                let caller = self.function_scope.map(|(reference, _)| reference);
+                let own_scope = self.admitted_lexical_scope(binding)?;
+                self.unit
+                    .derived_type_admission
+                    .parallel
+                    .reserve::<BindingId>(
+                        self.live_loans
+                            .len()
+                            .saturating_add(usize::from(own_scope.is_some())),
+                    )?;
+                let mut invocation_loans = self.live_loans.clone();
+                if own_scope.is_some() && !invocation_loans.insert(binding) {
+                    return Err(compiler_corrupt(
+                        "compiler_read_view_scope",
+                        "borrowed invocation repeats an already live exact scope",
+                    ));
+                }
+                let invocation = self.unit.with_admission_read(|read, admission| {
+                    crate::platform::kernel::memory::borrow_invocation_at_with_scope_authority(
+                        read, call, scope,
+                        crate::platform::kernel::owned_associated::read_view_admission::ScopeAuthority {
+                            binder: caller.map(ReadScopeBinder::Declaration), lexical: caller, live_loans: &invocation_loans,
+                        }, admission,
+                    )
                 })?;
-                let value = match self
-                    .unit
-                    .required_owner(OwnerKey::Expression(source), "borrowed source argument")?
-                {
+                if invocation.result.relation.source().copied() != Some(invocation.source) {
+                    return Err(compiler_corrupt(
+                        "compiler_borrow_call",
+                        "borrowed application changed its selected source",
+                    ));
+                }
+                let position = arguments
+                    .iter()
+                    .position(|argument| *argument == invocation.source)
+                    .ok_or_else(|| {
+                        compiler_corrupt(
+                            "compiler_borrow_call",
+                            "selected source is outside the exact argument inventory",
+                        )
+                    })?;
+                let source_position = u32_count("borrowed result source position", position)?;
+                for (digest, object) in invocation.types {
+                    self.unit.canonical.code_step()?;
+                    self.unit.retain_derived_type(Some(digest), &object)?;
+                }
+                let source = match self.unit.required_owner(
+                    OwnerKey::Expression(invocation.source),
+                    "borrowed source argument",
+                )? {
                     OwnerRecord::Expression(record) => match record.operation {
                         ExpressionOperation::Local { value } => value,
                         _ => {
                             return Err(compiler_corrupt(
                                 "compiler_borrow_source",
-                                "borrowed result source must be a local",
+                                "borrowed result source must be an exact local",
                             ));
                         }
                     },
@@ -2532,26 +3313,43 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                         ));
                     }
                 };
-                let source_local = self.locals.get(&value).copied().ok_or_else(|| {
-                    compiler_corrupt(
-                        "compiler_borrow_source",
-                        "borrowed result source is outside scope",
-                    )
-                })?;
-                let record = self.binding(binding, BindingKind::OwnedBorrow)?;
-                let ty = record.declared_type.ok_or_else(|| {
-                    compiler_corrupt(
+                let (source_local, source_type) = self.local_slot(source)?;
+                if source_type != invocation.source_type {
+                    return Err(compiler_corrupt(
+                        "compiler_borrow_source_type",
+                        "selected local differs from the complete applied source type",
+                    ));
+                }
+                let view_result =
+                    matches!(invocation.result.relation, ResultRelation::ViewFrom { .. });
+                let kind = if view_result {
+                    BindingKind::ReadView
+                } else {
+                    BindingKind::OwnedBorrow
+                };
+                let destination = self.binding(binding, kind)?;
+                if destination.value.is_some()
+                    || destination.declared_type != Some(invocation.result.ty)
+                {
+                    return Err(compiler_corrupt(
                         "compiler_borrow_binding",
-                        "borrowed call binding requires an exact type",
-                    )
-                })?;
-                // Preserve complete authored argument evaluation before entering the handoff.
-                self.expression(call, depth)?;
-                let invocation = self.instructions.pop().ok_or_else(|| {
+                        "borrowed result requires its exact applied annotation and no initializer",
+                    ));
+                }
+                if let Some(read_scope) = own_scope {
+                    self.push(CompiledInstruction::BeginReadViewScope { read_scope })?;
+                }
+                self.expression_with_prospective_scope(
+                    call,
+                    depth,
+                    ParameterUse::Unrestricted,
+                    own_scope.map(|_| binding),
+                )?;
+                let terminal = self.instructions.pop().ok_or_else(|| {
                     compiler_corrupt("compiler_borrow_call", "missing call instruction")
                 })?;
                 if !matches!(
-                    invocation,
+                    terminal,
                     CompiledInstruction::Call { .. }
                         | CompiledInstruction::ImplementationCall { .. }
                         | CompiledInstruction::MethodCall { .. }
@@ -2561,20 +3359,35 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                         "borrowed invocation has no exact call terminal",
                     ));
                 }
-                let (reference, binding_local, binding_type) = self.borrow_binding(binding, ty)?;
+                let (reference, binding_local, binding_type) =
+                    self.scoped_read_binding(binding, invocation.result.ty, kind)?;
                 self.push(CompiledInstruction::BeginBorrowCall {
                     source_local,
                     source_position,
                 })?;
-                self.push(invocation)?;
-                self.push(CompiledInstruction::AdoptBorrowResult {
-                    source_local,
-                    binding_local,
-                    binding_type,
+                self.push(terminal)?;
+                self.push(if view_result {
+                    CompiledInstruction::AdoptViewResult {
+                        source_local,
+                        binding_local,
+                        binding_type,
+                    }
+                } else {
+                    CompiledInstruction::AdoptBorrowResult {
+                        source_local,
+                        binding_local,
+                        binding_type,
+                    }
                 })?;
                 self.expression_with_use(body, depth, use_mode)?;
-                self.push(CompiledInstruction::EndOwnedBorrow { binding_local })?;
-                self.locals.remove(&reference);
+                if view_result {
+                    self.clear_owning_local(binding_local)?;
+                }
+                self.end_loan_scope(own_scope)?;
+                if !view_result {
+                    self.push(CompiledInstruction::EndOwnedBorrow { binding_local })?;
+                }
+                self.unbind(reference);
             }
             ExpressionOperation::BorrowOwnedItem {
                 sequence_type,
@@ -2595,9 +3408,11 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     binding_local,
                     binding_type,
                 })?;
+                let loan_scope = self.begin_loan_scope(binding)?;
                 self.expression_with_use(body, depth, use_mode)?;
+                self.end_loan_scope(loan_scope)?;
                 self.push(CompiledInstruction::EndOwnedBorrow { binding_local })?;
-                self.locals.remove(&reference);
+                self.unbind(reference);
             }
             ExpressionOperation::BorrowOwnedRecordField {
                 record_type,
@@ -2627,9 +3442,11 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     binding_local,
                     binding_type,
                 })?;
+                let loan_scope = self.begin_loan_scope(binding)?;
                 self.expression_with_use(body, depth, use_mode)?;
+                self.end_loan_scope(loan_scope)?;
                 self.push(CompiledInstruction::EndOwnedBorrow { binding_local })?;
-                self.locals.remove(&reference);
+                self.unbind(reference);
             }
             ExpressionOperation::BorrowOwnedField {
                 product_type,
@@ -2670,9 +3487,11 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     binding_local,
                     binding_type,
                 })?;
+                let loan_scope = self.begin_loan_scope(binding)?;
                 self.expression_with_use(body, depth, use_mode)?;
+                self.end_loan_scope(loan_scope)?;
                 self.push(CompiledInstruction::EndOwnedBorrow { binding_local })?;
-                self.locals.remove(&reference);
+                self.unbind(reference);
             }
             ExpressionOperation::MatchBorrowedOwned {
                 choice_type,
@@ -2716,9 +3535,11 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     let target = self.next_instruction()?;
                     let (reference, binding_local, binding_type) =
                         self.borrow_binding(arm.binding, expected.ty)?;
+                    let loan_scope = self.begin_loan_scope(arm.binding)?;
                     self.expression_with_use(arm.body, depth, use_mode)?;
+                    self.end_loan_scope(loan_scope)?;
                     self.push(CompiledInstruction::EndOwnedBorrow { binding_local })?;
-                    self.locals.remove(&reference);
+                    self.unbind(reference);
                     cases.push(super::unit::CompiledBorrowedOwnedChoiceJump {
                         target,
                         binding_local,
@@ -2749,10 +3570,12 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     left_arguments: left.arguments,
                     left_types: left.types,
                     left_implementations: left.implementations,
+                    left_read_scope_arguments: left.read_scope_arguments,
                     right: right.function,
                     right_arguments: right.arguments,
                     right_types: right.types,
                     right_implementations: right.implementations,
+                    right_read_scope_arguments: right.read_scope_arguments,
                     result_type,
                 })?;
             }
@@ -2806,7 +3629,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     self.expression_with_use(arm.body, depth, use_mode)?;
                     self.push(CompiledInstruction::Unit)?;
                     self.push(CompiledInstruction::StoreLocal(binding_local))?;
-                    self.locals.remove(&reference);
+                    self.unbind(reference);
                     cases.push(super::unit::CompiledOwnedChoiceJump {
                         target,
                         binding_local,
@@ -2995,6 +3818,12 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                         "validated exact local reference is outside the compiled lexical scope",
                     )
                 })?;
+                if self.local_is_view(value)? && use_mode != ParameterUse::Borrow {
+                    return Err(compiler_corrupt(
+                        "compiler_read_view_move",
+                        "ordinary local evaluation cannot copy or implicitly move a view descriptor",
+                    ));
+                }
                 let memory = self.local_is_memory(value)?;
                 let use_mode = if memory && use_mode == ParameterUse::Unrestricted {
                     ParameterUse::Consume
@@ -3010,6 +3839,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     effect_arguments: Vec::new(),
                     function,
                     type_arguments: Vec::new(),
+                    read_scope_arguments: Vec::new(),
                     arguments: 0,
                 })?;
             }
@@ -3030,9 +3860,72 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 self.instructions[jump as usize] = CompiledInstruction::Jump(end);
             }
             ExpressionOperation::Let { bindings, body } => {
+                self.unit
+                    .derived_type_admission
+                    .parallel
+                    .reserve::<(BindingId, ReadScopeArgument)>(bindings.len())?;
                 let mut scoped = Vec::with_capacity(bindings.len());
+                let mut view_scopes = Vec::new();
                 for binding in bindings {
-                    let record = self.binding(binding, BindingKind::Let)?;
+                    let record = match self
+                        .unit
+                        .required_owner(OwnerKey::Binding(binding), "let binding")?
+                    {
+                        OwnerRecord::Binding(record)
+                            if matches!(record.kind, BindingKind::Let | BindingKind::ReadView) =>
+                        {
+                            record
+                        }
+                        _ => {
+                            return Err(compiler_corrupt(
+                                "compiler_binding_kind",
+                                "let requires an ordinary or owning read-view binding",
+                            ));
+                        }
+                    };
+                    let view_scope_entry = if record.kind == BindingKind::ReadView {
+                        let read_scope =
+                            self.admitted_lexical_scope(binding)?.ok_or_else(|| {
+                                compiler_corrupt(
+                                    "compiler_read_view_scope",
+                                    "owning view binding requires one exact current named function",
+                                )
+                            })?;
+                        let ty = record.declared_type.ok_or_else(|| {
+                            compiler_corrupt(
+                                "compiler_read_view_type",
+                                "owning view binding requires its exact annotation",
+                            )
+                        })?;
+                        let declared_scope = self.unit.with_expression_read(|read| {
+                            let object = read.type_object(ty)?.ok_or_else(|| {
+                                compiler_corrupt(
+                                    "compiler_read_view_type",
+                                    "missing owning view annotation",
+                                )
+                            })?;
+                            match object.form {
+                                TypeForm::ReadViewApplied { read_scope, .. }
+                                | TypeForm::AssociatedReadViewMember { read_scope, .. }
+                                | TypeForm::AssociatedReadViewProjection { read_scope, .. } => {
+                                    Ok(read_scope)
+                                }
+                                _ => Err(compiler_corrupt(
+                                    "compiler_read_view_type",
+                                    "owning binding annotation has no positive ReadView category",
+                                )),
+                            }
+                        })?;
+                        let prospective = declared_scope == read_scope;
+                        if prospective {
+                            self.enter_read_scope(binding)?;
+                            self.push(CompiledInstruction::BeginReadViewScope { read_scope })?;
+                        }
+                        self.view_scope(ty, consumer_generation)?;
+                        Some((read_scope, prospective))
+                    } else {
+                        None
+                    };
                     if let Some(ty) = record.declared_type {
                         self.unit.tables.ty(ty)?;
                     }
@@ -3047,17 +3940,57 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     let local = self.bind(reference)?;
                     scoped.push(reference);
                     self.push(CompiledInstruction::StoreLocal(local))?;
+                    if let Some((read_scope, prospective)) = view_scope_entry {
+                        if !prospective {
+                            self.enter_read_scope(binding)?;
+                            self.push(CompiledInstruction::BeginReadViewScope { read_scope })?;
+                        }
+                        view_scopes.push((binding, read_scope));
+                    }
                 }
                 self.expression_with_use(body, depth, use_mode)?;
-                for reference in &scoped {
+                // Later view bindings retain earlier owning sources. Tear down
+                // mixed Lets in reverse lexical order; ordinary-only Lets keep
+                // their existing canonical instruction order.
+                let reverse_cleanup = !view_scopes.is_empty();
+                for offset in 0..scoped.len() {
+                    let index = if reverse_cleanup {
+                        scoped.len() - 1 - offset
+                    } else {
+                        offset
+                    };
+                    let reference = &scoped[index];
                     let LocalValueReference::LexicalBinding(binding) = reference else {
                         continue;
                     };
-                    let record = self.binding(*binding, BindingKind::Let)?;
-                    if let Some(ty) = record.declared_type
+                    let record = match self
+                        .unit
+                        .required_owner(OwnerKey::Binding(*binding), "let cleanup binding")?
+                    {
+                        OwnerRecord::Binding(record) => record,
+                        _ => {
+                            return Err(compiler_corrupt(
+                                "compiler_binding_kind",
+                                "let cleanup lost its exact binding",
+                            ));
+                        }
+                    };
+                    let local = self.locals[reference];
+                    if record.kind == BindingKind::ReadView {
+                        let (_, read_scope) = view_scopes
+                            .pop()
+                            .filter(|(scope_binding, _)| scope_binding == binding)
+                            .ok_or_else(|| {
+                                compiler_corrupt(
+                                    "compiler_read_view_scope",
+                                    "let cleanup lost its exact view scope",
+                                )
+                            })?;
+                        self.clear_owning_local(local)?;
+                        self.push(CompiledInstruction::EndReadViewScope { read_scope })?;
+                    } else if let Some(ty) = record.declared_type
                         && self.unit.owned_local_type(ty)?
                     {
-                        let local = self.locals[reference];
                         self.push(CompiledInstruction::Unit)?;
                         self.push(CompiledInstruction::StoreLocal(local))?;
                     }
@@ -3088,7 +4021,9 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 type_arguments,
                 implementations,
                 arguments,
+                read_scope_arguments,
             } => {
+                self.application_scopes_with_prospective(&read_scope_arguments, prospective)?;
                 self.application_requirements(&requirement_arguments, &effect_arguments)?;
                 let uses = self.unit.function_parameter_uses(function)?;
                 if uses.len() != arguments.len() {
@@ -3116,6 +4051,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     type_arguments,
                     implementations,
                     arguments: count,
+                    read_scope_arguments,
                 })?;
             }
             ExpressionOperation::MethodCall {
@@ -3123,7 +4059,9 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 contract,
                 method,
                 arguments,
+                read_scope_arguments,
             } => {
+                self.application_scopes_with_prospective(&read_scope_arguments, prospective)?;
                 self.unit.implementation_operand(&witness)?;
                 self.unit.tables.declaration(contract)?;
                 let signature = self.unit.owned_method(contract, method)?;
@@ -3142,6 +4080,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     contract,
                     method,
                     arguments: count,
+                    read_scope_arguments,
                 })?;
             }
             ExpressionOperation::Call {
@@ -3150,7 +4089,9 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 function,
                 type_arguments,
                 arguments,
+                read_scope_arguments,
             } => {
+                self.application_scopes_with_prospective(&read_scope_arguments, prospective)?;
                 self.application_requirements(&requirement_arguments, &effect_arguments)?;
                 let parameter_uses = self.unit.function_parameter_uses(function)?;
                 if parameter_uses.len() != arguments.len() {
@@ -3174,6 +4115,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     function,
                     type_arguments,
                     arguments: argument_count,
+                    read_scope_arguments,
                 })?;
             }
             ExpressionOperation::FunctionValue {
@@ -3181,7 +4123,10 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 effect_arguments,
                 function,
                 type_arguments,
+                read_scope_arguments,
             } => {
+                self.unit.require_value_callable(function)?;
+                self.application_scopes_with_prospective(&read_scope_arguments, prospective)?;
                 self.application_requirements(&requirement_arguments, &effect_arguments)?;
                 let function = self.unit.tables.declaration(function)?;
                 let type_arguments = type_arguments
@@ -3193,6 +4138,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     effect_arguments,
                     function,
                     type_arguments,
+                    read_scope_arguments,
                 })?;
             }
             ExpressionOperation::Invoke { callee, arguments } => {
@@ -3438,7 +4384,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     }
                 };
                 self.push(instruction)?;
-                self.locals.remove(&reference);
+                self.unbind(reference);
             }
             ExpressionOperation::TransactionOutcome {
                 requirement,
@@ -3480,7 +4426,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     binding: local,
                     outcome,
                 })?;
-                self.locals.remove(&reference);
+                self.unbind(reference);
             }
         }
         Ok(())
@@ -3598,7 +4544,16 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         binding: BindingId,
         expected: TypeObjectDigest,
     ) -> Result<(LocalValueReference, u32, u32), Diagnostic> {
-        let record = self.binding(binding, BindingKind::OwnedBorrow)?;
+        self.scoped_read_binding(binding, expected, BindingKind::OwnedBorrow)
+    }
+
+    fn scoped_read_binding(
+        &mut self,
+        binding: BindingId,
+        expected: TypeObjectDigest,
+        kind: BindingKind,
+    ) -> Result<(LocalValueReference, u32, u32), Diagnostic> {
+        let record = self.binding(binding, kind)?;
         if record.value.is_some() || record.declared_type != Some(expected) {
             return Err(compiler_corrupt(
                 "compiler_borrow_binding",
@@ -3607,6 +4562,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         }
         let reference = LocalValueReference::LexicalBinding(binding);
         let local = self.bind(reference)?;
+        self.enter_read_scope(binding)?;
         let ty = self.unit.tables.ty(expected)?;
         Ok((reference, local, ty))
     }
@@ -3661,8 +4617,79 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
 
     fn unbind_all(&mut self, references: &[LocalValueReference]) {
         for reference in references {
-            self.locals.remove(reference);
+            self.unbind(*reference);
         }
+    }
+
+    fn unbind(&mut self, reference: LocalValueReference) {
+        self.locals.remove(&reference);
+        if let LocalValueReference::LexicalBinding(binding) = reference {
+            self.live_loans.remove(&binding);
+            self.read_scope_order.retain(|active| *active != binding);
+        }
+    }
+
+    fn enter_read_scope(&mut self, binding: BindingId) -> Result<(), Diagnostic> {
+        self.unit.canonical.code_step()?;
+        self.unit
+            .derived_type_admission
+            .parallel
+            .reserve::<BindingId>(2)?;
+        if !self.live_loans.insert(binding) {
+            return Err(compiler_corrupt(
+                "compiler_read_view_scope",
+                "one exact loan scope is introduced twice",
+            ));
+        }
+        self.read_scope_order.push(binding);
+        Ok(())
+    }
+
+    fn admitted_lexical_scope(
+        &mut self,
+        binding: BindingId,
+    ) -> Result<Option<ReadScopeArgument>, Diagnostic> {
+        let Some((callable, generation)) = self.function_scope else {
+            return Ok(None);
+        };
+        if generation < crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION {
+            return Ok(None);
+        }
+        self.unit.with_admission_read(|read, admission| {
+            crate::platform::kernel::owned_associated::read_view_admission::lexical_owner(
+                read,
+                callable,
+                binding,
+                crate::platform::kernel::owned_associated::AssociatedTypeContext::Lexical(callable),
+                admission,
+            )
+        })?;
+        self.unit.tables.declaration(callable)?;
+        Ok(Some(ReadScopeArgument::Lexical { callable, binding }))
+    }
+
+    fn begin_loan_scope(
+        &mut self,
+        binding: BindingId,
+    ) -> Result<Option<ReadScopeArgument>, Diagnostic> {
+        let scope = self.admitted_lexical_scope(binding)?;
+        if let Some(read_scope) = scope {
+            self.push(CompiledInstruction::BeginReadViewScope { read_scope })?;
+        }
+        Ok(scope)
+    }
+
+    fn end_loan_scope(&mut self, scope: Option<ReadScopeArgument>) -> Result<(), Diagnostic> {
+        if let Some(read_scope) = scope {
+            self.push(CompiledInstruction::EndReadViewScope { read_scope })?;
+        }
+        Ok(())
+    }
+
+    fn clear_owning_local(&mut self, local: u32) -> Result<(), Diagnostic> {
+        self.push(CompiledInstruction::Unit)?;
+        self.push(CompiledInstruction::StoreLocal(local))?;
+        Ok(())
     }
 
     fn push(&mut self, instruction: CompiledInstruction) -> Result<u32, Diagnostic> {
@@ -3695,6 +4722,7 @@ struct TablesBuilder {
     ports: InternTable<PortReference>,
     types: InternTable<TypeObjectDigest>,
     structural_names: InternTable<crate::platform::kernel::Name>,
+    read_view_fields: InternTable<ReadViewFieldReference>,
     texts: InternTable<CompiledText>,
 }
 
@@ -3709,6 +4737,7 @@ impl TablesBuilder {
             ports: InternTable::from_values(&tables.ports),
             types: InternTable::from_values(&tables.types),
             structural_names: InternTable::from_values(&tables.structural_names),
+            read_view_fields: InternTable::from_values(&tables.read_view_fields),
             texts: InternTable::from_values(&tables.texts),
         }
     }
@@ -3722,6 +4751,11 @@ impl TablesBuilder {
 
     fn case(&mut self, value: CaseReference) -> Result<u32, Diagnostic> {
         self.cases.intern(value, "case relocations")
+    }
+
+    fn read_view_field(&mut self, value: ReadViewFieldReference) -> Result<u32, Diagnostic> {
+        self.read_view_fields
+            .intern(value, "inline read-view field relocations")
     }
 
     fn requirement(&mut self, value: RequirementReference) -> Result<u32, Diagnostic> {
@@ -3759,6 +4793,7 @@ impl TablesBuilder {
             ports: self.ports.values,
             types: self.types.values,
             structural_names: self.structural_names.values,
+            read_view_fields: self.read_view_fields.values,
             texts: self.texts.values,
         }
     }
@@ -3835,4 +4870,1080 @@ fn compiler_error(
     message: impl Into<String>,
 ) -> Diagnostic {
     Diagnostic::new(class, code, message)
+}
+
+#[cfg(test)]
+mod read_view_lower_tests {
+    use super::*;
+    use crate::platform::kernel::{
+        DeclarationVisibility, FunctionDeclaration, Name, OwnerHeader, OwnerKind, ParameterRecord,
+        ReadScopeReference, ReadViewDeclaration, ReadViewFieldInitializer,
+    };
+    use crate::platform::semantic_id::{ModuleId, ReadScopeParameterId};
+
+    struct Source {
+        package: PackageId,
+        owners: BTreeMap<OwnerKey, OwnerRecord>,
+        types: BTreeMap<TypeObjectDigest, TypeObject>,
+        function: DeclarationId,
+        parameter: ParameterId,
+        root: ExpressionId,
+        view: DeclarationReference,
+        fields: [FieldId; 2],
+        buffer: TypeObjectDigest,
+    }
+
+    impl CodeRead for Source {
+        fn code_dependency(&self, package: PackageId) -> Result<CanonicalRead<bool>, Diagnostic> {
+            Ok(observed(package == self.package))
+        }
+        fn code_owner(
+            &self,
+            owner: OwnerKey,
+        ) -> Result<CanonicalRead<Option<OwnerRecord>>, Diagnostic> {
+            Ok(observed(self.owners.get(&owner).cloned()))
+        }
+        fn code_type(
+            &self,
+            ty: TypeObjectDigest,
+        ) -> Result<CanonicalRead<Option<TypeObject>>, Diagnostic> {
+            Ok(observed(self.types.get(&ty).cloned()))
+        }
+        fn code_interface(
+            &self,
+            _: PackageId,
+            _: OwnerKey,
+        ) -> Result<CanonicalRead<Option<PackageInterfaceRecord>>, Diagnostic> {
+            Ok(observed(None))
+        }
+    }
+
+    /// Supplies the local point reads used by the production declaration compiler. These
+    /// hand-built lowering fixtures have no accepted root, repository or witness binding.
+    struct DeclarationRead<'a>(&'a Source);
+
+    impl CanonicalBaseRead for DeclarationRead<'_> {
+        fn semantic_root(&self) -> &crate::platform::kernel::SemanticRoot {
+            panic!("lowering fixture has no persisted semantic root")
+        }
+
+        fn repository_id(&self) -> crate::platform::semantic_id::RepositoryId {
+            panic!("lowering fixture has no accepted repository binding")
+        }
+
+        fn package_id(&self) -> PackageId {
+            self.0.package
+        }
+
+        fn exact_revision(&self) -> Option<crate::platform::semantic_id::RevisionId> {
+            None
+        }
+
+        fn owner_count(&self) -> u64 {
+            self.0.owners.len() as u64
+        }
+
+        fn dependency_count(&self) -> u64 {
+            0
+        }
+
+        fn retirement_count(&self) -> u64 {
+            0
+        }
+
+        fn read_owner(
+            &self,
+            owner: OwnerKey,
+        ) -> Result<CanonicalRead<Option<OwnerRecord>>, Diagnostic> {
+            self.0.code_owner(owner)
+        }
+
+        fn read_type_object(
+            &self,
+            ty: TypeObjectDigest,
+        ) -> Result<CanonicalRead<Option<TypeObject>>, Diagnostic> {
+            self.0.code_type(ty)
+        }
+
+        fn read_package_interface_owner(
+            &self,
+            _: &crate::platform::kernel::DependencyRecord,
+            _: OwnerKey,
+        ) -> Result<CanonicalRead<Option<PackageInterfaceRecord>>, Diagnostic> {
+            Ok(observed(None))
+        }
+
+        fn read_dependency(
+            &self,
+            _: PackageId,
+        ) -> Result<CanonicalRead<Option<crate::platform::kernel::DependencyRecord>>, Diagnostic>
+        {
+            Ok(observed(None))
+        }
+
+        fn read_dependencies(
+            &self,
+        ) -> Result<CanonicalRead<Vec<crate::platform::kernel::DependencyRecord>>, Diagnostic>
+        {
+            Ok(observed(Vec::new()))
+        }
+
+        fn read_retirement(
+            &self,
+            _: OwnerKey,
+        ) -> Result<CanonicalRead<Option<crate::platform::kernel::RetirementRecord>>, Diagnostic>
+        {
+            Ok(observed(None))
+        }
+    }
+
+    fn observed<T>(value: T) -> CanonicalRead<T> {
+        CanonicalRead {
+            value,
+            work: CanonicalReadWork::default(),
+        }
+    }
+
+    impl Source {
+        fn ty(&mut self, form: TypeForm) -> TypeObjectDigest {
+            let object = TypeObject::new(form).unwrap();
+            let digest = encode_type_object(&object).unwrap().0;
+            self.types.insert(digest, object);
+            digest
+        }
+
+        fn expression(&mut self, id: ExpressionId, operation: ExpressionOperation) {
+            self.owners.insert(
+                OwnerKey::Expression(id),
+                OwnerRecord::Expression(ExpressionRecord::new(id, operation).unwrap()),
+            );
+        }
+
+        fn function_record(&self) -> DeclarationRecord {
+            let OwnerRecord::Declaration(record) =
+                &self.owners[&OwnerKey::Declaration(self.function)]
+            else {
+                panic!("function owner")
+            };
+            record.clone()
+        }
+
+        fn lower(&self) -> Result<(CompiledCode, CompilationTables), Diagnostic> {
+            let read = DeclarationRead(self);
+            let mut builder = UnitBuilder {
+                canonical: &read,
+                package: self.package,
+                scope: Some(self.function),
+                tables: TablesBuilder::default(),
+                derived_type_objects: BTreeMap::new(),
+                derived_type_admission: DerivedTypeAdmission::default(),
+                work: CompilationWork::default(),
+            };
+            let CompilationPayload::Function { code, .. } =
+                builder.compile_declaration(self.function, self.function_record())?
+            else {
+                panic!("function payload")
+            };
+            builder.complete_owned_record_type_closure()?;
+            Ok((code, builder.tables.finish()))
+        }
+    }
+
+    fn source(count: usize, authored_order: &[usize]) -> Source {
+        let package = PackageId::from_bytes([1; 16]).unwrap();
+        let function = DeclarationId::from_bytes([2; 16]).unwrap();
+        let parameter = ParameterId::from_bytes([3; 16]).unwrap();
+        let root = ExpressionId::from_bytes([4; 16]).unwrap();
+        let view = DeclarationReference {
+            package,
+            declaration: DeclarationId::from_bytes([5; 16]).unwrap(),
+        };
+        let module = ModuleId::from_bytes([6; 16]).unwrap();
+        let formal = ReadScopeParameter {
+            id: ReadScopeParameterId::from_bytes([7; 16]).unwrap(),
+            name: Name::new("source_scope").unwrap(),
+        };
+        let scope = ReadScopeArgument::Parameter(ReadScopeReference {
+            binder: ReadScopeBinder::Declaration(DeclarationReference {
+                package,
+                declaration: function,
+            }),
+            parameter: formal.id,
+        });
+        let mut source = Source {
+            package,
+            owners: BTreeMap::new(),
+            types: BTreeMap::new(),
+            function,
+            parameter,
+            root,
+            view,
+            fields: [
+                FieldId::from_bytes([11; 16]).unwrap(),
+                FieldId::from_bytes([12; 16]).unwrap(),
+            ],
+            buffer: TypeObjectDigest::from_bytes([1; 32]),
+        };
+        let scalar = source.ty(TypeForm::I64);
+        source.buffer = source.ty(TypeForm::ByteBuffer);
+        let result = source.ty(TypeForm::ReadViewApplied {
+            declaration: view,
+            arguments: Vec::new(),
+            read_scope: scope,
+        });
+        let fields = (0..count)
+            .map(|index| ReadViewField {
+                id: source.fields[index],
+                name: Name::new(if index == 0 { "first" } else { "second" }).unwrap(),
+                ty: scalar,
+                kind: ReadViewFieldKind::Ordinary,
+            })
+            .collect();
+        source.owners.insert(
+            OwnerKey::Declaration(view.declaration),
+            OwnerRecord::Declaration(DeclarationRecord {
+                header: OwnerHeader::new(
+                    OwnerKey::Declaration(view.declaration),
+                    OwnerKind::ReadView,
+                ),
+                module,
+                name: Name::new("Descriptor").unwrap(),
+                visibility: DeclarationVisibility::Private,
+                payload: DeclarationPayload::ReadView(ReadViewDeclaration {
+                    type_parameters: Vec::new(),
+                    scope_parameter: ReadScopeParameter {
+                        id: ReadScopeParameterId::from_bytes([8; 16]).unwrap(),
+                        name: Name::new("view_scope").unwrap(),
+                    },
+                    fields,
+                }),
+            }),
+        );
+        source.owners.insert(
+            OwnerKey::Parameter(parameter),
+            OwnerRecord::Parameter(ParameterRecord {
+                header: OwnerHeader::new(OwnerKey::Parameter(parameter), OwnerKind::Parameter),
+                parent: ParameterParent::Function(function),
+                name: Name::new("source").unwrap(),
+                ty: source.buffer,
+                use_mode: ParameterUse::Borrow,
+                resource_requirement: None,
+            }),
+        );
+        source.owners.insert(
+            OwnerKey::Declaration(function),
+            OwnerRecord::Declaration(DeclarationRecord {
+                header: OwnerHeader::new(OwnerKey::Declaration(function), OwnerKind::PureFunction),
+                module,
+                name: Name::new("build").unwrap(),
+                visibility: DeclarationVisibility::Private,
+                payload: DeclarationPayload::Function(FunctionDeclaration {
+                    implementation_parameters: Vec::new(),
+                    requirement_parameters: Vec::new(),
+                    effect_parameters: Vec::new(),
+                    type_parameters: Vec::new(),
+                    parameters: vec![parameter],
+                    result: CallableResult {
+                        ty: result,
+                        relation: ResultRelation::ViewFrom {
+                            source: parameter,
+                            scope,
+                        },
+                    },
+                    read_scope_parameters: vec![formal],
+                    read_scope_sources: vec![ReadScopeSource {
+                        source: parameter,
+                        scope,
+                    }],
+                    effect: FunctionEffect::Pure,
+                    body: root,
+                }),
+            }),
+        );
+        let initializer_ids = [
+            ExpressionId::from_bytes([21; 16]).unwrap(),
+            ExpressionId::from_bytes([22; 16]).unwrap(),
+        ];
+        for (id, value) in initializer_ids.into_iter().zip([17, -29]) {
+            source.expression(id, ExpressionOperation::I64 { value });
+        }
+        source.expression(
+            root,
+            ExpressionOperation::CreateReadView {
+                declaration: view,
+                type_arguments: Vec::new(),
+                read_scope: scope,
+                source: LocalValueReference::FunctionParameter(parameter),
+                fields: authored_order
+                    .iter()
+                    .map(|index| ReadViewFieldInitializer {
+                        field: source.fields[*index],
+                        value: initializer_ids[*index],
+                    })
+                    .collect(),
+            },
+        );
+        source
+    }
+
+    #[test]
+    fn zero_field_view_retains_explicit_source_guard_and_view_return() {
+        let source = source(0, &[]);
+        let (code, tables) = source.lower().unwrap();
+        let view_type = tables
+            .types
+            .iter()
+            .position(|ty| {
+                matches!(
+                    source.types.get(ty).map(|object| &object.form),
+                    Some(TypeForm::ReadViewApplied { .. })
+                )
+            })
+            .unwrap() as u32;
+        assert_eq!(code.parameter_count, 1);
+        assert_eq!(
+            code.instructions,
+            vec![
+                CompiledInstruction::BeginReadView {
+                    view_type,
+                    source_local: 0,
+                    fields: Vec::new()
+                },
+                CompiledInstruction::FinishReadView {
+                    view_type,
+                    fields: Vec::new()
+                },
+                CompiledInstruction::ReturnView,
+            ]
+        );
+        assert!(tables.read_view_fields.is_empty());
+    }
+
+    #[test]
+    fn view_constructor_protects_source_before_authored_field_order() {
+        let source = source(2, &[1, 0]);
+        let (code, tables) = source.lower().unwrap();
+        assert_eq!(
+            tables.read_view_fields,
+            source.fields.map(|field| ReadViewFieldReference {
+                declaration: source.view,
+                field
+            })
+        );
+        assert!(
+            matches!(&code.instructions[0], CompiledInstruction::BeginReadView { source_local: 0, fields, .. } if fields == &[1, 0])
+        );
+        assert_eq!(code.instructions[1], CompiledInstruction::I64(-29));
+        assert_eq!(code.instructions[2], CompiledInstruction::I64(17));
+        assert!(
+            matches!(&code.instructions[3], CompiledInstruction::FinishReadView { fields, .. } if fields == &[1, 0])
+        );
+        assert_eq!(code.instructions[4], CompiledInstruction::ReturnView);
+    }
+
+    #[test]
+    fn view_constructor_refuses_missing_repeated_and_foreign_inline_fields() {
+        assert_eq!(
+            source(2, &[0]).lower().unwrap_err().code,
+            "compiler_read_view_field"
+        );
+        // Build a locally valid record before faulting this private raw reader.
+        // The checked constructor correctly refuses duplicate fields earlier;
+        // this control independently reaches the compiler inventory boundary.
+        let mut repeated = source(2, &[0, 1]);
+        let OwnerRecord::Expression(record) = repeated
+            .owners
+            .get_mut(&OwnerKey::Expression(repeated.root))
+            .unwrap()
+        else {
+            panic!("constructor owner")
+        };
+        let ExpressionOperation::CreateReadView { fields, .. } = &mut record.operation else {
+            panic!("constructor operation")
+        };
+        fields[1].field = fields[0].field;
+        assert_eq!(
+            repeated.lower().unwrap_err().code,
+            "compiler_read_view_field"
+        );
+        let mut foreign = source(2, &[0, 1]);
+        let OwnerRecord::Expression(record) = foreign
+            .owners
+            .get_mut(&OwnerKey::Expression(foreign.root))
+            .unwrap()
+        else {
+            panic!("constructor owner")
+        };
+        let ExpressionOperation::CreateReadView { fields, .. } = &mut record.operation else {
+            panic!("constructor operation")
+        };
+        fields[1].field = FieldId::from_bytes([99; 16]).unwrap();
+        assert_eq!(
+            foreign.lower().unwrap_err().code,
+            "compiler_read_view_field"
+        );
+    }
+
+    #[test]
+    fn inline_field_relocations_keep_equal_field_ids_in_distinct_declarations() {
+        let source = source(0, &[]);
+        let mut tables = TablesBuilder::default();
+        let first = ReadViewFieldReference {
+            declaration: source.view,
+            field: source.fields[0],
+        };
+        let second = ReadViewFieldReference {
+            declaration: DeclarationReference {
+                package: source.package,
+                declaration: source.function,
+            },
+            field: source.fields[0],
+        };
+        assert_eq!(tables.read_view_field(first).unwrap(), 0);
+        assert_eq!(tables.read_view_field(second).unwrap(), 1);
+        assert_eq!(tables.read_view_field(first).unwrap(), 0);
+        assert!(tables.fields.values.is_empty());
+        assert_eq!(tables.finish().read_view_fields, vec![first, second]);
+    }
+
+    fn borrowed_call_source(generation: u16) -> Source {
+        let mut source = source(0, &[]);
+        let callee = DeclarationId::from_bytes([40; 16]).unwrap();
+        let parameters = [
+            ParameterId::from_bytes([41; 16]).unwrap(),
+            ParameterId::from_bytes([42; 16]).unwrap(),
+        ];
+        let callee_root = ExpressionId::from_bytes([43; 16]).unwrap();
+        let call = ExpressionId::from_bytes([44; 16]).unwrap();
+        let arguments = [
+            ExpressionId::from_bytes([45; 16]).unwrap(),
+            ExpressionId::from_bytes([46; 16]).unwrap(),
+        ];
+        let binding = BindingId::from_bytes([47; 16]).unwrap();
+        let body = ExpressionId::from_bytes([48; 16]).unwrap();
+        let header = |owner, kind| {
+            let mut header = OwnerHeader::new(owner, kind);
+            header.contract_version = generation;
+            header
+        };
+        let mut declaration = source.function_record();
+        declaration.header.contract_version = generation;
+        let DeclarationPayload::Function(function) = &mut declaration.payload else {
+            panic!("function")
+        };
+        function.result = CallableResult {
+            ty: source.buffer,
+            relation: ResultRelation::ReadFrom {
+                source: source.parameter,
+            },
+        };
+        function.read_scope_parameters.clear();
+        function.read_scope_sources.clear();
+        source.owners.insert(
+            OwnerKey::Declaration(source.function),
+            OwnerRecord::Declaration(declaration.clone()),
+        );
+        let OwnerRecord::Parameter(parameter) = source
+            .owners
+            .get_mut(&OwnerKey::Parameter(source.parameter))
+            .unwrap()
+        else {
+            panic!("parameter")
+        };
+        parameter.header.contract_version = generation;
+        for (index, parameter) in parameters.into_iter().enumerate() {
+            source.owners.insert(
+                OwnerKey::Parameter(parameter),
+                OwnerRecord::Parameter(ParameterRecord {
+                    header: header(OwnerKey::Parameter(parameter), OwnerKind::Parameter),
+                    parent: ParameterParent::Function(callee),
+                    name: Name::new(if index == 0 { "unselected" } else { "selected" }).unwrap(),
+                    ty: source.buffer,
+                    use_mode: ParameterUse::Borrow,
+                    resource_requirement: None,
+                }),
+            );
+        }
+        declaration.header = header(OwnerKey::Declaration(callee), OwnerKind::PureFunction);
+        declaration.name = Name::new("second_source").unwrap();
+        let DeclarationPayload::Function(function) = &mut declaration.payload else {
+            panic!("callee")
+        };
+        function.parameters = parameters.to_vec();
+        function.result = CallableResult {
+            ty: source.buffer,
+            relation: ResultRelation::ReadFrom {
+                source: parameters[1],
+            },
+        };
+        function.body = callee_root;
+        source.owners.insert(
+            OwnerKey::Declaration(callee),
+            OwnerRecord::Declaration(declaration),
+        );
+        source.expression(
+            callee_root,
+            ExpressionOperation::Local {
+                value: LocalValueReference::FunctionParameter(parameters[1]),
+            },
+        );
+        for argument in arguments {
+            source.expression(
+                argument,
+                ExpressionOperation::Local {
+                    value: LocalValueReference::FunctionParameter(source.parameter),
+                },
+            );
+        }
+        source.expression(
+            call,
+            ExpressionOperation::Call {
+                function: DeclarationReference {
+                    package: source.package,
+                    declaration: callee,
+                },
+                type_arguments: Vec::new(),
+                read_scope_arguments: Vec::new(),
+                effect_arguments: Vec::new(),
+                requirement_arguments: Vec::new(),
+                arguments: arguments.to_vec(),
+            },
+        );
+        source.owners.insert(
+            OwnerKey::Binding(binding),
+            OwnerRecord::Binding(BindingRecord {
+                header: header(OwnerKey::Binding(binding), OwnerKind::Binding),
+                name: Name::new("loan").unwrap(),
+                kind: BindingKind::OwnedBorrow,
+                value: None,
+                declared_type: Some(source.buffer),
+            }),
+        );
+        source.expression(
+            body,
+            ExpressionOperation::Local {
+                value: LocalValueReference::LexicalBinding(binding),
+            },
+        );
+        source.expression(
+            source.root,
+            ExpressionOperation::BorrowCall {
+                call,
+                binding,
+                body,
+            },
+        );
+        for record in source.owners.values_mut() {
+            if let OwnerRecord::Expression(record) = record {
+                record.contract_version = generation;
+            }
+        }
+        source
+    }
+
+    #[test]
+    fn borrowed_call_keeps_selected_ordered_source_despite_equal_types_and_backing_local() {
+        let source = borrowed_call_source(34);
+        let (code, _) = source.lower().unwrap();
+        assert_eq!(
+            code.instructions
+                .iter()
+                .filter(|instruction| matches!(
+                    instruction,
+                    CompiledInstruction::LoadLocal {
+                        local: 0,
+                        use_mode: ParameterUse::Borrow
+                    }
+                ))
+                .count(),
+            2
+        );
+        assert!(code.instructions.iter().any(|instruction| matches!(
+            instruction,
+            CompiledInstruction::BeginBorrowCall {
+                source_local: 0,
+                source_position: 1
+            }
+        )));
+        assert!(matches!(
+            code.instructions.first(),
+            Some(CompiledInstruction::BeginReadViewScope { .. })
+        ));
+        assert!(matches!(
+            code.instructions[code.instructions.len() - 3],
+            CompiledInstruction::EndReadViewScope { .. }
+        ));
+        assert_eq!(
+            code.instructions.last(),
+            Some(&CompiledInstruction::ReturnBorrowed)
+        );
+    }
+
+    #[test]
+    fn retained_graph33_borrowed_call_keeps_the_original_scope_free_protocol() {
+        let source = borrowed_call_source(33);
+        let (code, _) = source.lower().unwrap();
+        assert_eq!(
+            code.instructions
+                .iter()
+                .filter(|instruction| matches!(
+                    instruction,
+                    CompiledInstruction::BeginReadViewScope { .. }
+                        | CompiledInstruction::EndReadViewScope { .. }
+                ))
+                .count(),
+            0
+        );
+        assert_eq!(code.instructions.len(), 8);
+        assert!(matches!(
+            code.instructions[2],
+            CompiledInstruction::BeginBorrowCall {
+                source_local: 0,
+                source_position: 1
+            }
+        ));
+        assert!(matches!(
+            code.instructions[4],
+            CompiledInstruction::AdoptBorrowResult {
+                source_local: 0,
+                binding_local: 1,
+                ..
+            }
+        ));
+        assert_eq!(
+            code.instructions[6],
+            CompiledInstruction::EndOwnedBorrow { binding_local: 1 }
+        );
+        assert_eq!(code.instructions[7], CompiledInstruction::ReturnBorrowed);
+    }
+
+    #[test]
+    fn current_function_bounds_retained_ordinary_loan_syntax_without_relabelling_it() {
+        let mut source = borrowed_call_source(33);
+        let OwnerRecord::Declaration(record) = source
+            .owners
+            .get_mut(&OwnerKey::Declaration(source.function))
+            .unwrap()
+        else {
+            panic!("function")
+        };
+        record.header.contract_version = 34;
+        let (code, _) = source.lower().unwrap();
+        assert!(matches!(
+            code.instructions.first(),
+            Some(CompiledInstruction::BeginReadViewScope { .. })
+        ));
+        assert!(code.instructions.iter().any(|instruction| matches!(
+            instruction,
+            CompiledInstruction::EndReadViewScope { .. }
+        )));
+        let OwnerRecord::Expression(record) = &source.owners[&OwnerKey::Expression(source.root)]
+        else {
+            panic!("loan expression")
+        };
+        assert_eq!(record.contract_version, 33);
+        let OwnerRecord::Binding(record) =
+            &source.owners[&OwnerKey::Binding(BindingId::from_bytes([47; 16]).unwrap())]
+        else {
+            panic!("loan binding")
+        };
+        assert_eq!(record.header.contract_version, 33);
+    }
+
+    #[test]
+    fn current_constant_owned_loan_has_no_invented_callable_scope() {
+        let mut source = source(0, &[]);
+        source.owners.clear();
+        source.types.clear();
+        let scalar = source.ty(TypeForm::I64);
+        let inner = source.ty(TypeForm::OwnedProduct {
+            fields: vec![StructuralTypeField {
+                name: Name::new("tag").unwrap(),
+                ty: scalar,
+            }],
+        });
+        let outer = source.ty(TypeForm::OwnedProduct {
+            fields: vec![StructuralTypeField {
+                name: Name::new("child").unwrap(),
+                ty: inner,
+            }],
+        });
+        let owning = BindingId::from_bytes([80; 16]).unwrap();
+        let loan = BindingId::from_bytes([81; 16]).unwrap();
+        let empty = ExpressionId::from_bytes([82; 16]).unwrap();
+        let packed = ExpressionId::from_bytes([83; 16]).unwrap();
+        let local = ExpressionId::from_bytes([84; 16]).unwrap();
+        let body = ExpressionId::from_bytes([85; 16]).unwrap();
+        let borrowed = ExpressionId::from_bytes([86; 16]).unwrap();
+        let tag = ExpressionId::from_bytes([87; 16]).unwrap();
+        source.owners.insert(
+            OwnerKey::Binding(owning),
+            OwnerRecord::Binding(BindingRecord {
+                header: OwnerHeader::new(OwnerKey::Binding(owning), OwnerKind::Binding),
+                name: Name::new("owner").unwrap(),
+                kind: BindingKind::Let,
+                value: Some(packed),
+                declared_type: Some(outer),
+            }),
+        );
+        source.owners.insert(
+            OwnerKey::Binding(loan),
+            OwnerRecord::Binding(BindingRecord {
+                header: OwnerHeader::new(OwnerKey::Binding(loan), OwnerKind::Binding),
+                name: Name::new("child").unwrap(),
+                kind: BindingKind::OwnedBorrow,
+                value: None,
+                declared_type: Some(inner),
+            }),
+        );
+        source.expression(tag, ExpressionOperation::I64 { value: 0 });
+        source.expression(
+            empty,
+            ExpressionOperation::PackOwned {
+                product_type: inner,
+                fields: vec![crate::platform::kernel::OwnedProductExpressionField {
+                    name: Name::new("tag").unwrap(),
+                    value: tag,
+                }],
+            },
+        );
+        source.expression(
+            packed,
+            ExpressionOperation::PackOwned {
+                product_type: outer,
+                fields: vec![crate::platform::kernel::OwnedProductExpressionField {
+                    name: Name::new("child").unwrap(),
+                    value: empty,
+                }],
+            },
+        );
+        source.expression(
+            local,
+            ExpressionOperation::Local {
+                value: LocalValueReference::LexicalBinding(owning),
+            },
+        );
+        source.expression(body, ExpressionOperation::I64 { value: 73 });
+        source.expression(
+            borrowed,
+            ExpressionOperation::BorrowOwnedField {
+                product_type: outer,
+                source: local,
+                field: Name::new("child").unwrap(),
+                binding: loan,
+                body,
+            },
+        );
+        source.expression(
+            source.root,
+            ExpressionOperation::Let {
+                bindings: vec![owning],
+                body: borrowed,
+            },
+        );
+        let record = DeclarationRecord {
+            header: OwnerHeader::new(OwnerKey::Declaration(source.function), OwnerKind::Constant),
+            module: ModuleId::from_bytes([6; 16]).unwrap(),
+            name: Name::new("ordinary_constant").unwrap(),
+            visibility: DeclarationVisibility::Private,
+            payload: DeclarationPayload::Constant {
+                ty: scalar,
+                value: source.root,
+            },
+        };
+        source.owners.insert(
+            OwnerKey::Declaration(source.function),
+            OwnerRecord::Declaration(record.clone()),
+        );
+        let read = DeclarationRead(&source);
+        let mut builder = UnitBuilder {
+            canonical: &read,
+            package: source.package,
+            scope: Some(source.function),
+            tables: TablesBuilder::default(),
+            derived_type_objects: BTreeMap::new(),
+            derived_type_admission: DerivedTypeAdmission::default(),
+            work: CompilationWork::default(),
+        };
+        let CompilationPayload::Constant { code, .. } = builder
+            .compile_declaration(source.function, record)
+            .unwrap()
+        else {
+            panic!("constant")
+        };
+        assert_eq!(code.parameter_count, 0);
+        assert!(code.instructions.iter().any(|instruction| matches!(
+            instruction,
+            CompiledInstruction::BorrowOwnedField { .. }
+        )));
+        assert!(
+            code.instructions.iter().any(|instruction| matches!(
+                instruction,
+                CompiledInstruction::EndOwnedBorrow { .. }
+            ))
+        );
+        assert!(!code.instructions.iter().any(|instruction| matches!(
+            instruction,
+            CompiledInstruction::BeginReadViewScope { .. }
+                | CompiledInstruction::EndReadViewScope { .. }
+        )));
+        assert_eq!(code.instructions.last(), Some(&CompiledInstruction::Return));
+    }
+
+    #[test]
+    fn forwarded_view_result_adopts_an_owning_descriptor_and_closes_only_its_own_scope() {
+        let mut source = borrowed_call_source(34);
+        let callee = DeclarationId::from_bytes([40; 16]).unwrap();
+        let selected = ParameterId::from_bytes([42; 16]).unwrap();
+        let callee_root = ExpressionId::from_bytes([43; 16]).unwrap();
+        let call = ExpressionId::from_bytes([44; 16]).unwrap();
+        let binding = BindingId::from_bytes([47; 16]).unwrap();
+        let body = ExpressionId::from_bytes([48; 16]).unwrap();
+        let caller = DeclarationReference {
+            package: source.package,
+            declaration: source.function,
+        };
+        let caller_formal = ReadScopeParameter {
+            id: ReadScopeParameterId::from_bytes([7; 16]).unwrap(),
+            name: Name::new("source_scope").unwrap(),
+        };
+        let caller_scope = ReadScopeArgument::Parameter(ReadScopeReference {
+            binder: ReadScopeBinder::Declaration(caller),
+            parameter: caller_formal.id,
+        });
+        let callee_formal = ReadScopeParameter {
+            id: ReadScopeParameterId::from_bytes([55; 16]).unwrap(),
+            name: Name::new("returned_scope").unwrap(),
+        };
+        let callee_scope = ReadScopeArgument::Parameter(ReadScopeReference {
+            binder: ReadScopeBinder::Declaration(DeclarationReference {
+                package: source.package,
+                declaration: callee,
+            }),
+            parameter: callee_formal.id,
+        });
+        let caller_type = source.ty(TypeForm::ReadViewApplied {
+            declaration: source.view,
+            arguments: Vec::new(),
+            read_scope: caller_scope,
+        });
+        let callee_type = source.ty(TypeForm::ReadViewApplied {
+            declaration: source.view,
+            arguments: Vec::new(),
+            read_scope: callee_scope,
+        });
+        for (declaration, formal, scope, ty, selected) in [
+            (
+                source.function,
+                caller_formal,
+                caller_scope,
+                caller_type,
+                source.parameter,
+            ),
+            (callee, callee_formal, callee_scope, callee_type, selected),
+        ] {
+            let OwnerRecord::Declaration(record) = source
+                .owners
+                .get_mut(&OwnerKey::Declaration(declaration))
+                .unwrap()
+            else {
+                panic!("function")
+            };
+            let DeclarationPayload::Function(function) = &mut record.payload else {
+                panic!("function payload")
+            };
+            function.result = CallableResult {
+                ty,
+                relation: ResultRelation::ViewFrom {
+                    source: selected,
+                    scope,
+                },
+            };
+            function.read_scope_parameters = vec![formal];
+            function.read_scope_sources = vec![ReadScopeSource {
+                source: selected,
+                scope,
+            }];
+        }
+        source.expression(
+            callee_root,
+            ExpressionOperation::CreateReadView {
+                declaration: source.view,
+                type_arguments: Vec::new(),
+                read_scope: callee_scope,
+                source: LocalValueReference::FunctionParameter(selected),
+                fields: Vec::new(),
+            },
+        );
+        let OwnerRecord::Expression(record) =
+            source.owners.get_mut(&OwnerKey::Expression(call)).unwrap()
+        else {
+            panic!("call")
+        };
+        let ExpressionOperation::Call {
+            read_scope_arguments,
+            ..
+        } = &mut record.operation
+        else {
+            panic!("named call")
+        };
+        *read_scope_arguments = vec![caller_scope];
+        let OwnerRecord::Binding(record) =
+            source.owners.get_mut(&OwnerKey::Binding(binding)).unwrap()
+        else {
+            panic!("result binding")
+        };
+        record.kind = BindingKind::ReadView;
+        record.declared_type = Some(caller_type);
+        source.expression(
+            body,
+            ExpressionOperation::MoveReadView {
+                value: LocalValueReference::LexicalBinding(binding),
+            },
+        );
+        let (code, _) = source.lower().unwrap();
+        assert!(code.instructions.iter().any(|instruction| matches!(
+            instruction,
+            CompiledInstruction::AdoptViewResult {
+                source_local: 0,
+                binding_local: 1,
+                ..
+            }
+        )));
+        assert!(!code.instructions.iter().any(|instruction| matches!(
+            instruction,
+            CompiledInstruction::AdoptBorrowResult { .. }
+                | CompiledInstruction::EndOwnedBorrow { .. }
+        )));
+        assert!(code.instructions.iter().any(|instruction| matches!(instruction,
+            CompiledInstruction::Call { read_scope_arguments, .. } if read_scope_arguments == &[caller_scope])));
+        assert_eq!(
+            code.instructions[code.instructions.len() - 2],
+            CompiledInstruction::EndReadViewScope {
+                read_scope: ReadScopeArgument::Lexical {
+                    callable: caller,
+                    binding
+                },
+            }
+        );
+        assert_eq!(
+            code.instructions.last(),
+            Some(&CompiledInstruction::ReturnView)
+        );
+    }
+
+    #[test]
+    fn owning_view_let_bounds_descriptor_lifetime_without_changing_source_scope() {
+        let mut source = source(0, &[]);
+        let binding = BindingId::from_bytes([74; 16]).unwrap();
+        let root = ExpressionId::from_bytes([70; 16]).unwrap();
+        let result = ExpressionId::from_bytes([71; 16]).unwrap();
+        let drop = ExpressionId::from_bytes([72; 16]).unwrap();
+        let body = ExpressionId::from_bytes([73; 16]).unwrap();
+        let scalar = source.ty(TypeForm::I64);
+        let mut function_record = source.function_record();
+        let DeclarationPayload::Function(function) = &mut function_record.payload else {
+            panic!("function")
+        };
+        let view_type = function.result.ty;
+        let ResultRelation::ViewFrom {
+            scope: source_scope,
+            ..
+        } = function.result.relation
+        else {
+            panic!("source result")
+        };
+        function.result = CallableResult {
+            ty: scalar,
+            relation: ResultRelation::Value,
+        };
+        function.body = root;
+        source.owners.insert(
+            OwnerKey::Declaration(source.function),
+            OwnerRecord::Declaration(function_record),
+        );
+        source.owners.insert(
+            OwnerKey::Binding(binding),
+            OwnerRecord::Binding(BindingRecord {
+                header: OwnerHeader::new(OwnerKey::Binding(binding), OwnerKind::Binding),
+                name: Name::new("descriptor").unwrap(),
+                kind: BindingKind::ReadView,
+                value: Some(source.root),
+                declared_type: Some(view_type),
+            }),
+        );
+        source.expression(
+            drop,
+            ExpressionOperation::DropReadView {
+                value: LocalValueReference::LexicalBinding(binding),
+            },
+        );
+        source.expression(result, ExpressionOperation::I64 { value: 73 });
+        source.expression(
+            body,
+            ExpressionOperation::Sequence {
+                items: vec![drop, result],
+            },
+        );
+        source.expression(
+            root,
+            ExpressionOperation::Let {
+                bindings: vec![binding],
+                body,
+            },
+        );
+        source.root = root;
+        let (code, tables) = source.lower().unwrap();
+        let descriptor_scope = ReadScopeArgument::Lexical {
+            callable: DeclarationReference {
+                package: source.package,
+                declaration: source.function,
+            },
+            binding,
+        };
+        assert_eq!(
+            code.instructions.get(3),
+            Some(&CompiledInstruction::BeginReadViewScope {
+                read_scope: descriptor_scope
+            })
+        );
+        assert!(matches!(
+            code.instructions[0],
+            CompiledInstruction::BeginReadView {
+                source_local: 0,
+                ..
+            }
+        ));
+        assert_eq!(
+            code.instructions[code.instructions.len() - 2],
+            CompiledInstruction::EndReadViewScope {
+                read_scope: descriptor_scope
+            }
+        );
+        assert_eq!(code.instructions.last(), Some(&CompiledInstruction::Return));
+        assert!(
+            code.instructions
+                .iter()
+                .any(|instruction| matches!(instruction, CompiledInstruction::I64(73)))
+        );
+        assert_eq!(
+            code.instructions
+                .iter()
+                .filter(|instruction| matches!(
+                    instruction,
+                    CompiledInstruction::DropReadView {
+                        source_local: 1,
+                        ..
+                    }
+                ))
+                .count(),
+            1
+        );
+        assert!(tables.types.contains(&view_type));
+        let TypeForm::ReadViewApplied { read_scope, .. } = &source.types[&view_type].form else {
+            panic!("view type")
+        };
+        assert_eq!(*read_scope, source_scope);
+        assert_ne!(*read_scope, descriptor_scope);
+    }
 }

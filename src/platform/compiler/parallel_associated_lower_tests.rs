@@ -180,10 +180,13 @@ fn fixture(equal_outputs: bool) -> Fixture {
             unreachable!()
         };
         value.associated_types = vec![
-            AssociatedTypeBinding { member, ty: output },
+            AssociatedTypeBinding {
+                member,
+                value: crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty: output },
+            },
             AssociatedTypeBinding {
                 member: spare,
-                ty: cell,
+                value: crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty: cell },
             },
         ];
         value.associated_types.sort_by_key(|binding| binding.member);
@@ -199,7 +202,7 @@ fn fixture(equal_outputs: bool) -> Fixture {
         },
     );
     let child_parameter = function(&source, child).parameters[0];
-    function_mut(&mut source, child).result = projection;
+    function_mut(&mut source, child).result.ty = projection;
     let OwnerRecord::Parameter(parameter) = source
         .owners
         .get_mut(&OwnerKey::Parameter(child_parameter))
@@ -219,7 +222,7 @@ fn fixture(equal_outputs: bool) -> Fixture {
         };
         parameter.ty = output;
     }
-    let original_pair = function(&source, joined).result;
+    let original_pair = function(&source, joined).result.ty;
     let pair = add_type(
         &mut source,
         TypeForm::OwnedProduct {
@@ -235,7 +238,7 @@ fn fixture(equal_outputs: bool) -> Fixture {
             ],
         },
     );
-    function_mut(&mut source, joined).result = pair;
+    function_mut(&mut source, joined).result.ty = pair;
     // The old ByteBuffer/ByteBuffer result has no remaining owner or type reference. Keep the
     // complete logical fixture free of this exact obsolete object; do not prune other types.
     assert_ne!(original_pair, pair);
@@ -475,7 +478,7 @@ fn associated_parallel_unused_members_and_actuals_are_admitted_without_retaining
             .iter_mut()
             .find(|binding| binding.member == f.spare)
             .unwrap()
-            .ty = unused;
+            .value = crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty: unused };
     }
     let (_, derived) = raw_compile(&f.source, f.joined).unwrap();
     assert!(!derived.contains_key(&ObjectKey::from_digest(
@@ -499,7 +502,7 @@ fn associated_parallel_unused_members_and_actuals_are_admitted_without_retaining
         .iter_mut()
         .find(|binding| binding.member == f.spare)
         .unwrap()
-        .ty = secret;
+        .value = crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty: secret };
     let error = raw_compile(&f.source, f.joined).unwrap_err();
     assert_eq!(error.class, DiagnosticClass::Semantic, "{error:?}");
     let mut f = fixture(false);
@@ -622,7 +625,7 @@ fn associated_parallel_exact_parameter_parent_and_projection_witness_scope_are_r
                     member: f.member,
                 },
             );
-            function_mut(&mut f.source, f.child).result = foreign;
+            function_mut(&mut f.source, f.child).result.ty = foreign;
         }
         let error = canonical_code(
             &f.source,
@@ -682,6 +685,7 @@ fn associated_parallel_phantom_projected_actual_keeps_wrapper_generation_provena
         arguments: vec![],
         effect_arguments: vec![],
         requirement_arguments: vec![],
+        read_scope_arguments: vec![],
     };
     // Isolate provenance from the other limb, which also becomes ordinary.
     let first = named(&f.source, "plain");
@@ -699,6 +703,7 @@ fn associated_parallel_phantom_projected_actual_keeps_wrapper_generation_provena
         arguments: vec![],
         effect_arguments: vec![],
         requirement_arguments: vec![],
+        read_scope_arguments: vec![],
     };
     // The replaced zero-argument calls no longer own these original Local roots.
     // Remove exactly those roots; a complete canonical fixture cannot keep orphans.
@@ -718,7 +723,7 @@ fn associated_parallel_phantom_projected_actual_keeps_wrapper_generation_provena
             }
         );
     }
-    let scalar_type = function(&f.source, scalar).result;
+    let scalar_type = function(&f.source, scalar).result.ty;
     let expected = add_type(
         &mut f.source,
         TypeForm::StructuralRecord {
@@ -734,7 +739,7 @@ fn associated_parallel_phantom_projected_actual_keeps_wrapper_generation_provena
             ],
         },
     );
-    function_mut(&mut f.source, f.joined).result = expected;
+    function_mut(&mut f.source, f.joined).result.ty = expected;
     let (unit, _) = raw_compile(&f.source, f.joined).unwrap();
     assert_eq!(pair(&unit), expected);
     let OwnerRecord::Expression(record) = f
@@ -808,7 +813,8 @@ fn associated_parallel_task_kind_and_borrowed_result_are_not_erased_by_empty_row
             record.header.kind = OwnerKind::PureFunction;
         } else {
             let parameter = function(&f.source, f.child).parameters[0];
-            function_mut(&mut f.source, f.child).result_borrow = Some(parameter);
+            function_mut(&mut f.source, f.child).result.relation =
+                crate::platform::kernel::ResultRelation::ReadFrom { source: parameter };
             let OwnerRecord::Parameter(record) = f
                 .source
                 .owners
@@ -875,9 +881,18 @@ fn ordinary_parallel_literal_bytes_and_cached_fresh_unit_bytes_remain_identical(
         OptimizationPolicy::DeterministicBaseline,
     )
     .unwrap();
-    // Frozen base bincode code bytes: Parallel ordinal38, Return ordinal27;
-    // empty inventories, original left/right target order and result table index.
-    let literal = [0, 0, 2, 38, 0, 0, 0, 0, 0, 0, 1, 0, 0, 27];
+    // Byte27 remains exact through the private frozen DTO. Byte28 adds one
+    // empty read-scope argument vector per limb; ordinals/targets stay fixed.
+    let frozen_literal = [0, 0, 2, 38, 0, 0, 0, 0, 0, 0, 1, 0, 0, 27];
+    let frozen = super::super::wire33::Code33::try_from(code(&receipt.unit)).unwrap();
+    assert_eq!(
+        bincode::encode_to_vec(&frozen, bincode::config::standard()).unwrap(),
+        frozen_literal
+    );
+    assert_eq!(CompiledCode::from(frozen), *code(&receipt.unit));
+    // parameter/local counts; two instructions; Parallel38; six empty
+    // type/witness/scope inventories; target0/args0,target1/args0,result0; Return27.
+    let literal = [0, 0, 2, 38, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 27];
     assert_eq!(
         bincode::encode_to_vec(
             code(&receipt.unit),
@@ -1252,6 +1267,8 @@ fn associated_parallel_both_children_share_exact_producer_work_and_metadata_boun
             builder.parallel_call_contract(
                 expression,
                 crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+                // These two literal limbs occur outside any lexical read body.
+                &BTreeSet::new(),
             )?;
         }
         Ok(())

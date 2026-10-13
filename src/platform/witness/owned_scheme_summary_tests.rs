@@ -65,6 +65,7 @@ fn original_graph27_implementation_and_operand_summary_material_remains_exact() 
             self_type: ty,
             type_arguments: vec![ty],
             methods: vec![OwnedMethodImplementation {
+                read_scope_arguments: Vec::new(),
                 implementations: Vec::new(),
                 method,
                 function: reference,
@@ -97,6 +98,7 @@ fn original_graph27_implementation_and_operand_summary_material_remains_exact() 
         contract_version: 27,
         id,
         operation: ExpressionOperation::MethodCall {
+            read_scope_arguments: Vec::new(),
             witness: ImplementationOperand::Concrete {
                 implementations: Vec::new(),
                 implementation: reference,
@@ -160,6 +162,7 @@ fn scheme_children_and_mapping_applications_contribute_to_summaries() {
             self_type: types[0],
             type_arguments: Vec::new(),
             methods: vec![OwnedMethodImplementation {
+                read_scope_arguments: Vec::new(),
                 implementations: Vec::new(),
                 method: MethodId::migrate(seed, 0),
                 function: reference,

@@ -27,10 +27,10 @@ independent storage suppliers, then append the explicit default Flat wrapper.
 Finish requests author/export the checker before the producer and bind the
 checked consumer to queried exact declarations. These requests are provenance;
 the accepted editable project remains the program-meaning authority. The
-[current provenance](requests/blockread-adoption/provenance.json) binds all 27
+[original .95 provenance](requests/blockread-adoption/provenance.json) binds all 27
 requests, exact suppliers, accepted project and public proof.
 
-The selected asset is **3,710,645 bytes**, SHA-256
+The preceding .95 asset is **3,710,645 bytes**, SHA-256
 `5bd6a9568d59df598d1f0a3a7b5538036697db9d04355753f042fe61103bad7d`.
 Its original, rebuilt and clean-consumer builds are byte-identical. The accepted
 project HEAD file is bound by SHA-256
@@ -117,3 +117,6 @@ native ownership does not imply lower compilation cost.
 See the [independent checker](../../examples/dependency-plan/verification/README.md)
 and [planner](../../examples/dependency-plan/README.md) for the native algorithm and
 complete-outcome contracts.
+
+The .96 compilation refresh selects artifact_bundle_787f9a47624dba6e19f24d3255a6acd8e21dc9936104e6a92b75f49a8b9171d6 (3,713,432 bytes, SHA-256 c4fe6143f0efe9a178d47a46ff261bf7788cc11061cfbb70cd944c9bfbc939c5), using compiler 34, bytecode 28 and artifact 41. Its two public builds are byte-identical and all 176 source/supplier checks report zero failures and differential equality; the [separate rebuild receipt](../../.artifacts/associated-read-views/consumer-assets-installation-proposals/sourcef87c8b-four-families-first/receipt.json) binds their original source f87c8b7fa80e03bb8e3901746aa14a845fc509161916ca07eef92c55d32ed550. Accepted HEAD and exact suppliers remain unchanged. This compilation refresh supplies no final source, release or additional runtime acceptance.
+The original provenance retains its exact current_requests and runtime_scope fields; their original bytes, source and counts are not rewritten for this rebuild.

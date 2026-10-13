@@ -24,6 +24,10 @@ mod origins;
 #[cfg(test)]
 mod parameter_tests;
 mod preflight;
+#[cfg(test)]
+mod read_view_edit_inventory_tests;
+#[cfg(test)]
+mod read_view_parser_tests;
 mod references;
 mod structural;
 #[cfg(test)]
@@ -33,41 +37,45 @@ use references::ReferenceLookup;
 
 use super::{CompactField, CompactRecord, parse_records};
 use crate::platform::change::{
-    AuthoredAssociatedTypeBinding, AuthoredAssociatedTypeMember, AuthoredBindingDefinition,
-    AuthoredCase, AuthoredCaseReference, AuthoredChange, AuthoredChangeSet,
-    AuthoredDeclarationReference, AuthoredDeletePolicy, AuthoredEffectParameter,
-    AuthoredEffectParameterReference, AuthoredEffectRow, AuthoredExpression,
-    AuthoredExpressionOperation, AuthoredField, AuthoredFieldReference, AuthoredFieldSelector,
-    AuthoredFunctionEffect, AuthoredImplementationOperand, AuthoredImplementationParameter,
-    AuthoredLetBinding, AuthoredLocalReference, AuthoredMapExpressionEntry,
-    AuthoredMatchExpressionArm, AuthoredOperationReference, AuthoredOwnedMethod,
-    AuthoredOwnedMethodImplementation, AuthoredOwnerParent, AuthoredParameter, AuthoredPort,
-    AuthoredPortImplementation, AuthoredPortReference, AuthoredPrecondition,
+    AuthoredAssociatedTypeBinding, AuthoredAssociatedTypeBindingValue,
+    AuthoredAssociatedTypeMember, AuthoredBindingDefinition, AuthoredCallableResult, AuthoredCase,
+    AuthoredCaseReference, AuthoredChange, AuthoredChangeSet, AuthoredDeclarationReference,
+    AuthoredDeletePolicy, AuthoredEffectParameter, AuthoredEffectParameterReference,
+    AuthoredEffectRow, AuthoredExpression, AuthoredExpressionOperation, AuthoredField,
+    AuthoredFieldReference, AuthoredFieldSelector, AuthoredFunctionEffect,
+    AuthoredImplementationOperand, AuthoredImplementationParameter, AuthoredLetBinding,
+    AuthoredLocalReference, AuthoredMapExpressionEntry, AuthoredMatchExpressionArm,
+    AuthoredOperationReference, AuthoredOwnedMethod, AuthoredOwnedMethodImplementation,
+    AuthoredOwnerParent, AuthoredParameter, AuthoredPort, AuthoredPortImplementation,
+    AuthoredPortReference, AuthoredPrecondition, AuthoredReadScopeArgument,
+    AuthoredReadScopeBinder, AuthoredReadScopeSource, AuthoredReadViewField,
+    AuthoredReadViewFieldInitializer, AuthoredReadViewFieldKind, AuthoredReadViewFieldReference,
     AuthoredRecordExpressionField, AuthoredRequirement, AuthoredRequirementReference,
-    AuthoredResourceLimit, AuthoredStructuralTypeField, AuthoredTransactionOutcomeContract,
-    AuthoredType, AuthoredTypeParameter, AuthoredTypeParameterReference, DeclarationSelector,
-    ModuleSelector, OwnerSelector, ParameterParentSelector,
+    AuthoredResourceLimit, AuthoredResultRelation, AuthoredStructuralTypeField,
+    AuthoredTransactionOutcomeContract, AuthoredType, AuthoredTypeParameter,
+    AuthoredTypeParameterReference, DeclarationSelector, ModuleSelector, OwnerSelector,
+    ParameterParentSelector,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass, SourceLocation};
 use crate::platform::kernel::{
     AssociatedTypeBound, DeclarationVisibility, ExternalVisibility, HttpRouteSelector, Idempotency,
     ImplementationName, Name, NamespaceClass, OwnerKey, PackageId, PackageRevisionDigest,
-    ParameterUse, ResourceUnit,
+    ParameterUse, ReadScopeParameter, ResourceUnit,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::publication::{PublicationOptions, idempotency_key_is_valid};
 use crate::platform::semantic_id::{
     BindingId, CaseId, DeclarationId, EffectParameterId, ExpressionId, FieldId, ModuleId,
-    OperationId, ParameterId, PortId, RequirementId, RevisionId,
+    OperationId, ParameterId, PortId, ReadScopeParameterId, RequirementId, RevisionId,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-41";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 41;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-38";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 38;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-42";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 42;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-39";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 39;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -108,7 +116,7 @@ pub(crate) const COMPACT_REFERENCE_NAMESPACES: &[(&str, &str, &str)] = &[
     ("declaration", "module", "interface-root"),
     (
         "type-parameter",
-        "record|variant|function|external",
+        "record|owned-record|read-view|variant|function|external",
         "declaring-exported-owner",
     ),
     (
@@ -141,6 +149,8 @@ pub(crate) enum CompactChangeOperation {
     CreateModule,
     CreateRecord,
     CreateOwnedRecord,
+    CreateReadView,
+    SetReadView,
     CreateVariant,
     CreateInterface,
     CreateOwnedContract,
@@ -182,12 +192,14 @@ pub(crate) enum CompactChangeOperation {
 }
 
 impl CompactChangeOperation {
-    pub(crate) const ALL: [Self; 43] = [
+    pub(crate) const ALL: [Self; 45] = [
         Self::ReferencePackage,
         Self::ReferenceOwner,
         Self::CreateModule,
         Self::CreateRecord,
         Self::CreateOwnedRecord,
+        Self::CreateReadView,
+        Self::SetReadView,
         Self::CreateVariant,
         Self::CreateInterface,
         Self::CreateOwnedContract,
@@ -556,6 +568,70 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
         direct: None,
     },
     CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::CreateReadView,
+        name: "create.read-view",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "module",
+                required: true,
+                form: FieldForm::ModuleSelector,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "visibility",
+                required: true,
+                form: FieldForm::DeclarationVisibility,
+            },
+            CompactChangeOperationField {
+                name: "scope-parameter",
+                required: true,
+                form: FieldForm::ExistingOwnerReference,
+            },
+            CompactChangeOperationField {
+                name: "scope-name",
+                required: true,
+                form: FieldForm::Name,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::SetReadView,
+        name: "set.read-view",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestFragment,
+            },
+            CompactChangeOperationField {
+                name: "declaration",
+                required: true,
+                form: FieldForm::DeclarationSelector,
+            },
+            CompactChangeOperationField {
+                name: "scope-parameter",
+                required: true,
+                form: FieldForm::ExistingOwnerReference,
+            },
+            CompactChangeOperationField {
+                name: "scope-name",
+                required: true,
+                form: FieldForm::Name,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
         operation: CompactChangeOperation::CreateVariant,
         name: "create.variant",
         fields: &[
@@ -737,9 +813,19 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
         name: "create.function",
         fields: &[
             CompactChangeOperationField {
-                name: "borrow-from",
+                name: "result-kind",
+                required: false,
+                form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "result-source",
                 required: false,
                 form: FieldForm::ExistingOwnerReference,
+            },
+            CompactChangeOperationField {
+                name: "result-scope",
+                required: false,
+                form: FieldForm::RequestFragment,
             },
             CompactChangeOperationField {
                 name: "as",
@@ -1395,9 +1481,19 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
         name: "set.function-contract",
         fields: &[
             CompactChangeOperationField {
-                name: "borrow-from",
+                name: "result-kind",
+                required: false,
+                form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "result-source",
                 required: false,
                 form: FieldForm::ExistingOwnerReference,
+            },
+            CompactChangeOperationField {
+                name: "result-scope",
+                required: false,
+                form: FieldForm::RequestFragment,
             },
             CompactChangeOperationField {
                 name: "as",
@@ -1721,6 +1817,66 @@ pub const COMPACT_TYPE_FORMS: &[&str] = &[
     "task-function",
     "associated-contract-member",
     "associated-witness-projection",
+    "read-view-application",
+    "associated-read-view-member",
+    "associated-read-view-projection",
+];
+pub(crate) const COMPACT_READ_SCOPE_FORMS: &[&str] = &["parameter-actual", "lexical-actual"];
+pub(crate) const COMPACT_READ_SCOPE_FORM_FIELDS: &[CompactFormField] = &[
+    CompactFormField {
+        form: "parameter-actual",
+        name: "as",
+        required: true,
+        syntax: "%NAME",
+    },
+    CompactFormField {
+        form: "parameter-actual",
+        name: "binder-kind",
+        required: true,
+        syntax: "declaration|contract-method|associated-member|associated-binding",
+    },
+    CompactFormField {
+        form: "parameter-actual",
+        name: "binder",
+        required: true,
+        syntax: "declaration-reference",
+    },
+    CompactFormField {
+        form: "parameter-actual",
+        name: "parameter",
+        required: true,
+        syntax: "read_scope_ID",
+    },
+    CompactFormField {
+        form: "parameter-actual",
+        name: "method",
+        required: false,
+        syntax: "method_ID",
+    },
+    CompactFormField {
+        form: "parameter-actual",
+        name: "member",
+        required: false,
+        syntax: "assoc_type_ID",
+    },
+    CompactFormField {
+        form: "lexical-actual",
+        name: "as",
+        required: true,
+        syntax: "%NAME",
+    },
+    CompactFormField {
+        form: "lexical-actual",
+        name: "callable",
+        required: true,
+        syntax: "declaration-reference",
+    },
+    CompactFormField {
+        form: "lexical-actual",
+        name: "binding",
+        required: true,
+        syntax: "lexical-reference",
+    },
 ];
 pub(crate) const COMPACT_EFFECT_FORMS: &[&str] = &["row"];
 pub(crate) const COMPACT_EFFECT_FORM_FIELDS: &[CompactFormField] = &[CompactFormField {
@@ -1771,6 +1927,13 @@ pub const COMPACT_EXPRESSION_FORMS: &[&str] = &[
     "transaction",
     "transaction-outcome",
     "parallel",
+    "read-view-create",
+    "read-view-borrow",
+    "read-view-reborrow",
+    "read-view-move",
+    "read-view-drop",
+    "read-view-data-field",
+    "read-view-borrow-field",
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1782,6 +1945,84 @@ pub(crate) struct CompactFormField {
 }
 
 pub(crate) const COMPACT_TYPE_FORM_FIELDS: &[CompactFormField] = &[
+    CompactFormField {
+        form: "read-view-application",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "read-view-application",
+        name: "declaration",
+        required: true,
+        syntax: "declaration-reference",
+    },
+    CompactFormField {
+        form: "read-view-application",
+        name: "read-scope",
+        required: true,
+        syntax: "%SCOPE",
+    },
+    CompactFormField {
+        form: "associated-read-view-member",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "associated-read-view-member",
+        name: "contract",
+        required: true,
+        syntax: "declaration-reference",
+    },
+    CompactFormField {
+        form: "associated-read-view-member",
+        name: "member",
+        required: true,
+        syntax: "assoc_type_ID",
+    },
+    CompactFormField {
+        form: "associated-read-view-member",
+        name: "read-scope",
+        required: true,
+        syntax: "%SCOPE",
+    },
+    CompactFormField {
+        form: "associated-read-view-projection",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "associated-read-view-projection",
+        name: "scope",
+        required: true,
+        syntax: "declaration-reference",
+    },
+    CompactFormField {
+        form: "associated-read-view-projection",
+        name: "parameter",
+        required: true,
+        syntax: "impl_param_ID",
+    },
+    CompactFormField {
+        form: "associated-read-view-projection",
+        name: "contract",
+        required: true,
+        syntax: "declaration-reference",
+    },
+    CompactFormField {
+        form: "associated-read-view-projection",
+        name: "member",
+        required: true,
+        syntax: "assoc_type_ID",
+    },
+    CompactFormField {
+        form: "associated-read-view-projection",
+        name: "read-scope",
+        required: true,
+        syntax: "%SCOPE",
+    },
     CompactFormField {
         form: "associated-contract-member",
         name: "as",
@@ -2073,6 +2314,144 @@ pub(crate) const COMPACT_TYPE_FORM_FIELDS: &[CompactFormField] = &[
 ];
 
 pub(crate) const COMPACT_EXPRESSION_FORM_FIELDS: &[CompactFormField] = &[
+    CompactFormField {
+        form: "read-view-create",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "read-view-create",
+        name: "declaration",
+        required: true,
+        syntax: "declaration-reference",
+    },
+    CompactFormField {
+        form: "read-view-create",
+        name: "read-scope",
+        required: true,
+        syntax: "%SCOPE",
+    },
+    CompactFormField {
+        form: "read-view-create",
+        name: "source",
+        required: true,
+        syntax: "local-reference",
+    },
+    CompactFormField {
+        form: "read-view-borrow",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "read-view-borrow",
+        name: "value",
+        required: true,
+        syntax: "local-reference",
+    },
+    CompactFormField {
+        form: "read-view-borrow",
+        name: "body",
+        required: true,
+        syntax: "$EXPRESSION",
+    },
+    CompactFormField {
+        form: "read-view-reborrow",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "read-view-reborrow",
+        name: "value",
+        required: true,
+        syntax: "local-reference",
+    },
+    CompactFormField {
+        form: "read-view-reborrow",
+        name: "read-scope",
+        required: true,
+        syntax: "%SCOPE",
+    },
+    CompactFormField {
+        form: "read-view-move",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "read-view-move",
+        name: "value",
+        required: true,
+        syntax: "local-reference",
+    },
+    CompactFormField {
+        form: "read-view-drop",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "read-view-drop",
+        name: "value",
+        required: true,
+        syntax: "local-reference",
+    },
+    CompactFormField {
+        form: "read-view-data-field",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "read-view-data-field",
+        name: "value",
+        required: true,
+        syntax: "local-reference",
+    },
+    CompactFormField {
+        form: "read-view-data-field",
+        name: "declaration",
+        required: true,
+        syntax: "declaration-reference",
+    },
+    CompactFormField {
+        form: "read-view-data-field",
+        name: "field",
+        required: true,
+        syntax: "field_ID",
+    },
+    CompactFormField {
+        form: "read-view-borrow-field",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "read-view-borrow-field",
+        name: "value",
+        required: true,
+        syntax: "local-reference",
+    },
+    CompactFormField {
+        form: "read-view-borrow-field",
+        name: "declaration",
+        required: true,
+        syntax: "declaration-reference",
+    },
+    CompactFormField {
+        form: "read-view-borrow-field",
+        name: "field",
+        required: true,
+        syntax: "field_ID",
+    },
+    CompactFormField {
+        form: "read-view-borrow-field",
+        name: "body",
+        required: true,
+        syntax: "$EXPRESSION",
+    },
     CompactFormField {
         form: "borrow-call",
         name: "as",
@@ -2835,6 +3214,235 @@ pub(crate) struct CompactEdgeDescriptor {
 
 pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
     CompactEdgeDescriptor {
+        name: "read-scope.parameter",
+        parent: "function-or-method",
+        child: "scope-formal",
+        fields: &[
+            CompactFormField {
+                form: "read-scope.parameter",
+                name: "parent",
+                required: true,
+                syntax: "$NAME|%NAME",
+            },
+            CompactFormField {
+                form: "read-scope.parameter",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "read-scope.parameter",
+                name: "id",
+                required: true,
+                syntax: "read_scope_ID",
+            },
+            CompactFormField {
+                form: "read-scope.parameter",
+                name: "name",
+                required: true,
+                syntax: "name",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
+        name: "read-scope.source",
+        parent: "function-or-method",
+        child: "scope-source",
+        fields: &[
+            CompactFormField {
+                form: "read-scope.source",
+                name: "parent",
+                required: true,
+                syntax: "$NAME|%NAME",
+            },
+            CompactFormField {
+                form: "read-scope.source",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "read-scope.source",
+                name: "source",
+                required: true,
+                syntax: "local-reference|zero-based-position",
+            },
+            CompactFormField {
+                form: "read-scope.source",
+                name: "scope",
+                required: true,
+                syntax: "%SCOPE",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
+        name: "scope.argument",
+        parent: "call-or-method-mapping",
+        child: "scope-actual",
+        fields: &[
+            CompactFormField {
+                form: "scope.argument",
+                name: "parent",
+                required: true,
+                syntax: "$NAME|%NAME",
+            },
+            CompactFormField {
+                form: "scope.argument",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "scope.argument",
+                name: "scope",
+                required: true,
+                syntax: "%SCOPE",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
+        name: "read-view.field",
+        parent: "read-view",
+        child: "view-field",
+        fields: &[
+            CompactFormField {
+                form: "read-view.field",
+                name: "parent",
+                required: true,
+                syntax: "$NAME|%NAME",
+            },
+            CompactFormField {
+                form: "read-view.field",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "read-view.field",
+                name: "id",
+                required: true,
+                syntax: "field_ID",
+            },
+            CompactFormField {
+                form: "read-view.field",
+                name: "name",
+                required: true,
+                syntax: "name",
+            },
+            CompactFormField {
+                form: "read-view.field",
+                name: "type",
+                required: true,
+                syntax: "type-reference",
+            },
+            CompactFormField {
+                form: "read-view.field",
+                name: "kind",
+                required: true,
+                syntax: "ordinary|read-reference",
+            },
+            CompactFormField {
+                form: "read-view.field",
+                name: "read-scope",
+                required: false,
+                syntax: "%SCOPE",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
+        name: "read-view.type-parameter",
+        parent: "read-view-set-fragment",
+        child: "type-parameter",
+        fields: &[
+            CompactFormField {
+                form: "read-view.type-parameter",
+                name: "parent",
+                required: true,
+                syntax: "%NAME",
+            },
+            CompactFormField {
+                form: "read-view.type-parameter",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "read-view.type-parameter",
+                name: "parameter",
+                required: true,
+                syntax: "type-parameter-reference",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
+        name: "expression.read-view-field",
+        parent: "read-view-create",
+        child: "field-initializer",
+        fields: &[
+            CompactFormField {
+                form: "expression.read-view-field",
+                name: "parent",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "expression.read-view-field",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "expression.read-view-field",
+                name: "field",
+                required: true,
+                syntax: "field_ID",
+            },
+            CompactFormField {
+                form: "expression.read-view-field",
+                name: "value",
+                required: true,
+                syntax: "$EXPRESSION",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
+        name: "expression.read-view-binding",
+        parent: "read-view-borrow",
+        child: "lexical-binding",
+        fields: &[
+            CompactFormField {
+                form: "expression.read-view-binding",
+                name: "parent",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "expression.read-view-binding",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "expression.read-view-binding",
+                name: "as",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "expression.read-view-binding",
+                name: "name",
+                required: true,
+                syntax: "name",
+            },
+            CompactFormField {
+                form: "expression.read-view-binding",
+                name: "type",
+                required: false,
+                syntax: "type-reference",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
         name: "expression.call-binding",
         parent: "expression.borrow-call",
         child: "binding",
@@ -3088,6 +3696,18 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
         fields: &[
             CompactFormField {
                 form: "owned.associated-member",
+                name: "scope-parameter",
+                required: false,
+                syntax: "read_scope_ID",
+            },
+            CompactFormField {
+                form: "owned.associated-member",
+                name: "scope-name",
+                required: false,
+                syntax: "name",
+            },
+            CompactFormField {
+                form: "owned.associated-member",
                 name: "parent",
                 required: true,
                 syntax: "$NAME|%NAME",
@@ -3112,9 +3732,9 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
             },
             CompactFormField {
                 form: "owned.associated-member",
-                name: "bound",
+                name: "kind",
                 required: true,
-                syntax: "owned",
+                syntax: "owned|read-view-family",
             },
         ],
     },
@@ -3123,6 +3743,24 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
         parent: "owned-implementation",
         child: "associated-owned-binding",
         fields: &[
+            CompactFormField {
+                form: "owned.associated-binding",
+                name: "scope-parameter",
+                required: false,
+                syntax: "read_scope_ID",
+            },
+            CompactFormField {
+                form: "owned.associated-binding",
+                name: "scope-name",
+                required: false,
+                syntax: "name",
+            },
+            CompactFormField {
+                form: "owned.associated-binding",
+                name: "kind",
+                required: true,
+                syntax: "owned|read-view-family",
+            },
             CompactFormField {
                 form: "owned.associated-binding",
                 name: "parent",
@@ -3206,9 +3844,21 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
         fields: &[
             CompactFormField {
                 form: "owned.method",
-                name: "borrow-from",
+                name: "result-source",
                 required: false,
                 syntax: "zero-based-parameter-position",
+            },
+            CompactFormField {
+                form: "owned.method",
+                name: "result-scope",
+                required: false,
+                syntax: "%SCOPE",
+            },
+            CompactFormField {
+                form: "owned.method",
+                name: "result-kind",
+                required: false,
+                syntax: "value|read-from|view-from",
             },
             CompactFormField {
                 form: "owned.method",
@@ -4083,6 +4733,8 @@ struct Decoder {
     records: Vec<CompactRecord>,
     types: BTreeMap<String, CompactRecord>,
     effect_rows: BTreeMap<String, CompactRecord>,
+    read_scopes: BTreeMap<String, CompactRecord>,
+    consumed_read_scopes: BTreeSet<String>,
     expressions: BTreeMap<String, CompactRecord>,
     arguments: BTreeMap<String, Vec<IndexedValue>>,
     type_parameters: BTreeMap<String, Vec<IndexedValue>>,
@@ -4110,6 +4762,8 @@ impl Decoder {
             records,
             types: BTreeMap::new(),
             effect_rows: BTreeMap::new(),
+            read_scopes: BTreeMap::new(),
+            consumed_read_scopes: BTreeSet::new(),
             expressions: BTreeMap::new(),
             arguments: BTreeMap::new(),
             type_parameters: BTreeMap::new(),
@@ -4167,19 +4821,100 @@ impl Decoder {
                         ));
                     }
                 }
-                "owned.method" => self.insert_indexed_record_edge(
+                "read-scope.parameter-actual" | "read-scope.lexical-actual" => {
+                    let allowed: &[&str] = if record.operation == "read-scope.parameter-actual" {
+                        &[
+                            "as",
+                            "binder-kind",
+                            "binder",
+                            "method",
+                            "member",
+                            "parameter",
+                        ]
+                    } else {
+                        &["as", "callable", "binding"]
+                    };
+                    check_fields(&record, allowed)?;
+                    let label = fragment(&record, "as")?;
+                    if self
+                        .fragments
+                        .insert(label.clone(), record.location.clone())
+                        .is_some()
+                        || self
+                            .read_scopes
+                            .insert(label.clone(), record.clone())
+                            .is_some()
+                    {
+                        return Err(field_error(
+                            &record,
+                            "as",
+                            "change_fragment_duplicate",
+                            format!("fragment label '{label}' is defined more than once"),
+                        ));
+                    }
+                }
+                "read-scope.parameter" => {
+                    self.insert_indexed_record_edge(record, &["parent", "index", "id", "name"])?
+                }
+                "read-scope.source" => self
+                    .insert_indexed_record_edge(record, &["parent", "index", "source", "scope"])?,
+                "scope.argument" => {
+                    self.insert_indexed_record_edge(record, &["parent", "index", "scope"])?
+                }
+                "read-view.type-parameter" => {
+                    self.insert_indexed_record_edge(record, &["parent", "index", "parameter"])?
+                }
+                "read-view.field" => self.insert_indexed_record_edge(
                     record,
                     &[
                         "parent",
                         "index",
-                        "as",
                         "id",
                         "name",
-                        "result",
-                        "effect",
-                        "borrow-from",
+                        "type",
+                        "kind",
+                        "read-scope",
                     ],
                 )?,
+                "expression.read-view-field" => {
+                    self.insert_indexed_record_edge(record, &["parent", "index", "field", "value"])?
+                }
+                "expression.read-view-binding" => self.insert_indexed_record_edge(
+                    record,
+                    &["parent", "index", "as", "name", "type"],
+                )?,
+                "owned.method" => {
+                    let label = required(&record, "as")?.to_owned();
+                    let prefix = if label.starts_with('%') { '%' } else { '$' };
+                    validate_local_label(&record, "as", &label, prefix)?;
+                    if self
+                        .fragments
+                        .insert(label.clone(), record.location.clone())
+                        .is_some()
+                    {
+                        return Err(field_error(
+                            &record,
+                            "as",
+                            "change_fragment_duplicate",
+                            format!("fragment label '{label}' is defined more than once"),
+                        ));
+                    }
+                    self.insert_indexed_record_edge(
+                        record,
+                        &[
+                            "parent",
+                            "index",
+                            "as",
+                            "id",
+                            "name",
+                            "result",
+                            "effect",
+                            "result-kind",
+                            "result-source",
+                            "result-scope",
+                        ],
+                    )?;
+                }
                 "owned.parameter" => {
                     self.insert_indexed_record_edge(record, &["parent", "index", "type", "use"])?
                 }
@@ -4188,11 +4923,28 @@ impl Decoder {
                 }
                 "owned.associated-member" => self.insert_indexed_record_edge(
                     record,
-                    &["parent", "index", "id", "name", "bound"],
+                    &[
+                        "parent",
+                        "index",
+                        "id",
+                        "name",
+                        "kind",
+                        "scope-parameter",
+                        "scope-name",
+                    ],
                 )?,
-                "owned.associated-binding" => {
-                    self.insert_indexed_record_edge(record, &["parent", "index", "member", "type"])?
-                }
+                "owned.associated-binding" => self.insert_indexed_record_edge(
+                    record,
+                    &[
+                        "parent",
+                        "index",
+                        "member",
+                        "type",
+                        "kind",
+                        "scope-parameter",
+                        "scope-name",
+                    ],
+                )?,
                 "owned.type-argument" => {
                     self.insert_indexed_record_edge(record, &["parent", "index", "type"])?
                 }
@@ -4336,6 +5088,7 @@ impl Decoder {
                         if matches!(
                             descriptor.operation,
                             CompactChangeOperation::SetImplementations
+                                | CompactChangeOperation::SetReadView
                                 | CompactChangeOperation::SetFunctionContract
                                 | CompactChangeOperation::SetRequirementContract
                                 | CompactChangeOperation::SetRequirementParameter
@@ -4382,6 +5135,10 @@ impl Decoder {
         let base = parse_field::<RevisionId>(&request, "base")?;
         let idempotency_key = optional(&request, "idempotency").map(str::to_owned);
         let intent = optional(&request, "intent").map(str::to_owned);
+        let scope_labels = self.read_scopes.keys().cloned().collect::<Vec<_>>();
+        for label in scope_labels {
+            let _ = self.decode_read_scope(&label)?;
+        }
         let expression_order = self.preflight()?;
         let type_labels = self.types.keys().cloned().collect::<Vec<_>>();
         for label in type_labels {
@@ -4728,6 +5485,40 @@ impl Decoder {
                 visibility: parse_visibility(record, "visibility")?,
                 fields: Vec::new(),
             }),
+            CompactChangeOperation::CreateReadView => {
+                let parent = symbol(record, "as")?;
+                Ok(AuthoredChange::CreateReadView {
+                    symbol: parent.clone(),
+                    module: self.parse_module_selector(record, "module")?,
+                    name: parse_name(record, "name")?,
+                    visibility: parse_visibility(record, "visibility")?,
+                    type_parameters: Vec::new(),
+                    scope_parameter: parse_scope_parameter(
+                        record,
+                        "scope-parameter",
+                        "scope-name",
+                    )?,
+                    fields: self.decode_view_fields(&parent)?,
+                })
+            }
+            CompactChangeOperation::SetReadView => {
+                let parent = fragment(record, "as")?;
+                let type_parameters = self
+                    .ordered_record_edges("read-view.type-parameter", &parent)?
+                    .iter()
+                    .map(|edge| self.parse_type_parameter_reference(&edge.record, "parameter"))
+                    .collect::<Result<_, _>>()?;
+                Ok(AuthoredChange::SetReadView {
+                    declaration: self.parse_declaration_selector(record, "declaration")?,
+                    type_parameters,
+                    scope_parameter: parse_scope_parameter(
+                        record,
+                        "scope-parameter",
+                        "scope-name",
+                    )?,
+                    fields: self.decode_view_fields(&parent)?,
+                })
+            }
             CompactChangeOperation::CreateVariant => Ok(AuthoredChange::CreateVariant {
                 type_parameters: Vec::new(),
                 symbol: symbol(record, "as")?,
@@ -4743,18 +5534,10 @@ impl Decoder {
                     .iter()
                     .map(|edge| {
                         let member = &edge.record;
-                        if required(member, "bound")? != "owned" {
-                            return Err(field_error(
-                                member,
-                                "bound",
-                                "change_associated_bound",
-                                "associated members require the explicit Owned bound",
-                            ));
-                        }
                         Ok(AuthoredAssociatedTypeMember {
                             id: parse_field(member, "id")?,
                             name: parse_name(member, "name")?,
-                            bound: AssociatedTypeBound::Owned,
+                            bound: self.decode_associated_bound(member)?,
                         })
                     })
                     .collect::<Result<Vec<_>, Diagnostic>>()?;
@@ -4778,10 +5561,9 @@ impl Decoder {
                         id: required(method, "id")?.parse()?,
                         name: parse_name(method, "name")?,
                         parameters,
-                        result: self.decode_type(required(method, "result")?)?,
-                        result_borrow: optional(method, "borrow-from")
-                            .map(|_| parse_field(method, "borrow-from"))
-                            .transpose()?,
+                        result: self.decode_method_result(method)?,
+                        read_scope_parameters: self.decode_scope_parameters(label)?,
+                        read_scope_sources: self.decode_method_scope_sources(label)?,
                         effect: self.decode_function_effect(
                             method,
                             label,
@@ -4808,7 +5590,7 @@ impl Decoder {
                     .map(|edge| {
                         Ok(AuthoredAssociatedTypeBinding {
                             member: parse_field(&edge.record, "member")?,
-                            ty: self.decode_type(required(&edge.record, "type")?)?,
+                            value: self.decode_associated_binding(&edge.record)?,
                         })
                     })
                     .collect::<Result<Vec<_>, Diagnostic>>()?;
@@ -4829,6 +5611,10 @@ impl Decoder {
                                 validate_local_label(&edge.record, "as", parent, '%')?;
                                 self.decode_owned_type_arguments(parent)?
                             }
+                            None => Vec::new(),
+                        },
+                        read_scope_arguments: match optional(&edge.record, "as") {
+                            Some(parent) => self.decode_read_scope_arguments(parent)?,
                             None => Vec::new(),
                         },
                         implementations: match optional(&edge.record, "as") {
@@ -4886,10 +5672,9 @@ impl Decoder {
                     visibility: parse_visibility(record, "visibility")?,
                     type_parameters: Vec::new(),
                     parameters: Vec::new(),
-                    result: self.decode_type(required(record, "result")?)?,
-                    result_borrow: optional(record, "borrow-from")
-                        .map(|_| self.parse_local_reference(record, "borrow-from"))
-                        .transpose()?,
+                    result: self.decode_named_result(record)?,
+                    read_scope_parameters: self.decode_scope_parameters(&function_symbol)?,
+                    read_scope_sources: self.decode_named_scope_sources(&function_symbol)?,
                     effect: self.decode_function_effect(
                         record,
                         &function_symbol,
@@ -5161,10 +5946,9 @@ impl Decoder {
                 let fragment = fragment(record, "as")?;
                 Ok(AuthoredChange::SetFunctionContract {
                     function: self.parse_declaration_selector(record, "function")?,
-                    result: self.decode_type(required(record, "result")?)?,
-                    result_borrow: optional(record, "borrow-from")
-                        .map(|_| self.parse_local_reference(record, "borrow-from"))
-                        .transpose()?,
+                    result: self.decode_named_result(record)?,
+                    read_scope_parameters: self.decode_scope_parameters(&fragment)?,
+                    read_scope_sources: self.decode_named_scope_sources(&fragment)?,
                     effect: self.decode_function_effect(
                         record,
                         &fragment,
@@ -5475,6 +6259,47 @@ impl Decoder {
                     declaration: self.parse_declaration_reference(&record, "declaration")?,
                 }
             }
+            "type.read-view-application" => {
+                check_fields(&record, &["as", "declaration", "read-scope"])?;
+                let arguments = self
+                    .ordered_edges(reference, true)?
+                    .iter()
+                    .map(|edge| self.decode_type(&edge.value))
+                    .collect::<Result<_, _>>()?;
+                AuthoredType::ReadViewApplied {
+                    declaration: self.parse_declaration_reference(&record, "declaration")?,
+                    arguments,
+                    read_scope: self.decode_read_scope(required(&record, "read-scope")?)?,
+                }
+            }
+            "type.associated-read-view-member" => {
+                check_fields(&record, &["as", "contract", "member", "read-scope"])?;
+                AuthoredType::AssociatedReadViewMember {
+                    contract: self.parse_declaration_reference(&record, "contract")?,
+                    member: parse_field(&record, "member")?,
+                    read_scope: self.decode_read_scope(required(&record, "read-scope")?)?,
+                }
+            }
+            "type.associated-read-view-projection" => {
+                check_fields(
+                    &record,
+                    &[
+                        "as",
+                        "scope",
+                        "parameter",
+                        "contract",
+                        "member",
+                        "read-scope",
+                    ],
+                )?;
+                AuthoredType::AssociatedReadViewProjection {
+                    scope: self.parse_declaration_reference(&record, "scope")?,
+                    parameter: parse_field(&record, "parameter")?,
+                    contract: self.parse_declaration_reference(&record, "contract")?,
+                    member: parse_field(&record, "member")?,
+                    read_scope: self.decode_read_scope(required(&record, "read-scope")?)?,
+                }
+            }
             "type.associated-contract-member" => {
                 check_fields(&record, &["as", "contract", "member"])?;
                 AuthoredType::AssociatedContractMember {
@@ -5637,6 +6462,99 @@ impl Decoder {
                 .lower(self);
         }
         let operation = match record.operation.as_str() {
+            "expression.read-view-create" => {
+                check_fields(&record, &["as", "declaration", "read-scope", "source"])?;
+                let type_arguments = self
+                    .ordered_edges(symbol, true)?
+                    .iter()
+                    .map(|edge| self.decode_type(&edge.value))
+                    .collect::<Result<_, _>>()?;
+                let mut ids = BTreeSet::new();
+                let fields = self
+                    .ordered_record_edges("expression.read-view-field", symbol)?
+                    .iter()
+                    .map(|edge| {
+                        let field = parse_field(&edge.record, "field")?;
+                        if !ids.insert(field) {
+                            return Err(field_error(
+                                &edge.record,
+                                "field",
+                                "change_read_view_field_duplicate",
+                                "view construction repeats a field identity",
+                            ));
+                        }
+                        Ok(AuthoredReadViewFieldInitializer {
+                            field,
+                            value: self.decode_expression(required(&edge.record, "value")?)?,
+                        })
+                    })
+                    .collect::<Result<_, _>>()?;
+                AuthoredExpressionOperation::CreateReadView {
+                    declaration: self.parse_declaration_reference(&record, "declaration")?,
+                    type_arguments,
+                    read_scope: self.decode_read_scope(required(&record, "read-scope")?)?,
+                    source: self.parse_local_reference(&record, "source")?,
+                    fields,
+                }
+            }
+            "expression.read-view-borrow" | "expression.read-view-borrow-field" => {
+                let is_field = record.operation == "expression.read-view-borrow-field";
+                check_fields(
+                    &record,
+                    if is_field {
+                        &["as", "value", "declaration", "field", "body"]
+                    } else {
+                        &["as", "value", "body"]
+                    },
+                )?;
+                let value = self.parse_local_reference(&record, "value")?;
+                let binding = self.decode_view_binding(symbol, &record)?;
+                let body = Box::new(self.decode_expression(required(&record, "body")?)?);
+                if is_field {
+                    AuthoredExpressionOperation::BorrowReadViewField {
+                        value,
+                        field: AuthoredReadViewFieldReference {
+                            declaration: self
+                                .parse_declaration_reference(&record, "declaration")?,
+                            field: parse_field(&record, "field")?,
+                        },
+                        binding,
+                        body,
+                    }
+                } else {
+                    AuthoredExpressionOperation::BorrowReadView {
+                        value,
+                        binding,
+                        body,
+                    }
+                }
+            }
+            "expression.read-view-reborrow" => {
+                check_fields(&record, &["as", "value", "read-scope"])?;
+                AuthoredExpressionOperation::ReborrowReadView {
+                    value: self.parse_local_reference(&record, "value")?,
+                    read_scope: self.decode_read_scope(required(&record, "read-scope")?)?,
+                }
+            }
+            "expression.read-view-move" | "expression.read-view-drop" => {
+                check_fields(&record, &["as", "value"])?;
+                let value = self.parse_local_reference(&record, "value")?;
+                if record.operation == "expression.read-view-move" {
+                    AuthoredExpressionOperation::MoveReadView { value }
+                } else {
+                    AuthoredExpressionOperation::DropReadView { value }
+                }
+            }
+            "expression.read-view-data-field" => {
+                check_fields(&record, &["as", "value", "declaration", "field"])?;
+                AuthoredExpressionOperation::ReadViewDataField {
+                    value: self.parse_local_reference(&record, "value")?,
+                    field: AuthoredReadViewFieldReference {
+                        declaration: self.parse_declaration_reference(&record, "declaration")?,
+                        field: parse_field(&record, "field")?,
+                    },
+                }
+            }
             "expression.unit" => {
                 check_fields(&record, &["as"])?;
                 AuthoredExpressionOperation::Unit {}
@@ -5709,6 +6627,7 @@ impl Decoder {
             "expression.implementation-call" => {
                 check_fields(&record, &["as", "function"])?;
                 AuthoredExpressionOperation::ImplementationCall {
+                    read_scope_arguments: self.decode_read_scope_arguments(symbol)?,
                     effect_arguments: self.decode_effect_arguments(symbol)?,
                     requirement_arguments: self.decode_requirement_arguments(symbol)?,
                     function: self.parse_declaration_reference(&record, "function")?,
@@ -5733,6 +6652,7 @@ impl Decoder {
             "expression.method-call" => {
                 check_fields(&record, &["as", "witness", "contract", "method"])?;
                 AuthoredExpressionOperation::MethodCall {
+                    read_scope_arguments: self.decode_read_scope_arguments(symbol)?,
                     witness: self
                         .parse_implementation_operand(&record, required(&record, "witness")?)?,
                     contract: self.parse_declaration_reference(&record, "contract")?,
@@ -5743,6 +6663,7 @@ impl Decoder {
             "expression.call" => {
                 check_fields(&record, &["as", "function"])?;
                 AuthoredExpressionOperation::Call {
+                    read_scope_arguments: self.decode_read_scope_arguments(symbol)?,
                     effect_arguments: self.decode_effect_arguments(symbol)?,
                     requirement_arguments: self.decode_requirement_arguments(symbol)?,
                     function: self.parse_declaration_reference(&record, "function")?,
@@ -5757,6 +6678,7 @@ impl Decoder {
             "expression.function-value" => {
                 check_fields(&record, &["as", "function"])?;
                 AuthoredExpressionOperation::FunctionValue {
+                    read_scope_arguments: self.decode_read_scope_arguments(symbol)?,
                     effect_arguments: self.decode_effect_arguments(symbol)?,
                     requirement_arguments: self.decode_requirement_arguments(symbol)?,
                     function: self.parse_declaration_reference(&record, "function")?,
@@ -6353,6 +7275,294 @@ impl Decoder {
         Ok(edges)
     }
 
+    fn decode_read_scope(&mut self, label: &str) -> Result<AuthoredReadScopeArgument, Diagnostic> {
+        let record = self.read_scopes.get(label).cloned().ok_or_else(|| {
+            Diagnostic::new(
+                DiagnosticClass::Source,
+                "change_read_scope_undefined",
+                format!("read scope fragment '{label}' is not defined"),
+            )
+        })?;
+        validate_local_label(&record, "as", label, '%')?;
+        self.consumed_read_scopes.insert(label.to_owned());
+        Ok(if record.operation == "read-scope.lexical-actual" {
+            let binding = self.parse_local_reference(&record, "binding")?;
+            if matches!(binding, AuthoredLocalReference::FunctionParameter { .. }) {
+                return Err(field_error(
+                    &record,
+                    "binding",
+                    "change_read_scope_binding",
+                    "lexical scope requires a lexical binding, not a parameter",
+                ));
+            }
+            AuthoredReadScopeArgument::Lexical {
+                callable: self.parse_declaration_reference(&record, "callable")?,
+                binding,
+            }
+        } else {
+            let binder = self.parse_declaration_reference(&record, "binder")?;
+            let kind = required(&record, "binder-kind")?;
+            let binder = match kind {
+                "declaration" => {
+                    forbid_fields(&record, &["method", "member"])?;
+                    AuthoredReadScopeBinder::Declaration(binder)
+                }
+                "contract-method" => {
+                    forbid_fields(&record, &["member"])?;
+                    AuthoredReadScopeBinder::ContractMethod {
+                        contract: binder,
+                        method: parse_field(&record, "method")?,
+                    }
+                }
+                "associated-member" => {
+                    forbid_fields(&record, &["method"])?;
+                    AuthoredReadScopeBinder::AssociatedMember {
+                        contract: binder,
+                        member: parse_field(&record, "member")?,
+                    }
+                }
+                "associated-binding" => {
+                    forbid_fields(&record, &["method"])?;
+                    AuthoredReadScopeBinder::AssociatedBinding {
+                        implementation: binder,
+                        member: parse_field(&record, "member")?,
+                    }
+                }
+                _ => {
+                    return Err(field_error(
+                        &record,
+                        "binder-kind",
+                        "change_read_scope_binder",
+                        "read scope binder must select declaration, contract-method, associated-member or associated-binding",
+                    ));
+                }
+            };
+            AuthoredReadScopeArgument::Parameter {
+                binder,
+                parameter: parse_field(&record, "parameter")?,
+            }
+        })
+    }
+
+    fn decode_scope_parameters(
+        &mut self,
+        parent: &str,
+    ) -> Result<Vec<ReadScopeParameter>, Diagnostic> {
+        let mut ids = BTreeSet::new();
+        let mut names = BTreeSet::new();
+        self.ordered_record_edges("read-scope.parameter", parent)?
+            .iter()
+            .map(|edge| {
+                let parameter = parse_scope_parameter(&edge.record, "id", "name")?;
+                if !ids.insert(parameter.id) || !names.insert(parameter.name.clone()) {
+                    return Err(record_error(
+                        &edge.record,
+                        "change_read_scope_duplicate",
+                        "scope formals require distinct identities and names",
+                    ));
+                }
+                Ok(parameter)
+            })
+            .collect()
+    }
+
+    fn decode_named_scope_sources(
+        &mut self,
+        parent: &str,
+    ) -> Result<Vec<AuthoredReadScopeSource<AuthoredLocalReference>>, Diagnostic> {
+        self.ordered_record_edges("read-scope.source", parent)?
+            .iter()
+            .map(|edge| {
+                Ok(AuthoredReadScopeSource {
+                    source: self.parse_local_reference(&edge.record, "source")?,
+                    scope: self.decode_read_scope(required(&edge.record, "scope")?)?,
+                })
+            })
+            .collect()
+    }
+
+    fn decode_method_scope_sources(
+        &mut self,
+        parent: &str,
+    ) -> Result<Vec<AuthoredReadScopeSource<u32>>, Diagnostic> {
+        self.ordered_record_edges("read-scope.source", parent)?
+            .iter()
+            .map(|edge| {
+                Ok(AuthoredReadScopeSource {
+                    source: parse_field(&edge.record, "source")?,
+                    scope: self.decode_read_scope(required(&edge.record, "scope")?)?,
+                })
+            })
+            .collect()
+    }
+
+    fn decode_read_scope_arguments(
+        &mut self,
+        parent: &str,
+    ) -> Result<Vec<AuthoredReadScopeArgument>, Diagnostic> {
+        self.ordered_record_edges("scope.argument", parent)?
+            .iter()
+            .map(|edge| self.decode_read_scope(required(&edge.record, "scope")?))
+            .collect()
+    }
+
+    fn decode_named_result(
+        &mut self,
+        record: &CompactRecord,
+    ) -> Result<AuthoredCallableResult<AuthoredLocalReference>, Diagnostic> {
+        let relation = match result_kind(record)? {
+            "value" => AuthoredResultRelation::Value,
+            "read-from" => AuthoredResultRelation::ReadFrom {
+                source: self.parse_local_reference(record, "result-source")?,
+            },
+            _ => AuthoredResultRelation::ViewFrom {
+                source: self.parse_local_reference(record, "result-source")?,
+                scope: self.decode_read_scope(required(record, "result-scope")?)?,
+            },
+        };
+        Ok(AuthoredCallableResult {
+            ty: self.decode_type(required(record, "result")?)?,
+            relation,
+        })
+    }
+
+    fn decode_method_result(
+        &mut self,
+        record: &CompactRecord,
+    ) -> Result<AuthoredCallableResult<u32>, Diagnostic> {
+        let relation = match result_kind(record)? {
+            "value" => AuthoredResultRelation::Value,
+            "read-from" => AuthoredResultRelation::ReadFrom {
+                source: parse_field(record, "result-source")?,
+            },
+            _ => AuthoredResultRelation::ViewFrom {
+                source: parse_field(record, "result-source")?,
+                scope: self.decode_read_scope(required(record, "result-scope")?)?,
+            },
+        };
+        Ok(AuthoredCallableResult {
+            ty: self.decode_type(required(record, "result")?)?,
+            relation,
+        })
+    }
+
+    fn decode_associated_bound(
+        &mut self,
+        record: &CompactRecord,
+    ) -> Result<AssociatedTypeBound, Diagnostic> {
+        Ok(match required(record, "kind")? {
+            "owned" => {
+                forbid_fields(record, &["scope-parameter", "scope-name"])?;
+                AssociatedTypeBound::Owned
+            }
+            "read-view-family" => AssociatedTypeBound::ReadViewFamily {
+                scope_parameter: parse_scope_parameter(record, "scope-parameter", "scope-name")?,
+            },
+            _ => {
+                return Err(field_error(
+                    record,
+                    "kind",
+                    "change_associated_bound",
+                    "associated member kind must be owned or read-view-family",
+                ));
+            }
+        })
+    }
+
+    fn decode_associated_binding(
+        &mut self,
+        record: &CompactRecord,
+    ) -> Result<AuthoredAssociatedTypeBindingValue, Diagnostic> {
+        let ty = self.decode_type(required(record, "type")?)?;
+        Ok(match required(record, "kind")? {
+            "owned" => {
+                forbid_fields(record, &["scope-parameter", "scope-name"])?;
+                AuthoredAssociatedTypeBindingValue::Owned { ty }
+            }
+            "read-view-family" => AuthoredAssociatedTypeBindingValue::ReadViewFamily {
+                scope_parameter: parse_scope_parameter(record, "scope-parameter", "scope-name")?,
+                ty,
+            },
+            _ => {
+                return Err(field_error(
+                    record,
+                    "kind",
+                    "change_associated_binding_kind",
+                    "associated binding kind must be owned or read-view-family",
+                ));
+            }
+        })
+    }
+
+    fn decode_view_fields(
+        &mut self,
+        parent: &str,
+    ) -> Result<Vec<AuthoredReadViewField>, Diagnostic> {
+        let mut ids = BTreeSet::new();
+        let mut names = BTreeSet::new();
+        self.ordered_record_edges("read-view.field", parent)?
+            .iter()
+            .map(|edge| {
+                let record = &edge.record;
+                let id = parse_field(record, "id")?;
+                let name = parse_name(record, "name")?;
+                if !ids.insert(id) || !names.insert(name.clone()) {
+                    return Err(record_error(
+                        record,
+                        "change_read_view_field_duplicate",
+                        "view fields require distinct identities and names",
+                    ));
+                }
+                let kind = match required(record, "kind")? {
+                    "ordinary" => {
+                        forbid_fields(record, &["read-scope"])?;
+                        AuthoredReadViewFieldKind::Ordinary
+                    }
+                    "read-reference" => AuthoredReadViewFieldKind::ReadReference {
+                        read_scope: self.decode_read_scope(required(record, "read-scope")?)?,
+                    },
+                    _ => {
+                        return Err(field_error(
+                            record,
+                            "kind",
+                            "change_read_view_field_kind",
+                            "view field kind must be ordinary or read-reference",
+                        ));
+                    }
+                };
+                Ok(AuthoredReadViewField {
+                    id,
+                    name,
+                    ty: self.decode_type(required(record, "type")?)?,
+                    kind,
+                })
+            })
+            .collect()
+    }
+
+    fn decode_view_binding(
+        &mut self,
+        parent: &str,
+        record: &CompactRecord,
+    ) -> Result<Box<AuthoredBindingDefinition>, Diagnostic> {
+        let mut edges = self.ordered_record_edges("expression.read-view-binding", parent)?;
+        if edges.len() != 1 {
+            return Err(record_error(
+                record,
+                "change_read_view_binding",
+                "view borrow requires exactly one binding",
+            ));
+        }
+        let edge = edges.remove(0);
+        Ok(Box::new(AuthoredBindingDefinition {
+            symbol: symbol_field(&edge.record, "as")?,
+            name: parse_name(&edge.record, "name")?,
+            declared_type: optional(&edge.record, "type")
+                .map(|ty| self.decode_type(ty))
+                .transpose()?,
+        }))
+    }
+
     fn decode_owned_type_arguments(
         &mut self,
         parent: &str,
@@ -6401,6 +7611,55 @@ impl Decoder {
             })
             .collect()
     }
+}
+
+fn parse_scope_parameter(
+    record: &CompactRecord,
+    id: &str,
+    name: &str,
+) -> Result<ReadScopeParameter, Diagnostic> {
+    Ok(ReadScopeParameter {
+        id: parse_field::<ReadScopeParameterId>(record, id)?,
+        name: parse_name(record, name)?,
+    })
+}
+
+fn forbid_fields(record: &CompactRecord, names: &[&str]) -> Result<(), Diagnostic> {
+    for name in names {
+        if field(record, name).is_some() {
+            return Err(field_error(
+                record,
+                name,
+                "change_field_not_applicable",
+                format!("field '{name}' is not accepted by this selected kind"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn result_kind(record: &CompactRecord) -> Result<&str, Diagnostic> {
+    let kind = optional(record, "result-kind").unwrap_or("value");
+    match kind {
+        "value" => forbid_fields(record, &["result-source", "result-scope"])?,
+        "read-from" => {
+            required(record, "result-source")?;
+            forbid_fields(record, &["result-scope"])?;
+        }
+        "view-from" => {
+            required(record, "result-source")?;
+            required(record, "result-scope")?;
+        }
+        _ => {
+            return Err(field_error(
+                record,
+                "result-kind",
+                "change_result_relation",
+                "result kind must be value, read-from or view-from",
+            ));
+        }
+    }
+    Ok(kind)
 }
 
 fn is_change_precondition(operation: &str) -> bool {
@@ -6486,10 +7745,20 @@ fn change_request_commitment(
 ) -> Result<ChangeRequestCommitment, Diagnostic> {
     let intent = crate::platform::change::canonical_authored_intent_bytes(request)?;
     let budget = crate::platform::change::canonical_authored_budget_bytes(request.budget)?;
+    change_request_commitment_from_bytes(&intent, &budget, options)
+}
+
+// The byte hasher is shared with literal historical protocol controls; public normalization
+// still derives intent and budget exclusively from the current typed request above.
+fn change_request_commitment_from_bytes(
+    intent: &[u8],
+    budget: &[u8],
+    options: &PublicationOptions,
+) -> Result<ChangeRequestCommitment, Diagnostic> {
     let mut hasher = blake3::Hasher::new_derive_key(CHANGE_REQUEST_COMMITMENT_DOMAIN);
-    hash_digest_field(&mut hasher, commitment_codec_identity(&intent).as_bytes())?;
-    hash_digest_field(&mut hasher, &intent)?;
-    hash_digest_field(&mut hasher, &budget)?;
+    hash_digest_field(&mut hasher, commitment_codec_identity(intent).as_bytes())?;
+    hash_digest_field(&mut hasher, intent)?;
+    hash_digest_field(&mut hasher, budget)?;
     hash_optional_digest_field(&mut hasher, options.idempotency_key.as_deref())?;
     hash_optional_digest_field(&mut hasher, options.intent.as_deref())?;
     Ok(ChangeRequestCommitment(*hasher.finalize().as_bytes()))
@@ -6545,6 +7814,8 @@ fn commitment_codec_identity(intent: &[u8]) -> &'static str {
         "lkjscript-authored-change-codec-36"
     } else if intent.starts_with(b"LKJACR37") {
         "lkjscript-authored-change-codec-37"
+    } else if intent.starts_with(b"LKJACR38") {
+        "lkjscript-authored-change-codec-38"
     } else {
         // Retain the existing fallback; do not infer identities from unknown/future magics.
         AUTHORED_CHANGE_CODEC_IDENTITY
@@ -7393,6 +8664,19 @@ mod tests {
                 _ => None,
             })
             .unwrap();
+        // The predecessor vectors stay literal history. Current requests commit39 and
+        // must not masquerade as the old wire/allocation profile.
+        fn frozen_prefix(base: RevisionId) -> Vec<u8> {
+            let mut bytes = b"LKJACR14".to_vec();
+            bytes.extend_from_slice(&base.bytes());
+            bytes.extend_from_slice(&0_u64.to_be_bytes());
+            bytes.extend_from_slice(&1_u64.to_be_bytes());
+            bytes
+        }
+        fn frozen_string(bytes: &mut Vec<u8>, value: &str) {
+            bytes.extend_from_slice(&(value.len() as u64).to_be_bytes());
+            bytes.extend_from_slice(value.as_bytes());
+        }
         let expected = [
             (
                 "330a169923709b56f66b37bf676c253ae44eb24845bab551cd29e6a4e9ae3bdc",
@@ -7419,31 +8703,87 @@ mod tests {
                 historical_base,
             );
             let request = original_budget_request("legacy.lkjc", input.as_bytes());
-            let bytes = crate::platform::change::canonical_authored_intent_bytes(&request.semantic)
-                .unwrap();
-            let allocated =
-                crate::platform::change::authored_source_owners(&logical, &request.semantic)
-                    .unwrap();
+            let mut bytes = frozen_prefix(historical_base);
+            bytes.extend_from_slice(&[2, 2]); // Create function; declaration symbol domain.
+            bytes.extend_from_slice(&1_u64.to_be_bytes());
+            if selector == module.header.owner.to_string() {
+                bytes.push(1); // Exact module selector.
+                let OwnerKey::Module(id) = module.header.owner else {
+                    unreachable!()
+                };
+                bytes.extend_from_slice(&id.bytes());
+            } else {
+                bytes.push(2); // Named module selector.
+                frozen_string(&mut bytes, module.name.as_str());
+            }
+            frozen_string(&mut bytes, "legacy_reference_golden");
+            bytes.push(1); // Private.
+            bytes.extend_from_slice(&0_u64.to_be_bytes()); // Type parameters.
+            bytes.extend_from_slice(&0_u64.to_be_bytes()); // Value parameters.
+            bytes.extend_from_slice(&[3, 1, 1, 12]); // I64, Pure, body symbol, expression domain.
+            bytes.extend_from_slice(&1_u64.to_be_bytes());
+            bytes.push(3); // I64 expression.
+            bytes.extend_from_slice(&42_i64.to_be_bytes());
+            let allocated = crate::platform::change::authored_source_owners_from_frozen_intent(
+                &logical,
+                &request.semantic,
+                &bytes,
+            )
+            .unwrap();
             assert_eq!(blake3::hash(&bytes).to_hex().as_str(), expected.0);
-            assert_eq!(request.request_commitment.to_string(), expected.1);
+            let budget =
+                crate::platform::change::canonical_authored_budget_bytes(request.semantic.budget)
+                    .unwrap();
+            assert_eq!(
+                change_request_commitment_from_bytes(&bytes, &budget, &request.options)
+                    .unwrap()
+                    .to_string(),
+                expected.1
+            );
             assert_eq!(allocated["$body"].to_string(), expected.2);
             assert_eq!(allocated["$new"].to_string(), expected.3);
+            let current =
+                crate::platform::change::canonical_authored_intent_bytes(&request.semantic)
+                    .unwrap();
+            assert_eq!(&current[..8], b"LKJACR39");
+            assert_ne!(current, bytes);
+            let current_allocated =
+                crate::platform::change::authored_source_owners(&logical, &request.semantic)
+                    .unwrap();
+            assert_ne!(current_allocated["$body"], allocated["$body"]);
+            assert_ne!(current_allocated["$new"], allocated["$new"]);
         }
         let input = format!(
             "request base={} idempotency=legacy-qualified-baseline\nexpression.unit as=$body\nreplace.body function=first/callee body=$body\n",
             historical_base
         );
         let request = original_budget_request("qualified.lkjc", input.as_bytes());
-        let bytes =
-            crate::platform::change::canonical_authored_intent_bytes(&request.semantic).unwrap();
-        let allocated =
-            crate::platform::change::authored_source_owners(&logical, &request.semantic).unwrap();
+        let mut bytes = frozen_prefix(historical_base);
+        bytes.extend_from_slice(&[35, 2, 2]); // Replace body; qualified declaration; named module.
+        frozen_string(&mut bytes, "first");
+        frozen_string(&mut bytes, "callee");
+        bytes.extend_from_slice(&[1, 12]); // Body symbol present, expression domain.
+        bytes.extend_from_slice(&1_u64.to_be_bytes());
+        bytes.push(1); // Unit expression.
+        let allocated = crate::platform::change::authored_source_owners_from_frozen_intent(
+            &logical,
+            &request.semantic,
+            &bytes,
+        )
+        .unwrap();
         assert_eq!(
             blake3::hash(&bytes).to_hex().as_str(),
             "b481f04b0bb63a68f42b5b06f97ff773f411a8dc8479f611e7137fef24596b3c"
         );
         assert_eq!(
-            request.request_commitment.to_string(),
+            change_request_commitment_from_bytes(
+                &bytes,
+                &crate::platform::change::canonical_authored_budget_bytes(request.semantic.budget)
+                    .unwrap(),
+                &request.options
+            )
+            .unwrap()
+            .to_string(),
             "request_82b03a0b580889d3b5a92372b903ced62853e7ef5e7d8008bcaa99d2f848a74a"
         );
         assert_eq!(
@@ -7846,7 +9186,10 @@ mod tests {
         else {
             panic!("function contract")
         };
-        assert!(matches!(result, AuthoredType::StructuralRecord { fields } if fields.len() == 2));
+        assert!(
+            matches!(&result.ty, AuthoredType::StructuralRecord { fields } if fields.len() == 2)
+        );
+        assert_eq!(result.relation, AuthoredResultRelation::Value);
         assert!(matches!(
             effect,
             AuthoredFunctionEffect::Task { effect_parameters: _, requirements } if requirements.len() == 1

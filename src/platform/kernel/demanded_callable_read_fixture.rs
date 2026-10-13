@@ -123,9 +123,14 @@ impl Fixture {
                     id: method,
                     name: Name::new("read")?,
                     parameters: Vec::new(),
-                    result,
-                    result_borrow: None,
+                    result: crate::platform::kernel::CallableResult {
+                        ty: result,
+                        relation: crate::platform::kernel::ResultRelation::Value,
+                    },
                     effect: FunctionEffect::Pure,
+
+                    read_scope_parameters: Vec::new(),
+                    read_scope_sources: Vec::new(),
                 }],
                 associated_types: Vec::new(),
             }),
@@ -155,6 +160,8 @@ impl Fixture {
                         contract,
                         method,
                         arguments: Vec::new(),
+
+                        read_scope_arguments: Vec::new(),
                     },
                 )?),
             );
@@ -179,10 +186,15 @@ impl Fixture {
                 effect_parameters: Vec::new(),
                 type_parameters: vec![parameter],
                 parameters: Vec::new(),
-                result,
-                result_borrow: None,
+                result: crate::platform::kernel::CallableResult {
+                    ty: result,
+                    relation: crate::platform::kernel::ResultRelation::Value,
+                },
                 effect: FunctionEffect::Pure,
                 body,
+
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             }),
         )?;
         let parameter = fixture.parameter(mapping, 2)?;
@@ -213,6 +225,8 @@ impl Fixture {
                     function: caller,
                     type_arguments: vec![variable],
                     implementations: operands,
+
+                    read_scope_arguments: Vec::new(),
                 }],
                 associated_types: Vec::new(),
             }),

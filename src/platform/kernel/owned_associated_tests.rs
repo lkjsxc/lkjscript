@@ -6,6 +6,7 @@ use crate::platform::semantic_id::{
 
 const SEED: &[u8] = b"owned-associated-admission-tests";
 const GENERATION: u16 = 33;
+static EMPTY_READ_SCOPES: BTreeMap<ReadScopeReference, ReadScopeArgument> = BTreeMap::new();
 
 struct Fixture {
     source: KernelSnapshot,
@@ -91,10 +92,15 @@ fn function(
         requirement_parameters: vec![],
         effect_parameters: vec![],
         parameters: vec![],
-        result,
-        result_borrow: None,
+        result: crate::platform::kernel::CallableResult {
+            ty: result,
+            relation: crate::platform::kernel::ResultRelation::Value,
+        },
         effect: FunctionEffect::Pure,
         body: ExpressionId::migrate(SEED, 0),
+
+        read_scope_parameters: Vec::new(),
+        read_scope_sources: Vec::new(),
     }
 }
 
@@ -127,9 +133,14 @@ fn fixture() -> Fixture {
                 ty: scalar,
                 use_mode: ParameterUse::Unrestricted,
             }],
-            result: scalar,
-            result_borrow: None,
+            result: crate::platform::kernel::CallableResult {
+                ty: scalar,
+                relation: crate::platform::kernel::ResultRelation::Value,
+            },
             effect: FunctionEffect::Pure,
+
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
         }],
         associated_types: vec![
             AssociatedTypeMember {
@@ -167,10 +178,13 @@ fn fixture() -> Fixture {
     parameter(&mut source, other_contract, other_self_parameter);
     let scheme_parameter = TypeParameterId::migrate(SEED, 1);
     let mut bindings = vec![
-        AssociatedTypeBinding { member, ty: cell },
+        AssociatedTypeBinding {
+            member,
+            value: crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty: cell },
+        },
         AssociatedTypeBinding {
             member: spare,
-            ty: cell,
+            value: crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty: cell },
         },
     ];
     bindings.sort_by_key(|binding| binding.member);
@@ -188,6 +202,8 @@ fn fixture() -> Fixture {
             },
             type_arguments: vec![],
             implementations: vec![],
+
+            read_scope_arguments: Vec::new(),
         }],
         associated_types: bindings,
     };
@@ -210,7 +226,7 @@ fn fixture() -> Fixture {
             .iter_mut()
             .find(|binding| binding.member == member)
             .expect("Out binding")
-            .ty = symbolic;
+            .value = AssociatedTypeBindingValue::Owned { ty: symbolic };
     }
     let mut concrete_value = implementation;
     concrete_value.type_parameters.clear();
@@ -219,7 +235,7 @@ fn fixture() -> Fixture {
         .iter_mut()
         .find(|binding| binding.member == member)
         .expect("Out binding")
-        .ty = buffer;
+        .value = AssociatedTypeBindingValue::Owned { ty: buffer };
     let concrete = declaration(
         &mut source,
         module,
@@ -326,10 +342,15 @@ fn fixture() -> Fixture {
             requirement_parameters: vec![],
             effect_parameters: vec![],
             parameters: vec![method_parameter],
-            result: scalar,
-            result_borrow: None,
+            result: crate::platform::kernel::CallableResult {
+                ty: scalar,
+                relation: crate::platform::kernel::ResultRelation::Value,
+            },
             effect: FunctionEffect::Pure,
             body: ExpressionId::migrate(SEED, 0),
+
+            read_scope_parameters: Vec::new(),
+            read_scope_sources: Vec::new(),
         }),
     );
     source.owners.insert(
@@ -414,7 +435,7 @@ fn owned_associated_member_admission_is_per_occurrence_and_does_not_readmit_sign
     let DeclarationPayload::OwnedContract(contract) = &mut record.payload else {
         panic!("contract payload")
     };
-    contract.methods[0].result = missing;
+    contract.methods[0].result.ty = missing;
     let admission = OwnedAssociatedAdmission::new();
     admission
         .validate_occurrences(
@@ -540,7 +561,7 @@ fn owned_associated_binding_inventory_and_unused_rhs_are_complete() {
         .iter_mut()
         .find(|binding| binding.member == f.spare)
         .expect("unused binding")
-        .ty = scalar;
+        .value = AssociatedTypeBindingValue::Owned { ty: scalar };
     replace_implementation(&mut f, unused.clone());
     semantic(OwnedAssociatedAdmission::new().validate_bindings(&f.source, f.scheme, &unused));
 }
@@ -563,7 +584,7 @@ fn owned_associated_stored_templates_reject_hidden_projection_and_foreign_parame
         .iter_mut()
         .find(|binding| binding.member == f.spare)
         .expect("unused binding")
-        .ty = hidden;
+        .value = AssociatedTypeBindingValue::Owned { ty: hidden };
     replace_implementation(&mut f, value.clone());
     semantic(OwnedAssociatedAdmission::new().validate_bindings(&f.source, f.scheme, &value));
     let foreign_parameter = ty(
@@ -577,7 +598,9 @@ fn owned_associated_stored_templates_reject_hidden_projection_and_foreign_parame
         .iter_mut()
         .find(|binding| binding.member == f.spare)
         .expect("unused binding")
-        .ty = foreign_parameter;
+        .value = AssociatedTypeBindingValue::Owned {
+        ty: foreign_parameter,
+    };
     replace_implementation(&mut f, value.clone());
     semantic(OwnedAssociatedAdmission::new().validate_bindings(&f.source, f.scheme, &value));
     let field = FieldId::migrate(SEED, 0);
@@ -596,7 +619,7 @@ fn owned_associated_stored_templates_reject_hidden_projection_and_foreign_parame
         .iter_mut()
         .find(|binding| binding.member == f.spare)
         .expect("unused binding")
-        .ty = nominal;
+        .value = AssociatedTypeBindingValue::Owned { ty: nominal };
     replace_implementation(&mut f, value.clone());
     semantic(OwnedAssociatedAdmission::new().validate_bindings(&f.source, f.scheme, &value));
 }
@@ -625,7 +648,7 @@ fn owned_associated_resolution_keeps_selected_identity_and_rebinds_lexical_scope
         .into_iter()
         .find(|binding| binding.member == f.member)
         .expect("binding")
-        .ty;
+        .ty();
     assert_eq!(
         result,
         AssociatedResolution::Binding {
@@ -923,7 +946,7 @@ fn owned_associated_private_generic_layout_property_does_not_require_public_auth
         .iter_mut()
         .find(|binding| binding.member == f.spare)
         .expect("unused binding")
-        .ty = public_type;
+        .value = AssociatedTypeBindingValue::Owned { ty: public_type };
     replace_implementation(&mut f, value.clone());
     let mut read = RepresentationRead {
         source: &f.source,
@@ -1012,6 +1035,8 @@ fn environment<'a>(
         contract_selection: contract_operand
             .map(parallel_types::AssociatedContractSelection::Witness),
         implementations,
+
+        scopes: &EMPTY_READ_SCOPES,
     }
 }
 
@@ -1304,7 +1329,7 @@ fn owned_associated_binding_accepts_unrestricted_ordinary_nominal_formals() {
         .iter_mut()
         .find(|binding| binding.member == f.spare)
         .expect("unused binding")
-        .ty = nominal;
+        .value = AssociatedTypeBindingValue::Owned { ty: nominal };
     replace_implementation(&mut f, value.clone());
     OwnedAssociatedAdmission::new()
         .validate_bindings(&f.source, f.scheme, &value)
@@ -1333,7 +1358,7 @@ fn owned_associated_own_definition_binding_is_opaque_to_contract_ordinary_map() 
         .iter()
         .find(|binding| binding.member == f.member)
         .expect("binding")
-        .ty;
+        .ty();
     // An unrelated source substitution with the same key cannot reinterpret an
     // implementation-context RHS. The engine environment is not an application
     // certificate; this adversary deliberately makes capture easy to observe.
@@ -1352,6 +1377,8 @@ fn owned_associated_own_definition_binding_is_opaque_to_contract_ordinary_map() 
                 implementation: &value,
             }),
             implementations: &implementations,
+
+            scopes: &EMPTY_READ_SCOPES,
         },
         &associated,
     );
@@ -1459,7 +1486,7 @@ fn owned_associated_function_carrier_retains_exact_witness_environment_and_sourc
     let DeclarationPayload::Function(value) = &mut record.payload else {
         panic!("callee payload")
     };
-    value.result = root;
+    value.result.ty = root;
     let operands = [ImplementationOperand::Concrete {
         implementation: f.scheme,
         type_arguments: vec![f.buffer],
@@ -1476,7 +1503,7 @@ fn owned_associated_function_carrier_retains_exact_witness_environment_and_sourc
         &associated,
     )
     .expect("complete selected function application");
-    assert_eq!(application.signature.result, root);
+    assert_eq!(application.signature.result.ty, root);
     {
         let overlay = owned_contract::AppliedTypeRead {
             read: &f.source,
@@ -1817,4 +1844,258 @@ fn owned_associated_repeated_deep_walks_reuse_queue_storage_with_exact_contexts(
         AssociatedTypeContext::Lexical(f.lexical),
         GENERATION,
     ));
+}
+
+#[test]
+fn owned_associated_nominal_absence_keeps_scope_independent_work_within_shared_storage() {
+    let mut f = fixture();
+    let module = ModuleId::migrate(SEED, 20000);
+    let unit = ty(&mut f.source, TypeForm::Unit);
+    let mut fields = Vec::new();
+    let mut last = None;
+    for position in 0..256 {
+        let field = FieldId::migrate(SEED, 20000 + position);
+        let nominal = declaration(
+            &mut f.source,
+            module,
+            20000 + position,
+            &format!("Target{position}"),
+            OwnerKind::Record,
+            DeclarationPayload::Record {
+                type_parameters: vec![],
+                fields: vec![field],
+            },
+        );
+        f.source.owners.insert(
+            OwnerKey::Field(field),
+            OwnerRecord::Field(FieldRecord {
+                header: OwnerHeader::new(OwnerKey::Field(field), OwnerKind::Field),
+                declaration: nominal.declaration,
+                name: name("value"),
+                ty: unit,
+            }),
+        );
+        let named = ty(
+            &mut f.source,
+            TypeForm::Named {
+                declaration: nominal,
+            },
+        );
+        fields.push(StructuralTypeField {
+            name: name(&format!("target_{position:04}")),
+            ty: named,
+        });
+        last = Some((field, nominal));
+    }
+    let root = ty(&mut f.source, TypeForm::StructuralRecord { fields });
+    let limits = AssociatedAdmissionLimits {
+        maximum_metadata_bytes: 128 * 1024,
+        ..AssociatedAdmissionLimits::default()
+    };
+    let admission = OwnedAssociatedAdmission::with_limits(limits);
+    admission
+        .validate_occurrences(&f.source, &[root], AssociatedTypeContext::Forbidden, 34)
+        .expect("all256 exact nominal fields fit without unused per-declaration absence scopes");
+    assert!(admission.work().1 < limits.maximum_metadata_bytes);
+
+    // A shallower visit to Unit never suppresses a later depth refusal. Depth is
+    // checked before the shared absence key may skip a completed ordinary node.
+    let shallow = OwnedAssociatedAdmission::with_limits(AssociatedAdmissionLimits {
+        maximum_depth: 1,
+        ..limits
+    });
+    let depth = shallow
+        .validate_occurrences(
+            &f.source,
+            &[root, unit],
+            AssociatedTypeContext::Forbidden,
+            34,
+        )
+        .unwrap_err();
+    assert_eq!(depth.class, DiagnosticClass::Resource);
+    assert_eq!(
+        depth.message,
+        "associated type traversal exceeds its depth admission"
+    );
+
+    let (field, nominal) = last.unwrap();
+    let OwnerRecord::Field(record) = f.source.owners.get_mut(&OwnerKey::Field(field)).unwrap()
+    else {
+        panic!("last field")
+    };
+    record.declaration = f.nominal.declaration;
+    assert_ne!(record.declaration, nominal.declaration);
+    let foreign = OwnedAssociatedAdmission::with_limits(limits)
+        .validate_occurrences(&f.source, &[root], AssociatedTypeContext::Forbidden, 34)
+        .unwrap_err();
+    assert_eq!(foreign.class, DiagnosticClass::Semantic);
+}
+
+#[test]
+fn owned_associated_projection_free_nominal_fields_keep_exact_formal_authority() {
+    let mut f = fixture();
+    let module = ModuleId::migrate(SEED, 21000);
+    let formal = TypeParameterId::migrate(SEED, 21000);
+    let field = FieldId::migrate(SEED, 21000);
+    let nominal = declaration(
+        &mut f.source,
+        module,
+        21000,
+        "Template",
+        OwnerKind::OwnedRecord,
+        DeclarationPayload::OwnedRecord {
+            type_parameters: vec![formal],
+            fields: vec![field],
+        },
+    );
+    let formal_type = parameter(&mut f.source, nominal, formal);
+    f.source.owners.insert(
+        OwnerKey::Field(field),
+        OwnerRecord::Field(FieldRecord {
+            header: OwnerHeader::new(OwnerKey::Field(field), OwnerKind::Field),
+            declaration: nominal.declaration,
+            name: name("value"),
+            ty: formal_type,
+        }),
+    );
+    let root = ty(
+        &mut f.source,
+        TypeForm::Applied {
+            declaration: nominal,
+            arguments: vec![f.cell],
+        },
+    );
+    let admission = OwnedAssociatedAdmission::new();
+    AssociatedRead {
+        read: &f.source,
+        admission: &admission,
+    }
+    .walk(&[root], AssociatedTypeContext::Lexical(f.scheme), 34, true)
+    .expect("stored-RHS field formal belongs to its exact raw nominal definition");
+
+    let foreign_parameter = f.scheme_parameter;
+    let foreign = ty(
+        &mut f.source,
+        TypeForm::TypeParameter {
+            parameter: foreign_parameter,
+        },
+    );
+    let OwnerRecord::Field(record) = f.source.owners.get_mut(&OwnerKey::Field(field)).unwrap()
+    else {
+        panic!("nominal field")
+    };
+    record.ty = foreign;
+    let admission = OwnedAssociatedAdmission::new();
+    let error = AssociatedRead {
+        read: &f.source,
+        admission: &admission,
+    }
+    .walk(&[root], AssociatedTypeContext::Lexical(f.scheme), 34, true)
+    .unwrap_err();
+    assert_eq!(error.class, DiagnosticClass::Semantic);
+}
+
+#[test]
+fn owned_associated_raw_nominal_field_and_case_generations_remain_exact() {
+    for case_form in [false, true] {
+        for (generation, expected) in [
+            (33, "kernel_read_view_generation"),
+            (34, "kernel_owned_associated"),
+        ] {
+            let mut f = fixture();
+            let module = ModuleId::migrate(SEED, 22000);
+            let scope_parameter = ReadScopeParameter {
+                id: crate::platform::semantic_id::ReadScopeParameterId::migrate(SEED, 22000),
+                name: name("source"),
+            };
+            let parameter = scope_parameter.id;
+            let view = declaration(
+                &mut f.source,
+                module,
+                22000,
+                "HiddenView",
+                OwnerKind::ReadView,
+                DeclarationPayload::ReadView(ReadViewDeclaration {
+                    type_parameters: vec![],
+                    scope_parameter,
+                    fields: vec![],
+                }),
+            );
+            let view_type = ty(
+                &mut f.source,
+                TypeForm::ReadViewApplied {
+                    declaration: view,
+                    arguments: vec![],
+                    read_scope: ReadScopeArgument::Parameter(ReadScopeReference {
+                        binder: ReadScopeBinder::Declaration(view),
+                        parameter,
+                    }),
+                },
+            );
+            let field = FieldId::migrate(SEED, 22000);
+            let case = crate::platform::semantic_id::CaseId::migrate(SEED, 22000);
+            let payload = if case_form {
+                DeclarationPayload::Variant {
+                    type_parameters: vec![],
+                    cases: vec![case],
+                }
+            } else {
+                DeclarationPayload::Record {
+                    type_parameters: vec![],
+                    fields: vec![field],
+                }
+            };
+            let nominal = declaration(
+                &mut f.source,
+                module,
+                22001,
+                "Container",
+                if case_form {
+                    OwnerKind::Variant
+                } else {
+                    OwnerKind::Record
+                },
+                payload,
+            );
+            if case_form {
+                let mut header = OwnerHeader::new(OwnerKey::Case(case), OwnerKind::Case);
+                header.contract_version = generation;
+                f.source.owners.insert(
+                    OwnerKey::Case(case),
+                    OwnerRecord::Case(CaseRecord {
+                        header,
+                        declaration: nominal.declaration,
+                        name: name("value"),
+                        payload: Some(view_type),
+                    }),
+                );
+            } else {
+                let mut header = OwnerHeader::new(OwnerKey::Field(field), OwnerKind::Field);
+                header.contract_version = generation;
+                f.source.owners.insert(
+                    OwnerKey::Field(field),
+                    OwnerRecord::Field(FieldRecord {
+                        header,
+                        declaration: nominal.declaration,
+                        name: name("value"),
+                        ty: view_type,
+                    }),
+                );
+            }
+            let root = ty(
+                &mut f.source,
+                TypeForm::Named {
+                    declaration: nominal,
+                },
+            );
+            let error = OwnedAssociatedAdmission::new()
+                .validate_occurrences(&f.source, &[root], AssociatedTypeContext::Forbidden, 34)
+                .unwrap_err();
+            assert_eq!(error.class, DiagnosticClass::Semantic);
+            assert_eq!(
+                error.code, expected,
+                "case={case_form} field_generation={generation}"
+            );
+        }
+    }
 }

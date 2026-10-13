@@ -1,6 +1,11 @@
 //! Logical package-revision identity and separate physical acceptance transport.
 
 pub(crate) mod oracle;
+mod read_views;
+
+#[cfg(test)]
+#[path = "package_transport/read_view_admission_tests.rs"]
+mod read_view_admission_tests;
 pub(crate) mod source;
 
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -1009,7 +1014,9 @@ fn validate_interface_dependencies(
                     "associated discovery count overflow",
                 )
             })?;
-            if object.form.is_associated() {
+            if object.form.is_associated()
+                || matches!(object.form, TypeForm::ReadViewApplied { .. })
+            {
                 associated_present = true;
                 break 'discovery;
             }
@@ -1030,6 +1037,15 @@ fn validate_interface_dependencies(
                     }
                     PackageInterfaceDeclarationPayload::OwnedImplementation(implementation) => {
                         !implementation.associated_types.is_empty()
+                    }
+                    PackageInterfaceDeclarationPayload::ReadView(_) => true,
+                    PackageInterfaceDeclarationPayload::Function(function) => {
+                        !function.read_scope_parameters.is_empty()
+                            || !function.read_scope_sources.is_empty()
+                            || matches!(
+                                function.result.relation,
+                                crate::platform::kernel::ResultRelation::ViewFrom { .. }
+                            )
                     }
                     _ => false,
                 },
@@ -1055,6 +1071,7 @@ fn validate_interface_dependencies(
         if associated_present {
             closure.validate_associated_occurrences(revision, interface, &mut associated)?;
         }
+        read_views::validate_revision(&closure, revision, interface, &mut associated)?;
         for ty in interface.type_objects.values() {
             if revision.graph_contract_version < 25
                 && matches!(ty.form, TypeForm::OwnedSequence { .. })
@@ -1132,46 +1149,28 @@ fn validate_interface_dependencies(
                             "owned implementation contract",
                         )?;
                         for method in &implementation.methods {
-                            closure.require_owner(
-                                revision,
-                                method.function.package,
-                                OwnerKey::Declaration(method.function.declaration),
-                                &[OwnerKind::PureFunction, OwnerKind::TaskFunction],
-                                "owned implementation method",
-                            )?;
+                            let omitted_local = method.function.package == revision.package
+                                && !interface.owners.contains_key(&OwnerKey::Declaration(
+                                    method.function.declaration,
+                                ));
+                            // The earlier mapped-scope proof checks all visible obligations.
+                            // Omitted private local targets require complete canonical source
+                            // admission before this descriptive closure can become ready.
+                            if !omitted_local {
+                                closure.require_owner(
+                                    revision,
+                                    method.function.package,
+                                    OwnerKey::Declaration(method.function.declaration),
+                                    &[OwnerKind::PureFunction, OwnerKind::TaskFunction],
+                                    "owned implementation method",
+                                )?;
+                            }
                         }
                     }
                     if let PackageInterfaceDeclarationPayload::OwnedContract(contract) =
                         &declaration.payload
                     {
                         for method in &contract.methods {
-                            if let Some(position) = method.result_borrow {
-                                let source =
-                                    method.parameters.get(position as usize).ok_or_else(|| {
-                                        package_error(
-                                            DiagnosticClass::Semantic,
-                                            "package_transport_interface_borrow_result",
-                                            "borrowed method source position is absent",
-                                        )
-                                    })?;
-                                if !closure.owned_type_at(
-                                    revision,
-                                    owner.owner(),
-                                    source.ty,
-                                    &mut associated,
-                                )? || !closure.owned_type_at(
-                                    revision,
-                                    owner.owner(),
-                                    method.result,
-                                    &mut associated,
-                                )? {
-                                    return Err(package_error(
-                                        DiagnosticClass::Semantic,
-                                        "package_transport_interface_borrow_result",
-                                        "borrowed method signatures require exact Owned source and result types",
-                                    ));
-                                }
-                            }
                             for requirement in method.effect.row().requirements {
                                 closure.require_owner(
                                     revision,
@@ -1188,39 +1187,6 @@ fn validate_interface_dependencies(
                     else {
                         continue;
                     };
-                    if let Some(source) = signature.result_borrow {
-                        let source = interface
-                            .owners
-                            .get(&OwnerKey::Parameter(source))
-                            .and_then(|owner| match &owner.record {
-                                PackageInterfaceRecord::Parameter(parameter) => Some(parameter),
-                                _ => None,
-                            })
-                            .ok_or_else(|| {
-                                package_error(
-                                    DiagnosticClass::Semantic,
-                                    "package_transport_interface_borrow_result",
-                                    "borrowed function source parameter is absent",
-                                )
-                            })?;
-                        if !closure.owned_type_at(
-                            revision,
-                            source.header.owner,
-                            source.ty,
-                            &mut associated,
-                        )? || !closure.owned_type_at(
-                            revision,
-                            owner.owner(),
-                            signature.result,
-                            &mut associated,
-                        )? {
-                            return Err(package_error(
-                                DiagnosticClass::Semantic,
-                                "package_transport_interface_borrow_result",
-                                "borrowed function signatures require exact Owned source and result types",
-                            ));
-                        }
-                    }
                     for parameter in &signature.implementation_parameters {
                         closure.require_owner(
                             revision,
@@ -1362,9 +1328,11 @@ impl<'a> PackageInterfaceClosure<'a> {
         reference: crate::platform::kernel::DeclarationReference,
     ) -> Result<&'a crate::platform::package_interface::PackageInterfaceOwner, Diagnostic> {
         let version = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
-        if source.revision.graph_contract_version != version {
+        if !matches!(source.revision.graph_contract_version, 33)
+            && source.revision.graph_contract_version != version
+        {
             return Err(associated_transport_error(
-                "associated consuming semantic revision requires exact Graph33",
+                "associated consuming semantic revision requires the exact current graph",
             ));
         }
         let target_digest = if reference.package == source.package {
@@ -1389,23 +1357,25 @@ impl<'a> PackageInterfaceClosure<'a> {
             .revisions
             .get(&target_digest)
             .ok_or_else(|| associated_transport_error("associated selected revision is absent"))?;
-        if target.package != reference.package || target.revision.graph_contract_version != version
+        if target.package != reference.package
+            || (target.revision.graph_contract_version != 33
+                && target.revision.graph_contract_version != version)
         {
             return Err(associated_transport_error(
-                "associated selected declaration semantic revision requires exact Graph33",
+                "associated selected declaration semantic revision requires the exact current graph",
             ));
         }
         self.require_owner(
             source,
             reference.package,
             OwnerKey::Declaration(reference.declaration),
-            &[OwnerKind::OwnedContract],
+            &[OwnerKind::OwnedContract, OwnerKind::ReadView],
             "associated contract authority",
         )
     }
 
     /// Complete descriptive occurrence/binding proof. Executable canonical source is still
-    /// independently admitted by source::admit, and the blanket feature gates stay closed.
+    /// independently admitted by source::admit; descriptive evidence grants no execution rights.
     fn validate_associated_occurrences(
         &self,
         revision: &PackageRevision,
@@ -1417,7 +1387,9 @@ impl<'a> PackageInterfaceClosure<'a> {
         let mut projected = false;
         for object in interface.type_objects.values() {
             admission.step()?;
-            if object.form.is_associated() {
+            if object.form.is_associated()
+                || matches!(object.form, TypeForm::ReadViewApplied { .. })
+            {
                 projected = true;
                 break;
             }
@@ -1429,18 +1401,51 @@ impl<'a> PackageInterfaceClosure<'a> {
                 match &declaration.payload {
                     PackageInterfaceDeclarationPayload::OwnedContract(contract) => {
                         for member in &contract.associated_types {
-                            admission.validate_form(revision.package, *key,
-                                &TypeForm::AssociatedContractMember {
-                                    contract: crate::platform::kernel::DeclarationReference { package: revision.package, declaration: match key { OwnerKey::Declaration(id) => *id, _ => return Err(associated_transport_error("associated contract has a foreign identity kind")) } },
+                            let contract_reference =
+                                crate::platform::kernel::DeclarationReference {
+                                    package: revision.package,
+                                    declaration: match key {
+                                        OwnerKey::Declaration(id) => *id,
+                                        _ => {
+                                            return Err(associated_transport_error(
+                                                "associated contract has a foreign identity kind",
+                                            ));
+                                        }
+                                    },
+                                };
+                            let form = match &member.bound {
+                                crate::platform::kernel::AssociatedTypeBound::Owned => TypeForm::AssociatedContractMember {
+                                    contract: contract_reference,
                                     member: member.id,
-                                }, &interface.owners, &interface.type_objects, &mut resolve)?;
+                                },
+                                crate::platform::kernel::AssociatedTypeBound::ReadViewFamily { scope_parameter } => TypeForm::AssociatedReadViewMember {
+                                    contract: contract_reference,
+                                    member: member.id,
+                                    read_scope: crate::platform::kernel::ReadScopeArgument::Parameter(crate::platform::kernel::ReadScopeReference {
+                                        binder: crate::platform::kernel::ReadScopeBinder::AssociatedMember {
+                                            contract: contract_reference,
+                                            member: member.id,
+                                        },
+                                        parameter: scope_parameter.id,
+                                    }),
+                                },
+                            };
+                            admission.validate_form(
+                                revision.package,
+                                *key,
+                                &form,
+                                &interface.owners,
+                                &interface.type_objects,
+                                &mut resolve,
+                            )?;
                         }
                         if !contract.associated_types.is_empty()
+                            && revision.revision.graph_contract_version != 33
                             && revision.revision.graph_contract_version
                                 != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
                         {
                             return Err(associated_transport_error(
-                                "associated contract revision requires exact Graph33",
+                                "associated contract revision requires the exact current graph",
                             ));
                         }
                     }
@@ -1489,33 +1494,53 @@ impl<'a> PackageInterfaceClosure<'a> {
                                     ));
                                 }
                                 previous = Some(binding.member);
-                                let mut found = false;
+                                let mut selected = None;
                                 for member in &contract.associated_types {
                                     admission.step()?;
-                                    found |= member.id == binding.member;
+                                    if member.id == binding.member {
+                                        selected = Some(member);
+                                    }
                                 }
-                                if !found {
-                                    return Err(associated_transport_error(
+                                let selected = selected.ok_or_else(|| {
+                                    associated_transport_error(
                                         "binding names no exact contract member",
-                                    ));
-                                }
+                                    )
+                                })?;
+                                let ty = match &binding.value {
+                                    crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty }
+                                    | crate::platform::kernel::AssociatedTypeBindingValue::ReadViewFamily { ty, .. } => *ty,
+                                };
                                 if admission.validate_occurrences(
                                     revision.package,
                                     *key,
-                                    &[binding.ty],
+                                    &[ty],
                                     true,
                                     &interface.owners,
                                     &interface.type_objects,
                                     &mut resolve,
                                 )? {
-                                    return Err(associated_transport_error(
-                                        "stored binding cannot retain a deferred projection",
-                                    ));
+                                    read_views::discharge_occurrences(
+                                        self,
+                                        revision,
+                                        *key,
+                                        &[ty],
+                                        interface,
+                                        admission,
+                                    )?;
                                 }
-                                if !self.owned_type(revision, binding.ty)? {
-                                    return Err(associated_transport_error(
-                                        "associated binding RHS lacks an Owned bound",
-                                    ));
+                                match (&selected.bound, &binding.value) {
+                                    (crate::platform::kernel::AssociatedTypeBound::Owned,
+                                     crate::platform::kernel::AssociatedTypeBindingValue::Owned { .. }) => {
+                                        if !self.owned_type(revision, ty)? {
+                                            return Err(associated_transport_error("associated binding RHS lacks an Owned bound"));
+                                        }
+                                    }
+                                    (crate::platform::kernel::AssociatedTypeBound::ReadViewFamily { .. },
+                                     crate::platform::kernel::AssociatedTypeBindingValue::ReadViewFamily { scope_parameter, .. }) => {
+                                        read_views::validate_binding(self, revision, *key, binding.member,
+                                            scope_parameter, ty, interface, admission)?;
+                                    }
+                                    _ => return Err(associated_transport_error("associated binding kind/arity differs from the exact member")),
                                 }
                             }
                         }
@@ -1535,9 +1560,9 @@ impl<'a> PackageInterfaceClosure<'a> {
                     &interface.type_objects,
                     &mut resolve,
                 )? {
-                    return Err(associated_transport_error(
-                        "exact interface closure left foreign member authority unresolved",
-                    ));
+                    read_views::discharge_occurrences(
+                        self, revision, *key, &roots, interface, admission,
+                    )?;
                 }
             }
         }

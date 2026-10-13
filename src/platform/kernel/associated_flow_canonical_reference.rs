@@ -8,6 +8,8 @@ use crate::platform::semantic_id::{
     AssociatedTypeMemberId, ExpressionId, ImplementationParameterId, MethodId, TypeParameterId,
 };
 use std::collections::{BTreeMap, BTreeSet};
+#[path = "read_view_flow_canonical_reference.rs"]
+mod views;
 
 const MAXIMUM_REFERENCE_BYTES: usize = 64 * 1_048_576;
 
@@ -35,6 +37,7 @@ pub(crate) fn validate(
     };
     let budget = model::Budget::new(&checkpoint, work, maximum_work, MAXIMUM_REFERENCE_BYTES);
     let result = (|| {
+        budget.observe_phase("associated presence");
         budget.tick()?;
         let mut associated = false;
         for source in snapshots {
@@ -54,9 +57,13 @@ pub(crate) fn validate(
                     object.form,
                     TypeForm::AssociatedContractMember { .. }
                         | TypeForm::AssociatedWitnessProjection { .. }
+                        | TypeForm::ReadViewApplied { .. }
+                        | TypeForm::AssociatedReadViewMember { .. }
+                        | TypeForm::AssociatedReadViewProjection { .. }
                 );
             }
         }
+        budget.observe_boundary(model::ReferencePhaseBoundary::Presence);
         if !associated {
             return Ok(ReferenceFlowWork::default());
         }
@@ -81,7 +88,18 @@ pub(crate) fn validate(
             metadata_bytes: budget.bytes(),
         })
     })();
-    result.map_err(refusal_diagnostic)
+    result.map_err(|refusal| {
+        let work_capacity = matches!(refusal, model::Refusal::Capacity("reference work"));
+        let mut diagnostic = refusal_diagnostic(refusal);
+        if work_capacity {
+            let ledger = budget.phase_ledger();
+            diagnostic.notes.push(format!(
+                "reference_flow phase={} entry={} consumed={} maximum={} metadata_bytes={} ledger={ledger:?}",
+                ledger.phase, ledger.entry, budget.consumed(), maximum_work, budget.bytes(),
+            ));
+        }
+        diagnostic
+    })
 }
 
 fn refusal_diagnostic(refusal: model::Refusal) -> Diagnostic {
@@ -149,6 +167,11 @@ pub(super) struct CanonicalProgram {
 pub(super) enum SignatureTerm {
     Ordinary(model::Term),
     Member(DeclarationReference, AssociatedTypeMemberId),
+    ViewMember(
+        DeclarationReference,
+        AssociatedTypeMemberId,
+        ReadScopeArgument,
+    ),
     Constructor(usize, Vec<SignatureTerm>),
 }
 
@@ -167,10 +190,13 @@ struct Context {
     target: model::Definition,
     mode: TypeMode,
     generation: u16,
+    scope_binder: Option<ReadScopeBinder>,
 }
 
 struct Adapter<'a, 'b> {
     budget: &'a model::Budget<'b>,
+    #[cfg(test)]
+    materialize_raw_records: bool,
     sources: BTreeMap<PackageId, &'a KernelSnapshot>,
     // Raw exact closure inventory, independent of producer selections. Vectors
     // retain declaration traversal order, including private and unused schemes.
@@ -195,9 +221,38 @@ impl CanonicalProgram {
         entries: &[CanonicalEntry],
         budget: &model::Budget<'_>,
     ) -> Result<Self> {
+        Self::read_configured(
+            snapshots,
+            entries,
+            budget,
+            #[cfg(test)]
+            false,
+        )
+    }
+
+    /// Test-only comparison executes the avoided full-record copies on every
+    /// raw record lookup; it is not an alternate proof or an admission token.
+    #[cfg(test)]
+    pub(super) fn read_with_raw_copies(
+        snapshots: &[&KernelSnapshot],
+        entries: &[CanonicalEntry],
+        budget: &model::Budget<'_>,
+    ) -> Result<Self> {
+        Self::read_configured(snapshots, entries, budget, true)
+    }
+
+    fn read_configured(
+        snapshots: &[&KernelSnapshot],
+        entries: &[CanonicalEntry],
+        budget: &model::Budget<'_>,
+        #[cfg(test)] materialize_raw_records: bool,
+    ) -> Result<Self> {
+        budget.observe_phase("raw canonical preflight");
         budget.reserve::<(PackageId, &KernelSnapshot)>(snapshots.len())?;
         let mut adapter = Adapter {
             budget,
+            #[cfg(test)]
+            materialize_raw_records,
             sources: BTreeMap::new(),
             implementations_by_contract: BTreeMap::new(),
             ids: BTreeMap::new(),
@@ -239,7 +294,11 @@ impl CanonicalProgram {
                 }
             }
         }
+        budget.observe_boundary(model::ReferencePhaseBoundary::Preflight);
+        budget.observe_phase("raw canonical inventory");
         adapter.inventory()?;
+        budget.observe_boundary(model::ReferencePhaseBoundary::Inventory);
+        budget.observe_phase("raw canonical translation");
         let declarations = adapter.declarations()?;
         for reference in declarations {
             adapter.translate_declaration(reference)?;
@@ -266,7 +325,10 @@ impl CanonicalProgram {
                 implementations,
             });
         }
+        budget.observe_boundary(model::ReferencePhaseBoundary::Translation);
+        budget.observe_phase("raw model admission");
         adapter.output.program.admit_with_budget(budget)?;
+        budget.observe_boundary(model::ReferencePhaseBoundary::RawAdmission);
         Ok(adapter.output)
     }
 
@@ -281,8 +343,8 @@ impl CanonicalProgram {
     }
 }
 
-impl Adapter<'_, '_> {
-    fn source(&self, package: PackageId) -> Result<&KernelSnapshot> {
+impl<'a, 'b> Adapter<'a, 'b> {
+    fn source(&self, package: PackageId) -> Result<&'a KernelSnapshot> {
         self.budget.tick()?;
         self.sources
             .get(&package)
@@ -290,13 +352,21 @@ impl Adapter<'_, '_> {
             .ok_or(model::Refusal::MissingDefinition)
     }
 
-    fn declaration(&self, reference: DeclarationReference) -> Result<DeclarationRecord> {
+    // Sources are immutably borrowed for the whole adapter operation. Lookup
+    // retains exact owner/package authority without copying unrelated payloads.
+    fn declaration(&self, reference: DeclarationReference) -> Result<&'a DeclarationRecord> {
         match self
             .source(reference.package)?
             .owners
             .get(&OwnerKey::Declaration(reference.declaration))
         {
-            Some(OwnerRecord::Declaration(record)) => self.budget.canonical_clone(record),
+            Some(OwnerRecord::Declaration(record)) => {
+                #[cfg(test)]
+                if self.materialize_raw_records {
+                    std::hint::black_box(self.budget.canonical_clone(record)?);
+                }
+                Ok(record)
+            }
             _ => Err(model::Refusal::MissingDefinition),
         }
     }
@@ -305,7 +375,7 @@ impl Adapter<'_, '_> {
         &self,
         from: PackageId,
         reference: DeclarationReference,
-    ) -> Result<DeclarationRecord> {
+    ) -> Result<&'a DeclarationRecord> {
         let declaration = self.declaration(reference)?;
         if from != reference.package
             && (!self
@@ -458,9 +528,21 @@ impl Adapter<'_, '_> {
         // Synthetic mapping nodes never reuse the scheme's definition identity.
         for reference in self.declarations()? {
             if let DeclarationPayload::OwnedImplementation(implementation) =
-                self.declaration(reference)?.payload
+                &self.declaration(reference)?.payload
             {
-                for mapping in implementation.methods {
+                let callable = self.context(reference, TypeMode::Binding)?;
+                for mapping in &implementation.methods {
+                    self.view_call_scopes(
+                        mapping.function,
+                        &mapping.read_scope_arguments,
+                        Context {
+                            scope_binder: Some(ReadScopeBinder::ContractMethod {
+                                contract: implementation.contract,
+                                method: mapping.method,
+                            }),
+                            ..callable
+                        },
+                    )?;
                     let ordinal = next.entry(reference.package).or_default();
                     let id = model::Definition {
                         package: package_ids[&reference.package],
@@ -520,36 +602,19 @@ impl Adapter<'_, '_> {
             target: self.id(reference)?,
             mode,
             generation: self.declaration(reference)?.header.contract_version,
+            scope_binder: Some(ReadScopeBinder::Declaration(reference)),
         })
     }
 
-    fn parameters(&self, reference: DeclarationReference) -> Result<Vec<TypeParameterId>> {
+    fn parameters(&self, reference: DeclarationReference) -> Result<DeclarationTypeParameters<'a>> {
         let record = self.declaration(reference)?;
-        self.budget
-            .reserve::<TypeParameterId>(record.payload.type_parameters().len())?;
-        let parameters = match record.payload {
-            DeclarationPayload::Function(f) => f.type_parameters,
-            DeclarationPayload::External(f) => f.type_parameters,
-            DeclarationPayload::OwnedImplementation(i) => i.type_parameters,
-            DeclarationPayload::OwnedContract(c) => std::iter::once(c.self_parameter)
-                .chain(c.type_parameters)
-                .collect(),
-            DeclarationPayload::Record {
-                type_parameters, ..
-            }
-            | DeclarationPayload::Variant {
-                type_parameters, ..
-            }
-            | DeclarationPayload::OwnedRecord {
-                type_parameters, ..
-            } => type_parameters,
-            _ => vec![],
-        };
+        let parameters = record.payload.type_parameters();
+        self.budget.reserve::<TypeParameterId>(parameters.len())?;
         self.budget.reserve::<TypeParameterId>(parameters.len())?;
         if parameters.iter().collect::<BTreeSet<_>>().len() != parameters.len() {
             return Err(model::Refusal::Inventory);
         }
-        for parameter in &parameters {
+        for parameter in parameters.iter() {
             match self
                 .source(reference.package)?
                 .owners
@@ -564,11 +629,11 @@ impl Adapter<'_, '_> {
         Ok(parameters)
     }
 
-    fn witnesses(&self, reference: DeclarationReference) -> Result<Vec<ImplementationParameter>> {
-        Ok(match self.declaration(reference)?.payload {
-            DeclarationPayload::Function(f) => f.implementation_parameters,
-            DeclarationPayload::OwnedImplementation(i) => i.implementation_parameters,
-            _ => vec![],
+    fn witnesses(&self, reference: DeclarationReference) -> Result<&'a [ImplementationParameter]> {
+        Ok(match &self.declaration(reference)?.payload {
+            DeclarationPayload::Function(f) => &f.implementation_parameters,
+            DeclarationPayload::OwnedImplementation(i) => &i.implementation_parameters,
+            _ => &[],
         })
     }
 
@@ -602,15 +667,32 @@ impl Adapter<'_, '_> {
         Ok(id)
     }
 
-    fn object(&self, package: PackageId, digest: TypeObjectDigest) -> Result<TypeObject> {
+    // Raw owner/type records remain immutably borrowed for this whole read.
+    // Materialization is confined to the test comparison; owned output growth
+    // retains its own reservations before allocation.
+    fn owner(&self, package: PackageId, key: OwnerKey) -> Result<Option<&'a OwnerRecord>> {
+        let record = self.source(package)?.owners.get(&key);
+        #[cfg(test)]
+        if self.materialize_raw_records
+            && let Some(record) = record
+        {
+            std::hint::black_box(self.budget.canonical_clone(record)?);
+        }
+        Ok(record)
+    }
+
+    fn object(&self, package: PackageId, digest: TypeObjectDigest) -> Result<&'a TypeObject> {
         let source = self.source(package)?;
-        source
+        let object = source
             .types
             .get(&digest)
             .or_else(|| source.dependency_types.get(&digest))
-            .map(|object| self.budget.canonical_clone(object))
-            .transpose()?
-            .ok_or(model::Refusal::MissingDefinition)
+            .ok_or(model::Refusal::MissingDefinition)?;
+        #[cfg(test)]
+        if self.materialize_raw_records {
+            std::hint::black_box(self.budget.canonical_clone(object)?);
+        }
+        Ok(object)
     }
 
     fn term(
@@ -624,6 +706,11 @@ impl Adapter<'_, '_> {
         }
         self.budget.tick()?;
         let object = self.object(context.source.package, digest)?;
+        if object.form.is_read_view()
+            && object.contract_version != contract::ASSOCIATED_READ_VIEW_CONTRACT_VERSION
+        {
+            return Err(model::Refusal::Scope);
+        }
         self.budget
             .reserve::<TypeObjectDigest>(object.child_type_count())?;
         self.budget
@@ -634,9 +721,9 @@ impl Adapter<'_, '_> {
                 .checked_add(2)
                 .ok_or(model::Refusal::Capacity("canonical atom fields"))?,
         )?;
-        self.budget.canonical_reserve(&object)?;
-        let mut children = Vec::new();
-        let (kind, atoms) = match object.form {
+        self.budget.canonical_reserve(object)?;
+        let children = Self::type_children(&object.form);
+        let (kind, atoms) = match &object.form {
             TypeForm::TypeParameter { parameter } => {
                 if matches!(context.mode, TypeMode::Closed) {
                     return Err(model::Refusal::Scope);
@@ -644,7 +731,7 @@ impl Adapter<'_, '_> {
                 let parameters = self.parameters(context.source)?;
                 let ordinal = parameters
                     .iter()
-                    .position(|id| *id == parameter)
+                    .position(|id| *id == *parameter)
                     .ok_or(model::Refusal::Scope)?;
                 return Ok(model::Term::Parameter {
                     scope: context.target,
@@ -661,26 +748,73 @@ impl Adapter<'_, '_> {
                     return Err(model::Refusal::ProjectionInBinding);
                 }
                 if !matches!(context.mode, TypeMode::Callable)
-                    || scope != context.source
-                    || context.generation != contract::GRAPH_CONTRACT_VERSION
+                    || *scope != context.source
+                    || !matches!(context.generation, 33 | 34)
                 {
                     return Err(model::Refusal::Scope);
                 }
                 let witness = self
-                    .witnesses(scope)?
-                    .into_iter()
-                    .find(|w| w.id == parameter)
+                    .witnesses(*scope)?
+                    .iter()
+                    .find(|w| w.id == *parameter)
                     .ok_or(model::Refusal::Scope)?;
-                if witness.contract != contract {
+                if witness.contract != *contract {
                     return Err(model::Refusal::ForeignContract);
                 }
+                self.require_owned_member(context.source.package, *contract, *member)?;
                 return Ok(model::Term::Projection {
                     scope: context.target,
-                    parameter: self.witness_ids[&(scope, parameter)],
-                    member: self.member(scope.package, contract, member)?,
+                    parameter: self.witness_ids[&(*scope, *parameter)],
+                    member: self.member(scope.package, *contract, *member)?,
                 });
             }
             TypeForm::AssociatedContractMember { .. } => return Err(model::Refusal::Scope),
+            TypeForm::AssociatedReadViewProjection {
+                scope,
+                parameter,
+                contract,
+                member,
+                read_scope,
+            } => {
+                if matches!(context.mode, TypeMode::Binding) {
+                    return Err(model::Refusal::ProjectionInBinding);
+                }
+                if !matches!(context.mode, TypeMode::Callable) || *scope != context.source {
+                    return Err(model::Refusal::Scope);
+                }
+                self.view_scope(*read_scope, context)?;
+                let witness = self
+                    .witnesses(*scope)?
+                    .iter()
+                    .find(|w| w.id == *parameter)
+                    .ok_or(model::Refusal::Scope)?;
+                if witness.contract != *contract {
+                    return Err(model::Refusal::ForeignContract);
+                }
+                self.view_member(context.source.package, *contract, *member)?;
+                // Family syntax and its scope coordinate are not constructors.
+                // RHS nominal/type constructors still add ordinary positive flow.
+                return Ok(model::Term::Projection {
+                    scope: context.target,
+                    parameter: self.witness_ids[&(*scope, *parameter)],
+                    member: self.member(scope.package, *contract, *member)?,
+                });
+            }
+            TypeForm::AssociatedReadViewMember { .. } => return Err(model::Refusal::Scope),
+            TypeForm::ReadViewApplied {
+                declaration,
+                arguments,
+                read_scope,
+            } => {
+                self.view_scope(*read_scope, context)?;
+                self.authored(context.source.package, *declaration)?;
+                if self.parameters(*declaration)?.len() != arguments.len() {
+                    return Err(model::Refusal::Arity);
+                }
+                // Finite symbolic scope validation is separate from type-growth
+                // edges; no runtime invocation or lease ID enters this term.
+                ("read_view", vec![format!("{declaration:?}")])
+            }
             TypeForm::Unit => ("unit", vec![]),
             TypeForm::Bool => ("bool", vec![]),
             TypeForm::I64 => ("i64", vec![]),
@@ -692,22 +826,21 @@ impl Adapter<'_, '_> {
             TypeForm::ByteBuffer => ("byte_buffer", vec![]),
             TypeForm::OwnedI64Cell => ("owned_i64_cell", vec![]),
             TypeForm::Named { declaration } => {
-                self.authored(context.source.package, declaration)?;
+                self.authored(context.source.package, *declaration)?;
                 ("named", vec![format!("{declaration:?}")])
             }
             TypeForm::CapabilityResource { interface } => {
-                self.authored(context.source.package, interface)?;
+                self.authored(context.source.package, *interface)?;
                 ("resource", vec![format!("{interface:?}")])
             }
             TypeForm::Applied {
                 declaration,
                 arguments,
             } => {
-                self.authored(context.source.package, declaration)?;
-                if self.parameters(declaration)?.len() != arguments.len() {
+                self.authored(context.source.package, *declaration)?;
+                if self.parameters(*declaration)?.len() != arguments.len() {
                     return Err(model::Refusal::Arity);
                 }
-                children = arguments;
                 ("applied", vec![format!("{declaration:?}")])
             }
             TypeForm::StructuralRecord { fields }
@@ -722,50 +855,19 @@ impl Adapter<'_, '_> {
                     .iter()
                     .map(|field| field.name.as_str().to_owned())
                     .collect();
-                children = fields.into_iter().map(|field| field.ty).collect();
                 (kind, names)
             }
-            TypeForm::List { item } => {
-                children.push(item);
-                ("list", vec![])
-            }
-            TypeForm::Option { item } => {
-                children.push(item);
-                ("option", vec![])
-            }
-            TypeForm::Stream { item } => {
-                children.push(item);
-                ("stream", vec![])
-            }
-            TypeForm::OwnedSequence { item } => {
-                children.push(item);
-                ("owned_sequence", vec![])
-            }
-            TypeForm::Map { key, value } => {
-                children.extend([key, value]);
-                ("map", vec![])
-            }
-            TypeForm::Result { ok, error } => {
-                children.extend([ok, error]);
-                ("result", vec![])
-            }
-            TypeForm::Function { parameters, result } => {
-                children = parameters;
-                children.push(result);
-                ("function", vec![])
-            }
-            TypeForm::TaskFunction {
-                parameters,
-                result,
-                effect,
-            } => {
-                children = parameters;
-                children.push(result);
-                (
-                    "task_function",
-                    vec![serde_json::to_string(&effect).map_err(|_| model::Refusal::Inventory)?],
-                )
-            }
+            TypeForm::List { .. } => ("list", vec![]),
+            TypeForm::Option { .. } => ("option", vec![]),
+            TypeForm::Stream { .. } => ("stream", vec![]),
+            TypeForm::OwnedSequence { .. } => ("owned_sequence", vec![]),
+            TypeForm::Map { .. } => ("map", vec![]),
+            TypeForm::Result { .. } => ("result", vec![]),
+            TypeForm::Function { .. } => ("function", vec![]),
+            TypeForm::TaskFunction { effect, .. } => (
+                "task_function",
+                vec![serde_json::to_string(&effect).map_err(|_| model::Refusal::Inventory)?],
+            ),
         };
         let tag = self.tag(kind, atoms)?;
         if children.is_empty() {
@@ -785,7 +887,7 @@ impl Adapter<'_, '_> {
         self.budget.tick()?;
         match term {
             SignatureTerm::Ordinary(term) => self.budget.term(term),
-            SignatureTerm::Member(_, _) => Ok(()),
+            SignatureTerm::Member(_, _) | SignatureTerm::ViewMember(_, _, _) => Ok(()),
             SignatureTerm::Constructor(_, children) => {
                 self.budget.reserve::<SignatureTerm>(children.len())?;
                 for child in children {
@@ -807,25 +909,52 @@ impl Adapter<'_, '_> {
         }
         self.budget.tick()?;
         let object = self.object(context.source.package, ty)?;
+        if object.form.is_read_view()
+            && object.contract_version != contract::ASSOCIATED_READ_VIEW_CONTRACT_VERSION
+        {
+            return Err(model::Refusal::Scope);
+        }
         self.budget
             .reserve::<TypeObjectDigest>(object.child_type_count())?;
         self.budget
             .reserve::<SignatureTerm>(object.child_type_count())?;
-        self.budget.canonical_reserve(&object)?;
+        self.budget.canonical_reserve(object)?;
         self.budget
             .reserve::<((DeclarationReference, TypeObjectDigest), SignatureTerm)>(1)?;
         if let TypeForm::AssociatedContractMember { contract, member } = object.form {
             if contract != context.source
                 || !matches!(context.mode, TypeMode::Contract)
-                || context.generation != contract::GRAPH_CONTRACT_VERSION
+                || !matches!(context.generation, 33 | 34)
             {
                 return Err(model::Refusal::Scope);
             }
             self.member(context.source.package, contract, member)?;
+            self.require_owned_member(context.source.package, contract, member)?;
             self.budget
                 .reserve::<(DeclarationReference, AssociatedTypeMemberId)>(1)?;
             self.output.signature_members.insert((contract, member));
             let term = SignatureTerm::Member(contract, member);
+            self.reserve_signature(&term)?;
+            self.output
+                .signature_types
+                .insert((context.source, ty), term.clone());
+            return Ok(term);
+        }
+        if let TypeForm::AssociatedReadViewMember {
+            contract,
+            member,
+            read_scope,
+        } = object.form
+        {
+            if contract != context.source || !matches!(context.mode, TypeMode::Contract) {
+                return Err(model::Refusal::Scope);
+            }
+            self.view_scope(read_scope, context)?;
+            self.view_member(context.source.package, contract, member)?;
+            self.budget
+                .reserve::<(DeclarationReference, AssociatedTypeMemberId)>(1)?;
+            self.output.signature_members.insert((contract, member));
+            let term = SignatureTerm::ViewMember(contract, member, read_scope);
             self.reserve_signature(&term)?;
             self.output
                 .signature_types
@@ -846,6 +975,21 @@ impl Adapter<'_, '_> {
                         return Err(model::Refusal::Arity);
                     }
                     ("applied", vec![format!("{declaration:?}")])
+                }
+                TypeForm::ReadViewApplied {
+                    declaration,
+                    arguments,
+                    read_scope,
+                } => {
+                    self.view_scope(*read_scope, context)?;
+                    self.authored(context.source.package, *declaration)?;
+                    if self.parameters(*declaration)?.len() != arguments.len() {
+                        return Err(model::Refusal::Arity);
+                    }
+                    (
+                        "read_view",
+                        vec![format!("{declaration:?}"), format!("{read_scope:?}")],
+                    )
                 }
                 TypeForm::StructuralRecord { fields } => (
                     "record",
@@ -898,7 +1042,9 @@ impl Adapter<'_, '_> {
 
     fn type_children(form: &TypeForm) -> Vec<TypeObjectDigest> {
         match form {
-            TypeForm::Applied { arguments, .. } => arguments.clone(),
+            TypeForm::Applied { arguments, .. } | TypeForm::ReadViewApplied { arguments, .. } => {
+                arguments.clone()
+            }
             TypeForm::StructuralRecord { fields }
             | TypeForm::OwnedProduct { fields }
             | TypeForm::OwnedChoice { cases: fields } => {
@@ -927,7 +1073,7 @@ impl Adapter<'_, '_> {
         let mut result = Vec::new();
         let ordinary = self.parameters(context.source)?;
         for witness in witnesses {
-            let DeclarationPayload::OwnedContract(contract) = self
+            let DeclarationPayload::OwnedContract(contract) = &self
                 .authored(context.source.package, witness.contract)?
                 .payload
             else {
@@ -953,8 +1099,8 @@ impl Adapter<'_, '_> {
                 _ => return Err(model::Refusal::Scope),
             }
             self.term(witness.self_type, context, 0)?;
-            for ty in witness.type_arguments {
-                self.term(ty, context, 0)?;
+            for ty in &witness.type_arguments {
+                self.term(*ty, context, 0)?;
             }
             let id = self.witness_ids[&(context.source, witness.id)];
             self.output
@@ -997,7 +1143,7 @@ impl Adapter<'_, '_> {
                 type_arguments,
                 implementations,
             } => {
-                let DeclarationPayload::OwnedImplementation(scheme) = self
+                let DeclarationPayload::OwnedImplementation(scheme) = &self
                     .authored(context.source.package, *implementation)?
                     .payload
                 else {
@@ -1077,7 +1223,7 @@ impl Adapter<'_, '_> {
         from: PackageId,
         reference: DeclarationReference,
     ) -> Result<model::Definition> {
-        match self.authored(from, reference)?.payload {
+        match &self.authored(from, reference)?.payload {
             DeclarationPayload::Function(_) | DeclarationPayload::External(_) => self.id(reference),
             _ => Err(model::Refusal::MissingDefinition),
         }
@@ -1100,20 +1246,14 @@ impl Adapter<'_, '_> {
             })
             .collect();
         for (package, key) in ports {
-            let Some(OwnerRecord::Port(port)) = self
-                .source(package)?
-                .owners
-                .get(&key)
-                .map(|r| self.budget.canonical_clone(r))
-                .transpose()?
-            else {
+            let Some(OwnerRecord::Port(port)) = self.owner(package, key)? else {
                 return Err(model::Refusal::Inventory);
             };
             let reference = DeclarationReference {
                 package,
                 declaration: port.declaration,
             };
-            let DeclarationPayload::Component { ports, .. } = self.declaration(reference)?.payload
+            let DeclarationPayload::Component { ports, .. } = &self.declaration(reference)?.payload
             else {
                 return Err(model::Refusal::Scope);
             };
@@ -1129,18 +1269,19 @@ impl Adapter<'_, '_> {
                 target,
                 mode: TypeMode::Closed,
                 generation: port.header.contract_version,
+                scope_binder: None,
             };
             self.term(port.function_type, context, 0)?;
             self.budget.reserve::<model::Call>(1)?;
             self.budget
                 .reserve::<(model::Definition, model::Function)>(1)?;
             let mut calls = Vec::new();
-            match port.implementation {
+            match &port.implementation {
                 PortImplementation::Expression(expression) => {
-                    self.expressions(expression, context, &mut calls)?
+                    self.expressions(*expression, context, &mut calls)?
                 }
                 PortImplementation::Function(function) => calls.push(model::Call {
-                    target: self.function_target(package, function)?,
+                    target: self.function_target(package, *function)?,
                     arguments: vec![],
                     implementations: vec![],
                     kind: model::CallKind::Function,
@@ -1166,7 +1307,7 @@ impl Adapter<'_, '_> {
             .reserve::<(model::Definition, model::Function)>(1)?;
         self.budget
             .reserve::<(model::Definition, model::Scheme)>(1)?;
-        match self.declaration(reference)?.payload {
+        match &self.declaration(reference)?.payload {
             DeclarationPayload::OwnedContract(contract) => {
                 let context = self.context(reference, TypeMode::Contract)?;
                 match self
@@ -1177,16 +1318,49 @@ impl Adapter<'_, '_> {
                     Some(OwnerRecord::TypeParameter(record)) if record.constraints.has_owned() => {}
                     _ => return Err(model::Refusal::Scope),
                 }
-                for method in contract.methods {
-                    for parameter in method.parameters {
+                for method in &contract.methods {
+                    let context = Context {
+                        scope_binder: Some(ReadScopeBinder::ContractMethod {
+                            contract: reference,
+                            method: method.id,
+                        }),
+                        ..context
+                    };
+                    self.view_signature_inventory(
+                        &method.read_scope_parameters,
+                        &method.read_scope_sources,
+                        context,
+                    )?;
+                    for source in &method.read_scope_sources {
+                        self.budget.tick()?;
+                        if method
+                            .parameters
+                            .get(source.source as usize)
+                            .is_none_or(|p| p.use_mode != ParameterUse::Borrow)
+                        {
+                            return Err(model::Refusal::Scope);
+                        }
+                    }
+                    if let Some(source) = method.result.relation.source()
+                        && method
+                            .parameters
+                            .get(*source as usize)
+                            .is_none_or(|p| p.use_mode != ParameterUse::Borrow)
+                    {
+                        return Err(model::Refusal::Scope);
+                    }
+                    if let ResultRelation::ViewFrom { scope, .. } = method.result.relation {
+                        self.view_scope(scope, context)?;
+                    }
+                    for parameter in &method.parameters {
                         self.contract_type(parameter.ty, context, 0)?;
                     }
-                    self.contract_type(method.result, context, 0)?;
+                    self.contract_type(method.result.ty, context, 0)?;
                 }
             }
             DeclarationPayload::OwnedImplementation(implementation) => {
                 let context = self.context(reference, TypeMode::Binding)?;
-                let DeclarationPayload::OwnedContract(contract) = self
+                let DeclarationPayload::OwnedContract(contract) = &self
                     .authored(reference.package, implementation.contract)?
                     .payload
                 else {
@@ -1223,11 +1397,43 @@ impl Adapter<'_, '_> {
                     .reserve::<MethodId>(implementation.methods.len())?;
                 self.budget.reserve::<MethodId>(contract.methods.len())?;
                 let mut bindings = BTreeMap::new();
-                for binding in implementation.associated_types {
+                for binding in &implementation.associated_types {
                     let member =
                         self.member(reference.package, implementation.contract, binding.member)?;
+                    let (ty, binding_context) = match &binding.value {
+                        AssociatedTypeBindingValue::Owned { ty } => (ty, context),
+                        AssociatedTypeBindingValue::ReadViewFamily {
+                            scope_parameter,
+                            ty,
+                        } => {
+                            self.view_member(
+                                reference.package,
+                                implementation.contract,
+                                binding.member,
+                            )?;
+                            let binder = ReadScopeBinder::AssociatedBinding {
+                                implementation: reference,
+                                member: binding.member,
+                            };
+                            let expected = ReadScopeArgument::Parameter(ReadScopeReference {
+                                binder,
+                                parameter: scope_parameter.id,
+                            });
+                            if !matches!(self.object(reference.package, *ty)?.form, TypeForm::ReadViewApplied { read_scope, .. } if read_scope == expected)
+                            {
+                                return Err(model::Refusal::Scope);
+                            }
+                            (
+                                ty,
+                                Context {
+                                    scope_binder: Some(binder),
+                                    ..context
+                                },
+                            )
+                        }
+                    };
                     if bindings
-                        .insert(member.id, self.term(binding.ty, context, 0)?)
+                        .insert(member.id, self.term(*ty, binding_context, 0)?)
                         .is_some()
                     {
                         return Err(model::Refusal::Inventory);
@@ -1245,7 +1451,7 @@ impl Adapter<'_, '_> {
                         bindings,
                     },
                 );
-                for mapping in implementation.methods {
+                for mapping in &implementation.methods {
                     let synthetic =
                         self.ids[&DefinitionIdentity::MethodMapping(reference, mapping.method)];
                     let mapped = Context {
@@ -1290,8 +1496,38 @@ impl Adapter<'_, '_> {
             }
             DeclarationPayload::Function(function) => {
                 let context = self.context(reference, TypeMode::Callable)?;
+                self.view_signature_inventory(
+                    &function.read_scope_parameters,
+                    &function.read_scope_sources,
+                    context,
+                )?;
+                for source in &function.read_scope_sources {
+                    self.budget.tick()?;
+                    if function
+                        .parameters
+                        .iter()
+                        .filter(|id| **id == source.source)
+                        .count()
+                        != 1
+                    {
+                        return Err(model::Refusal::Scope);
+                    }
+                }
+                if let Some(source) = function.result.relation.source()
+                    && function
+                        .parameters
+                        .iter()
+                        .filter(|id| *id == source)
+                        .count()
+                        != 1
+                {
+                    return Err(model::Refusal::Scope);
+                }
+                if let ResultRelation::ViewFrom { scope, .. } = function.result.relation {
+                    self.view_scope(scope, context)?;
+                }
                 let witnesses = self.witness_inventory(context)?;
-                self.term(function.result, context, 0)?;
+                self.term(function.result.ty, context, 0)?;
                 self.budget
                     .reserve::<crate::platform::semantic_id::ParameterId>(
                         function.parameters.len(),
@@ -1301,13 +1537,7 @@ impl Adapter<'_, '_> {
                     if !parameter_ids.insert(*parameter) {
                         return Err(model::Refusal::Inventory);
                     }
-                    match self
-                        .source(reference.package)?
-                        .owners
-                        .get(&OwnerKey::Parameter(*parameter))
-                        .map(|record| self.budget.canonical_clone(record))
-                        .transpose()?
-                    {
+                    match self.owner(reference.package, OwnerKey::Parameter(*parameter))? {
                         Some(OwnerRecord::Parameter(record))
                             if record.parent
                                 == ParameterParent::Function(reference.declaration)
@@ -1336,17 +1566,24 @@ impl Adapter<'_, '_> {
                     },
                 );
             }
+            DeclarationPayload::ReadView(view) => {
+                let context = self.context(reference, TypeMode::Nominal)?;
+                self.view_scope(
+                    ReadScopeArgument::Parameter(ReadScopeReference {
+                        binder: ReadScopeBinder::Declaration(reference),
+                        parameter: view.scope_parameter.id,
+                    }),
+                    context,
+                )?;
+                for field in &view.fields {
+                    self.term(field.ty, context, 0)?;
+                }
+            }
             DeclarationPayload::External(function) => {
                 let context = self.context(reference, TypeMode::Callable)?;
                 self.term(function.result, context, 0)?;
-                for parameter in function.parameters {
-                    match self
-                        .source(reference.package)?
-                        .owners
-                        .get(&OwnerKey::Parameter(parameter))
-                        .map(|record| self.budget.canonical_clone(record))
-                        .transpose()?
-                    {
+                for parameter in &function.parameters {
+                    match self.owner(reference.package, OwnerKey::Parameter(*parameter))? {
                         Some(OwnerRecord::Parameter(record))
                             if record.parent
                                 == ParameterParent::Function(reference.declaration) =>
@@ -1369,13 +1606,7 @@ impl Adapter<'_, '_> {
             | DeclarationPayload::OwnedRecord { fields, .. } => {
                 let context = self.context(reference, TypeMode::Nominal)?;
                 for field in fields {
-                    match self
-                        .source(reference.package)?
-                        .owners
-                        .get(&OwnerKey::Field(field))
-                        .map(|record| self.budget.canonical_clone(record))
-                        .transpose()?
-                    {
+                    match self.owner(reference.package, OwnerKey::Field(*field))? {
                         Some(OwnerRecord::Field(record))
                             if record.declaration == reference.declaration =>
                         {
@@ -1388,13 +1619,7 @@ impl Adapter<'_, '_> {
             DeclarationPayload::Variant { cases, .. } => {
                 let context = self.context(reference, TypeMode::Nominal)?;
                 for case in cases {
-                    match self
-                        .source(reference.package)?
-                        .owners
-                        .get(&OwnerKey::Case(case))
-                        .map(|record| self.budget.canonical_clone(record))
-                        .transpose()?
-                    {
+                    match self.owner(reference.package, OwnerKey::Case(*case))? {
                         Some(OwnerRecord::Case(record))
                             if record.declaration == reference.declaration =>
                         {
@@ -1408,9 +1633,9 @@ impl Adapter<'_, '_> {
             }
             DeclarationPayload::Constant { ty, value } => {
                 let context = self.context(reference, TypeMode::Closed)?;
-                self.term(ty, context, 0)?;
+                self.term(*ty, context, 0)?;
                 let mut calls = Vec::new();
-                self.expressions(value, context, &mut calls)?;
+                self.expressions(*value, context, &mut calls)?;
                 self.output.program.functions.insert(
                     context.target,
                     model::Function {
@@ -1425,8 +1650,8 @@ impl Adapter<'_, '_> {
             } => {
                 let context = self.context(reference, TypeMode::Closed)?;
                 let mut calls = Vec::new();
-                self.expressions(actual, context, &mut calls)?;
-                self.expressions(expected, context, &mut calls)?;
+                self.expressions(*actual, context, &mut calls)?;
+                self.expressions(*expected, context, &mut calls)?;
                 self.output.program.functions.insert(
                     context.target,
                     model::Function {
@@ -1439,24 +1664,14 @@ impl Adapter<'_, '_> {
             DeclarationPayload::Interface { operations } => {
                 let context = self.context(reference, TypeMode::Closed)?;
                 for operation in operations {
-                    match self
-                        .source(reference.package)?
-                        .owners
-                        .get(&OwnerKey::Operation(operation))
-                        .map(|record| self.budget.canonical_clone(record))
-                        .transpose()?
-                    {
+                    match self.owner(reference.package, OwnerKey::Operation(*operation))? {
                         Some(OwnerRecord::Operation(record))
                             if record.declaration == reference.declaration =>
                         {
                             self.term(record.result, context, 0)?;
-                            for parameter in record.parameters {
+                            for parameter in &record.parameters {
                                 match self
-                                    .source(reference.package)?
-                                    .owners
-                                    .get(&OwnerKey::Parameter(parameter))
-                                    .map(|record| self.budget.canonical_clone(record))
-                                    .transpose()?
+                                    .owner(reference.package, OwnerKey::Parameter(*parameter))?
                                 {
                                     Some(OwnerRecord::Parameter(record)) => {
                                         self.term(record.ty, context, 0)?;
@@ -1483,7 +1698,7 @@ impl Adapter<'_, '_> {
         calls: &mut Vec<model::Call>,
     ) -> Result<()> {
         let DeclarationPayload::OwnedContract(contract_record) =
-            self.authored(context.source.package, contract)?.payload
+            &self.authored(context.source.package, contract)?.payload
         else {
             return Err(model::Refusal::ForeignContract);
         };
@@ -1506,7 +1721,7 @@ impl Adapter<'_, '_> {
                     return Err(model::Refusal::MissingDefinition);
                 };
                 let DeclarationPayload::OwnedImplementation(record) =
-                    self.declaration(implementation)?.payload
+                    &self.declaration(implementation)?.payload
                 else {
                     return Err(model::Refusal::MissingDefinition);
                 };
@@ -1531,7 +1746,7 @@ impl Adapter<'_, '_> {
             model::Operand::Parameter { path, .. } => {
                 let Some(raw) = self
                     .witnesses(context.source)?
-                    .into_iter()
+                    .iter()
                     .find(|witness| self.witness_ids[&(context.source, witness.id)] == path.root)
                 else {
                     return Err(model::Refusal::Scope);
@@ -1549,7 +1764,7 @@ impl Adapter<'_, '_> {
                 {
                     self.budget.tick()?;
                     let DeclarationPayload::OwnedImplementation(record) =
-                        self.declaration(*implementation)?.payload
+                        &self.declaration(*implementation)?.payload
                     else {
                         return Err(model::Refusal::Inventory);
                     };
@@ -1620,32 +1835,36 @@ impl Adapter<'_, '_> {
             if !seen.insert(id) {
                 continue;
             }
-            let Some(OwnerRecord::Expression(expression)) = self
-                .source(context.source.package)?
-                .owners
-                .get(&OwnerKey::Expression(id))
-                .map(|record| self.budget.canonical_clone(record))
-                .transpose()?
+            let Some(OwnerRecord::Expression(expression)) =
+                self.owner(context.source.package, OwnerKey::Expression(id))?
             else {
                 return Err(model::Refusal::MissingDefinition);
             };
-            self.budget.canonical_reserve(&expression)?;
-            let operation = expression.operation;
+            self.budget.canonical_reserve(expression)?;
+            let operation = &expression.operation;
             let context = Context {
                 generation: expression.contract_version,
                 ..context
             };
-            match &operation {
+            match operation {
                 ExpressionOperation::Call {
                     function,
                     type_arguments,
+                    read_scope_arguments,
                     ..
                 }
                 | ExpressionOperation::FunctionValue {
                     function,
                     type_arguments,
+                    read_scope_arguments,
                     ..
                 } => {
+                    self.view_call_scopes(*function, read_scope_arguments, context)?;
+                    if matches!(operation, ExpressionOperation::FunctionValue { .. })
+                        && !read_scope_arguments.is_empty()
+                    {
+                        return Err(model::Refusal::Scope);
+                    }
                     self.budget.reserve::<model::Call>(1)?;
                     self.budget.reserve::<model::Term>(type_arguments.len())?;
                     calls.push(model::Call {
@@ -1669,8 +1888,10 @@ impl Adapter<'_, '_> {
                     function,
                     type_arguments,
                     implementations,
+                    read_scope_arguments,
                     ..
                 } => {
+                    self.view_call_scopes(*function, read_scope_arguments, context)?;
                     self.budget
                         .reserve::<model::Operand>(implementations.len())?;
                     self.budget.reserve::<model::Call>(1)?;
@@ -1695,12 +1916,31 @@ impl Adapter<'_, '_> {
                     witness,
                     contract,
                     method,
+                    read_scope_arguments,
                     ..
-                } => self.method_calls(witness, *contract, *method, context, calls)?,
+                } => {
+                    let DeclarationPayload::OwnedContract(c) =
+                        &self.authored(context.source.package, *contract)?.payload
+                    else {
+                        return Err(model::Refusal::ForeignContract);
+                    };
+                    let selected = c
+                        .methods
+                        .iter()
+                        .find(|m| m.id == *method)
+                        .ok_or(model::Refusal::Inventory)?;
+                    if selected.read_scope_parameters.len() != read_scope_arguments.len() {
+                        return Err(model::Refusal::Arity);
+                    }
+                    for argument in read_scope_arguments {
+                        self.view_scope(*argument, context)?;
+                    }
+                    self.method_calls(witness, *contract, *method, context, calls)?;
+                }
                 _ => {}
             }
-            let mut children = Vec::new();
-            let mut types = Vec::new();
+            let mut children: Vec<ExpressionId> = Vec::new();
+            let mut types: Vec<TypeObjectDigest> = Vec::new();
             let mut bindings = Vec::new();
             // This independent exhaustive constructor table deliberately walks
             // both branches, all arms and all unused annotations/actuals.
@@ -1712,14 +1952,14 @@ impl Adapter<'_, '_> {
                 } => {
                     children.extend([condition, when_true]);
                     self.budget.reserve::<(ExpressionId, bool)>(1)?;
-                    pending.push((when_false, true));
+                    pending.push((*when_false, true));
                 }
                 ExpressionOperation::Let {
                     bindings: ids,
                     body,
                 } => {
                     bindings.extend(ids);
-                    children.push(body);
+                    children.push(*body);
                 }
                 ExpressionOperation::Sequence { items } => children.extend(items),
                 ExpressionOperation::Call { arguments, .. }
@@ -1730,7 +1970,7 @@ impl Adapter<'_, '_> {
                 }
                 ExpressionOperation::Invoke { callee, arguments }
                 | ExpressionOperation::Bind { callee, arguments } => {
-                    children.push(callee);
+                    children.push(*callee);
                     children.extend(arguments);
                 }
                 ExpressionOperation::Record {
@@ -1739,7 +1979,7 @@ impl Adapter<'_, '_> {
                     ..
                 } => {
                     types.extend(type_arguments);
-                    children.extend(fields.into_iter().map(|field| field.value));
+                    children.extend(fields.iter().map(|field| field.value));
                 }
                 ExpressionOperation::Variant {
                     type_arguments,
@@ -1749,9 +1989,9 @@ impl Adapter<'_, '_> {
                     types.extend(type_arguments);
                     children.extend(payload);
                 }
-                ExpressionOperation::Field { value, .. } => children.push(value),
+                ExpressionOperation::Field { value, .. } => children.push(*value),
                 ExpressionOperation::List { item_type, items } => {
-                    types.push(item_type);
+                    types.push(*item_type);
                     children.extend(items);
                 }
                 ExpressionOperation::Map {
@@ -1765,15 +2005,15 @@ impl Adapter<'_, '_> {
                     }
                 }
                 ExpressionOperation::Match { value, arms } => {
-                    children.push(value);
+                    children.push(*value);
                     for arm in arms {
                         children.push(arm.body);
                         bindings.extend(arm.payload_binding);
                     }
                 }
                 ExpressionOperation::Transaction { binding, body, .. } => {
-                    bindings.push(binding);
-                    children.push(body);
+                    bindings.push(*binding);
+                    children.push(*body);
                 }
                 ExpressionOperation::TransactionOutcome {
                     binding,
@@ -1781,16 +2021,16 @@ impl Adapter<'_, '_> {
                     type_argument,
                     ..
                 } => {
-                    bindings.push(binding);
-                    children.push(body);
-                    types.push(type_argument);
+                    bindings.push(*binding);
+                    children.push(*body);
+                    types.push(*type_argument);
                 }
                 ExpressionOperation::PackOwned {
                     product_type,
                     fields,
                 } => {
-                    types.push(product_type);
-                    children.extend(fields.into_iter().map(|field| field.value));
+                    types.push(*product_type);
+                    children.extend(fields.iter().map(|field| field.value));
                 }
                 ExpressionOperation::UnpackOwned {
                     product_type,
@@ -1798,15 +2038,15 @@ impl Adapter<'_, '_> {
                     fields,
                     body,
                 } => {
-                    types.push(product_type);
+                    types.push(*product_type);
                     children.extend([source, body]);
-                    bindings.extend(fields.into_iter().map(|field| field.binding));
+                    bindings.extend(fields.iter().map(|field| field.binding));
                 }
                 ExpressionOperation::ChooseOwned {
                     choice_type, value, ..
                 } => {
-                    types.push(choice_type);
-                    children.push(value);
+                    types.push(*choice_type);
+                    children.push(*value);
                 }
                 ExpressionOperation::MatchOwned {
                     choice_type,
@@ -1818,8 +2058,8 @@ impl Adapter<'_, '_> {
                     source,
                     arms,
                 } => {
-                    types.push(choice_type);
-                    children.push(source);
+                    types.push(*choice_type);
+                    children.push(*source);
                     for arm in arms {
                         children.push(arm.body);
                         bindings.push(arm.binding);
@@ -1833,24 +2073,24 @@ impl Adapter<'_, '_> {
                     body,
                     ..
                 } => {
-                    types.push(product_type);
+                    types.push(*product_type);
                     children.extend([source, body]);
-                    bindings.push(binding);
+                    bindings.push(*binding);
                 }
-                ExpressionOperation::SequenceEmpty { sequence_type } => types.push(sequence_type),
+                ExpressionOperation::SequenceEmpty { sequence_type } => types.push(*sequence_type),
                 ExpressionOperation::SequenceLength {
                     sequence_type,
                     source,
                 } => {
-                    types.push(sequence_type);
-                    children.push(source);
+                    types.push(*sequence_type);
+                    children.push(*source);
                 }
                 ExpressionOperation::SequencePush {
                     sequence_type,
                     value,
                     source,
                 } => {
-                    types.push(sequence_type);
+                    types.push(*sequence_type);
                     children.extend([value, source]);
                 }
                 ExpressionOperation::SequencePop {
@@ -1859,7 +2099,7 @@ impl Adapter<'_, '_> {
                     source,
                 } => {
                     types.extend([sequence_type, result_type]);
-                    children.push(source);
+                    children.push(*source);
                 }
                 ExpressionOperation::BorrowOwnedItem {
                     sequence_type,
@@ -1868,9 +2108,9 @@ impl Adapter<'_, '_> {
                     binding,
                     body,
                 } => {
-                    types.push(sequence_type);
+                    types.push(*sequence_type);
                     children.extend([source, index, body]);
-                    bindings.push(binding);
+                    bindings.push(*binding);
                 }
                 ExpressionOperation::BorrowCall {
                     call,
@@ -1878,14 +2118,14 @@ impl Adapter<'_, '_> {
                     body,
                 } => {
                     children.extend([call, body]);
-                    bindings.push(binding);
+                    bindings.push(*binding);
                 }
                 ExpressionOperation::SequenceGet {
                     sequence_type,
                     source,
                     index,
                 } => {
-                    types.push(sequence_type);
+                    types.push(*sequence_type);
                     children.extend([source, index]);
                 }
                 ExpressionOperation::SequenceReplace {
@@ -1902,8 +2142,8 @@ impl Adapter<'_, '_> {
                     record_type,
                     fields,
                 } => {
-                    types.push(record_type);
-                    children.extend(fields.into_iter().map(|field| field.value));
+                    types.push(*record_type);
+                    children.extend(fields.iter().map(|field| field.value));
                 }
                 ExpressionOperation::UnpackOwnedRecord {
                     record_type,
@@ -1911,9 +2151,9 @@ impl Adapter<'_, '_> {
                     fields,
                     body,
                 } => {
-                    types.push(record_type);
+                    types.push(*record_type);
                     children.extend([source, body]);
-                    bindings.extend(fields.into_iter().map(|field| field.binding));
+                    bindings.extend(fields.iter().map(|field| field.binding));
                 }
                 ExpressionOperation::BorrowOwnedRecordField {
                     record_type,
@@ -1922,10 +2162,33 @@ impl Adapter<'_, '_> {
                     body,
                     ..
                 } => {
-                    types.push(record_type);
+                    types.push(*record_type);
                     children.extend([source, body]);
-                    bindings.push(binding);
+                    bindings.push(*binding);
                 }
+                ExpressionOperation::CreateReadView {
+                    declaration,
+                    type_arguments,
+                    read_scope,
+                    fields,
+                    ..
+                } => {
+                    self.authored(context.source.package, *declaration)?;
+                    self.view_scope(*read_scope, context)?;
+                    types.extend(type_arguments);
+                    children.extend(fields.iter().map(|f| f.value));
+                }
+                ExpressionOperation::BorrowReadView { binding, body, .. }
+                | ExpressionOperation::BorrowReadViewField { binding, body, .. } => {
+                    bindings.push(*binding);
+                    children.push(*body);
+                }
+                ExpressionOperation::ReborrowReadView { read_scope, .. } => {
+                    self.view_scope(*read_scope, context)?
+                }
+                ExpressionOperation::MoveReadView { .. }
+                | ExpressionOperation::DropReadView { .. }
+                | ExpressionOperation::ReadViewDataField { .. } => {}
                 ExpressionOperation::Unit {}
                 | ExpressionOperation::Bool { .. }
                 | ExpressionOperation::I64 { .. }
@@ -1940,12 +2203,8 @@ impl Adapter<'_, '_> {
                 self.term(ty, context, 0)?;
             }
             for binding in bindings {
-                let Some(OwnerRecord::Binding(record)) = self
-                    .source(context.source.package)?
-                    .owners
-                    .get(&OwnerKey::Binding(binding))
-                    .map(|record| self.budget.canonical_clone(record))
-                    .transpose()?
+                let Some(OwnerRecord::Binding(record)) =
+                    self.owner(context.source.package, OwnerKey::Binding(binding))?
                 else {
                     return Err(model::Refusal::MissingDefinition);
                 };

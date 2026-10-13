@@ -15,6 +15,9 @@ struct Storage {
     loans: usize,
     admitted_program: Option<ValueOrigin>,
     admission_valid: bool,
+    // Physical absence of view carriers, independently of typed admission. Guarded
+    // attachment preserves this fact; an arbitrary mutable callback invalidates it.
+    view_free: bool,
 }
 pub struct OwnedStorage {
     // Read access can enter a child invocation without moving backing custody.
@@ -72,6 +75,7 @@ impl OwnedStorage {
         reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
         control.check()?;
+        reject_view_fields(&fields, control)?;
         reserve(Self::ALLOCATION_BYTES)?;
         control.check()?;
         let product = Self {
@@ -83,6 +87,7 @@ impl OwnedStorage {
                 loans: 0,
                 admitted_program: None,
                 admission_valid: false,
+                view_free: true,
             })),
             mode: Mode::Owner,
         };
@@ -107,6 +112,11 @@ impl OwnedStorage {
         origin: ValueOrigin,
         consume: bool,
     ) -> Result<(), ExecutionError> {
+        // A callback may retain an inert observation of this very allocation.
+        // Refuse it before acquiring a mutex the callback already holds.
+        if self.mode == Mode::Inert {
+            return Err(reject());
+        }
         let storage = self.lock();
         self.validate_storage(&storage, origin, consume)
     }
@@ -129,8 +139,12 @@ impl OwnedStorage {
     /// The checked constructor admits the exact type and children before minting
     /// this allocation-bound certificate. Raw storage never starts certified.
     pub(super) fn establish_admission(&self, program: ValueOrigin) -> Result<(), ExecutionError> {
+        if self.mode == Mode::Inert {
+            return Err(reject());
+        }
         let mut storage = self.lock();
         self.validate_storage(&storage, self.origin, true)?;
+        restore_view_free(&mut storage, None)?;
         if storage
             .admitted_program
             .is_some_and(|existing| existing != program)
@@ -142,6 +156,9 @@ impl OwnedStorage {
         Ok(())
     }
     pub(super) fn validate_admission(&self, program: ValueOrigin) -> Result<(), ExecutionError> {
+        if self.mode == Mode::Inert {
+            return Err(reject());
+        }
         let storage = self.lock();
         self.validate_storage(&storage, self.origin, false)?;
         if storage.admitted_program != Some(program) || !storage.admission_valid {
@@ -151,6 +168,9 @@ impl OwnedStorage {
     }
     /// Return only a live allocation's currently valid prepared-program proof.
     pub(super) fn admitted_program(&self) -> Option<ValueOrigin> {
+        if self.mode == Mode::Inert {
+            return None;
+        }
         let storage = self.lock();
         self.validate_storage(&storage, self.origin, false).ok()?;
         storage.admitted_program.filter(|_| storage.admission_valid)
@@ -161,6 +181,7 @@ impl OwnedStorage {
         }
         let mut storage = self.lock();
         self.validate_storage(&storage, self.origin, false)?;
+        restore_view_free(&mut storage, None)?;
         if storage
             .admitted_program
             .is_some_and(|existing| existing != program)
@@ -184,8 +205,12 @@ impl OwnedStorage {
         Ok(())
     }
     pub(super) fn borrow(&self) -> Result<Self, ExecutionError> {
+        if self.mode == Mode::Inert {
+            return Err(reject());
+        }
         let mut storage = self.lock();
         self.validate_storage(&storage, self.origin, false)?;
+        restore_view_free(&mut storage, None)?;
         storage.loans = storage.loans.checked_add(1).ok_or_else(reject)?;
         Ok(Self {
             origin: self.origin,
@@ -224,8 +249,10 @@ impl OwnedStorage {
     ) -> Result<(), ExecutionError> {
         self.validate(origin, true)?;
         control.check()?;
+        StorageEscapeCheck::new(control).value(&value, 0)?;
         let mut storage = self.lock();
         self.validate_storage(&storage, origin, true)?;
+        restore_view_free(&mut storage, Some(control))?;
         let fields = storage.fields.as_mut().ok_or_else(reject)?;
         let length = fields.len().checked_add(1).ok_or_else(reject)?;
         if length as u64 > super::value::MAXIMUM_ADMISSION_ITEMS {
@@ -277,9 +304,13 @@ impl OwnedStorage {
         origin: ValueOrigin,
         control: &ExecutionControl,
     ) -> Result<Option<NormalizedValue>, ExecutionError> {
+        if self.mode == Mode::Inert {
+            return Err(reject());
+        }
         let mut storage = self.lock();
         self.validate_storage(&storage, origin, true)?;
         control.check()?;
+        restore_view_free(&mut storage, Some(control))?;
         let value = storage.fields.as_mut().map(Vec::pop).ok_or_else(reject)?;
         if value.is_some() {
             // Removal preserves a typed sequence only through its checked owner.
@@ -297,9 +328,14 @@ impl OwnedStorage {
         value: NormalizedValue,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
+        StorageEscapeCheck::new(control).value(&value, 0)?;
+        if self.mode == Mode::Inert {
+            return Err(reject());
+        }
         let mut storage = self.lock();
         self.validate_storage(&storage, origin, true)?;
         control.check()?;
+        restore_view_free(&mut storage, Some(control))?;
         let slot = storage
             .fields
             .as_mut()
@@ -331,6 +367,9 @@ impl OwnedStorage {
                 .as_ref()
                 .and_then(|fields| fields.get(index))
                 .ok_or_else(reject)?;
+            if !storage.view_free {
+                StorageEscapeCheck::new(control).value(value, 0)?;
+            }
             if value.memory_form().is_some() {
                 value.memory_validate(self.backing_origin, false)?;
                 let mut borrowed = value.memory_borrow()?;
@@ -384,7 +423,11 @@ impl OwnedStorage {
         }
         self.validate(source, true)?;
         let storage = self.lock();
-        inspect(storage.fields.as_deref().ok_or_else(reject)?)
+        let fields = storage.fields.as_deref().ok_or_else(reject)?;
+        if !storage.view_free {
+            reject_view_fields_uncontrolled(fields)?;
+        }
+        inspect(fields)
     }
     /// The consuming envelope keeps custody if cancellation interrupts children.
     /// Destruction does not depend on their possibly mixed intermediate domains.
@@ -403,8 +446,15 @@ impl OwnedStorage {
             // Interrupted descendant adoption is cleanup custody, never a new
             // reusable typed root. Retain the program binding across invalidation.
             let was_admitted = storage.admission_valid;
+            restore_view_free(&mut storage, None)?;
             storage.admission_valid = false;
-            adopt(storage.fields.as_deref_mut().ok_or_else(reject)?)?;
+            storage.view_free = false;
+            let fields = storage.fields.as_deref_mut().ok_or_else(reject)?;
+            adopt(fields)?;
+            // A raw callback cannot smuggle a new capability into an Owned envelope.
+            // Failed callbacks/admission keep cleanup custody and no certificate.
+            reject_view_fields_uncontrolled(fields)?;
+            storage.view_free = true;
             storage.admission_valid = was_admitted;
         }
         self.origin = destination;
@@ -431,6 +481,9 @@ impl OwnedStorage {
             .as_ref()
             .and_then(|fields| fields.get(index))
             .ok_or_else(reject)?;
+        if !storage.view_free {
+            StorageEscapeCheck::new(control).value(value, 0)?;
+        }
         // Records, lists, maps, text and bytes share immutable backing. Only the
         // inline sum/option spine allocates during an ordinary value clone.
         let mut current = value;
@@ -449,7 +502,8 @@ impl OwnedStorage {
                         .ok_or_else(reject)?;
                     child
                 }
-                NormalizedValue::ByteBuffer(_)
+                NormalizedValue::ReadView(_)
+                | NormalizedValue::ByteBuffer(_)
                 | NormalizedValue::OwnedI64Cell(_)
                 | NormalizedValue::OwnedProduct(_)
                 | NormalizedValue::OwnedChoice(_)
@@ -477,7 +531,11 @@ impl OwnedStorage {
             return Err(reject());
         }
         control.check()?;
-        let fields = self.lock().fields.take().ok_or_else(reject)?;
+        let fields = {
+            let mut storage = self.lock();
+            restore_view_free(&mut storage, Some(control))?;
+            storage.fields.take().ok_or_else(reject)?
+        };
         #[cfg(test)]
         OBSERVED.with(|entries| {
             if let Some(entries) = entries.borrow_mut().as_mut()
@@ -508,6 +566,175 @@ impl OwnedStorage {
         });
         storage.fields.take()
     }
+}
+
+// A negative guard only: callers still independently admit closed Owned types,
+// child category/provenance, depth and growth before establishing a certificate.
+fn reject_view_fields(
+    fields: &[NormalizedValue],
+    control: &ExecutionControl,
+) -> Result<(), ExecutionError> {
+    let mut guard = StorageEscapeCheck::new(control);
+    for field in fields {
+        guard.value(field, 0)?;
+    }
+    Ok(())
+}
+
+struct StorageEscapeCheck<'a> {
+    control: Option<&'a ExecutionControl>,
+    visits: u64,
+}
+
+impl<'a> StorageEscapeCheck<'a> {
+    fn new(control: &'a ExecutionControl) -> Self {
+        Self {
+            control: Some(control),
+            visits: 0,
+        }
+    }
+
+    fn value(&mut self, value: &NormalizedValue, depth: usize) -> Result<(), ExecutionError> {
+        if let Some(control) = self.control {
+            control.check()?;
+        }
+        if depth > 256 {
+            return Err(ExecutionError::resource(
+                "normalized_value_depth",
+                "owned storage escape inspection exceeds finite value depth 256",
+            ));
+        }
+        self.visits = self
+            .visits
+            .checked_add(1)
+            .filter(|visits| *visits <= super::value::MAXIMUM_ADMISSION_ITEMS + 1)
+            .ok_or_else(|| {
+                ExecutionError::resource(
+                    "normalized_collection_items",
+                    "owned storage escape inspection exceeds finite admission items",
+                )
+            })?;
+        match value {
+            NormalizedValue::ReadView(_) => {
+                return Err(view_escape());
+            }
+            NormalizedValue::OwnedProduct(storage) => self.storage(storage, depth)?,
+            NormalizedValue::OwnedChoice(choice) => self.storage(&choice.storage, depth)?,
+            NormalizedValue::OwnedSequence(sequence) => self.storage(&sequence.storage, depth)?,
+            NormalizedValue::Record(super::value::NormalizedRecord::Nominal { fields, .. }) => {
+                for field in fields.iter() {
+                    self.value(field, depth + 1)?;
+                }
+            }
+            NormalizedValue::Record(super::value::NormalizedRecord::Structural { fields }) => {
+                for (_, field) in fields.iter() {
+                    self.value(field, depth + 1)?;
+                }
+            }
+            NormalizedValue::List(values) => self.list(values, depth)?,
+            NormalizedValue::Map(values) => self.map(values, depth)?,
+            NormalizedValue::Variant { payload, .. } | NormalizedValue::Option(payload) => {
+                if let Some(child) = payload {
+                    self.value(child, depth + 1)?;
+                }
+            }
+            NormalizedValue::Result { value, .. } => self.value(value, depth + 1)?,
+            NormalizedValue::Function {
+                read_scope_arguments,
+                bound_arguments,
+                ..
+            } => {
+                if !read_scope_arguments.is_empty() {
+                    return Err(view_escape());
+                }
+                if let Some(arguments) = bound_arguments {
+                    for argument in arguments.iter() {
+                        self.value(argument, depth + 1)?;
+                    }
+                }
+            }
+            NormalizedValue::Unit
+            | NormalizedValue::Bool(_)
+            | NormalizedValue::I64(_)
+            | NormalizedValue::F64(_)
+            | NormalizedValue::Bytes(_)
+            | NormalizedValue::Text(_)
+            | NormalizedValue::StaticText(_)
+            | NormalizedValue::ByteBuffer(_)
+            | NormalizedValue::OwnedI64Cell(_)
+            | NormalizedValue::Resource(_) => {}
+        }
+        Ok(())
+    }
+
+    fn storage(&mut self, token: &OwnedStorage, depth: usize) -> Result<(), ExecutionError> {
+        // Inert observations cannot supply child storage. Reject before locking:
+        // a raw self-observation inside a callback must never deadlock this walk.
+        if token.mode == Mode::Inert {
+            return Err(reject());
+        }
+        let storage = token.lock();
+        if storage.view_free {
+            return Ok(());
+        }
+        for field in storage.fields.as_deref().ok_or_else(reject)? {
+            self.value(field, depth + 1)?;
+        }
+        Ok(())
+    }
+
+    #[inline(never)]
+    fn list(&mut self, values: &super::list::List, depth: usize) -> Result<(), ExecutionError> {
+        let mut cursor = values.iter();
+        for child in &mut cursor {
+            self.value(child, depth + 1)?;
+        }
+        Ok(())
+    }
+
+    #[inline(never)]
+    fn map(&mut self, values: &super::map::Map, depth: usize) -> Result<(), ExecutionError> {
+        let mut cursor = values.iter();
+        for (_, child) in &mut cursor {
+            self.value(child, depth + 1)?;
+        }
+        Ok(())
+    }
+}
+
+fn reject_view_fields_uncontrolled(fields: &[NormalizedValue]) -> Result<(), ExecutionError> {
+    // These existing callback APIs carry no execution control. Do not allocate a
+    // substitute control or silently grant them a new cancellation domain.
+    let mut guard = StorageEscapeCheck {
+        control: None,
+        visits: 0,
+    };
+    for field in fields {
+        guard.value(field, 0)?;
+    }
+    Ok(())
+}
+
+fn restore_view_free(
+    storage: &mut Storage,
+    control: Option<&ExecutionControl>,
+) -> Result<(), ExecutionError> {
+    if !storage.view_free {
+        let mut guard = StorageEscapeCheck { control, visits: 0 };
+        for field in storage.fields.as_deref().ok_or_else(reject)? {
+            guard.value(field, 0)?;
+        }
+        storage.view_free = true;
+    }
+    Ok(())
+}
+
+fn view_escape() -> ExecutionError {
+    ExecutionError::new(
+        crate::platform::execution::ExecutionFailureClass::Trap,
+        "normalized_read_view_escape",
+        "read-view values, scopes, or nested types cannot cross an ordinary value boundary",
+    )
 }
 
 #[cfg(test)]

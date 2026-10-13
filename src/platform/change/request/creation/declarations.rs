@@ -302,7 +302,10 @@ pub(in crate::platform::change::request) fn lower_variant<
     }))
 }
 
-fn lower_nominal_parameters<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+pub(super) fn lower_nominal_parameters<
+    B: CanonicalBaseRead + ?Sized,
+    W: WitnessBaseRead + ?Sized,
+>(
     lowerer: &mut AuthoredLowerer<'_, B, W>,
     declaration: DeclarationId,
     parameters: &[AuthoredTypeParameter],

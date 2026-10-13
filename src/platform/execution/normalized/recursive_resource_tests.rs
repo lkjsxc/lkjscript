@@ -100,6 +100,7 @@ pub(crate) fn snapshot(mode: &str, tail: bool) -> KernelSnapshot {
             &mut snapshot,
             &mut serial,
             ExpressionOperation::Call {
+                read_scope_arguments: Vec::new(),
                 function: callee,
                 type_arguments,
                 effect_arguments: vec![],

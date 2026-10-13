@@ -6,16 +6,57 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 pub(in super::super::super) struct TaskApplication {
+    identity: ValueOrigin,
     function: FunctionIndex,
     types: Arc<[TypeObjectDigest]>,
     result: TypeObjectDigest,
-    canonical_result: TypeObjectDigest,
+    canonical_result: crate::platform::kernel::CallableResult<u32>,
     parameters: Option<Vec<TypeObjectDigest>>,
     bindings: BTreeMap<TypeParameterId, TypeObjectDigest>,
     canonical_parameters: Arc<[super::super::super::prepare::NormalizedParameter]>,
     implementations: Arc<[super::super::super::prepare::NormalizedImplementationArgument]>,
+    scope_parameters: Arc<[crate::platform::kernel::ReadScopeParameter]>,
+    scope_sources: Arc<[crate::platform::kernel::ReadScopeSource<u32>]>,
+    scopes: Arc<[crate::platform::kernel::ReadScopeArgument]>,
 }
 impl TaskApplication {
+    pub(in super::super::super) fn application_identity(&self) -> ValueOrigin {
+        self.identity
+    }
+    pub(in super::super::super) fn read_scope_arguments(
+        &self,
+    ) -> &Arc<[crate::platform::kernel::ReadScopeArgument]> {
+        &self.scopes
+    }
+    pub(in super::super::super) fn read_scope_source_count(&self, position: usize) -> usize {
+        self.scope_sources
+            .iter()
+            .filter(|source| source.source as usize == position)
+            .count()
+    }
+    pub(in super::super::super) fn visit_read_scope_keys(
+        &self,
+        position: usize,
+        visit: &mut impl FnMut(crate::platform::kernel::ReadScopeArgument) -> Result<(), ExecutionError>,
+    ) -> Result<(), ExecutionError> {
+        for source in self
+            .scope_sources
+            .iter()
+            .filter(|source| source.source as usize == position)
+        {
+            let crate::platform::kernel::ReadScopeArgument::Parameter(reference) = source.scope
+            else {
+                return Err(reject());
+            };
+            let index = self
+                .scope_parameters
+                .iter()
+                .position(|parameter| parameter.id == reference.parameter)
+                .ok_or_else(reject)?;
+            visit(*self.scopes.get(index).ok_or_else(reject)?)?;
+        }
+        Ok(())
+    }
     pub(in super::super::super) fn function(&self) -> FunctionIndex {
         self.function
     }
@@ -48,11 +89,35 @@ impl TaskApplication {
             || f.type_parameter_constraints.len() != types.len()
             || (!f.type_arguments.is_empty() && f.type_arguments.as_ref() != types.as_ref())
             || f.implementation_parameters.len() != f.implementation_arguments.len()
-            || f.result_borrow.is_some()
+            || !matches!(
+                f.result.relation,
+                crate::platform::kernel::ResultRelation::Value
+            )
+            || f.read_scope_parameters.len() != f.read_scope_arguments.len()
         {
             return Err(reject());
         }
+        let identity = ValueOrigin::fresh().ok_or_else(reject)?;
         let mut work = Work { control, nodes: 0 };
+        for (position, scope) in f.read_scope_parameters.iter().enumerate() {
+            work.visit(0)?;
+            for earlier in &f.read_scope_parameters[..position] {
+                work.visit(0)?;
+                if earlier.id == scope.id {
+                    return Err(reject());
+                }
+            }
+        }
+        for (position, source) in f.read_scope_sources.iter().enumerate() {
+            work.visit(0)?;
+            work_scope_source(f, position, &mut work)?;
+            for earlier in &f.read_scope_sources[..position] {
+                work.visit(0)?;
+                if earlier == source {
+                    return Err(reject());
+                }
+            }
+        }
         for (ty, constraint) in types.iter().zip(f.type_parameter_constraints.iter()) {
             work.visit(0)?;
             let owned = closed_owned_type(program, *ty, &mut work)?;
@@ -128,7 +193,10 @@ impl TaskApplication {
                 }
             }
         }
-        if types.is_empty() && f.implementation_arguments.is_empty() {
+        if types.is_empty()
+            && f.implementation_arguments.is_empty()
+            && f.read_scope_parameters.is_empty()
+        {
             for parameter in f.parameters.iter() {
                 let ty = types::resolve_application_in(program, parameter.ty, &context, &mut work)?;
                 if ty != parameter.ty {
@@ -136,9 +204,10 @@ impl TaskApplication {
                 }
                 validate_parameter_type(program, ty, parameter.use_mode, &mut work)?;
             }
-            let result = types::resolve_application_in(program, f.result, &context, &mut work)?;
+            let result = types::resolve_application_in(program, f.result.ty, &context, &mut work)?;
             validate_type(program, result, 0, &mut work)?;
             return Ok(Self {
+                identity,
                 function,
                 types,
                 result,
@@ -147,6 +216,9 @@ impl TaskApplication {
                 bindings,
                 canonical_parameters: Arc::clone(&f.parameters),
                 implementations: Arc::clone(&f.implementation_arguments),
+                scope_parameters: Arc::clone(&f.read_scope_parameters),
+                scope_sources: Arc::clone(&f.read_scope_sources),
+                scopes: Arc::clone(&f.read_scope_arguments),
             });
         }
         reserve(super::super::super::value::collection_storage_bytes(
@@ -161,9 +233,10 @@ impl TaskApplication {
             validate_parameter_type(program, ty, p.use_mode, &mut work)?;
             parameters.push(ty);
         }
-        let result = types::resolve_application_in(program, f.result, &context, &mut work)?;
+        let result = types::resolve_application_in(program, f.result.ty, &context, &mut work)?;
         validate_type(program, result, 0, &mut work)?;
         Ok(Self {
+            identity,
             function,
             types,
             result,
@@ -172,6 +245,9 @@ impl TaskApplication {
             bindings,
             canonical_parameters: Arc::clone(&f.parameters),
             implementations: Arc::clone(&f.implementation_arguments),
+            scope_parameters: Arc::clone(&f.read_scope_parameters),
+            scope_sources: Arc::clone(&f.read_scope_sources),
+            scopes: Arc::clone(&f.read_scope_arguments),
         })
     }
 
@@ -190,11 +266,17 @@ impl TaskApplication {
             || !function.task_requirements.is_empty()
             || !function.effect_parameters.is_empty()
             || !function.requirement_parameters.is_empty()
-            || function.result_borrow.is_some()
+            || !matches!(
+                function.result.relation,
+                crate::platform::kernel::ResultRelation::Value
+            )
             || function.result != self.canonical_result
             || function.type_parameters.len() != self.types.len()
             || !Arc::ptr_eq(&function.parameters, &self.canonical_parameters)
             || !Arc::ptr_eq(&function.implementation_arguments, &self.implementations)
+            || !Arc::ptr_eq(&function.read_scope_parameters, &self.scope_parameters)
+            || !Arc::ptr_eq(&function.read_scope_sources, &self.scope_sources)
+            || !Arc::ptr_eq(&function.read_scope_arguments, &self.scopes)
         {
             return Ok(false);
         }
@@ -206,7 +288,7 @@ impl TaskApplication {
         )
         .map_err(types::context_error)?;
         let mut work = Work { control, nodes: 0 };
-        if types::resolve_application_in(program, function.result, &context, &mut work)?
+        if types::resolve_application_in(program, function.result.ty, &context, &mut work)?
             != self.result
         {
             return Ok(false);
@@ -236,6 +318,39 @@ impl TaskApplication {
         }
         .ok_or_else(reject)
     }
+}
+
+fn work_scope_source(
+    function: &super::super::super::prepare::NormalizedFunction,
+    position: usize,
+    work: &mut Work<'_>,
+) -> Result<(), ExecutionError> {
+    let source = function
+        .read_scope_sources
+        .get(position)
+        .ok_or_else(reject)?;
+    let parameter = function
+        .parameters
+        .get(source.source as usize)
+        .ok_or_else(reject)?;
+    if parameter.use_mode != ParameterUse::Borrow || parameter.resource_requirement.is_some() {
+        return Err(reject());
+    }
+    let crate::platform::kernel::ReadScopeArgument::Parameter(reference) = source.scope else {
+        return Err(reject());
+    };
+    if reference.binder
+        != crate::platform::kernel::ReadScopeBinder::Declaration(function.declaration)
+    {
+        return Err(reject());
+    }
+    for parameter in function.read_scope_parameters.iter() {
+        work.visit(0)?;
+        if parameter.id == reference.parameter {
+            return Ok(());
+        }
+    }
+    Err(reject())
 }
 
 /// Metadata actuals prove their declared generic obligations; they do not gain

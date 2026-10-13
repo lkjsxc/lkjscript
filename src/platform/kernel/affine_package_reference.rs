@@ -79,7 +79,7 @@ fn exact_package_resource_signatures_agree_with_the_disjoint_flow_oracle() {
                         panic!("signature");
                     };
                     match fault {
-                        "resource-result" => signature.result = resource_type,
+                        "resource-result" => signature.result.ty = resource_type,
                         "pure" => signature.effect = FunctionEffect::Pure,
                         "open-requirement" => signature.requirement_parameters.push(
                             crate::platform::semantic_id::RequirementParameterId::migrate(
@@ -92,7 +92,7 @@ fn exact_package_resource_signatures_agree_with_the_disjoint_flow_oracle() {
                                 crate::platform::kernel::PackageExternalSignature {
                                     type_parameters: signature.type_parameters.clone(),
                                     parameters: signature.parameters.clone(),
-                                    result: signature.result,
+                                    result: signature.result.ty,
                                 },
                             )
                         }

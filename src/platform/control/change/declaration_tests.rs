@@ -46,7 +46,7 @@ declarations.end
     let flat = decode_compact_change("parameterized-flat.lkjc", flat.as_bytes()).unwrap();
     let native = decode_compact_change("parameterized-native.lkjc", native.as_bytes()).unwrap();
     let bytes = canonical_authored_intent_bytes(&native.semantic).unwrap();
-    assert_eq!(&bytes[..8], b"LKJACR30");
+    assert_eq!(&bytes[..8], b"LKJACR39");
     assert_eq!(
         bytes,
         canonical_authored_intent_bytes(&flat.semantic).unwrap()
@@ -54,7 +54,7 @@ declarations.end
     assert_eq!(native.request_commitment, flat.request_commitment);
     assert_eq!(
         commitment_codec_identity(&bytes),
-        "lkjscript-authored-change-codec-30"
+        "lkjscript-authored-change-codec-39"
     );
 }
 
@@ -101,7 +101,7 @@ declarations.end
             decode_compact_change("mixed-native.lkjc", format!("{header}{native}").as_bytes())
                 .unwrap();
         let bytes = canonical_authored_intent_bytes(&native.semantic).unwrap();
-        assert_eq!(&bytes[..8], b"LKJACR37");
+        assert_eq!(&bytes[..8], b"LKJACR39");
         assert_eq!(
             bytes,
             canonical_authored_intent_bytes(&flat.semantic).unwrap()
@@ -109,7 +109,7 @@ declarations.end
         assert_eq!(native.request_commitment, flat.request_commitment);
         assert_eq!(
             commitment_codec_identity(&bytes),
-            "lkjscript-authored-change-codec-37"
+            "lkjscript-authored-change-codec-39"
         );
     }
 }
@@ -133,7 +133,7 @@ fn parameterized_owned_witness_edges_bind_order_and_reject_malformed_children() 
     );
     assert_eq!(
         &canonical_authored_intent_bytes(&original.semantic).unwrap()[..8],
-        b"LKJACR30"
+        b"LKJACR39"
     );
     let swapped = input
         .replace("index=0 type=byte-buffer", "index=1 type=byte-buffer")
@@ -338,7 +338,9 @@ declarations.end"#;
 #[test]
 fn native_transfer_and_share_constraint_sets_select_exact_canonical_codec() {
     use crate::platform::kernel::TypeParameterConstraints as C;
-    for (names, expected, magic) in [
+    // The third column records each constraint form's historical introduced generation.
+    // Every freshly authored request now uses the complete codec39 profile.
+    for (names, expected, _historical_magic) in [
         ("none", C::None, b"LKJACR14"),
         ("capture-safe", C::CaptureSafe, b"LKJACR14"),
         ("owned", C::Owned, b"LKJACR21"),
@@ -396,7 +398,7 @@ fn native_transfer_and_share_constraint_sets_select_exact_canonical_codec() {
         assert!(decoded.semantic.changes.iter().any(|change| matches!(change,
             AuthoredChange::AddTypeParameter { parameter, .. } if parameter.constraints == expected)));
         let bytes = canonical_authored_intent_bytes(&decoded.semantic).unwrap();
-        assert_eq!(&bytes[..8], magic, "{names}");
+        assert_eq!(&bytes[..8], b"LKJACR39", "{names}");
         let owner = OwnerKey::TypeParameter(
             crate::platform::semantic_id::TypeParameterId::migrate(b"constraint-set", 0),
         );
@@ -410,7 +412,7 @@ fn native_transfer_and_share_constraint_sets_select_exact_canonical_codec() {
         );
         assert_eq!(
             &canonical_authored_intent_bytes(&decoded.semantic).unwrap()[..8],
-            magic
+            b"LKJACR39"
         );
         let json = serde_json::to_vec(&expected).unwrap();
         assert_eq!(serde_json::from_slice::<C>(&json).unwrap(), expected);
@@ -662,7 +664,7 @@ declarations.end"#;
     let decoded = decode_compact_change("owned-authority.lkjc", input.as_bytes()).unwrap();
     assert_eq!(
         &canonical_authored_intent_bytes(&decoded.semantic).unwrap()[..8],
-        b"LKJACR27"
+        b"LKJACR39"
     );
     let prepared = created
         .repository
@@ -797,8 +799,8 @@ fn native_owned_task_method_intent_is_distinct_and_pure_predecessor_stays_stable
     let pure = encode(&literal.replace("(returns Self)", "(returns Self) (effect pure)"));
     let task = encode(&literal.replace("(returns Self)", "(returns Self) (effect (task))"));
     assert_eq!(implicit, pure);
-    assert_eq!(&pure[..8], b"LKJACR21");
-    assert_eq!(&task[..8], b"LKJACR24");
+    assert_eq!(&pure[..8], b"LKJACR39");
+    assert_eq!(&task[..8], b"LKJACR39");
     assert_ne!(pure, task);
     for effect in ["(effect pure ignored)", "(effect)", "(other (task))"] {
         let invalid = literal.replace("(returns Self)", &format!("(returns Self) {effect}"));

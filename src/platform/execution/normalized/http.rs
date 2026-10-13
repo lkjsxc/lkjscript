@@ -6,8 +6,9 @@ use super::resident::NormalizedResidentDeployment;
 use super::resource::NormalizedResourceScope;
 use super::value::PortIndex;
 use super::value::{NormalizedMapKey, NormalizedRecord, NormalizedValue};
+use super::value_schema::NormalizedValueSchema;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
-use crate::platform::execution::{ExecutionError, ExecutionFailureClass};
+use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::http::{
     HTTP_ADAPTER_CONTRACT_VERSION, HttpDispatchObservation, HttpHeader, HttpLimits, HttpRequest,
     HttpResponse, HttpRuntimeObservation, HttpServerReceipt, decode_live_request,
@@ -399,6 +400,7 @@ impl NormalizedHttpApplication {
             ));
         }
         let program = resident.program();
+        let control = ExecutionControl::uncancelled();
         let matcher = PreparedHttpMatcher::new(&resident.target().http_routes)?;
         for route in resident.target().http_routes.iter() {
             let port = program.ports.get(route.port.0 as usize).ok_or_else(|| {
@@ -413,6 +415,9 @@ impl NormalizedHttpApplication {
                     "HTTP port callable type is absent",
                 )
             })?;
+            program
+                .reject_read_view_escape(port.function_type, &control)
+                .map_err(super::runner::execution_diagnostic)?;
             let matches_shape = crate::platform::http::has_semantic_http_route_shape(
                 &shape.form,
                 route.selector.capture_count(),
@@ -448,7 +453,11 @@ impl NormalizedHttpApplication {
                     .parameters
                     .first()
                     .is_none_or(|parameter| parameter.ty != http.request_type)
-                || handler.result != http.response_type
+                || handler.result.ty != http.response_type
+                || !matches!(
+                    handler.result.relation,
+                    crate::platform::kernel::ResultRelation::Value
+                )
                 || route.capture_parameters.len() != captures.len()
             {
                 return Err(http_corrupt(
@@ -948,6 +957,7 @@ fn response_value(
     value: NormalizedValue,
     limits: &HttpLimits,
 ) -> Result<HttpResponse, ExecutionError> {
+    value.reject_read_view_escape(&ExecutionControl::uncancelled())?;
     let fields = exact_structural(&value, &["body", "headers", "status"], "response")?;
     let body = match &fields[0].1 {
         NormalizedValue::Bytes(bytes) if bytes.len() <= limits.maximum_response_body_bytes => {

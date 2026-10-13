@@ -1,0 +1,28 @@
+declarations.begin
+(units
+  (module create bad-self-sharing
+    (read-view create GenericSpan (visibility private)
+      (scope-parameter read_scope_d8600000000000000000000000000010 s)
+      (type-parameter create W (constraint owned))
+      (view-field field_d8600000000000000000000000000002 length (type I64) (ordinary))
+      (view-field field_d8600000000000000000000000000003 source (type W)
+        (read-reference (read-scope (declaration GenericSpan) read_scope_d8600000000000000000000000000010))))
+    (function create child (visibility private) (effect (task))
+      (type-parameter create W (constraint owned))
+      (scope-parameter read_scope_d8600000000000000000000000000011 s)
+      (parameter create view (type (read-view-application GenericSpan (types W)
+        (read-scope (declaration child) read_scope_d8600000000000000000000000000011))) (use borrow))
+      (scope-source view (read-scope (declaration child) read_scope_d8600000000000000000000000000011))
+      (returns I64 (value))
+      (body (view-data-field (local view) GenericSpan field_d8600000000000000000000000000002)))
+    (function create join (visibility private) (effect (task))
+      (type-parameter create W (constraint owned))
+      (scope-parameter read_scope_d8600000000000000000000000000012 s)
+      (parameter create view (type (read-view-application GenericSpan (types W)
+        (read-scope (declaration join) read_scope_d8600000000000000000000000000012))) (use borrow))
+      (scope-source view (read-scope (declaration join) read_scope_d8600000000000000000000000000012))
+      (returns (record (left I64) (right I64)) (value))
+      (body (parallel
+        (call child (types W) (scopes (read-scope (declaration join) read_scope_d8600000000000000000000000000012)) (local view))
+        (call child (types W) (scopes (read-scope (declaration join) read_scope_d8600000000000000000000000000012)) (local view)))))))
+declarations.end

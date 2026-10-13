@@ -104,6 +104,7 @@ impl Read {
         let kind = match &payload {
             DeclarationPayload::Function(_) => OwnerKind::PureFunction,
             DeclarationPayload::OwnedImplementation(_) => OwnerKind::OwnedImplementation,
+            DeclarationPayload::OwnedContract(_) => OwnerKind::OwnedContract,
             _ => panic!("fixture declaration kind"),
         };
         self.owners.insert(
@@ -117,7 +118,65 @@ impl Read {
             }),
         );
     }
+    // Witness scope admission resolves the complete contract even when its
+    // associated-member inventory is empty. Keep that authority in the reader
+    // rather than relying on a synthetic dangling contract reference.
+    fn contract(&mut self, methods: &[u64]) {
+        let r = reference(900);
+        let owner = OwnerKey::Declaration(r.declaration);
+        if !self.owners.contains_key(&(r.package, owner)) {
+            let self_parameter = parameter(900, 0);
+            let key = OwnerKey::TypeParameter(self_parameter);
+            self.owners.insert(
+                (r.package, key),
+                OwnerRecord::TypeParameter(TypeParameterRecord {
+                    header: OwnerHeader::new(key, OwnerKind::TypeParameter),
+                    declaration: r.declaration,
+                    name: Name::new("Self").unwrap(),
+                    constraints: TypeParameterConstraints::Owned,
+                }),
+            );
+            self.declaration(
+                900,
+                DeclarationPayload::OwnedContract(OwnedContract {
+                    self_parameter,
+                    type_parameters: Vec::new(),
+                    methods: Vec::new(),
+                    associated_types: Vec::new(),
+                }),
+            );
+        }
+        let result = self.ty(TypeForm::I64);
+        let OwnerRecord::Declaration(record) = self.owners.get_mut(&(r.package, owner)).unwrap()
+        else {
+            panic!("fixture contract")
+        };
+        let DeclarationPayload::OwnedContract(contract) = &mut record.payload else {
+            panic!("fixture contract payload")
+        };
+        for n in methods {
+            if !contract.methods.iter().any(|m| m.id == method(*n)) {
+                contract.methods.push(OwnedMethod {
+                    id: method(*n),
+                    name: Name::new(format!("method{n}")).unwrap(),
+                    parameters: Vec::new(),
+                    result: CallableResult {
+                        ty: result,
+                        relation: ResultRelation::Value,
+                    },
+                    read_scope_parameters: Vec::new(),
+                    read_scope_sources: Vec::new(),
+                    effect: FunctionEffect::Pure,
+                });
+            }
+        }
+        contract.methods.sort_by_key(|m| m.id);
+        contract.validate_local().unwrap();
+    }
     fn function(&mut self, n: u64, arity: usize, implementations: usize, body: ExpressionId) {
+        if implementations != 0 {
+            self.contract(&[0]);
+        }
         let result = self.ty(TypeForm::I64);
         let mut ps = Vec::new();
         for i in 0..implementations {
@@ -137,10 +196,15 @@ impl Read {
                 effect_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result,
-                result_borrow: None,
+                result: crate::platform::kernel::CallableResult {
+                    ty: result,
+                    relation: crate::platform::kernel::ResultRelation::Value,
+                },
                 effect: FunctionEffect::Pure,
                 body,
+
+                read_scope_parameters: Vec::new(),
+                read_scope_sources: Vec::new(),
             }),
         );
     }
@@ -150,6 +214,7 @@ impl Read {
         arity: usize,
         methods: Vec<(u64, u64, Vec<TypeObjectDigest>)>,
     ) {
+        self.contract(&methods.iter().map(|(m, _, _)| *m).collect::<Vec<_>>());
         let leaf = self.ty(TypeForm::OwnedI64Cell);
         self.declaration(
             n,
@@ -167,6 +232,8 @@ impl Read {
                         function: reference(f),
                         type_arguments,
                         implementations: Vec::new(),
+
+                        read_scope_arguments: Vec::new(),
                     })
                     .collect(),
             }),
@@ -250,6 +317,8 @@ fn implementation_call(
             effect_arguments: Vec::new(),
             requirement_arguments: Vec::new(),
             arguments: Vec::new(),
+
+            read_scope_arguments: Vec::new(),
         },
     )
 }
@@ -261,6 +330,8 @@ fn method_call(read: &mut Read, owner: u64, operand: ImplementationOperand) -> E
             contract: reference(900),
             method: method(0),
             arguments: Vec::new(),
+
+            read_scope_arguments: Vec::new(),
         },
     )
 }
@@ -438,6 +509,8 @@ fn nested_type_callback(grow: bool) -> Read {
             effect_arguments: vec![],
             requirement_arguments: vec![],
             arguments: vec![],
+
+            read_scope_arguments: Vec::new(),
         },
     );
     read.function(4, 1, 0, body);
@@ -485,7 +558,8 @@ fn acyclic_duplicate_prerequisites_share_selection_nodes_without_tree_expansion(
     // Synthetic flow-reader stress, not a fully admitted language declaration:
     // prerequisite schemes in public source require an Owned type parameter.
     // Forty tiny edges describe over a trillion logical leaf occurrences here.
-    // With no type arguments, this observer has no distinct type-slot paths.
+    // With no function/scheme type arguments, the complete contract contributes
+    // only its distinguished Self slot; witness paths add no type-flow slots.
     for n in 1..=40 {
         let pair = selected(1000, vec![], vec![lexical(n, 0), lexical(n, 0)]);
         let body = implementation_call(&mut read, n, n - 1, vec![pair]);
@@ -503,7 +577,11 @@ fn acyclic_duplicate_prerequisites_share_selection_nodes_without_tree_expansion(
     read.function(1004, 0, 0, body);
     let mut work = 0;
     let observation = validate_callable_closure(&read, &mut work, 5_000_000).unwrap();
-    assert_eq!(observation.slots, 0);
+    assert_eq!(observation.slots, 1, "only the complete contract Self slot");
+    assert_eq!(
+        observation.edges, 0,
+        "untyped witness paths add no type edges"
+    );
     assert!(observation.functions < 2_000);
     assert!(observation.metadata_bytes < 16 * 1024 * 1024);
     assert!(work < 5_000_000);
@@ -540,6 +618,8 @@ fn duplicate_shape_provenance(select_growing: bool) -> Read {
             effect_arguments: vec![],
             requirement_arguments: vec![],
             arguments: vec![],
+
+            read_scope_arguments: Vec::new(),
         },
     );
     read.function(4, 1, 0, body);
@@ -572,6 +652,8 @@ fn typed_duplicate_prerequisites(depth: u64) -> Read {
                 effect_arguments: vec![],
                 requirement_arguments: vec![],
                 arguments: vec![],
+
+                read_scope_arguments: Vec::new(),
             },
         );
         read.function(n, 1, 1, body);
@@ -612,6 +694,8 @@ fn callback(grow: bool, reset: bool) -> Read {
             contract: reference(900),
             method: method(0),
             arguments: Vec::new(),
+
+            read_scope_arguments: Vec::new(),
         },
     );
     read.function(0, 1, 1, call);
@@ -638,6 +722,8 @@ fn callback(grow: bool, reset: bool) -> Read {
             effect_arguments: Vec::new(),
             requirement_arguments: Vec::new(),
             arguments: Vec::new(),
+
+            read_scope_arguments: Vec::new(),
         },
     );
     let condition = read.expression(package(1), ExpressionOperation::Bool { value: true });
@@ -718,6 +804,8 @@ fn parameter_permutation_across_scheme_and_function_slots_is_finite() {
             contract: reference(900),
             method: method(0),
             arguments: Vec::new(),
+
+            read_scope_arguments: Vec::new(),
         },
     );
     read.function(0, 2, 1, call);
@@ -739,6 +827,8 @@ fn parameter_permutation_across_scheme_and_function_slots_is_finite() {
             effect_arguments: Vec::new(),
             requirement_arguments: Vec::new(),
             arguments: Vec::new(),
+
+            read_scope_arguments: Vec::new(),
         },
     );
     read.function(2, 2, 0, call);
@@ -763,6 +853,8 @@ fn explicit_forwarding_of_scheme_arguments_preserves_growth_cycle() {
             effect_arguments: Vec::new(),
             requirement_arguments: Vec::new(),
             arguments: Vec::new(),
+
+            read_scope_arguments: Vec::new(),
         },
     );
     read.function(0, 1, 1, body);
@@ -776,6 +868,8 @@ fn explicit_forwarding_of_scheme_arguments_preserves_growth_cycle() {
             contract: reference(900),
             method: method(0),
             arguments: Vec::new(),
+
+            read_scope_arguments: Vec::new(),
         },
     );
     read.function(3, 1, 1, body);
@@ -914,6 +1008,8 @@ fn schema_callback(method_arguments: &[Term], next_arguments: &[Term]) -> Read {
             contract: reference(900),
             method: method(0),
             arguments: Vec::new(),
+
+            read_scope_arguments: Vec::new(),
         },
     );
     read.function(0, 2, 1, call);
@@ -940,6 +1036,8 @@ fn schema_callback(method_arguments: &[Term], next_arguments: &[Term]) -> Read {
             effect_arguments: Vec::new(),
             requirement_arguments: Vec::new(),
             arguments: Vec::new(),
+
+            read_scope_arguments: Vec::new(),
         },
     );
     read.function(2, 2, 0, call);
@@ -1019,6 +1117,8 @@ fn selected_chain(close_cycle: bool) -> Read {
             contract: reference(900),
             method: method(0),
             arguments: Vec::new(),
+
+            read_scope_arguments: Vec::new(),
         },
     );
     read.function(0, 1, 1, call);
@@ -1041,6 +1141,8 @@ fn selected_chain(close_cycle: bool) -> Read {
             effect_arguments: Vec::new(),
             requirement_arguments: Vec::new(),
             arguments: Vec::new(),
+
+            read_scope_arguments: Vec::new(),
         },
     );
     read.function(2, 1, 0, call);
@@ -1059,6 +1161,8 @@ fn selected_chain(close_cycle: bool) -> Read {
                 effect_arguments: Vec::new(),
                 requirement_arguments: Vec::new(),
                 arguments: Vec::new(),
+
+                read_scope_arguments: Vec::new(),
             },
         )
     } else {
@@ -1079,6 +1183,8 @@ fn selected_chain(close_cycle: bool) -> Read {
             effect_arguments: Vec::new(),
             requirement_arguments: Vec::new(),
             arguments: Vec::new(),
+
+            read_scope_arguments: Vec::new(),
         },
     );
     read.function(6, 0, 0, call);
@@ -1209,6 +1315,8 @@ fn acyclic_calls_still_admit_unused_nested_phantom_type_scope_and_arity() {
                 effect_arguments: vec![],
                 requirement_arguments: vec![],
                 arguments: vec![],
+
+                read_scope_arguments: Vec::new(),
             },
         );
         read.function(1, 0, 0, body);
@@ -1237,6 +1345,8 @@ fn recursive_duplicate_prerequisites(depth: u64) -> Read {
             effect_arguments: vec![],
             requirement_arguments: vec![],
             arguments: vec![],
+
+            read_scope_arguments: Vec::new(),
         },
     );
     read.function(0, 1, 1, body);
@@ -1368,6 +1478,8 @@ fn demanded_paths_preserve_equal_shape_forwarding_permutations_and_resets() {
                         effect_arguments: vec![],
                         requirement_arguments: vec![],
                         arguments: vec![],
+
+                        read_scope_arguments: Vec::new(),
                     },
                 );
                 read.function(2, 1, 2, body);
@@ -1416,6 +1528,8 @@ fn demanded_paths_cross_carriers_without_declaration_type_parameters() {
                 effect_arguments: vec![],
                 requirement_arguments: vec![],
                 arguments: vec![],
+
+                read_scope_arguments: Vec::new(),
             },
         );
         read.function(2, 1, 0, body);
@@ -1426,4 +1540,346 @@ fn demanded_paths_cross_carriers_without_declaration_type_parameters() {
             result.unwrap();
         }
     }
+}
+
+fn root_query_analysis<'a>(
+    read: &'a Read,
+    work: &'a mut usize,
+    maximum_work: usize,
+) -> Analysis<'a, Read> {
+    Analysis {
+        read,
+        work,
+        maximum_work,
+        maximum_metadata_bytes: MAXIMUM_ANALYSIS_BYTES,
+        observation: CallableFlowWork::default(),
+        contexts: Vec::new(),
+        indexes: BTreeMap::new(),
+        selections: Vec::new(),
+        selection_indexes: BTreeMap::new(),
+        pending: Vec::new(),
+        calls: Vec::new(),
+        slot_owners: Vec::new(),
+        edges: Vec::new(),
+        associated: associated::State::default(),
+        completed_view_queries: BTreeMap::new(),
+        diagnostic_context: WorkContext {
+            phase: "test root query",
+            owner: None,
+            context: None,
+            expression: None,
+            query: None,
+        },
+    }
+}
+
+fn large_closed_query(read: &mut Read) -> TypeObjectDigest {
+    let integer = read.ty(TypeForm::I64);
+    let mut level: Vec<_> = (0..512)
+        .map(|ordinal| {
+            read.ty(TypeForm::StructuralRecord {
+                fields: vec![StructuralTypeField {
+                    name: Name::new(format!("leaf-{ordinal}")).unwrap(),
+                    ty: integer,
+                }],
+            })
+        })
+        .collect();
+    while level.len() > 1 {
+        level = level
+            .chunks_exact(2)
+            .map(|children| {
+                read.ty(TypeForm::StructuralRecord {
+                    fields: vec![
+                        StructuralTypeField {
+                            name: Name::new("left").unwrap(),
+                            ty: children[0],
+                        },
+                        StructuralTypeField {
+                            name: Name::new("right").unwrap(),
+                            ty: children[1],
+                        },
+                    ],
+                })
+            })
+            .collect();
+    }
+    level[0]
+}
+
+#[test]
+fn composed_root_view_queries_reuse_completed_nonprimitive_proofs_within_work_bound() {
+    let mut read = Read::default();
+    let root = large_closed_query(&mut read);
+    let mut work = 0;
+    let root_metadata = {
+        let mut analysis = root_query_analysis(&read, &mut work, 8192);
+        // This balanced, fully ordinary graph has 1023 distinct record objects.
+        // Sixteen independent rewalks cannot fit the unchanged bound above.
+        assert!(!analysis.type_contains_view(package(1), root).unwrap());
+        let metadata = analysis.observation.metadata_bytes;
+        for _ in 1..16 {
+            assert!(!analysis.type_contains_view(package(1), root).unwrap());
+        }
+        metadata
+    };
+    assert!(work < 8192);
+    let mut exact_work = 0;
+    let mut exact = root_query_analysis(&read, &mut exact_work, 8192);
+    exact.maximum_metadata_bytes = root_metadata;
+    assert!(!exact.type_contains_view(package(1), root).unwrap());
+    let mut short_work = 0;
+    let mut short = root_query_analysis(&read, &mut short_work, 8192);
+    short.maximum_metadata_bytes = root_metadata - 1;
+    let error = short.type_contains_view(package(1), root).unwrap_err();
+    assert_eq!(error.class, DiagnosticClass::Resource);
+    assert_eq!(error.code, "kernel_callable_flow_storage");
+    assert!(short.completed_view_queries.is_empty());
+}
+
+fn cyclic_query_with_late_view(read: &mut Read) -> (TypeObjectDigest, TypeObjectDigest) {
+    let a = reference(4000);
+    let b = reference(4001);
+    let v = reference(4002);
+    let scope_id = crate::platform::semantic_id::ReadScopeParameterId::migrate(SEED, 4002);
+    let formal = ReadScopeArgument::Parameter(ReadScopeReference {
+        binder: ReadScopeBinder::Declaration(v),
+        parameter: scope_id,
+    });
+    let view = read.ty(TypeForm::ReadViewApplied {
+        declaration: v,
+        arguments: Vec::new(),
+        read_scope: formal,
+    });
+    let a_type = read.ty(TypeForm::Named { declaration: a });
+    let b_type = read.ty(TypeForm::Named { declaration: b });
+    let a_back = crate::platform::semantic_id::FieldId::migrate(SEED, 4000);
+    let a_view = crate::platform::semantic_id::FieldId::migrate(SEED, 4001);
+    let b_back = crate::platform::semantic_id::FieldId::migrate(SEED, 4002);
+    for (owner, fields) in [(a, vec![a_view, a_back]), (b, vec![b_back])] {
+        let key = OwnerKey::Declaration(owner.declaration);
+        read.owners.insert(
+            (owner.package, key),
+            OwnerRecord::Declaration(DeclarationRecord {
+                header: OwnerHeader::new(key, OwnerKind::Record),
+                module: ModuleId::migrate(SEED, 4000),
+                name: Name::new("cycle").unwrap(),
+                visibility: DeclarationVisibility::Private,
+                payload: DeclarationPayload::Record {
+                    type_parameters: Vec::new(),
+                    fields,
+                },
+            }),
+        );
+    }
+    for (owner, id, ty, label) in [
+        (a, a_back, b_type, "next"),
+        (a, a_view, view, "late"),
+        (b, b_back, a_type, "back"),
+    ] {
+        let key = OwnerKey::Field(id);
+        read.owners.insert(
+            (owner.package, key),
+            OwnerRecord::Field(FieldRecord {
+                header: OwnerHeader::new(key, OwnerKind::Field),
+                declaration: owner.declaration,
+                name: Name::new(label).unwrap(),
+                ty,
+            }),
+        );
+    }
+    let key = OwnerKey::Declaration(v.declaration);
+    read.owners.insert(
+        (v.package, key),
+        OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(key, OwnerKind::ReadView),
+            module: ModuleId::migrate(SEED, 4000),
+            name: Name::new("view").unwrap(),
+            visibility: DeclarationVisibility::Private,
+            payload: DeclarationPayload::ReadView(ReadViewDeclaration {
+                type_parameters: Vec::new(),
+                scope_parameter: ReadScopeParameter {
+                    id: scope_id,
+                    name: Name::new("source").unwrap(),
+                },
+                fields: Vec::new(),
+            }),
+        }),
+    );
+    (a_type, b_type)
+}
+
+#[test]
+fn composed_root_view_queries_do_not_publish_cycle_prefixes_or_lose_late_view() {
+    let mut read = Read::default();
+    let (a, b) = cyclic_query_with_late_view(&mut read);
+    let mut work = 0;
+    let mut analysis = root_query_analysis(&read, &mut work, 8192);
+    // The backedge is visited before the late field. Neither an in-progress
+    // prefix nor a visited child may be published as a completed negative root.
+    for root in [a, b, a, b] {
+        assert!(analysis.type_contains_view(package(1), root).unwrap());
+    }
+}
+
+#[test]
+fn composed_root_view_query_hits_preserve_work_and_cancellation_boundaries() {
+    let mut read = Read::default();
+    let root = large_closed_query(&mut read);
+    let mut work = 0;
+    {
+        let mut analysis = root_query_analysis(&read, &mut work, 8192);
+        assert!(!analysis.type_contains_view(package(1), root).unwrap());
+        analysis.maximum_work = *analysis.work;
+        let exhausted = analysis.type_contains_view(package(1), root).unwrap_err();
+        assert_eq!(exhausted.class, DiagnosticClass::Resource);
+        assert_eq!(exhausted.code, "kernel_callable_flow_work");
+        assert!(
+            exhausted
+                .notes
+                .iter()
+                .any(|note| note.contains("operation=view root closure")
+                    && note.contains("requested=1")
+                    && note.contains("maximum="))
+        );
+        read.cancel_after.set(Some(read.checkpoints.get() + 1));
+        let cancelled = analysis.type_contains_view(package(1), root).unwrap_err();
+        assert_eq!(cancelled.class, DiagnosticClass::Cancelled);
+        assert_eq!(cancelled.code, "test_cancelled");
+    }
+    read.cancel_after.set(None);
+    let mut retry_work = 0;
+    let mut retry = root_query_analysis(&read, &mut retry_work, 64);
+    let partial = retry.type_contains_view(package(1), root).unwrap_err();
+    assert_eq!(partial.class, DiagnosticClass::Resource);
+    assert_eq!(partial.code, "kernel_callable_flow_work");
+    assert!(retry.completed_view_queries.is_empty());
+    let spent = *retry.work;
+    retry.maximum_work = 8192;
+    assert!(!retry.type_contains_view(package(1), root).unwrap());
+    assert!(*retry.work > spent);
+}
+
+#[test]
+fn composed_work_phase_diagnostic_separates_carried_work_and_completed_phases() {
+    let mut read = Read::default();
+    let body = read.expression(package(1), ExpressionOperation::I64 { value: 1 });
+    read.function(1, 0, 0, body);
+    let entry = 2_000_000;
+    let mut prerequisite_end = entry;
+    {
+        let mut analysis = root_query_analysis(&read, &mut prerequisite_end, 16_000_000);
+        analysis.tick().unwrap();
+        prerequisites::validate(&mut analysis).unwrap();
+    }
+    let mut exhausted_work = entry;
+    let exhausted =
+        validate_callable_closure(&read, &mut exhausted_work, prerequisite_end).unwrap_err();
+    assert_eq!(exhausted.class, DiagnosticClass::Resource);
+    assert_eq!(exhausted.code, "kernel_callable_flow_work");
+    assert_eq!(exhausted_work, prerequisite_end);
+    assert!(
+        exhausted
+            .notes
+            .iter()
+            .any(|note| note.contains("operation=declaration inventory"))
+    );
+    let expected = format!(
+        "composed_work entry={} after_prerequisites=Some({}) after_inventory=None after_scan=None after_recursive=None consumed={}",
+        entry, prerequisite_end, prerequisite_end,
+    );
+    assert_eq!(exhausted.notes.last(), Some(&expected));
+
+    let mut fresh_work = 0;
+    let fresh = validate_callable_closure(&read, &mut fresh_work, 16_000_000).unwrap();
+    let mut carried_work = entry;
+    let carried = validate_callable_closure(&read, &mut carried_work, 16_000_000).unwrap();
+    assert_eq!(carried_work, entry + fresh_work);
+    assert_eq!(carried.slots, fresh.slots);
+    assert_eq!(carried.edges, fresh.edges);
+    assert_eq!(carried.metadata_bytes, fresh.metadata_bytes);
+
+    read.cancel_after.set(Some(read.checkpoints.get() + 1));
+    let mut cancelled_work = entry;
+    let cancelled = validate_callable_closure(&read, &mut cancelled_work, 16_000_000).unwrap_err();
+    assert_eq!(cancelled.class, DiagnosticClass::Cancelled);
+    assert_eq!(cancelled.code, "test_cancelled");
+    assert!(cancelled.notes.is_empty());
+    assert_eq!(cancelled_work, entry);
+}
+
+#[test]
+fn composed_witness_scope_requires_the_exact_contract_declaration_in_both_proofs() {
+    for scope in [recursive::ProofScope::Recursive, recursive::ProofScope::All] {
+        let mut read = callback(false, false);
+        let contract = reference(900);
+        read.owners.remove(&(
+            contract.package,
+            OwnerKey::Declaration(contract.declaration),
+        ));
+        let failure = validate_callable_closure_with_scope(&read, &mut 0, 1_000_000, scope)
+            .expect_err("a witness reference cannot supply its missing contract authority");
+        assert_eq!(failure.class, DiagnosticClass::Semantic);
+        assert_eq!(failure.code, "kernel_callable_flow_target");
+    }
+}
+
+#[test]
+fn composed_syntax_scalar_partition_matches_full_occurrence_identity_and_scope() {
+    let expressions = [
+        ExpressionId::migrate(SEED, 700),
+        ExpressionId::migrate(SEED, 701),
+    ];
+    let a = BindingId::migrate(SEED, 710);
+    let b = BindingId::migrate(SEED, 711);
+    let loan_sets = [BTreeSet::new(), BTreeSet::from([a]), BTreeSet::from([a, b])];
+    let mut specialized = VisitedSyntax::default();
+    let mut original = BTreeSet::new();
+    for expression in expressions {
+        for loans in &loan_sets {
+            for establishing in [None, Some(a), Some(b)] {
+                let occurrence = (expression, loans.clone(), establishing);
+                assert_eq!(
+                    specialized.contains(&occurrence),
+                    original.contains(&occurrence)
+                );
+                assert!(!specialized.contains(&occurrence));
+                let (width, keys) = specialized.comparison_shape(loans, establishing);
+                if loans.is_empty() && establishing.is_none() {
+                    assert_eq!(width, 0);
+                    assert_eq!(keys, specialized.plain.len());
+                } else {
+                    assert_eq!(width, loans.len() + 2);
+                    assert_eq!(keys, specialized.scoped.len());
+                }
+                specialized.insert(occurrence.clone());
+                original.insert(occurrence.clone());
+                assert!(specialized.contains(&occurrence));
+                assert_eq!(
+                    specialized.contains(&occurrence),
+                    original.contains(&occurrence)
+                );
+                assert_eq!(
+                    specialized.plain.len() + specialized.scoped.len(),
+                    original.len()
+                );
+            }
+        }
+    }
+    assert_eq!(original.len(), 18);
+    assert_eq!(specialized.plain.len(), 2);
+    assert_eq!(specialized.scoped.len(), 16);
+    // Inserting the same exact occurrence again creates no new key; same syntax
+    // with a changed loan/establishing state above never shares that membership.
+    for occurrence in &original {
+        specialized.insert(occurrence.clone());
+        assert!(specialized.contains(occurrence));
+    }
+    assert_eq!(specialized.plain.len() + specialized.scoped.len(), 18);
+    let fresh_context = VisitedSyntax::default();
+    assert!(
+        original
+            .iter()
+            .all(|occurrence| !fresh_context.contains(occurrence))
+    );
 }

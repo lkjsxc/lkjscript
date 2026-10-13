@@ -303,7 +303,17 @@ fn canonical_owned_record_field_operations_require_exact_module_without_kernel_a
 fn canonical_owned_record_same_shape_foreign_fields_and_duplicate_coverage_reject() {
     let source = source();
     admit(&source).unwrap();
+    let payload = field(&source, "Packet", "payload");
     let foreign = field(&source, "Other", "payload");
+    let OwnerRecord::Field(payload_record) = &source.owners[&OwnerKey::Field(payload.field)] else {
+        unreachable!()
+    };
+    let OwnerRecord::Field(foreign_record) = &source.owners[&OwnerKey::Field(foreign.field)] else {
+        unreachable!()
+    };
+    assert_eq!(payload_record.ty, foreign_record.ty);
+    assert_ne!(payload, foreign);
+    assert_ne!(payload_record.declaration, foreign_record.declaration);
     for kind in 0..3 {
         let mut changed = source.clone();
         let operation = changed
@@ -311,12 +321,16 @@ fn canonical_owned_record_same_shape_foreign_fields_and_duplicate_coverage_rejec
             .values_mut()
             .find_map(|owner| match owner {
                 OwnerRecord::Expression(owner)
-                    if matches!(
-                        (&owner.operation, kind),
-                        (ExpressionOperation::PackOwnedRecord { .. }, 0)
-                            | (ExpressionOperation::UnpackOwnedRecord { .. }, 1)
-                            | (ExpressionOperation::BorrowOwnedRecordField { .. }, 2)
-                    ) =>
+                    if match (&owner.operation, kind) {
+                        (ExpressionOperation::PackOwnedRecord { fields, .. }, 0) => {
+                            fields.iter().any(|field| field.field == payload)
+                        }
+                        (ExpressionOperation::UnpackOwnedRecord { fields, .. }, 1) => {
+                            fields.iter().any(|field| field.field == payload)
+                        }
+                        (ExpressionOperation::BorrowOwnedRecordField { .. }, 2) => true,
+                        _ => false,
+                    } =>
                 {
                     Some(&mut owner.operation)
                 }
@@ -324,9 +338,24 @@ fn canonical_owned_record_same_shape_foreign_fields_and_duplicate_coverage_rejec
             })
             .unwrap();
         match operation {
-            ExpressionOperation::PackOwnedRecord { fields, .. } => fields[0].field = foreign,
-            ExpressionOperation::UnpackOwnedRecord { fields, .. } => fields[0].field = foreign,
-            ExpressionOperation::BorrowOwnedRecordField { field, .. } => *field = foreign,
+            ExpressionOperation::PackOwnedRecord { fields, .. } => {
+                fields
+                    .iter_mut()
+                    .find(|field| field.field == payload)
+                    .unwrap()
+                    .field = foreign;
+            }
+            ExpressionOperation::UnpackOwnedRecord { fields, .. } => {
+                fields
+                    .iter_mut()
+                    .find(|field| field.field == payload)
+                    .unwrap()
+                    .field = foreign;
+            }
+            ExpressionOperation::BorrowOwnedRecordField { field, .. } => {
+                assert_eq!(*field, payload);
+                *field = foreign;
+            }
             _ => unreachable!(),
         }
         assert!(

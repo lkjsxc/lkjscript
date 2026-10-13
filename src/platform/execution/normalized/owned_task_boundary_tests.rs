@@ -176,8 +176,12 @@ fn owned_task_independent_oracle_accepts_loans_and_rejects_escape_and_old_genera
         let DeclarationPayload::Function(f) = &mut d.payload else {
             unreachable!()
         };
-        f.result = result;
-        f.result_borrow = escapes_as_borrow.then_some(parameter);
+        f.result.ty = result;
+        f.result.relation = if escapes_as_borrow {
+            ResultRelation::ReadFrom { source: parameter }
+        } else {
+            ResultRelation::Value
+        };
         let OwnerRecord::Expression(e) =
             invalid.owners.get_mut(&OwnerKey::Expression(body)).unwrap()
         else {

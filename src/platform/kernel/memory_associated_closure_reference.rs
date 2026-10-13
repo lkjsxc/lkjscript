@@ -11,13 +11,53 @@ enum Parent {
 }
 
 #[derive(Default)]
-struct Scopes {
+pub(super) struct Scopes {
     parents: BTreeMap<ExpressionId, Vec<Parent>>,
     bindings: BTreeMap<BindingId, Vec<ExpressionId>>,
 }
 
 impl Scopes {
-    fn build(resolver: &mut Resolver<'_>) -> Result<Self> {
+    pub(super) fn loan_generation(
+        &self,
+        resolver: &mut Resolver<'_>,
+        binding: BindingId,
+    ) -> Result<()> {
+        resolver.step(0)?;
+        let [container] = self
+            .bindings
+            .get(&binding)
+            .ok_or(Failure::Authority)?
+            .as_slice()
+        else {
+            return Err(Failure::Authority);
+        };
+        let record = match resolver
+            .source
+            .owners
+            .get(&OwnerKey::Expression(*container))
+        {
+            Some(OwnerRecord::Expression(e)) => e,
+            _ => return Err(Failure::Missing),
+        };
+        let minimum = match &record.operation {
+            ExpressionOperation::BorrowOwnedField { .. }
+            | ExpressionOperation::MatchBorrowedOwned { .. } => 24,
+            ExpressionOperation::BorrowOwnedItem { .. } => 25,
+            ExpressionOperation::BorrowCall { .. } => 27,
+            ExpressionOperation::BorrowOwnedRecordField { .. } => 32,
+            ExpressionOperation::BorrowReadView { .. }
+            | ExpressionOperation::BorrowReadViewField { .. }
+            | ExpressionOperation::Let { .. } => 34,
+            _ => return Err(Failure::Authority),
+        };
+        if !contract::supported_graph_contract(record.contract_version)
+            || record.contract_version < minimum
+        {
+            return Err(Failure::Generation);
+        }
+        Ok(())
+    }
+    pub(super) fn build(resolver: &mut Resolver<'_>) -> Result<Self> {
         let mut scopes = Self::default();
         for (key, owner) in &resolver.source.owners {
             resolver.step(0)?;
@@ -46,6 +86,8 @@ impl Scopes {
                     | ExpressionOperation::BorrowOwnedRecordField { .. }
                     | ExpressionOperation::BorrowOwnedItem { .. }
                     | ExpressionOperation::BorrowCall { .. }
+                    | ExpressionOperation::BorrowReadView { .. }
+                    | ExpressionOperation::BorrowReadViewField { .. }
                     | ExpressionOperation::Transaction { .. }
                     | ExpressionOperation::TransactionOutcome { .. } => 1,
                     ExpressionOperation::UnpackOwned { fields, .. } => fields.len(),
@@ -66,6 +108,8 @@ impl Scopes {
                     | ExpressionOperation::BorrowOwnedRecordField { binding, .. }
                     | ExpressionOperation::BorrowOwnedItem { binding, .. }
                     | ExpressionOperation::BorrowCall { binding, .. }
+                    | ExpressionOperation::BorrowReadView { binding, .. }
+                    | ExpressionOperation::BorrowReadViewField { binding, .. }
                     | ExpressionOperation::Transaction { binding, .. }
                     | ExpressionOperation::TransactionOutcome { binding, .. } => {
                         bindings.push(binding)
@@ -99,7 +143,7 @@ impl Scopes {
         Ok(scopes)
     }
 
-    fn expression(
+    pub(super) fn expression(
         &self,
         resolver: &mut Resolver<'_>,
         id: ExpressionId,
@@ -139,7 +183,7 @@ impl Scopes {
         }
     }
 
-    fn binding(
+    pub(super) fn binding(
         &self,
         resolver: &mut Resolver<'_>,
         id: BindingId,
@@ -246,6 +290,12 @@ impl Resolver<'_> {
             declaration: id,
         };
         let oracle = Oracle(self.source, Some(scope));
+        if self
+            .header(package, key, true)
+            .is_ok_and(|h| h.kind == OwnerKind::ReadView)
+        {
+            return true;
+        }
         oracle
             .contract(scope)
             .is_some_and(|c| !c.associated_types.is_empty())
@@ -264,11 +314,14 @@ impl Resolver<'_> {
                     })
             })
             || oracle.function(scope).is_some_and(|f| {
-                f.implementation_parameters.iter().any(|p| {
-                    oracle
-                        .contract(p.contract)
-                        .is_some_and(|c| !c.associated_types.is_empty())
-                })
+                !f.read_scope_parameters.is_empty()
+                    || !f.read_scope_sources.is_empty()
+                    || matches!(f.result.relation, ResultRelation::ViewFrom { .. })
+                    || f.implementation_parameters.iter().any(|p| {
+                        oracle
+                            .contract(p.contract)
+                            .is_some_and(|c| !c.associated_types.is_empty())
+                    })
             })
     }
 
@@ -287,7 +340,24 @@ impl Resolver<'_> {
             if !c.associated_types.is_empty() {
                 self.current(occurrence)?;
                 for member in &c.associated_types {
-                    self.member(scope, member.id)?;
+                    match member.bound {
+                        AssociatedTypeBound::Owned => self.member(scope, member.id)?,
+                        AssociatedTypeBound::ReadViewFamily { .. } => {
+                            self.read_view_member(scope, member.id)?
+                        }
+                    }
+                }
+            }
+            for method in &c.methods {
+                if !method.read_scope_parameters.is_empty()
+                    || !method.read_scope_sources.is_empty()
+                    || matches!(method.result.relation, ResultRelation::ViewFrom { .. })
+                    || method
+                        .parameters
+                        .iter()
+                        .any(|p| self.object(p.ty).is_ok_and(|t| t.form.is_read_view()))
+                {
+                    self.read_view_method_signature(scope, method)?;
                 }
             }
         } else if let Some(i) = oracle.implementation(scope) {
@@ -326,9 +396,50 @@ impl Resolver<'_> {
                         .collect(),
                 };
                 self.admit_application(&environment)?;
+                let method = self
+                    .contract(i.contract)?
+                    .methods
+                    .iter()
+                    .find(|m| m.id == mapping.method)
+                    .ok_or(Failure::Inventory)?
+                    .clone();
+                if !mapping.read_scope_arguments.is_empty()
+                    || !method.read_scope_parameters.is_empty()
+                    || !method.read_scope_sources.is_empty()
+                    || self.contains_read_view(method.result.ty)?
+                    || method.parameters.iter().any(|p| {
+                        Oracle(self.source, Some(i.contract))
+                            .form(p.ty)
+                            .is_some_and(TypeForm::is_read_view)
+                    })
+                {
+                    self.admit_view_method_mapping(scope, &method, mapping)?;
+                }
             }
-        } else if oracle.function(scope).is_some() {
+        } else if let Some(function) = oracle.function(scope) {
             self.lexical_inventory(scope)?;
+            if !function.read_scope_parameters.is_empty()
+                || !function.read_scope_sources.is_empty()
+                || matches!(function.result.relation, ResultRelation::ViewFrom { .. })
+                || self.object(function.result.ty)?.form.is_read_view()
+                || function.parameters.iter().any(|p| {
+                    oracle
+                        .parameter(scope.package, *p)
+                        .is_some_and(|p| oracle.form(p.ty).is_some_and(TypeForm::is_read_view))
+                })
+            {
+                self.read_view_function_signature(scope)?;
+            }
+        } else if self
+            .header(
+                scope.package,
+                OwnerKey::Declaration(scope.declaration),
+                true,
+            )?
+            .kind
+            == OwnerKind::ReadView
+        {
+            self.admit_view_layout(scope)?;
         }
         Ok(())
     }
@@ -405,6 +516,66 @@ impl Resolver<'_> {
                         .collect(),
                 };
                 self.admit_application(&environment)?;
+                let scopes = match operation {
+                    ExpressionOperation::Call {
+                        read_scope_arguments,
+                        ..
+                    }
+                    | ExpressionOperation::ImplementationCall {
+                        read_scope_arguments,
+                        ..
+                    }
+                    | ExpressionOperation::FunctionValue {
+                        read_scope_arguments,
+                        ..
+                    } => read_scope_arguments,
+                    _ => unreachable!(),
+                };
+                let view_dependent = !f.read_scope_parameters.is_empty()
+                    || !f.read_scope_sources.is_empty()
+                    || !scopes.is_empty()
+                    || self.contains_read_view(f.result.ty)?
+                    || f.parameters.iter().any(|p| {
+                        Oracle(self.source, Some(*function))
+                            .parameter(function.package, *p)
+                            .is_some_and(|p| {
+                                Oracle(self.source, Some(*function))
+                                    .form(p.ty)
+                                    .is_some_and(TypeForm::is_read_view)
+                            })
+                    });
+                let view_environment = if view_dependent {
+                    if scopes.len() != f.read_scope_parameters.len()
+                        || matches!(operation, ExpressionOperation::FunctionValue { .. })
+                    {
+                        return Err(Failure::Authority);
+                    }
+                    self.read_view_function_signature(*function)?;
+                    self.reserve_entries(scopes.len())?;
+                    Some(ReadViewEnvironment {
+                        types: environment.clone(),
+                        source_binder: ReadScopeBinder::Declaration(*function),
+                        caller_binder: ReadScopeBinder::Declaration(
+                            occurrence.parameter_scope.ok_or(Failure::Authority)?,
+                        ),
+                        scopes: f
+                            .read_scope_parameters
+                            .iter()
+                            .zip(scopes)
+                            .map(|(p, actual)| {
+                                (
+                                    ReadScopeReference {
+                                        binder: ReadScopeBinder::Declaration(*function),
+                                        parameter: p.id,
+                                    },
+                                    *actual,
+                                )
+                            })
+                            .collect(),
+                    })
+                } else {
+                    None
+                };
                 for id in &f.parameters {
                     let p = Oracle(self.source, Some(*function))
                         .parameter(function.package, *id)
@@ -424,10 +595,18 @@ impl Resolver<'_> {
                         ),
                         false,
                     )?;
-                    let ty = self.substitute(p.ty, &environment, 0)?;
+                    let ty = if let Some(view_environment) = &view_environment {
+                        self.substitute_view(p.ty, view_environment, 0)?
+                    } else {
+                        self.substitute(p.ty, &environment, 0)?
+                    };
                     self.admit_roots(&[ty], occurrence, false)?;
                 }
-                let result = self.substitute(f.result, &environment, 0)?;
+                let result = if let Some(view_environment) = &view_environment {
+                    self.substitute_view(f.result.ty, view_environment, 0)?
+                } else {
+                    self.substitute(f.result.ty, &environment, 0)?
+                };
                 self.admit_roots(&[result], occurrence, false)?;
                 Ok(Some(result))
             }
@@ -435,6 +614,7 @@ impl Resolver<'_> {
                 witness,
                 contract,
                 method,
+                read_scope_arguments,
                 ..
             } => {
                 let (selected, self_type, actuals) = self.admit_operand(witness, occurrence, 0)?;
@@ -459,11 +639,62 @@ impl Resolver<'_> {
                     witnesses: BTreeMap::new(),
                 };
                 self.admit_application(&environment)?;
+                let view_dependent = !m.read_scope_parameters.is_empty()
+                    || !m.read_scope_sources.is_empty()
+                    || !read_scope_arguments.is_empty()
+                    || self.contains_read_view(m.result.ty)?
+                    || m.parameters.iter().any(|p| {
+                        Oracle(self.source, Some(*contract))
+                            .form(p.ty)
+                            .is_some_and(TypeForm::is_read_view)
+                    });
+                let view_environment = if view_dependent {
+                    if read_scope_arguments.len() != m.read_scope_parameters.len() {
+                        return Err(Failure::Arity);
+                    }
+                    self.read_view_method_signature(*contract, m)?;
+                    self.reserve_entries(read_scope_arguments.len())?;
+                    let binder = ReadScopeBinder::ContractMethod {
+                        contract: *contract,
+                        method: *method,
+                    };
+                    Some(ReadViewEnvironment {
+                        types: environment.clone(),
+                        source_binder: binder,
+                        caller_binder: ReadScopeBinder::Declaration(
+                            occurrence.parameter_scope.ok_or(Failure::Authority)?,
+                        ),
+                        scopes: m
+                            .read_scope_parameters
+                            .iter()
+                            .zip(read_scope_arguments)
+                            .map(|(p, actual)| {
+                                (
+                                    ReadScopeReference {
+                                        binder,
+                                        parameter: p.id,
+                                    },
+                                    *actual,
+                                )
+                            })
+                            .collect(),
+                    })
+                } else {
+                    None
+                };
                 for p in &m.parameters {
-                    let ty = self.substitute(p.ty, &environment, 0)?;
+                    let ty = if let Some(view_environment) = &view_environment {
+                        self.substitute_view(p.ty, view_environment, 0)?
+                    } else {
+                        self.substitute(p.ty, &environment, 0)?
+                    };
                     self.admit_roots(&[ty], occurrence, false)?;
                 }
-                let result = self.substitute(m.result, &environment, 0)?;
+                let result = if let Some(view_environment) = &view_environment {
+                    self.substitute_view(m.result.ty, view_environment, 0)?
+                } else {
+                    self.substitute(m.result.ty, &environment, 0)?
+                };
                 self.admit_roots(&[result], occurrence, false)?;
                 Ok(Some(result))
             }
@@ -504,7 +735,8 @@ impl Resolver<'_> {
                 }
             }
             let metadata = self.associated_metadata(package, *key);
-            let needs_scope = metadata || self.roots_need_scope(&roots);
+            let view_operation = matches!(owner, OwnerRecord::Expression(e) if matches!(e.operation, ExpressionOperation::CreateReadView { .. } | ExpressionOperation::BorrowReadView { .. } | ExpressionOperation::ReborrowReadView { .. } | ExpressionOperation::MoveReadView { .. } | ExpressionOperation::DropReadView { .. } | ExpressionOperation::ReadViewDataField { .. } | ExpressionOperation::BorrowReadViewField { .. }));
+            let needs_scope = metadata || self.roots_need_scope(&roots) || view_operation;
             let invocation = matches!(owner, OwnerRecord::Expression(e) if matches!(e.operation, ExpressionOperation::Call { .. } | ExpressionOperation::ImplementationCall { .. } | ExpressionOperation::MethodCall { .. } | ExpressionOperation::FunctionValue { .. }));
             // An ordinary call whose signature is projected needs scope even
             // when its expression has no explicit type roots.
@@ -521,6 +753,9 @@ impl Resolver<'_> {
             let scope = self.local_scope(&scopes, *key, owner)?;
             let representation = matches!(owner, OwnerRecord::Field(_) | OwnerRecord::Case(_));
             let occurrence = self.occurrence_for(package, *key, scope, representation);
+            if view_operation {
+                self.current_view(occurrence)?;
+            }
             self.admit_roots(&roots, occurrence, false)?;
             if metadata {
                 self.declaration_metadata(scope.ok_or(Failure::Authority)?, occurrence)?;
@@ -639,6 +874,11 @@ impl Resolver<'_> {
                 let occurrence = self.occurrence_for(package, *key, scope, representation);
                 self.admit_roots(&roots, occurrence, false)?;
                 if metadata {
+                    if matches!(owner, PackageInterfaceRecord::RepresentationDeclaration(d) if matches!(d.payload, PackageInterfaceDeclarationPayload::ReadView(_)))
+                    {
+                        self.admit_view_layout(scope.ok_or(Failure::Authority)?)?;
+                        continue;
+                    }
                     if representation || !self.source.dependencies.contains_key(&package) {
                         return Err(Failure::Authority);
                     }

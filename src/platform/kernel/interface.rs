@@ -6,9 +6,10 @@
 
 use super::contract::{GRAPH_CONTRACT_VERSION, MAXIMUM_CHILDREN};
 use super::{
-    CaseRecord, DeclarationPayload, DeclarationVisibility, EffectParameterRecord, FieldRecord,
-    FunctionEffect, Name, OperationRecord, OwnerHeader, OwnerKey, OwnerKind, OwnerRecord,
-    ParameterRecord, RequirementRecord, TypeObjectDigest, TypeParameterRecord,
+    CallableResult, CaseRecord, DeclarationPayload, DeclarationVisibility, EffectParameterRecord,
+    FieldRecord, FunctionEffect, Name, OperationRecord, OwnerHeader, OwnerKey, OwnerKind,
+    OwnerRecord, ParameterRecord, ReadScopeParameter, ReadScopeSource, RequirementRecord,
+    ResultRelation, TypeObjectDigest, TypeParameterRecord,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::{
@@ -110,6 +111,7 @@ impl PackageInterfaceRecord {
                     PackageInterfaceDeclarationPayload::Record { .. }
                         | PackageInterfaceDeclarationPayload::Variant { .. }
                         | PackageInterfaceDeclarationPayload::OwnedRecord { .. }
+                        | PackageInterfaceDeclarationPayload::ReadView(_)
                 ) {
                     return Err(interface_error(
                         DiagnosticClass::Semantic,
@@ -153,6 +155,7 @@ impl PackageInterfaceDeclaration {
                 DeclarationPayload::Record { .. }
                     | DeclarationPayload::Variant { .. }
                     | DeclarationPayload::OwnedRecord { .. }
+                    | DeclarationPayload::ReadView(_)
             )
         {
             return Err(interface_error(
@@ -202,8 +205,9 @@ impl PackageInterfaceDeclaration {
                     effect_parameters: function.effect_parameters.clone(),
                     type_parameters: function.type_parameters.clone(),
                     parameters: function.parameters.clone(),
-                    result: function.result,
-                    result_borrow: function.result_borrow,
+                    result: function.result.clone(),
+                    read_scope_parameters: function.read_scope_parameters.clone(),
+                    read_scope_sources: function.read_scope_sources.clone(),
                     effect: function.effect.clone(),
                 })
             }
@@ -222,6 +226,9 @@ impl PackageInterfaceDeclaration {
             }
             DeclarationPayload::OwnedImplementation(i) => {
                 PackageInterfaceDeclarationPayload::OwnedImplementation(i.clone())
+            }
+            DeclarationPayload::ReadView(view) => {
+                PackageInterfaceDeclarationPayload::ReadView(view.clone())
             }
             DeclarationPayload::Test { .. } => {
                 return Err(interface_error(
@@ -245,10 +252,13 @@ impl PackageInterfaceDeclaration {
                 .implementation_parameters
                 .iter()
                 .flat_map(|p| std::iter::once(p.self_type).chain(p.type_arguments.iter().copied()))
-                .chain([signature.result])
+                .chain([signature.result.ty])
                 .collect(),
             PackageInterfaceDeclarationPayload::OwnedContract(c) => c.type_roots(),
             PackageInterfaceDeclarationPayload::OwnedImplementation(i) => i.type_roots(),
+            PackageInterfaceDeclarationPayload::ReadView(view) => {
+                view.fields.iter().map(|field| field.ty).collect()
+            }
             PackageInterfaceDeclarationPayload::Constant { ty } => vec![*ty],
             PackageInterfaceDeclarationPayload::Record { .. }
             | PackageInterfaceDeclarationPayload::OwnedRecord { .. }
@@ -287,10 +297,13 @@ impl PackageInterfaceDeclaration {
         }
         if self.header.contract_version < 27
             && match &self.payload {
-                PackageInterfaceDeclarationPayload::Function(f) => f.result_borrow.is_some(),
-                PackageInterfaceDeclarationPayload::OwnedContract(c) => {
-                    c.methods.iter().any(|m| m.result_borrow.is_some())
+                PackageInterfaceDeclarationPayload::Function(f) => {
+                    !matches!(f.result.relation, ResultRelation::Value)
                 }
+                PackageInterfaceDeclarationPayload::OwnedContract(c) => c
+                    .methods
+                    .iter()
+                    .any(|m| !matches!(m.result.relation, ResultRelation::Value)),
                 _ => false,
             }
         {
@@ -322,6 +335,18 @@ impl PackageInterfaceDeclaration {
             ));
         }
         let expected = match &self.payload {
+            PackageInterfaceDeclarationPayload::ReadView(view) => {
+                if self.header.contract_version < 34 {
+                    return Err(interface_error(
+                        DiagnosticClass::Semantic,
+                        "kernel_read_view_generation",
+                        "read-view interfaces require Graph 34",
+                    ));
+                }
+                validate_ordered("read-view type parameters", &view.type_parameters)?;
+                view.validate_local()?;
+                OwnerKind::ReadView
+            }
             PackageInterfaceDeclarationPayload::Record {
                 fields,
                 type_parameters,
@@ -364,9 +389,12 @@ impl PackageInterfaceDeclaration {
                 signature.effect.row().validate()?;
                 validate_ordered("function type parameters", &signature.type_parameters)?;
                 validate_ordered("function parameters", &signature.parameters)?;
-                if let Some(source) = signature.result_borrow
-                    && (!signature.parameters.contains(&source)
-                        || signature.effect != FunctionEffect::Pure)
+                if let Some(source) = match &signature.result.relation {
+                    ResultRelation::Value => None,
+                    ResultRelation::ReadFrom { source }
+                    | ResultRelation::ViewFrom { source, .. } => Some(*source),
+                } && (!signature.parameters.contains(&source)
+                    || signature.effect != FunctionEffect::Pure)
                 {
                     return Err(interface_error(
                         DiagnosticClass::Semantic,
@@ -374,6 +402,7 @@ impl PackageInterfaceDeclaration {
                         "a borrowed result requires an exact parameter of a pure function",
                     ));
                 }
+                validate_callable_scopes(self.header, signature)?;
                 if let FunctionEffect::Task {
                     effect_parameters: _,
                     requirements,
@@ -442,6 +471,7 @@ pub enum PackageInterfaceDeclarationPayload {
         type_parameters: Vec<TypeParameterId>,
         fields: Vec<FieldId>,
     },
+    ReadView(super::ReadViewDeclaration),
 }
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
@@ -458,8 +488,9 @@ pub struct PackageFunctionSignature {
     pub effect_parameters: Vec<EffectParameterId>,
     pub type_parameters: Vec<TypeParameterId>,
     pub parameters: Vec<ParameterId>,
-    pub result: TypeObjectDigest,
-    pub result_borrow: Option<ParameterId>,
+    pub result: CallableResult<ParameterId>,
+    pub read_scope_parameters: Vec<ReadScopeParameter>,
+    pub read_scope_sources: Vec<ReadScopeSource<ParameterId>>,
     pub effect: FunctionEffect,
 }
 
@@ -483,6 +514,56 @@ impl PackageInterfacePort {
         }
         Ok(())
     }
+}
+
+fn validate_callable_scopes(
+    header: OwnerHeader,
+    signature: &PackageFunctionSignature,
+) -> Result<(), Diagnostic> {
+    let ids = signature
+        .read_scope_parameters
+        .iter()
+        .map(|parameter| parameter.id)
+        .collect::<Vec<_>>();
+    validate_ordered("function read-scope parameters", &ids)?;
+    super::validate_read_scope_inventory(
+        &signature.read_scope_parameters,
+        &signature.read_scope_sources,
+        |source| signature.parameters.contains(&source),
+    )?;
+    if header.contract_version < 34
+        && (!ids.is_empty()
+            || !signature.read_scope_sources.is_empty()
+            || matches!(signature.result.relation, ResultRelation::ViewFrom { .. }))
+    {
+        return Err(interface_error(
+            DiagnosticClass::Semantic,
+            "kernel_read_view_generation",
+            "read scopes and view results require Graph 34",
+        ));
+    }
+    for scope in signature
+        .read_scope_sources
+        .iter()
+        .map(|entry| &entry.scope)
+        .chain(match &signature.result.relation {
+            ResultRelation::ViewFrom { scope, .. } => Some(scope),
+            _ => None,
+        })
+    {
+        match scope {
+            super::ReadScopeArgument::Parameter(reference)
+                if ids.contains(&reference.parameter) => {}
+            _ => {
+                return Err(interface_error(
+                    DiagnosticClass::Semantic,
+                    "kernel_read_scope_signature",
+                    "signature scopes must name an explicit read-scope formal",
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn validate_header(header: OwnerHeader) -> Result<(), Diagnostic> {

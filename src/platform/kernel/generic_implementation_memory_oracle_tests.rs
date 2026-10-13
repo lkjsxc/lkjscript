@@ -177,7 +177,9 @@ fn generic_implementation_oracles_reject_wrong_generic_borrowed_result_source() 
     let DeclarationPayload::Function(function) = &mut owner.payload else {
         unreachable!()
     };
-    function.result_borrow = Some(function.parameters[2]);
+    function.result.relation = ResultRelation::ReadFrom {
+        source: function.parameters[2],
+    };
     reencode(&mut changed);
     rejected(&changed);
 }

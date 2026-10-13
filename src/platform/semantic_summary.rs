@@ -389,6 +389,12 @@ pub fn validator_contract_digest() -> SemanticSummaryDigest {
         &mut hasher,
         super::meaning::GRAPH_CONTRACT_IDENTITY.as_bytes(),
     );
+    // Retained module projections have no separate authority to admit canonical meaning.
+    // A kernel validator cut must also invalidate their local derived cache seals.
+    hash_part(
+        &mut hasher,
+        &super::witness::contract::validator_contract_digest().bytes(),
+    );
     SemanticSummaryDigest(*hasher.finalize().as_bytes())
 }
 

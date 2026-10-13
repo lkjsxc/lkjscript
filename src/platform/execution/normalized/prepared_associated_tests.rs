@@ -102,14 +102,17 @@ fn fixture() -> Fixture {
             unreachable!()
         };
         value.associated_types = vec![
-            AssociatedTypeBinding { member, ty: output },
+            AssociatedTypeBinding {
+                member,
+                value: crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty: output },
+            },
             AssociatedTypeBinding {
                 member: unused,
-                ty: output,
+                value: crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty: output },
             },
         ];
         if reference == plain || reference == both {
-            value.associated_types[0].ty = value.self_type;
+            *value.associated_types[0].value.ty_mut() = value.self_type;
         }
         value.associated_types.sort_by_key(|binding| binding.member);
     }
@@ -203,6 +206,7 @@ fn probe(
         implementations,
         contracts,
         runtime_owners: &runtime_owners,
+        producer_profiles: None,
         owned_records: fixture.program.owned_record_declarations.clone(),
         targets: BTreeMap::new(),
         instances: BTreeMap::new(),
@@ -353,7 +357,7 @@ fn associated_closed_members_preserve_exact_witness_identity_and_contract_order(
         unreachable!()
     };
     for binding in &mut value.associated_types {
-        binding.ty = fixture.cell;
+        *binding.value.ty_mut() = fixture.cell;
     }
     let probe = probe(
         &mut fixture,
@@ -413,12 +417,13 @@ fn associated_closed_members_admit_unused_members_and_reject_hidden_projection_a
         };
         match fault {
             0 | 1 => {
-                value
+                *value
                     .associated_types
                     .iter_mut()
                     .find(|binding| binding.member == fixture.unused)
                     .unwrap()
-                    .ty = bad
+                    .value
+                    .ty_mut() = bad
             }
             2 => {
                 value.associated_types.pop();
@@ -455,12 +460,13 @@ fn associated_closed_members_refuse_a_bad_unused_prerequisite_before_parent_publ
     let DeclarationPayload::OwnedImplementation(value) = &mut owner.payload else {
         unreachable!()
     };
-    value
+    *value
         .associated_types
         .iter_mut()
         .find(|binding| binding.member == fixture.unused)
         .unwrap()
-        .ty = i64_type;
+        .value
+        .ty_mut() = i64_type;
     let operand = ImplementationOperand::Concrete {
         implementation: fixture.both,
         type_arguments: vec![fixture.cell],
@@ -543,7 +549,8 @@ fn associated_closed_selection_preserves_scope_generation_and_opaque_actuals() {
             &TypeApplication {
                 bindings: &opaque,
                 associated: Some(right.environment()),
-                function: None
+                function: None,
+                scopes: None,
             },
             0,
             &mut work
@@ -553,7 +560,7 @@ fn associated_closed_selection_preserves_scope_generation_and_opaque_actuals() {
         "caller replacement is not captured by the source witness environment"
     );
     let mut older = model.program.functions[0].clone();
-    older.source_generation -= 1;
+    older.source_generation = 32;
     assert!(
         ClosedTypeEnvironment::for_function(&older)
             .unwrap()

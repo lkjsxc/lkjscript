@@ -215,10 +215,15 @@ fn representation_evidence_does_not_admit_authored_symbolic_scopes() {
                     requirement_parameters: Vec::new(),
                     effect_parameters: Vec::new(),
                     parameters: Vec::new(),
-                    result,
-                    result_borrow: None,
+                    result: crate::platform::kernel::CallableResult {
+                        ty: result,
+                        relation: crate::platform::kernel::ResultRelation::Value,
+                    },
                     effect: FunctionEffect::Pure,
                     body: ExpressionId::migrate(SEED, ordinal),
+
+                    read_scope_parameters: Vec::new(),
+                    read_scope_sources: Vec::new(),
                 }),
             }),
             OwnerRecord::TypeParameter(TypeParameterRecord {
