@@ -2268,7 +2268,7 @@ mod tests {
             self.record(PackageInterfaceRecord::Parameter(ParameterRecord {
                 header: OwnerHeader::new(OwnerKey::Parameter(id), OwnerKind::Parameter),
                 parent: ParameterParent::Function(reference.declaration),
-                name: Name::new(&format!("source-{ordinal}")).expect("name"),
+                name: Name::new(format!("source-{ordinal}")).expect("name"),
                 ty,
                 use_mode: ParameterUse::Borrow,
                 resource_requirement: None,

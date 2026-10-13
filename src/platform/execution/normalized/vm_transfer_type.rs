@@ -177,8 +177,10 @@ pub(super) fn resolve_application_in(
                     .declaration,
                 template,
                 context.ordinary(),
-                context.read_scope_parameters(),
-                context.read_scope_arguments(),
+                (
+                    context.read_scope_parameters(),
+                    context.read_scope_arguments(),
+                ),
             )
     }
     .map_err(|()| reject())?;

@@ -4,7 +4,7 @@
 use super::*;
 use crate::platform::builtin_standard::BuiltinStandard;
 use crate::platform::control::decode_compact_change_in_repository;
-use crate::platform::execution::normalized::run_pure_command;
+use crate::platform::execution::normalized::{NormalizedRunObservation, run_pure_command};
 use crate::platform::publication::ExportedPackageTransport;
 
 const CONSUMER: &str =
@@ -20,6 +20,8 @@ const CHUNKED_JOINED: &str =
     include_str!("../../../../tests/public_cli/read_view_fixtures/04-chunked-joined.lkjc");
 const APPLICATION: &str =
     include_str!("../../../../tests/public_cli/read_view_fixtures/05-application.lkjc");
+const APPLICATION_JOINED: &str =
+    include_str!("../../../../tests/public_cli/read_view_fixtures/05-application-joined.lkjc");
 const CASES: &str = include_str!("../../../../tests/public_cli/read_view_fixtures/cases.json");
 
 fn publish_native(repository: &GraphRepository, selections: &str, literal: &str) {
@@ -68,7 +70,7 @@ fn selection(alias: &str, exported: &ExportedPackageTransport) -> String {
     )
 }
 
-fn extend_native(repository: &GraphRepository, name: &str, literal: &str) {
+fn extend_native(repository: &GraphRepository, name: &str, literal: &str, selections: &str) {
     let source = repository
         .view_current()
         .unwrap()
@@ -89,7 +91,7 @@ fn extend_native(repository: &GraphRepository, name: &str, literal: &str) {
     assert_eq!(literal.matches("MODULE_OWNER").count(), 1);
     publish_native(
         repository,
-        "",
+        selections,
         &literal.replace("MODULE_OWNER", &modules[0].to_string()),
     );
 }
@@ -150,7 +152,7 @@ fn associated_read_view_public_imported_closure_prepares_and_executes_both_engin
             literal,
         );
         // Unselected joined syntax is retained in the same closure as the public case.
-        extend_native(repository, module, joined);
+        extend_native(repository, module, joined, "");
     }
     let flat_export = flat.export_package_transport().unwrap();
     let chunked_export = chunked.export_package_transport().unwrap();
@@ -170,6 +172,23 @@ fn associated_read_view_public_imported_closure_prepares_and_executes_both_engin
         .map(|(alias, exported)| selection(alias, exported))
         .collect::<String>();
     publish_native(&application, &selections, APPLICATION);
+    // Namespace aliases are selected per authored request. Reuse the same exact
+    // dependencies; the joined extension adds no dependency inventory entries.
+    let joined_selections = exports
+        .iter()
+        .map(|(alias, exported)| {
+            format!(
+                "declarations.begin\n(units (use {alias} {} {}))\ndeclarations.end\n",
+                exported.revision.package, exported.revision_digest,
+            )
+        })
+        .collect::<String>();
+    extend_native(
+        &application,
+        "readview-app",
+        APPLICATION_JOINED,
+        &joined_selections,
+    );
     let application_export = application.export_package_transport().unwrap();
     let accepted = application.view_current().unwrap().revision();
 
@@ -215,6 +234,105 @@ fn associated_read_view_public_imported_closure_prepares_and_executes_both_engin
     assert_eq!(builtin.package_revision, standard.package_revision);
     assert_eq!(builtin.semantic_revision, standard.semantic_revision);
     let fresh_program = Arc::new(NormalizedProgram::prepare(loaded).unwrap());
+
+    // Locate a pre-dispatch allocation refusal for real joined view sharing from
+    // observed execution, rather than deriving an allowance from object sizes.
+    // This is a closed Task VM invocation, not a pure-project differential route.
+    let task = Name::new("readview-joined-flat").unwrap();
+    let joined_cases: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../tests/public_cli/read_view_fixtures/joined-cases.json"
+    ))
+    .unwrap();
+    let first_case: serde_json::Value = serde_json::from_str(CASES).unwrap();
+    let arguments = serde_json::to_vec(&first_case[0]["arguments"]).unwrap();
+    let expected = serde_json::to_vec(&joined_cases[0]["range"]).unwrap();
+    let probe = |maximum_allocated_bytes| {
+        let storage = super::super::owned_storage::StorageObservation::start();
+        let control = ExecutionControl::uncancelled();
+        let invocation = super::super::runner::prepare_command_invocation(
+            &fresh_program,
+            &task,
+            &arguments,
+            crate::platform::json::JsonLimits::default(),
+            &control,
+        )
+        .unwrap();
+        assert!(invocation.task);
+        let observer = std::sync::Mutex::new(None);
+        let result = NormalizedVm::for_test(
+            &fresh_program,
+            NormalizedRunPolicy {
+                maximum_allocated_bytes,
+                ..NormalizedRunPolicy::foreground()
+            },
+        )
+        .observing_checked(&observer)
+        .invoke_root_target(&task, invocation.arguments, None, &control);
+        let observation = observer.lock().unwrap().take().unwrap();
+        match &result {
+            Ok((value, _)) => {
+                assert_eq!(
+                    super::super::codec::encode_typed_with_control(
+                        fresh_program.as_ref(),
+                        value,
+                        invocation.result_type,
+                        crate::platform::json::JsonLimits::default(),
+                        &control,
+                    )
+                    .unwrap(),
+                    expected,
+                );
+            }
+            Err(error) => {
+                assert_eq!(
+                    error.class,
+                    crate::platform::execution::ExecutionFailureClass::Resource
+                );
+                assert!(error.code.contains("allocation"));
+            }
+        }
+        let success = result.is_ok();
+        drop(result);
+        if observation.parallel_scopes > 0 {
+            assert!(storage.created() > 0);
+        }
+        assert_eq!(storage.live(), (0, 0));
+        storage.assert_owners_released_after_loans();
+        assert_eq!(observation.live_call_frames_after, 0);
+        assert_eq!(observation.live_locals_after, 0);
+        assert_eq!(observation.live_type_bindings_after, 0);
+        assert_eq!(observation.live_operands_after, 0);
+        assert_eq!(observation.live_transactions_after, 0);
+        assert_eq!(observation.live_handles_after, 0);
+        (success, observation)
+    };
+    let (success, baseline) = probe(None);
+    assert!(success);
+    let started = |observation: &NormalizedRunObservation| {
+        observation.parallel_worker_dispatches + observation.parallel_inline_fallbacks > 0
+    };
+    assert!(started(&baseline));
+    let mut low = 1;
+    let mut high = baseline.allocated_bytes;
+    assert!(high > low);
+    let (_, first) = probe(Some(low));
+    assert!(!started(&first));
+    while high - low > 1 {
+        let middle = low.midpoint(high);
+        let (_, observation) = probe(Some(middle));
+        if started(&observation) {
+            high = middle;
+        } else {
+            low = middle;
+        }
+    }
+    let (success, refused) = probe(Some(low));
+    assert!(!success);
+    assert_eq!(refused.parallel_scopes, 1);
+    assert!(!started(&refused));
+    let (success, recovery) = probe(Some(baseline.allocated_bytes));
+    assert!(success);
+    assert!(started(&recovery));
 
     // Literal expectations are independent of the source/compiler tables and both
     // evaluators. Each command reaches both Flat and Chunked concrete witnesses.

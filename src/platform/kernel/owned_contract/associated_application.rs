@@ -19,6 +19,15 @@ pub(crate) struct FunctionArguments<'a> {
     pub(crate) requirements: &'a [RequirementOperand],
 }
 
+/// Written read-scope actuals and the caller's existing exact authority.
+/// Grouping these borrowed inputs does not perform or bypass admission.
+#[derive(Clone, Copy)]
+pub(crate) struct ScopeApplication<'a> {
+    pub(crate) arguments: &'a [ReadScopeArgument],
+    pub(crate) authority:
+        crate::platform::kernel::owned_associated::read_view_admission::ScopeAuthority<'a>,
+}
+
 pub(crate) struct AdmittedFunctionApplication {
     pub(crate) signature: PackageFunctionSignature,
     pub(crate) parameters: Vec<ParameterRecord>,
@@ -76,15 +85,19 @@ pub(crate) fn admit_function_application(
         function,
         type_actuals,
         operands,
-        &[],
-        crate::platform::kernel::owned_associated::read_view_admission::ScopeAuthority {
-            binder: crate::platform::kernel::owned_associated::read_view_admission::binder(
-                caller.associated,
-            ),
-            lexical: crate::platform::kernel::owned_associated::read_view_admission::lexical(
-                caller.associated,
-            ),
-            live_loans: &loans,
+        ScopeApplication {
+            arguments: &[],
+            authority:
+                crate::platform::kernel::owned_associated::read_view_admission::ScopeAuthority {
+                    binder: crate::platform::kernel::owned_associated::read_view_admission::binder(
+                        caller.associated,
+                    ),
+                    lexical:
+                        crate::platform::kernel::owned_associated::read_view_admission::lexical(
+                            caller.associated,
+                        ),
+                    live_loans: &loans,
+                },
         },
         caller,
         associated,
@@ -96,13 +109,14 @@ pub(crate) fn admit_function_application_with_scopes(
     function: DeclarationReference,
     type_actuals: &[TypeObjectDigest],
     operands: &[ImplementationOperand],
-    scope_actuals: &[ReadScopeArgument],
-    scope_authority: crate::platform::kernel::owned_associated::read_view_admission::ScopeAuthority<
-        '_,
-    >,
+    scope_application: ScopeApplication<'_>,
     caller: OwnedTypeOccurrence,
     associated: &OwnedAssociatedAdmission,
 ) -> Result<AdmittedFunctionApplication, Diagnostic> {
+    let ScopeApplication {
+        arguments: scope_actuals,
+        authority: scope_authority,
+    } = scope_application;
     // A sized forwarding view preserves the original reader's authority while
     // permitting the shared witness checker to consume a trait-object reader.
     let empty_types = BTreeMap::new();
@@ -247,13 +261,16 @@ pub(crate) fn admit_method_application(
         operand,
         reference,
         id,
-        &[],
-        crate::platform::kernel::owned_associated::read_view_admission::ScopeAuthority {
-            binder: crate::platform::kernel::owned_associated::read_view_admission::binder(
-                caller.associated,
-            ),
-            lexical: caller.associated.scope(),
-            live_loans: &loans,
+        ScopeApplication {
+            arguments: &[],
+            authority:
+                crate::platform::kernel::owned_associated::read_view_admission::ScopeAuthority {
+                    binder: crate::platform::kernel::owned_associated::read_view_admission::binder(
+                        caller.associated,
+                    ),
+                    lexical: caller.associated.scope(),
+                    live_loans: &loans,
+                },
         },
         caller,
         associated,
@@ -265,13 +282,14 @@ pub(crate) fn admit_method_application_with_scopes(
     operand: &ImplementationOperand,
     reference: DeclarationReference,
     id: MethodId,
-    scope_actuals: &[ReadScopeArgument],
-    scope_authority: crate::platform::kernel::owned_associated::read_view_admission::ScopeAuthority<
-        '_,
-    >,
+    scope_application: ScopeApplication<'_>,
     caller: OwnedTypeOccurrence,
     associated: &OwnedAssociatedAdmission,
 ) -> Result<AdmittedMethodApplication, Diagnostic> {
+    let ScopeApplication {
+        arguments: scope_actuals,
+        authority: scope_authority,
+    } = scope_application;
     let empty_types = BTreeMap::new();
     let source_read = AppliedTypeRead {
         read,

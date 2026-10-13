@@ -1068,8 +1068,7 @@ impl ReferenceState<'_> {
             .ok_or_else(|| reference_type_error("structured argument count overflow"))?;
         self.charge_allocation(super::super::value::collection_storage_bytes(
             count as u64,
-            (std::mem::size_of::<NormalizedValue>() + std::mem::size_of::<ScopedReadLease>())
-                as u64,
+            std::mem::size_of::<NormalizedValue>() as u64 + ScopedReadLease::ALLOCATION_BYTES,
             "normalized_parallel_arguments",
         )?)?;
         let left_domain = super::super::value::ValueOrigin::fresh().ok_or_else(|| {

@@ -156,7 +156,7 @@ fn typed_data_collections_charge_nodes_once_and_preflight_nested_allocations() {
         let encoded = round_trip(&f, &value, f.nested);
         assert_eq!(encoded.len(), ENVELOPE_BYTES + outer * 4);
         assert_eq!(&encoded[42..46], &(outer as u32).to_be_bytes());
-        for count in encoded[46..encoded.len() - 32].chunks_exact(4) {
+        for count in encoded[46..encoded.len() - 32].as_chunks::<4>().0 {
             assert_eq!(count, &(inner as u32).to_be_bytes());
         }
     }

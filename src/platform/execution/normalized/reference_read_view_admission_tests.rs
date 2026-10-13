@@ -2617,7 +2617,7 @@ fn raw_named_calls_forward_distinct_complete_effect_and_requirement_rows() {
     for mutant in 0..8 {
         let mut changed = fixture.source.clone();
         match mutant {
-            0 | 1 | 2 | 3 | 4 | 5 => {
+            0..=5 => {
                 let ExpressionOperation::Call {
                     effect_arguments,
                     requirement_arguments,
@@ -4000,7 +4000,7 @@ fn raw_owned_unpack_rechecks_complete_layout_source_selectors_and_annotations() 
             }
             let mut changed = source.clone();
             match mutant {
-                0 | 1 | 2 => match call_operation_mut(&mut changed, unpacked) {
+                0..=2 => match call_operation_mut(&mut changed, unpacked) {
                     ExpressionOperation::UnpackOwned { fields, .. } => match mutant {
                         0 => {
                             fields.pop();

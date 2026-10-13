@@ -800,7 +800,7 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
     maximum_read_bytes: u64,
     control: &ExecutionControl,
     prior: Option<&super::PackageRevisionClosureValidation>,
-    mut reuse: Option<&mut SourceValidationReuse>,
+    reuse: Option<&mut SourceValidationReuse>,
 ) -> Result<AdmittedClosure, Diagnostic> {
     control.check().map_err(execution_diagnostic)?;
     if maximum_visits > MAXIMUM_VALIDATION_VISITS
@@ -1075,7 +1075,7 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
     let dependency_plan = validated.logical.dependency_plan.evidence().clone();
     let dependency_order = validated.logical.dependency_plan.into_order();
     control.check().map_err(execution_diagnostic)?;
-    if let Some(cache) = reuse.as_deref_mut() {
+    if let Some(cache) = reuse {
         cache.commit(pending_validations, &store, control)?;
     }
     let validation_visits = store.visits();

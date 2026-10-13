@@ -22,7 +22,7 @@ use super::owned_associated::read_view_admission::{self as views, ScopeAuthority
 use super::owned_associated::{
     OwnedAssociatedAdmission, OwnedTypeOccurrence, TypeParameterContext,
 };
-use super::owned_contract::FunctionArguments;
+use super::owned_contract::{FunctionArguments, ScopeApplication};
 use super::*;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::ExpressionId;
@@ -376,6 +376,13 @@ fn signature(
     }))
 }
 
+/// Written function and read-scope inputs; live authority remains a later check.
+#[derive(Clone, Copy)]
+struct ScopedFunctionArguments<'a> {
+    application: FunctionArguments<'a>,
+    scopes: &'a [ReadScopeArgument],
+}
+
 fn instantiate(
     read: &(impl ExpressionRead + ?Sized),
     d: DeclarationReference,
@@ -389,11 +396,13 @@ fn instantiate(
         read,
         d,
         application_arguments,
-        &[],
-        ScopeAuthority {
-            binder: views::binder(occurrence.associated),
-            lexical: views::lexical(occurrence.associated),
-            live_loans: &loans,
+        ScopeApplication {
+            arguments: &[],
+            authority: ScopeAuthority {
+                binder: views::binder(occurrence.associated),
+                lexical: views::lexical(occurrence.associated),
+                live_loans: &loans,
+            },
         },
         s,
         occurrence,
@@ -405,12 +414,15 @@ fn instantiate_with_scopes(
     read: &(impl ExpressionRead + ?Sized),
     d: DeclarationReference,
     application_arguments: FunctionArguments<'_>,
-    scopes: &[ReadScopeArgument],
-    authority: ScopeAuthority<'_>,
+    scope_application: ScopeApplication<'_>,
     s: &mut Signature,
     occurrence: OwnedTypeOccurrence,
     associated: &OwnedAssociatedAdmission,
 ) -> Result<BTreeMap<TypeObjectDigest, TypeObject>, Diagnostic> {
+    let ScopeApplication {
+        arguments: scopes,
+        authority,
+    } = scope_application;
     let FunctionArguments {
         types: arguments,
         implementations,
@@ -425,8 +437,10 @@ fn instantiate_with_scopes(
             d,
             arguments,
             implementations,
-            scopes,
-            authority,
+            super::owned_contract::ScopeApplication {
+                arguments: scopes,
+                authority,
+            },
             occurrence,
             associated,
         )?;
@@ -876,8 +890,10 @@ pub(crate) fn borrow_invocation_at_with_scope_authority(
                     requirements: &requirement_arguments,
                 },
                 arguments,
-                &read_scope_arguments,
-                authority,
+                ScopeApplication {
+                    arguments: &read_scope_arguments,
+                    authority,
+                },
                 occurrence,
                 associated,
             )?,
@@ -899,8 +915,10 @@ pub(crate) fn borrow_invocation_at_with_scope_authority(
                     requirements: &requirement_arguments,
                 },
                 arguments,
-                &read_scope_arguments,
-                authority,
+                ScopeApplication {
+                    arguments: &read_scope_arguments,
+                    authority,
+                },
                 occurrence,
                 associated,
             )?,
@@ -916,8 +934,10 @@ pub(crate) fn borrow_invocation_at_with_scope_authority(
                     &witness,
                     contract,
                     method,
-                    &read_scope_arguments,
-                    authority,
+                    super::owned_contract::ScopeApplication {
+                        arguments: &read_scope_arguments,
+                        authority,
+                    },
                     occurrence,
                     associated,
                 )?;
@@ -1016,11 +1036,14 @@ fn borrowed_function_application(
     function: DeclarationReference,
     application_arguments: FunctionArguments<'_>,
     arguments: Vec<ExpressionId>,
-    scope_arguments: &[ReadScopeArgument],
-    authority: ScopeAuthority<'_>,
+    scope_application: ScopeApplication<'_>,
     occurrence: OwnedTypeOccurrence,
     associated: &OwnedAssociatedAdmission,
 ) -> Result<BorrowedApplication, Diagnostic> {
+    let ScopeApplication {
+        arguments: scope_arguments,
+        authority,
+    } = scope_application;
     let mut signature = signature(read, function)?
         .ok_or_else(|| reject("borrow-call requires a named graph function"))?;
     let source = signature
@@ -1042,8 +1065,10 @@ fn borrowed_function_application(
         read,
         function,
         application_arguments,
-        scope_arguments,
-        authority,
+        ScopeApplication {
+            arguments: scope_arguments,
+            authority,
+        },
         &mut signature,
         occurrence,
         associated,
@@ -1765,13 +1790,16 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
     fn function_call(
         &self,
         function: DeclarationReference,
-        application_arguments: FunctionArguments<'_>,
-        scope_arguments: &[ReadScopeArgument],
+        application: ScopedFunctionArguments<'_>,
         arguments: Vec<ExpressionId>,
         occurrence: OwnedTypeOccurrence,
         state: &mut State,
         depth: usize,
     ) -> Result<bool, Diagnostic> {
+        let ScopedFunctionArguments {
+            application: application_arguments,
+            scopes: scope_arguments,
+        } = application;
         let Some(mut signature) = signature(self, function)? else {
             for argument in arguments {
                 self.eval(argument, state, ParameterUse::Unrestricted, depth)?;
@@ -1783,8 +1811,10 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
             self,
             function,
             application_arguments,
-            scope_arguments,
-            self.scope_authority(&loans),
+            ScopeApplication {
+                arguments: scope_arguments,
+                authority: self.scope_authority(&loans),
+            },
             &mut signature,
             occurrence,
             self.associated,
@@ -3008,13 +3038,15 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 read_scope_arguments,
             } => self.function_call(
                 function,
-                FunctionArguments {
-                    types: &type_arguments,
-                    implementations: &[],
-                    effects: &effect_arguments,
-                    requirements: &requirement_arguments,
+                ScopedFunctionArguments {
+                    application: FunctionArguments {
+                        types: &type_arguments,
+                        implementations: &[],
+                        effects: &effect_arguments,
+                        requirements: &requirement_arguments,
+                    },
+                    scopes: &read_scope_arguments,
                 },
-                &read_scope_arguments,
                 arguments,
                 occurrence,
                 state,
@@ -3030,13 +3062,15 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 read_scope_arguments,
             } => self.function_call(
                 function,
-                FunctionArguments {
-                    types: &type_arguments,
-                    implementations: &implementations,
-                    effects: &effect_arguments,
-                    requirements: &requirement_arguments,
+                ScopedFunctionArguments {
+                    application: FunctionArguments {
+                        types: &type_arguments,
+                        implementations: &implementations,
+                        effects: &effect_arguments,
+                        requirements: &requirement_arguments,
+                    },
+                    scopes: &read_scope_arguments,
                 },
-                &read_scope_arguments,
                 arguments,
                 occurrence,
                 state,
@@ -3101,8 +3135,10 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                     &witness,
                     contract,
                     method,
-                    &read_scope_arguments,
-                    self.scope_authority(&loans),
+                    super::owned_contract::ScopeApplication {
+                        arguments: &read_scope_arguments,
+                        authority: self.scope_authority(&loans),
+                    },
                     occurrence,
                     self.associated,
                 )?;

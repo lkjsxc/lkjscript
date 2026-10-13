@@ -126,8 +126,7 @@ fn untaken_view_instructions_close_scope_and_type_actuals() {
             declaration(1),
             template,
             &ordinary,
-            &[region.clone()],
-            &[lexical(0)]
+            (std::slice::from_ref(&region), &[lexical(0)])
         ),
         Ok(Some(expected))
     );
@@ -183,8 +182,7 @@ fn scope_lookup_keeps_unused_formals_and_exact_binders() {
             declaration(1),
             template,
             &BTreeMap::new(),
-            &parameters,
-            &[lexical(0), lexical(1)]
+            (&parameters, &[lexical(0), lexical(1)])
         ),
         Ok(Some(result))
     );
@@ -213,8 +211,7 @@ fn scope_lookup_keeps_unused_formals_and_exact_binders() {
                 owner,
                 template,
                 &BTreeMap::new(),
-                &parameters,
-                &arguments
+                (&parameters, &arguments)
             ),
             Ok(None)
         );
@@ -485,8 +482,7 @@ fn prepared_view_instruction_reprocessing_preserves_exact_applied_scope_identity
                 declaration(1),
                 template,
                 &ordinary,
-                &[first.clone(), second.clone()],
-                &actuals,
+                (&[first.clone(), second.clone()], &actuals)
             ),
             Ok(Some(expected))
         );
@@ -515,8 +511,7 @@ fn prepared_view_instruction_reprocessing_preserves_exact_applied_scope_identity
                 declaration(1),
                 already_applied,
                 &ordinary,
-                &[first.clone(), second.clone()],
-                &actuals,
+                (&[first.clone(), second.clone()], &actuals)
             ),
             Ok(None)
         );

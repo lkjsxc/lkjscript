@@ -169,11 +169,13 @@ impl ReferenceState<'_> {
         let requirements = self.resolve_requirement_arguments(&requirements)?;
         let target = self.admit_resolved_witness_call_scoped(
             function,
-            &types,
-            &effects,
-            &requirements,
-            &implementations,
-            &scopes,
+            ReferenceApplication {
+                types: &types,
+                effects: &effects,
+                requirements: &requirements,
+                implementations: &implementations,
+                scopes: &scopes,
+            },
             arguments,
         )?;
         let expected = self.schema.transfer_type_identity(

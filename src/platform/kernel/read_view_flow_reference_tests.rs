@@ -334,10 +334,9 @@ fn zero_reference_descriptor_keeps_the_explicit_source_anchor() {
         .owners
         .get_mut(&OwnerKey::Declaration(f.view.declaration))
         .unwrap()
+        && let DeclarationPayload::ReadView(view) = &mut d.payload
     {
-        if let DeclarationPayload::ReadView(view) = &mut d.payload {
-            view.fields.clear();
-        }
+        view.fields.clear();
     }
     // Remove now-unreachable initializer records: the oracle accepts raw
     // canonical ownership, not an invented duplicate semantic root.

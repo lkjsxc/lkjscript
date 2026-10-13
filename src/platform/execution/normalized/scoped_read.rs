@@ -81,7 +81,7 @@ enum ReadKind {
     View {
         parent: SourceAnchor,
         destination: SourceAnchor,
-        scope: RuntimeScopeLease,
+        scope: Box<RuntimeScopeLease>,
     },
 }
 
@@ -104,6 +104,11 @@ pub(in super::super::super) struct ScopedReadLease {
 }
 
 impl ScopedReadLease {
+    // Evaluators charge this worst-case retained storage before minting either kind.
+    // The view lease moved behind a Box is counted once, outside the inline wrapper.
+    pub(in super::super::super) const ALLOCATION_BYTES: u64 =
+        (std::mem::size_of::<Self>() + std::mem::size_of::<RuntimeScopeLease>()) as u64;
+
     #[allow(
         clippy::too_many_arguments,
         reason = "exact scoped invocation and custody boundary"
@@ -242,7 +247,7 @@ impl ScopedReadLease {
             kind: ReadKind::View {
                 parent,
                 destination: anchor,
-                scope,
+                scope: Box::new(scope),
             },
             backing: value.clone(),
             _custody: custody,

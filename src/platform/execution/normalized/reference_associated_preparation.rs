@@ -21,6 +21,14 @@ use crate::platform::semantic_id::{
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 
+struct AuthoredCallApplication<'a> {
+    types: &'a [TypeObjectDigest],
+    implementations: &'a [ImplementationOperand],
+    effects: &'a [EffectRow],
+    requirements: &'a [RequirementOperand],
+    scopes: &'a [ReadScopeArgument],
+}
+
 type Ordinary = BTreeMap<TypeParameterId, TypeObjectDigest>;
 type Witnesses = BTreeMap<ImplementationParameterId, Arc<Selection>>;
 type SelectionKey = (DeclarationReference, Vec<TypeObjectDigest>, Vec<usize>);
@@ -2244,11 +2252,13 @@ impl<'a> Derivation<'a> {
                     read_scope_arguments,
                 } => Some(self.call(
                     *function,
-                    type_arguments,
-                    &[],
-                    effect_arguments,
-                    requirement_arguments,
-                    read_scope_arguments,
+                    AuthoredCallApplication {
+                        types: type_arguments,
+                        implementations: &[],
+                        effects: effect_arguments,
+                        requirements: requirement_arguments,
+                        scopes: read_scope_arguments,
+                    },
                     env,
                 )?),
                 ExpressionOperation::ImplementationCall {
@@ -2261,11 +2271,13 @@ impl<'a> Derivation<'a> {
                     ..
                 } => Some(self.call(
                     *function,
-                    type_arguments,
-                    implementations,
-                    effect_arguments,
-                    requirement_arguments,
-                    read_scope_arguments,
+                    AuthoredCallApplication {
+                        types: type_arguments,
+                        implementations,
+                        effects: effect_arguments,
+                        requirements: requirement_arguments,
+                        scopes: read_scope_arguments,
+                    },
                     env,
                 )?),
                 ExpressionOperation::MethodCall {
@@ -2579,13 +2591,16 @@ impl<'a> Derivation<'a> {
     fn call(
         &mut self,
         function: DeclarationReference,
-        types: &[TypeObjectDigest],
-        implementations: &[ImplementationOperand],
-        effects: &[EffectRow],
-        requirements: &[RequirementOperand],
-        read_scope_arguments: &[ReadScopeArgument],
+        application: AuthoredCallApplication<'_>,
         caller: &Environment,
     ) -> Result<Application, ExecutionError> {
+        let AuthoredCallApplication {
+            types,
+            implementations,
+            effects,
+            requirements,
+            scopes: read_scope_arguments,
+        } = application;
         self.declaration(
             function,
             caller
@@ -2708,11 +2723,13 @@ impl<'a> Derivation<'a> {
         )?;
         let target = self.call(
             mapping.function,
-            &mapping.type_arguments,
-            &mapping.implementations,
-            &[],
-            &[],
-            &mapping.read_scope_arguments,
+            AuthoredCallApplication {
+                types: &mapping.type_arguments,
+                implementations: &mapping.implementations,
+                effects: &[],
+                requirements: &[],
+                scopes: &mapping.read_scope_arguments,
+            },
             &env,
         )?;
         self.compare_method(selected, method, &target, read_scope_arguments)?;

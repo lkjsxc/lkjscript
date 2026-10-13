@@ -15,7 +15,7 @@ use super::owned_associated::{OwnedAssociatedAdmission, OwnedTypeOccurrence};
 #[path = "owned_contract/associated_application.rs"]
 mod associated_application;
 pub(crate) use associated_application::{
-    AdmittedFunctionApplication, AdmittedMethodApplication, FunctionArguments,
+    AdmittedFunctionApplication, AdmittedMethodApplication, FunctionArguments, ScopeApplication,
     admit_function_application, admit_function_application_with_scopes, admit_method_application,
     admit_method_application_with_scopes,
 };

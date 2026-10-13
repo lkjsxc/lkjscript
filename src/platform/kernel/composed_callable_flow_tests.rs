@@ -1587,7 +1587,9 @@ fn large_closed_query(read: &mut Read) -> TypeObjectDigest {
         .collect();
     while level.len() > 1 {
         level = level
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|children| {
                 read.ty(TypeForm::StructuralRecord {
                     fields: vec![

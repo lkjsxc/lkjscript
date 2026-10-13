@@ -2916,7 +2916,7 @@ fn validate_definition_scope_inventory(
             if field(record, "parent")? != function {
                 return Err(fail("definition parameter names a foreign function"));
             }
-            Ok(field(record, "id")?)
+            field(record, "id")
         })
         .collect::<Result<BTreeSet<_>, AcceptanceFailure>>()?;
     let source = field(contract, "result-source")?;

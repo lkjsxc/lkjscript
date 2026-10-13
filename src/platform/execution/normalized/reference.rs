@@ -721,13 +721,24 @@ struct ReferenceTransaction {
     transaction: Box<dyn NormalizedCapabilityTransaction>,
 }
 
-#[derive(Default)]
-struct ReferenceApplication<'a> {
+struct ReferenceApplication<'a, I = AppliedReferenceImplementation> {
     types: &'a [TypeObjectDigest],
     effects: &'a [EffectRow],
     requirements: &'a [RequirementOperand],
-    implementations: &'a [AppliedReferenceImplementation],
+    implementations: &'a [I],
     scopes: &'a [ReadScopeArgument],
+}
+
+impl<I> Default for ReferenceApplication<'_, I> {
+    fn default() -> Self {
+        Self {
+            types: &[],
+            effects: &[],
+            requirements: &[],
+            implementations: &[],
+            scopes: &[],
+        }
+    }
 }
 
 // An Invoke evaluator alone supplies this route. The seal is a local input to
@@ -784,10 +795,9 @@ struct ReferenceState<'a> {
     observation: NormalizedReferenceObservation,
 }
 
-enum ReferenceStep {
-    Value(CheckedValue),
-    Tail(Box<AdmittedGraphCall>),
-}
+// Break completes the trampoline; Continue transfers an already admitted tail call.
+// Ordinary checked results stay inline; only tail targets retain their existing Box.
+type ReferenceStep = std::ops::ControlFlow<CheckedValue, Box<AdmittedGraphCall>>;
 
 /// Lexical custody is retained across body execution and host unwind. Removing
 /// the child before dropping the parent also preserves nested loan order.
@@ -1995,10 +2005,13 @@ impl ReferenceState<'_> {
     ) -> Result<CheckedValue, ExecutionError> {
         self.call_declaration_on_route(
             reference,
-            type_arguments,
-            effect_arguments,
-            requirement_arguments,
-            scopes,
+            ReferenceApplication {
+                types: type_arguments,
+                effects: effect_arguments,
+                requirements: requirement_arguments,
+                implementations: &[],
+                scopes,
+            },
             arguments,
             ReferenceCallRoute::Direct,
         )
@@ -2007,13 +2020,17 @@ impl ReferenceState<'_> {
     fn call_declaration_on_route(
         &mut self,
         reference: DeclarationReference,
-        type_arguments: &[TypeObjectDigest],
-        effect_arguments: &[EffectRow],
-        requirement_arguments: &[RequirementOperand],
-        scopes: &[ReadScopeArgument],
+        application: ReferenceApplication<'_>,
         arguments: Vec<CheckedValue>,
         route: ReferenceCallRoute<'_>,
     ) -> Result<CheckedValue, ExecutionError> {
+        let ReferenceApplication {
+            types: type_arguments,
+            effects: effect_arguments,
+            requirements: requirement_arguments,
+            scopes,
+            ..
+        } = application;
         self.control.check()?;
         self.require_owning_result(reference)?;
         let type_arguments = self.resolve_type_arguments(type_arguments)?;
@@ -2035,17 +2052,20 @@ impl ReferenceState<'_> {
         self.active_package = reference.package;
         let mut step = self.call_activation(
             reference,
-            &type_arguments,
-            &effect_arguments,
-            &requirement_arguments,
-            &scopes,
+            ReferenceApplication {
+                types: &type_arguments,
+                effects: &effect_arguments,
+                requirements: &requirement_arguments,
+                implementations: &[],
+                scopes: &scopes,
+            },
             arguments,
             route,
         );
         let result = loop {
             match step {
-                Ok(ReferenceStep::Value(value)) => break Ok(value),
-                Ok(ReferenceStep::Tail(target)) => {
+                Ok(ReferenceStep::Break(value)) => break Ok(value),
+                Ok(ReferenceStep::Continue(target)) => {
                     // The outgoing canonical scope admitted this exact application. All its
                     // lexical/native frames have unwound; never reauthorize against an ancestor.
                     step = self.enter_graph_call(*target, true);
@@ -2061,13 +2081,17 @@ impl ReferenceState<'_> {
     fn call_activation(
         &mut self,
         reference: DeclarationReference,
-        type_arguments: &[TypeObjectDigest],
-        effect_arguments: &[EffectRow],
-        requirement_arguments: &[RequirementOperand],
-        scopes: &[ReadScopeArgument],
+        application: ReferenceApplication<'_>,
         arguments: Vec<CheckedValue>,
         route: ReferenceCallRoute<'_>,
     ) -> Result<ReferenceStep, ExecutionError> {
+        let ReferenceApplication {
+            types: type_arguments,
+            effects: effect_arguments,
+            requirements: requirement_arguments,
+            scopes,
+            ..
+        } = application;
         self.control.check()?;
         (|| {
             let declaration = self.declaration(reference)?;
@@ -2184,7 +2208,7 @@ impl ReferenceState<'_> {
                                 arguments,
                             )?
                         };
-                        Ok(ReferenceStep::Value(value))
+                        Ok(ReferenceStep::Break(value))
                     }
                 }
                 DeclarationPayload::Constant { value, .. } => {
@@ -2197,7 +2221,7 @@ impl ReferenceState<'_> {
                         self.local_counts.push(0);
                         let result = self
                             .evaluate(value, &mut BTreeMap::new())
-                            .map(ReferenceStep::Value);
+                            .map(ReferenceStep::Break);
                         self.local_counts.pop();
                         result
                     } else {
@@ -2588,12 +2612,12 @@ impl ReferenceState<'_> {
         let previous_read_demand = std::mem::take(&mut self.read_source_demand);
         let result = if result_borrow.is_some() {
             self.evaluate_in_context(target.function.body, &mut locals, true)
-                .map(ReferenceStep::Value)
+                .map(ReferenceStep::Break)
         } else {
             self.evaluate_tail(target.function.body, &mut locals)
         };
         let result = result.and_then(|mut step| {
-            if let ReferenceStep::Value(value) = &mut step {
+            if let ReferenceStep::Break(value) = &mut step {
                 if let ResultRelation::ViewFrom { source, scope } = target.function.result.relation
                 {
                     let source = LocalValueReference::FunctionParameter(source);
@@ -2878,7 +2902,7 @@ impl ReferenceState<'_> {
                     if has_view {
                         return self
                             .evaluate_view_let(bindings, body, locals, false)
-                            .map(ReferenceStep::Value);
+                            .map(ReferenceStep::Break);
                     }
                     for binding in bindings {
                         let view_binding = matches!(self.owner(OwnerKey::Binding(binding))?, Some(OwnerRecord::Binding(record)) if record.kind == BindingKind::ReadView);
@@ -3025,11 +3049,13 @@ impl ReferenceState<'_> {
                     let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
                     let target = self.witness_call_scoped(
                         function,
-                        &type_arguments,
-                        &effect_arguments,
-                        &requirement_arguments,
-                        &implementations,
-                        &read_scope_arguments,
+                        ReferenceApplication {
+                            types: &type_arguments,
+                            effects: &effect_arguments,
+                            requirements: &requirement_arguments,
+                            implementations: &implementations,
+                            scopes: &read_scope_arguments,
+                        },
                         arguments,
                     )?;
                     return self.transfer_graph_call(target, locals);
@@ -3052,11 +3078,13 @@ impl ReferenceState<'_> {
                     let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
                     let target = self.admit_resolved_witness_call_scoped(
                         function,
-                        &types,
-                        &[],
-                        &[],
-                        &implementations,
-                        &scopes,
+                        ReferenceApplication {
+                            types: &types,
+                            effects: &[],
+                            requirements: &[],
+                            implementations: &implementations,
+                            scopes: &scopes,
+                        },
                         arguments,
                     )?;
                     return self.transfer_graph_call(target, locals);
@@ -3073,10 +3101,13 @@ impl ReferenceState<'_> {
                     let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
                     return self.tail_step(
                         function,
-                        &type_arguments,
-                        &effect_arguments,
-                        &requirement_arguments,
-                        &read_scope_arguments,
+                        ReferenceApplication {
+                            types: &type_arguments,
+                            effects: &effect_arguments,
+                            requirements: &requirement_arguments,
+                            implementations: &[],
+                            scopes: &read_scope_arguments,
+                        },
                         arguments,
                         locals,
                     );
@@ -3109,7 +3140,7 @@ impl ReferenceState<'_> {
                 operation => {
                     return self
                         .evaluate_operation(operation, locals)
-                        .map(ReferenceStep::Value);
+                        .map(ReferenceStep::Break);
                 }
             }
         })();
@@ -3121,22 +3152,13 @@ impl ReferenceState<'_> {
     fn tail_step(
         &mut self,
         declaration: DeclarationReference,
-        types: &[TypeObjectDigest],
-        effect_arguments: &[EffectRow],
-        requirement_arguments: &[RequirementOperand],
-        scopes: &[ReadScopeArgument],
+        application: ReferenceApplication<'_>,
         arguments: Vec<CheckedValue>,
         locals: &BTreeMap<LocalValueReference, CheckedValue>,
     ) -> Result<ReferenceStep, ExecutionError> {
         self.tail_step_on_route(
             declaration,
-            ReferenceApplication {
-                types,
-                effects: effect_arguments,
-                requirements: requirement_arguments,
-                implementations: &[],
-                scopes,
-            },
+            application,
             arguments,
             locals,
             ReferenceCallRoute::Direct,
@@ -3175,14 +3197,17 @@ impl ReferenceState<'_> {
         } else {
             self.call_declaration_on_route(
                 declaration,
-                application.types,
-                application.effects,
-                application.requirements,
-                application.scopes,
+                ReferenceApplication {
+                    types: application.types,
+                    effects: application.effects,
+                    requirements: application.requirements,
+                    implementations: &[],
+                    scopes: application.scopes,
+                },
                 arguments,
                 route,
             )
-            .map(ReferenceStep::Value)
+            .map(ReferenceStep::Break)
         }
     }
 
@@ -3217,8 +3242,8 @@ impl ReferenceState<'_> {
             let mut step = self.enter_graph_call(target, false);
             let result = loop {
                 match step {
-                    Ok(ReferenceStep::Value(value)) => break Ok(ReferenceStep::Value(value)),
-                    Ok(ReferenceStep::Tail(target)) => {
+                    Ok(ReferenceStep::Break(value)) => break Ok(ReferenceStep::Break(value)),
+                    Ok(ReferenceStep::Continue(target)) => {
                         step = self.enter_graph_call(*target, true);
                     }
                     Err(error) => break Err(error),
@@ -3228,7 +3253,7 @@ impl ReferenceState<'_> {
             self.call_depth -= 1;
             result
         } else {
-            Ok(ReferenceStep::Tail(Box::new(target)))
+            Ok(ReferenceStep::Continue(Box::new(target)))
         }
     }
 
@@ -3920,11 +3945,13 @@ impl ReferenceState<'_> {
                 let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
                 let target = self.witness_call_scoped(
                     function,
-                    &type_arguments,
-                    &effect_arguments,
-                    &requirement_arguments,
-                    &implementations,
-                    &read_scope_arguments,
+                    ReferenceApplication {
+                        types: &type_arguments,
+                        effects: &effect_arguments,
+                        requirements: &requirement_arguments,
+                        implementations: &implementations,
+                        scopes: &read_scope_arguments,
+                    },
                     arguments,
                 )?;
                 self.execute_witness_call(target)
@@ -3943,11 +3970,13 @@ impl ReferenceState<'_> {
                 let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
                 let target = self.admit_resolved_witness_call_scoped(
                     function,
-                    &types,
-                    &[],
-                    &[],
-                    &implementations,
-                    &scopes,
+                    ReferenceApplication {
+                        types: &types,
+                        effects: &[],
+                        requirements: &[],
+                        implementations: &implementations,
+                        scopes: &scopes,
+                    },
                     arguments,
                 )?;
                 self.execute_witness_call(target)
@@ -4225,10 +4254,13 @@ impl ReferenceState<'_> {
                 ) = self.callable_arguments(callee, arguments)?;
                 self.call_declaration_on_route(
                     declaration,
-                    &type_arguments,
-                    &effect_arguments,
-                    &requirement_arguments,
-                    &[],
+                    ReferenceApplication {
+                        types: &type_arguments,
+                        effects: &effect_arguments,
+                        requirements: &requirement_arguments,
+                        implementations: &[],
+                        scopes: &[],
+                    },
                     arguments,
                     ReferenceCallRoute::Invocation(invocation.as_ref()),
                 )

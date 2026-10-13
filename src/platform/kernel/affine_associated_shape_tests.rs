@@ -640,7 +640,7 @@ fn owning_read_view_let_binding_preserves_memory_and_resource_authority() {
                 "kernel_buffer_ownership",
                 "missing memory binding initializer",
             ),
-            3 | 4 | 5 => (
+            3..=5 => (
                 "kernel_buffer_ownership",
                 "owning view initializer requires its exact positive binding category",
             ),

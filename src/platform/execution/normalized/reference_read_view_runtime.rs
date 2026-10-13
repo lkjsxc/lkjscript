@@ -194,22 +194,21 @@ impl ReadViewAdmission for RuntimeAdmission<'_> {
                 if key != self.scope {
                     return Err(failure("source scope was replaced"));
                 }
-                if let ReadScopeArgument::Parameter(reference) = key {
-                    if !self
+                if let ReadScopeArgument::Parameter(reference) = key
+                    && !self
                         .proof()?
                         .scope_parameters(reference.binder)?
                         .iter()
                         .any(|formal| formal.id == reference.parameter)
-                    {
-                        return Err(failure("source scope names a foreign binder formal"));
-                    }
+                {
+                    return Err(failure("source scope names a foreign binder formal"));
                 }
                 // RuntimeScopeOwner separately checks the live parent prefix. Naming a
                 // symbolic parameter alone creates no permission or scope containment.
-                if let Some(parent) = parent {
-                    if parent.source().program != source.program {
-                        return Err(failure("source scope forwards another preparation"));
-                    }
+                if let Some(parent) = parent
+                    && parent.source().program != source.program
+                {
+                    return Err(failure("source scope forwards another preparation"));
                 }
             }
             AdmissionRequest::Source {
@@ -1085,22 +1084,21 @@ impl ReferenceState<'_> {
     }
 }
 
+type BorrowCallScopeState = (
+    ReadScopeArgument,
+    Option<super::super::read_view_storage::RuntimeScopeOwner>,
+    LocalValueReference,
+    Option<SourceAnchor>,
+    Option<super::super::read_view_storage::RuntimeScopeLease>,
+);
+
 impl ReferenceState<'_> {
     pub(super) fn open_borrow_call_scope(
         &mut self,
         call: ExpressionId,
         binding: BindingId,
         locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
-    ) -> Result<
-        Option<(
-            ReadScopeArgument,
-            Option<super::super::read_view_storage::RuntimeScopeOwner>,
-            LocalValueReference,
-            Option<SourceAnchor>,
-            Option<super::super::read_view_storage::RuntimeScopeLease>,
-        )>,
-        ExecutionError,
-    > {
+    ) -> Result<Option<BorrowCallScopeState>, ExecutionError> {
         let operation = self.read_expression(call)?;
         let (scopes, arguments, position, view_scope) =
             match operation {

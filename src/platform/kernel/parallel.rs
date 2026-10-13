@@ -227,8 +227,10 @@ pub(crate) fn admit_call_at_with_scope_authority(
         function,
         &type_arguments,
         &implementations,
-        &read_scope_arguments,
-        scope_authority,
+        super::owned_contract::ScopeApplication {
+            arguments: &read_scope_arguments,
+            authority: scope_authority,
+        },
         occurrence,
         admission,
     )?;

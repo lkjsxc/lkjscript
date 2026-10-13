@@ -111,10 +111,10 @@ fn view_scope(form: &TypeForm) -> Option<&ReadScopeArgument> {
     }
 }
 
-fn object<'a>(
-    interface: &'a PackageInterfaceValidation,
+fn object(
+    interface: &PackageInterfaceValidation,
     ty: TypeObjectDigest,
-) -> Result<&'a TypeObject, Diagnostic> {
+) -> Result<&TypeObject, Diagnostic> {
     interface
         .type_objects
         .get(&ty)
@@ -397,7 +397,9 @@ fn signature<S: Copy + Eq>(
                 return Err(reject("read-view parameters permit borrow mode only"));
             }
             scope(
-                view_scope(&object(interface, *ty)?.form).expect("proved view form"),
+                view_scope(&object(interface, *ty)?.form).ok_or_else(|| {
+                    reject("read-view parameter lacks its independently admitted exact scope")
+                })?,
                 &binder,
                 formals,
                 admission,

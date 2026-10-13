@@ -1497,10 +1497,10 @@ impl Lowering<'_> {
                     quoted: false,
                 };
             }
-            if form == "view-reborrow" {
-                if let Some(id) = args.get(1) {
-                    self.body_scope(&mut block, *id, scope)?;
-                }
+            if form == "view-reborrow"
+                && let Some(id) = args.get(1)
+            {
+                self.body_scope(&mut block, *id, scope)?;
             }
             match form.as_str() {
                 "scopes" | "scope" => {

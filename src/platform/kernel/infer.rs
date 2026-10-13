@@ -2040,8 +2040,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         &witness,
                         contract,
                         method,
-                        &read_scope_arguments,
-                        authority,
+                        super::owned_contract::ScopeApplication {
+                            arguments: &read_scope_arguments,
+                            authority,
+                        },
                         occurrence,
                         admission,
                     )
@@ -3646,8 +3648,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     reference,
                     type_arguments,
                     implementations,
-                    read_scope_arguments,
-                    authority,
+                    super::owned_contract::ScopeApplication {
+                        arguments: read_scope_arguments,
+                        authority,
+                    },
                     occurrence,
                     admission,
                 )

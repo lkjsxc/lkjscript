@@ -3073,3 +3073,325 @@ mod incremental_owner_tests;
 
 #[path = "incremental_owner_lifecycle_tests.rs"]
 mod incremental_owner_lifecycle_tests;
+
+#[test]
+fn imported_captured_match_annotation_survives_standalone_and_cached_linking() {
+    const SUPPLIER: &str = r#"create.module as=$module name=captured-tree
+create.variant as=$tree module=$module name=Tree visibility=public
+add.type-parameter as=$tree-T declaration=$tree name=T constraint=capture-safe
+type.parameter as=@tree-T parameter=$tree-T
+type.application as=@tree declaration=$tree
+type.argument parent=@tree index=0 type=@tree-T
+type.list as=@children item=@tree
+add.case as=$leaf variant=$tree name=leaf payload=@tree-T
+add.case as=$branch variant=$tree name=branch payload=@children
+expression.i64 as=$zero-body value=17
+create.function as=$zero module=$module name=zero visibility=private result=i64 effect=pure body=$zero-body
+add.type-parameter as=$retain-T declaration=$retain name=T constraint=capture-safe
+type.parameter as=@retain-T parameter=$retain-T
+type.application as=@retain-tree declaration=$tree
+type.argument parent=@retain-tree index=0 type=@retain-T
+type.list as=@retain-items item=@retain-tree
+expression.i64 as=$retain-body value=17
+create.function as=$retain module=$module name=retain visibility=private result=i64 effect=pure body=$retain-body
+add.parameter as=$retain-items function=$retain name=items type=@retain-items
+add.type-parameter as=$snapshot-T declaration=$snapshot name=T constraint=capture-safe
+type.parameter as=@snapshot-T parameter=$snapshot-T
+type.application as=@snapshot-tree declaration=$tree
+type.argument parent=@snapshot-tree index=0 type=@snapshot-T
+type.list as=@snapshot-items item=@snapshot-tree
+type.function as=@thunk result=i64
+expression.function-value as=$leaf-result function=$zero
+expression.function-value as=$retained-callee function=$retain
+type.argument parent=$retained-callee index=0 type=@snapshot-T
+expression.local as=$children value=$captured
+expression.bind as=$branch-result callee=$retained-callee
+expression.argument parent=$branch-result index=0 expression=$children
+expression.local as=$input value=$snapshot-input
+expression.match as=$snapshot-body value=$input
+expression.match-arm parent=$snapshot-body index=0 case=$leaf as=$leaf-value name=leaf-value type=@snapshot-T body=$leaf-result
+expression.match-arm parent=$snapshot-body index=1 case=$branch as=$captured name=captured type=@snapshot-items body=$branch-result
+create.function as=$snapshot module=$module name=snapshot visibility=public result=@thunk effect=pure body=$snapshot-body
+add.parameter as=$snapshot-input function=$snapshot name=input type=@snapshot-tree
+"#;
+    let temporary = tempfile::tempdir().unwrap();
+    let make = |name: &str| {
+        GraphRepository::create(
+            &temporary.path().join(name),
+            &structurally_empty_snapshot(name.as_bytes()),
+            None,
+        )
+        .unwrap()
+        .repository
+    };
+    let supplier = make("captured-supplier");
+    owned_closure_tests::author(&supplier, SUPPLIER);
+    let supplier_head = std::fs::read(supplier.root().join("HEAD")).unwrap();
+    let source = supplier
+        .view_current()
+        .unwrap()
+        .reconstruct_full_oracle()
+        .unwrap()
+        .value;
+    crate::platform::kernel::validate_full(&source).unwrap();
+    let snapshot = declaration_named(&source, "snapshot");
+    let tree = declaration_named(&source, "Tree");
+    let branch = source
+        .owners
+        .iter()
+        .find_map(|(key, record)| match (key, record) {
+            (OwnerKey::Case(id), OwnerRecord::Case(record)) if record.name.as_str() == "branch" => {
+                Some(*id)
+            }
+            _ => None,
+        })
+        .unwrap();
+    let annotation = source
+        .owners
+        .values()
+        .find_map(|record| match record {
+            OwnerRecord::Binding(binding) if binding.name.as_str() == "captured" => {
+                assert_eq!(binding.kind, BindingKind::MatchPayload);
+                binding.declared_type
+            }
+            _ => None,
+        })
+        .unwrap();
+    let TypeForm::List { item } = source.types[&annotation].form else {
+        panic!("captured list")
+    };
+    let TypeForm::Applied {
+        declaration,
+        arguments,
+    } = &source.types[&item].form
+    else {
+        panic!("captured tree")
+    };
+    assert_eq!(declaration.declaration, tree);
+    let TypeForm::TypeParameter { parameter } = source.types[&arguments[0]].form else {
+        panic!("caller formal")
+    };
+    assert!(
+        matches!(source.owners[&OwnerKey::TypeParameter(parameter)], OwnerRecord::TypeParameter(ref formal) if formal.declaration == snapshot)
+    );
+    let compiled = build_clean(&supplier, OptimizationPolicy::DeterministicBaseline).unwrap();
+    let cold = link_artifact(&supplier, compiled.manifest_digest, &[]).unwrap();
+    let loaded = load_artifact(&cold.artifact.bytes).unwrap();
+    let annotation_key = ObjectKey::from_digest(ObjectDomain::Type, annotation.bytes());
+    assert!(loaded.objects.contains_key(&annotation_key));
+    // No instruction indexes this instantiated payload annotation. The source record
+    // must supply its strict type root without changing valid cached unit bytes.
+    let unit_bytes = loaded
+        .objects
+        .iter()
+        .filter(|(key, _)| key.domain == ObjectDomain::CompilerUnit)
+        .map(|(key, bytes)| {
+            let unit = CompilationUnit::decode(bytes, *key).unwrap();
+            assert!(!unit.tables.types.contains(&annotation));
+            (*key, bytes.clone())
+        })
+        .collect::<BTreeMap<_, _>>();
+    let warm = link_artifact(&supplier, compiled.manifest_digest, &[]).unwrap();
+    assert_eq!(cold.artifact.bytes, warm.artifact.bytes);
+    let warmed = load_artifact(&warm.artifact.bytes).unwrap();
+    for (key, bytes) in &unit_bytes {
+        assert_eq!(warmed.objects[key], *bytes);
+    }
+    let mut incomplete = loaded.objects.clone();
+    incomplete.remove(&annotation_key).unwrap();
+    let mut manifest = loaded.manifest.clone();
+    let (closure, count, bytes) = super::artifact::closure_facts(&incomplete).unwrap();
+    manifest.closure = closure;
+    manifest.object_count = count;
+    manifest.object_bytes = bytes;
+    let error = load_artifact(&nominal_session_tests::hostile_bundle(
+        &manifest,
+        &incomplete,
+    ))
+    .expect_err("a missing exact annotation object cannot become ordinary data");
+    assert_eq!(error.class, crate::platform::DiagnosticClass::Corrupt);
+    assert_eq!(error.code, "artifact_object_missing");
+    // Metadata-only roots obey historical generation fences even under a current
+    // package/compiler envelope. The neutral rehash grants no semantic admission.
+    let (captured_id, captured) = source
+        .owners
+        .iter()
+        .find_map(|(key, record)| match (key, record) {
+            (OwnerKey::Binding(id), OwnerRecord::Binding(binding))
+                if binding.name.as_str() == "captured" =>
+            {
+                Some((*id, binding.clone()))
+            }
+            _ => None,
+        })
+        .unwrap();
+    let i64_type = source
+        .types
+        .iter()
+        .find_map(|(digest, object)| matches!(object.form, TypeForm::I64).then_some(*digest))
+        .unwrap();
+    let member = crate::platform::kernel::StructuralTypeField {
+        name: Name::new("value").unwrap(),
+        ty: i64_type,
+    };
+    for (generation, form, class, expected) in [
+        (
+            16,
+            TypeForm::F64,
+            crate::platform::DiagnosticClass::Corrupt,
+            "artifact_f64_graph_generation",
+        ),
+        (
+            18,
+            TypeForm::OwnedProduct {
+                fields: vec![member.clone()],
+            },
+            crate::platform::DiagnosticClass::Semantic,
+            "kernel_product_generation",
+        ),
+        (
+            19,
+            TypeForm::OwnedChoice {
+                cases: vec![member.clone()],
+            },
+            crate::platform::DiagnosticClass::Semantic,
+            "kernel_choice_generation",
+        ),
+        (
+            24,
+            TypeForm::OwnedSequence { item: i64_type },
+            crate::platform::DiagnosticClass::Semantic,
+            "kernel_sequence_generation",
+        ),
+        (
+            33,
+            TypeForm::ReadViewApplied {
+                declaration: crate::platform::kernel::DeclarationReference {
+                    package: source.root.package_id,
+                    declaration: tree,
+                },
+                arguments: vec![i64_type],
+                read_scope: crate::platform::kernel::ReadScopeArgument::Lexical {
+                    callable: crate::platform::kernel::DeclarationReference {
+                        package: source.root.package_id,
+                        declaration: snapshot,
+                    },
+                    binding: captured_id,
+                },
+            },
+            crate::platform::DiagnosticClass::Semantic,
+            "kernel_read_view_generation",
+        ),
+    ] {
+        let mut objects = loaded.objects.clone();
+        let (ty, bytes) = encode_type_object(&TypeObject::new(form).unwrap()).unwrap();
+        objects.insert(
+            ObjectKey::from_digest(ObjectDomain::Type, ty.bytes()),
+            bytes,
+        );
+        let mut changed = captured.clone();
+        changed.header.contract_version = generation;
+        changed.declared_type = Some(ty);
+        let (digest, bytes) = encode_owner(&OwnerRecord::Binding(changed)).unwrap();
+        objects.insert(
+            ObjectKey::from_digest(ObjectDomain::Owner, digest.bytes()),
+            bytes,
+        );
+        let mut manifest = loaded.manifest.clone();
+        let package = manifest
+            .packages
+            .iter_mut()
+            .find(|p| p.package == source.root.package_id)
+            .unwrap();
+        let mut entries = artifact_map_entries(&loaded, package.reference_owners);
+        let mut replaced = 0;
+        for (owner, value) in &mut entries {
+            if crate::platform::kernel::EncodedOwnerKey::decode(owner).unwrap()
+                == OwnerKey::Binding(captured_id)
+            {
+                *value = crate::platform::kernel::encode_owner_binding(
+                    &crate::platform::kernel::OwnerBinding {
+                        kind: OwnerKind::Binding,
+                        object: digest,
+                    },
+                );
+                replaced += 1;
+            }
+        }
+        assert_eq!(replaced, 1);
+        package.reference_owners = replace_artifact_map(&mut objects, entries);
+        let (closure, count, bytes) = super::artifact::closure_facts(&objects).unwrap();
+        manifest.closure = closure;
+        manifest.object_count = count;
+        manifest.object_bytes = bytes;
+        let error = load_artifact(&nominal_session_tests::hostile_bundle(&manifest, &objects))
+            .expect_err("an older owner cannot hide a newer metadata type");
+        assert_eq!(error.class, class, "generation={generation}: {error:?}");
+        assert_eq!(error.code, expected, "generation={generation}: {error:?}");
+    }
+    let exported = supplier.export_package_transport().unwrap();
+    let consumer = make("captured-consumer");
+    consumer
+        .stage_package_transport(exported.transport_digest, &exported.container)
+        .unwrap();
+    let tree_ref = format!("{}/{}", exported.revision.package, tree);
+    let branch_ref = format!("{}/{}", exported.revision.package, branch);
+    let snapshot_ref = format!("{}/{}", exported.revision.package, snapshot);
+    owned_closure_tests::author(
+        &consumer,
+        &format!(
+            r#"{}create.module as=$module name=consumer
+ type.application as=@tree declaration={tree_ref}
+ type.argument parent=@tree index=0 type=i64
+ expression.list as=$items item=@tree
+ expression.variant as=$value case={branch_ref} payload=$items
+ type.argument parent=$value index=0 type=i64
+ expression.call as=$thunk function={snapshot_ref}
+ type.argument parent=$thunk index=0 type=i64
+ expression.argument parent=$thunk index=0 expression=$value
+ expression.invoke as=$actual function=$thunk
+ expression.i64 as=$expected value=17
+ create.test as=$test module=$module name=captured visibility=private actual=$actual expected=$expected
+ "#,
+            owned_closure_tests::dependency(&exported)
+        ),
+    );
+    let consumer_head = std::fs::read(consumer.root().join("HEAD")).unwrap();
+    // The maintained lifecycle compiles the separately staged supplier, strict-loads
+    // the complete artifact, and prepares both the VM and raw canonical evaluator.
+    let application =
+        crate::platform::normalized_lifecycle::prepare_repository(consumer.clone()).unwrap();
+    let copied = temporary.path().join("standalone.lkja");
+    std::fs::write(&copied, &application.artifact_bytes).unwrap();
+    let copied = std::fs::read(copied).unwrap();
+    let standalone = load_artifact(&copied).unwrap();
+    assert_eq!(
+        standalone
+            .package(exported.revision.package)
+            .unwrap()
+            .package_revision,
+        exported.revision_digest
+    );
+    crate::platform::execution::normalized::NormalizedProgram::prepare(standalone).unwrap();
+    assert_eq!(
+        std::fs::read(supplier.root().join("HEAD")).unwrap(),
+        supplier_head
+    );
+    std::fs::remove_dir_all(supplier.root()).unwrap();
+    let result = application
+        .check(&crate::platform::execution::ExecutionControl::uncancelled())
+        .unwrap();
+    assert_eq!((result.passed, result.failed), (1, 0));
+    assert_eq!(result.differential, "equal");
+    let again =
+        crate::platform::normalized_lifecycle::prepare_repository(consumer.clone()).unwrap();
+    assert_eq!(
+        again.cache_profile,
+        crate::platform::normalized_lifecycle::LifecycleCacheProfile::ExactCurrent
+    );
+    assert_eq!(again.artifact_bytes, application.artifact_bytes);
+    assert_eq!(
+        std::fs::read(consumer.root().join("HEAD")).unwrap(),
+        consumer_head
+    );
+}

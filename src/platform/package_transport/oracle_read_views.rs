@@ -325,18 +325,17 @@ impl Interpretation<'_, '_> {
                         ));
                     }
                 }
-                if let TypeForm::AssociatedReadViewMember { contract, .. } = &object.form {
-                    if *contract != binder.declaration()
+                if let TypeForm::AssociatedReadViewMember { contract, .. } = &object.form
+                    && (*contract != binder.declaration()
                         || !matches!(
                             binder,
                             ReadScopeBinder::ContractMethod { .. }
                                 | ReadScopeBinder::AssociatedMember { .. }
-                        )
-                    {
-                        return Err(failure(
-                            "view oracle abstract member escaped its exact contract coordinate",
-                        ));
-                    }
+                        ))
+                {
+                    return Err(failure(
+                        "view oracle abstract member escaped its exact contract coordinate",
+                    ));
                 }
                 match &object.form {
                     TypeForm::ReadViewApplied {

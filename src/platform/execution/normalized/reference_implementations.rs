@@ -8,6 +8,13 @@ use crate::platform::semantic_id::ImplementationParameterId;
 
 use std::collections::BTreeSet;
 
+type ScopedMethodTarget = (
+    DeclarationReference,
+    Vec<TypeObjectDigest>,
+    Vec<AppliedReferenceImplementation>,
+    Vec<ReadScopeArgument>,
+);
+
 #[derive(Clone, Debug)]
 pub(super) struct AppliedReferenceImplementation {
     pub(super) canonical: Option<Arc<CanonicalSelection>>,
@@ -915,15 +922,7 @@ impl ReferenceState<'_> {
         contract: DeclarationReference,
         method: crate::platform::semantic_id::MethodId,
         scopes: &[ReadScopeArgument],
-    ) -> Result<
-        (
-            DeclarationReference,
-            Vec<TypeObjectDigest>,
-            Vec<AppliedReferenceImplementation>,
-            Vec<ReadScopeArgument>,
-        ),
-        ExecutionError,
-    > {
+    ) -> Result<ScopedMethodTarget, ExecutionError> {
         let scopes = self.resolve_read_scope_arguments(scopes)?;
         let selected = self.resolve_implementation(witness)?;
         let implementation = self.checked_implementation(&selected)?;
@@ -1054,13 +1053,16 @@ impl ReferenceState<'_> {
     pub(super) fn witness_call_scoped(
         &mut self,
         function: DeclarationReference,
-        types: &[TypeObjectDigest],
-        effects: &[EffectRow],
-        requirements: &[RequirementOperand],
-        operands: &[ImplementationOperand],
-        scopes: &[ReadScopeArgument],
+        application: ReferenceApplication<'_, ImplementationOperand>,
         arguments: Vec<CheckedValue>,
     ) -> Result<AdmittedGraphCall, ExecutionError> {
+        let ReferenceApplication {
+            types,
+            effects,
+            requirements,
+            implementations: operands,
+            scopes,
+        } = application;
         self.charge_allocation(
             (operands.len() * std::mem::size_of::<AppliedReferenceImplementation>()) as u64,
         )?;
@@ -1074,11 +1076,13 @@ impl ReferenceState<'_> {
         let scopes = self.resolve_read_scope_arguments(scopes)?;
         self.admit_resolved_witness_call_scoped(
             function,
-            &types,
-            &effects,
-            &requirements,
-            &selected,
-            &scopes,
+            ReferenceApplication {
+                types: &types,
+                effects: &effects,
+                requirements: &requirements,
+                implementations: &selected,
+                scopes: &scopes,
+            },
             arguments,
         )
     }
@@ -1095,11 +1099,13 @@ impl ReferenceState<'_> {
     ) -> Result<AdmittedGraphCall, ExecutionError> {
         self.admit_resolved_witness_call_scoped(
             function,
-            types,
-            effects,
-            requirements,
-            implementations,
-            &[],
+            ReferenceApplication {
+                types,
+                effects,
+                requirements,
+                implementations,
+                scopes: &[],
+            },
             arguments,
         )
     }
@@ -1107,11 +1113,7 @@ impl ReferenceState<'_> {
     pub(super) fn admit_resolved_witness_call_scoped(
         &mut self,
         function: DeclarationReference,
-        types: &[TypeObjectDigest],
-        effects: &[EffectRow],
-        requirements: &[RequirementOperand],
-        implementations: &[AppliedReferenceImplementation],
-        scopes: &[ReadScopeArgument],
+        application: ReferenceApplication<'_>,
         arguments: Vec<CheckedValue>,
     ) -> Result<AdmittedGraphCall, ExecutionError> {
         let DeclarationPayload::Function(declaration) = self.declaration(function)?.payload else {
@@ -1119,18 +1121,7 @@ impl ReferenceState<'_> {
                 "witness call requires a graph function",
             ));
         };
-        self.admit_graph_call_with_implementations(
-            function,
-            declaration,
-            arguments,
-            ReferenceApplication {
-                types,
-                effects,
-                requirements,
-                implementations,
-                scopes,
-            },
-        )
+        self.admit_graph_call_with_implementations(function, declaration, arguments, application)
     }
 
     pub(super) fn execute_witness_call(
@@ -1152,8 +1143,8 @@ impl ReferenceState<'_> {
         let mut step = self.enter_graph_call(target, false);
         let result = loop {
             match step {
-                Ok(ReferenceStep::Value(value)) => break Ok(value),
-                Ok(ReferenceStep::Tail(target)) => step = self.enter_graph_call(*target, true),
+                Ok(ReferenceStep::Break(value)) => break Ok(value),
+                Ok(ReferenceStep::Continue(target)) => step = self.enter_graph_call(*target, true),
                 Err(error) => break Err(error),
             }
         };

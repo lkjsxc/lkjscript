@@ -210,10 +210,10 @@ impl storage::ReadViewAdmission for Admission<'_> {
                         "view scope does not bind its exact selected source",
                     ));
                 }
-                if let Some(parent) = parent {
-                    if parent.source().program != source.program {
-                        return Err(type_error("view scope has unrelated source custody"));
-                    }
+                if let Some(parent) = parent
+                    && parent.source().program != source.program
+                {
+                    return Err(type_error("view scope has unrelated source custody"));
                 }
             }
             AdmissionRequest::Source {
@@ -531,10 +531,10 @@ fn visit_source_custody(
         visit(source)?;
         for scope in &frame.owned_loans {
             control.check()?;
-            if scope.binding_local == local {
-                if let Some(parent) = &scope.parent {
-                    visit(parent)?;
-                }
+            if scope.binding_local == local
+                && let Some(parent) = &scope.parent
+            {
+                visit(parent)?;
             }
         }
         // A real owning token already carries complete physical custody. Its

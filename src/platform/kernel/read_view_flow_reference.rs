@@ -7,6 +7,11 @@ use super::view_scopes::ReadPathStep;
 use super::*;
 use crate::platform::semantic_id::{BindingId, FieldId};
 
+struct ScopedBody {
+    binding: BindingId,
+    body: ExpressionId,
+}
+
 #[derive(Clone, Debug)]
 struct Value {
     ty: TypeObjectDigest,
@@ -683,10 +688,10 @@ impl Engine<'_, '_> {
             return Err(Failure::Authority);
         }
         for value in cell.fields.values().chain(cell.custody.iter()) {
-            if let Some(origin) = value.origin() {
-                if !origin.derives_from(selected) {
-                    return Err(Failure::Authority);
-                }
+            if let Some(origin) = value.origin()
+                && !origin.derives_from(selected)
+            {
+                return Err(Failure::Authority);
             }
             if let ValueKind::View { cell, .. } = value.kind {
                 self.validate_cell_lineage(state, cell, selected, depth + 1)?;
@@ -945,10 +950,10 @@ impl Engine<'_, '_> {
             &ReadScopeBinder::Declaration(function),
             self.occurrence(function, OwnerKey::Declaration(function.declaration)),
         )?;
-        if let ReadScopeArgument::Lexical { callable, binding } = scope {
-            if callable != function || !state.lexical.contains(&binding) {
-                return Err(Failure::Authority);
-            }
+        if let ReadScopeArgument::Lexical { callable, binding } = scope
+            && (callable != function || !state.lexical.contains(&binding))
+        {
+            return Err(Failure::Authority);
         }
         Ok(())
     }
@@ -1029,13 +1034,13 @@ impl Engine<'_, '_> {
     fn scoped(
         &mut self,
         function: DeclarationReference,
-        binding: BindingId,
-        body: ExpressionId,
+        scoped_body: ScopedBody,
         mut state: State,
         value: Value,
         demand: Demand,
         depth: usize,
     ) -> Result<Vec<Outcome>> {
+        let ScopedBody { binding, body } = scoped_body;
         self.install(&mut state, binding, value)?;
         self.resolver.reserve_entries(1)?;
         state.lexical.push(binding);
@@ -1398,7 +1403,14 @@ impl Engine<'_, '_> {
                 if b.declared_type != Some(value.ty) {
                     return Err(Failure::Category);
                 }
-                self.scoped(function, binding, body, state, value, demand, depth)
+                self.scoped(
+                    function,
+                    ScopedBody { binding, body },
+                    state,
+                    value,
+                    demand,
+                    depth,
+                )
             }
             E::ReadViewDataField { value, field } => {
                 let parent = self.local(function, &mut state, value, Demand::Borrow)?;
@@ -1435,8 +1447,14 @@ impl Engine<'_, '_> {
                 if b.declared_type != Some(value.ty) {
                     return Err(Failure::Category);
                 }
-                let mut outcomes =
-                    self.scoped(function, binding, body, state, value, demand, depth)?;
+                let mut outcomes = self.scoped(
+                    function,
+                    ScopedBody { binding, body },
+                    state,
+                    value,
+                    demand,
+                    depth,
+                )?;
                 for outcome in &mut outcomes {
                     outcome.state.release(self.resolver, parent.clone())?;
                 }
@@ -1472,7 +1490,12 @@ impl Engine<'_, '_> {
                         return Err(Failure::Category);
                     }
                     let results = self.scoped(
-                        function, binding, body, call.state, call.value, demand, depth,
+                        function,
+                        ScopedBody { binding, body },
+                        call.state,
+                        call.value,
+                        demand,
+                        depth,
                     )?;
                     self.resolver.reserve_entries(results.len())?;
                     outcomes.extend(results);
@@ -1584,8 +1607,10 @@ impl Engine<'_, '_> {
                         }
                         let mut results = self.scoped(
                             function,
-                            arm.binding,
-                            arm.body,
+                            ScopedBody {
+                                binding: arm.binding,
+                                body: arm.body,
+                            },
                             branch,
                             child,
                             demand,
@@ -1928,8 +1953,14 @@ impl Engine<'_, '_> {
             if b.declared_type != Some(child.ty) {
                 return Err(Failure::Category);
             }
-            let mut results =
-                self.scoped(function, binding, body, source.state, child, demand, depth)?;
+            let mut results = self.scoped(
+                function,
+                ScopedBody { binding, body },
+                source.state,
+                child,
+                demand,
+                depth,
+            )?;
             for result in &mut results {
                 result.state.release(self.resolver, source.value.clone())?;
             }
@@ -1977,7 +2008,7 @@ impl Engine<'_, '_> {
                     &environment.caller_binder,
                 )?,
             },
-            ref relation => relation.clone(),
+            relation => relation,
         };
         let ty = self
             .resolver
@@ -2964,14 +2995,13 @@ impl Engine<'_, '_> {
         if operation.is_read_view_operation() {
             return Err(Failure::Unproved);
         }
-        if let ExpressionOperation::Local { value } = operation {
-            if state
+        if let ExpressionOperation::Local { value } = operation
+            && state
                 .locals
                 .get(&value)
                 .is_some_and(|s| matches!(s.value.kind, ValueKind::View { .. }))
-            {
-                return Err(Failure::Category);
-            }
+        {
+            return Err(Failure::Category);
         }
         if matches!(
             operation,
@@ -3021,10 +3051,10 @@ impl Engine<'_, '_> {
         if let ExpressionOperation::Let { bindings, .. } = operation {
             for binding in bindings {
                 let b = self.binding(function, binding, BindingKind::Let, true)?;
-                if let Some(ty) = b.declared_type {
-                    if self.resolver.contains_read_view(ty)? {
-                        return Err(Failure::Category);
-                    }
+                if let Some(ty) = b.declared_type
+                    && self.resolver.contains_read_view(ty)?
+                {
+                    return Err(Failure::Category);
                 }
                 self.no_view_subtree(function, b.value.ok_or(Failure::Missing)?, state, depth + 1)?;
             }

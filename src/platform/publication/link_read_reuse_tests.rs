@@ -399,8 +399,7 @@ fn scoped_link_reads_preserve_rooted_representation_and_exact_dependency_authori
         wrong.semantic_revision = RevisionId::from_digest([0xdd; 32]);
         let error = view
             .read_representation_dependency(&wrong, f.dependency.package)
-            .err()
-            .expect("wrong retained root must refuse");
+            .expect_err("wrong retained root must refuse");
         assert_eq!(error.class, DiagnosticClass::Semantic);
         assert_eq!(error.code, "package_revision_dependency_binding");
         Ok(())
@@ -475,8 +474,7 @@ fn scoped_link_reads_keep_cumulative_limits_cancellation_and_cleanup() {
             wrong.package_revision = missing;
             let error = healthy
                 .package_interface_owner_from_dependency(&wrong, f.owner)
-                .err()
-                .expect("failed first miss");
+                .expect_err("failed first miss");
             assert!(
                 healthy
                     .link_transport_reuse

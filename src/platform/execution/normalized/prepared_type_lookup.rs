@@ -77,8 +77,10 @@ impl PreparedTypeLookup {
         declaration: crate::platform::kernel::DeclarationReference,
         template: TypeObjectDigest,
         bindings: &Bindings,
-        parameters: &[crate::platform::kernel::ReadScopeParameter],
-        arguments: &[ReadScopeArgument],
+        (parameters, arguments): (
+            &[crate::platform::kernel::ReadScopeParameter],
+            &[ReadScopeArgument],
+        ),
     ) -> Result<Option<TypeObjectDigest>, ()> {
         if self.origin != origin || function.1 != origin || parameters.len() != arguments.len() {
             return Err(());

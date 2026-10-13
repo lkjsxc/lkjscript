@@ -1626,7 +1626,7 @@ impl Resolver<'_, '_> {
         context: &Context,
     ) -> Result<()> {
         self.admit_effect(row, context)?;
-        self.admit_effect(&available, context)?;
+        self.admit_effect(available, context)?;
         for parameter in &row.parameters {
             self.budget.step(0)?;
             if available.parameters.binary_search(parameter).is_err() {
@@ -3272,30 +3272,30 @@ impl Resolver<'_, '_> {
                 }
             }
         }
-        if let Some(binder) = context.binder {
-            if let Some(sources) = self.proof.sources.get(&binder) {
-                for relationship in sources {
-                    let (ty, use_mode) = parameters
-                        .get(relationship.source as usize)
-                        .ok_or_else(|| invalid("scope source position absent"))?;
-                    let facts = self.facts(*ty, context, 0)?;
-                    if *use_mode != ParameterUse::Borrow
-                        || !matches!(
-                            facts.category,
-                            ValueCategory::Owned | ValueCategory::ReadView
-                        )
-                    {
-                        return Err(invalid(
-                            "scope relationship names an unborrowed or ordinary parameter",
-                        ));
-                    }
-                    if facts.category == ValueCategory::ReadView
-                        && self.view_scope(*ty)? != relationship.scope
-                    {
-                        return Err(invalid(
-                            "view parameter source inventory changes its carried scope",
-                        ));
-                    }
+        if let Some(binder) = context.binder
+            && let Some(sources) = self.proof.sources.get(&binder)
+        {
+            for relationship in sources {
+                let (ty, use_mode) = parameters
+                    .get(relationship.source as usize)
+                    .ok_or_else(|| invalid("scope source position absent"))?;
+                let facts = self.facts(*ty, context, 0)?;
+                if *use_mode != ParameterUse::Borrow
+                    || !matches!(
+                        facts.category,
+                        ValueCategory::Owned | ValueCategory::ReadView
+                    )
+                {
+                    return Err(invalid(
+                        "scope relationship names an unborrowed or ordinary parameter",
+                    ));
+                }
+                if facts.category == ValueCategory::ReadView
+                    && self.view_scope(*ty)? != relationship.scope
+                {
+                    return Err(invalid(
+                        "view parameter source inventory changes its carried scope",
+                    ));
                 }
             }
         }
@@ -3594,10 +3594,10 @@ impl Resolver<'_, '_> {
                     let ty = self.intern(form)?;
                     self.facts(ty, &context, 0)?;
                 }
-                DeclarationPayload::Constant { ty, .. } => {
-                    if self.facts(ty, &context, 0)?.category == ValueCategory::ReadView {
-                        return Err(invalid("constant stores a view"));
-                    }
+                DeclarationPayload::Constant { ty, .. }
+                    if self.facts(ty, &context, 0)?.category == ValueCategory::ReadView =>
+                {
+                    return Err(invalid("constant stores a view"));
                 }
                 _ => {}
             }
@@ -3671,14 +3671,13 @@ impl Resolver<'_, '_> {
                             "unused case is missing from its complete declaration inventory",
                         ));
                     }
-                    if let Some(ty) = case.payload {
-                        if self
+                    if let Some(ty) = case.payload
+                        && self
                             .facts(ty, &Context::declaration(reference), 0)?
                             .category
                             == ValueCategory::ReadView
-                        {
-                            return Err(invalid("unused ordinary case payload contains a view"));
-                        }
+                    {
+                        return Err(invalid("unused ordinary case payload contains a view"));
                     }
                 }
                 OwnerRecord::Parameter(parameter) => {
@@ -3743,19 +3742,18 @@ impl Resolver<'_, '_> {
                         declaration: port.declaration,
                     });
                     self.facts(port.function_type, &context, 0)?;
-                    if let kernel::PortImplementation::Function(function) = port.implementation {
-                        if let DeclarationPayload::Function(function) =
+                    if let kernel::PortImplementation::Function(function) = port.implementation
+                        && let DeclarationPayload::Function(function) =
                             self.declaration(function)?.payload
-                        {
-                            if function.result.relation != ResultRelation::Value {
-                                return Err(invalid(
-                                    "component entrypoint names a borrowed-result function",
-                                ));
-                            }
-                            if function.parameters.iter().any(|parameter| matches!(self.proof.owners.get(&(package, OwnerKey::Parameter(*parameter))), Some(OwnerRecord::Parameter(p)) if self.proof.types.get(&p.ty).is_some_and(|t| t.form.is_read_view()))) {
+                    {
+                        if function.result.relation != ResultRelation::Value {
+                            return Err(invalid(
+                                "component entrypoint names a borrowed-result function",
+                            ));
+                        }
+                        if function.parameters.iter().any(|parameter| matches!(self.proof.owners.get(&(package, OwnerKey::Parameter(*parameter))), Some(OwnerRecord::Parameter(p)) if self.proof.types.get(&p.ty).is_some_and(|t| t.form.is_read_view()))) {
                                 return Err(invalid("component entrypoint accepts a view"));
                             }
-                        }
                     }
                 }
                 _ => {}
@@ -4742,10 +4740,11 @@ impl Resolver<'_, '_> {
         if local.scopes.contains(&scope) {
             return Ok(());
         }
-        if let ReadScopeArgument::Lexical { callable, binding } = scope {
-            if context.owner == Some(callable) && context.lexical.contains(&binding) {
-                return Ok(());
-            }
+        if let ReadScopeArgument::Lexical { callable, binding } = scope
+            && context.owner == Some(callable)
+            && context.lexical.contains(&binding)
+        {
+            return Ok(());
         }
         Err(invalid(
             "source scope is widened or assigned to an unrelated parameter/local owner",
@@ -5469,12 +5468,12 @@ impl Resolver<'_, '_> {
                 }
             }
             ExpressionOperation::SequencePop { result_type, .. }
-            | ExpressionOperation::SequenceReplace { result_type, .. } => {
-                if self.facts(*result_type, context, 0)?.category != ValueCategory::Owned {
-                    return Err(invalid(
-                        "Owned sequence result contract contains an ordinary/view occurrence",
-                    ));
-                }
+            | ExpressionOperation::SequenceReplace { result_type, .. }
+                if self.facts(*result_type, context, 0)?.category != ValueCategory::Owned =>
+            {
+                return Err(invalid(
+                    "Owned sequence result contract contains an ordinary/view occurrence",
+                ));
             }
             _ => {}
         }

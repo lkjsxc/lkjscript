@@ -1739,7 +1739,11 @@ fn grow_reserved<T>(
             values.append(&mut replacement);
             return Err(error);
         }
-        replacement.push(values.pop().expect("nonempty source vector"));
+        // The same exclusively borrowed vector was just checked nonempty; keep
+        // cancellation admission before taking its next element.
+        if let Some(value) = values.pop() {
+            replacement.push(value);
+        }
     }
     replacement.reverse();
     *values = replacement;

@@ -2689,7 +2689,6 @@ fn trace_object_closure(
         // A current package envelope/compiler may retain older accepted meaning.
         // Only the embedded semantic revision owns that meaning's generation.
         let source_generation = revision.revision.graph_contract_version;
-        source_generations.insert(package.package, source_generation);
         let interface = validate_package_interface(
             package.package,
             package.interface_owners,
@@ -2749,6 +2748,10 @@ fn trace_object_closure(
                 "logical package revision, deterministic interface, and compilation do not bind one package meaning",
             ));
         }
+        source_generations.insert(
+            package.package,
+            (source_generation, compilation.graph_contract_version),
+        );
         let reader = ObjectPageReader::new(&store);
         let mut map_work = MapWork::default();
         let mut captured = None;
@@ -2867,6 +2870,65 @@ fn trace_object_closure(
     }
     let relocations = validate_unit_relocations(&units)?;
 
+    // These records have already been selected by exact source-owner commitments.
+    // A binding annotation need not be an instruction relocation in a cached unit.
+    for ((package, _), record) in &reference_owners {
+        work.implementation_inventory_steps = work.implementation_inventory_steps
+            .checked_add(1)
+            .filter(|steps| *steps <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK as u64)
+            .ok_or_else(|| artifact_error(
+                DiagnosticClass::Resource,
+                "artifact_reference_type_work",
+                "canonical binding type inventory exceeds the existing artifact proof allowance",
+            ))?;
+        let OwnerRecord::Binding(binding) = record else {
+            continue;
+        };
+        let Some(ty) = binding.declared_type else {
+            continue;
+        };
+        // Precharge the generation lookup and all possible root-set insertions.
+        work.implementation_inventory_steps = work
+            .implementation_inventory_steps
+            .checked_add(7)
+            .filter(|steps| {
+                *steps <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK as u64
+            })
+            .ok_or_else(|| {
+                artifact_error(
+                    DiagnosticClass::Resource,
+                    "artifact_reference_type_work",
+                    "canonical binding type roots exceed the existing artifact proof allowance",
+                )
+            })?;
+        let (source_generation, compilation_generation) =
+            source_generations.get(package).ok_or_else(|| {
+                artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_package_revision_binding",
+                    "canonical artifact binding has no containing logical source",
+                )
+            })?;
+        let generation = (*source_generation)
+            .min(*compilation_generation)
+            .min(binding.header.contract_version);
+        type_roots.insert(ty);
+        if generation < 34 {
+            preview_type_roots.insert(ty);
+        }
+        if generation < 25 {
+            presequence_type_roots.insert(ty);
+        }
+        if generation < 20 {
+            prechoice_type_roots.insert(ty);
+        }
+        if generation < 19 {
+            preproduct_type_roots.insert(ty);
+        }
+        if generation < 17 {
+            predecessor_type_roots.insert(ty);
+        }
+    }
     let mut types = BTreeMap::new();
     while let Some(digest) = type_roots.pop_first() {
         if types.contains_key(&digest) {
@@ -2949,7 +3011,7 @@ fn trace_object_closure(
     validate_product_generation_closure(prechoice_type_roots, &types, 19)?;
     validate_sequence_generation_closure(presequence_type_roots, &types)?;
     for ((package, _), record) in reference_owners.iter().chain(runtime_owners.iter()) {
-        let source_generation = source_generations.get(package).ok_or_else(|| {
+        let (source_generation, _) = source_generations.get(package).ok_or_else(|| {
             artifact_error(
                 DiagnosticClass::Corrupt,
                 "artifact_package_revision_binding",

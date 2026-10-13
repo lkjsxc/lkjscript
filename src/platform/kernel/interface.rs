@@ -205,7 +205,7 @@ impl PackageInterfaceDeclaration {
                     effect_parameters: function.effect_parameters.clone(),
                     type_parameters: function.type_parameters.clone(),
                     parameters: function.parameters.clone(),
-                    result: function.result.clone(),
+                    result: function.result,
                     read_scope_parameters: function.read_scope_parameters.clone(),
                     read_scope_sources: function.read_scope_sources.clone(),
                     effect: function.effect.clone(),

@@ -1080,13 +1080,13 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                     {
                         return Err(associated::invalid());
                     }
-                    if let Some(ty) = case.payload {
-                        if self.type_contains_view(owner.package, ty)? {
-                            return Err(semantic(
-                                "kernel_callable_flow_category",
-                                "ordinary variant cases cannot contain a ReadView",
-                            ));
-                        }
+                    if let Some(ty) = case.payload
+                        && self.type_contains_view(owner.package, ty)?
+                    {
+                        return Err(semantic(
+                            "kernel_callable_flow_category",
+                            "ordinary variant cases cannot contain a ReadView",
+                        ));
                     }
                 }
             }
@@ -2019,18 +2019,17 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                         .read
                         .type_object(owner.package, method.result.ty)?
                         .ok_or_else(associated::invalid)?;
-                    if let Some(source) = method.result.relation.source() {
-                        if method.effect != crate::platform::kernel::FunctionEffect::Pure
+                    if let Some(source) = method.result.relation.source()
+                        && (method.effect != crate::platform::kernel::FunctionEffect::Pure
                             || method
                                 .parameters
                                 .get(*source as usize)
                                 .is_none_or(|parameter| {
                                     parameter.use_mode
                                         != crate::platform::kernel::ParameterUse::Borrow
-                                })
-                        {
-                            return Err(associated::invalid());
-                        }
+                                }))
+                    {
+                        return Err(associated::invalid());
                     }
                     if let ResultRelation::ViewFrom { scope, .. } = method.result.relation {
                         match result.form {
@@ -2369,13 +2368,13 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                         self.signature_type(source, ty, source_binder, true, &initializer_loans)?;
                         self.reserve::<BindingId>(1)?;
                         completed.insert(*binding);
-                    } else if let Some(ty) = binding_record.declared_type {
-                        if self.type_contains_view(info.key.owner.package, ty)? {
-                            return Err(semantic(
-                                "kernel_callable_flow_category",
-                                "ordinary let annotations cannot hide a ReadView",
-                            ));
-                        }
+                    } else if let Some(ty) = binding_record.declared_type
+                        && self.type_contains_view(info.key.owner.package, ty)?
+                    {
+                        return Err(semantic(
+                            "kernel_callable_flow_category",
+                            "ordinary let annotations cannot hide a ReadView",
+                        ));
                     }
                     // Only a prospective source scope is available during initialization.
                     // This walk grants no readable local value before initializer completion.

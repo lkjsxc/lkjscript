@@ -393,6 +393,8 @@ pub(super) fn link_prepared(
         &runtime_records,
         &mut objects,
         &mut work,
+        &mut types,
+        &mut type_reconstruction_work,
     )?;
 
     let mut resolved_types = BTreeSet::new();
@@ -485,6 +487,8 @@ fn build_reference_owner_map(
     runtime_owners: &BTreeMap<OwnerKey, OwnerRecord>,
     objects: &mut BTreeMap<ObjectKey, Vec<u8>>,
     work: &mut ArtifactLinkWork,
+    types: &mut BTreeSet<TypeObjectDigest>,
+    type_reconstruction_work: &mut usize,
 ) -> Result<crate::platform::persistent_map::MapRoot, Diagnostic> {
     let package = view.package_id();
     let mut pending = BTreeSet::new();
@@ -563,7 +567,20 @@ fn build_reference_owner_map(
                     }
                 }
             }
-            OwnerRecord::Binding(_) => {
+            OwnerRecord::Binding(binding) => {
+                if let Some(ty) = binding.declared_type {
+                    // Canonical local annotations can be absent from unchanged unit tables.
+                    // Retain their exact objects for the standalone category/flow proofs.
+                    view.validation_checkpoint()?;
+                    *type_reconstruction_work = type_reconstruction_work
+                        .checked_sub(1)
+                        .ok_or_else(|| link_error(
+                            DiagnosticClass::Resource,
+                            "artifact_link_reference_type_work",
+                            "canonical binding type roots exceed the existing reconstruction allowance",
+                        ))?;
+                    types.insert(ty);
+                }
                 pending.extend(
                     record
                         .expression_roots()

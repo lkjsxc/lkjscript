@@ -1593,30 +1593,34 @@ fn canonical_borrowed_declarations_preserve_model_and_scope_with_less_work() {
     for expanding in [false, true] {
         let mut fixture = recurrence(expanding, false, false);
         let mut borrowed_work = 0;
-        let borrowed_budget =
-            model::Budget::new(&checkpoint, &mut borrowed_work, maximum_work, maximum_bytes);
-        let borrowed = CanonicalProgram::read_with_budget(
-            &[&fixture.source],
-            std::slice::from_ref(&fixture.entry),
-            &borrowed_budget,
-        )
-        .expect("complete borrowed translation");
-        let borrowed_bytes = borrowed_budget.bytes();
-        drop(borrowed_budget);
+        let (borrowed, borrowed_bytes) = {
+            let borrowed_budget =
+                model::Budget::new(&checkpoint, &mut borrowed_work, maximum_work, maximum_bytes);
+            let borrowed = CanonicalProgram::read_with_budget(
+                &[&fixture.source],
+                std::slice::from_ref(&fixture.entry),
+                &borrowed_budget,
+            )
+            .expect("complete borrowed translation");
+            let borrowed_bytes = borrowed_budget.bytes();
+            (borrowed, borrowed_bytes)
+        };
         let mut copied_work = 0;
-        let copied_budget =
-            model::Budget::new(&checkpoint, &mut copied_work, maximum_work, maximum_bytes);
-        // This comparison really serializes and clones declarations, type
-        // objects and other raw owners at their lookup sites. It isolates those
-        // avoided copies, rather than reconstructing every old allocation.
-        let copied = CanonicalProgram::read_with_raw_copies(
-            &[&fixture.source],
-            std::slice::from_ref(&fixture.entry),
-            &copied_budget,
-        )
-        .expect("same input and allowance with real raw record copies");
-        let copied_bytes = copied_budget.bytes();
-        drop(copied_budget);
+        let (copied, copied_bytes) = {
+            let copied_budget =
+                model::Budget::new(&checkpoint, &mut copied_work, maximum_work, maximum_bytes);
+            // This comparison really serializes and clones declarations, type
+            // objects and other raw owners at their lookup sites. It isolates those
+            // avoided copies, rather than reconstructing every old allocation.
+            let copied = CanonicalProgram::read_with_raw_copies(
+                &[&fixture.source],
+                std::slice::from_ref(&fixture.entry),
+                &copied_budget,
+            )
+            .expect("same input and allowance with real raw record copies");
+            let copied_bytes = copied_budget.bytes();
+            (copied, copied_bytes)
+        };
         assert_eq!(
             format!("{:?}", borrowed.program),
             format!("{:?}", copied.program)

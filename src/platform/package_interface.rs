@@ -3139,14 +3139,14 @@ impl<'v> AssociatedInterfaceAdmission<'v> {
                 }
             }
             found |= entry.id == member
-                && match (&entry.bound, read_scope) {
-                    (crate::platform::kernel::AssociatedTypeBound::Owned, None) => true,
-                    (
-                        crate::platform::kernel::AssociatedTypeBound::ReadViewFamily { .. },
-                        Some(_),
-                    ) => true,
-                    _ => false,
-                };
+                && matches!(
+                    (&entry.bound, read_scope),
+                    (crate::platform::kernel::AssociatedTypeBound::Owned, None)
+                        | (
+                            crate::platform::kernel::AssociatedTypeBound::ReadViewFamily { .. },
+                            Some(_),
+                        )
+                );
         }
         if !found {
             return Err(associated_interface_error(

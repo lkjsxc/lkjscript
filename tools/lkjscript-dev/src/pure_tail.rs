@@ -82,6 +82,39 @@ fn mapping_collection_items(n: u64) -> u64 {
     n + 2 + 2 + 2 + 1 + 2 + 2 + slots
 }
 
+// The reference scope frame independently retains two collections per admitted
+// graph call: current ParameterRecord scratch and ordered ParameterId coordinates.
+// The authored map calls map(3), configure(2), list-map(2), fold-left(3), and
+// the initial fold-loop(5) once. Each item adds fold-loop(5), map-step(3),
+// configure-helper(3), and configured-map-step(2). External intrinsics do not
+// enter a graph scope frame. These metadata slots are separate from the unchanged
+// language list/capture model above; they are not inferred from observed counters.
+fn mapping_reference_scope_items(n: u64) -> u64 {
+    let fixed_parameter_slots = 3 + 2 + 2 + 3 + 5;
+    let per_item_parameter_slots = 5 + 3 + 3 + 2;
+    2 * (fixed_parameter_slots + n * per_item_parameter_slots)
+}
+
+fn verify_mapping_collection_items(
+    outcome: &serde_json::Value,
+    tier: &str,
+    n: u64,
+) -> Result<(), DevError> {
+    let language = mapping_collection_items(n);
+    let expected = match tier {
+        "production" => language,
+        "reference" => language + mapping_reference_scope_items(n),
+        _ => return Err(DevError::corrupt("unknown mapping evaluator tier")),
+    };
+    let actual = &outcome[format!("{tier}_collection_items")];
+    require(
+        *actual == expected,
+        &format!(
+            "mapping {tier} ledger differs from independently calculated list, capture and scope-frame slots: items={n} expected={expected} actual={actual}"
+        ),
+    )
+}
+
 impl ValueWork {
     fn visits(&self) -> Result<u64, DevError> {
         self.input_admission_nodes
@@ -1083,11 +1116,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
             for tier in ["production", "reference"] {
                 let work: ValueWork =
                     serde_json::from_value(outcome[format!("{tier}_value_work")].clone())?;
-                require(
-                    outcome[format!("{tier}_collection_items")]
-                        == mapping_collection_items(n as u64),
-                    "mapping ledger omitted an independently calculated list or capture slot charge",
-                )?;
+                verify_mapping_collection_items(outcome, tier, n as u64)?;
                 require(
                     work.internal_guard_descendant_visits == 0
                         && work.lists.full_materializations == 0
@@ -2319,10 +2348,7 @@ pub(crate) fn read_transferred_receipt(
             for tier in ["production", "reference"] {
                 let work: ValueWork =
                     serde_json::from_value(outcome[format!("{tier}_value_work")].clone())?;
-                require(
-                    outcome[format!("{tier}_collection_items")] == mapping_collection_items(n),
-                    "transferred list ledger differs from the independent charge schedule",
-                )?;
+                verify_mapping_collection_items(outcome, tier, n)?;
                 require(
                     work.internal_guard_descendant_visits == 0
                         && work.lists.full_materializations == 0
@@ -2688,6 +2714,42 @@ pub(crate) fn encode_transferred_test_fixture(
 #[cfg(test)]
 mod checked_value_tests {
     use super::*;
+
+    #[test]
+    fn mapping_ledger_requires_each_tiers_exact_list_capture_and_scope_slots() {
+        // Literal independent fixed-fanout and graph-arity boundaries. In
+        // particular, the first branch reservation occurs at append 65.
+        for (n, production, reference) in [
+            (0, 11, 41),
+            (1, 44, 100),
+            (32, 1067, 1929),
+            (33, 1100, 1988),
+            (64, 2123, 3817),
+            (65, 2188, 3908),
+            (256, 8651, 15337),
+        ] {
+            let healthy = serde_json::json!({
+                "production_collection_items": production,
+                "reference_collection_items": reference,
+            });
+            assert!(verify_mapping_collection_items(&healthy, "production", n).is_ok());
+            assert!(verify_mapping_collection_items(&healthy, "reference", n).is_ok());
+            for (tier, exact) in [("production", production), ("reference", reference)] {
+                for difference in [-1, 1] {
+                    let mut altered = healthy.clone();
+                    altered[format!("{tier}_collection_items")] =
+                        serde_json::json!(exact + difference);
+                    assert!(verify_mapping_collection_items(&altered, tier, n).is_err());
+                }
+                let missing = serde_json::json!({});
+                assert!(verify_mapping_collection_items(&missing, tier, n).is_err());
+            }
+            let mut omitted_scope = healthy;
+            omitted_scope["reference_collection_items"] = serde_json::json!(production);
+            assert!(verify_mapping_collection_items(&omitted_scope, "reference", n).is_err());
+            assert!(verify_mapping_collection_items(&omitted_scope, "other", n).is_err());
+        }
+    }
     #[test]
     fn cost_oracle_rejects_restored_guards_and_equivalent_raw_result_readmission() {
         let mut matrix = Vec::new();
