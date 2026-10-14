@@ -323,7 +323,7 @@ impl ReferenceState<'_> {
         &mut self,
         declaration: DeclarationReference,
         function: &mut FunctionDeclaration,
-        parameters: &[ParameterRecord],
+        parameters: &[GraphCallParameter],
         actuals: &[ReadScopeArgument],
         arguments: &mut [CheckedValue],
     ) -> Result<ScopeFrame, ExecutionError> {

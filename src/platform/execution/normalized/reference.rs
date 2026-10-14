@@ -288,6 +288,49 @@ impl NormalizedValueSchema for BoundReferenceSchema {
     }
 }
 
+// Runtime graph calls do not retain discovery names. Every semantic field is
+// copied from the same fresh canonical owner read and checked at its old phase.
+#[derive(Clone, Debug)]
+struct GraphCallParameter {
+    header: crate::platform::kernel::OwnerHeader,
+    parent: crate::platform::kernel::ParameterParent,
+    ty: TypeObjectDigest,
+    use_mode: ParameterUse,
+    resource_requirement: Option<RequirementReference>,
+}
+
+// Borrow only the resource contract fields of either invocation storage or a
+// complete external signature. This view allocates no projected vector.
+trait CallParameterResources {
+    fn ty(&self) -> TypeObjectDigest;
+    fn use_mode(&self) -> ParameterUse;
+    fn resource_requirement(&self) -> Option<RequirementReference>;
+}
+
+impl CallParameterResources for GraphCallParameter {
+    fn ty(&self) -> TypeObjectDigest {
+        self.ty
+    }
+    fn use_mode(&self) -> ParameterUse {
+        self.use_mode
+    }
+    fn resource_requirement(&self) -> Option<RequirementReference> {
+        self.resource_requirement
+    }
+}
+
+impl CallParameterResources for ParameterRecord {
+    fn ty(&self) -> TypeObjectDigest {
+        self.ty
+    }
+    fn use_mode(&self) -> ParameterUse {
+        self.use_mode
+    }
+    fn resource_requirement(&self) -> Option<RequirementReference> {
+        self.resource_requirement
+    }
+}
+
 pub struct ReferenceSignature {
     has_implementations: bool,
     requirement_parameters: Vec<crate::platform::semantic_id::RequirementParameterId>,
@@ -2362,13 +2405,10 @@ impl ReferenceState<'_> {
             },
             route,
         )?;
-        // Reserve the one real parameter-record vector before reading it. The
-        // scope frame borrows these same already-admitted records below.
-        self.charge_items(
-            function.parameters.len(),
-            std::mem::size_of::<ParameterRecord>(),
-        )?;
-        let mut parameters = self.parameters(declaration.package, &function.parameters)?;
+        // Construct only the compact, precharged graph-call vector. Scope
+        // admission borrows these same current-reader semantic records below.
+        let mut parameters =
+            self.graph_call_parameters(declaration.package, &function.parameters)?;
         if let Some(application) = &associated {
             let proof =
                 self.schema.associated_proof().cloned().ok_or_else(|| {
@@ -2772,7 +2812,7 @@ impl ReferenceState<'_> {
 
     fn validate_call_resources(
         &mut self,
-        parameters: &[ParameterRecord],
+        parameters: &[impl CallParameterResources],
         substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
         arguments: &[CheckedValue],
         _pure: bool,
@@ -2780,7 +2820,7 @@ impl ReferenceState<'_> {
         let mut resource_seen = false;
         for (index, (parameter, argument)) in parameters.iter().zip(arguments).enumerate() {
             if let Some(proof) = &self.schema.read_view_proof
-                && proof.prepared_category(parameter.ty)?
+                && proof.prepared_category(parameter.ty())?
                     == crate::platform::kernel::ValueCategory::ReadView
             {
                 let NormalizedValue::ReadView(view) = argument.raw() else {
@@ -2789,13 +2829,14 @@ impl ReferenceState<'_> {
                     ));
                 };
                 if resource_seen
-                    || parameter.resource_requirement.is_some()
-                    || parameter.use_mode == ParameterUse::Unrestricted
+                    || parameter.resource_requirement().is_some()
+                    || parameter.use_mode() == ParameterUse::Unrestricted
                     || argument.ownership(&self.schema, &mut self.observation.value_work)?
                         != Ownership::ReadView
                     || view.identity().program != self.schema.value_origin
-                    || view.identity().ty != parameter.ty
-                    || (parameter.use_mode == ParameterUse::Consume && argument.is_view_borrowed())
+                    || view.identity().ty != parameter.ty()
+                    || (parameter.use_mode() == ParameterUse::Consume
+                        && argument.is_view_borrowed())
                 {
                     return Err(reference_type_error(
                         "view argument differs from its complete exact affine signature",
@@ -2805,11 +2846,11 @@ impl ReferenceState<'_> {
                 continue;
             }
             let memory_form =
-                direct_memory_type(&self.schema, parameter.ty, substitutions, self.control)?;
+                direct_memory_type(&self.schema, parameter.ty(), substitutions, self.control)?;
             if memory_form.is_some() {
                 if resource_seen
-                    || parameter.resource_requirement.is_some()
-                    || parameter.use_mode == ParameterUse::Unrestricted
+                    || parameter.resource_requirement().is_some()
+                    || parameter.use_mode() == ParameterUse::Unrestricted
                     || argument.ownership(&self.schema, &mut self.observation.value_work)?
                         != Ownership::Memory
                 {
@@ -2820,19 +2861,19 @@ impl ReferenceState<'_> {
                 }
                 argument.raw().memory_validate(
                     self.memory_domain,
-                    parameter.use_mode == ParameterUse::Consume,
+                    parameter.use_mode() == ParameterUse::Consume,
                 )?;
-                if (parameter.use_mode == ParameterUse::Borrow)
+                if (parameter.use_mode() == ParameterUse::Borrow)
                     != argument.raw().memory_is_borrowed()
                 {
                     return Err(reference_type_error("memory argument loan mode mismatch"));
                 }
                 continue;
             }
-            match parameter.resource_requirement {
+            match parameter.resource_requirement() {
                 Some(requirement) => {
                     resource_seen = true;
-                    if parameter.use_mode == ParameterUse::Unrestricted
+                    if parameter.use_mode() == ParameterUse::Unrestricted
                         || argument.ownership(&self.schema, &mut self.observation.value_work)?
                             != Ownership::Capability
                     {
@@ -2850,8 +2891,8 @@ impl ReferenceState<'_> {
                     for (prior, value) in parameters[..index].iter().zip(&arguments[..index]) {
                         if let NormalizedValue::Resource(other) = value.raw()
                             && handle.borrow() == other.borrow()
-                            && (parameter.use_mode == ParameterUse::Consume
-                                || prior.use_mode == ParameterUse::Consume)
+                            && (parameter.use_mode() == ParameterUse::Consume
+                                || prior.use_mode() == ParameterUse::Consume)
                         {
                             return Err(reference_error(
                                 "normalized_reference_resource_call_alias",
@@ -2869,7 +2910,7 @@ impl ReferenceState<'_> {
                             "resource parameter requirement is absent from canonical authority",
                         ));
                     };
-                    match parameter.use_mode {
+                    match parameter.use_mode() {
                         ParameterUse::Borrow => {
                             if !handle.is_borrowed() {
                                 return Err(reference_error(
@@ -2892,7 +2933,7 @@ impl ReferenceState<'_> {
                 }
                 None => {
                     if resource_seen
-                        || parameter.use_mode != ParameterUse::Unrestricted
+                        || parameter.use_mode() != ParameterUse::Unrestricted
                         || argument.ownership(&self.schema, &mut self.observation.value_work)?
                             != Ownership::Ordinary
                     {
@@ -4785,6 +4826,36 @@ impl ReferenceState<'_> {
                 }
             })
             .collect()
+    }
+
+    fn graph_call_parameters(
+        &mut self,
+        package: PackageId,
+        parameters: &[ParameterId],
+    ) -> Result<Vec<GraphCallParameter>, ExecutionError> {
+        self.control.check()?;
+        self.charge_items(parameters.len(), std::mem::size_of::<GraphCallParameter>())?;
+        let mut records = Vec::with_capacity(parameters.len());
+        for parameter in parameters {
+            self.control.check()?;
+            let record = match self.owner_in_package(package, OwnerKey::Parameter(*parameter))? {
+                Some(OwnerRecord::Parameter(record)) => record,
+                _ => {
+                    return Err(reference_error(
+                        "normalized_reference_parameter_missing",
+                        "exact parameter is absent from canonical authority",
+                    ));
+                }
+            };
+            records.push(GraphCallParameter {
+                header: record.header,
+                parent: record.parent,
+                ty: record.ty,
+                use_mode: record.use_mode,
+                resource_requirement: record.resource_requirement,
+            });
+        }
+        Ok(records)
     }
 
     fn parameters(

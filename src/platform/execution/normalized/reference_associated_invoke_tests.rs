@@ -863,6 +863,17 @@ fn reference_associated_invocation_seals_bind_route_scope_proof_and_retention_bu
 fn reference_scope_frames_reuse_one_admitted_parameter_inventory_without_weakening_guards() {
     use std::cell::Cell;
 
+    let full = std::mem::size_of::<ParameterRecord>();
+    let compact = std::mem::size_of::<GraphCallParameter>();
+    println!(
+        "graph parameter storage full={} compact={} name={} delta={}",
+        full,
+        compact,
+        std::mem::size_of::<Name>(),
+        full.saturating_sub(compact),
+    );
+    assert!(compact < full);
+
     struct CountingRead<'a> {
         inner: FaultedReferenceRead<'a>,
         parameters: Cell<usize>,
@@ -886,7 +897,11 @@ fn reference_scope_frames_reuse_one_admitted_parameter_inventory_without_weakeni
         crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
         crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
     ] {
-        let case = fixture_at_generation(false, generation);
+        let mut case = fixture_at_generation(false, generation);
+        let external = add_external_target(&mut case);
+        for owner in case.fixture.source.owners.values_mut() {
+            owner.set_encoding_for_edit(generation);
+        }
         let schema = schema(&case);
         let reader = CountingRead {
             inner: FaultedReferenceRead {
@@ -911,11 +926,57 @@ fn reference_scope_frames_reuse_one_admitted_parameter_inventory_without_weakeni
                 assert!(count > 0);
                 assert!(function_template.read_scope_parameters.is_empty());
                 assert!(function_template.read_scope_sources.is_empty());
-                state.charge_items(count, std::mem::size_of::<ParameterRecord>())?;
+                // Full external signatures retain fresh canonical names.
+                let signature = state.function_signature(external)?;
+                let OwnerRecord::Declaration(external_owner) =
+                    &case.fixture.source.owners[&OwnerKey::Declaration(external.declaration)]
+                else {
+                    unreachable!()
+                };
+                let DeclarationPayload::External(external_record) = &external_owner.payload else {
+                    unreachable!()
+                };
+                assert_eq!(signature.parameters.len(), external_record.parameters.len());
+                for (record, id) in signature.parameters.iter().zip(&external_record.parameters) {
+                    let OwnerRecord::Parameter(canonical) =
+                        &case.fixture.source.owners[&OwnerKey::Parameter(*id)]
+                    else {
+                        unreachable!()
+                    };
+                    assert_eq!(record, canonical);
+                    assert!(!record.name.as_str().is_empty());
+                }
                 reader.parameters.set(0);
-                let mut parameters =
-                    state.parameters(case.target.package, &function_template.parameters)?;
+                let before = state.observation.allocated_bytes;
+                let before_items = state.observation.collection_items;
+                let original_limit = state.policy.maximum_allocated_bytes;
+                let cost = (count * compact) as u64;
+                state.policy.maximum_allocated_bytes = Some(before + cost);
+                let mut parameters = state
+                    .graph_call_parameters(case.target.package, &function_template.parameters)?;
+                assert_eq!(parameters.capacity(), count);
+                assert_eq!(state.observation.allocated_bytes - before, cost);
+                assert_eq!(
+                    state.observation.collection_items - before_items,
+                    count as u64
+                );
+                state.policy.maximum_allocated_bytes = original_limit;
                 assert_eq!(reader.parameters.get(), count);
+                for (parameter, id) in parameters.iter().zip(&function_template.parameters) {
+                    let OwnerRecord::Parameter(canonical) =
+                        &case.fixture.source.owners[&OwnerKey::Parameter(*id)]
+                    else {
+                        unreachable!()
+                    };
+                    assert_eq!(parameter.header, canonical.header);
+                    assert_eq!(parameter.parent, canonical.parent);
+                    assert_eq!(parameter.ty, canonical.ty);
+                    assert_eq!(parameter.use_mode, canonical.use_mode);
+                    assert_eq!(
+                        parameter.resource_requirement,
+                        canonical.resource_requirement
+                    );
+                }
                 // Canonical application closes .ty before frame admission. The
                 // frame uses the exact raw header/parent/use/source fields only.
                 let i64_type = state
@@ -1174,13 +1235,10 @@ fn reference_scope_frames_reuse_one_admitted_parameter_inventory_without_weakeni
                 // refusal cannot hide a first vector allocation or second read.
                 let old_policy = state.policy.maximum_allocated_bytes;
                 let before_bytes = state.observation.allocated_bytes;
-                let cost = (count * std::mem::size_of::<ParameterRecord>()) as u64;
+                let cost = (count * compact) as u64;
                 state.policy.maximum_allocated_bytes = Some(before_bytes + cost - 1);
                 let error = state
-                    .charge_items(count, std::mem::size_of::<ParameterRecord>())
-                    .and_then(|_| {
-                        state.parameters(case.target.package, &function_template.parameters)
-                    })
+                    .graph_call_parameters(case.target.package, &function_template.parameters)
                     .unwrap_err();
                 assert_eq!(error.class, ExecutionFailureClass::Resource);
                 assert_eq!(error.code, "normalized_reference_allocation");
@@ -1211,12 +1269,8 @@ fn reference_scope_frames_reuse_one_admitted_parameter_inventory_without_weakeni
                 let DeclarationPayload::Function(function_template) = record.payload else {
                     unreachable!()
                 };
-                state.charge_items(
-                    function_template.parameters.len(),
-                    std::mem::size_of::<ParameterRecord>(),
-                )?;
-                let parameters =
-                    state.parameters(case.target.package, &function_template.parameters)?;
+                let parameters = state
+                    .graph_call_parameters(case.target.package, &function_template.parameters)?;
                 let mut arguments = parameters
                     .iter()
                     .map(|_| CheckedValue::primitive(&state.schema, NormalizedValue::I64(17)))
@@ -1225,6 +1279,13 @@ fn reference_scope_frames_reuse_one_admitted_parameter_inventory_without_weakeni
                 let bytes = state.observation.allocated_bytes;
                 let mut function = function_template.clone();
                 control.cancel();
+                let error = state
+                    .graph_call_parameters(case.target.package, &function_template.parameters)
+                    .unwrap_err();
+                assert_eq!(error.class, ExecutionFailureClass::Cancelled);
+                assert_eq!(error.code, "execution_cancelled");
+                assert_eq!(reader.parameters.get(), reads);
+                assert_eq!(state.observation.allocated_bytes, bytes);
                 let error = state
                     .admit_read_scope_frame(
                         case.target,
