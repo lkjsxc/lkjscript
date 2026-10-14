@@ -138,7 +138,7 @@ fn inspect_consumer(public: &Native, text: &str) -> String {
     assert!(text.contains(&format!("(associated-type {MEMBER} Block (bound owned))")));
     assert!(text.contains("(associated-contract-member "));
     assert!(text.contains("(associated-witness-projection "));
-    assert!(text.contains("(borrow-call ") && text.contains("(borrow-from "));
+    assert!(text.contains("(borrow-call ") && text.contains("(read-from 1)"));
     assert!(text.contains("(constraint transferable)") && text.contains("(constraint owned)"));
     for forbidden in ["ChunkBlock", "ChunkStorage", "owned-implementation"] {
         assert!(
@@ -160,8 +160,9 @@ fn inspect_consumer(public: &Native, text: &str) -> String {
         assert_eq!(compact_field(record, "kind"), "pure");
         assert!(text.contains(expected));
     }
-    assert_eq!(compact_field(methods[1], "result-mode"), "read-from");
-    assert_eq!(compact_field(methods[1], "borrow-from"), "1");
+    assert_eq!(compact_field(methods[1], "result-kind"), "read-from");
+    assert_eq!(compact_field(methods[1], "result-source"), "1");
+    assert_eq!(compact_field(methods[1], "result-scope"), "-");
     for (function, reader) in READERS {
         let identity = declaration(public, "blockread-consumer", function);
         let records = public.cli(&["inspect", "owner", "pure_function", &identity], true);

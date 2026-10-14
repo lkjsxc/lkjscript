@@ -1877,7 +1877,29 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .iter()
         .filter(|record| record.operation == "change.reference")
         .collect::<Vec<_>>();
-    assert_eq!(references.len(), 8);
+    assert_eq!(references.len(), 9);
+    assert_eq!(
+        references
+            .iter()
+            .map(|record| {
+                (
+                    compact_field(record, "name").expect("reference form name"),
+                    compact_field(record, "syntax").expect("reference form syntax"),
+                )
+            })
+            .collect::<Vec<_>>(),
+        vec![
+            ("request_local_symbol", "$NAME"),
+            ("request_local_type", "@NAME"),
+            ("request_local_read_scope", "%NAME"),
+            ("exact_owner", "DOMAIN_HEX"),
+            ("exact_package", "pkg_HEX"),
+            ("exact_revision", "rev_HEX"),
+            ("exact_package_revision", "package_revision_HEX"),
+            ("qualified_declaration", "MODULE/NAME"),
+            ("exact_package_declaration", "pkg_HEX/decl_HEX"),
+        ]
+    );
     let exact_reference = references
         .iter()
         .find(|record| compact_field(record, "name") == Some("exact_package_declaration"))

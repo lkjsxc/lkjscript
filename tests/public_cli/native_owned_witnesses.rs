@@ -304,16 +304,84 @@ fn native_owned_witness_inspection_and_semantic_rejections_preserve_head() {
 
 #[test]
 fn native_owned_exports_require_visible_method_and_contract_signatures() {
-    for (from, to) in [
+    // A complete public witness may encapsulate a supplier-local private method.
+    // The scheme grants method invocation without naming its private target.
+    let supplier = Native::new();
+    let source = format!("{LIBRARY}\n{CELL}").replace(
+        "(function create read (visibility public)",
+        "(function create read (visibility private)",
+    );
+    assert!(source.contains("(function create read (visibility private)"));
+    author(&supplier, &source);
+    let supplier_head = supplier.revision();
+    let method = super::native_owned_worklists::declaration(&supplier, "cell", "read");
+    let opaque = export(&supplier);
+    assert!(opaque.path.exists());
+    assert_eq!(supplier.revision(), supplier_head);
+    let consumer = Native::template("command");
+    stage(&consumer, &opaque);
+    let imports = format!(
+        "declarations.begin\n(units (use abstraction {} {}) (use cell {} {}))\ndeclarations.end\n",
+        opaque.package, opaque.revision, opaque.package, opaque.revision,
+    );
+    author(&consumer, &format!("{}{imports}", dependency(&opaque)));
+    let consumer_head = consumer.revision();
+    for (label, reference, callee) in [
+        ("private-method-name", String::new(), "cell::read"),
         (
-            "(function create read (visibility public)",
-            "(function create read (visibility private)",
-        ),
-        (
-            "(owned-contract create Storage (visibility public)",
-            "(owned-contract create Storage (visibility private)",
+            "private-method-exact",
+            format!("(reference hidden declaration {}/{method})", opaque.package),
+            "hidden",
         ),
     ] {
+        let input = consumer.input(
+            &format!("{label}.lkjc"),
+            &format!(
+                "request base={consumer_head}\n{imports}declarations.begin\n(units {reference} (module create forbidden\n(function create direct (visibility private) (effect pure)\n(parameter create value (type OwnedI64Cell) (use borrow)) (returns I64)\n(body (call {callee} (local value))))))\ndeclarations.end\n",
+            ),
+        );
+        let failure = consumer.plan(&input, false);
+        assert_eq!(
+            compact_field(compact_record(&failure, "diagnostic"), "code"),
+            "change_reference_not_exposed",
+            "{label}: {failure:?}"
+        );
+        assert_eq!(consumer.revision(), consumer_head);
+    }
+    author(
+        &consumer,
+        &format!(
+            "{imports}{}",
+            r#"declarations.begin
+(units (module create opaque-use
+  (function create main (visibility public) (effect pure) (returns I64)
+    (body (let
+      (binding value (type OwnedI64Cell)
+        (implementation-call abstraction::produce (types OwnedI64Cell)
+          (implementations concrete@cell::Scalar) (i64 42)))
+      (in (implementation-call abstraction::consume (types OwnedI64Cell)
+        (implementations concrete@cell::Scalar) (local value))))))
+  (component create command (visibility private)
+    (port create main (type (function () I64)) (function main))))
+  (target create opaque-witness (component opaque-use::command)
+    (runner command) (port opaque-use::command::main)))
+declarations.end
+"#
+        ),
+    );
+    let result = consumer.cli(&["run", "opaque-witness", "--arguments", "[]"], true);
+    let execution = compact_record(&result, "execution");
+    assert_eq!(compact_field(execution, "differential"), "equal");
+    assert_eq!(
+        serde_json::from_str::<Value>(compact_field(execution, "value")).unwrap(),
+        json!(42)
+    );
+    assert_eq!(supplier.revision(), supplier_head);
+
+    // Public implementation and function signatures still require an exposed contract.
+    {
+        let from = "(owned-contract create Storage (visibility public)";
+        let to = "(owned-contract create Storage (visibility private)";
         let public = Native::new();
         let source = format!("{LIBRARY}\n{CELL}").replace(from, to);
         assert!(source.contains(to));

@@ -48,9 +48,16 @@ use modes, result type, callable kind, closed effect row and borrowed-result sou
 position. Pure and named task mappings remain distinct even for empty task rows.
 Mapped functions may have implementation parameters, with one exact mapped operand
 per parameter in declared order. Effect and requirement parameters remain excluded.
-An exported scheme maps exported functions so an importing package can admit
-their exact signatures through its selected interface. A private scheme can map
-private functions inside its own package.
+An exported scheme can map exported functions or its supplier's local private
+functions. A private mapped function remains absent from the public naming and
+direct-call interface. Its complete canonical source must independently prove the
+exact mapped signature, type and witness applications, result relation and effects
+before export, import or executable readiness; descriptive interface evidence
+cannot discharge that obligation. Selecting the exported scheme grants invocation
+through its exact public contract and selected implementation; it grants no direct
+naming or call authority over the mapped function. Missing source and foreign
+private targets reject, and the contract itself must remain exposed. A private
+scheme can also map private functions inside its own package.
 
 All mappings and all scheme parameters are checked, including unused methods and
 phantom parameters. A closed target or type argument still requires its complete

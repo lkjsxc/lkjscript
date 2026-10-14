@@ -27,9 +27,25 @@ pub(super) struct Value {
     // rather than multiplying the same ancestor loans at every forwarding hop.
     guards: Option<Arc<AncestorCustody>>,
     reservation: Option<Arc<AncestorCustody>>,
-    source_anchor: Option<super::super::read_view_storage::SourceAnchor>,
-    source_scope: Option<super::super::read_view_storage::RuntimeScopeLease>,
+    source_binding: Option<Arc<SourceBinding>>,
     view_borrowed: bool,
+}
+
+// Immutable placement metadata. Sharing this allocation grants no source or read rights.
+// Scope-owner invalidation remains independent of this backing's reference count.
+pub(super) struct SourceBinding {
+    anchor: super::super::read_view_storage::SourceAnchor,
+    scope: Option<super::super::read_view_storage::RuntimeScopeLease>,
+}
+
+impl SourceBinding {
+    pub(super) fn anchor(&self) -> &super::super::read_view_storage::SourceAnchor {
+        &self.anchor
+    }
+
+    pub(super) fn scope(&self) -> Option<&super::super::read_view_storage::RuntimeScopeLease> {
+        self.scope.as_ref()
+    }
 }
 
 impl std::fmt::Debug for Value {
@@ -135,8 +151,7 @@ impl Value {
             provenance: None,
             guards: None,
             reservation: None,
-            source_anchor: None,
-            source_scope: None,
+            source_binding: None,
             view_borrowed: false,
         })
     }
@@ -178,31 +193,36 @@ impl Value {
     }
 
     pub(super) fn source_anchor(&self) -> Option<&super::super::read_view_storage::SourceAnchor> {
-        self.source_anchor.as_ref()
+        self.source_binding.as_ref().map(|binding| &binding.anchor)
     }
 
     pub(super) fn source_scope(
         &self,
     ) -> Option<&super::super::read_view_storage::RuntimeScopeLease> {
-        self.source_scope.as_ref()
+        self.source_binding
+            .as_ref()
+            .and_then(|binding| binding.scope.as_ref())
     }
 
-    pub(super) fn bind_source(
-        &mut self,
+    pub(super) fn source_binding(&self) -> Option<Arc<SourceBinding>> {
+        self.source_binding.as_ref().map(Arc::clone)
+    }
+
+    pub(super) fn reserve_source_binding(
         anchor: super::super::read_view_storage::SourceAnchor,
         scope: Option<super::super::read_view_storage::RuntimeScopeLease>,
-    ) {
-        self.source_anchor = Some(anchor);
-        self.source_scope = scope;
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+    ) -> Result<Arc<SourceBinding>, ExecutionError> {
+        reserve((std::mem::size_of::<SourceBinding>() + 2 * std::mem::size_of::<usize>()) as u64)?;
+        Ok(Arc::new(SourceBinding { anchor, scope }))
     }
 
-    pub(super) fn restore_source_binding(
-        &mut self,
-        anchor: Option<super::super::read_view_storage::SourceAnchor>,
-        scope: Option<super::super::read_view_storage::RuntimeScopeLease>,
-    ) {
-        self.source_anchor = anchor;
-        self.source_scope = scope;
+    pub(super) fn bind_source(&mut self, binding: Arc<SourceBinding>) {
+        self.source_binding = Some(binding);
+    }
+
+    pub(super) fn restore_source_binding(&mut self, binding: Option<Arc<SourceBinding>>) {
+        self.source_binding = binding;
     }
 
     pub(super) fn is_view_borrowed(&self) -> bool {
@@ -221,7 +241,7 @@ impl Value {
 
     pub(super) fn rebind_view_source(
         &mut self,
-        anchor: super::super::read_view_storage::SourceAnchor,
+        binding: Arc<SourceBinding>,
         admission: &impl super::super::read_view_storage::ReadViewAdmission,
         control: &ExecutionControl,
         reservation: crate::platform::execution::normalized::read_view_storage::DescriptorReservation,
@@ -229,9 +249,15 @@ impl Value {
         let NormalizedValue::ReadView(view) = &self.datum else {
             return Err(reject("view rebasing requires a live admitted descriptor"));
         };
-        let reborrowed = view.reborrow(anchor.clone(), false, admission, control, reservation)?;
+        let reborrowed = view.reborrow(
+            binding.anchor.clone(),
+            false,
+            admission,
+            control,
+            reservation,
+        )?;
         self.datum = NormalizedValue::ReadView(reborrowed);
-        self.source_anchor = Some(anchor);
+        self.source_binding = Some(binding);
         Ok(())
     }
 
@@ -240,6 +266,18 @@ impl Value {
         view: super::super::read_view_storage::ReadView,
         borrowed: bool,
         control: &ExecutionControl,
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+    ) -> Result<Self, ExecutionError> {
+        Self::view_with_binding(schema, view, borrowed, control, None, reserve)
+    }
+
+    fn view_with_binding(
+        schema: &BoundReferenceSchema,
+        view: super::super::read_view_storage::ReadView,
+        borrowed: bool,
+        control: &ExecutionControl,
+        existing: Option<&Arc<SourceBinding>>,
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
         view.validate(control)?;
         if view.identity().program != schema.value_origin {
@@ -252,8 +290,18 @@ impl Value {
             .as_ref()
             .ok_or_else(|| reject("reference view lacks independent raw admission"))?
             .prepared_layout(view.identity().ty)?;
-        let source_anchor = Some(view.source().clone());
-        let source_scope = Some(view.scope()?.reborrow(control)?);
+        let source_scope = view.scope()?.reborrow(control)?;
+        let source_binding = match existing {
+            Some(binding)
+                if binding.anchor == *view.source()
+                    && binding.scope.as_ref().is_some_and(|scope| {
+                        scope.key() == source_scope.key() && scope.same_live_scope(&source_scope)
+                    }) =>
+            {
+                Arc::clone(binding)
+            }
+            _ => Self::reserve_source_binding(view.source().clone(), Some(source_scope), reserve)?,
+        };
         Ok(Self {
             datum: NormalizedValue::ReadView(view),
             preparation: schema.value_origin,
@@ -261,8 +309,7 @@ impl Value {
             provenance: None,
             guards: None,
             reservation: None,
-            source_anchor,
-            source_scope,
+            source_binding: Some(source_binding),
             view_borrowed: borrowed,
         })
     }
@@ -274,6 +321,7 @@ impl Value {
         admission: &impl super::super::read_view_storage::ReadViewAdmission,
         control: &ExecutionControl,
         reservation: crate::platform::execution::normalized::read_view_storage::DescriptorReservation,
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
         let NormalizedValue::ReadView(view) = &self.datum else {
             return Err(reject(
@@ -281,7 +329,14 @@ impl Value {
             ));
         };
         let view = view.reborrow(destination, false, admission, control, reservation)?;
-        let mut result = Self::view(schema, view, true, control)?;
+        let mut result = Self::view_with_binding(
+            schema,
+            view,
+            true,
+            control,
+            self.source_binding.as_ref(),
+            reserve,
+        )?;
         result.provenance = self.provenance;
         result.guards = self.guards.as_ref().map(Arc::clone);
         Ok(result)
@@ -308,6 +363,7 @@ impl Value {
                 + std::mem::size_of::<super::super::read_view_storage::ProjectedOwnedRead>()
                 + 2 * std::mem::size_of::<usize>()) as u64,
         )?;
+        let source_binding = Self::reserve_source_binding(source_anchor, Some(scope), reserve)?;
         let packet = Arc::new(packet);
         let mut custody = AncestorCustody::default();
         custody.projected = Some(packet);
@@ -318,8 +374,7 @@ impl Value {
             provenance: None,
             guards: Some(Arc::new(custody)),
             reservation: None,
-            source_anchor: Some(source_anchor),
-            source_scope: Some(scope),
+            source_binding: Some(source_binding),
             view_borrowed: false,
         })
     }
@@ -476,7 +531,7 @@ impl Value {
             .ok_or_else(|| reject("borrowed result custody reservation was shared"))?;
         let parent = take_parent()?;
         unique.inner = self.guards.take();
-        unique.token_origin = parent.source_anchor.as_ref().map(|source| source.origin);
+        unique.token_origin = parent.source_anchor().map(|source| source.origin);
         unique.token = Some(parent.datum);
         unique.outer = parent.guards;
         self.guards = self.reservation.take();
@@ -502,6 +557,10 @@ impl Value {
     pub(super) fn duplicate(&self, use_mode: ParameterUse) -> Result<Self, ExecutionError> {
         if self.ownership == Ownership::Memory && use_mode == ParameterUse::Borrow {
             let datum = self.datum.memory_borrow()?;
+            if let Some(scope) = self.source_scope() {
+                // Preserve the original liveness gate; immutable backing sharing allocates nothing.
+                scope.reborrow(&ExecutionControl::uncancelled())?;
+            }
             return Ok(Self {
                 datum,
                 preparation: self.preparation,
@@ -509,12 +568,7 @@ impl Value {
                 provenance: self.provenance,
                 guards: self.guards.as_ref().map(Arc::clone),
                 reservation: None,
-                source_anchor: self.source_anchor.clone(),
-                source_scope: self
-                    .source_scope
-                    .as_ref()
-                    .map(|scope| scope.reborrow(&ExecutionControl::uncancelled()))
-                    .transpose()?,
+                source_binding: self.source_binding(),
                 view_borrowed: self.view_borrowed,
             });
         }
@@ -536,8 +590,7 @@ impl Value {
                 provenance: None,
                 guards: None,
                 reservation: None,
-                source_anchor: None,
-                source_scope: None,
+                source_binding: None,
                 view_borrowed: false,
             }),
             _ => Err(reference_error(
@@ -565,8 +618,7 @@ impl Value {
                 provenance: None,
                 guards: None,
                 reservation: None,
-                source_anchor: None,
-                source_scope: None,
+                source_binding: None,
                 view_borrowed: false,
             }),
             _ => Err(reject(
@@ -643,8 +695,7 @@ impl Value {
             provenance: None,
             guards: None,
             reservation: None,
-            source_anchor: None,
-            source_scope: None,
+            source_binding: None,
             view_borrowed: false,
         })
     }
@@ -688,8 +739,7 @@ impl Value {
             provenance: None,
             guards: None,
             reservation: None,
-            source_anchor: None,
-            source_scope: None,
+            source_binding: None,
             view_borrowed: false,
         })
     }
@@ -709,8 +759,7 @@ impl Value {
             provenance: None,
             guards: None,
             reservation: None,
-            source_anchor: None,
-            source_scope: None,
+            source_binding: None,
             view_borrowed: false,
         })
     }
@@ -728,8 +777,7 @@ impl Value {
             provenance: None,
             guards: None,
             reservation: None,
-            source_anchor: None,
-            source_scope: None,
+            source_binding: None,
             view_borrowed: false,
         }))
     }
@@ -758,8 +806,7 @@ impl Value {
             provenance: None,
             guards: None,
             reservation: None,
-            source_anchor: None,
-            source_scope: None,
+            source_binding: None,
             view_borrowed: false,
         }))
     }
@@ -805,8 +852,7 @@ impl Value {
                 provenance: None,
                 guards: None,
                 reservation: None,
-                source_anchor: None,
-                source_scope: None,
+                source_binding: None,
                 view_borrowed: false,
             }),
         ))
@@ -911,8 +957,7 @@ impl ReferenceState<'_> {
             provenance: None,
             guards: None,
             reservation: None,
-            source_anchor: None,
-            source_scope: None,
+            source_binding: None,
             view_borrowed: false,
         })
     }
@@ -986,8 +1031,7 @@ impl ReferenceState<'_> {
             provenance: None,
             guards: None,
             reservation: None,
-            source_anchor: None,
-            source_scope: None,
+            source_binding: None,
             view_borrowed: false,
         })
     }
@@ -1058,8 +1102,7 @@ impl ReferenceState<'_> {
             provenance: None,
             guards: None,
             reservation: None,
-            source_anchor: None,
-            source_scope: None,
+            source_binding: None,
             view_borrowed: false,
         })
     }
@@ -1073,8 +1116,7 @@ impl ReferenceState<'_> {
             provenance: None,
             guards: None,
             reservation: None,
-            source_anchor: None,
-            source_scope: None,
+            source_binding: None,
             view_borrowed: false,
         })
     }
@@ -1087,8 +1129,7 @@ impl ReferenceState<'_> {
             provenance: None,
             guards: None,
             reservation: None,
-            source_anchor: None,
-            source_scope: None,
+            source_binding: None,
             view_borrowed: false,
         }
     }
@@ -1129,8 +1170,7 @@ impl ReferenceState<'_> {
             provenance: None,
             guards: None,
             reservation: None,
-            source_anchor: None,
-            source_scope: None,
+            source_binding: None,
             view_borrowed: false,
         })
     }
@@ -1158,8 +1198,7 @@ impl ReferenceState<'_> {
             provenance: None,
             guards: None,
             reservation: None,
-            source_anchor: None,
-            source_scope: None,
+            source_binding: None,
             view_borrowed: false,
         })
     }
@@ -1190,8 +1229,7 @@ impl ReferenceState<'_> {
             provenance: None,
             guards: None,
             reservation: None,
-            source_anchor: None,
-            source_scope: None,
+            source_binding: None,
             view_borrowed: false,
         })
     }
@@ -1228,8 +1266,7 @@ impl ReferenceState<'_> {
                     provenance: None,
                     guards: None,
                     reservation: None,
-                    source_anchor: None,
-                    source_scope: None,
+                    source_binding: None,
                     view_borrowed: false,
                 })
             }
@@ -2110,8 +2147,7 @@ impl ReferenceState<'_> {
             provenance: None,
             guards: None,
             reservation: None,
-            source_anchor: None,
-            source_scope: None,
+            source_binding: None,
             view_borrowed: false,
         })
     }
@@ -2181,8 +2217,7 @@ impl ReferenceState<'_> {
                 provenance: None,
                 guards: None,
                 reservation: None,
-                source_anchor: None,
-                source_scope: None,
+                source_binding: None,
                 view_borrowed: false,
             });
         }

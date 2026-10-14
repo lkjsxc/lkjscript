@@ -44,7 +44,7 @@ impl Packages {
         );
         author_retained(&library, LIBRARY, "read-library");
         let draft = unchanged(&library, "owned-read-results");
-        assert!(draft.contains("(borrow-from "));
+        assert!(draft.contains("(read-from "));
         assert!(draft.contains("(borrow-call "));
         for absent in ["OwnedI64Cell", "ByteBuffer", "owned-implementation"] {
             assert!(!draft.contains(absent), "generic library: {absent}");
@@ -75,7 +75,7 @@ impl Packages {
         );
         unchanged(&carriers, "worklist-carriers");
         let draft = unchanged(&carriers, "read-carriers");
-        assert!(draft.contains("(borrow-from "));
+        assert!(draft.contains("(read-from "));
         let concrete = export(&carriers);
         let consumer = evidence_native("command");
         stage(&consumer, &generic);
@@ -351,7 +351,7 @@ fn native_owned_read_results_forward_root_and_sibling_reads_then_consume() {
     let public = evidence_native("command");
     author(&public, ROOT_VIEWS);
     let draft = unchanged(&public, "source-results");
-    assert!(draft.contains("(borrow-from "));
+    assert!(draft.contains("(read-from "));
     let artifact = public.root.path().join("read-root.lkja");
     public.cli(&["build", "--output", path(&artifact)], true);
     let descriptor = deployment(&public, "read-root.lkja", "read-root");
@@ -521,7 +521,7 @@ fn native_owned_read_results_match_exact_method_source_positions_before_publicat
     }
     author(&public, METHOD_RESULTS);
     let draft = unchanged(&public, "result-methods");
-    assert!(draft.contains("(borrow-from 1)"));
+    assert!(draft.contains("(read-from 1)"));
     let artifact = public.root.path().join("read-method.lkja");
     public.cli(&["build", "--output", path(&artifact)], true);
     let descriptor = deployment(&public, "read-method.lkja", "read-method");

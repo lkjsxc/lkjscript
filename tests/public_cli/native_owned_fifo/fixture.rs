@@ -95,7 +95,7 @@ impl Fifo {
         accept(&consumer, "application", &format!("{imports}{APPLICATION}"));
         checked(&consumer, "118"); // One additional consumer-owned starter test.
         let draft = unchanged(&consumer, "fifo-app");
-        assert!(draft.contains("(borrow-from ") && draft.contains("(borrow-call "));
+        assert!(draft.contains("(read-from queue)") && draft.contains("(borrow-call "));
         let artifact = consumer.root.path().join("fifo.lkja");
         consumer.cli(&["build", "--output", path(&artifact)], true);
         let mut paths = vec![

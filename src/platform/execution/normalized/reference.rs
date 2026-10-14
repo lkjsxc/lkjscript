@@ -367,7 +367,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         })
     }
 
-    #[cfg(test)]
+    /// Contributor admission probes reuse the checked canonical invocation boundary.
     pub(super) fn invoke_instantiated(
         &self,
         declaration: DeclarationReference,
@@ -2333,6 +2333,12 @@ impl ReferenceState<'_> {
             },
             route,
         )?;
+        // Reserve the one real parameter-record vector before reading it. The
+        // scope frame borrows these same already-admitted records below.
+        self.charge_items(
+            function.parameters.len(),
+            std::mem::size_of::<ParameterRecord>(),
+        )?;
         let mut parameters = self.parameters(declaration.package, &function.parameters)?;
         if let Some(application) = &associated {
             let proof =
@@ -2544,8 +2550,13 @@ impl ReferenceState<'_> {
                 supplied,
             )?
         };
-        let read_scopes =
-            self.admit_read_scope_frame(declaration, &function, scopes, &mut arguments)?;
+        let read_scopes = self.admit_read_scope_frame(
+            declaration,
+            &function,
+            &parameters,
+            scopes,
+            &mut arguments,
+        )?;
         Ok(AdmittedGraphCall {
             associated,
             implementations,
@@ -4575,7 +4586,10 @@ impl ReferenceState<'_> {
                 && let Some(frame) = self.read_scope_frames.last()
             {
                 let anchor = frame.source_anchor(local, self.memory_domain)?;
-                value.bind_source(anchor, None);
+                let source = CheckedValue::reserve_source_binding(anchor, None, &mut |bytes| {
+                    self.charge_allocation(bytes)
+                })?;
+                value.bind_source(source);
             }
         }
         if let NormalizedValue::Resource(handle) = value.raw() {

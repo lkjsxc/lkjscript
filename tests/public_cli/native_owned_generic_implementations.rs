@@ -95,7 +95,7 @@ impl Packages {
             "(type-parameter ",
             "(types ",
             "(implementation ",
-            "(borrow-from ",
+            "(read-from ",
         ] {
             assert!(draft.contains(present), "scheme draft: {present}");
         }

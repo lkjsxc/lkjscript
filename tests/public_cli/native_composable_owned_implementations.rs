@@ -162,7 +162,7 @@ impl Packages {
         for present in [
             "(implementation-parameter ",
             "(implementations ",
-            "(borrow-from ",
+            "(read-from ",
         ] {
             assert!(
                 draft.contains(present),

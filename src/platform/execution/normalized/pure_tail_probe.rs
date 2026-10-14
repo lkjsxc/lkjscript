@@ -3,18 +3,22 @@
 //! and counts live evaluator ownership in a subprocess-contained, bounded-stack thread.
 
 use super::prepare::{
-    NormalizedFunction, NormalizedFunctionBody, NormalizedInstruction, NormalizedProgram,
+    NormalizedEntryPoint, NormalizedFunction, NormalizedFunctionBody, NormalizedInstruction,
+    NormalizedProgram,
 };
 use super::reference::{
     CoreNormalizedReferenceHost, NormalizedReferenceHost, NormalizedReferenceInterpreter,
     NormalizedReferenceRead, ReferenceSignature,
 };
-use super::value::NormalizedValue;
+use super::value::{FunctionIndex, NormalizedValue};
 use super::value_schema::NormalizedValueSchema;
 use super::vm::{CoreNormalizedHost, NormalizedHost, NormalizedRunPolicy, NormalizedVm};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionControl, ExecutionError};
-use crate::platform::kernel::{ImplementationName, Name, TypeObjectDigest};
+use crate::platform::kernel::{
+    DeclarationReference, FunctionEffect, ImplementationName, Name, ResultRelation, TypeForm,
+    TypeObjectDigest,
+};
 use crate::platform::normalized_lifecycle::{PreparedApplication, prepare_repository};
 use crate::platform::publication::GraphRepository;
 use serde_json::{Value, json};
@@ -287,6 +291,51 @@ fn invocation(
     )
 }
 
+fn raw_list_length_entry(
+    program: &NormalizedProgram,
+) -> Result<(FunctionIndex, DeclarationReference, TypeObjectDigest), Diagnostic> {
+    let integer = program
+        .types
+        .iter()
+        .find_map(|(identity, object)| matches!(object.form, TypeForm::I64).then_some(*identity))
+        .ok_or_else(|| failure("raw ingress probe has no admitted I64 type"))?;
+    let mut entries = program.functions.iter().enumerate().filter(|(_, function)| {
+        function.type_parameters.len() == 1
+            && function.type_arguments.is_empty()
+            && function.parameters.len() == 1
+            && matches!(&function.body, NormalizedFunctionBody::External(name) if name.as_str() == "core.list.length")
+    });
+    let (index, function) = entries
+        .next()
+        .ok_or_else(|| failure("raw ingress probe has no admitted list-length template"))?;
+    require(
+        entries.next().is_none()
+            && !function.graph_function
+            && matches!(function.effect, FunctionEffect::Pure)
+            && function.implementation_parameters.is_empty()
+            && function.implementation_arguments.is_empty()
+            && function.requirement_parameters.is_empty()
+            && function.requirement_arguments.is_empty()
+            && function.effect_parameters.is_empty()
+            && function.effect_arguments.is_empty()
+            && function.read_scope_parameters.is_empty()
+            && function.read_scope_sources.is_empty()
+            && function.read_scope_arguments.is_empty()
+            && function.task_requirements.is_empty()
+            && function.parameter_count == 1
+            && function.parameters[0].resource_requirement.is_none()
+            && function.result.relation == ResultRelation::Value
+            && function.result.ty == integer,
+        "raw ingress probe list-length entry has foreign context or authority",
+    )?;
+    let index = u32::try_from(index).map_err(|_| failure("raw ingress entry index overflow"))?;
+    Ok((
+        FunctionIndex(index, program.value_origin),
+        function.declaration,
+        integer,
+    ))
+}
+
 fn invocation_control(
     prepared: &PreparedApplication,
     reference: bool,
@@ -303,6 +352,13 @@ fn invocation_control(
         mapper_items: Mutex::new(Vec::new()),
     };
     let name = Name::new(target)?;
+    // This private probe target uses the admitted External declaration directly.
+    // A graph sum adds scope metadata after ingress and cannot isolate an eight-item quota.
+    let raw_entry = if target == "raw-list-length" {
+        Some(raw_list_length_entry(&prepared.program)?)
+    } else {
+        None
+    };
     let (result, observation) = if reference {
         let sink = Mutex::new(None);
         let evaluator = NormalizedReferenceInterpreter::from_reader(
@@ -310,13 +366,18 @@ fn invocation_control(
             &prepared.program,
             policy,
         );
-        let evaluator =
-            if (target == "map" || target.starts_with("scale-")) && cancel_after == u64::MAX {
-                evaluator.observing_checked(&sink)
-            } else {
-                evaluator.observing(&sink, &host)
-            };
-        let result = evaluator.invoke_root_target(&name, arguments, None, control);
+        let evaluator = if (raw_entry.is_some() || target == "map" || target.starts_with("scale-"))
+            && cancel_after == u64::MAX
+        {
+            evaluator.observing_checked(&sink)
+        } else {
+            evaluator.observing(&sink, &host)
+        };
+        let result = if let Some((_, declaration, integer)) = raw_entry {
+            evaluator.invoke_instantiated(declaration, &[integer], arguments, control)
+        } else {
+            evaluator.invoke_root_target(&name, arguments, None, control)
+        };
         let observed = sink
             .into_inner()
             .map_err(|_| failure("reference observation poisoned"))?
@@ -334,13 +395,23 @@ fn invocation_control(
     } else {
         let sink = Mutex::new(None);
         let evaluator = NormalizedVm::new(&prepared.program, policy, &executor.handle());
-        let evaluator =
-            if (target == "map" || target.starts_with("scale-")) && cancel_after == u64::MAX {
-                evaluator.observing_checked(&sink)
-            } else {
-                evaluator.observing(&sink, &host)
-            };
-        let result = evaluator.invoke_root_target(&name, arguments, None, control);
+        let evaluator = if (raw_entry.is_some() || target == "map" || target.starts_with("scale-"))
+            && cancel_after == u64::MAX
+        {
+            evaluator.observing_checked(&sink)
+        } else {
+            evaluator.observing(&sink, &host)
+        };
+        let result = if let Some((function, _, integer)) = raw_entry {
+            evaluator.invoke_entry(
+                NormalizedEntryPoint::InstantiatedFunction(function, Arc::from([integer])),
+                arguments,
+                None,
+                control,
+            )
+        } else {
+            evaluator.invoke_root_target(&name, arguments, None, control)
+        };
         let observed = sink
             .into_inner()
             .map_err(|_| failure("production observation poisoned"))?
@@ -740,27 +811,67 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
             .err()
             .ok_or_else(|| failure("deep malformed ingress escaped"))?;
         require(
-            error.code
-                == if reference {
-                    "normalized_reference_value_admission"
-                } else {
-                    "normalized_value_admission"
-                },
-            "deep ingress has wrong admission failure",
+            error.class == crate::platform::execution::ExecutionFailureClass::Resource
+                && error.code == "normalized_value_depth"
+                && error
+                    .message
+                    .contains("view escape inspection exceeds finite value depth 256"),
+            &format!(
+                "deep ingress has wrong structural failure (reference={reference}): {:?}/{}: {}",
+                error.class, error.code, error.message,
+            ),
         )?;
         require(
-            observed["host_calls"] == 0,
-            "malformed ingress called a host",
+            observed["host_calls"] == 0
+                && observed["observation"]["value_work"]["input_admission_nodes"] == 0
+                && observed["observation"]["external_calls"] == 0
+                && observed["observation"]["capability_calls"] == 0,
+            "deep structural rejection reached typed admission or effects",
+        )?;
+        // Preserve an independent typed-shape refusal below the structural depth bound.
+        let (shallow, shallow_observed) = invocation(
+            &prepared,
+            reference,
+            "sum",
+            vec![raw_list(vec![NormalizedValue::Option(Some(Box::new(
+                NormalizedValue::I64(1),
+            )))])?],
+            policy,
+            u64::MAX,
+        )?;
+        let shallow_error = shallow
+            .err()
+            .ok_or_else(|| failure("shallow malformed I64 ingress escaped"))?;
+        require(
+            shallow_error.class
+                == crate::platform::execution::ExecutionFailureClass::Infrastructure
+                && shallow_error.code
+                    == if reference {
+                        "normalized_reference_value_admission"
+                    } else {
+                        "normalized_value_admission"
+                    }
+                && shallow_observed["host_calls"] == 0
+                && shallow_observed["observation"]["value_work"]["input_admission_nodes"] == 2
+                && shallow_observed["observation"]["external_calls"] == 0
+                && shallow_observed["observation"]["capability_calls"] == 0,
+            &format!(
+                "shallow I64 ingress has wrong typed refusal (reference={reference}): {:?}/{}: {}",
+                shallow_error.class, shallow_error.code, shallow_error.message,
+            ),
         )?;
         observed["case"] = json!("deep-raw-rejection-stack-safe-disposal");
         observed["raw_depth"] = json!(100_001);
         observed["failure"] = json!(error);
+        observed["shallow_failure"] = json!(shallow_error);
+        observed["shallow_host_calls"] = shallow_observed["host_calls"].clone();
+        observed["shallow_observation"] = shallow_observed["observation"].clone();
         cases.push(observed);
         for (count, success) in [(8, true), (9, false)] {
             let (result, mut observed) = invocation(
                 &prepared,
                 reference,
-                "sum",
+                "raw-list-length",
                 vec![raw_list(vec![NormalizedValue::I64(1); count])?],
                 NormalizedRunPolicy {
                     maximum_collection_items: Some(8),
@@ -768,19 +879,49 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
                 },
                 u64::MAX,
             )?;
-            require(
-                result.is_ok() == success,
-                "raw aggregate item admission is off by one",
-            )?;
-            if let Err(error) = result {
-                require(
-                    error.class == crate::platform::execution::ExecutionFailureClass::Resource,
-                    "raw item exhaustion has wrong class",
-                )?;
-                observed["failure"] = json!(error);
+            match result {
+                Ok(value) => {
+                    require(
+                        success && value == NormalizedValue::I64(8),
+                        "raw aggregate exact-fit admission has wrong success or length",
+                    )?;
+                    observed["value"] = json!(8);
+                }
+                Err(error) => {
+                    require(
+                        !success
+                            && error.class
+                                == crate::platform::execution::ExecutionFailureClass::Resource
+                            && error.code
+                                == if reference {
+                                    "normalized_reference_collection_items"
+                                } else {
+                                    "normalized_collection_items"
+                                },
+                        &format!(
+                            "raw aggregate admission has wrong refusal (reference={reference}, items={count}): {:?}/{}: {}",
+                            error.class, error.code, error.message,
+                        ),
+                    )?;
+                    observed["failure"] = json!(error);
+                }
             }
+            require(
+                observed["host_calls"] == 0
+                    && observed["cancelled"] == false
+                    && observed["observation"]["capability_calls"] == 0
+                    && observed["observation"]["maximum_live_allowances"] == 0
+                    && observed["observation"]["maximum_control_frames"] == 0
+                    && observed["observation"]["calls"] == if success { 1 } else { 0 }
+                    && observed["observation"]["external_calls"] == if success { 1 } else { 0 }
+                    && observed["observation"]["value_work"]["input_admission_nodes"]
+                        == if success { 9 } else { 1 }
+                    && observed["observation"]["collection_items"] == if success { 8 } else { 0 },
+                "raw item boundary reached effects or lost exact ingress accounting",
+            )?;
             observed["case"] = json!("raw-items-exact-fit-one-over");
             observed["items"] = json!(count);
+            observed["item_limit"] = json!(8);
             cases.push(observed);
         }
         let mut fold_peaks = None;

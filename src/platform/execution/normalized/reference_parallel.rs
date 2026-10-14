@@ -24,8 +24,7 @@ struct CanonicalTask {
 }
 
 struct ParallelArgumentSource {
-    anchor: Option<super::super::read_view_storage::SourceAnchor>,
-    scope: Option<super::super::read_view_storage::RuntimeScopeLease>,
+    binding: Option<Arc<super::checked::SourceBinding>>,
 }
 struct CanonicalParallelCall {
     task: CanonicalTask,
@@ -666,12 +665,12 @@ impl ReferenceState<'_> {
         for (position, value) in values.into_iter().enumerate() {
             // Preserve each argument's exact parent placement before the shared
             // raw envelope changes invocation coordinates.
+            // Preserve the prior liveness validation before sharing immutable placement metadata.
+            if let Some(scope) = value.source_scope() {
+                scope.reborrow(self.control)?;
+            }
             sources.push(ParallelArgumentSource {
-                anchor: value.source_anchor().cloned(),
-                scope: value
-                    .source_scope()
-                    .map(|scope| scope.reborrow(self.control))
-                    .transpose()?,
+                binding: value.source_binding(),
             });
             let parameter = parallel_reference_parameter(
                 u32::try_from(position).map_err(|_| {
@@ -703,10 +702,10 @@ impl ReferenceState<'_> {
                 let source = sources.last().ok_or_else(|| reference_type_error(
                     "structured source scope custody lost its ordered argument",
                 ))?;
-                let lease = source.scope.as_ref().ok_or_else(|| reference_type_error(
+                let lease = source.binding.as_ref().and_then(|binding| binding.scope()).ok_or_else(|| reference_type_error(
                     "structured scoped source lacks an independently admitted runtime lease",
                 ))?;
-                let anchor = source.anchor.as_ref().ok_or_else(|| reference_type_error(
+                let anchor = source.binding.as_ref().map(|binding| binding.anchor()).ok_or_else(|| reference_type_error(
                     "structured scoped source lacks an exact checked placement",
                 ))?;
                 let borrowed = value.raw().memory_is_borrowed()
@@ -1393,10 +1392,10 @@ impl ReferenceState<'_> {
                     let expected = expected.next().ok_or_else(|| reference_type_error(
                         "structured child imported an extra source scope relationship",
                     ))?;
-                    let captured = source.scope.as_ref().ok_or_else(|| reference_type_error(
+                    let captured = source.binding.as_ref().and_then(|binding| binding.scope()).ok_or_else(|| reference_type_error(
                         "structured child source scope lacks independent checked custody",
                     ))?;
-                    let anchor = source.anchor.as_ref().ok_or_else(|| reference_type_error(
+                    let anchor = source.binding.as_ref().map(|binding| binding.anchor()).ok_or_else(|| reference_type_error(
                         "structured child source scope lacks its ordered checked placement",
                     ))?;
                     if actual_position != position || key != expected.scope
@@ -1435,8 +1434,12 @@ impl ReferenceState<'_> {
                 .zip(signature.parameters)
                 .zip(task.argument_sources)
                 .map(|((value, parameter), source)| {
+                    let schema = Arc::clone(&state.schema);
+                    let control = state.control;
                     let mut checked = if let NormalizedValue::ReadView(view) = value {
-                        CheckedValue::view(&state.schema, view, true, state.control)?
+                        CheckedValue::view(&schema, view, true, control, &mut |bytes| {
+                            state.charge_allocation(bytes)
+                        })?
                     } else if value.memory_form().is_some() {
                         CheckedValue::memory(&state.schema, value)?
                     } else {
@@ -1447,12 +1450,8 @@ impl ReferenceState<'_> {
                         )?;
                         state.admit_raw(value, ty, &BTreeMap::new(), None, true)?
                     };
-                    if let Some(anchor) = source.anchor {
-                        checked.bind_source(anchor, source.scope);
-                    } else if source.scope.is_some() {
-                        return Err(reference_type_error(
-                            "structured source scope has no exact ordered source anchor",
-                        ));
+                    if let Some(binding) = source.binding {
+                        checked.bind_source(binding);
                     }
                     Ok(checked)
                 })

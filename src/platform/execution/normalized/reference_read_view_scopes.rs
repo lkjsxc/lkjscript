@@ -256,11 +256,13 @@ impl ReferenceState<'_> {
         &mut self,
         declaration: DeclarationReference,
         function: &FunctionDeclaration,
+        parameters: &[ParameterRecord],
         actuals: &[ReadScopeArgument],
         arguments: &mut [CheckedValue],
     ) -> Result<ScopeFrame, ExecutionError> {
         self.control.check()?;
         if function.parameters.len() != arguments.len()
+            || function.parameters.len() != parameters.len()
             || function.read_scope_parameters.len() != actuals.len()
         {
             return Err(failure("complete callable scope or argument arity differs"));
@@ -323,11 +325,9 @@ impl ReferenceState<'_> {
             ));
         }
 
-        self.charge_items(
-            function.parameters.len(),
-            std::mem::size_of::<ParameterRecord>(),
-        )?;
-        let parameters = self.parameters(declaration.package, &function.parameters)?;
+        // Call admission already read and precharged this exact ordered vector.
+        // Its possibly closed type digests are not interpreted here; all raw
+        // header, parent, use, resource, ownership and source gates remain below.
         self.charge_items(
             actuals.len(),
             std::mem::size_of::<(ReadScopeReference, ReadScopeArgument)>()
@@ -370,7 +370,7 @@ impl ReferenceState<'_> {
         for ((id, parameter), value) in function
             .parameters
             .iter()
-            .zip(&parameters)
+            .zip(parameters)
             .zip(arguments.iter())
         {
             self.control.check()?;
@@ -429,7 +429,7 @@ impl ReferenceState<'_> {
         for (position, ((id, parameter), value)) in function
             .parameters
             .iter()
-            .zip(&parameters)
+            .zip(parameters)
             .zip(arguments.iter_mut())
             .enumerate()
         {
@@ -478,6 +478,9 @@ impl ReferenceState<'_> {
                 origin,
                 path,
             };
+            let binding = CheckedValue::reserve_source_binding(destination, lease, &mut |bytes| {
+                self.charge_allocation(bytes)
+            })?;
             if let NormalizedValue::ReadView(view) = value.raw() {
                 let source = view.source().clone();
                 let actual = value
@@ -488,13 +491,13 @@ impl ReferenceState<'_> {
                 let admission = super::RuntimeAdmission::rebase(
                     &schema,
                     &source,
-                    &destination,
+                    binding.anchor(),
                     actual,
                     self.control,
                 )?;
-                value.rebind_view_source(destination.clone(), &admission, self.control, crate::platform::execution::normalized::read_view_storage::ReadView::reserve_descriptor(self.control, &mut |bytes| self.charge_allocation(bytes))?)?;
+                value.rebind_view_source(Arc::clone(&binding), &admission, self.control, crate::platform::execution::normalized::read_view_storage::ReadView::reserve_descriptor(self.control, &mut |bytes| self.charge_allocation(bytes))?)?;
             }
-            value.bind_source(destination, lease);
+            value.bind_source(binding);
             value.set_provenance(LocalValueReference::FunctionParameter(*id));
         }
         Ok(frame)

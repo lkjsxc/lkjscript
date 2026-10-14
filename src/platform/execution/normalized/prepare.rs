@@ -909,8 +909,7 @@ pub struct NormalizedOperation {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NormalizedEntryPoint {
     Function(FunctionIndex),
-    /// Test admission supplies runtime type arguments to an existing maintained function.
-    #[cfg(test)]
+    /// Internal admission probes supply exact runtime types to a maintained function.
     InstantiatedFunction(FunctionIndex, Arc<[TypeObjectDigest]>),
     Code(NormalizedCode),
     PortExpression(NormalizedCode, TypeObjectDigest),

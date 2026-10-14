@@ -517,7 +517,9 @@ impl ReferenceState<'_> {
             self.control,
         )?;
         let borrowed = view.reborrow(destination.clone(), true, &admission, self.control, crate::platform::execution::normalized::read_view_storage::ReadView::reserve_descriptor(self.control, &mut |bytes| self.charge_allocation(bytes))?)?;
-        CheckedValue::view(&schema, borrowed, true, self.control)
+        CheckedValue::view(&schema, borrowed, true, self.control, &mut |bytes| {
+            self.charge_allocation(bytes)
+        })
     }
 
     pub(super) fn evaluate_read_view_operation(
@@ -786,7 +788,10 @@ impl ReferenceState<'_> {
                     let view = builder.finish(&admission, control, &mut |bytes| {
                         self.charge_allocation(bytes)
                     })?;
-                    let mut value = CheckedValue::view(&schema, view, false, control)?;
+                    let mut value =
+                        CheckedValue::view(&schema, view, false, control, &mut |bytes| {
+                            self.charge_allocation(bytes)
+                        })?;
                     value.set_provenance(provenance);
                     Ok(value)
                 })();
@@ -845,7 +850,10 @@ impl ReferenceState<'_> {
                     sharing: false,
                 };
                 let view = view.reborrow_as(target, &admission, self.control, crate::platform::execution::normalized::read_view_storage::ReadView::reserve_descriptor(self.control, &mut |bytes| self.charge_allocation(bytes))?)?;
-                let mut result = CheckedValue::view(&schema, view, false, self.control)?;
+                let mut result =
+                    CheckedValue::view(&schema, view, false, self.control, &mut |bytes| {
+                        self.charge_allocation(bytes)
+                    })?;
                 result.inherit_read_custody(selected)?;
                 if let Some(provenance) = provenance {
                     result.set_provenance(provenance);
@@ -896,9 +904,9 @@ impl ReferenceState<'_> {
                     .key();
                 let admission = RuntimeAdmission::new(&schema, &anchor, scope, self.control);
                 let parent =
-                    selected.duplicate_view(&schema, anchor.clone(), &admission, self.control, crate::platform::execution::normalized::read_view_storage::ReadView::reserve_descriptor(self.control, &mut |bytes| self.charge_allocation(bytes))?)?;
+                    selected.duplicate_view(&schema, anchor.clone(), &admission, self.control, crate::platform::execution::normalized::read_view_storage::ReadView::reserve_descriptor(self.control, &mut |bytes| self.charge_allocation(bytes))?, &mut |bytes| self.charge_allocation(bytes))?;
                 let child =
-                    selected.duplicate_view(&schema, anchor.clone(), &admission, self.control, crate::platform::execution::normalized::read_view_storage::ReadView::reserve_descriptor(self.control, &mut |bytes| self.charge_allocation(bytes))?)?;
+                    selected.duplicate_view(&schema, anchor.clone(), &admission, self.control, crate::platform::execution::normalized::read_view_storage::ReadView::reserve_descriptor(self.control, &mut |bytes| self.charge_allocation(bytes))?, &mut |bytes| self.charge_allocation(bytes))?;
                 self.evaluate_borrowed_body(parent, binding, child, body, locals)
             }
             ExpressionOperation::BorrowReadViewField {
@@ -936,7 +944,7 @@ impl ReferenceState<'_> {
                 let admission =
                     RuntimeAdmission::new(&schema, &anchor, layout.read_scope, self.control);
                 let parent =
-                    selected.duplicate_view(&schema, anchor.clone(), &admission, self.control, crate::platform::execution::normalized::read_view_storage::ReadView::reserve_descriptor(self.control, &mut |bytes| self.charge_allocation(bytes))?)?;
+                    selected.duplicate_view(&schema, anchor.clone(), &admission, self.control, crate::platform::execution::normalized::read_view_storage::ReadView::reserve_descriptor(self.control, &mut |bytes| self.charge_allocation(bytes))?, &mut |bytes| self.charge_allocation(bytes))?;
                 let mut path = anchor.path.to_vec();
                 self.charge_items(
                     path.len().saturating_add(1),
@@ -992,7 +1000,9 @@ impl ReferenceState<'_> {
                             control,
                             &mut |bytes| self.charge_allocation(bytes),
                         )?;
-                        CheckedValue::view(&schema, projected, true, control)?
+                        CheckedValue::view(&schema, projected, true, control, &mut |bytes| {
+                            self.charge_allocation(bytes)
+                        })?
                     }
                     _ => return Err(failure("view reference targets a foreign value category")),
                 };
@@ -1021,7 +1031,7 @@ impl ReferenceState<'_> {
             .ok_or_else(|| failure("view argument lost its actual source lease"))?
             .key();
         let admission = RuntimeAdmission::new(&schema, &anchor, scope, self.control);
-        value.duplicate_view(&schema, anchor.clone(), &admission, self.control, crate::platform::execution::normalized::read_view_storage::ReadView::reserve_descriptor(self.control, &mut |bytes| self.charge_allocation(bytes))?)
+        value.duplicate_view(&schema, anchor.clone(), &admission, self.control, crate::platform::execution::normalized::read_view_storage::ReadView::reserve_descriptor(self.control, &mut |bytes| self.charge_allocation(bytes))?, &mut |bytes| self.charge_allocation(bytes))
     }
 }
 
@@ -1049,7 +1059,10 @@ impl ReferenceState<'_> {
             .source_scope()
             .map(|scope| scope.reborrow(self.control))
             .transpose()?;
-        child.bind_source(anchor, scope);
+        let binding = CheckedValue::reserve_source_binding(anchor, scope, &mut |bytes| {
+            self.charge_allocation(bytes)
+        })?;
+        child.bind_source(binding);
         Ok(())
     }
 }
@@ -1088,8 +1101,7 @@ type BorrowCallScopeState = (
     ReadScopeArgument,
     Option<super::super::read_view_storage::RuntimeScopeOwner>,
     LocalValueReference,
-    Option<SourceAnchor>,
-    Option<super::super::read_view_storage::RuntimeScopeLease>,
+    Option<Arc<super::checked::SourceBinding>>,
 );
 
 impl ReferenceState<'_> {
@@ -1212,8 +1224,9 @@ impl ReferenceState<'_> {
             .get(&local)
             .ok_or_else(|| failure("lexical view source is absent"))?;
         let anchor = self.view_source_anchor(local, source)?;
-        let old_anchor = source.source_anchor().cloned();
-        let old_scope = source
+        let old_binding = source.source_binding();
+        // Capture the immutable backing only after the same original live-lease gate.
+        let _old_scope = source
             .source_scope()
             .map(|scope| scope.reborrow(self.control))
             .transpose()?;
@@ -1224,13 +1237,17 @@ impl ReferenceState<'_> {
                     "prospective view source differs from its admitted lifetime",
                 ));
             }
+            let binding =
+                CheckedValue::reserve_source_binding(anchor, Some(lease), &mut |bytes| {
+                    self.charge_allocation(bytes)
+                })?;
             locals
                 .get_mut(&local)
                 .ok_or_else(|| failure("lexical source disappeared"))?
-                .bind_source(anchor, Some(lease));
+                .bind_source(binding);
             // ScopeFrame retains the owner until the containing initializer
             // scope closes; BorrowCall restores only its temporary source link.
-            return Ok(Some((key, None, local, old_anchor, old_scope)));
+            return Ok(Some((key, None, local, old_binding)));
         }
         let parent = source
             .source_scope()
@@ -1247,15 +1264,19 @@ impl ReferenceState<'_> {
             control,
             &mut |bytes| self.charge_allocation(bytes),
         )?;
+        let frame_lease = lease.reborrow(control)?;
+        let binding = CheckedValue::reserve_source_binding(anchor, Some(lease), &mut |bytes| {
+            self.charge_allocation(bytes)
+        })?;
         self.read_scope_frames
             .last_mut()
             .ok_or_else(|| failure("lexical scope frame disappeared"))?
-            .bind_scope(key, lease.reborrow(control)?, control)?;
+            .bind_scope(key, frame_lease, control)?;
         locals
             .get_mut(&local)
             .ok_or_else(|| failure("lexical source disappeared"))?
-            .bind_source(anchor, Some(lease));
-        Ok(Some((key, Some(owner), local, old_anchor, old_scope)))
+            .bind_source(binding);
+        Ok(Some((key, Some(owner), local, old_binding)))
     }
 }
 

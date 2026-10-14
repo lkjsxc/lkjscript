@@ -2513,13 +2513,33 @@ pub(crate) fn read_transferred_receipt(
                         | "raw-items-exact-fit-one-over"
                 )
             );
+        let direct_ingress = case["case"] == "raw-items-exact-fit-one-over"
+            && case["target"] == "raw-list-length"
+            && matches!(
+                case["tier"].as_str(),
+                Some("production" | "canonical-reference")
+            )
+            && case["items"] == 8
+            && case["item_limit"] == 8
+            && case["value"] == 8
+            && case["failure"].is_null()
+            && case["host_calls"] == 0
+            && case["cancelled"] == false
+            && observation["calls"] == 1
+            && observation["external_calls"] == 1
+            && observation["maximum_live_allowances"] == 0
+            && observation["collection_items"] == 8
+            && observation["value_work"]["input_admission_nodes"] == 9
+            && observation["capability_calls"] == 0;
         require(
             observation["maximum_call_depth"]
                 .as_u64()
                 .is_some_and(|peak| peak <= 8)
                 && observation["maximum_control_frames"]
                     .as_u64()
-                    .is_some_and(|peak| peak > 0 || (admission_failure && case["host_calls"] == 0))
+                    .is_some_and(|peak| {
+                        peak > 0 || (admission_failure && case["host_calls"] == 0) || direct_ingress
+                    })
                 && observation["maximum_live_locals"].as_u64().is_some()
                 && observation["maximum_live_type_bindings"].as_u64().is_some()
                 && observation["live_call_frames_after"] == 0
@@ -2549,7 +2569,28 @@ pub(crate) fn read_transferred_receipt(
                     && case["case"] == "deep-raw-rejection-stack-safe-disposal"
                     && case["raw_depth"] == 100_001
                     && case["host_calls"] == 0
-                    && case["failure"].is_object()
+                    && case["failure"]["class"] == "resource"
+                    && case["failure"]["code"] == "normalized_value_depth"
+                    && case["failure"]["message"].as_str().is_some_and(|message| {
+                        message.contains("view escape inspection exceeds finite value depth 256")
+                    })
+                    && case["observation"]["value_work"]["input_admission_nodes"] == 0
+                    && case["observation"]["external_calls"] == 0
+                    && case["observation"]["capability_calls"] == 0
+                    && case["shallow_failure"]["class"] == "infrastructure"
+                    && case["shallow_failure"]["code"]
+                        == if tier == "production" {
+                            "normalized_value_admission"
+                        } else {
+                            "normalized_reference_value_admission"
+                        }
+                    && case["shallow_host_calls"] == 0
+                    && case["shallow_observation"]["value_work"]["input_admission_nodes"] == 2
+                    && case["shallow_observation"]["external_calls"] == 0
+                    && case["shallow_observation"]["capability_calls"] == 0
+                    && case["shallow_observation"]["live_call_frames_after"] == 0
+                    && case["shallow_observation"]["live_transactions_after"] == 0
+                    && case["shallow_observation"]["live_handles_after"] == 0
             }),
             "stack-safe raw rejection is missing",
         )?;
@@ -2558,8 +2599,30 @@ pub(crate) fn read_transferred_receipt(
                 cases.iter().any(|case| {
                     case["tier"] == tier
                         && case["case"] == "raw-items-exact-fit-one-over"
+                        && case["target"] == "raw-list-length"
                         && case["items"] == count
-                        && case["failure"].is_object() == (count == 9)
+                        && case["item_limit"] == 8
+                        && case["host_calls"] == 0
+                        && case["cancelled"] == false
+                        && case["observation"]["capability_calls"] == 0
+                        && case["observation"]["maximum_live_allowances"] == 0
+                        && case["observation"]["maximum_control_frames"] == 0
+                        && case["observation"]["calls"] == if count == 8 { 1 } else { 0 }
+                        && case["observation"]["external_calls"] == if count == 8 { 1 } else { 0 }
+                        && case["observation"]["value_work"]["input_admission_nodes"]
+                            == if count == 8 { 9 } else { 1 }
+                        && case["observation"]["collection_items"] == if count == 8 { 8 } else { 0 }
+                        && if count == 8 {
+                            case["failure"].is_null() && case["value"] == 8
+                        } else {
+                            case["failure"]["class"] == "resource"
+                                && case["failure"]["code"]
+                                    == if tier == "production" {
+                                        "normalized_collection_items"
+                                    } else {
+                                        "normalized_reference_collection_items"
+                                    }
+                        }
                 }),
                 "raw collection exact-fit or one-over evidence is missing",
             )?;

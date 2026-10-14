@@ -40,7 +40,6 @@ pub(super) fn derive_program(
                 derive(code, work)?;
             }
             NormalizedEntryPoint::Function(_) => {}
-            #[cfg(test)]
             NormalizedEntryPoint::InstantiatedFunction(_, _) => {}
         }
     }

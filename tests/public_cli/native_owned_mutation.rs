@@ -118,8 +118,8 @@ fn native_owned_implementation_edit_reselects_tests_and_invalidates_prepared_res
     let source = std::fs::read_to_string(&draft).unwrap();
     let read = draft_reference(&source, "read");
     let alternate = draft_reference(&source, "alternate-read");
-    let from = format!("(method method_10000000000000000000000000000003 {read})");
-    let to = format!("(method method_10000000000000000000000000000003 {alternate})");
+    let from = format!("(method method_10000000000000000000000000000003 {read} (scopes))");
+    let to = format!("(method method_10000000000000000000000000000003 {alternate} (scopes))");
     assert_eq!(source.matches(&from).count(), 1);
     let changed = public.input("remap.lkjc", &source.replacen(&from, &to, 1));
     let remap = public.plan(&changed, true);

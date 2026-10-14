@@ -113,7 +113,7 @@ impl Nominals {
             "(self ",
             "(constraint owned)",
             "(constraint transferable)",
-            "borrow-from",
+            "read-from",
             "borrow-owned-field",
         ] {
             assert!(draft.contains(syntax), "generic supplier: {syntax}");
@@ -788,7 +788,7 @@ declarations.end
 fn native_owned_nominals_nested_borrows_preserve_source_until_consumption() {
     let nominal = Nominals::new();
     let supplier = unchanged(&nominal.supplier, "owned-nominals");
-    assert!(supplier.contains("(returns ") && supplier.contains("(borrow-from "));
+    assert!(supplier.contains("(returns ") && supplier.contains("(read-from "));
     for (label, source) in [
         (
             "consume-parent-during-child-loan",

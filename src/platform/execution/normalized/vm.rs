@@ -482,7 +482,6 @@ impl<'a> NormalizedVm<'a> {
                     machine.call(function, Arc::from([]), arguments)?;
                     None
                 }
-                #[cfg(test)]
                 NormalizedEntryPoint::InstantiatedFunction(function, types) => {
                     let arguments =
                         machine.admit_arguments(function, &types, arguments.into_vec())?;
@@ -726,7 +725,6 @@ impl Machine<'_> {
         let program = self.program;
         let function = match entry {
             NormalizedEntryPoint::Function(function) => Some(*function),
-            #[cfg(test)]
             NormalizedEntryPoint::InstantiatedFunction(function, _) => Some(*function),
             _ => None,
         };

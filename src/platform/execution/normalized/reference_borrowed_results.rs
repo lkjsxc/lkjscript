@@ -17,9 +17,9 @@ impl ReferenceState<'_> {
         let result = match opened {
             Ok(opened) => {
                 let result = self.evaluate_borrow_call_at(call, binding, body, locals);
-                if let Some((key, owner, local, anchor, scope)) = opened {
+                if let Some((key, owner, local, source)) = opened {
                     if let Some(value) = locals.get_mut(&local) {
-                        value.restore_source_binding(anchor, scope);
+                        value.restore_source_binding(source);
                     }
                     if let Some(owner) = owner {
                         if let Some(frame) = self.read_scope_frames.last_mut() {
@@ -222,6 +222,13 @@ impl ReferenceState<'_> {
                 path: Arc::clone(&returned.path),
                 ..parent_anchor.clone()
             };
+            let lease = value
+                .source_scope()
+                .map(|scope| scope.reborrow(self.control))
+                .transpose()?;
+            let source = CheckedValue::reserve_source_binding(anchor, lease, &mut |bytes| {
+                self.charge_allocation(bytes)
+            })?;
             if let NormalizedValue::ReadView(view) = value.raw() {
                 let schema = Arc::clone(&self.schema);
                 let scope = view.scope()?.key();
@@ -229,17 +236,13 @@ impl ReferenceState<'_> {
                 let admission = super::read_views::RuntimeAdmission::rebase(
                     &schema,
                     &original,
-                    &anchor,
+                    source.anchor(),
                     scope,
                     self.control,
                 )?;
-                value.rebind_view_source(anchor.clone(), &admission, self.control, crate::platform::execution::normalized::read_view_storage::ReadView::reserve_descriptor(self.control, &mut |bytes| self.charge_allocation(bytes))?)?;
+                value.rebind_view_source(Arc::clone(&source), &admission, self.control, crate::platform::execution::normalized::read_view_storage::ReadView::reserve_descriptor(self.control, &mut |bytes| self.charge_allocation(bytes))?)?;
             }
-            let lease = value
-                .source_scope()
-                .map(|scope| scope.reborrow(self.control))
-                .transpose()?;
-            value.bind_source(anchor, lease);
+            value.bind_source(source);
         }
         self.evaluate_borrowed_body(parent, binding, value, body, locals)
     }

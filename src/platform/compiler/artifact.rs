@@ -2872,8 +2872,10 @@ fn trace_object_closure(
 
     // These records have already been selected by exact source-owner commitments.
     // A binding annotation need not be an instruction relocation in a cached unit.
+    // Share the already-spent method budget without changing its reported metric.
+    let mut type_inventory_steps = work.implementation_inventory_steps;
     for ((package, _), record) in &reference_owners {
-        work.implementation_inventory_steps = work.implementation_inventory_steps
+        type_inventory_steps = type_inventory_steps
             .checked_add(1)
             .filter(|steps| *steps <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK as u64)
             .ok_or_else(|| artifact_error(
@@ -2888,8 +2890,7 @@ fn trace_object_closure(
             continue;
         };
         // Precharge the generation lookup and all possible root-set insertions.
-        work.implementation_inventory_steps = work
-            .implementation_inventory_steps
+        type_inventory_steps = type_inventory_steps
             .checked_add(7)
             .filter(|steps| {
                 *steps <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK as u64

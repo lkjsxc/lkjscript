@@ -858,3 +858,191 @@ fn reference_associated_invocation_seals_bind_route_scope_proof_and_retention_bu
     assert_eq!(error.class, ExecutionFailureClass::Cancelled);
     healthy(&case, &schema, true);
 }
+
+#[test]
+fn reference_scope_frames_reuse_one_admitted_parameter_inventory_without_weakening_guards() {
+    use std::cell::Cell;
+
+    struct CountingRead<'a> {
+        inner: FaultedReferenceRead<'a>,
+        parameters: Cell<usize>,
+    }
+    impl NormalizedReferenceRead for CountingRead<'_> {
+        fn binding(&self) -> Result<NormalizedReferenceBinding, ExecutionError> {
+            self.inner.binding()
+        }
+        fn schema(&self) -> Result<Arc<NormalizedReferenceSchema>, ExecutionError> {
+            self.inner.schema()
+        }
+        fn owner(&self, key: OwnerKey) -> Result<NormalizedReferenceOwnerRead, ExecutionError> {
+            if matches!(key, OwnerKey::Parameter(_)) {
+                self.parameters.set(self.parameters.get() + 1);
+            }
+            self.inner.owner(key)
+        }
+    }
+
+    for generation in [
+        crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
+        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+    ] {
+        let case = fixture_at_generation(false, generation);
+        let schema = schema(&case);
+        let reader = CountingRead {
+            inner: FaultedReferenceRead {
+                source: &case.fixture.source,
+                schema: Arc::clone(&schema),
+            },
+            parameters: Cell::new(0),
+        };
+        let program = program();
+        let interpreter = NormalizedReferenceInterpreter::from_reader(
+            &reader,
+            &program,
+            NormalizedRunPolicy::foreground(),
+        );
+        let (value, _) = interpreter
+            .execute(None, &ExecutionControl::uncancelled(), |state| {
+                let record = state.declaration(case.target)?;
+                let DeclarationPayload::Function(function) = record.payload else {
+                    unreachable!()
+                };
+                let count = function.parameters.len();
+                assert!(count > 0);
+                assert!(function.read_scope_parameters.is_empty());
+                assert!(function.read_scope_sources.is_empty());
+                state.charge_items(count, std::mem::size_of::<ParameterRecord>())?;
+                reader.parameters.set(0);
+                let mut parameters = state.parameters(case.target.package, &function.parameters)?;
+                assert_eq!(reader.parameters.get(), count);
+                // Canonical application closes .ty before frame admission. The
+                // frame uses the exact raw header/parent/use/source fields only.
+                let i64_type = state
+                    .schema
+                    .types
+                    .iter()
+                    .find_map(|(ty, object)| matches!(object.form, TypeForm::I64).then_some(*ty))
+                    .unwrap();
+                for parameter in &mut parameters {
+                    parameter.ty = i64_type;
+                }
+                let mut arguments = (0..count)
+                    .map(|_| CheckedValue::primitive(&state.schema, NormalizedValue::I64(17)))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let before_bytes = state.observation.allocated_bytes;
+                let before_items = state.observation.collection_items;
+                let frame = state.admit_read_scope_frame(
+                    case.target,
+                    &function,
+                    &parameters,
+                    &[],
+                    &mut arguments,
+                )?;
+                assert_eq!(frame.declaration(), Some(case.target));
+                assert_eq!(reader.parameters.get(), count);
+                assert_eq!(
+                    state.observation.allocated_bytes - before_bytes,
+                    (count * std::mem::size_of::<ParameterId>()) as u64,
+                );
+                assert_eq!(
+                    state.observation.collection_items - before_items,
+                    count as u64
+                );
+                drop(frame);
+
+                for mutation in 0..3 {
+                    let mut wrong = parameters.clone();
+                    match mutation {
+                        0 => wrong[0].header.kind = OwnerKind::Binding,
+                        1 => wrong[0].parent = ParameterParent::Function(case.caller.declaration),
+                        2 => {
+                            wrong.pop();
+                        }
+                        _ => unreachable!(),
+                    }
+                    let error = state
+                        .admit_read_scope_frame(case.target, &function, &wrong, &[], &mut arguments)
+                        .err()
+                        .expect("wrong exact parameter metadata must refuse");
+                    assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
+                    assert_eq!(error.code, "normalized_reference_type");
+                    assert_eq!(
+                        error.message,
+                        if mutation == 2 {
+                            "complete callable scope or argument arity differs"
+                        } else {
+                            "scope frame parameter has another canonical owner"
+                        },
+                    );
+                    assert_eq!(reader.parameters.get(), count);
+                }
+
+                // The one real vector remains reserved before owner reads. A
+                // refusal cannot hide a first vector allocation or second read.
+                let old_policy = state.policy.maximum_allocated_bytes;
+                let before_bytes = state.observation.allocated_bytes;
+                let cost = (count * std::mem::size_of::<ParameterRecord>()) as u64;
+                state.policy.maximum_allocated_bytes = Some(before_bytes + cost - 1);
+                let error = state
+                    .charge_items(count, std::mem::size_of::<ParameterRecord>())
+                    .and_then(|_| state.parameters(case.target.package, &function.parameters))
+                    .unwrap_err();
+                assert_eq!(error.class, ExecutionFailureClass::Resource);
+                assert_eq!(error.code, "normalized_reference_allocation");
+                assert_eq!(reader.parameters.get(), count);
+                assert_eq!(state.observation.allocated_bytes, before_bytes);
+                state.policy.maximum_allocated_bytes = old_policy;
+                let frame = state.admit_read_scope_frame(
+                    case.target,
+                    &function,
+                    &parameters,
+                    &[],
+                    &mut arguments,
+                )?;
+                drop(frame);
+                assert_eq!(reader.parameters.get(), count);
+                // A complete canonical indirect call still supplies the final
+                // value; this private helper test grants no artifact admission.
+                state.call_declaration(case.caller, &[], &[], &[], vec![])
+            })
+            .unwrap();
+        assert_eq!(value, NormalizedValue::I64(17));
+
+        let control = ExecutionControl::uncancelled();
+        let error = interpreter
+            .execute(None, &control, |state| {
+                let record = state.declaration(case.target)?;
+                let DeclarationPayload::Function(function) = record.payload else {
+                    unreachable!()
+                };
+                state.charge_items(
+                    function.parameters.len(),
+                    std::mem::size_of::<ParameterRecord>(),
+                )?;
+                let parameters = state.parameters(case.target.package, &function.parameters)?;
+                let mut arguments = parameters
+                    .iter()
+                    .map(|_| CheckedValue::primitive(&state.schema, NormalizedValue::I64(17)))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let reads = reader.parameters.get();
+                let bytes = state.observation.allocated_bytes;
+                control.cancel();
+                let error = state
+                    .admit_read_scope_frame(
+                        case.target,
+                        &function,
+                        &parameters,
+                        &[],
+                        &mut arguments,
+                    )
+                    .err()
+                    .expect("cancelled scope admission must refuse before storage");
+                assert_eq!(reader.parameters.get(), reads);
+                assert_eq!(state.observation.allocated_bytes, bytes);
+                Err(error)
+            })
+            .unwrap_err();
+        assert_eq!(error.class, ExecutionFailureClass::Cancelled);
+        assert_eq!(error.code, "execution_cancelled");
+    }
+}
