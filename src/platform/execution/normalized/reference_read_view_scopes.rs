@@ -46,6 +46,9 @@ impl ScopeFrame {
     pub(in super::super) fn declaration(&self) -> Option<DeclarationReference> {
         self.declaration
     }
+    pub(in super::super) fn parameter_ids(&self) -> &[ParameterId] {
+        &self.parameters
+    }
     pub(in super::super) fn source_anchor(
         &self,
         local: LocalValueReference,
@@ -255,7 +258,7 @@ impl ReferenceState<'_> {
     pub(in super::super) fn admit_read_scope_frame(
         &mut self,
         declaration: DeclarationReference,
-        function: &FunctionDeclaration,
+        function: &mut FunctionDeclaration,
         parameters: &[ParameterRecord],
         actuals: &[ReadScopeArgument],
         arguments: &mut [CheckedValue],
@@ -334,12 +337,7 @@ impl ReferenceState<'_> {
                 + std::mem::size_of::<ReadScopeArgument>()
                 + 6 * std::mem::size_of::<usize>(),
         )?;
-        self.charge_items(
-            function.parameters.len(),
-            std::mem::size_of::<ParameterId>(),
-        )?;
         let mut frame = ScopeFrame::new(self.schema.value_origin, Some(declaration))?;
-        frame.parameters = function.parameters.clone();
         for (formal, actual) in function.read_scope_parameters.iter().zip(actuals) {
             self.validate_read_scope_actual(*actual)?;
             let caller = self
@@ -500,6 +498,9 @@ impl ReferenceState<'_> {
             value.bind_source(binding);
             value.set_provenance(LocalValueReference::FunctionParameter(*id));
         }
+        // All admission checks have finished. Retain the invocation's existing
+        // ordered ID storage instead of allocating a second parameter vector.
+        frame.parameters = std::mem::take(&mut function.parameters);
         Ok(frame)
     }
 

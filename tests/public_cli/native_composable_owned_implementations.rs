@@ -328,7 +328,11 @@ fn native_owned_composable_implementation_prerequisites_three_packages_nested_id
     let main = declaration(public, "composable-owned-app", "main");
     let draft = unchanged_labeled(public, "composable-owned-app", "original");
     assert!(draft.contains("(implementations "));
-    assert!(draft.contains("(borrow-call "));
+    assert!(
+        draft
+            .split_whitespace()
+            .any(|token| token == "(borrow-call")
+    );
     assert_nested_draft_identity(&packages, &draft);
     let artifact = public
         .root

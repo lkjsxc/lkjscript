@@ -326,12 +326,19 @@ fn native_owned_exports_require_visible_method_and_contract_signatures() {
     );
     author(&consumer, &format!("{}{imports}", dependency(&opaque)));
     let consumer_head = consumer.revision();
-    for (label, reference, callee) in [
-        ("private-method-name", String::new(), "cell::read"),
+    let consumer_head_bytes = std::fs::read(consumer.project.join("HEAD")).unwrap();
+    for (label, reference, callee, expected_code) in [
+        (
+            "private-method-name",
+            String::new(),
+            "cell::read",
+            "change_reference_not_exposed",
+        ),
         (
             "private-method-exact",
             format!("(reference hidden declaration {}/{method})", opaque.package),
             "hidden",
+            "kernel_type_dependency_owner_missing",
         ),
     ] {
         let input = consumer.input(
@@ -341,12 +348,47 @@ fn native_owned_exports_require_visible_method_and_contract_signatures() {
             ),
         );
         let failure = consumer.plan(&input, false);
+        let diagnostic = compact_record(&failure, "diagnostic");
+        assert_eq!(compact_field(diagnostic, "class"), "semantic");
         assert_eq!(
-            compact_field(compact_record(&failure, "diagnostic"), "code"),
-            "change_reference_not_exposed",
+            compact_field(diagnostic, "code"),
+            expected_code,
             "{label}: {failure:?}"
         );
+        if label == "private-method-name" {
+            assert_eq!(
+                compact_field(diagnostic, "message"),
+                "no legally exposed owner has this name under the exact interface parent; private, removed and unexposed namespaces cannot be bound"
+            );
+        } else {
+            assert_eq!(
+                compact_field(diagnostic, "message"),
+                format!(
+                    "function names owner Declaration({:?}) absent from exact dependency interface {}",
+                    method
+                        .parse::<lkjscript::platform::DeclarationId>()
+                        .unwrap(),
+                    opaque.package,
+                )
+            );
+            let memory = failure
+                .iter()
+                .find(|record| {
+                    record.operation == "diagnostic"
+                        && compact_field(record, "code") == "kernel_buffer_ownership"
+                })
+                .expect("exact private callee independently refused by memory admission");
+            assert_eq!(compact_field(memory, "class"), "semantic");
+            assert_eq!(
+                compact_field(memory, "message"),
+                "missing imported memory callee"
+            );
+        }
         assert_eq!(consumer.revision(), consumer_head);
+        assert_eq!(
+            std::fs::read(consumer.project.join("HEAD")).unwrap(),
+            consumer_head_bytes
+        );
     }
     author(
         &consumer,

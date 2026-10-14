@@ -904,16 +904,17 @@ fn reference_scope_frames_reuse_one_admitted_parameter_inventory_without_weakeni
         let (value, _) = interpreter
             .execute(None, &ExecutionControl::uncancelled(), |state| {
                 let record = state.declaration(case.target)?;
-                let DeclarationPayload::Function(function) = record.payload else {
+                let DeclarationPayload::Function(function_template) = record.payload else {
                     unreachable!()
                 };
-                let count = function.parameters.len();
+                let count = function_template.parameters.len();
                 assert!(count > 0);
-                assert!(function.read_scope_parameters.is_empty());
-                assert!(function.read_scope_sources.is_empty());
+                assert!(function_template.read_scope_parameters.is_empty());
+                assert!(function_template.read_scope_sources.is_empty());
                 state.charge_items(count, std::mem::size_of::<ParameterRecord>())?;
                 reader.parameters.set(0);
-                let mut parameters = state.parameters(case.target.package, &function.parameters)?;
+                let mut parameters =
+                    state.parameters(case.target.package, &function_template.parameters)?;
                 assert_eq!(reader.parameters.get(), count);
                 // Canonical application closes .ty before frame admission. The
                 // frame uses the exact raw header/parent/use/source fields only.
@@ -929,25 +930,27 @@ fn reference_scope_frames_reuse_one_admitted_parameter_inventory_without_weakeni
                 let mut arguments = (0..count)
                     .map(|_| CheckedValue::primitive(&state.schema, NormalizedValue::I64(17)))
                     .collect::<Result<Vec<_>, _>>()?;
+                let mut function = function_template.clone();
+                let parameter_storage = function.parameters.as_ptr();
                 let before_bytes = state.observation.allocated_bytes;
                 let before_items = state.observation.collection_items;
                 let frame = state.admit_read_scope_frame(
                     case.target,
-                    &function,
+                    &mut function,
                     &parameters,
                     &[],
                     &mut arguments,
                 )?;
                 assert_eq!(frame.declaration(), Some(case.target));
+                assert_eq!(
+                    frame.parameter_ids(),
+                    function_template.parameters.as_slice()
+                );
+                assert_eq!(frame.parameter_ids().as_ptr(), parameter_storage);
+                assert!(function.parameters.is_empty());
                 assert_eq!(reader.parameters.get(), count);
-                assert_eq!(
-                    state.observation.allocated_bytes - before_bytes,
-                    (count * std::mem::size_of::<ParameterId>()) as u64,
-                );
-                assert_eq!(
-                    state.observation.collection_items - before_items,
-                    count as u64
-                );
+                assert_eq!(state.observation.allocated_bytes, before_bytes);
+                assert_eq!(state.observation.collection_items, before_items);
                 drop(frame);
 
                 for mutation in 0..3 {
@@ -960,8 +963,15 @@ fn reference_scope_frames_reuse_one_admitted_parameter_inventory_without_weakeni
                         }
                         _ => unreachable!(),
                     }
+                    let mut function = function_template.clone();
                     let error = state
-                        .admit_read_scope_frame(case.target, &function, &wrong, &[], &mut arguments)
+                        .admit_read_scope_frame(
+                            case.target,
+                            &mut function,
+                            &wrong,
+                            &[],
+                            &mut arguments,
+                        )
                         .err()
                         .expect("wrong exact parameter metadata must refuse");
                     assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
@@ -975,6 +985,7 @@ fn reference_scope_frames_reuse_one_admitted_parameter_inventory_without_weakeni
                         },
                     );
                     assert_eq!(reader.parameters.get(), count);
+                    assert_eq!(function.parameters, function_template.parameters);
                 }
 
                 // The one real vector remains reserved before owner reads. A
@@ -985,16 +996,19 @@ fn reference_scope_frames_reuse_one_admitted_parameter_inventory_without_weakeni
                 state.policy.maximum_allocated_bytes = Some(before_bytes + cost - 1);
                 let error = state
                     .charge_items(count, std::mem::size_of::<ParameterRecord>())
-                    .and_then(|_| state.parameters(case.target.package, &function.parameters))
+                    .and_then(|_| {
+                        state.parameters(case.target.package, &function_template.parameters)
+                    })
                     .unwrap_err();
                 assert_eq!(error.class, ExecutionFailureClass::Resource);
                 assert_eq!(error.code, "normalized_reference_allocation");
                 assert_eq!(reader.parameters.get(), count);
                 assert_eq!(state.observation.allocated_bytes, before_bytes);
                 state.policy.maximum_allocated_bytes = old_policy;
+                let mut function = function_template.clone();
                 let frame = state.admit_read_scope_frame(
                     case.target,
-                    &function,
+                    &mut function,
                     &parameters,
                     &[],
                     &mut arguments,
@@ -1012,25 +1026,27 @@ fn reference_scope_frames_reuse_one_admitted_parameter_inventory_without_weakeni
         let error = interpreter
             .execute(None, &control, |state| {
                 let record = state.declaration(case.target)?;
-                let DeclarationPayload::Function(function) = record.payload else {
+                let DeclarationPayload::Function(function_template) = record.payload else {
                     unreachable!()
                 };
                 state.charge_items(
-                    function.parameters.len(),
+                    function_template.parameters.len(),
                     std::mem::size_of::<ParameterRecord>(),
                 )?;
-                let parameters = state.parameters(case.target.package, &function.parameters)?;
+                let parameters =
+                    state.parameters(case.target.package, &function_template.parameters)?;
                 let mut arguments = parameters
                     .iter()
                     .map(|_| CheckedValue::primitive(&state.schema, NormalizedValue::I64(17)))
                     .collect::<Result<Vec<_>, _>>()?;
                 let reads = reader.parameters.get();
                 let bytes = state.observation.allocated_bytes;
+                let mut function = function_template.clone();
                 control.cancel();
                 let error = state
                     .admit_read_scope_frame(
                         case.target,
-                        &function,
+                        &mut function,
                         &parameters,
                         &[],
                         &mut arguments,
@@ -1039,6 +1055,7 @@ fn reference_scope_frames_reuse_one_admitted_parameter_inventory_without_weakeni
                     .expect("cancelled scope admission must refuse before storage");
                 assert_eq!(reader.parameters.get(), reads);
                 assert_eq!(state.observation.allocated_bytes, bytes);
+                assert_eq!(function.parameters, function_template.parameters);
                 Err(error)
             })
             .unwrap_err();

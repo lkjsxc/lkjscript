@@ -82,8 +82,9 @@ fn mapping_collection_items(n: u64) -> u64 {
     n + 2 + 2 + 2 + 1 + 2 + 2 + slots
 }
 
-// The reference scope frame independently retains two collections per admitted
-// graph call: current ParameterRecord scratch and ordered ParameterId coordinates.
+// Reference call admission creates one ParameterRecord collection per graph call.
+// Its ordered ParameterId vector moves into the scope frame after complete
+// admission; transferring that existing storage creates no second collection.
 // The authored map calls map(3), configure(2), list-map(2), fold-left(3), and
 // the initial fold-loop(5) once. Each item adds fold-loop(5), map-step(3),
 // configure-helper(3), and configured-map-step(2). External intrinsics do not
@@ -92,7 +93,7 @@ fn mapping_collection_items(n: u64) -> u64 {
 fn mapping_reference_scope_items(n: u64) -> u64 {
     let fixed_parameter_slots = 3 + 2 + 2 + 3 + 5;
     let per_item_parameter_slots = 5 + 3 + 3 + 2;
-    2 * (fixed_parameter_slots + n * per_item_parameter_slots)
+    fixed_parameter_slots + n * per_item_parameter_slots
 }
 
 fn verify_mapping_collection_items(
@@ -2783,13 +2784,13 @@ mod checked_value_tests {
         // Literal independent fixed-fanout and graph-arity boundaries. In
         // particular, the first branch reservation occurs at append 65.
         for (n, production, reference) in [
-            (0, 11, 41),
-            (1, 44, 100),
-            (32, 1067, 1929),
-            (33, 1100, 1988),
-            (64, 2123, 3817),
-            (65, 2188, 3908),
-            (256, 8651, 15337),
+            (0, 11, 26),
+            (1, 44, 72),
+            (32, 1067, 1498),
+            (33, 1100, 1544),
+            (64, 2123, 2970),
+            (65, 2188, 3048),
+            (256, 8651, 11994),
         ] {
             let healthy = serde_json::json!({
                 "production_collection_items": production,
@@ -2797,6 +2798,11 @@ mod checked_value_tests {
             });
             assert!(verify_mapping_collection_items(&healthy, "production", n).is_ok());
             assert!(verify_mapping_collection_items(&healthy, "reference", n).is_ok());
+            // The removed ID clone must not survive in an accepted item ledger.
+            let mut duplicated_ids = healthy.clone();
+            duplicated_ids["reference_collection_items"] =
+                serde_json::json!(2 * reference - production);
+            assert!(verify_mapping_collection_items(&duplicated_ids, "reference", n).is_err());
             for (tier, exact) in [("production", production), ("reference", reference)] {
                 for difference in [-1, 1] {
                     let mut altered = healthy.clone();

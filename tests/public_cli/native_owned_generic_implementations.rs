@@ -247,7 +247,11 @@ fn native_owned_generic_implementation_schemes_three_packages_nested_products_re
     let scenario = declaration(public, "generic-owned-app", "scenario");
     let draft = unchanged_labeled(public, "generic-owned-app", "original");
     assert!(draft.contains("(implementation "));
-    assert!(draft.contains("(borrow-call "));
+    assert!(
+        draft
+            .split_whitespace()
+            .any(|token| token == "(borrow-call")
+    );
     let artifact = public
         .root
         .path()

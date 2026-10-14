@@ -2552,7 +2552,7 @@ impl ReferenceState<'_> {
         };
         let read_scopes = self.admit_read_scope_frame(
             declaration,
-            &function,
+            &mut function,
             &parameters,
             scopes,
             &mut arguments,
@@ -2580,9 +2580,10 @@ impl ReferenceState<'_> {
         self.charge_allocation(std::mem::size_of::<read_views::ScopeFrame>() as u64)?;
         let result_borrow = target.function.result.relation.source().copied();
         let mut locals = target
-            .function
-            .parameters
-            .into_iter()
+            .read_scopes
+            .parameter_ids()
+            .iter()
+            .copied()
             .zip(target.arguments)
             .map(|(parameter, mut value)| {
                 let local = LocalValueReference::FunctionParameter(parameter);

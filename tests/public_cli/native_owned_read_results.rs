@@ -202,7 +202,11 @@ fn native_owned_read_results_three_packages_select_first_max_drain_reuse_and_det
     let main = declaration(public, "owned-read-app", "main");
     let scenario = declaration(public, "owned-read-app", "scenario");
     let draft = unchanged_labeled(public, "owned-read-app", "original");
-    assert!(draft.contains("(borrow-call "));
+    assert!(
+        draft
+            .split_whitespace()
+            .any(|token| token == "(borrow-call")
+    );
     // Canonical edits preserve function identities, and subsequent re-entry stays exact.
     assert!(draft.contains("(i64 17)"));
     let edit = public.input(
