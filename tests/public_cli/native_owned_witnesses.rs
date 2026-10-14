@@ -434,6 +434,7 @@ declarations.end
         let plan = public.plan(&input, true);
         public.apply(&input, &plan, true);
         let head = public.revision();
+        let head_bytes = std::fs::read(public.project.join("HEAD")).unwrap();
         let output = public.root.path().join("private-signature.lkjp");
         let failure = public.cli(
             &[
@@ -447,13 +448,27 @@ declarations.end
             ],
             false,
         );
+        let diagnostic = compact_record(&failure, "diagnostic");
+        assert_eq!(compact_field(diagnostic, "class"), "semantic");
         assert_eq!(
-            compact_field(compact_record(&failure, "diagnostic"), "code"),
-            "package_transport_interface_owner_missing",
+            compact_field(diagnostic, "code"),
+            "package_interface_read_view",
             "{failure:?}"
+        );
+        assert_eq!(
+            compact_field(diagnostic, "message"),
+            "local read-view nominal declaration is absent"
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(compact_field(diagnostic, "notes")).unwrap(),
+            json!(["while resolving historical package transport selections"])
         );
         assert!(!output.exists());
         assert_eq!(public.revision(), head);
+        assert_eq!(
+            std::fs::read(public.project.join("HEAD")).unwrap(),
+            head_bytes
+        );
     }
 }
 

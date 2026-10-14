@@ -795,6 +795,35 @@ struct ReferenceState<'a> {
     observation: NormalizedReferenceObservation,
 }
 
+fn charge_reference_allocation(
+    policy: NormalizedRunPolicy,
+    observation: &mut NormalizedReferenceObservation,
+    shared_budget: Option<&super::shared_budget::SharedBudget>,
+    bytes: u64,
+) -> Result<(), ExecutionError> {
+    if bytes > super::value::MAXIMUM_VALUE_ALLOCATION_BYTES {
+        return Err(reference_resource(
+            "normalized_reference_allocation",
+            "one allocation exceeds finite value storage",
+        ));
+    }
+    let next_bytes = crate::platform::execution::cumulative_charge(
+        observation.allocated_bytes,
+        bytes,
+        policy.maximum_allocated_bytes,
+        "normalized_reference_allocation",
+        "execution exhausted its allocation budget",
+    )?;
+    if let Some(budget) = shared_budget {
+        budget.reserve(bytes, 0)?;
+    }
+    observation.allocated_bytes = next_bytes;
+    if bytes != 0 {
+        observation.allocation_charges = observation.allocation_charges.saturating_add(1);
+    }
+    Ok(())
+}
+
 // Break completes the trampoline; Continue transfers an already admitted tail call.
 // Ordinary checked results stay inline; only tail targets retain their existing Box.
 type ReferenceStep = std::ops::ControlFlow<CheckedValue, Box<AdmittedGraphCall>>;
@@ -5504,28 +5533,12 @@ impl ReferenceState<'_> {
     }
 
     fn charge_allocation(&mut self, bytes: u64) -> Result<(), ExecutionError> {
-        if bytes > super::value::MAXIMUM_VALUE_ALLOCATION_BYTES {
-            return Err(reference_resource(
-                "normalized_reference_allocation",
-                "one allocation exceeds finite value storage",
-            ));
-        }
-        let next_bytes = crate::platform::execution::cumulative_charge(
-            self.observation.allocated_bytes,
+        charge_reference_allocation(
+            self.policy,
+            &mut self.observation,
+            self.shared_budget.as_deref(),
             bytes,
-            self.policy.maximum_allocated_bytes,
-            "normalized_reference_allocation",
-            "execution exhausted its allocation budget",
-        )?;
-        if let Some(budget) = &self.shared_budget {
-            budget.reserve(bytes, 0)?;
-        }
-        self.observation.allocated_bytes = next_bytes;
-        if bytes != 0 {
-            self.observation.allocation_charges =
-                self.observation.allocation_charges.saturating_add(1);
-        }
-        Ok(())
+        )
     }
 
     fn charge_value(&mut self, value: &NormalizedValue) -> Result<(), ExecutionError> {

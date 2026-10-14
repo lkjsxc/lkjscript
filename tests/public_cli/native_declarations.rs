@@ -17,7 +17,11 @@ impl Native {
     }
 
     fn template(template: &str) -> Self {
-        let root = tempfile::tempdir().unwrap();
+        let mut root = tempfile::tempdir().unwrap();
+        if std::env::var_os("LKJSCRIPT_RETAIN_PRODUCT_EVIDENCE").is_some() {
+            root.disable_cleanup(true);
+            println!("retained native public evidence: {}", root.path().display());
+        }
         let executable = root.path().join("lkjscript");
         copy_executable(&binary(), &executable);
         let project = root.path().join("project");

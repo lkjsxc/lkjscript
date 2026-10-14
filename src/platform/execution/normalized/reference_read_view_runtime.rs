@@ -1268,10 +1268,15 @@ impl ReferenceState<'_> {
         let binding = CheckedValue::reserve_source_binding(anchor, Some(lease), &mut |bytes| {
             self.charge_allocation(bytes)
         })?;
+        let policy = self.policy;
+        let observation = &mut self.observation;
+        let shared_budget = self.shared_budget.as_deref();
         self.read_scope_frames
             .last_mut()
             .ok_or_else(|| failure("lexical scope frame disappeared"))?
-            .bind_scope(key, frame_lease, control)?;
+            .bind_scope(key, frame_lease, control, &mut |bytes| {
+                charge_reference_allocation(policy, observation, shared_budget, bytes)
+            })?;
         locals
             .get_mut(&local)
             .ok_or_else(|| failure("lexical source disappeared"))?
@@ -1322,10 +1327,15 @@ impl ReferenceState<'_> {
             2,
             std::mem::size_of::<ReadScopeArgument>() + 3 * std::mem::size_of::<usize>(),
         )?;
+        let policy = self.policy;
+        let observation = &mut self.observation;
+        let shared_budget = self.shared_budget.as_deref();
         self.read_scope_frames
             .last_mut()
             .ok_or_else(|| failure("prospective frame disappeared"))?
-            .begin_prospective_scope(key, self.control)?;
+            .begin_prospective_scope(key, self.control, &mut |bytes| {
+                charge_reference_allocation(policy, observation, shared_budget, bytes)
+            })?;
         self.lexical_loan_scopes = self
             .lexical_loan_scopes
             .checked_add(1)
@@ -1468,10 +1478,15 @@ impl ReferenceState<'_> {
             2,
             std::mem::size_of::<ReadScopeArgument>() + 3 * std::mem::size_of::<usize>(),
         )?;
+        let policy = self.policy;
+        let observation = &mut self.observation;
+        let shared_budget = self.shared_budget.as_deref();
         self.read_scope_frames
             .last_mut()
             .ok_or_else(|| failure("borrow-call frame disappeared"))?
-            .begin_prospective_scope(scope, self.control)?;
+            .begin_prospective_scope(scope, self.control, &mut |bytes| {
+                charge_reference_allocation(policy, observation, shared_budget, bytes)
+            })?;
         Ok(Some(scope))
     }
 }
@@ -1517,10 +1532,15 @@ impl ReferenceState<'_> {
                 + std::mem::size_of::<super::super::read_view_storage::RuntimeScopeLease>()
                 + 6 * std::mem::size_of::<usize>(),
         )?;
+        let policy = self.policy;
+        let observation = &mut self.observation;
+        let shared_budget = self.shared_budget.as_deref();
         self.read_scope_frames
             .last_mut()
             .ok_or_else(|| failure("source scope frame disappeared"))?
-            .bind_owned_scope(scope, owner, lease, control)?;
+            .bind_owned_scope(scope, owner, lease, control, &mut |bytes| {
+                charge_reference_allocation(policy, observation, shared_budget, bytes)
+            })?;
         Ok(result)
     }
 }
@@ -1625,10 +1645,15 @@ impl ReferenceState<'_> {
             2,
             std::mem::size_of::<ReadScopeArgument>() + 3 * std::mem::size_of::<usize>(),
         )?;
+        let policy = self.policy;
+        let observation = &mut self.observation;
+        let shared_budget = self.shared_budget.as_deref();
         self.read_scope_frames
             .last_mut()
             .ok_or_else(|| failure("lexical loan frame disappeared"))?
-            .begin_prospective_scope(key, self.control)?;
+            .begin_prospective_scope(key, self.control, &mut |bytes| {
+                charge_reference_allocation(policy, observation, shared_budget, bytes)
+            })?;
         Ok(Some(key))
     }
 }

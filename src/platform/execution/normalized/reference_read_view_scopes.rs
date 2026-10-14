@@ -17,6 +17,11 @@ pub(in super::super) struct ScopeFrame {
     application: ValueOrigin,
     invocation: ValueOrigin,
     parameters: Vec<ParameterId>,
+    scope_state: Option<Box<ScopeState>>,
+}
+
+#[derive(Default)]
+struct ScopeState {
     bindings: BTreeMap<ReadScopeReference, ReadScopeArgument>,
     actuals: BTreeSet<ReadScopeArgument>,
     leases: BTreeMap<ReadScopeArgument, RuntimeScopeLease>,
@@ -35,12 +40,27 @@ impl ScopeFrame {
             application: fresh()?,
             invocation: fresh()?,
             parameters: Vec::new(),
-            bindings: BTreeMap::new(),
-            actuals: BTreeSet::new(),
-            leases: BTreeMap::new(),
-            prospective: BTreeSet::new(),
-            owners: BTreeMap::new(),
+            scope_state: None,
         })
+    }
+
+    pub(in super::super) const fn scope_storage_bytes() -> usize {
+        std::mem::size_of::<ScopeState>()
+    }
+
+    fn scope_state_mut(
+        &mut self,
+        control: &ExecutionControl,
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+    ) -> Result<&mut ScopeState, ExecutionError> {
+        if self.scope_state.is_none() {
+            control.check()?;
+            reserve(Self::scope_storage_bytes() as u64)?;
+            self.scope_state = Some(Box::new(ScopeState::default()));
+        }
+        self.scope_state
+            .as_deref_mut()
+            .ok_or_else(|| failure("reserved scope state is absent"))
     }
 
     pub(in super::super) fn declaration(&self) -> Option<DeclarationReference> {
@@ -96,11 +116,18 @@ impl ScopeFrame {
         scope: ReadScopeArgument,
     ) -> Result<ReadScopeArgument, ExecutionError> {
         if let ReadScopeArgument::Parameter(reference) = scope
-            && let Some(actual) = self.bindings.get(&reference)
+            && let Some(actual) = self
+                .scope_state
+                .as_ref()
+                .and_then(|state| state.bindings.get(&reference))
         {
             return Ok(*actual);
         }
-        if self.actuals.contains(&scope) {
+        if self
+            .scope_state
+            .as_ref()
+            .is_some_and(|state| state.actuals.contains(&scope))
+        {
             return Ok(scope);
         }
         Err(failure("read scope is outside the exact active invocation"))
@@ -110,13 +137,18 @@ impl ScopeFrame {
         &self,
         actual: ReadScopeArgument,
     ) -> Result<&RuntimeScopeLease, ExecutionError> {
-        if !self.actuals.contains(&actual) {
+        if !self
+            .scope_state
+            .as_ref()
+            .is_some_and(|state| state.actuals.contains(&actual))
+        {
             return Err(failure(
                 "runtime lease lookup requires an exact resolved caller actual",
             ));
         }
-        self.leases
-            .get(&actual)
+        self.scope_state
+            .as_ref()
+            .and_then(|state| state.leases.get(&actual))
             .ok_or_else(|| failure("symbolic read scope has no admitted live source lease"))
     }
 
@@ -127,6 +159,7 @@ impl ScopeFrame {
         scope: ReadScopeArgument,
         lease: RuntimeScopeLease,
         control: &ExecutionControl,
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
     ) -> Result<(), ExecutionError> {
         control.check()?;
         let ReadScopeArgument::Lexical { callable, .. } = scope else {
@@ -135,8 +168,10 @@ impl ScopeFrame {
         if self.declaration != Some(callable)
             || lease.key() != scope
             || lease.source().program != self.program
-            || (self.actuals.contains(&scope) && !self.prospective.contains(&scope))
-            || self.leases.contains_key(&scope)
+            || self.scope_state.as_ref().is_some_and(|state| {
+                (state.actuals.contains(&scope) && !state.prospective.contains(&scope))
+                    || state.leases.contains_key(&scope)
+            })
         {
             return Err(failure(
                 "lexical scope does not name one fresh containing loan",
@@ -144,8 +179,9 @@ impl ScopeFrame {
         }
         // Validate liveness before making the lease visible in the frame.
         let lease = lease.reborrow(control)?;
-        self.actuals.insert(scope);
-        self.leases.insert(scope, lease);
+        let state = self.scope_state_mut(control, reserve)?;
+        state.actuals.insert(scope);
+        state.leases.insert(scope, lease);
         Ok(())
     }
 
@@ -153,32 +189,40 @@ impl ScopeFrame {
         &mut self,
         scope: ReadScopeArgument,
         control: &ExecutionControl,
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
     ) -> Result<(), ExecutionError> {
         control.check()?;
         let ReadScopeArgument::Lexical { callable, .. } = scope else {
             return Err(failure("prospective loan requires a lexical binding"));
         };
         if self.declaration != Some(callable)
-            || self.actuals.contains(&scope)
-            || !self.prospective.insert(scope)
+            || self.scope_state.as_ref().is_some_and(|state| {
+                state.actuals.contains(&scope) || state.prospective.contains(&scope)
+            })
         {
             return Err(failure(
                 "prospective loan aliases another exact live binding",
             ));
         }
-        self.actuals.insert(scope);
+        let state = self.scope_state_mut(control, reserve)?;
+        state.prospective.insert(scope);
+        state.actuals.insert(scope);
         Ok(())
     }
 
     pub(in super::super) fn remove_scope(&mut self, scope: ReadScopeArgument) {
-        self.leases.remove(&scope);
-        self.actuals.remove(&scope);
-        self.prospective.remove(&scope);
-        self.owners.remove(&scope);
+        if let Some(state) = self.scope_state.as_deref_mut() {
+            state.leases.remove(&scope);
+            state.actuals.remove(&scope);
+            state.prospective.remove(&scope);
+            state.owners.remove(&scope);
+        }
     }
 
     pub(in super::super) fn is_prospective(&self, scope: ReadScopeArgument) -> bool {
-        self.prospective.contains(&scope)
+        self.scope_state
+            .as_ref()
+            .is_some_and(|state| state.prospective.contains(&scope))
     }
 
     pub(in super::super) fn bind_owned_scope(
@@ -187,14 +231,24 @@ impl ScopeFrame {
         owner: RuntimeScopeOwner,
         lease: RuntimeScopeLease,
         control: &ExecutionControl,
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
     ) -> Result<(), ExecutionError> {
-        if !self.prospective.contains(&scope) || self.owners.contains_key(&scope) {
+        if !self.is_prospective(scope)
+            || self
+                .scope_state
+                .as_ref()
+                .is_some_and(|state| state.owners.contains_key(&scope))
+        {
             return Err(failure(
                 "source owner lacks one exact prospective lexical context",
             ));
         }
-        self.bind_scope(scope, lease, control)?;
-        self.owners.insert(scope, owner);
+        self.bind_scope(scope, lease, control, reserve)?;
+        self.scope_state
+            .as_deref_mut()
+            .ok_or_else(|| failure("bound scope state is absent"))?
+            .owners
+            .insert(scope, owner);
         Ok(())
     }
 }
@@ -223,6 +277,7 @@ impl ReferenceState<'_> {
     pub(in super::super) fn capture_read_scope_frame(
         &self,
         actuals: &[ReadScopeArgument],
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
     ) -> Result<ScopeFrame, ExecutionError> {
         self.control.check()?;
         if actuals.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN {
@@ -240,16 +295,25 @@ impl ReferenceState<'_> {
             // Replacing them a second time would capture the wrong invocation
             // when recursive calls permute same-binder scope parameters.
             let actual = *actual;
-            if !caller.actuals.contains(&actual) {
+            if !caller
+                .scope_state
+                .as_ref()
+                .is_some_and(|state| state.actuals.contains(&actual))
+            {
                 return Err(failure(
                     "captured scope is outside the resolved caller actual inventory",
                 ));
             }
-            captured.actuals.insert(actual);
-            if let Some(lease) = caller.leases.get(&actual) {
-                captured
-                    .leases
-                    .insert(actual, lease.reborrow(self.control)?);
+            let lease = caller
+                .scope_state
+                .as_ref()
+                .and_then(|state| state.leases.get(&actual))
+                .map(|lease| lease.reborrow(self.control))
+                .transpose()?;
+            let state = captured.scope_state_mut(self.control, reserve)?;
+            state.actuals.insert(actual);
+            if let Some(lease) = lease {
+                state.leases.insert(actual, lease);
             }
         }
         Ok(captured)
@@ -347,7 +411,11 @@ impl ReferenceState<'_> {
             // Complete call preparation supplies resolved actuals. Substitution
             // is simultaneous: never interpret an inserted actual as a new formal.
             let actual = *actual;
-            if !caller.actuals.contains(&actual) {
+            if !caller
+                .scope_state
+                .as_ref()
+                .is_some_and(|state| state.actuals.contains(&actual))
+            {
                 return Err(failure(
                     "callee scope is outside the resolved caller actual inventory",
                 ));
@@ -356,12 +424,25 @@ impl ReferenceState<'_> {
                 binder: ReadScopeBinder::Declaration(declaration),
                 parameter: formal.id,
             };
-            if frame.bindings.insert(reference, actual).is_some() {
+            if frame
+                .scope_state
+                .as_ref()
+                .is_some_and(|state| state.bindings.contains_key(&reference))
+            {
                 return Err(failure("duplicate exact callable scope formal"));
             }
-            frame.actuals.insert(actual);
-            if let Some(lease) = caller.leases.get(&actual) {
-                frame.leases.insert(actual, lease.reborrow(self.control)?);
+            let lease = caller
+                .scope_state
+                .as_ref()
+                .and_then(|state| state.leases.get(&actual))
+                .map(|lease| lease.reborrow(self.control))
+                .transpose()?;
+            let state =
+                frame.scope_state_mut(self.control, &mut |bytes| self.charge_allocation(bytes))?;
+            state.bindings.insert(reference, actual);
+            state.actuals.insert(actual);
+            if let Some(lease) = lease {
+                state.leases.insert(actual, lease);
             }
         }
 
@@ -407,7 +488,10 @@ impl ReferenceState<'_> {
                     "source argument forwards another exact actual scope",
                 ));
             }
-            if let Some(existing) = frame.leases.get(&actual)
+            if let Some(existing) = frame
+                .scope_state
+                .as_ref()
+                .and_then(|state| state.leases.get(&actual))
                 && !existing.same_live_scope(lease)
             {
                 return Err(failure(
@@ -419,7 +503,11 @@ impl ReferenceState<'_> {
                 std::mem::size_of::<(ReadScopeArgument, RuntimeScopeLease)>()
                     + 3 * std::mem::size_of::<usize>(),
             )?;
-            frame.leases.insert(actual, lease.reborrow(self.control)?);
+            let lease = lease.reborrow(self.control)?;
+            frame
+                .scope_state_mut(self.control, &mut |bytes| self.charge_allocation(bytes))?
+                .leases
+                .insert(actual, lease);
         }
 
         // Each borrowed argument gets its own new ordered invocation coordinate.

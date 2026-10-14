@@ -1190,7 +1190,7 @@ impl ReferenceState<'_> {
         envelope: TransferArguments,
     ) -> ChildOutcome {
         let declaration = task.declaration;
-        let capture_bytes = (std::mem::size_of::<read_views::ScopeFrame>()
+        let mut capture_bytes = (std::mem::size_of::<read_views::ScopeFrame>()
             + task.read_scope_arguments.len()
                 * (std::mem::size_of::<ReadScopeArgument>()
                     + std::mem::size_of::<super::super::read_view_storage::RuntimeScopeLease>()
@@ -1202,13 +1202,32 @@ impl ReferenceState<'_> {
                 observation: NormalizedReferenceObservation::default(),
             };
         }
-        let read_scope_frame = match self.capture_read_scope_frame(&task.read_scope_arguments) {
+        let mut capture_charges = 1;
+        let capture = self.capture_read_scope_frame(&task.read_scope_arguments, &mut |bytes| {
+            let next_bytes = capture_bytes.checked_add(bytes).ok_or_else(|| {
+                reference_resource(
+                    "normalized_reference_allocation",
+                    "scope capture allocation size overflowed",
+                )
+            })?;
+            budget.reserve(bytes, 0)?;
+            capture_bytes = next_bytes;
+            capture_charges += 1;
+            Ok(())
+        });
+        let observation = NormalizedReferenceObservation {
+            allocated_bytes: capture_bytes,
+            allocation_charges: capture_charges,
+            production_tier: "graph14_reference_records_10",
+            ..NormalizedReferenceObservation::default()
+        };
+        let read_scope_frame = match capture {
             Ok(frame) => frame,
             Err(error) => {
                 self.control.cancel();
                 return ChildOutcome {
                     result: Err(error),
-                    observation: NormalizedReferenceObservation::default(),
+                    observation,
                 };
             }
         };
@@ -1218,7 +1237,7 @@ impl ReferenceState<'_> {
                 self.control.cancel();
                 return ChildOutcome {
                     result: Err(error),
-                    observation: NormalizedReferenceObservation::default(),
+                    observation,
                 };
             }
         };
@@ -1259,12 +1278,7 @@ impl ReferenceState<'_> {
             read_scope_frames: vec![read_scope_frame],
             allowances: Vec::new(),
             root_allowance: Some(EffectRow::default()),
-            observation: NormalizedReferenceObservation {
-                allocated_bytes: capture_bytes,
-                allocation_charges: 1,
-                production_tier: "graph14_reference_records_10",
-                ..NormalizedReferenceObservation::default()
-            },
+            observation,
         };
         let result = (|| {
             let (application, values, leases) =

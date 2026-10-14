@@ -934,7 +934,7 @@ fn reference_scope_frames_reuse_one_admitted_parameter_inventory_without_weakeni
                 let parameter_storage = function.parameters.as_ptr();
                 let before_bytes = state.observation.allocated_bytes;
                 let before_items = state.observation.collection_items;
-                let frame = state.admit_read_scope_frame(
+                let mut frame = state.admit_read_scope_frame(
                     case.target,
                     &mut function,
                     &parameters,
@@ -951,6 +951,188 @@ fn reference_scope_frames_reuse_one_admitted_parameter_inventory_without_weakeni
                 assert_eq!(reader.parameters.get(), count);
                 assert_eq!(state.observation.allocated_bytes, before_bytes);
                 assert_eq!(state.observation.collection_items, before_items);
+                if generation == crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION {
+                    // Exercise only private metadata storage here: a prospective
+                    // key has no lease and cannot confer a raw lexical loan.
+                    let binding = BindingId::migrate(SEED, 2001);
+                    let scope = ReadScopeArgument::Lexical {
+                        callable: case.target,
+                        binding,
+                    };
+                    let foreign = ReadScopeArgument::Lexical {
+                        callable: case.caller,
+                        binding,
+                    };
+                    assert!(frame.resolve(scope).is_err());
+                    let mut reserves = Vec::new();
+                    let error = frame
+                        .begin_prospective_scope(foreign, state.control, &mut |bytes| {
+                            reserves.push(bytes);
+                            Ok(())
+                        })
+                        .unwrap_err();
+                    assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
+                    assert_eq!(error.code, "normalized_reference_type");
+                    assert_eq!(
+                        error.message,
+                        "prospective loan aliases another exact live binding"
+                    );
+                    assert!(reserves.is_empty());
+
+                    let cost = read_views::ScopeFrame::scope_storage_bytes() as u64;
+                    let original_limit = state.policy.maximum_allocated_bytes;
+                    let before = state.observation.allocated_bytes;
+                    state.policy.maximum_allocated_bytes = Some(before + cost - 1);
+                    let error = frame
+                        .begin_prospective_scope(scope, state.control, &mut |bytes| {
+                            reserves.push(bytes);
+                            state.charge_allocation(bytes)
+                        })
+                        .unwrap_err();
+                    assert_eq!(error.class, ExecutionFailureClass::Resource);
+                    assert_eq!(error.code, "normalized_reference_allocation");
+                    assert_eq!(reserves, [cost]);
+                    assert_eq!(state.observation.allocated_bytes, before);
+                    assert!(frame.resolve(scope).is_err());
+                    assert!(!frame.is_prospective(scope));
+                    assert_eq!(frame.parameter_ids().as_ptr(), parameter_storage);
+                    state.policy.maximum_allocated_bytes = original_limit;
+                    reserves.clear();
+
+                    // The caller still reserves the actual BTree entries; the
+                    // backing charge is distinct and paid exactly once.
+                    state.charge_items(
+                        2,
+                        std::mem::size_of::<ReadScopeArgument>() + 3 * std::mem::size_of::<usize>(),
+                    )?;
+                    let before = state.observation.allocated_bytes;
+                    frame.begin_prospective_scope(scope, state.control, &mut |bytes| {
+                        reserves.push(bytes);
+                        state.charge_allocation(bytes)
+                    })?;
+                    assert_eq!(reserves, [cost]);
+                    assert_eq!(state.observation.allocated_bytes - before, cost);
+                    assert_eq!(frame.resolve(scope)?, scope);
+                    assert!(frame.is_prospective(scope));
+                    assert_eq!(
+                        frame.scope(scope).err().unwrap().message,
+                        "symbolic read scope has no admitted live source lease"
+                    );
+                    frame.remove_scope(scope);
+                    assert!(frame.resolve(scope).is_err());
+                    let later = ReadScopeArgument::Lexical {
+                        callable: case.target,
+                        binding: BindingId::migrate(SEED, 2002),
+                    };
+                    state.charge_items(
+                        2,
+                        std::mem::size_of::<ReadScopeArgument>() + 3 * std::mem::size_of::<usize>(),
+                    )?;
+                    let before = state.observation.allocated_bytes;
+                    frame.begin_prospective_scope(later, state.control, &mut |bytes| {
+                        reserves.push(bytes);
+                        state.charge_allocation(bytes)
+                    })?;
+                    assert_eq!(reserves, [cost]);
+                    assert_eq!(state.observation.allocated_bytes, before);
+                    let error = frame
+                        .begin_prospective_scope(later, state.control, &mut |_| {
+                            panic!("duplicate scope cannot reserve storage")
+                        })
+                        .unwrap_err();
+                    assert_eq!(
+                        error.message,
+                        "prospective loan aliases another exact live binding"
+                    );
+                    let cancelled = ExecutionControl::uncancelled();
+                    cancelled.cancel();
+                    let error = frame
+                        .begin_prospective_scope(scope, &cancelled, &mut |_| {
+                            panic!("cancelled scope cannot reserve storage")
+                        })
+                        .unwrap_err();
+                    assert_eq!(error.class, ExecutionFailureClass::Cancelled);
+                    assert_eq!(error.code, "execution_cancelled");
+                    assert!(frame.resolve(scope).is_err());
+
+                    // A receiving capture ledger independently refuses the
+                    // backing before minting it, preserving the caller's state.
+                    state.read_scope_frames.push(frame);
+                    let budget = super::super::shared_budget::SharedBudget::new(
+                        NormalizedRunPolicy {
+                            maximum_allocated_bytes: Some(cost - 1),
+                            ..NormalizedRunPolicy::foreground()
+                        },
+                        None,
+                        0,
+                        0,
+                    );
+                    let error = state
+                        .capture_read_scope_frame(&[later], &mut |bytes| budget.reserve(bytes, 0))
+                        .err()
+                        .unwrap();
+                    assert_eq!(error.class, ExecutionFailureClass::Resource);
+                    assert_eq!(error.code, "normalized_allocation");
+                    budget.reserve(cost - 1, 0)?;
+                    assert_eq!(
+                        state.read_scope_frames.last().unwrap().resolve(later)?,
+                        later
+                    );
+                    let budget = super::super::shared_budget::SharedBudget::new(
+                        NormalizedRunPolicy {
+                            maximum_allocated_bytes: Some(cost),
+                            ..NormalizedRunPolicy::foreground()
+                        },
+                        None,
+                        0,
+                        0,
+                    );
+                    let mut committed = 0;
+                    let error = state
+                        .capture_read_scope_frame(&[later, foreign], &mut |bytes| {
+                            budget.reserve(bytes, 0)?;
+                            committed += bytes;
+                            Ok(())
+                        })
+                        .err()
+                        .unwrap();
+                    assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
+                    assert_eq!(error.code, "normalized_reference_type");
+                    assert_eq!(
+                        error.message,
+                        "read scope is outside the exact active invocation"
+                    );
+                    assert_eq!(committed, cost);
+                    assert_eq!(
+                        budget.reserve(1, 0).unwrap_err().code,
+                        "normalized_allocation"
+                    );
+                    let budget = super::super::shared_budget::SharedBudget::new(
+                        NormalizedRunPolicy {
+                            maximum_allocated_bytes: Some(cost),
+                            ..NormalizedRunPolicy::foreground()
+                        },
+                        None,
+                        0,
+                        0,
+                    );
+                    let mut committed = 0;
+                    let captured = state.capture_read_scope_frame(&[later], &mut |bytes| {
+                        budget.reserve(bytes, 0)?;
+                        committed += bytes;
+                        Ok(())
+                    })?;
+                    assert_eq!(committed, cost);
+                    assert_eq!(captured.resolve(later)?, later);
+                    assert_eq!(
+                        captured.scope(later).err().unwrap().message,
+                        "symbolic read scope has no admitted live source lease"
+                    );
+                    drop(captured);
+                    frame = state.read_scope_frames.pop().unwrap();
+                    frame.remove_scope(later);
+                    assert_eq!(reader.parameters.get(), count);
+                }
                 drop(frame);
 
                 for mutation in 0..3 {
