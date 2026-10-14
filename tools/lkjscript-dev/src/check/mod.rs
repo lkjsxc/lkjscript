@@ -1,4 +1,7 @@
 mod cache;
+mod cargo_origin;
+mod cargo_origin_context;
+mod cargo_origin_units;
 mod cargo_outputs;
 mod executor;
 mod model;
@@ -66,10 +69,14 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
     let run_directory = run.path();
     let started_wall = unix_nanoseconds()?;
     let started = Instant::now();
-    let receipt = match run_profile(&repository, run_directory, &options, started_wall, started) {
-        Ok(receipt) => receipt,
-        Err(error) => failure_receipt(&options, started_wall, started, error),
-    };
+    let (receipt, _origin) =
+        match run_profile(&repository, run_directory, &options, started_wall, started) {
+            Ok((receipt, origin)) => (receipt, Some(origin)),
+            Err(error) => (
+                failure_receipt(&options, started_wall, started, error),
+                None,
+            ),
+        };
     let receipt_path = run_directory.join("receipt.json");
     let published = evidence::publish_json(&receipt_path, &receipt)?;
     print_summary(
@@ -140,8 +147,7 @@ fn run_profile(
     options: &Options,
     started_wall: u128,
     started: Instant,
-) -> Result<CheckReceipt, DevError> {
-    rotate_runs(repository, run_directory, "")?;
+) -> Result<(CheckReceipt, std::sync::Arc<cargo_origin::Run>), DevError> {
     let harness_copy = copy_harness(run_directory)?;
     let registry = registry::base_registry(repository, run_directory, &harness_copy)?;
     let (initial, requested) = snapshot::capture_profile(repository, &options.profile)?;
@@ -156,7 +162,17 @@ fn run_profile(
         },
     )?;
     let command_names = registry.input_commands(&selected)?;
-    let runtime = snapshot::runtime_identity(repository, command_names)?;
+    let runtime = snapshot::runtime_identity(repository, command_names.clone())?;
+    let origin = std::sync::Arc::new(cargo_origin::Run::with_commands_for_run(
+        repository,
+        &cargo_origin_context::Context::target(repository)?,
+        &initial,
+        &runtime,
+        command_names.into_iter().collect(),
+        run_directory,
+    )?);
+    // Origin Run pins its complete prior cold closure before any run rotation.
+    rotate_runs(repository, run_directory, "")?;
     let dag_path = run_directory.join("dag.json");
     evidence::publish_json(
         &dag_path,
@@ -188,6 +204,7 @@ fn run_profile(
             allow_reuse: !fresh_required,
             fresh_reason,
             cache: &cache,
+            origin: Some(origin.clone()),
         },
     )?;
 
@@ -273,32 +290,35 @@ fn run_profile(
     } else {
         None
     };
-    Ok(CheckReceipt {
-        contract_version: CHECK_CONTRACT_VERSION,
-        status,
-        profile: options.profile.clone(),
-        profile_definition_digest: profile_digest,
-        started_unix_nanoseconds: started_wall,
-        completed_unix_nanoseconds: unix_nanoseconds()?,
-        elapsed_nanoseconds: duration_nanoseconds(started.elapsed()),
-        git_head: Some(initial.git_head.clone()),
-        worktree_input_digest: Some(initial.digest.clone()),
-        final_worktree_input_digest: final_digest,
-        input_stable,
-        input_manifest: Some(evidence::relative(repository, &inputs_path)),
-        dag_manifest: Some(evidence::relative(repository, &dag_path)),
-        runtime: Some(runtime),
-        requested_gates: requested,
-        selected_gates: selected,
-        passed_gates,
-        fresh_passed_gates,
-        reused_passed_gates,
-        unrun_gates,
-        maximum_workers: options.jobs,
-        fresh_required,
-        gates,
-        failure,
-    })
+    Ok((
+        CheckReceipt {
+            contract_version: CHECK_CONTRACT_VERSION,
+            status,
+            profile: options.profile.clone(),
+            profile_definition_digest: profile_digest,
+            started_unix_nanoseconds: started_wall,
+            completed_unix_nanoseconds: unix_nanoseconds()?,
+            elapsed_nanoseconds: duration_nanoseconds(started.elapsed()),
+            git_head: Some(initial.git_head.clone()),
+            worktree_input_digest: Some(initial.digest.clone()),
+            final_worktree_input_digest: final_digest,
+            input_stable,
+            input_manifest: Some(evidence::relative(repository, &inputs_path)),
+            dag_manifest: Some(evidence::relative(repository, &dag_path)),
+            runtime: Some(runtime),
+            requested_gates: requested,
+            selected_gates: selected,
+            passed_gates,
+            fresh_passed_gates,
+            reused_passed_gates,
+            unrun_gates,
+            maximum_workers: options.jobs,
+            fresh_required,
+            gates,
+            failure,
+        },
+        origin,
+    ))
 }
 
 fn failure_receipt(
@@ -522,7 +542,7 @@ fn rotate_runs(repository: &Path, current: &Path, prefix: &str) -> Result<(), De
     rotate_runs_with_limit(repository, current, prefix, MAXIMUM_RETAINED_RUNS)
 }
 
-fn rotate_runs_with_limit(
+pub(super) fn rotate_runs_with_limit(
     repository: &Path,
     current: &Path,
     prefix: &str,
@@ -545,20 +565,23 @@ fn rotate_runs_with_limit(
             continue;
         }
         managed_count = managed_count.saturating_add(1);
-        if path == current || run_is_active(&path)? {
+        if path == current {
             continue;
         }
+        let Some(lease) = run_deletion_lease(&path)? else {
+            continue;
+        };
         let modified = entry
             .metadata()
             .and_then(|metadata| metadata.modified())
             .unwrap_or(UNIX_EPOCH);
-        runs.push((modified, path));
+        runs.push((modified, path, lease));
     }
-    runs.sort_by_key(|(modified, _)| *modified);
+    runs.sort_by_key(|(modified, _, _)| *modified);
     let remove = managed_count
         .saturating_sub(maximum_retained)
         .min(runs.len());
-    for (_, path) in runs.into_iter().take(remove) {
+    for (_, path, _lease) in runs.into_iter().take(remove) {
         fs::remove_dir_all(&path).map_err(|error| {
             DevError::infrastructure(format!(
                 "remove old check evidence '{}': {error}",
@@ -569,11 +592,11 @@ fn rotate_runs_with_limit(
     Ok(())
 }
 
-fn run_is_active(path: &Path) -> Result<bool, DevError> {
+fn run_deletion_lease(path: &Path) -> Result<Option<File>, DevError> {
     let lease_path = path.join("ACTIVE.lock");
     let metadata = match fs::symlink_metadata(&lease_path) {
         Ok(metadata) => metadata,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(true),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => {
             return Err(DevError::infrastructure(format!(
                 "inspect check run lease '{}': {error}",
@@ -599,20 +622,36 @@ fn run_is_active(path: &Path) -> Result<bool, DevError> {
         })?;
     match lease.try_lock_exclusive() {
         Ok(()) => {
-            FileExt::unlock(&lease).map_err(|error| {
-                DevError::infrastructure(format!(
-                    "unlock check run lease '{}': {error}",
-                    lease_path.display()
-                ))
-            })?;
-            Ok(false)
+            let opened = lease.metadata()?;
+            let selected = fs::symlink_metadata(&lease_path)?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::MetadataExt;
+                if selected.file_type().is_symlink()
+                    || !selected.is_file()
+                    || selected.dev() != opened.dev()
+                    || selected.ino() != opened.ino()
+                {
+                    return Err(DevError::infrastructure(
+                        "check run lease changed while selecting deletion",
+                    ));
+                }
+            }
+            // Keep the same exclusive lease through remove_dir_all; a pin cannot
+            // slip between a successful probe and scheduled deletion.
+            Ok(Some(lease))
         }
-        Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(true),
+        Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(None),
         Err(error) => Err(DevError::infrastructure(format!(
             "probe check run lease '{}': {error}",
             lease_path.display()
         ))),
     }
+}
+
+#[cfg(test)]
+fn run_is_active(path: &Path) -> Result<bool, DevError> {
+    Ok(run_deletion_lease(path)?.is_none())
 }
 
 fn managed_run(path: &Path, prefix: &str) -> Result<bool, DevError> {

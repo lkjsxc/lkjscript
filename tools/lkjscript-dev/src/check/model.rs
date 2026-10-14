@@ -5,8 +5,8 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
-pub(crate) const CHECK_CONTRACT_VERSION: u32 = 7;
-pub(crate) const CACHE_CONTRACT_VERSION: u32 = 3;
+pub(crate) const CHECK_CONTRACT_VERSION: u32 = 8;
+pub(crate) const CACHE_CONTRACT_VERSION: u32 = 4;
 pub(crate) const DEFAULT_TIMEOUT: Duration = Duration::from_secs(3_600);
 pub(crate) const DEFAULT_MAXIMUM_STREAM_BYTES: u64 = 64 * 1024 * 1024;
 pub(crate) const MAXIMUM_WORKERS: usize = 8;
@@ -153,6 +153,8 @@ pub(crate) struct GateReceipt {
     pub(crate) process: Option<ProcessObservation>,
     pub(crate) outputs: Vec<FileProof>,
     pub(crate) retained_outputs: Vec<FileProof>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) cargo_origin: Option<FileProof>,
     pub(crate) input_fingerprint: VerificationDigest,
     pub(crate) evidence_digest: VerificationDigest,
     pub(crate) cache: CacheObservation,
@@ -282,5 +284,6 @@ pub(crate) struct CacheRecord {
     pub(crate) source_elapsed_nanoseconds: u64,
     pub(crate) process: ProcessObservation,
     pub(crate) outputs: Vec<FileProof>,
+    pub(crate) cargo_origin: Option<FileProof>,
     pub(crate) evidence_digest: VerificationDigest,
 }

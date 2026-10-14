@@ -1,8 +1,10 @@
 use super::*;
 
 #[test]
-fn all_declared_cargo_executables_require_machine_records_before_test_arguments() {
+fn all_declared_cargo_executables_require_machine_records_before_test_arguments()
+-> Result<(), DevError> {
     let root = tempfile::tempdir().expect("registry fixture");
+    let target = super::super::cargo_origin_context::Context::target(root.path())?;
     let registry = base_registry(root.path(), root.path(), Path::new("/bin/true"))
         .expect("maintained registry");
     let mut producers = Vec::new();
@@ -23,10 +25,7 @@ fn all_declared_cargo_executables_require_machine_records_before_test_arguments(
                     .count(),
                 1
             );
-            assert_eq!(
-                gate.required_outputs,
-                [root.path().join("target/release/lkjscript")]
-            );
+            assert_eq!(gate.required_outputs, [target.join("release/lkjscript")]);
         }
     }
     assert_eq!(producers, ["release_build", "release_command_lifecycle"]);
@@ -45,4 +44,5 @@ fn all_declared_cargo_executables_require_machine_records_before_test_arguments(
             .profile_digest("full", &requested)
             .expect("weakened identity")
     );
+    Ok(())
 }

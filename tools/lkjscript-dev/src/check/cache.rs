@@ -28,6 +28,7 @@ pub(crate) struct CacheLoad {
 pub(crate) struct CachedGate {
     pub(crate) process: ProcessObservation,
     pub(crate) outputs: Vec<FileProof>,
+    pub(crate) cargo_origin: Option<FileProof>,
     pub(crate) evidence_digest: VerificationDigest,
     pub(crate) source_elapsed_nanoseconds: u64,
     pub(crate) record: String,
@@ -74,6 +75,11 @@ impl VerificationCache {
                 "passed gate has a non-passing child observation",
             ));
         }
+        if super::cargo_origin::is_producer(gate) || receipt.cargo_origin.is_some() {
+            return Err(DevError::infrastructure(
+                "Cargo origin producers are not result-cacheable",
+            ));
+        }
         super::cargo_outputs::verify(
             &self.repository,
             gate,
@@ -92,6 +98,7 @@ impl VerificationCache {
                 source_elapsed_nanoseconds: receipt.elapsed_nanoseconds,
                 process: process.clone(),
                 outputs: receipt.outputs.clone(),
+                cargo_origin: receipt.cargo_origin.clone(),
                 evidence_digest: receipt.evidence_digest.clone(),
             };
             let path = self.record_path(gate, &receipt.input_fingerprint)?;
@@ -173,6 +180,8 @@ impl VerificationCache {
                 || record.input_fingerprint != *fingerprint
                 || record.identity_command != gate.identity_command()
                 || record.process.status != ProcessStatus::Passed
+                || super::cargo_origin::is_producer(gate)
+                || record.cargo_origin.is_some()
             {
                 return Ok(CacheLoad {
                     cached: None,
@@ -186,8 +195,13 @@ impl VerificationCache {
                     reason: "declared_output_changed".to_owned(),
                 });
             }
-            if gate_evidence_digest(&gate.name, fingerprint, &record.process, &record.outputs)?
-                != record.evidence_digest
+            if gate_evidence_digest(
+                &gate.name,
+                fingerprint,
+                &record.process,
+                &record.outputs,
+                record.cargo_origin.as_ref(),
+            )? != record.evidence_digest
             {
                 return Ok(CacheLoad {
                     cached: None,
@@ -220,6 +234,7 @@ impl VerificationCache {
                 cached: Some(CachedGate {
                     process,
                     outputs: record.outputs,
+                    cargo_origin: record.cargo_origin,
                     evidence_digest: record.evidence_digest,
                     source_elapsed_nanoseconds: record.source_elapsed_nanoseconds,
                     record: evidence::relative(&self.repository, &record_path),
@@ -258,6 +273,11 @@ impl VerificationCache {
             DevError::infrastructure(format!("lock verification cache: {error}"))
         })?;
         Ok(file)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn store_test_log(&self, observation: &FileProof) -> Result<(), DevError> {
+        self.store_log(observation)
     }
 
     fn store_log(&self, observation: &FileProof) -> Result<(), DevError> {
@@ -437,6 +457,7 @@ pub(crate) fn gate_evidence_digest(
     fingerprint: &VerificationDigest,
     process: &ProcessObservation,
     outputs: &[FileProof],
+    cargo_origin: Option<&FileProof>,
 ) -> Result<VerificationDigest, DevError> {
     #[derive(Serialize)]
     struct StreamIdentity<'a> {
@@ -457,6 +478,7 @@ pub(crate) fn gate_evidence_digest(
         stdout: StreamIdentity<'a>,
         stderr: StreamIdentity<'a>,
         outputs: &'a [FileProof],
+        cargo_origin: Option<&'a FileProof>,
     }
     let bytes = serde_json::to_vec(&EvidenceIdentity {
         gate,
@@ -477,6 +499,7 @@ pub(crate) fn gate_evidence_digest(
             digest: process.stderr.digest.as_ref(),
         },
         outputs,
+        cargo_origin,
     })
     .map_err(|error| DevError::infrastructure(format!("encode gate evidence: {error}")))?;
     Ok(VerificationDigest::of(&bytes))
@@ -624,7 +647,7 @@ mod tests {
         );
         let gate = Gate::new("gate", vec!["/bin/true".to_owned()]);
         let fingerprint = VerificationDigest::of(b"input");
-        let evidence_digest = gate_evidence_digest("gate", &fingerprint, &process, &[])
+        let evidence_digest = gate_evidence_digest("gate", &fingerprint, &process, &[], None)
             .expect("gate evidence digest");
         let receipt = GateReceipt {
             name: "gate".to_owned(),
@@ -639,6 +662,7 @@ mod tests {
             process: Some(process),
             outputs: Vec::new(),
             retained_outputs: Vec::new(),
+            cargo_origin: None,
             input_fingerprint: fingerprint.clone(),
             evidence_digest,
             cache: CacheObservation {

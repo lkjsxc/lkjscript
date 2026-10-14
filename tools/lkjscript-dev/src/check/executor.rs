@@ -1,4 +1,5 @@
 use super::cache::{self, VerificationCache};
+use super::cargo_origin;
 use super::model::{
     CacheLookupStatus, CacheObservation, ExecutableProof, ExecutionKind, Gate, GateReceipt,
     GateStatus, InputSnapshot, MAXIMUM_FAILURE_EXCERPT_BYTES, RuntimeIdentity,
@@ -11,7 +12,7 @@ use crate::process::{self, ProcessSpec, ProcessStatus};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
+use std::sync::{Arc, mpsc};
 use std::thread;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
@@ -24,6 +25,7 @@ pub(crate) struct ExecutionOptions<'a> {
     pub(crate) allow_reuse: bool,
     pub(crate) fresh_reason: &'a str,
     pub(crate) cache: &'a VerificationCache,
+    pub(super) origin: Option<Arc<cargo_origin::Run>>,
 }
 
 // An early scheduler error must not detach still-running gate owners. Normal completion removes
@@ -50,6 +52,24 @@ pub(crate) fn execute_dag(
             super::model::MAXIMUM_WORKERS
         )));
     }
+    let origin = match &options.origin {
+        Some(origin) => Some(origin.clone()),
+        None if names
+            .iter()
+            .any(|name| registry.gate(name).is_ok_and(cargo_origin::is_writer)) =>
+        {
+            let commands = registry.input_commands(names)?;
+            Some(Arc::new(cargo_origin::Run::with_commands_for_run(
+                options.repository,
+                &super::cargo_origin_context::Context::target(options.repository)?,
+                options.snapshot,
+                options.runtime,
+                commands.into_iter().collect(),
+                options.run_directory,
+            )?))
+        }
+        None => None,
+    };
     let order: BTreeMap<String, usize> = names
         .iter()
         .enumerate()
@@ -112,6 +132,7 @@ pub(crate) fn execute_dag(
             let allow_reuse = options.allow_reuse;
             let fresh_reason = options.fresh_reason.to_owned();
             let worker_gate = gate.clone();
+            let origin = origin.clone();
             let worker = thread::Builder::new()
                 .name(format!("check-{}", gate.name))
                 .spawn(move || {
@@ -126,6 +147,7 @@ pub(crate) fn execute_dag(
                             allow_reuse,
                             &fresh_reason,
                             &cache,
+                            origin.as_deref(),
                         )
                     }))
                     .unwrap_or_else(|_| {
@@ -198,9 +220,19 @@ fn execute_gate(
     allow_reuse: bool,
     fresh_reason: &str,
     verification_cache: &VerificationCache,
+    origin: Option<&cargo_origin::Run>,
 ) -> Result<GateReceipt, DevError> {
     let started_wall = unix_nanoseconds()?;
     let started = Instant::now();
+    let mut transaction = if cargo_origin::is_writer(gate) {
+        Some(
+            origin
+                .ok_or_else(|| DevError::infrastructure("Cargo target owner is absent"))?
+                .begin(gate)?,
+        )
+    } else {
+        None
+    };
     let selected = snapshot::observe_executable(repository, &gate.command[0])?;
     let fingerprint = fingerprint_with_executable(
         repository,
@@ -215,6 +247,9 @@ fn execute_gate(
     if allow_reuse && gate.cacheable {
         let load = verification_cache.load(gate, &fingerprint, &stdout_path, &stderr_path);
         if let Some(cached) = load.cached {
+            if let Some(transaction) = &mut transaction {
+                transaction.finish_unchanged()?;
+            }
             let retained_outputs =
                 retain_outputs(repository, run_directory, gate, &cached.outputs)?;
             return Ok(GateReceipt {
@@ -230,6 +265,7 @@ fn execute_gate(
                 process: Some(cached.process),
                 outputs: cached.outputs,
                 retained_outputs,
+                cargo_origin: cached.cargo_origin,
                 input_fingerprint: fingerprint,
                 evidence_digest: cached.evidence_digest,
                 cache: CacheObservation {
@@ -247,59 +283,93 @@ fn execute_gate(
                 stderr_excerpt: None,
             });
         }
-        return execute_fresh(
+        return execute_fresh_inner(
+            FreshInput {
+                repository,
+                gate,
+                program: selected.path.as_deref(),
+                fingerprint,
+                stdout_path,
+                stderr_path,
+                started_wall,
+                started,
+                cache_observation: CacheObservation {
+                    eligible: true,
+                    lookup: CacheLookupStatus::Miss,
+                    reason: Some(load.reason),
+                    record: None,
+                    write: None,
+                },
+            },
+            transaction,
+        );
+    }
+    execute_fresh_inner(
+        FreshInput {
             repository,
             gate,
-            selected.path.as_deref(),
+            program: selected.path.as_deref(),
             fingerprint,
             stdout_path,
             stderr_path,
             started_wall,
             started,
-            CacheObservation {
-                eligible: true,
-                lookup: CacheLookupStatus::Miss,
-                reason: Some(load.reason),
+            cache_observation: CacheObservation {
+                eligible: gate.cacheable,
+                lookup: CacheLookupStatus::Bypassed,
+                reason: Some(if gate.cacheable {
+                    fresh_reason.to_owned()
+                } else {
+                    "gate_not_cacheable".to_owned()
+                }),
                 record: None,
                 write: None,
             },
-        );
-    }
-    execute_fresh(
+        },
+        transaction,
+    )
+}
+
+pub(super) struct FreshInput<'a> {
+    pub(super) repository: &'a Path,
+    pub(super) gate: &'a Gate,
+    pub(super) program: Option<&'a Path>,
+    pub(super) fingerprint: VerificationDigest,
+    pub(super) stdout_path: PathBuf,
+    pub(super) stderr_path: PathBuf,
+    pub(super) started_wall: u128,
+    pub(super) started: Instant,
+    pub(super) cache_observation: CacheObservation,
+}
+
+#[cfg(test)]
+pub(super) fn execute_fresh_with_origin(
+    input: FreshInput<'_>,
+    origin: &cargo_origin::Run,
+) -> Result<GateReceipt, DevError> {
+    let transaction = if cargo_origin::is_writer(input.gate) {
+        Some(origin.begin(input.gate)?)
+    } else {
+        None
+    };
+    execute_fresh_inner(input, transaction)
+}
+
+fn execute_fresh_inner(
+    input: FreshInput<'_>,
+    mut transaction: Option<cargo_origin::Transaction<'_>>,
+) -> Result<GateReceipt, DevError> {
+    let FreshInput {
         repository,
         gate,
-        selected.path.as_deref(),
+        program,
         fingerprint,
         stdout_path,
         stderr_path,
         started_wall,
         started,
-        CacheObservation {
-            eligible: gate.cacheable,
-            lookup: CacheLookupStatus::Bypassed,
-            reason: Some(if gate.cacheable {
-                fresh_reason.to_owned()
-            } else {
-                "gate_not_cacheable".to_owned()
-            }),
-            record: None,
-            write: None,
-        },
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-fn execute_fresh(
-    repository: &Path,
-    gate: &Gate,
-    program: Option<&Path>,
-    fingerprint: VerificationDigest,
-    stdout_path: PathBuf,
-    stderr_path: PathBuf,
-    started_wall: u128,
-    started: Instant,
-    cache_observation: CacheObservation,
-) -> Result<GateReceipt, DevError> {
+        cache_observation,
+    } = input;
     let process = process::run_selected(
         &ProcessSpec {
             command: gate.command.clone(),
@@ -333,8 +403,25 @@ fn execute_fresh(
         status = GateStatus::Failed;
         reason = Some(format!("cargo_output_binding:{}", error.message()));
     }
-    let evidence_digest =
-        cache::gate_evidence_digest(&gate.name, &fingerprint, &process, &outputs)?;
+    let mut cargo_origin = None;
+    if status == GateStatus::Passed
+        && let Some(transaction) = &mut transaction
+    {
+        match transaction.finish(gate, &process, run_directory) {
+            Ok(proof) => cargo_origin = proof,
+            Err(error) => {
+                status = GateStatus::Failed;
+                reason = Some(format!("cargo_output_binding:{}", error.message()));
+            }
+        }
+    }
+    let evidence_digest = cache::gate_evidence_digest(
+        &gate.name,
+        &fingerprint,
+        &process,
+        &outputs,
+        cargo_origin.as_ref(),
+    )?;
     let (stdout_excerpt, stderr_excerpt) = if status == GateStatus::Passed {
         (None, None)
     } else {
@@ -356,6 +443,7 @@ fn execute_fresh(
         process: Some(process),
         outputs,
         retained_outputs,
+        cargo_origin,
         input_fingerprint: fingerprint,
         evidence_digest,
         cache: cache_observation,
@@ -404,6 +492,7 @@ fn skipped_receipt(
         process: None,
         outputs: Vec::new(),
         retained_outputs: Vec::new(),
+        cargo_origin: None,
         input_fingerprint: fingerprint,
         evidence_digest: VerificationDigest::of(&evidence_bytes),
         cache: CacheObservation {
@@ -435,6 +524,7 @@ fn infrastructure_receipt(gate: &Gate, error: DevError) -> GateReceipt {
         process: None,
         outputs: Vec::new(),
         retained_outputs: Vec::new(),
+        cargo_origin: None,
         input_fingerprint: fingerprint.clone(),
         evidence_digest: VerificationDigest::of(
             format!("{}:{fingerprint}", error.kind()).as_bytes(),

@@ -381,7 +381,7 @@ fn relevant_untracked(path: &str) -> bool {
     })
 }
 
-fn checked_text(repository: &Path, command: &[&str]) -> Result<String, DevError> {
+pub(super) fn checked_text(repository: &Path, command: &[&str]) -> Result<String, DevError> {
     let bytes = checked_bytes(repository, command)?;
     String::from_utf8(bytes)
         .map(|value| value.trim().to_owned())

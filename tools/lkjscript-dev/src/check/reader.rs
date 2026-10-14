@@ -181,6 +181,20 @@ fn admit(
             &root.join(format!("{name}.stdout.log")),
             &process.stdout,
         )?;
+        let context = if super::cargo_origin::is_producer(gate) {
+            Some(super::cargo_origin_context::Context::capture(
+                repository, &current, runtime,
+            )?)
+        } else {
+            None
+        };
+        verify_cargo_origin(
+            repository,
+            gate,
+            process,
+            observed.cargo_origin.as_ref(),
+            context.as_ref(),
+        )?;
         require(
             observed.outputs.len() == gate.required_outputs.len()
                 && observed.retained_outputs.len() == observed.outputs.len(),
@@ -205,11 +219,33 @@ fn admit(
                 &observed.input_fingerprint,
                 process,
                 &observed.outputs,
+                observed.cargo_origin.as_ref(),
             )? == observed.evidence_digest,
             "source child evidence digest changed",
         )?;
     }
     Ok(())
+}
+
+pub(super) fn verify_cargo_origin(
+    repository: &Path,
+    gate: &super::model::Gate,
+    process: &crate::process::ProcessObservation,
+    origin: Option<&FileProof>,
+    context: Option<&super::cargo_origin_context::Context>,
+) -> Result<(), DevError> {
+    if super::cargo_origin::is_producer(gate) {
+        let proof =
+            origin.ok_or_else(|| DevError::corrupt("Cargo producer origin proof is absent"))?;
+        let context =
+            context.ok_or_else(|| DevError::corrupt("Cargo producer current context is absent"))?;
+        super::cargo_origin::verify(repository, gate, process, proof, context)
+    } else {
+        require(
+            origin.is_none(),
+            "nonproducer substituted a Cargo origin proof",
+        )
+    }
 }
 
 fn verify_retained(repository: &Path, path: &Path, proof: &FileProof) -> Result<(), DevError> {
@@ -281,12 +317,18 @@ mod tests {
             repository.join("Cargo.lock"),
             b"independent source fixture\n",
         )
+        .and_then(|()| {
+            fs::write(
+                repository.join("Cargo.toml"),
+                b"[workspace]\nmembers = []\nresolver = \"3\"\n",
+            )
+        })
         .expect("lock");
         fs::write(repository.join(".gitignore"), b".artifacts/\n*.swp\n").expect("ignore evidence");
         fs::create_dir_all(repository.join("docs/guides/examples")).expect("audited directory");
         for arguments in [
             vec!["init", "--quiet"],
-            vec!["add", "--", "Cargo.lock", ".gitignore"],
+            vec!["add", "--", "Cargo.lock", "Cargo.toml", ".gitignore"],
             vec![
                 "-c",
                 "user.name=Fixture",
@@ -362,6 +404,7 @@ mod tests {
                 allow_reuse: false,
                 fresh_reason: "release_source_profile_requires_fresh",
                 cache: &cache,
+                origin: None,
             },
         )
         .expect("actual bounded fixture processes");

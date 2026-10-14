@@ -275,6 +275,7 @@ fn dag_test(
             allow_reuse: false,
             fresh_reason: "self_test",
             cache: &cache,
+            origin: None,
         },
     )?;
     let statuses = receipts
@@ -311,6 +312,7 @@ fn cache_test(
             allow_reuse: true,
             fresh_reason: "self_test",
             cache: &cache,
+            origin: None,
         },
     )?;
     let first_receipt = first
@@ -337,6 +339,7 @@ fn cache_test(
             allow_reuse: true,
             fresh_reason: "self_test",
             cache: &cache,
+            origin: None,
         },
     )?;
     let hit_receipt = second

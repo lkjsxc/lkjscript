@@ -160,7 +160,7 @@ check of another checkout is not acceptance of the requested source or report.
 
 ## Executable observations and compatibility
 
-Check/source receipt contract 7 and cache contract 3 bind each selected command to
+Check/source receipt contract 8 and cache contract 4 bind each selected command to
 an `ExecutableProof`. Its `entry` retains the ordinary file or symlink observation;
 `resolved` additionally binds a symlink's regular target bytes and mode. Plain files
 have no duplicate target proof. General source FileProofs still do not follow final
@@ -217,7 +217,7 @@ before expiry. This artifact is diagnostics, not release assets or release autho
 Read the actual workflow run, attempt and job steps, not only commit status.
 A skipped/deleted-ref job, pending run or successful upload is not acceptance.
 Record the accepted SHA, tree, verifier, profile, result and run/attempt. The full
-profile currently owns 26 gates; its Rust registry, rather than a duplicated count
+profile currently owns 29 gates; its Rust registry, rather than a duplicated count
 in this workflow, remains authoritative. This host run does not establish a new
 static-target release, anonymous acquisition or production deployment.
 
@@ -244,34 +244,108 @@ of rewriting it, force-updating it, or treating cleanup as a reason to hide deli
 
 ## Cargo output origin, not a pre-existing path
 
-Source-verification Cargo gates that declare executable outputs select
-`--message-format=json`. Admission checks the actual producer's bounded, unchanged
-stdout before its first successful `build-finished`: exactly one non-test binary
-artifact from the checked root `Cargo.toml` must name each declared target and
-its exact output path in both `executable` and `filenames`. A redirected target
-with a stale regular file at the default path fails `cargo_output_binding`.
-The failed process/gate observations and retained old output remain diagnostics,
-not successful output authority. Later dependent gates cannot use the failed gate.
+The Cargo-origin guard uses check/source receipt contract 8 and cache contract 4. It adds source-origin admission to the existing output-selection
+relation. Earlier contract-7/cache-3 evidence retains its original verifier and
+meaning; it cannot be relabeled as the new origin proof. This verification cut
+changes neither language/runtime encodings nor artifact or publication generations.
 
-The same relation is checked by the generic verification-cache boundary and when
-the original source receipt is independently read for release. The two maintained
-Cargo executable producers do not reuse gate-result evidence: they execute Cargo
-to observe its current output selection on every invocation, including configuration
-outside the repository that the source snapshot does not enumerate. A valid
-Cargo `fresh: true` artifact remains admissible: Cargo's compilation cache reuse
-is separate from reusing a verification-gate result. No output is deleted merely
-to force a timestamp change, and no Cargo setting is silently overwritten.
+Declared-output Cargo build/test gates request `--message-format=json` before
+any `--` test arguments. The bounded original stdout must contain exactly one
+non-test binary artifact from the checked root `Cargo.toml` for each declared
+output, with its exact path in both `executable` and `filenames`, followed by a
+successful `build-finished`. Regular bytes at an old path, rehashed logs without
+this relation, and later test output cannot supply missing Cargo artifacts. Process
+success, unchanged inputs, stream limits and joined cleanup remain separate checks.
 
-The source checker currently consumes the root product at its declared host path.
-A custom `CARGO_TARGET_DIR`, `build.target-dir` or explicit compilation target must
-produce that exact declared output or be refused; an unrelated old file cannot
-satisfy the boundary. The configured static-distribution target has its separate
-producer and final-byte admission. This change neither disables Cargo's build
-cache nor changes language/runtime encodings or the published product.
+The origin inventory additionally covers every workspace unit selected by that
+Cargo invocation, including libraries and test harnesses from `lkjscript`,
+`lkjscript-dev` and `lkjscript-site`. Each unit binds its exact package, manifest,
+target kind/name, profile and test mode, features, and all artifact filenames and
+file proofs. Declared binary-output cardinality remains a separate check. Workspace
+proc-macros and custom-build/generated-output closures are unsupported and refuse.
 
-The selected Cargo executable/toolchain remains trusted. These records establish
-the claimed output relationship within that build, not a hostile-build sandbox or
-a cryptographic proof of arbitrary compiler behavior. Test/program output after
-`build-finished` cannot supply a missing Cargo artifact; process exit and joined
-cleanup must still succeed independently. See Cargo's
-[artifact and completion protocol](https://doc.rust-lang.org/cargo/reference/external-tools.html#artifact-messages).
+Per-unit origin admission applies only to direct Cargo `build`/`test` producers
+with declared outputs. `clippy` and `workspace_tests` are nonproducer writers:
+they are serialized and recheck source, configuration and compiler context, but
+do not admit a debug/test-unit origin inventory. On an unknown prepopulated target
+they may still reuse stale foreign compiled tests; a warm `full` run on an arbitrary
+target has no compiled-test origin guarantee. For this guard's final acceptance, use
+a new empty governed target. That operational cold start is distinct from per-unit
+proof. A compiled-test origin extension is queued and is outside this scope.
+
+An actual `fresh: false` unit establishes a cold origin only after successful
+completion, stable context and retained artifact admission. Start unknown workspace
+origins in a newly owned target, or explicitly prepare a cold workspace-package
+rebuild after joining its owners. A newly linked binary does not authenticate an
+unknown `fresh: true` library. The checker refuses unknown origins; it does not
+silently clean or retry. Warm units require matching original cold evidence, exact
+current artifact bytes and the same worktree, inputs, lockfile, runtime, compiler,
+configuration and physical target. Non-test binaries also bind the producer's
+identity command. A warm record points directly to its cold producer, never to a
+warm record relabeled as cold. Mixed cold/warm selections must admit every unit.
+
+Context captures the approved effective environment, command/profile/target
+selection, compiler selection and its actual sysroot `rustc` file, and the bytes
+or absence of both Cargo config names along the child cwd's ancestor chain and
+Cargo home. Sensitive config values are not copied into evidence. The first guard
+admits a closed configuration/manifest grammar: wrappers, custom target JSON,
+`--config`/`--manifest-path` overrides and unsupported includes, dependency routing
+or file-valued flags refuse. It does not claim all compiler/backend dependencies.
+
+Every direct Cargo writer except `fmt` uses an explicit `--target-dir` matching
+one canonical physical target. Approved target selection derives both producer
+outputs and dependent consumer executable paths from that same target. An unrelated
+Cargo path or override cannot replace those already bound declared paths. Regular
+canonical external targets may be governed; symlink target aliases refuse.
+A lease outside the removable target tree spans the run. A separate per-run writer
+mutex spans executable/fingerprint observation, dirty publication before launch,
+child execution and joined cleanup, retention, rechecks and origin commit. The run
+lease alone does not serialize concurrent DAG workers. Non-Cargo gates keep their
+existing scheduling.
+
+Cold history is retained independently from current live-path admission. Compatible
+original proofs remain bounded and pinned even if another successful writer
+overwrites their live paths. Historical entries bind the exact unit/file proofs;
+non-test binary entries also bind the identity command. A later warm selection
+still requires its actual post-Cargo live bytes to match an eligible original.
+Retaining history grants no authority to changed or unknown current bytes.
+
+A successful unrelated debug or non-JSON writer can retain authenticated compatible
+cold history, including prior release proofs, but cannot establish an unknown origin.
+Failed, cancelled, timed-out, incomplete or abandoned writers leave the inventory
+dirty; retained historical proof does not implicitly recover a clean inventory or
+authorize warm reuse. Source/config/compiler drift likewise prevents commit.
+An unwritable filesystem is an infrastructure failure, not a rollback claim.
+
+Origin sidecars retain the actual producer/process, original logs, source/context
+binding and exact artifact copies. Before run rotation, the checker pins every
+referenced managed original with its `ACTIVE.lock`; the already exclusively owned
+current run needs no second pin. Rotation holds an exclusive deletion lease through
+removal. Pins survive validation, execution, retention, commit and receipt
+publication. Missing, evicted, inaccessible or changed originals remove warm
+authority. The source reader independently admits the complete closure; a ledger
+marker or final executable digest alone is insufficient. Declared-output producers
+remain gate-result-cache-ineligible, while admitted Cargo compilation reuse remains
+possible.
+
+Artifacts stream separately from JSON: at most 2 GiB per file, 8 GiB per live
+inventory and 16 GiB of retained closure reads. Origin metadata is bounded to
+16 MiB per sidecar/ledger and 64 MiB per closure, with at most 256 original proofs
+and depth 32. Existing 64 MiB process-stream limits remain, with a 256 MiB aggregate
+closure log bound. These are refusal limits, not measured capacity or performance
+claims; retained artifacts have a real disk cost.
+
+Building the checker is a separate bootstrap boundary. Use the bootstrap-only
+target procedure in [Develop the language](../README.md#develop-the-language),
+retain its actual Cargo producer and stable source evidence, and select the copied
+checker before it governs the check target. A different target name alone proves
+no origin, and checker bootstrap evidence cannot replace the governed profile's
+unit proof. Existing or restored targets require authenticated current origins or
+separately authorized cold preparation after owners join.
+
+The leases coordinate cooperating maintained writers on a trusted host. Arbitrary
+host Cargo/filesystem writers, hostile builds and filesystem alias attacks remain
+outside this scope; use an isolated owned target when cooperation cannot be
+assured. Static distribution keeps its separate producer and final-byte admission.
+Cargo's [artifact and completion protocol](https://doc.rust-lang.org/cargo/reference/external-tools.html#artifact-messages)
+defines the selected records; it does not itself prove arbitrary compiler behavior.

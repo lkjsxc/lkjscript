@@ -1,10 +1,12 @@
 use super::cargo_output_tests::{build, fixture};
 use super::*;
-use crate::check::model::CacheRecord;
+use crate::check::cache::gate_evidence_digest;
+use crate::check::model::{CACHE_CONTRACT_VERSION, CacheRecord};
 use std::fs;
 
 #[test]
-fn cargo_output_cache_requires_original_producer_binding_on_store_and_load() {
+fn cargo_output_cache_requires_original_producer_binding_on_store_and_load() -> Result<(), DevError>
+{
     let root = fixture();
     let mut receipt = build(root.path(), &root.path().join("target"), "cached");
     receipt.cache.eligible = true;
@@ -12,83 +14,90 @@ fn cargo_output_cache_requires_original_producer_binding_on_store_and_load() {
     gate.required_outputs = vec![root.path().join("target/release/lkjscript")];
     let cache_root = root.path().join("cache");
     let cache = VerificationCache::new(root.path(), &cache_root);
-    cache
-        .store(&gate, &receipt)
-        .expect("genuine producer cache");
+    if receipt.status != GateStatus::Passed || receipt.cargo_origin.is_none() {
+        return Err(DevError::corrupt(
+            "genuine fixture lacks its cold Cargo origin",
+        ));
+    }
+    // CHECK8 executable producers must be re-observed even with a genuine origin.
+    if cache.store(&gate, &receipt).is_ok() {
+        return Err(DevError::corrupt(
+            "an executable producer was result-cacheable",
+        ));
+    }
+    let process = receipt
+        .process
+        .clone()
+        .ok_or_else(|| DevError::corrupt("original process absent"))?;
+    cache.store_test_log(&process.stdout)?;
+    cache.store_test_log(&process.stderr)?;
+    let record_path = cache.record_path(&gate, &receipt.input_fingerprint)?;
+    let original = CacheRecord {
+        cache_contract_version: CACHE_CONTRACT_VERSION,
+        gate: gate.name.clone(),
+        input_fingerprint: receipt.input_fingerprint.clone(),
+        identity_command: gate.identity_command().to_vec(),
+        source_elapsed_nanoseconds: receipt.elapsed_nanoseconds,
+        process: process.clone(),
+        outputs: receipt.outputs.clone(),
+        cargo_origin: receipt.cargo_origin.clone(),
+        evidence_digest: receipt.evidence_digest.clone(),
+    };
+    evidence::publish_json(&record_path, &original)?;
     let restored = root.path().join("restored");
-    fs::create_dir(&restored).expect("restored logs");
-    let hit = cache.load(
-        &gate,
-        &receipt.input_fingerprint,
-        &restored.join("valid.stdout"),
-        &restored.join("valid.stderr"),
-    );
-    assert!(
-        hit.cached.is_some(),
-        "genuine matching producer cache must remain reusable"
-    );
-
-    // Rewrite both the log and its ordinary identity consistently. Integrity alone
-    // must not substitute for the Cargo artifact-to-output relation.
+    fs::create_dir(&restored)?;
+    let probe = |label: &str| {
+        cache.load(
+            &gate,
+            &receipt.input_fingerprint,
+            &restored.join(format!("{label}.stdout")),
+            &restored.join(format!("{label}.stderr")),
+        )
+    };
+    if probe("valid").cached.is_some() {
+        return Err(DevError::corrupt(
+            "a cached origin replaced fresh executable selection",
+        ));
+    }
+    // Keep the coherent artifact-free forgery. Valid origins cannot turn this
+    // producer into an accepted result-cache hit, even with consistently hashed logs.
     let forged_log = root.path().join("forged.stdout");
     evidence::publish(
         &forged_log,
         b"{\"reason\":\"build-finished\",\"success\":true}\n",
-    )
-    .expect("owned malformed claim");
-    let mut process = receipt.process.clone().expect("original process");
-    process.stdout = evidence::proof(&forged_log, evidence::relative(root.path(), &forged_log))
-        .expect("consistent forged log proof");
+    )?;
+    let mut forged_process = process;
+    forged_process.stdout =
+        evidence::proof(&forged_log, evidence::relative(root.path(), &forged_log))?;
     let mut forged = receipt.clone();
-    forged.process = Some(process.clone());
-    forged.evidence_digest = cache::gate_evidence_digest(
+    forged.process = Some(forged_process.clone());
+    forged.evidence_digest = gate_evidence_digest(
         &gate.name,
         &forged.input_fingerprint,
-        &process,
+        &forged_process,
         &forged.outputs,
-    )
-    .expect("consistent digest");
-    assert!(
-        cache.store(&gate, &forged).is_err(),
-        "store must reject an artifact-free claim"
-    );
-
-    let record_path = root.path().join(
-        cache
-            .record_path(&gate, &receipt.input_fingerprint)
-            .expect("record path"),
-    );
-    let mut record: CacheRecord =
-        serde_json::from_slice(&fs::read(&record_path).expect("cache record"))
-            .expect("cache schema");
-    let digest = process.stdout.digest.as_ref().expect("forged log digest");
-    let saved = cache_root
-        .join("logs")
-        .join(format!("{}.log", digest.as_str()));
-    evidence::publish(&saved, &fs::read(&forged_log).expect("forged bytes"))
-        .expect("owned consistent cached log");
-    record.process = process;
+        forged.cargo_origin.as_ref(),
+    )?;
+    if cache.store(&gate, &forged).is_ok() {
+        return Err(DevError::corrupt(
+            "a rehashed artifact-free producer was cacheable",
+        ));
+    }
+    let mut record = original.clone();
+    record.process = forged_process;
     record.evidence_digest = forged.evidence_digest;
-    evidence::publish_json(&record_path, &record).expect("owned consistent cached claim");
-    let rejected = cache.load(
-        &gate,
-        &receipt.input_fingerprint,
-        &restored.join("forged.stdout"),
-        &restored.join("forged.stderr"),
-    );
-    assert!(
-        rejected.cached.is_none(),
-        "restored bytes still require origin admission"
-    );
-    assert!(rejected.reason.starts_with("cache_corrupt:"));
-    cache
-        .store(&gate, &receipt)
-        .expect("repair with original evidence");
-    let recovered = cache.load(
-        &gate,
-        &receipt.input_fingerprint,
-        &restored.join("recovered.stdout"),
-        &restored.join("recovered.stderr"),
-    );
-    assert!(recovered.cached.is_some());
+    cache.store_test_log(&record.process.stdout)?;
+    evidence::publish_json(&record_path, &record)?;
+    if probe("forged").cached.is_some() {
+        return Err(DevError::corrupt(
+            "a forged producer record supplied acceptance",
+        ));
+    }
+    evidence::publish_json(&record_path, &original)?;
+    if probe("recovered").cached.is_some() {
+        return Err(DevError::corrupt(
+            "recovery silently waived fresh producer selection",
+        ));
+    }
+    Ok(())
 }

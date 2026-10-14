@@ -297,7 +297,8 @@ pub(crate) fn base_registry(
     std::fs::create_dir_all(&outputs).map_err(|error| {
         DevError::infrastructure(format!("create check output directory: {error}"))
     })?;
-    let binary = repository.join("target/release/lkjscript");
+    let cargo_target = super::cargo_origin_context::Context::target(repository)?;
+    let binary = cargo_target.join("release/lkjscript");
     let standard = outputs.join("standard.lkja");
     let builtin_artifact = outputs.join("builtin-standard.lkja");
     let builtin_transport = outputs.join("builtin-standard.lkjp");
@@ -790,6 +791,11 @@ pub(crate) fn base_registry(
         ],
         &[],
     ));
+    for gate in &mut gates {
+        if super::cargo_origin::is_writer(gate) {
+            super::cargo_origin::bind_target(gate, &cargo_target)?;
+        }
+    }
     GateRegistry::new(gates)
 }
 
@@ -978,8 +984,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn development_gates_run_real_package_checks_without_duplicating_full_acceptance() {
+    fn development_gates_run_real_package_checks_without_duplicating_full_acceptance()
+    -> Result<(), DevError> {
         let temporary = tempfile::tempdir().expect("temporary registry repository");
+        let target = super::super::cargo_origin_context::Context::target(temporary.path())?;
         let registry = base_registry(temporary.path(), temporary.path(), Path::new("/bin/true"))
             .expect("maintained registry");
         let cases: &[(&str, &[&str], &[&str])] = &[
@@ -1030,8 +1038,15 @@ mod tests {
         ];
         for (name, command, dependencies) in cases {
             let gate = registry.gate(name).expect("development gate");
-            assert_eq!(gate.command, *command, "{name}");
-            assert_eq!(gate.identity_command(), *command, "{name}: identity");
+            let mut expected: Vec<String> =
+                command.iter().map(|value| (*value).to_owned()).collect();
+            let index = expected
+                .iter()
+                .position(|argument| argument == "--")
+                .unwrap_or(expected.len());
+            expected.insert(index, format!("--target-dir={}", path_string(&target)));
+            assert_eq!(gate.command, expected, "{name}");
+            assert_eq!(gate.identity_command(), expected, "{name}: identity");
             assert_eq!(gate.dependencies, *dependencies, "{name}: dependencies");
             assert!(
                 gate.required_outputs.is_empty(),
@@ -1061,18 +1076,20 @@ mod tests {
                 );
             }
         }
+        Ok(())
     }
 
     #[test]
-    fn native_package_plan_requires_checked_source_build_and_exact_bytes() {
+    fn native_package_plan_requires_checked_source_build_and_exact_bytes() -> Result<(), DevError> {
         let temporary = tempfile::tempdir().expect("temporary registry repository");
+        let target = super::super::cargo_origin_context::Context::target(temporary.path())?;
         let registry = base_registry(temporary.path(), temporary.path(), Path::new("/bin/true"))
             .expect("maintained registry");
         let checked = registry.gate("native_package_plan_test").unwrap();
         assert_eq!(
             checked.command,
             [
-                path_string(&temporary.path().join("target/release/lkjscript")),
+                path_string(&target.join("release/lkjscript")),
                 "--project".to_owned(),
                 "tools/native-package-plan/project".to_owned(),
                 "check".to_owned(),
@@ -1125,11 +1142,14 @@ mod tests {
                     .any(|gate| gate == "native_package_plan_build")
             );
         }
+        Ok(())
     }
 
     #[test]
-    fn workspace_test_gate_collects_all_target_results_without_reusing_fail_fast_identity() {
+    fn workspace_test_gate_collects_all_target_results_without_reusing_fail_fast_identity()
+    -> Result<(), DevError> {
         let temporary = tempfile::tempdir().expect("temporary registry repository");
+        let target = super::super::cargo_origin_context::Context::target(temporary.path())?;
         let mut registry =
             base_registry(temporary.path(), temporary.path(), Path::new("/bin/true"))
                 .expect("maintained registry");
@@ -1142,22 +1162,20 @@ mod tests {
                 .timeout,
             super::super::model::DEFAULT_TIMEOUT
         );
-        assert_eq!(
-            workspace
-                .command
-                .iter()
-                .map(String::as_str)
-                .collect::<Vec<_>>(),
-            [
-                "cargo",
-                "test",
-                "--workspace",
-                "--all-targets",
-                "--all-features",
-                "--locked",
-                "--no-fail-fast"
-            ]
-        );
+        let mut expected: Vec<String> = [
+            "cargo",
+            "test",
+            "--workspace",
+            "--all-targets",
+            "--all-features",
+            "--locked",
+            "--no-fail-fast",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+        expected.push(format!("--target-dir={}", path_string(&target)));
+        assert_eq!(workspace.command, expected);
         for name in ["full", "release-source"] {
             assert!(
                 registry
@@ -1184,6 +1202,7 @@ mod tests {
                 .profile_digest("full", &full)
                 .expect("fail-fast identity")
         );
+        Ok(())
     }
 
     #[test]
@@ -1295,8 +1314,10 @@ mod tests {
     }
 
     #[test]
-    fn copied_candidate_oracles_wait_for_the_last_release_binary_producer() {
+    fn copied_candidate_oracles_wait_for_the_last_release_binary_producer() -> Result<(), DevError>
+    {
         let temporary = tempfile::tempdir().expect("temporary registry repository");
+        let target = super::super::cargo_origin_context::Context::target(temporary.path())?;
         let registry = base_registry(temporary.path(), temporary.path(), Path::new("/bin/true"))
             .expect("maintained registry");
         let lifecycle = registry
@@ -1304,7 +1325,7 @@ mod tests {
             .expect("release lifecycle");
         assert_eq!(
             lifecycle.required_outputs,
-            [temporary.path().join("target/release/lkjscript")]
+            [target.join("release/lkjscript")]
         );
         for name in [
             "distributed_http_application",
@@ -1318,6 +1339,7 @@ mod tests {
             assert_eq!(oracle.dependencies, ["release_command_lifecycle"], "{name}");
             assert!(!oracle.cacheable, "{name}");
         }
+        Ok(())
     }
 
     #[test]

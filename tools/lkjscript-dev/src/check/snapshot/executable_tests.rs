@@ -228,6 +228,7 @@ fn cached_gate(
             allow_reuse: true,
             fresh_reason: "executable_fixture",
             cache,
+            origin: None,
         },
     )
     .expect("bounded real gate execution")

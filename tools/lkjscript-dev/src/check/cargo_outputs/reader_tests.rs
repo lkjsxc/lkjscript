@@ -79,6 +79,7 @@ pub(super) fn rejects_artifact_free_cargo_claim_and_recovers(
                 &observed.input_fingerprint,
                 observed.process.as_ref().expect("process"),
                 &observed.outputs,
+                None,
             )
             .expect("consistent evidence identity");
         }
@@ -90,17 +91,12 @@ pub(super) fn rejects_artifact_free_cargo_claim_and_recovers(
             &registry,
             &requested,
         );
-        if has_artifact {
-            result.expect("complete consistent claim and restoration");
+        let error = result.expect_err("a Cargo claim cannot invent its required origin");
+        let expected = if has_artifact {
+            "Cargo producer origin proof is absent"
         } else {
-            let error =
-                result.expect_err("artifact-free claim cannot rely on a stale regular output");
-            assert!(
-                error
-                    .message()
-                    .contains("missing exact root-package executable artifact"),
-                "{error}"
-            );
-        }
+            "missing exact root-package executable artifact"
+        };
+        assert!(error.message().contains(expected), "{error}");
     }
 }

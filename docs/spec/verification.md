@@ -1297,11 +1297,21 @@ execution quota is introduced. Runtime/verifier identity invalidates predecessor
 
 ## Verification profiles and receipts
 
-The contributor owner is:
+Use the immutable verifier selected by the
+[bootstrap procedure](../../README.md#develop-the-language). From its selected
+checkout, after that procedure has produced the exact copied checker:
 
 ```sh
-cargo run --locked -p lkjscript-dev -- check PROFILE
+CARGO_TARGET_DIR="$PWD/target" "$bootstrap_root/lkjscript-dev" check PROFILE
 ```
+
+The supported bootstrap recipe requires absent effective Cargo `config` and
+`config.toml` files along the actual cwd ancestor chain and in Cargo home. Present
+configuration or unsupported compiler/environment overrides refuse; this is a
+declared no-config subset, not automatic configuration replacement. Its bootstrap
+target is separate from the independently governed check target. Existing governed
+outputs require matching authenticated origins or separately authorized cold
+preparation after their owners join. Bootstrap evidence does not seed those origins.
 
 `focused` runs narrow format/library/public checks. `changed` selects development checks from
 current Git-status paths and widening rules; it does not select a committed revision range.
@@ -2492,37 +2502,109 @@ does not itself determine semantic/artifact encodings or publish a new executabl
 
 ## Declared Cargo executable origin
 
-A source-checking Cargo build/test gate with declared executable outputs must
-request Cargo JSON before any `--` test-argument separator. A regular output at a
-known path is necessary but insufficient. Its original bounded stdout must retain
-an exact root-manifest, binary-target, non-test compiler-artifact record for each
-declared output. The artifact's executable and filenames must name that same path;
-missing, duplicate, conflicting, malformed or incomplete records refuse admission.
-A successful build-finished record must follow the complete artifact set. Later
-test output is not evidence of an additional Cargo artifact. Process success,
-output limits, regular-file identity and joined cleanup remain independently required.
+The Cargo-origin guard uses check/source receipt contract 8, cache contract 4
+and origin sidecar contract 1. Earlier check/cache records retain their historical
+meaning and cannot become current origin proof. Graph, witness, runtime
+artifact, application-data and publication generations remain independent.
 
-This origin relation is rechecked by fresh execution, verification-cache storage
-and loading, and the independent original source reader. Maintained Cargo
-executable-producing gates are not gate-result-cacheable: current Cargo selection
-is observed even when out-of-checkout Cargo configuration is not in the source
-snapshot. A consistently rehashed
-log without the artifact relation is insufficient. Cargo fresh artifacts remain
-valid selections; verification freshness and compilation reuse are different facts.
-This relation authenticates Cargo's declared selection, not the source inputs that
-produced a cached executable. Reusing one physical target directory across checkouts
-can retain an older executable while Cargo reports the current manifest and target
-paths. Before switching source origins, use a separate physical target directory
-or invalidate the affected project packages and require their fresh compilation,
-including project libraries linked into the selected executable. A fresh final
-binary alone does not prove its project dependencies were rebuilt. Retain immutable
-comparison executables before invalidation and verify their embedded checkout
-identity where available. Automatic admission of compilation origin for shared
-Cargo caches remains a separate verification improvement.
-The new command identity invalidates prior command/profile reuse without changing
-receipt encoding. Graph, artifact, application-data and publication identities are
-not changed by this source-verification correction. Cargo and its build environment
-remain trusted; no hostile-build sandbox or arbitrary compiler proof is asserted.
+A source-checking Cargo build/test gate with declared executable outputs must
+request Cargo JSON before any `--` test-argument separator. Its bounded original
+stdout must retain exactly one root-manifest, binary-target, non-test artifact for
+each declared output. Both `executable` and `filenames` name that exact path, and
+a successful `build-finished` follows the complete artifact set. Missing,
+duplicate, conflicting, malformed or incomplete records refuse. Later test output
+cannot supply an artifact. Successful process completion, output limits,
+regular-file identity, stable inputs and joined cleanup remain required.
+
+Admission also covers the complete workspace-unit inventory selected by the
+producer, separately from declared-bin cardinality. A unit binds exact package and
+manifest, target description/kind, profile/test mode, features and every filename
+and file proof. The supported workspace is the root, developer and site packages.
+Workspace proc-macro, custom-build and generated-output closures refuse rather
+than treating a build-script executable as proof of its outputs.
+
+This per-unit relation applies only to direct Cargo `build`/`test` gates with
+declared outputs (`is_producer`). `clippy` and `workspace_tests` are nonproducer
+writers: serialization and source/config/compiler rechecks preserve eligible
+history but do not admit their debug/test-unit inventory. The guard cannot prevent
+stale foreign compiled tests on an unknown prepopulated target or certify a warm
+`full` run's test origins on an arbitrary target. Use a new empty governed target
+for this guard's final acceptance; that operational cold start does not expand the
+per-unit proof boundary. Compiled-test origin admission is a queued extension.
+
+Only an actual `fresh: false` unit can establish a new cold origin. Each selected
+`fresh: true` unit requires an exact admitted cold producer, matching artifact
+bytes and context: canonical worktree/physical target, input snapshot/lockfile,
+runtime/compiler and effective configuration. Non-test binaries additionally bind
+the identity command. A fresh final binary cannot authorize an unknown warm library.
+Mixed selections admit all units. Warm references point directly to actual cold
+sidecars; they do not promote intermediate warm observations. Unknown, missing,
+changed or foreign origins refuse without automatic cleaning or retry. A newly
+owned target or an explicitly authorized workspace-package cold preparation is a
+separate operation after joining its owners.
+
+Context binds approved environment and command/profile/features/target selection,
+compiler entry/resolved selection and actual sysroot `rustc` file, plus byte or
+absence proofs for both Cargo config names on the actual child cwd ancestor chain
+and in Cargo home. Evidence does not copy sensitive config values. Version 1 uses a
+closed manifest/config grammar; wrappers, custom target JSON, command config or
+manifest overrides, unsupported includes/local routing and dynamic input-file
+flags refuse. Arbitrary transitive compiler/backends are not authenticated.
+
+All direct Cargo writers except `fmt` require an explicit target argument matching
+the owned canonical physical target. Approved target selection routes both producer
+outputs and dependent consumer executable paths through that same target; unrelated
+Cargo paths/overrides cannot replace the bound declared paths. Regular canonical
+external targets are supported; symlink aliases refuse. A physical-target lease
+outside the removable target tree spans the run, and an in-process writer mutex independently serializes each Cargo
+transaction from executable/fingerprint observation through prelaunch dirty
+publication, child execution, joined cleanup, retention, rechecks and commit.
+The run lease alone is insufficient to serialize same-run DAG workers.
+
+Bounded compatible cold history is independent of current live-path admission.
+An overwritten live path need not erase its authenticated, pinned original proof.
+Historical keys bind exact unit/file proofs and, for non-test binaries, the identity
+command. Each later warm unit must still match an eligible original and its actual
+post-Cargo live bytes; historical proof cannot authorize changed or unknown bytes.
+
+The durable inventory is dirty before a writer launches. Failure, cancellation,
+timeout, incomplete evidence, source/config/compiler drift or abandonment cannot
+publish a clean origin. A successful unrelated debug/non-JSON writer may retain
+authenticated compatible cold history, including prior release proofs, but cannot
+establish a new origin. Failed/dirty state cannot authorize warm reuse; physical
+retention of that history does not implicitly restore the prior clean inventory.
+Failed dirty-state persistence is an explicit infrastructure failure, not a filesystem rollback guarantee.
+
+Each producer receipt binds a separately hashed origin sidecar containing the
+actual producer/process, original logs, context, complete unit inventory and exact
+retained artifact copies. Before rotation, prior managed original runs are pinned
+with shared `ACTIVE.lock` leases; the independently owned current run is the sole
+exception. Deletion holds an exclusive run lease through removal. Pins remain
+through validation, execution, retention, origin commit and receipt publication.
+Missing, evicted, inaccessible or corrupted originals cannot authorize warm reuse.
+The independent source reader admits the entire cold/warm closure against its
+current context; absent/substituted proofs, a ledger marker, or an executable digest
+alone are insufficient. Protected declared-output producers remain result-cache-
+ineligible; new evidence/profile/dependency bindings include origin authority.
+
+Artifact lengths and checked aggregates are charged before streamed hashing/copying:
+2 GiB per artifact, 8 GiB per live inventory and 16 GiB of retained closure reads.
+A producer admits at most 256 units; a ledger at most 1,024 historical records.
+Origin sidecar/ledger metadata is at most 16 MiB, closure metadata 64 MiB, original proofs 256 and closure
+depth 32. Existing process-stream limits remain 64 MiB, with at most 256 MiB of
+closure log reads. These are finite refusal limits without a measured adequacy,
+disk-fit or performance claim.
+
+Checker bootstrap uses a separately owned target and its own original Cargo/source
+admission before selecting an immutable checker copy. Its evidence is not the
+later governed profile's unit proof. Target names, restored paths and the checker's
+embedded checkout alone establish neither cold origins nor bootstrap reuse.
+
+This is a cooperating trusted-host contract. Uncoordinated host writers, filesystem
+aliases and hostile build behavior are outside its lease and proof scope. Use an
+isolated owned target when cooperation cannot be assured. Existing static-target
+producer and final-byte admission remain separate; historical acceptance campaigns
+are not reinterpreted by this verification cut.
 
 ## Generalized sequence storage and exact final-byte families
 
