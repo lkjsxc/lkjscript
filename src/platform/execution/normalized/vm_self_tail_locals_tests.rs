@@ -1,0 +1,759 @@
+//! Actual local-buffer reuse, admission/cancellation, and conservative fallbacks.
+use super::*;
+use crate::platform::execution::normalized::{owned_i64_cell::OwnedI64Cell, value::ValueOrigin};
+use crate::platform::kernel::{OwnerKey, OwnerRecord};
+use crate::platform::publication::GraphRepository;
+use std::cell::Cell;
+use std::mem::size_of;
+
+type TestResult<T = ()> = Result<T, ExecutionError>;
+
+thread_local! {
+    static FRESH_LOCALS: Cell<bool> = const { Cell::new(false) };
+}
+
+pub(super) fn force_fresh_locals() -> bool {
+    FRESH_LOCALS.with(Cell::get)
+}
+
+fn with_fresh_locals<T>(run: impl FnOnce() -> T) -> T {
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            FRESH_LOCALS.with(|flag| flag.set(self.0));
+        }
+    }
+    let restore = Restore(FRESH_LOCALS.with(|flag| flag.replace(true)));
+    let result = run();
+    drop(restore);
+    result
+}
+
+fn failure(message: impl std::fmt::Display) -> ExecutionError {
+    ExecutionError::new(
+        ExecutionFailureClass::Trap,
+        "self_tail_locals_test",
+        message.to_string(),
+    )
+}
+
+fn require(condition: bool, message: &str) -> TestResult {
+    if condition {
+        Ok(())
+    } else {
+        Err(failure(message))
+    }
+}
+
+const SOURCE: &str = r#"declarations.begin
+(units (module create reuse
+  (external create less (visibility private) (implementation core.i64.less)
+    (parameter create a (type I64)) (parameter create b (type I64)) (returns Bool))
+  (external create subtract (visibility private) (implementation core.i64.subtract)
+    (parameter create a (type I64)) (parameter create b (type I64)) (returns I64))
+  (external create add (visibility private) (implementation core.i64.add)
+    (parameter create a (type I64)) (parameter create b (type I64)) (returns I64))
+  (external create new-cell (visibility private) (implementation core.cell.create)
+    (parameter create n (type I64)) (returns OwnedI64Cell))
+  (external create finish-cell (visibility private) (implementation core.cell.extract)
+    (parameter create cell (type OwnedI64Cell) (use consume)) (returns I64))
+  (function create count (visibility public) (effect pure)
+    (parameter create n (type I64)) (returns I64)
+    (body (if (call less (local n) (i64 1)) (i64 0)
+      (call count (call subtract (local n) (i64 1))))))
+  (function create even (visibility public) (effect pure)
+    (parameter create n (type I64)) (returns Bool)
+    (body (if (call less (local n) (i64 1)) (bool true)
+      (call odd (call subtract (local n) (i64 1))))))
+  (function create odd (visibility private) (effect pure)
+    (parameter create n (type I64)) (returns Bool)
+    (body (if (call less (local n) (i64 1)) (bool false)
+      (call even (call subtract (local n) (i64 1))))))
+  (function create step (visibility private) (effect pure)
+    (parameter create n (type I64)) (returns I64)
+    (body (call add (local n) (i64 5))))
+  (function create callback-loop (visibility public) (effect pure)
+    (parameter create n (type I64))
+    (parameter create callback (type (function (I64) I64)))
+    (parameter create seed (type I64)) (returns I64)
+    (body (if (call less (local n) (i64 1))
+      (invoke (local callback) (local seed))
+      (call callback-loop (call subtract (local n) (i64 1))
+        (local callback) (local seed)))))
+  (function create slots (visibility public) (effect pure)
+    (parameter create n (type I64))
+    (parameter create callback (type (function (I64) I64))) (returns I64)
+    (body (if (call less (local n) (i64 1))
+      (let (binding dirty (type Text) (text "old branch"))
+        (in (sequence (local dirty) (invoke (local callback) (i64 7)))))
+      (call slots (call subtract (local n) (i64 1)) (local callback)))))
+  (function create owned-result (visibility public) (effect pure)
+    (parameter create n (type I64)) (returns OwnedI64Cell)
+    (body (if (call less (local n) (i64 1)) (call new-cell (i64 137))
+      (call owned-result (call subtract (local n) (i64 1))))))
+  (function create owned-main (visibility public) (effect pure)
+    (parameter create n (type I64)) (returns I64)
+    (body (let (binding cell (type OwnedI64Cell) (call owned-result (local n)))
+      (in (call finish-cell (local cell))))))))
+declarations.end"#;
+
+fn fixture() -> TestResult<(Arc<NormalizedProgram>, BTreeMap<String, FunctionIndex>)> {
+    // Build a genuine authored canonical program through the maintained repository
+    // APIs; every new fixture setup failure is propagated rather than panicking.
+    use crate::platform::persistent_map::{MapContentDigest, MapRoot, PageDigest};
+    let empty = MapRoot::from_parts(
+        PageDigest::from_bytes([0; 32]),
+        0,
+        MapContentDigest::from_bytes([0; 32]),
+    );
+    let seed = b"self-tail-locals";
+    let source = crate::platform::kernel::KernelSnapshot {
+        root: crate::platform::kernel::SemanticRoot {
+            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+            repository_id: crate::platform::semantic_id::RepositoryId::migrate(seed, 0),
+            package_id: crate::platform::kernel::PackageId::migrate(seed, 0),
+            package_name: Name::new("self_tail_locals").map_err(failure)?,
+            owners: empty,
+            dependencies: empty,
+            retirements: empty,
+        },
+        owners: BTreeMap::new(),
+        types: BTreeMap::new(),
+        representation_dependencies: BTreeMap::new(),
+        dependency_interfaces: BTreeMap::new(),
+        dependency_types: BTreeMap::new(),
+        blobs: BTreeMap::new(),
+        dependencies: BTreeMap::new(),
+        retirements: BTreeMap::new(),
+    };
+    let temporary = tempfile::tempdir().map_err(failure)?;
+    let repository = GraphRepository::create(&temporary.path().join("reuse"), &source, None)
+        .map_err(failure)?
+        .repository;
+    let base = repository.view_current().map_err(failure)?.revision();
+    let input = format!("request base={base}\n{SOURCE}");
+    let decoded = crate::platform::control::decode_compact_change("reuse", input.as_bytes())
+        .map_err(|diagnostics| failure(format!("{diagnostics:?}")))?;
+    let plan = repository
+        .prepare_authored_change(&decoded.semantic, decoded.options)
+        .map_err(|diagnostics| failure(format!("{diagnostics:?}")))?;
+    repository.publish(&plan.publication).map_err(failure)?;
+    let source = repository
+        .view_current()
+        .map_err(failure)?
+        .reconstruct_full_oracle()
+        .map_err(failure)?
+        .value;
+    let program = crate::platform::normalized_lifecycle::prepare_repository(repository)
+        .map_err(failure)?
+        .program;
+    let functions = source
+        .owners
+        .iter()
+        .filter_map(|(key, owner)| {
+            let (OwnerKey::Declaration(declaration), OwnerRecord::Declaration(owner)) =
+                (key, owner)
+            else {
+                return None;
+            };
+            program
+                .function(DeclarationReference {
+                    package: source.root.package_id,
+                    declaration: *declaration,
+                })
+                .map(|function| (owner.name.to_string(), function))
+        })
+        .collect();
+    Ok((program, functions))
+}
+
+fn function(functions: &BTreeMap<String, FunctionIndex>, name: &str) -> TestResult<FunctionIndex> {
+    functions
+        .get(name)
+        .copied()
+        .ok_or_else(|| failure(format!("missing {name}")))
+}
+
+fn code(program: &NormalizedProgram, function: FunctionIndex) -> TestResult<NormalizedCode> {
+    match &program
+        .functions
+        .get(function.0 as usize)
+        .ok_or_else(|| failure("missing canonical function"))?
+        .body
+    {
+        NormalizedFunctionBody::Code(code) => Ok(code.clone()),
+        NormalizedFunctionBody::External(_) => Err(failure("expected graph code")),
+    }
+}
+
+fn scalar(program: &NormalizedProgram, n: i64) -> TestResult<CheckedValue> {
+    CheckedValue::scalar(program, NormalizedValue::I64(n))
+}
+
+fn callback(program: &NormalizedProgram, step: FunctionIndex) -> TestResult<CheckedValue> {
+    CheckedValue::function(
+        program,
+        step,
+        Arc::from([]),
+        &ExecutionControl::uncancelled(),
+    )
+}
+
+fn machine<'a>(
+    program: &'a Arc<NormalizedProgram>,
+    executor: &'a StructuredExecutorHandle,
+    resources: &'a NormalizedResourceScope,
+    control: &'a ExecutionControl,
+) -> TestResult<Machine<'a>> {
+    Ok(Machine {
+        shared_budget: None,
+        structured_depth: 0,
+        ancestor_depth: 0,
+        memory_domain: ValueOrigin::fresh().ok_or_else(|| failure("identity exhausted"))?,
+        root_allowance: None,
+        program,
+        program_owner: program,
+        executor,
+        policy: NormalizedRunPolicy::foreground(),
+        host: None,
+        capabilities: None,
+        resources,
+        control,
+        remaining_steps: None,
+        stack: Vec::new(),
+        frames: Vec::new(),
+        incoming_view_scopes: Vec::new(),
+        next_frame: 0,
+        next_transaction: 0,
+        transactions: BTreeMap::new(),
+        calls_by_requirement: BTreeMap::new(),
+        observation: NormalizedRunObservation::default(),
+    })
+}
+
+fn invoke(
+    program: &NormalizedProgram,
+    target: FunctionIndex,
+    arguments: Vec<NormalizedValue>,
+    fresh: bool,
+) -> TestResult<NormalizedInvocation> {
+    let run = || {
+        NormalizedVm::for_test(program, NormalizedRunPolicy::foreground()).invoke_entry(
+            NormalizedEntryPoint::Function(target),
+            arguments,
+            None,
+            &ExecutionControl::uncancelled(),
+        )
+    };
+    if fresh { with_fresh_locals(run) } else { run() }
+}
+
+fn equal_work_except_reuse(
+    old: &NormalizedRunObservation,
+    new: &NormalizedRunObservation,
+) -> TestResult {
+    let mut expected = old.clone();
+    expected.allocated_bytes = new.allocated_bytes;
+    expected.allocation_charges = new.allocation_charges;
+    expected.value_work.classification_decisions = new.value_work.classification_decisions;
+    require(
+        expected == *new,
+        "reuse changed unrelated execution/admission work",
+    )
+}
+
+#[test]
+fn self_tail_locals_reuse_preserves_scalar_callable_and_owned_results() -> TestResult {
+    let (program, functions) = fixture()?;
+    let count = function(&functions, "count")?;
+    let count_code = code(&program, count)?;
+    // The last use of n moves its root into subtract, leaving no occupied old
+    // slots at the self edge. Only the one incoming scalar is a new root query.
+    require(
+        count_code.parameter_count == 1 && count_code.local_count == 1,
+        "count is not the independent one-slot fixture",
+    )?;
+    require(
+        count_code
+            .instructions
+            .iter()
+            .filter(|instruction| matches!(instruction, NormalizedInstruction::MoveLocal(0)))
+            .count()
+            == 1,
+        "count no longer moves the sole outgoing root at its last use",
+    )?;
+    for n in [0_i64, 1, 64] {
+        let (old_value, old) = invoke(&program, count, vec![NormalizedValue::I64(n)], true)?;
+        let (new_value, new) = invoke(&program, count, vec![NormalizedValue::I64(n)], false)?;
+        require(
+            old_value == NormalizedValue::I64(0) && new_value == NormalizedValue::I64(0),
+            "count differs from its independent scalar answer",
+        )?;
+        require(
+            new.tail_transfers == n as u64
+                && new.maximum_control_frames == 1
+                && new.collection_items == 0,
+            "count changed tail/collection behavior",
+        )?;
+        let saved = n as u64 * size_of::<Option<CheckedValue>>() as u64;
+        require(
+            old.allocated_bytes == new.allocated_bytes + saved
+                && old.allocation_charges == new.allocation_charges + n as u64,
+            "count did not remove exactly its real replacement buffers",
+        )?;
+        require(
+            new.value_work.classification_decisions
+                == old.value_work.classification_decisions + n as u64,
+            "count did not report its independently derived incoming-root queries",
+        )?;
+        equal_work_except_reuse(&old, &new)?;
+    }
+    let target = function(&functions, "callback-loop")?;
+    let step = function(&functions, "step")?;
+    let callback_code = code(&program, target)?;
+    require(
+        callback_code.parameter_count == 3 && callback_code.local_count == 3,
+        "callback fixture is not the independent three-root shape",
+    )?;
+    for (local, occurrences) in [(0, 1), (1, 2), (2, 2)] {
+        require(callback_code.instructions.iter().filter(|instruction|
+            matches!(instruction, NormalizedInstruction::MoveLocal(index) if *index == local))
+            .count() == occurrences,
+            "callback fixture no longer moves each outgoing root at its branch last use")?;
+    }
+    let run_callback = |fresh| {
+        invoke(
+            &program,
+            target,
+            vec![
+                NormalizedValue::I64(32),
+                callback(&program, step)?.into_raw(),
+                NormalizedValue::I64(7),
+            ],
+            fresh,
+        )
+    };
+    let (old_value, old) = run_callback(true)?;
+    let (new_value, new) = run_callback(false)?;
+    require(
+        old_value == NormalizedValue::I64(12) && new_value == NormalizedValue::I64(12),
+        "sealed ordinary Function callback was not invoked correctly",
+    )?;
+    let saved = 32 * callback_code.local_count as u64 * size_of::<Option<CheckedValue>>() as u64;
+    require(
+        old.allocated_bytes == new.allocated_bytes + saved
+            && old.allocation_charges == new.allocation_charges + 32,
+        "ordinary callbacks incorrectly disqualified self-tail reuse",
+    )?;
+    // Both branches move their final callback/seed uses; at each self edge the
+    // outgoing three slots are empty and the three incoming roots are queried.
+    require(
+        new.value_work.classification_decisions == old.value_work.classification_decisions + 32 * 3,
+        "callback self edges hid their independently derived root queries",
+    )?;
+    equal_work_except_reuse(&old, &new)?;
+    // Fresh Owned data returns through an admitted caller and is consumed there;
+    // raw root boundaries intentionally still refuse an escaping memory token.
+    let owned = function(&functions, "owned-main")?;
+    let (old_value, old) = invoke(&program, owned, vec![NormalizedValue::I64(32)], true)?;
+    let (new_value, new) = invoke(&program, owned, vec![NormalizedValue::I64(32)], false)?;
+    require(
+        old_value == NormalizedValue::I64(137) && new_value == NormalizedValue::I64(137),
+        "fresh Owned result differs from its independently extracted scalar",
+    )?;
+    require(
+        old.allocated_bytes == new.allocated_bytes + 32 * size_of::<Option<CheckedValue>>() as u64,
+        "fresh Owned result incorrectly disabled ordinary input buffer reuse",
+    )?;
+    equal_work_except_reuse(&old, &new)?;
+    let even = function(&functions, "even")?;
+    for n in [31_i64, 32] {
+        let (old_value, old) = invoke(&program, even, vec![NormalizedValue::I64(n)], true)?;
+        let (new_value, new) = invoke(&program, even, vec![NormalizedValue::I64(n)], false)?;
+        require(
+            old_value == NormalizedValue::Bool(n % 2 == 0) && old_value == new_value,
+            "mutual tail result differs from independent parity",
+        )?;
+        require(
+            old == new,
+            "different-function tail fallback changed accounting",
+        )?;
+    }
+    let expected = ExecutionError::new(
+        ExecutionFailureClass::Infrastructure,
+        "normalized_value_admission",
+        "invocation input value admission: raw value disagrees with its exact type or authority; supply a value for the selected boundary",
+    );
+    let refused = |fresh| {
+        invoke(&program, count, vec![NormalizedValue::Bool(false)], fresh)
+            .err()
+            .ok_or_else(|| failure("foreign argument type bypassed complete admission"))
+    };
+    let old_error = refused(true)?;
+    let new_error = refused(false)?;
+    require(
+        old_error == expected && new_error == expected && old_error == new_error,
+        "foreign type changed its exact admission class/code/message or refusal flags",
+    )?;
+    Ok(())
+}
+
+#[test]
+fn self_tail_locals_clear_dirty_slots_and_keep_fresh_invocation_identity() -> TestResult {
+    let (program, functions) = fixture()?;
+    let target = function(&functions, "slots")?;
+    let step = function(&functions, "step")?;
+    let code = code(&program, target)?;
+    require(
+        code.local_count > code.parameter_count,
+        "fixture has no lexical-only slot",
+    )?;
+    let executor = crate::platform::runtime::structured::StructuredExecutor::for_test(1);
+    let handle = executor.handle();
+    let resources = NormalizedResourceScope::new()?;
+    let control = ExecutionControl::uncancelled();
+    let mut machine = machine(&program, &handle, &resources, &control)?;
+    machine.call_code(
+        code.clone(),
+        vec![scalar(&program, 3)?, callback(&program, step)?],
+        BTreeMap::new(),
+        Some(target),
+        false,
+    )?;
+    let dirty: Arc<str> = Arc::from("old lexical branch");
+    let retained = Arc::downgrade(&dirty);
+    let old = machine.current_frame_mut()?;
+    *old.locals
+        .last_mut()
+        .ok_or_else(|| failure("no dirty slot"))? = Some(CheckedValue::scalar(
+        &program,
+        NormalizedValue::Text(dirty),
+    )?);
+    let state = (
+        old.id,
+        old.application_identity,
+        old.invocation_identity,
+        old.locals.as_ptr(),
+        old.locals.capacity(),
+    );
+    let before = machine.observation.clone();
+    machine.policy.maximum_allocated_bytes = Some(before.allocated_bytes);
+    machine.call_code(
+        code.clone(),
+        vec![scalar(&program, 2)?, callback(&program, step)?],
+        BTreeMap::new(),
+        Some(target),
+        true,
+    )?;
+    let next = machine.current_frame()?;
+    require(
+        next.locals.as_ptr() == state.3 && next.locals.capacity() == state.4,
+        "eligible transition allocated a different locals buffer",
+    )?;
+    require(
+        next.id != state.0
+            && next.application_identity != state.1
+            && next.invocation_identity != state.2
+            && machine.next_frame == 2,
+        "buffer reuse reused activation/application/invocation identity",
+    )?;
+    require(
+        next.locals
+            .iter()
+            .skip(code.parameter_count as usize)
+            .all(Option::is_none)
+            && retained.upgrade().is_none(),
+        "dirty lexical slot or its old value survived",
+    )?;
+    require(
+        machine.observation.allocated_bytes == before.allocated_bytes
+            && machine.observation.allocation_charges == before.allocation_charges,
+        "zero-growth buffer reuse incurred a physical allocation charge",
+    )?;
+    // Three occupied old slots and two incoming roots, in authored slot/argument order.
+    require(
+        machine.observation.value_work.classification_decisions
+            == before.value_work.classification_decisions + 5,
+        "occupied slot and callback root queries were hidden",
+    )?;
+    Ok(())
+}
+
+#[test]
+fn self_tail_locals_charge_real_growth_and_cancel_before_retiring_old_frame() -> TestResult {
+    let (program, functions) = fixture()?;
+    let target = function(&functions, "count")?;
+    let code = code(&program, target)?;
+    let bytes = code.local_count as u64 * size_of::<Option<CheckedValue>>() as u64;
+    let executor = crate::platform::runtime::structured::StructuredExecutor::for_test(1);
+    let handle = executor.handle();
+    let resources = NormalizedResourceScope::new()?;
+    let healthy = ExecutionControl::uncancelled();
+    for (maximum, accepted) in [(bytes - 1, false), (bytes, true)] {
+        let mut machine = machine(&program, &handle, &resources, &healthy)?;
+        machine.policy.maximum_allocated_bytes = Some(maximum);
+        let result = machine.call_code(
+            code.clone(),
+            vec![scalar(&program, 3)?],
+            BTreeMap::new(),
+            Some(target),
+            false,
+        );
+        require(
+            result.is_ok() == accepted,
+            "first buffer exact-fit boundary changed",
+        )?;
+        require(
+            machine.frames.len() == usize::from(accepted),
+            "refused first call installed a frame",
+        )?;
+        if let Err(error) = result {
+            require(
+                error.code == "normalized_allocation",
+                "first buffer refused at a foreign guard",
+            )?;
+        }
+    }
+    // The first call consumes the sole permitted checkpoint. The next call fails
+    // specifically at call_code's final check; no scope/loan loops consume it.
+    let callee = program
+        .functions
+        .get(target.0 as usize)
+        .ok_or_else(|| failure("missing count scope inventory"))?;
+    require(
+        callee.read_scope_sources.is_empty()
+            && callee.read_scope_parameters.is_empty()
+            && callee.read_scope_arguments.is_empty(),
+        "cancellation fixture has intermediate view-scope checkpoints",
+    )?;
+    let cancelled = ExecutionControl::cancel_after_checks(1);
+    let mut machine = machine(&program, &handle, &resources, &cancelled)?;
+    machine.call_code(
+        code.clone(),
+        vec![scalar(&program, 3)?],
+        BTreeMap::new(),
+        Some(target),
+        false,
+    )?;
+    let old = machine.current_frame()?;
+    let state = (
+        old.id,
+        old.application_identity,
+        old.invocation_identity,
+        old.locals.as_ptr(),
+    );
+    let before = machine.observation.allocated_bytes;
+    let error = machine
+        .call_code(
+            code.clone(),
+            vec![scalar(&program, 2)?],
+            BTreeMap::new(),
+            Some(target),
+            true,
+        )
+        .err()
+        .ok_or_else(|| failure("final checkpoint did not cancel"))?;
+    require(
+        error.class == ExecutionFailureClass::Cancelled && error.code == "execution_cancelled",
+        "final checkpoint lost its original cancellation diagnostic",
+    )?;
+    let old = machine.current_frame()?;
+    require(
+        (
+            old.id,
+            old.application_identity,
+            old.invocation_identity,
+            old.locals.as_ptr(),
+        ) == state
+            && old
+                .locals
+                .first()
+                .and_then(Option::as_ref)
+                .map(CheckedValue::raw)
+                == Some(&NormalizedValue::I64(3)),
+        "cancellation destroyed the outgoing activation",
+    )?;
+    require(
+        machine.observation.allocated_bytes == before,
+        "cancelled reuse allocated a locals buffer",
+    )?;
+    machine.control = &healthy;
+    machine.call_code(
+        code,
+        vec![scalar(&program, 1)?],
+        BTreeMap::new(),
+        Some(target),
+        true,
+    )?;
+    require(
+        machine.current_frame()?.locals.as_ptr() == state.3,
+        "healthy retry could not reuse the preserved buffer",
+    )?;
+    Ok(())
+}
+
+#[test]
+fn self_tail_locals_fallback_preserves_application_and_borrow_custody() -> TestResult {
+    let (program, functions) = fixture()?;
+    let target = function(&functions, "count")?;
+    let original = code(&program, target)?;
+    let bytes = original.local_count as u64 * size_of::<Option<CheckedValue>>() as u64;
+    let executor = crate::platform::runtime::structured::StructuredExecutor::for_test(1);
+    let handle = executor.handle();
+    let resources = NormalizedResourceScope::new()?;
+    let control = ExecutionControl::uncancelled();
+    for case in 0..5 {
+        let mut machine = machine(&program, &handle, &resources, &control)?;
+        machine.call_code(
+            original.clone(),
+            vec![scalar(&program, 3)?],
+            BTreeMap::new(),
+            Some(target),
+            false,
+        )?;
+        let source = BorrowSource {
+            frame: machine.current_frame()?.id,
+            local: 0,
+        };
+        let mut next_code = original.clone();
+        let mut types = BTreeMap::new();
+        let mut argument = scalar(&program, 2)?;
+        // Private adversarial placements test the physical fallback boundary;
+        // production complete type/scope admission is exercised separately above.
+        match case {
+            0 => next_code.instructions = original.instructions.iter().cloned().collect(),
+            1 => {
+                let parameter = TypeParameterId::migrate(b"different-application", 0);
+                let ty = program
+                    .functions
+                    .get(target.0 as usize)
+                    .ok_or_else(|| failure("missing count"))?
+                    .result
+                    .ty;
+                types.insert(parameter, ty);
+            }
+            2 => machine
+                .current_frame_mut()?
+                .locals
+                .first_mut()
+                .and_then(Option::as_mut)
+                .ok_or_else(|| failure("missing old scalar"))?
+                .set_borrow_source(Some(source)),
+            3 => argument.set_borrow_source(Some(source)),
+            4 => {
+                let cell = OwnedI64Cell::new(machine.memory_domain, 137);
+                cell.establish_admission(program.value_origin)?;
+                let read = cell.borrow()?;
+                let mut leaf = scalar(&program, 3)?;
+                leaf.set_borrow_source(Some(source));
+                leaf.reserve_borrow_guards(1)?;
+                leaf.retain_borrow_guard_from(|| {
+                    CheckedValue::memory(&program, NormalizedValue::OwnedI64Cell(read))
+                })?;
+                *machine
+                    .current_frame_mut()?
+                    .locals
+                    .first_mut()
+                    .ok_or_else(|| failure("missing custody slot"))? = Some(leaf);
+                // Keep the real owner outside the frame until the fallback retry
+                // releases the retained read, then confirm ownership is usable.
+                let state = machine.current_frame()?.locals.as_ptr();
+                let before = machine.observation.allocated_bytes;
+                machine.policy.maximum_allocated_bytes = Some(before + bytes - 1);
+                let error = machine
+                    .call_code(
+                        next_code.clone(),
+                        vec![scalar(&program, 2)?],
+                        BTreeMap::new(),
+                        Some(target),
+                        true,
+                    )
+                    .err()
+                    .ok_or_else(|| failure("custody fallback escaped allocation refusal"))?;
+                require(
+                    error.code == "normalized_allocation"
+                        && machine.current_frame()?.locals.as_ptr() == state,
+                    "refused fallback retired custody before allocation admission",
+                )?;
+                require(
+                    cell.borrow().is_ok(),
+                    "refused fallback invalidated the retained ancestor",
+                )?;
+                machine.policy.maximum_allocated_bytes = Some(before + bytes);
+                machine.call_code(
+                    next_code,
+                    vec![scalar(&program, 1)?],
+                    BTreeMap::new(),
+                    Some(target),
+                    true,
+                )?;
+                require(
+                    machine.current_frame()?.locals.as_ptr() != state
+                        && machine.observation.allocated_bytes == before + bytes,
+                    "custody fallback reused the old buffer",
+                )?;
+                require(
+                    cell.extract()? == 137,
+                    "fallback failed to release the old read guard",
+                )?;
+                continue;
+            }
+            _ => return Err(failure("unknown fallback case")),
+        }
+        let state = machine.current_frame()?.locals.as_ptr();
+        let before = machine.observation.clone();
+        machine.policy.maximum_allocated_bytes = Some(before.allocated_bytes + bytes - 1);
+        let error = machine
+            .call_code(
+                next_code.clone(),
+                vec![argument],
+                types.clone(),
+                Some(target),
+                true,
+            )
+            .err()
+            .ok_or_else(|| failure("fallback bypassed real growth charge"))?;
+        require(
+            error.code == "normalized_allocation"
+                && machine.current_frame()?.locals.as_ptr() == state
+                && machine.current_frame()?.id == source.frame,
+            "fallback refused after destroying the outgoing activation",
+        )?;
+        let queries = match case {
+            0 | 1 => 0,
+            2 => 1,
+            3 => 2,
+            _ => 0,
+        };
+        require(
+            machine.observation.value_work.classification_decisions
+                == before.value_work.classification_decisions + queries,
+            "fallback short-circuit root queries were counted incorrectly",
+        )?;
+        machine.policy.maximum_allocated_bytes = Some(before.allocated_bytes + bytes);
+        let mut argument = scalar(&program, 1)?;
+        if case == 3 {
+            argument.set_borrow_source(Some(source));
+        }
+        machine.call_code(next_code, vec![argument], types, Some(target), true)?;
+        require(
+            machine.current_frame()?.locals.as_ptr() != state
+                && machine.observation.allocated_bytes == before.allocated_bytes + bytes
+                && machine.observation.allocation_charges == before.allocation_charges + 1,
+            "fallback did not allocate/charge exactly one fresh local buffer",
+        )?;
+        if case == 3 {
+            require(
+                machine
+                    .current_frame()?
+                    .locals
+                    .first()
+                    .and_then(Option::as_ref)
+                    .and_then(CheckedValue::borrow_source)
+                    == Some(source),
+                "fallback stripped incoming borrow metadata",
+            )?;
+        }
+    }
+    Ok(())
+}

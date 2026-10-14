@@ -2776,6 +2776,10 @@ pub(crate) fn encode_transferred_test_fixture(
 }
 
 #[cfg(test)]
+#[path = "pure_tail_measurement_tests.rs"]
+mod measurement_tests;
+
+#[cfg(test)]
 mod checked_value_tests {
     use super::*;
 

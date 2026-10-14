@@ -46,6 +46,9 @@ pub(super) mod borrow_result_tests;
 #[path = "vm_scoped_parallel_tests.rs"]
 mod scoped_parallel_tests;
 #[cfg(test)]
+#[path = "vm_self_tail_locals_tests.rs"]
+mod self_tail_locals_tests;
+#[cfg(test)]
 #[path = "vm_witness_dag_tests.rs"]
 mod witness_dag_tests;
 
@@ -3674,6 +3677,67 @@ impl Machine<'_> {
         Ok(())
     }
 
+    fn can_reuse_self_tail_locals(
+        &mut self,
+        code: &NormalizedCode,
+        arguments: &[CheckedValue],
+        type_arguments: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+        function: Option<FunctionIndex>,
+        tail: bool,
+    ) -> Result<bool, ExecutionError> {
+        // The private comparison control executes the original allocation path.
+        #[cfg(test)]
+        if self_tail_locals_tests::force_fresh_locals() {
+            return Ok(false);
+        }
+        let Some(function) = function.filter(|index| index.1 == self.program.value_origin) else {
+            return Ok(false);
+        };
+        let Some(frame) = self.frames.last() else {
+            return Ok(false);
+        };
+        let Some(callee) = self.program.functions.get(function.0 as usize) else {
+            return Ok(false);
+        };
+        if !tail
+            || frame.function != Some(function)
+            || !callee.graph_function
+            || !matches!(callee.effect, crate::platform::kernel::FunctionEffect::Pure)
+            || callee.result.relation.source().is_some()
+            || !callee.read_scope_sources.is_empty()
+            || frame.code.parameter_count != code.parameter_count
+            || frame.code.local_count != code.local_count
+            || !Arc::ptr_eq(&frame.code.instructions, &code.instructions)
+            || &frame.type_arguments != type_arguments
+            || frame.locals.len() != code.local_count as usize
+            || frame.locals.capacity() < code.local_count as usize
+            || frame.stack_base != self.stack.len()
+            || !self.transactions.is_empty()
+            || !frame.owned_loans.is_empty()
+            || frame.pending_borrow_call.is_some()
+            || frame.borrow_result_target.is_some()
+            || !frame.view_scopes.is_empty()
+            || !frame.view_builders.is_empty()
+            || !frame.lexical_view_scopes.is_empty()
+        {
+            return Ok(false);
+        }
+        // Free callable roots are allowed: their complete captures were admitted
+        // when the checked value was minted. Ordinary leaves with borrow metadata
+        // are excluded even when their raw value and admission class are ordinary.
+        for value in frame.locals.iter().flatten() {
+            if !value.permits_plain_slot_reuse(self.program, &mut self.observation.value_work)? {
+                return Ok(false);
+            }
+        }
+        for value in arguments {
+            if !value.permits_plain_slot_reuse(self.program, &mut self.observation.value_work)? {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
     fn call_code(
         &mut self,
         code: NormalizedCode,
@@ -3702,7 +3766,11 @@ impl Machine<'_> {
                     "normalized local allocation overflowed",
                 )
             })?;
-        self.charge_allocation(locals_bytes)?;
+        let reuse_locals =
+            self.can_reuse_self_tail_locals(&code, &arguments, &type_arguments, function, tail)?;
+        if !reuse_locals {
+            self.charge_allocation(locals_bytes)?;
+        }
         let metadata_bytes = arguments
             .iter()
             .filter(|argument| {
@@ -3733,41 +3801,53 @@ impl Machine<'_> {
                 "normalized frame generation counter overflowed",
             )
         })?;
-        let mut locals = (0..code.local_count).map(|_| None).collect::<Vec<_>>();
+        let mut locals = if reuse_locals {
+            Vec::new()
+        } else {
+            (0..code.local_count).map(|_| None).collect::<Vec<_>>()
+        };
         let application_identity = super::value::ValueOrigin::fresh()
             .ok_or_else(|| type_error("view application identity exhausted"))?;
         let invocation_identity = super::value::ValueOrigin::fresh()
             .ok_or_else(|| type_error("view invocation identity exhausted"))?;
-        for (index, mut argument) in arguments.into_iter().enumerate() {
-            if let NormalizedValue::ReadView(view) = argument.raw() {
-                let ty = view.identity().ty;
-                self.charge_allocation((2 * std::mem::size_of::<usize>()) as u64)?;
-                let destination = super::read_view_storage::SourceAnchor {
-                    program: self.program.value_origin,
-                    application: application_identity,
-                    invocation: invocation_identity,
-                    coordinate: super::read_view_storage::SourceCoordinate::Parameter(index as u32),
-                    origin: self.memory_domain,
-                    path: Arc::from([]),
-                };
-                let mut rebound = self.lend_read_view(&argument, destination.clone(), ty, false)?;
-                rebound.set_read_path(destination.path);
-                argument = rebound;
-            }
-            if argument.raw().memory_form().is_some()
-                || matches!(argument.raw(), NormalizedValue::ReadView(_))
-            {
-                if argument.raw().memory_form().is_some() {
+        let deferred_arguments = if reuse_locals {
+            Some(arguments)
+        } else {
+            for (index, mut argument) in arguments.into_iter().enumerate() {
+                if let NormalizedValue::ReadView(view) = argument.raw() {
+                    let ty = view.identity().ty;
                     self.charge_allocation((2 * std::mem::size_of::<usize>()) as u64)?;
-                    argument.set_read_path(Arc::from([]));
+                    let destination = super::read_view_storage::SourceAnchor {
+                        program: self.program.value_origin,
+                        application: application_identity,
+                        invocation: invocation_identity,
+                        coordinate: super::read_view_storage::SourceCoordinate::Parameter(
+                            index as u32,
+                        ),
+                        origin: self.memory_domain,
+                        path: Arc::from([]),
+                    };
+                    let mut rebound =
+                        self.lend_read_view(&argument, destination.clone(), ty, false)?;
+                    rebound.set_read_path(destination.path);
+                    argument = rebound;
                 }
-                argument.set_borrow_source(Some(BorrowSource {
-                    frame: id,
-                    local: index as u32,
-                }));
+                if argument.raw().memory_form().is_some()
+                    || matches!(argument.raw(), NormalizedValue::ReadView(_))
+                {
+                    if argument.raw().memory_form().is_some() {
+                        self.charge_allocation((2 * std::mem::size_of::<usize>()) as u64)?;
+                        argument.set_read_path(Arc::from([]));
+                    }
+                    argument.set_borrow_source(Some(BorrowSource {
+                        frame: id,
+                        local: index as u32,
+                    }));
+                }
+                locals[index] = Some(argument);
             }
-            locals[index] = Some(argument);
-        }
+            None
+        };
         let borrow_result_target = if function.is_some_and(|index| {
             self.program.functions[index.0 as usize]
                 .result
@@ -3791,7 +3871,24 @@ impl Machine<'_> {
         // The surviving caller already owns the original return continuation and stack base.
         self.control.check()?;
         if tail {
+            if reuse_locals {
+                // The outgoing activation remains intact through all admission
+                // and the final cancellation checkpoint. Drop its ordinary slots
+                // in the original ascending order before moving the empty buffer.
+                let frame = self.current_frame_mut()?;
+                frame.locals.clear();
+                locals = std::mem::take(&mut frame.locals);
+                locals.resize_with(code.local_count as usize, || None);
+            }
             self.frames.pop();
+        }
+        if let Some(arguments) = deferred_arguments {
+            for (index, argument) in arguments.into_iter().enumerate() {
+                *locals
+                    .get_mut(index)
+                    .ok_or_else(|| type_error("admitted local shape omitted a parameter slot"))? =
+                    Some(argument);
+            }
         }
         self.frames.push(Frame {
             id,
@@ -4272,8 +4369,9 @@ impl Machine<'_> {
                 "normalized execution exceeded its value-stack budget",
             ));
         }
-        // Charge the additional proof carried by this operand placement. Frame local
-        // storage continues to be charged cumulatively, including on every tail call.
+        // Charge the additional proof carried by this operand placement. New frame
+        // local buffers are charged when allocated; exact zero-growth self-tail
+        // reuse retains the already reserved buffer without another local charge.
         self.charge_allocation(
             (std::mem::size_of::<CheckedValue>() - std::mem::size_of::<NormalizedValue>()) as u64,
         )?;

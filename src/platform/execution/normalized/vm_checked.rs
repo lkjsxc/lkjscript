@@ -470,6 +470,16 @@ impl Value {
         Ok(self.class)
     }
 
+    /// Reusing an empty slot buffer must not retain a borrowed leaf's custody.
+    /// The counted root query uses the sealed admission class, not a descendant walk.
+    pub(super) fn permits_plain_slot_reuse(
+        &self,
+        program: &NormalizedProgram,
+        work: &mut ValueWork,
+    ) -> Result<bool, ExecutionError> {
+        Ok(self.class(program, work)? == Class::Free && self.borrow.is_none())
+    }
+
     pub(super) fn duplicate(&self, use_mode: ParameterUse) -> Result<Self, ExecutionError> {
         if self.class == Class::Memory && use_mode == ParameterUse::Borrow {
             let mut value = Self {

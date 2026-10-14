@@ -184,6 +184,20 @@ mechanism is implemented, not a new backlog item. Continue measuring retained
 instructions, application metadata and preparation on matched selections; sharing
 storage alone does not establish faster preparation or execution.
 
+Extend exact-self-tail execution with local-slot buffer reuse under the
+[language contract](spec/language.md), keeping fresh invocation identities, full
+admission, cancellation and custody checks. Require physical-buffer and exact
+allocation controls alongside complete reference/VM results. Measure preparation,
+first invocation and repeated invocation separately; an allocation reduction does
+not establish a throughput improvement or justify weaker performance thresholds.
+
+Bind verification compilation reuse to the physical Cargo target's source origin
+and exact input content. Declared Cargo output paths and hashes alone do not prove
+which checkout produced cached code. Preserve valid same-checkout warm reuse while
+rejecting a stale executable selected from another checkout, including reused
+project libraries. The next verification slice needs this ownership guard and a
+two-checkout regression before admitting shared-cache reuse automatically.
+
 Use [admission-local shared interface record maps](decisions/shared-dependency-interfaces.md)
 across importing snapshots. Each exact record map is materialized once per source
 admission; every load retains independent interface, body and composed-callable

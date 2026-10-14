@@ -504,6 +504,30 @@ invocation is limited to 900 wall seconds and 1,073,741,824 owned file bytes, ex
 receipts retain elapsed time, sampled RSS, work units, peaks, exact inputs, and cleanup. These
 prove constant control space for eligible tail chains, not constant heap or throughput.
 
+Exact-self-tail VM local-slot reuse additionally requires observation of the same physical
+buffer across eligible transfers, clearing of dirty nonparameter slots, and fresh invocation
+identities. Exercise exact prepared application/code/local-shape and retained-capacity matches,
+pure Value results, including fresh Owned results, with no read-scope sources, and each excluded
+task, source-tied result, borrow, owned/read-view scope or pending-result path. An active
+transaction anywhere in the invocation's stack requires fallback; ineligible transfers preserve the
+ordinary allocation and admission behavior. Complete argument/callee admission and cancellation
+must precede mutation of the outgoing slots. Keep exact-fit and one-byte-short allocation
+controls for both real reuse and charged fallback, no refunds or counter resets, and healthy
+execution after refusal or cancellation. New flat eligibility queries must count honestly in
+classification decisions. This optimization does not change the independent native mapping
+collection-item formula, reference parameter-scope charges, or reference expression/value units.
+Compare complete production/reference results without requiring equal allocation ledgers;
+physical buffer reuse alone establishes no throughput, RSS or whole-process memory improvement.
+
+The ignored developer selector
+`pure_tail::measurement_tests::prepared_pure_tool_cold_and_warm_measurements` separates strict
+artifact preparation, first invocation and repeated invocation of one loaded `PureTool`.
+It requires `LKJSCRIPT_MEASURE_ARTIFACT` and `LKJSCRIPT_MEASURE_N` (256, 1024, 4096 or 8192),
+and validates every complete mapping/countdown result. Run compared builds serially under an
+external timeout with identical artifact and harness bytes; retain exact source/executable
+bindings, paired sample order and unfavorable samples. This optional timing experiment has no
+speed threshold and does not replace the maintained semantic or accounting gates.
+
 Checked-value execution extends this same owner and receipt to the complete forwarding matrix:
 runtime list length N in {1, 256, 4096}, countdown K in {1, 64, 1024}, direct calls and named generic
 invocation through a separately authored transported library whose producer is removed. Each
@@ -2485,6 +2509,16 @@ is observed even when out-of-checkout Cargo configuration is not in the source
 snapshot. A consistently rehashed
 log without the artifact relation is insufficient. Cargo fresh artifacts remain
 valid selections; verification freshness and compilation reuse are different facts.
+This relation authenticates Cargo's declared selection, not the source inputs that
+produced a cached executable. Reusing one physical target directory across checkouts
+can retain an older executable while Cargo reports the current manifest and target
+paths. Before switching source origins, use a separate physical target directory
+or invalidate the affected project packages and require their fresh compilation,
+including project libraries linked into the selected executable. A fresh final
+binary alone does not prove its project dependencies were rebuilt. Retain immutable
+comparison executables before invalidation and verify their embedded checkout
+identity where available. Automatic admission of compilation origin for shared
+Cargo caches remains a separate verification improvement.
 The new command identity invalidates prior command/profile reuse without changing
 receipt encoding. Graph, artifact, application-data and publication identities are
 not changed by this source-verification correction. Cargo and its build environment

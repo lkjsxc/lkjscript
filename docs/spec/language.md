@@ -253,8 +253,21 @@ arguments finish, while retaining the exact resource signature and authority res
 
 Tail eligibility is derived from accepted meaning and strict loaded code, never stored meaning
 or an authoring option. Transfers check cancellation and consume execution work without resetting
-fuel, allocation, collection, operand, or capability accounting. Every admitted VM graph call,
-including a transfer, incurs its existing cumulative local-allocation charge without refunds.
+fuel, allocation, collection, operand, or capability accounting. New VM local storage is charged
+before allocation or growth, without refunds. An exact-self-tail transfer of a pure graph
+function with no source-tied result relation or read-scope sources may reuse its current local-slot
+buffer only when the same prepared function application, code and local shape are selected,
+retained capacity suffices without growth, arguments and old slots are certified ordinary and
+free of borrow custody, and no live owned, borrow, read-view or pending-result scope remains
+in the activation. No transaction may be active anywhere in the invocation's stack.
+The result's Value relation may still produce a fresh Owned value; reuse does not relax
+its result type or custody checks. Complete call admission and cancellation checks precede
+clearing any outgoing local. Successful reuse clears
+every old slot before installing arguments and assigns a fresh invocation identity; physical
+storage reuse does not preserve outgoing bindings or grant scope authority. Reusing that buffer
+incurs no replacement-local-storage allocation charge. Ineligible transfers and ordinary calls
+retain the existing allocation and admission path. Other allocation and metadata charges remain
+cumulative, and reference expression/value accounting remains independent.
 Non-tail calls retain call-frame admission. The unchanged defaults are 10,000,000 VM instructions,
 4,096 live call frames, 1,000,000 operand values, 268,435,456 allocated bytes, 1,000,000 collection
 items, and 100,000 capability calls. Reference work remains independently counted in expression
