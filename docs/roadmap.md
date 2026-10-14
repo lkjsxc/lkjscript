@@ -192,12 +192,23 @@ paired measurements did not establish a preparation or execution speedup. Contin
 measuring preparation, first invocation and repeated invocation separately;
 allocation reductions do not justify weaker performance thresholds.
 
-Bind verification compilation reuse to the physical Cargo target's source origin
-and exact input content. Declared Cargo output paths and hashes alone do not prove
-which checkout produced cached code. Preserve valid same-checkout warm reuse while
-rejecting a stale executable selected from another checkout, including reused
-project libraries. The next verification slice needs this ownership guard and a
-two-checkout regression before admitting shared-cache reuse automatically.
+The CHECK8/CACHE4 Cargo-origin implementation passed clean-T full29 with 29 fresh
+gates and zero reuse; complete independent CHECK8 authentication passed 68,023
+checks. Origin admission covers direct
+Cargo build/test producers with declared outputs and their complete selected
+workspace inventory. It binds the whole input snapshot digest and physical target;
+existing declaration-granular incremental compilation and scaling contracts remain
+unchanged. Nonproducer workspace tests are serialized and context-rechecked without
+per-unit debug/test-origin admission; this run used a new empty governed target.
+Compiled-test origin admission remains a separate queued follow-up.
+
+The selected next measured slice is native verification batching on current T
+before optimization. The actual cold checker bootstrap build reported 8m 59s,
+a measured preparation cost rather than a saving. Retain complete ordered cases,
+independent oracles, existing quotas/refusals/recovery and joined cleanup. Fuller
+bounded packing needs matched preparation/invocation/encoding and wall/storage
+observations before any improvement claim. Status owns the exact implementation
+run and separate reporting-scope validation.
 
 Use [admission-local shared interface record maps](decisions/shared-dependency-interfaces.md)
 across importing snapshots. Each exact record map is materialized once per source
