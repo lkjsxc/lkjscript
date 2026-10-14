@@ -184,12 +184,13 @@ mechanism is implemented, not a new backlog item. Continue measuring retained
 instructions, application metadata and preparation on matched selections; sharing
 storage alone does not establish faster preparation or execution.
 
-Extend exact-self-tail execution with local-slot buffer reuse under the
+Exact-self-tail execution now reuses local-slot buffers under the
 [language contract](spec/language.md), keeping fresh invocation identities, full
-admission, cancellation and custody checks. Require physical-buffer and exact
-allocation controls alongside complete reference/VM results. Measure preparation,
-first invocation and repeated invocation separately; an allocation reduction does
-not establish a throughput improvement or justify weaker performance thresholds.
+admission, cancellation and custody checks. Physical-buffer and exact allocation
+controls and complete reference/VM results passed fresh full acceptance. The
+paired measurements did not establish a preparation or execution speedup. Continue
+measuring preparation, first invocation and repeated invocation separately;
+allocation reductions do not justify weaker performance thresholds.
 
 Bind verification compilation reuse to the physical Cargo target's source origin
 and exact input content. Declared Cargo output paths and hashes alone do not prove
