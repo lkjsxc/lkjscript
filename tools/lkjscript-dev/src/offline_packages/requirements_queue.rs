@@ -145,7 +145,7 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
         require(
             command.command
                 == [
-                    receipt.pinned_runtime_path.clone(),
+                    receipt.host_path.clone(),
                     "run".into(),
                     "--deployment".into(),
                     descriptor.display().to_string(),

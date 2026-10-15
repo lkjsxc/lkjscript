@@ -12,6 +12,7 @@ mod reader;
 mod registry;
 mod self_test;
 mod snapshot;
+mod source;
 mod surface;
 
 use crate::error::DevError;
@@ -32,8 +33,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 const MAXIMUM_RETAINED_RUNS: usize = 8;
 static RUN_ORDINAL: AtomicU64 = AtomicU64::new(0);
 
-pub(crate) use reader::read_release_source_receipt;
-pub(crate) const RELEASE_SOURCE_GATE_COUNT: usize = 23;
+pub(crate) use source::{AdmittedSource, SourceOwner, SourceProof};
+pub(crate) const RELEASE_SOURCE_GATE_COUNT: usize = 25;
 
 #[derive(Clone, Debug)]
 struct Options {

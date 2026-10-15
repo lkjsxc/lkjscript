@@ -65,6 +65,15 @@ impl Native {
     }
 
     fn cli(&self, arguments: &[&str], success: bool) -> Vec<CompactRecord> {
+        self.cli_with_mode(arguments, success).1
+    }
+
+    /// Return the route that actually executed, including any process fallback.
+    fn cli_with_mode(
+        &self,
+        arguments: &[&str],
+        success: bool,
+    ) -> (semantic_cli::Mode, Vec<CompactRecord>) {
         let mut command = Command::new(&self.executable);
         if !arguments.starts_with(&["package", "builtin"])
             && !arguments.starts_with(&["run", "--deployment"])
@@ -138,7 +147,10 @@ impl Native {
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
-        parse_records("native public result", &output.stdout).unwrap()
+        (
+            mode,
+            parse_records("native public result", &output.stdout).unwrap(),
+        )
     }
 
     fn retains_evidence(&self) -> bool {
@@ -154,27 +166,35 @@ impl Native {
         .to_owned()
     }
 
-    /// Detached matrices always execute the selected product, including source tests.
+    /// Detached matrices use public host adapters or the explicitly selected candidate.
     fn batch(
         &self,
         label: &str,
         descriptor: &Path,
         cases: &[BatchCase],
     ) -> Vec<Vec<CompactRecord>> {
-        batch::execute(self.root.path(), &self.executable, label, descriptor, cases)
-            .iter()
-            .map(|stdout| parse_records("native batch row", stdout.as_bytes()).unwrap())
-            .collect()
+        batch::execute_in(
+            self.mode,
+            self.root.path(),
+            &self.executable,
+            label,
+            descriptor,
+            cases,
+        )
+        .iter()
+        .map(|stdout| parse_records("native batch row", stdout.as_bytes()).unwrap())
+        .collect()
     }
 
-    /// Every source matrix runs inside this exact selected product process.
+    /// Every source matrix retains independent differential execution under its selected mode.
     fn source_batch(
         &self,
         label: &str,
         target: &str,
         cases: &[BatchCase],
     ) -> Vec<Vec<CompactRecord>> {
-        source_batch::execute(
+        source_batch::execute_in(
+            self.mode,
             self.root.path(),
             &self.executable,
             label,

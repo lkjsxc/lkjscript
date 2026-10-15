@@ -377,10 +377,7 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
             root.join(format!("review-{first}.lkjplan")),
         )?))
         .map_err(|error| DevError::corrupt(error.to_string()))?;
-        let executable = Path::new(&receipt.isolated_root)
-            .join("lkjscript")
-            .display()
-            .to_string();
+        let executable = receipt.host_path.clone();
         let project = Path::new(&receipt.isolated_root)
             .join(format!(
                 "requirement-scalar-{}",
@@ -394,7 +391,7 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
             .to_string();
         require(
             planned.expects_success
-                && planned.observation.exit_code == Some(0)
+                && planned.observation.reported_code() == Some(0)
                 && review.token == token
                 && planned.command
                     == [
@@ -440,7 +437,7 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
         };
         require(
             applied.expects_success
-                && applied.observation.exit_code == Some(0)
+                && applied.observation.reported_code() == Some(0)
                 && field(&output, "result", "status")? == "accepted"
                 && field(&output, "revision", "base")? == base
                 && field(&output, "receipt", "digest")?
@@ -471,10 +468,10 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
                 MAXIMUM_OUTPUT_BYTES,
             )?)? == descriptor(label, target)
                 && command.expects_success
-                && command.observation.exit_code == Some(0)
+                && command.observation.reported_code() == Some(0)
                 && command.command
                     == [
-                        receipt.pinned_runtime_path.clone(),
+                        receipt.host_path.clone(),
                         "run".into(),
                         "--deployment".into(),
                         Path::new(&receipt.isolated_root)

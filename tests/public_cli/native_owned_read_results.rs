@@ -1,7 +1,8 @@
 //! Source-tied borrowed results through fresh native packages and independent outputs.
 use super::native_byte_buffer::{Export, author, dependency, export, stage};
 use super::native_owned_worklists::{
-    declaration, deployment, rejected, run_expected, standard, unchanged,
+    MatrixCase, declaration, deployment, detached_canary, rejected, run_expected, run_matrix,
+    same_deployment_policy, standard, unchanged,
 };
 use super::*;
 use serde_json::json;
@@ -242,6 +243,10 @@ fn native_owned_read_results_three_packages_select_first_max_drain_reuse_and_det
         .iter()
         .map(|target| deployment(public, "owned-read-results.lkja", target))
         .collect();
+    for (target, selected) in targets.iter().zip(&descriptors) {
+        same_deployment_policy(&descriptor, target, selected);
+    }
+    same_deployment_policy(&descriptor, "read-unchecked", &unchecked_descriptor);
     let mut workloads = vec![vec![], vec![2], vec![2, 7, 11, 3], vec![0, 255, 128]];
     for length in [31, 32, 33, 513] {
         workloads.push((0..length).map(|n| n % 17).collect());
@@ -251,6 +256,27 @@ fn native_owned_read_results_three_packages_select_first_max_drain_reuse_and_det
         scenario_expected(&[2, 7, 11, 3])["tied-selected"],
         json!([7])
     );
+    let mut cases = vec![MatrixCase::new(
+        "read-unchecked",
+        "healthy-after-empty",
+        json!([[2, 7, 11, 3]]),
+        json!(11),
+    )];
+    cases.extend(workloads.iter().enumerate().map(|(case, inputs)| {
+        MatrixCase::new(
+            "owned-read-results",
+            case,
+            json!([inputs]),
+            all_expected(inputs),
+        )
+    }));
+    let inputs = workloads.last().unwrap();
+    cases.extend(
+        targets.iter().map(|target| {
+            MatrixCase::new(target, "513", json!([inputs]), scenario_expected(inputs))
+        }),
+    );
+    assert_eq!(cases.len(), 13);
     for detached in [false, true] {
         if detached {
             packages.detach();
@@ -278,38 +304,16 @@ fn native_owned_read_results_three_packages_select_first_max_drain_reuse_and_det
                 .any(|record| record.operation == "diagnostic")
         );
         assert!(!result.exists());
-        run_expected(
-            public,
-            "read-unchecked",
-            &unchecked_descriptor,
-            detached,
-            "healthy-after-empty",
-            json!([[2, 7, 11, 3]]),
-            &json!(11),
-        );
-        for (case, inputs) in workloads.iter().enumerate() {
-            run_expected(
+        if detached {
+            detached_canary(
                 public,
-                "owned-read-results",
-                &descriptor,
-                detached,
-                &case.to_string(),
-                json!([inputs]),
-                &all_expected(inputs),
+                "read-unchecked",
+                &unchecked_descriptor,
+                json!([[2, 7, 11, 3]]),
+                &json!(11),
             );
         }
-        let inputs = workloads.last().unwrap();
-        for (target, descriptor) in targets.iter().zip(&descriptors) {
-            run_expected(
-                public,
-                target,
-                descriptor,
-                detached,
-                "513",
-                json!([inputs]),
-                &scenario_expected(inputs),
-            );
-        }
+        run_matrix(public, &descriptor, detached, "owned-read-results", &cases);
     }
     packages.retain();
 }

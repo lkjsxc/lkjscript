@@ -26,10 +26,15 @@ fn allocation_allowance(execution: &CompactRecord) -> u64 {
 }
 
 struct Server {
-    child: support::SpawnedChild,
+    owner: Owner,
     output: PathBuf,
     errors: PathBuf,
     address: SocketAddr,
+}
+
+enum Owner {
+    Process(support::SpawnedChild),
+    Host(native_http::resident::Resident),
 }
 
 fn events(path: &Path) -> Vec<Value> {
@@ -46,6 +51,29 @@ impl Server {
         let deployment = public.input(&format!("{label}.json"), &descriptor.to_string());
         let output = public.root.path().join(format!("{label}.stdout"));
         let errors = public.root.path().join(format!("{label}.stderr"));
+        if public.mode == crate::semantic_cli::Mode::HostSemantic
+            && native_http::resident::eligible(std::slice::from_ref(&deployment), &[])
+        {
+            let host = native_http::resident::Resident::start(
+                vec![deployment],
+                false,
+                output.clone(),
+                errors.clone(),
+                Duration::from_secs(20),
+                Duration::from_secs(10),
+            );
+            let address = host.ready["local_address"]
+                .as_str()
+                .unwrap()
+                .parse()
+                .unwrap();
+            return Self {
+                owner: Owner::Host(host),
+                output,
+                errors,
+                address,
+            };
+        }
         let mut child = support::spawn(
             Command::new(&public.executable)
                 .args(["serve", "--deployment", path(&deployment)])
@@ -65,7 +93,7 @@ impl Server {
             {
                 let address = event["local_address"].as_str().unwrap().parse().unwrap();
                 return Self {
-                    child,
+                    owner: Owner::Process(child),
                     output,
                     errors,
                     address,
@@ -115,29 +143,56 @@ impl Server {
         );
     }
 
-    fn stop(mut self) -> Value {
+    fn stop(self) -> Value {
+        let (stopped, host) = match self.owner {
+            Owner::Host(host) => (host.stop(), true),
+            Owner::Process(child) => (Self::stop_process(child, &self.output, &self.errors), false),
+        };
+        assert_eq!(stopped["receipt"]["shutdown"]["admission_stopped"], true);
+        assert_eq!(stopped["receipt"]["shutdown"]["remaining_tasks"], 0);
+        assert_eq!(
+            stopped["receipt"]["shutdown"]["cleanup_failures"],
+            json!([])
+        );
+        assert_eq!(stopped["receipt"]["runtime"]["resident"]["active"], 0);
+        assert_eq!(stopped["receipt"]["runtime"]["resident"]["queued"], 0);
+        assert_eq!(stopped["receipt"]["runtime"]["admission_permits"], 0);
+        assert_eq!(stopped["receipt"]["runtime"]["worker_permits"], 0);
+        assert_eq!(stopped["executor"]["dispatch_open"], false);
+        assert_eq!(stopped["executor"]["active_dispatches"], 0);
+        assert_eq!(stopped["executor"]["remaining_workers"], 0);
+        if host {
+            native_http::resident::check_executor(&stopped["executor"]).unwrap();
+        } else {
+            assert_eq!(stopped["executor"]["workers_received"], 0);
+            assert_eq!(stopped["executor"]["workers_handed_off"], 0);
+            assert_eq!(
+                stopped["executor"]["joined_workers"],
+                stopped["executor"]["workers_started"]
+            );
+        }
+        stopped
+    }
+
+    fn stop_process(mut child: support::SpawnedChild, output: &Path, errors: &Path) -> Value {
         // The direct child remains owned and unreaped until after signaling.
-        let pid = rustix::process::Pid::from_raw(i32::try_from(self.child.id()).unwrap()).unwrap();
+        let pid = rustix::process::Pid::from_raw(i32::try_from(child.id()).unwrap()).unwrap();
         rustix::process::kill_process(pid, rustix::process::Signal::INT).unwrap();
         let until = Instant::now() + Duration::from_secs(10);
         loop {
-            if let Some(status) = self.child.try_wait().unwrap() {
+            if let Some(status) = child.try_wait().unwrap() {
                 assert!(status.success(), "unjoined server: {status}");
                 break;
             }
             assert!(Instant::now() < until, "server shutdown timed out");
             std::thread::sleep(Duration::from_millis(10));
         }
-        assert!(self.child.wait_with_output().unwrap().status.success());
-        assert!(std::fs::read(&self.errors).unwrap().is_empty());
-        let stopped = events(&self.output)
+        assert!(child.wait_with_output().unwrap().status.success());
+        assert!(std::fs::read(errors).unwrap().is_empty());
+        events(output)
             .into_iter()
             .find(|event| event["event"] == "stopped")
-            .unwrap();
-        assert_eq!(stopped["receipt"]["shutdown"]["remaining_tasks"], 0);
-        assert_eq!(stopped["receipt"]["runtime"]["resident"]["active"], 0);
-        assert_eq!(stopped["receipt"]["runtime"]["resident"]["queued"], 0);
-        stopped
+            .unwrap()
     }
 }
 

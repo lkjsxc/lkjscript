@@ -108,6 +108,7 @@ pub(super) fn verify(
     receipt: &TargetAdmissionReceipt,
     candidate: &Path,
     verifier: &Path,
+    source: &crate::check::AdmittedSource,
 ) -> Result<(), DevError> {
     let root = path
         .parent()
@@ -128,15 +129,7 @@ pub(super) fn verify(
         let root = root.join(role.name());
         originals.take(
             role.name(),
-            vec![
-                verifier.display().to_string(),
-                role.name().to_owned(),
-                "--binary".to_owned(),
-                candidate.display().to_string(),
-                "--evidence-root".to_owned(),
-                root.display().to_string(),
-                "--machine".to_owned(),
-            ],
+            role.invocation(verifier, candidate, &root, source)?,
             0,
             role.timeout(),
         )?;

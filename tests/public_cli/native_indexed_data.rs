@@ -7,6 +7,9 @@ use std::cell::{Cell, RefCell};
 use std::io::Write;
 use std::time::{Duration, Instant};
 
+#[path = "native_indexed_data/seed.rs"]
+mod seed;
+
 const LIBRARY: &str = include_str!("../../examples/indexed-data-storage/library.lkjc");
 const FLAT: &str = include_str!("../../examples/indexed-data-storage/flat.lkjc");
 const CHUNKED: &str = include_str!("../../examples/indexed-data-storage/chunked.lkjc");
@@ -218,7 +221,7 @@ struct MatrixBatch {
 
 impl Packages {
     fn stage() -> Self {
-        Self::stage_with_progress(None)
+        seed::stage()
     }
 
     fn stage_with_progress(progress: Option<MatrixProgress>) -> Self {

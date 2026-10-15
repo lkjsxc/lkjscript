@@ -91,8 +91,7 @@ pub(super) fn public(context: &mut Context, source: &Path) -> Result<(), DevErro
         } else {
             None
         };
-        let mut round = crate::stateful_http::recursive_round(
-            &context.binary,
+        let mut round = super::runtime_semantic::http_round(
             &root,
             &context.evidence,
             &format!("iteration-config-{index}"),
@@ -109,8 +108,7 @@ pub(super) fn public(context: &mut Context, source: &Path) -> Result<(), DevErro
         round["threshold"] = json!(threshold);
         rounds.push(round);
     }
-    let data = crate::stateful_http::recursive_round(
-        &context.binary,
+    let data = super::runtime_semantic::http_round(
         &root,
         &context.evidence,
         "iteration-data",
@@ -141,8 +139,7 @@ pub(super) fn public(context: &mut Context, source: &Path) -> Result<(), DevErro
         },
     )?;
     rounds.push(data);
-    rounds.push(crate::stateful_http::recursive_round(
-        &context.binary,
+    rounds.push(super::runtime_semantic::http_round(
         &root,
         &context.evidence,
         "iteration-restart",

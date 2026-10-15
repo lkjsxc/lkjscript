@@ -39,43 +39,32 @@ fn round(
     label: &str,
     steps: &[(&str, Value, u16, Option<Value>)],
 ) -> Result<Value, DevError> {
-    crate::stateful_http::recursive_round(
-        &context.binary,
-        standalone,
-        &context.evidence,
-        label,
-        |address| {
-            let mut observations = Vec::new();
-            for (mode, tree, status, expected) in steps {
-                let body = json!({"mode":mode,"value":tree});
-                let response = crate::http_probe::request(
-                    address,
-                    "GET",
-                    "/",
-                    &serde_json::to_vec(&body)?,
-                    &[],
-                )?;
-                require(
-                    response.status == *status,
-                    &format!(
-                        "recursive HTTP {mode} status {} differs from {status}: {:?}",
-                        response.status, response.headers
-                    ),
-                )?;
-                let value: Value = if expected.is_some() {
-                    serde_json::from_slice(&response.body)?
-                } else {
-                    json!(String::from_utf8_lossy(&response.body))
-                };
-                require(
-                    expected.as_ref().is_none_or(|expected| &value == expected),
-                    "recursive persisted HTTP full value differs",
-                )?;
-                observations.push(json!({"request":body,"status":response.status,"value":value,"elapsed_nanoseconds":response.elapsed_nanoseconds,"failure":response.headers.get("x-lkjscript-failure-code")}));
-            }
-            Ok(json!(observations))
-        },
-    )
+    super::runtime_semantic::http_round(standalone, &context.evidence, label, |address| {
+        let mut observations = Vec::new();
+        for (mode, tree, status, expected) in steps {
+            let body = json!({"mode":mode,"value":tree});
+            let response =
+                crate::http_probe::request(address, "GET", "/", &serde_json::to_vec(&body)?, &[])?;
+            require(
+                response.status == *status,
+                &format!(
+                    "recursive HTTP {mode} status {} differs from {status}: {:?}",
+                    response.status, response.headers
+                ),
+            )?;
+            let value: Value = if expected.is_some() {
+                serde_json::from_slice(&response.body)?
+            } else {
+                json!(String::from_utf8_lossy(&response.body))
+            };
+            require(
+                expected.as_ref().is_none_or(|expected| &value == expected),
+                "recursive persisted HTTP full value differs",
+            )?;
+            observations.push(json!({"request":body,"status":response.status,"value":value,"elapsed_nanoseconds":response.elapsed_nanoseconds,"failure":response.headers.get("x-lkjscript-failure-code")}));
+        }
+        Ok(json!(observations))
+    })
 }
 
 fn build(context: &mut Context, fixture: &Fixture, label: &str) -> Result<(), DevError> {
@@ -301,40 +290,19 @@ pub(super) fn start(
     )?;
     fixture.original_bytes = persisted(&fixture.standalone)?;
     let head = digest_file(&fixture.standalone.join("data/HEAD"), MAXIMUM_OUTPUT_BYTES)?;
-    let spec = process::ProcessSpec {
-        command: vec![
-            std::env::current_exe()?.display().to_string(),
-            "recursive-transaction-probe".into(),
-            fixture
-                .standalone
-                .join("service.deployment.json")
-                .display()
-                .to_string(),
-            fixture.package.symbols["$write"].clone(),
-        ],
-        cwd: fixture.standalone.clone(),
-        environment: BTreeMap::from([("LANG".into(), "C.UTF-8".into())]),
-        timeout: Duration::from_secs(120),
-        maximum_stdout_bytes: MAXIMUM_OUTPUT_BYTES,
-        maximum_stderr_bytes: MAXIMUM_OUTPUT_BYTES,
-        stdout_path: context.evidence.join("recursive-transaction.stdout"),
-        stderr_path: context.evidence.join("recursive-transaction.stderr"),
-        unavailable_exit_code: None,
-    };
-    let observation = process::run(&spec, &context.evidence);
-    require(
-        observation.status == process::ProcessStatus::Passed,
-        "recursive transaction cancellation probe failed",
+    let descriptor = fixture.standalone.join("service.deployment.json");
+    let function = fixture.package.symbols["$write"].clone();
+    context.receipt.recursive.transaction_cancellation = context.probe_json(
+        "recursive-transaction",
+        "contributor.recursive_transaction_probe",
+        &[descriptor.display().to_string(), function.clone()],
+        || lkjscript::platform::contributor::recursive_transaction_probe(&descriptor, &function),
     )?;
     require(
         persisted(&fixture.standalone)? == fixture.original_bytes
             && digest_file(&fixture.standalone.join("data/HEAD"), MAXIMUM_OUTPUT_BYTES)? == head,
         "cancelled recursive write changed stored authority",
     )?;
-    context.receipt.recursive.transaction_cancellation = serde_json::from_slice(
-        &process::read_bounded(&spec.stdout_path, MAXIMUM_OUTPUT_BYTES)?,
-    )?;
-    context.receipt.runners.push(observation);
     let expected = expected_bytes(&fixture.package, library, &original)?;
     require(
         fixture.original_bytes == expected,

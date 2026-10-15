@@ -1,5 +1,6 @@
 //! Transferable, public-authored offline composition oracle. No producer API writes meaning.
 
+mod boundary;
 mod effects;
 mod effects_consumer;
 #[cfg(test)]
@@ -25,8 +26,12 @@ mod recursive_program;
 mod recursive_schemas;
 mod requirements;
 mod requirements_queue;
+mod runtime_semantic;
 mod source_batch;
 
+pub(crate) use boundary::{BoundaryReceipt, read_transferred_receipt};
+
+use crate::semantic_cli::{self, CallObservation};
 use crate::{error::DevError, evidence, process};
 use lkjscript::platform::contributor::{
     OfflinePackageInventory, OfflineProducerInventory, offline_package_inventory,
@@ -47,22 +52,39 @@ pub(crate) const COMPLETE_PROCESS_TIMEOUT: Duration = Duration::from_secs(3_600)
 const MAXIMUM_CONTAINER_BYTES: u64 = 268_435_456;
 const MAXIMUM_EXECUTABLE_BYTES: u64 = 384 * 1024 * 1024;
 const MAXIMUM_OUTPUT_BYTES: u64 = 4 * 1024 * 1024;
+const MAXIMUM_LINKED_CALL_TIME: Duration = Duration::from_secs(90);
+
+fn strict_from_slice<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, DevError> {
+    let value = lkjscript::platform::json::decode_strict_with_integer_policy(
+        bytes,
+        lkjscript::platform::json::JsonLimits {
+            maximum_bytes: MAXIMUM_OUTPUT_BYTES as usize,
+            maximum_string_bytes: MAXIMUM_OUTPUT_BYTES as usize,
+            ..Default::default()
+        },
+        lkjscript::platform::json::JsonIntegerPolicy::SignedOrUnsigned64,
+    )
+    .map_err(|error| DevError::corrupt(error.to_string()))?;
+    Ok(serde_json::from_value(value)?)
+}
+
+fn strict_from_str<T: serde::de::DeserializeOwned>(text: &str) -> Result<T, DevError> {
+    strict_from_slice(text.as_bytes())
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Receipt {
     pub schema: String,
     pub status: String,
-    pub candidate_sha256: String,
     pub verifier_sha256: String,
-    pub copied_candidate_sha256: String,
-    pub pinned_runtime_path: String,
+    pub host_path: String,
     pub isolated_root: String,
     pub evidence_root: String,
     pub environment_names: Vec<String>,
     pub elapsed_nanoseconds: u64,
     pub commands: Vec<CommandEvidence>,
-    pub runners: Vec<process::ProcessObservation>,
+    pub runners: Vec<CallObservation>,
     pub inventories: Vec<OfflinePackageInventory>,
     pub producer_inventories: Vec<OfflineProducerInventory>,
     pub transport_digests: Vec<String>,
@@ -78,10 +100,12 @@ pub(crate) struct Receipt {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct CommandEvidence {
+    #[serde(rename = "invocation")]
     command: Vec<String>,
+    #[serde(rename = "fixture_context")]
     cwd: String,
     expects_success: bool,
-    observation: process::ProcessObservation,
+    observation: CallObservation,
 }
 
 struct Context {
@@ -107,6 +131,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
     let mut output = None;
     let mut machine = false;
     let mut selected_case = None;
+    let mut source_receipt = None;
     while let Some(option) = crate::next_utf8(&mut arguments, "option")? {
         match option.as_str() {
             "--binary" if binary.is_none() => {
@@ -122,6 +147,12 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
                 ))
             }
             "--machine" if !machine => machine = true,
+            "--source-receipt" if source_receipt.is_none() => {
+                source_receipt = Some(PathBuf::from(
+                    crate::next_utf8(&mut arguments, "source receipt")?
+                        .ok_or_else(|| DevError::usage("missing --source-receipt path"))?,
+                ));
+            }
             "--case" if selected_case.is_none() => {
                 let selected = crate::next_utf8(&mut arguments, "case")?
                     .ok_or_else(|| DevError::usage("missing --case name"))?;
@@ -146,10 +177,26 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
             }
         }
     }
-    let requested_binary = binary.unwrap_or_else(|| PathBuf::from("target/release/lkjscript"));
-    let candidate_sha256 = digest_file(&requested_binary, MAXIMUM_EXECUTABLE_BYTES)?;
-    let binary = requested_binary.canonicalize()?;
-    let verifier_sha256 = digest_file(&std::env::current_exe()?, MAXIMUM_EXECUTABLE_BYTES)?;
+    if let Some(binary) = binary {
+        require(
+            selected_case.is_none(),
+            "candidate boundary owner takes no source case selector",
+        )?;
+        return boundary::command(
+            binary,
+            source_receipt.ok_or_else(|| {
+                DevError::usage("candidate offline boundary owner requires exact --source-receipt")
+            })?,
+            output,
+            machine,
+        );
+    }
+    require(
+        source_receipt.is_none(),
+        "source semantics does not consume a predecessor receipt",
+    )?;
+    let binary = std::env::current_exe()?.canonicalize()?;
+    let verifier_sha256 = digest_file(&binary, MAXIMUM_EXECUTABLE_BYTES)?;
     let output = match output {
         Some(path) => create_evidence_root(&path)?,
         None => {
@@ -164,35 +211,29 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
     let isolated = tempfile::Builder::new()
         .prefix("lkjscript-offline-packages-")
         .tempdir()?;
-    let copied = isolated.path().join("lkjscript");
-    fs::copy(&binary, &copied)?;
-    require(
-        digest_file(&copied, MAXIMUM_EXECUTABLE_BYTES)? == candidate_sha256,
-        "copied candidate bytes changed",
-    )?;
     let started = Instant::now();
     let mut context = Context {
         root: isolated.path().to_path_buf(),
         evidence: output.clone(),
-        binary: copied,
+        binary: binary.clone(),
         receipt: Receipt {
             schema: match selected_case.as_deref() {
-                Some("finite-callable") => "lkjscript-offline-finite-callable-2",
-                Some("requirement-parameters") => "lkjscript-offline-requirement-parameters-5",
-                Some("f64") => "lkjscript-offline-f64-1",
-                Some("parameter-type") => "lkjscript-offline-parameter-type-1",
-                Some("persistent-maps") => "lkjscript-offline-persistent-maps-2",
-                _ => "lkjscript-offline-packages-acceptance-20",
+                Some("finite-callable") => "lkjscript-offline-finite-callable-semantic-1",
+                Some("requirement-parameters") => {
+                    "lkjscript-offline-requirement-parameters-semantic-1"
+                }
+                Some("f64") => "lkjscript-offline-f64-semantic-1",
+                Some("parameter-type") => "lkjscript-offline-parameter-type-semantic-1",
+                Some("persistent-maps") => "lkjscript-offline-persistent-maps-semantic-1",
+                _ => "lkjscript-offline-semantic-1",
             }
             .to_owned(),
             status: "failed".to_owned(),
-            copied_candidate_sha256: candidate_sha256.clone(),
-            candidate_sha256,
-            pinned_runtime_path: binary.display().to_string(),
+            host_path: binary.display().to_string(),
             verifier_sha256,
             isolated_root: isolated.path().display().to_string(),
             evidence_root: output.display().to_string(),
-            environment_names: vec!["LANG".to_owned()],
+            environment_names: semantic_cli::environment_names()?,
             elapsed_nanoseconds: 0,
             commands: Vec::new(),
             runners: Vec::new(),
@@ -218,11 +259,8 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
     })
     .and_then(|()| {
         require(
-            digest_file(&context.binary, MAXIMUM_EXECUTABLE_BYTES)?
-                == context.receipt.candidate_sha256
-                && digest_file(&binary, MAXIMUM_EXECUTABLE_BYTES)?
-                    == context.receipt.candidate_sha256,
-            "candidate or copied candidate changed during execution",
+            digest_file(&binary, MAXIMUM_EXECUTABLE_BYTES)? == context.receipt.verifier_sha256,
+            "linked semantic host image changed during execution",
         )
     });
     context.receipt.elapsed_nanoseconds = u64::try_from(started.elapsed().as_nanos())
@@ -249,9 +287,9 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
     let success = context.receipt.status == "fresh passed" && context.receipt.cleanup_complete;
     if success {
         if selected_case.is_some() {
-            finite::read_focused(&receipt.path, &binary, &std::env::current_exe()?)?;
+            finite::read_focused(&receipt.path, &std::env::current_exe()?)?;
         } else {
-            read_transferred_receipt(&receipt.path, &binary, &std::env::current_exe()?)?;
+            read_semantic_receipt(&receipt.path, &std::env::current_exe()?)?;
         }
     }
     if machine {
@@ -349,6 +387,30 @@ pub(crate) fn recursive_transaction_probe_command(
 }
 
 impl Context {
+    fn probe_json(
+        &mut self,
+        label: &str,
+        operation: &str,
+        arguments: &[String],
+        run: impl FnOnce() -> Result<serde_json::Value, lkjscript::platform::Diagnostic>,
+    ) -> Result<serde_json::Value, DevError> {
+        let response = self.evidence.join(format!("{label}.stdout"));
+        let diagnostics = self.evidence.join(format!("{label}.stderr"));
+        let observation = semantic_cli::observe_json(
+            operation,
+            arguments,
+            &response,
+            &diagnostics,
+            &self.evidence,
+            run,
+        )?;
+        observation.require_outcome(true)?;
+        let value =
+            serde_json::from_slice(&process::read_bounded(&response, MAXIMUM_OUTPUT_BYTES)?)?;
+        self.receipt.runners.push(observation);
+        Ok(value)
+    }
+
     fn cli(
         &mut self,
         project: Option<&Path>,
@@ -365,17 +427,11 @@ impl Context {
         arguments: &[&str],
         passes: bool,
     ) -> Result<Vec<CompactRecord>, DevError> {
-        let executable = if project.is_none() && arguments.starts_with(&["run", "--deployment"]) {
-            // Author through the isolated copy; invoke artifacts through the exact supplied runtime.
-            // At the installed pair boundary this is the immutable installed executable itself.
-            self.receipt.pinned_runtime_path.clone()
-        } else {
-            self.binary.display().to_string()
-        };
+        let executable = self.receipt.host_path.clone();
         self.cli_using(cwd, project, arguments, passes, executable)
     }
 
-    fn cli_copied_at(
+    fn cli_detached_at(
         &mut self,
         cwd: &Path,
         arguments: &[&str],
@@ -403,40 +459,32 @@ impl Context {
             command.extend(["--project".to_owned(), project.display().to_string()]);
         }
         command.extend(arguments.iter().map(|value| (*value).to_owned()));
-        let spec = process::ProcessSpec {
-            command,
-            cwd: cwd.to_path_buf(),
-            environment: BTreeMap::from([("LANG".to_owned(), "C.UTF-8".to_owned())]),
-            timeout: Duration::from_secs(90),
-            maximum_stdout_bytes: MAXIMUM_OUTPUT_BYTES,
-            maximum_stderr_bytes: MAXIMUM_OUTPUT_BYTES,
-            stdout_path: self.evidence.join(format!("command-{index:04}.stdout")),
-            stderr_path: self.evidence.join(format!("command-{index:04}.stderr")),
-            unavailable_exit_code: None,
-        };
-        let observation = process::run(&spec, &self.evidence);
-        let success = observation.status == process::ProcessStatus::Passed;
-        let expected_failure = observation.status == process::ProcessStatus::Failed
-            && observation.exit_code.is_some_and(|code| code != 0);
+        let response_path = self.evidence.join(format!("command-{index:04}.stdout"));
+        let diagnostic_path = self.evidence.join(format!("command-{index:04}.stderr"));
+        let observation = semantic_cli::execute_with_cancellation(
+            &command[1..],
+            &response_path,
+            &diagnostic_path,
+            &self.evidence,
+            async { tokio::time::sleep(MAXIMUM_LINKED_CALL_TIME).await },
+        )?;
+        observation.require_outcome(passes)?;
+        require(
+            observation.elapsed_nanoseconds() <= MAXIMUM_LINKED_CALL_TIME.as_nanos() as u64,
+            "linked public call exceeded the original operation time bound",
+        )?;
+        let stdout = process::read_bounded(&response_path, MAXIMUM_OUTPUT_BYTES)?;
         self.receipt.commands.push(CommandEvidence {
-            command: spec.command.clone(),
+            command,
             cwd: cwd.display().to_string(),
             expects_success: passes,
             observation,
         });
-        let stdout = process::read_bounded(&spec.stdout_path, MAXIMUM_OUTPUT_BYTES)?;
-        if success != passes || (!passes && !expected_failure) {
-            let stderr = process::read_bounded(&spec.stderr_path, MAXIMUM_OUTPUT_BYTES)?;
-            return Err(DevError::corrupt(format!(
-                "command {index} {}: expected success={passes}; stdout={} stderr={}: {}",
-                arguments.join(" "),
-                spec.stdout_path.display(),
-                spec.stderr_path.display(),
-                String::from_utf8_lossy(&stderr)
-            )));
-        }
         let records = parse_records("copied-output", &stdout)
             .map_err(|errors| DevError::corrupt(format!("public compact output: {errors:?}")))?;
+        self.receipt.commands[index]
+            .observation
+            .require_public_response(&records)?;
         if !passes {
             require(
                 records
@@ -1626,6 +1674,10 @@ fn standalone_http(context: &mut Context, dependency: &Package) -> Result<(), De
         &package.path.join("service.deployment.json"),
         1024 * 1024,
     )?)?;
+    fs::copy(
+        package.path.join("service.deployment.json"),
+        context.evidence.join("standalone.starter.deployment.json"),
+    )?;
     descriptor["artifact"] = "application.lkja".into();
     let descriptor_path = standalone.join("service.deployment.json");
     fs::write(&descriptor_path, evidence::encode_json(&descriptor)?)?;
@@ -1656,95 +1708,49 @@ fn standalone_http(context: &mut Context, dependency: &Package) -> Result<(), De
             "project or dependency directory remains before standalone service",
         )?;
     }
-    let stdout = context.evidence.join("standalone.stdout");
-    let spec = process::ProcessSpec {
-        command: vec![
-            context.binary.display().to_string(),
-            "serve".to_owned(),
-            "--deployment".to_owned(),
-            descriptor_path.display().to_string(),
-        ],
-        cwd: standalone,
-        environment: BTreeMap::from([("LANG".to_owned(), "C.UTF-8".to_owned())]),
-        timeout: Duration::from_secs(120),
-        maximum_stdout_bytes: MAXIMUM_OUTPUT_BYTES,
-        maximum_stderr_bytes: MAXIMUM_OUTPUT_BYTES,
-        stdout_path: stdout.clone(),
-        stderr_path: context.evidence.join("standalone.stderr"),
-        unavailable_exit_code: None,
-    };
-    let control = process::ProcessControl::default();
-    let child_control = control.clone();
     let observed_root = context.evidence.clone();
-    let (sender, receiver) = std::sync::mpsc::channel();
-    let thread = std::thread::Builder::new()
-        .name("offline-package-service".to_owned())
-        .spawn(move || {
-            let _ = sender.send(process::run_controlled(
-                &spec,
-                &observed_root,
-                &child_control,
-            ));
-        })?;
-    let outcome: Result<(), DevError> = (|| {
-        let started = Instant::now();
-        let ready: serde_json::Value = loop {
+    let round = runtime_semantic::http_round(
+        &standalone,
+        &context.evidence,
+        "standalone-runtime",
+        |address| {
+            let response = crate::http_probe::request(address, "GET", "/", &[], &[])?;
             require(
-                started.elapsed() < Duration::from_secs(30) && !thread.is_finished(),
-                "standalone service exited or timed out before readiness",
+                response.status == 200 && response.body == b"offline-package-closure",
+                "raw HTTP observation differs from independent non-built-in pure result",
             )?;
-            if stdout.exists() {
-                let bytes = process::read_bounded(&stdout, MAXIMUM_OUTPUT_BYTES)?;
-                if let Some(end) = bytes.iter().position(|byte| *byte == b'\n') {
-                    break serde_json::from_slice(&bytes[..end])?;
-                }
-            }
-            std::thread::sleep(Duration::from_millis(20));
-        };
-        require(
-            ready["event"] == "ready"
-                && ready["ok"] == true
-                && ready["deployment"]["artifact_digest"] == artifact_identity,
-            "standalone readiness did not bind the exact executable closure",
-        )?;
-        let address = ready["local_address"]
-            .as_str()
-            .ok_or_else(|| DevError::corrupt("ready listener missing"))?
-            .parse()
-            .map_err(|_| DevError::corrupt("ready listener invalid"))?;
-        let response = crate::http_probe::request(address, "GET", "/", &[], &[])?;
-        require(
-            response.status == 200 && response.body == b"offline-package-closure",
-            "raw HTTP observation differs from the independently fixed non-built-in pure result",
-        )?;
-        fs::write(
-            context.evidence.join("standalone-response.body"),
-            response.body,
-        )?;
-        context.receipt.observations.insert(
-            "standalone_http_body".to_owned(),
-            "offline-package-closure".to_owned(),
-        );
-        context
-            .receipt
-            .observations
-            .insert("standalone_artifact".to_owned(), artifact_identity);
-        Ok(())
-    })();
-    control.interrupt();
-    let terminal = receiver.recv_timeout(Duration::from_secs(35)).or_else(|_| {
-        control.kill();
-        receiver.recv_timeout(Duration::from_secs(5))
-    });
-    thread
-        .join()
-        .map_err(|_| DevError::infrastructure("standalone process observer failed"))?;
-    let terminal =
-        terminal.map_err(|_| DevError::infrastructure("standalone process failed to terminate"))?;
-    let stopped = terminal.status == process::ProcessStatus::Passed;
-    context.receipt.runners.push(terminal);
-    outcome?;
-    require(stopped, "standalone service did not shut down successfully")
+            fs::write(
+                observed_root.join("standalone-response.body"),
+                &response.body,
+            )?;
+            Ok(serde_json::json!({"status":response.status,"body":response.body}))
+        },
+    )?;
+    require(
+        round["linked_runtime"]["deployment"]["artifact_digest"] == artifact_identity,
+        "linked standalone HTTP owner used another exact executable closure",
+    )?;
+    let server_elapsed = round["elapsed_nanoseconds"]
+        .as_u64()
+        .ok_or_else(|| DevError::corrupt("linked HTTP elapsed evidence missing"))?;
+    context.probe_json(
+        "standalone",
+        "deployment.http.serve",
+        &[descriptor_path.display().to_string()],
+        || Ok(round),
+    )?;
+    if let Some(CallObservation::Semantic(call)) = context.receipt.runners.last_mut() {
+        call.elapsed_nanoseconds = server_elapsed;
+    }
+    context.receipt.observations.insert(
+        "standalone_http_body".into(),
+        "offline-package-closure".into(),
+    );
+    context
+        .receipt
+        .observations
+        .insert("standalone_artifact".into(), artifact_identity);
+    Ok(())
 }
 
 fn module() -> &'static str {
@@ -1847,13 +1853,9 @@ fn create_evidence_root(path: &Path) -> Result<PathBuf, DevError> {
     Ok(path.to_path_buf())
 }
 
-/// Admission validates the transferred evidence and reconstructs every retained source container;
-/// it does not accept the child process exit status as proof of the package workflow.
-pub(crate) fn read_transferred_receipt(
-    path: &Path,
-    candidate: &Path,
-    verifier: &Path,
-) -> Result<Receipt, DevError> {
+/// Admit every linked public call, semantic row and independently reconstructed source container.
+/// This proves source semantics and makes no candidate executable claim.
+pub(crate) fn read_semantic_receipt(path: &Path, verifier: &Path) -> Result<Receipt, DevError> {
     let bytes = process::read_bounded(path, 64 * 1024 * 1024)?;
     let receipt: Receipt = serde_json::from_slice(&bytes)?;
     let root = path
@@ -1866,19 +1868,22 @@ pub(crate) fn read_transferred_receipt(
         "offline receipt encoding or path is noncanonical",
     )?;
     require(
-        receipt.schema == "lkjscript-offline-packages-acceptance-20"
+        receipt.schema == "lkjscript-offline-semantic-1"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
+            && receipt.commands.len() == 886
             && !Path::new(&receipt.isolated_root).exists()
             && receipt.evidence_root == root.display().to_string()
-            && receipt.environment_names == ["LANG"]
-            && receipt.candidate_sha256 == digest_file(candidate, MAXIMUM_EXECUTABLE_BYTES)?
-            && Path::new(&receipt.pinned_runtime_path) == candidate.canonicalize()?
-            && receipt.verifier_sha256 == digest_file(verifier, MAXIMUM_EXECUTABLE_BYTES)?
-            && receipt.copied_candidate_sha256 == receipt.candidate_sha256,
-        "offline receipt does not bind the exact transferred candidate, verifier, and cleanup",
+            && receipt
+                .environment_names
+                .windows(2)
+                .all(|pair| pair[0] < pair[1])
+            && Path::new(&receipt.host_path) == verifier.canonicalize()?
+            && receipt.verifier_sha256 == digest_file(verifier, MAXIMUM_EXECUTABLE_BYTES)?,
+        "offline source receipt does not bind the exact linked host and cleanup",
     )?;
+    runtime_semantic::validate(&receipt, &root)?;
     nominal::validate(&receipt.nominal)?;
     recursive::validate(&receipt.recursive)?;
     for (key, value) in [
@@ -1953,7 +1958,7 @@ pub(crate) fn read_transferred_receipt(
             && receipt
                 .runners
                 .iter()
-                .all(|runner| runner.status == process::ProcessStatus::Passed),
+                .all(|runner| runner.as_semantic().is_some() && runner.returned_success()),
         "standalone service observation missing or failed",
     )?;
     for label in [
@@ -2006,9 +2011,9 @@ pub(crate) fn read_transferred_receipt(
     }
     verify_file_inventory(&receipt, &root)?;
     require(
-        receipt.inventories.len() == 47
-            && receipt.transport_digests.len() == 47
-            && receipt.producer_inventories.len() == 47,
+        receipt.inventories.len() == 48
+            && receipt.transport_digests.len() == 48
+            && receipt.producer_inventories.len() == 48,
         "complete producer, replacement, HTTP, foreground, requirement, numerical and map source inventories missing",
     )?;
     for (index, inventory) in receipt.inventories.iter().enumerate() {
@@ -2045,12 +2050,13 @@ pub(crate) fn read_transferred_receipt(
         .ok_or_else(|| DevError::corrupt("D2 source revision missing"))?;
     let mut missing_source_diagnostic = false;
     let named_commands = named::validate(&receipt, &root)?;
-    let finite_installed_commands = finite::validate(&receipt, &root)?;
+    finite::validate(&receipt, &root)?;
     requirements::validate(&receipt, &root)?;
-    f64::validate(&receipt, &root, 39)?;
-    let parameter_type_commands = parameter_type::validate(&receipt, &root, 39..43)?;
-    let map_commands = maps::validate(&receipt, &root, 43..47)?;
+    f64::validate(&receipt, &root, 40)?;
+    parameter_type::validate(&receipt, &root, 40..44)?;
+    maps::validate(&receipt, &root, 44..48)?;
     nominal::validate_batch(&receipt, &root)?;
+    recursive::validate_batches(&receipt, &root)?;
     let named_cwd = Path::new(&receipt.isolated_root)
         .join("named-unrelated")
         .display()
@@ -2065,34 +2071,22 @@ pub(crate) fn read_transferred_receipt(
                     foreground::command_cwd(&receipt.effects.foreground, index)
                 })
                 .unwrap_or(&receipt.isolated_root)
-                && command.command.first().is_some_and(|binary| {
-                    if finite_installed_commands.contains(&index)
-                        || (!named
-                            && !parameter_type_commands.contains(&index)
-                            && !map_commands.contains(&index)
-                            && command.command.get(1).is_some_and(|v| v == "run")
-                            && command.command.get(2).is_some_and(|v| v == "--deployment"))
-                    {
-                        binary == &receipt.pinned_runtime_path
-                    } else {
-                        Path::new(binary) == Path::new(&receipt.isolated_root).join("lkjscript")
-                    }
-                }),
+                && command.command.first() == Some(&receipt.host_path),
             "offline command consulted a foreign executable or checkout",
         )?;
-        let expected = if command.expects_success {
-            process::ProcessStatus::Passed
-        } else {
-            process::ProcessStatus::Failed
-        };
         require(
-            command.observation.status == expected
-                && command.observation.signal.is_none()
-                && command
-                    .observation
-                    .exit_code
-                    .is_some_and(|code| (code == 0) == command.expects_success),
-            "offline command classification does not match its expected boundary",
+            command.observation.as_semantic().is_some(),
+            "source receipt substituted a process for a linked semantic call",
+        )?;
+        command
+            .observation
+            .require_outcome(command.expects_success)?;
+        command
+            .observation
+            .require_arguments(&command.command[1..])?;
+        require(
+            command.observation.elapsed_nanoseconds() <= MAXIMUM_LINKED_CALL_TIME.as_nanos() as u64,
+            "retained linked call exceeded its operation time bound",
         )?;
         verify_observation_files(
             &command.observation,
@@ -2100,21 +2094,13 @@ pub(crate) fn read_transferred_receipt(
             &format!("command-{index:04}"),
         )?;
         let stdout = process::read_bounded(
-            &root.join(&command.observation.stdout.path),
+            &root.join(&command.observation.stdout().path),
             MAXIMUM_OUTPUT_BYTES,
         )?;
-        if foreground::command_has_closed_stdout(&receipt.effects.foreground, index) {
-            // The foreground owner below binds this exact command and its structured stderr
-            // diagnostic. A deliberately closed output pipe cannot carry a stdout diagnostic.
-            require(
-                !command.expects_success && stdout.is_empty(),
-                "closed-output command reported success or retained stdout",
-            )?;
-            continue;
-        }
         let records = parse_records("transferred-output", &stdout).map_err(|errors| {
             DevError::corrupt(format!("transferred public output: {errors:?}"))
         })?;
+        command.observation.require_public_response(&records)?;
         if !command.expects_success {
             require(
                 records
@@ -2308,33 +2294,29 @@ fn verify_file_inventory(receipt: &Receipt, root: &Path) -> Result<(), DevError>
 }
 
 fn verify_observation_files(
-    observation: &process::ProcessObservation,
+    observation: &CallObservation,
     files: &[evidence::FileProof],
     label: &str,
 ) -> Result<(), DevError> {
     require(
-        observation.stdout_limit_bytes == MAXIMUM_OUTPUT_BYTES
-            && observation.stderr_limit_bytes == MAXIMUM_OUTPUT_BYTES
-            && !observation.stdout_limit_exhausted
-            && !observation.stderr_limit_exhausted,
-        "offline process output exhausted or changed its bound",
+        observation.as_semantic().is_some(),
+        "source probe or invocation must be linked semantic evidence",
     )?;
-    for (proof, suffix) in [
-        (&observation.stdout, "stdout"),
-        (&observation.stderr, "stderr"),
-    ] {
+    observation.require_outcome(observation.returned_success())?;
+    observation.verify_files(files, label)?;
+    for proof in [observation.stdout(), observation.stderr()] {
         require(
-            proof.path == format!("{label}.{suffix}") && files.contains(proof),
-            "offline process output does not bind its retained file",
+            proof
+                .bytes
+                .is_some_and(|bytes| bytes <= MAXIMUM_OUTPUT_BYTES),
+            "source semantic response exceeded its retained bound",
         )?;
     }
     Ok(())
 }
 
 #[cfg(test)]
-pub(crate) fn encode_transferred_test_fixture(
-    value: serde_json::Value,
-) -> Result<Vec<u8>, DevError> {
+pub(crate) fn encode_semantic_test_fixture(value: serde_json::Value) -> Result<Vec<u8>, DevError> {
     let receipt: Receipt = serde_json::from_value(value)?;
     evidence::encode_json(&receipt)
 }
@@ -2364,13 +2346,12 @@ mod tests {
     #[ignore = "requires an authentic retained offline receipt and its exact candidate/verifier"]
     fn retained_offline_receipt_passes_current_reader() {
         let input = |name| PathBuf::from(std::env::var_os(name).unwrap());
-        let receipt = read_transferred_receipt(
+        let receipt = read_semantic_receipt(
             &input("LKJSCRIPT_OFFLINE_READER_RECEIPT"),
-            &input("LKJSCRIPT_OFFLINE_READER_CANDIDATE"),
             &input("LKJSCRIPT_OFFLINE_READER_VERIFIER"),
         )
         .unwrap();
-        assert_eq!(receipt.effects.foreground.failures.len(), 16);
+        assert_eq!(receipt.effects.foreground.failures.len(), 15);
         assert!(receipt.cleanup_complete);
     }
 

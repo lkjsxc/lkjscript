@@ -167,9 +167,6 @@ pub(super) fn required_pointers() -> [(Oracle, Vec<&'static str>); 5] {
             vec![
                 "/schema",
                 "/status",
-                "/candidate_sha256",
-                "/copied_candidate_sha256",
-                "/commands/0/command/0",
                 "/verifier_sha256",
                 "/evidence_root",
                 "/cleanup_complete",
@@ -186,6 +183,7 @@ pub(super) fn required_pointers() -> [(Oracle, Vec<&'static str>); 5] {
                 "/outcomes/checked-value-nominal-bound-matrix",
                 "/outcomes/nominal_typed_data/complete_batch_and_edit",
                 "/outcomes/nominal_typed_data/expected_sha256",
+                "/commands/0/command/0",
             ],
         ),
         (
@@ -193,10 +191,6 @@ pub(super) fn required_pointers() -> [(Oracle, Vec<&'static str>); 5] {
             vec![
                 "/schema",
                 "/status",
-                "/candidate_sha256",
-                "/copied_candidate_sha256",
-                "/pinned_runtime_path",
-                "/commands/0/command/0",
                 "/verifier_sha256",
                 "/evidence_root",
                 "/cleanup_complete",
@@ -268,6 +262,8 @@ pub(super) fn required_pointers() -> [(Oracle, Vec<&'static str>); 5] {
                 "/effects/foreground/loops",
                 "/effects/foreground/failures",
                 "/nominal/results/heterogeneous",
+                "/host_path",
+                "/commands/0/invocation/0",
             ],
         ),
     ]
@@ -277,8 +273,46 @@ pub(super) fn encode(role: Oracle, value: Value) -> Result<Vec<u8>, DevError> {
     match role {
         Oracle::DistributedHttp => crate::distributed_http::encode_transferred_test_fixture(value),
         Oracle::OutboundHttp => crate::outbound_http::encode_transferred_test_fixture(value),
-        Oracle::OfflinePackages => crate::offline_packages::encode_transferred_test_fixture(value),
-        Oracle::PureTail => crate::pure_tail::encode_transferred_test_fixture(value),
+        Oracle::OfflinePackages => crate::offline_packages::encode_semantic_test_fixture(value),
+        Oracle::PureTail => crate::pure_tail::encode_semantic_test_fixture(value),
         Oracle::StatefulHttp => crate::stateful_http::encode_transferred_test_fixture(value),
+    }
+}
+
+// Candidate identity stays at the actual final-image owner after source semantics split.
+pub(super) fn boundary_pointers() -> [(Oracle, Vec<&'static str>); 2] {
+    [
+        (
+            Oracle::PureTail,
+            vec![
+                "/candidate_sha256",
+                "/copied_candidate_sha256",
+                "/commands/0/command/0",
+            ],
+        ),
+        (
+            Oracle::OfflinePackages,
+            vec!["/candidate_sha256", "/executable", "/processes/0/command/0"],
+        ),
+    ]
+}
+
+pub(super) fn encode_boundary(role: Oracle, value: Value) -> Result<Vec<u8>, DevError> {
+    match role {
+        Oracle::OfflinePackages => evidence::encode_json(&serde_json::from_value::<
+            crate::offline_packages::BoundaryReceipt,
+        >(value)?),
+        Oracle::PureTail => crate::pure_tail::encode_transferred_test_fixture(value),
+        _ => Err(DevError::corrupt("semantic split boundary owner differs")),
+    }
+}
+
+pub(super) fn read_semantic(role: Oracle, path: &Path, verifier: &Path) -> Result<(), DevError> {
+    match role {
+        Oracle::OfflinePackages => {
+            crate::offline_packages::read_semantic_receipt(path, verifier).map(|_| ())
+        }
+        Oracle::PureTail => crate::pure_tail::read_semantic_receipt(path, verifier).map(|_| ()),
+        _ => Err(DevError::corrupt("semantic split source owner differs")),
     }
 }

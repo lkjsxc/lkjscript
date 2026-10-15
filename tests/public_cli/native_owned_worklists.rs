@@ -272,6 +272,165 @@ pub(super) fn run_expected(
     clean_execution(&records, detached);
 }
 
+pub(super) struct MatrixCase {
+    id: String,
+    target: &'static str,
+    arguments: Value,
+    expected: Value,
+}
+
+pub(super) fn same_deployment_policy(base: &Path, target: &str, descriptor: &Path) {
+    let base = lkjscript::platform::decode_deployment(&std::fs::read(base).unwrap()).unwrap();
+    let selected =
+        lkjscript::platform::decode_deployment(&std::fs::read(descriptor).unwrap()).unwrap();
+    assert_eq!(selected.target, target);
+    let mut selected = serde_json::to_value(selected).unwrap();
+    selected["target"] = json!(base.target);
+    assert_eq!(
+        selected,
+        serde_json::to_value(base).unwrap(),
+        "per-row target override must retain the exact original deployment policy"
+    );
+}
+
+impl MatrixCase {
+    pub(super) fn new(
+        target: &'static str,
+        label: impl std::fmt::Display,
+        arguments: Value,
+        expected: Value,
+    ) -> Self {
+        Self {
+            id: format!("{target}-{label}"),
+            target,
+            arguments,
+            expected,
+        }
+    }
+}
+
+pub(super) fn run_matrix(
+    public: &Native,
+    descriptor: &Path,
+    detached: bool,
+    label: &str,
+    cases: &[MatrixCase],
+) {
+    assert!(!cases.is_empty());
+    let requests = cases
+        .iter()
+        .map(|case| {
+            let mut request = BatchCase::success(&case.id, &case.arguments, case.expected.clone());
+            request.target = Some(case.target.to_owned());
+            // Each row keeps the ordinary execution policy and deadline.
+            request
+        })
+        .collect::<Vec<_>>();
+    let outputs = if detached {
+        batch::execute_in(
+            public.mode,
+            public.root.path(),
+            &public.executable,
+            label,
+            descriptor,
+            &requests,
+        )
+    } else {
+        source_batch::execute_in(
+            public.mode,
+            public.root.path(),
+            &public.executable,
+            label,
+            &public.project,
+            cases[0].target,
+            &requests,
+        )
+    };
+    assert_eq!(
+        outputs.len(),
+        cases.len(),
+        "{label}: complete invocation inventory"
+    );
+    let prefix = if detached { "batch" } else { "source-batch" };
+    let bytes = std::fs::read(
+        public
+            .root
+            .path()
+            .join(format!("{prefix}-{label}.result.jsonl")),
+    )
+    .unwrap();
+    let framed = bytes
+        .strip_suffix(b"\n")
+        .expect("complete finite batch JSONL");
+    let rows = framed.split(|byte| *byte == b'\n').collect::<Vec<_>>();
+    assert_eq!(
+        rows.len(),
+        cases.len(),
+        "{label}: complete result file inventory"
+    );
+    for ((line, stdout), case) in rows.into_iter().zip(outputs).zip(cases) {
+        let row = lkjscript::platform::json::decode_strict(
+            line,
+            lkjscript::platform::json::JsonLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(row["id"], case.id, "{label}: exact ordered row identity");
+        assert_eq!(
+            row["exit_code"], 0,
+            "{label}: typed outcomes are successful data"
+        );
+        assert_eq!(row["stdout"], stdout, "{label}: actual row projection");
+        assert_eq!(
+            row["result_json"].as_str().unwrap().as_bytes(),
+            serde_json::to_vec(&case.expected).unwrap(),
+            "{label}: exact canonical result bytes for {}",
+            case.id
+        );
+        let records = parse_records("owned matrix actual row", stdout.as_bytes()).unwrap();
+        clean_execution(&records, detached);
+    }
+}
+
+/// A real ordinary process remains after all authoring inputs have been removed.
+pub(super) fn detached_canary(
+    public: &Native,
+    target: &str,
+    descriptor: &Path,
+    arguments: Value,
+    expected: &Value,
+) {
+    assert!(!public.project.exists());
+    let mut root = tempfile::tempdir().unwrap();
+    if std::env::var_os("LKJSCRIPT_RETAIN_PRODUCT_EVIDENCE").is_some() {
+        root.disable_cleanup(true);
+        println!("retained owned detached canary: {}", root.path().display());
+    }
+    let executable = root.path().join("lkjscript");
+    support::copy_executable(&public.executable, &executable);
+    let project = root.path().join("absent-project");
+    assert!(!project.exists());
+    let canary = Native {
+        root,
+        executable,
+        project,
+        mode: if public.mode == semantic_cli::Mode::HostSemantic {
+            semantic_cli::Mode::BoundaryProcess
+        } else {
+            public.mode
+        },
+    };
+    run_expected(
+        &canary,
+        target,
+        descriptor,
+        true,
+        "ordinary-nonempty-canary",
+        arguments,
+        expected,
+    );
+    assert!(!canary.project.exists());
+}
+
 fn worklist_expected(inputs: &[i64]) -> Value {
     let scenario = json!({
         "length":inputs.len(),"moved":inputs,"empty-length":0,"reused":[17],
@@ -303,6 +462,9 @@ fn native_owned_worklist_parameterized_three_packages_move_drain_reuse_and_detac
         .zip(benchmark_descriptors)
         .map(|(target, descriptor)| public.input(&format!("{target}.deployment.json"), descriptor))
         .collect();
+    for (target, selected) in benchmark_targets.iter().zip(&benchmark_descriptors) {
+        same_deployment_policy(&descriptor, target, selected);
+    }
     let benchmark_inputs: Vec<i64> = (0..513).map(|n| n % 17).collect();
     let benchmark_drained: Vec<i64> = benchmark_inputs.iter().rev().copied().collect();
     let benchmark_expected = json!({
@@ -312,33 +474,40 @@ fn native_owned_worklist_parameterized_three_packages_move_drain_reuse_and_detac
     for length in [31, 32, 33, 64, 65, 513] {
         workloads.push((0..length).map(|n| n % 17).collect());
     }
+    let mut cases = workloads
+        .iter()
+        .enumerate()
+        .map(|(case, inputs)| {
+            MatrixCase::new(
+                "owned-worklists",
+                case,
+                json!([inputs]),
+                worklist_expected(inputs),
+            )
+        })
+        .collect::<Vec<_>>();
+    cases.extend(benchmark_targets.iter().map(|target| {
+        MatrixCase::new(
+            target,
+            "513",
+            json!([benchmark_inputs]),
+            benchmark_expected.clone(),
+        )
+    }));
+    assert_eq!(cases.len(), 14);
     for detached in [false, true] {
         if detached {
             packages.detach();
         }
-        for (case, inputs) in workloads.iter().enumerate() {
-            run_expected(
-                public,
-                "owned-worklists",
-                &descriptor,
-                detached,
-                &case.to_string(),
-                json!([inputs]),
-                &worklist_expected(inputs),
-            );
-        }
-        for (target, descriptor) in benchmark_targets.iter().zip(&benchmark_descriptors) {
-            run_expected(
-                public,
-                target,
-                descriptor,
-                detached,
-                "513",
-                json!([benchmark_inputs]),
-                &benchmark_expected,
-            );
-        }
+        run_matrix(public, &descriptor, detached, "owned-worklists", &cases);
     }
+    detached_canary(
+        public,
+        "owned-worklists",
+        &descriptor,
+        json!([[2, 3, 7]]),
+        &worklist_expected(&[2, 3, 7]),
+    );
     packages.retain("storage-and-move");
 }
 
@@ -528,24 +697,31 @@ fn native_owned_worklist_provisional_graph_validates_full_candidates_and_detach(
         "provisional-reachability-chunked",
     ];
     let descriptors = targets.map(|target| deployment(public, "provisional-graph.lkja", target));
-    let cases = graph_cases();
+    for (target, selected) in targets.iter().zip(&descriptors) {
+        same_deployment_policy(&descriptors[0], target, selected);
+    }
+    let proposals = graph_cases();
+    assert_eq!(proposals.len(), 23);
+    let cases = targets
+        .iter()
+        .flat_map(|target| {
+            proposals.iter().map(move |(name, proposal, expected)| {
+                MatrixCase::new(target, name, json!([proposal]), expected.clone())
+            })
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(cases.len(), 46);
     for detached in [false, true] {
         if detached {
             packages.detach();
         }
-        for (target, descriptor) in targets.iter().zip(&descriptors) {
-            for (name, proposal, expected) in &cases {
-                run_expected(
-                    public,
-                    target,
-                    descriptor,
-                    detached,
-                    name,
-                    json!([proposal]),
-                    expected,
-                );
-            }
-        }
+        run_matrix(
+            public,
+            &descriptors[0],
+            detached,
+            "provisional-graph",
+            &cases,
+        );
     }
     // Native candidate errors above are successful typed outcome data; malformed
     // runner data is independently rejected before the native pass executes.
@@ -577,6 +753,13 @@ fn native_owned_worklist_provisional_graph_validates_full_candidates_and_detach(
         );
         assert!(!result.exists());
     }
+    detached_canary(
+        public,
+        targets[0],
+        &descriptors[0],
+        json!([graph(&[-7], vec![node(-7, &[])])]),
+        &valid(&[-7], &[]),
+    );
     packages.retain("provisional-reachability");
 }
 

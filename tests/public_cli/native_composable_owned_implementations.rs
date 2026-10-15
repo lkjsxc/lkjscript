@@ -1,5 +1,6 @@
 //! Independently authored prerequisite witnesses, borrowed selection and joined tasks.
 use super::native_byte_buffer::{Export, author, dependency, export, stage};
+use super::native_owned_generic_implementations::{PureLane, pure_batch, pure_row};
 use super::native_owned_worklists::{declaration, deployment, rejected, run_expected, standard};
 use super::*;
 use serde_json::json;
@@ -377,17 +378,23 @@ fn native_owned_composable_implementation_prerequisites_three_packages_nested_id
         all_expected(&[2, 7, 11, 3], 17)["cell-nested-reverse"]["tied-selected"],
         json!([3])
     );
-    for (case, inputs) in workloads.iter().enumerate() {
-        run_expected(
-            public,
-            "composable-owned-implementations",
-            &descriptor,
-            false,
-            &case.to_string(),
-            json!([inputs]),
-            &all_expected(inputs, 17),
-        );
-    }
+    pure_batch(
+        public,
+        "composable-original",
+        PureLane::Source("composable-owned-implementations"),
+        workloads
+            .iter()
+            .enumerate()
+            .map(|(case, inputs)| {
+                pure_row(
+                    format!("workload-{case}"),
+                    "composable-owned-implementations",
+                    json!([inputs]),
+                    all_expected(inputs, 17),
+                )
+            })
+            .collect(),
+    );
     assert!(draft.contains("(i64 17)"));
     let edit = public.input(
         "consumer-edit.lkjc",
@@ -443,29 +450,47 @@ fn native_owned_composable_implementation_prerequisites_three_packages_nested_id
             );
         }
         let large: Vec<_> = (0..513).map(|n| n % 17).collect();
-        for (target, offset, reverse, deployment) in &individual {
-            run_expected(
-                public,
-                target,
-                deployment,
-                detached,
-                "513",
-                json!([large]),
-                &scenario_expected(&large, *offset, *reverse, 17),
-            );
-        }
+        let mut rows: Vec<_> = individual
+            .iter()
+            .map(|(target, offset, reverse, _)| {
+                pure_row(
+                    format!("{target}-513"),
+                    target,
+                    json!([large]),
+                    scenario_expected(&large, *offset, *reverse, 17),
+                )
+            })
+            .collect();
         if detached {
+            pure_batch(
+                public,
+                "composable-detached-process",
+                PureLane::Process(&individual[0].3),
+                vec![rows.remove(0)],
+            );
             for (case, inputs) in workloads.iter().enumerate() {
-                run_expected(
-                    public,
+                rows.push(pure_row(
+                    format!("workload-{case}"),
                     "composable-owned-implementations",
-                    &descriptor,
-                    true,
-                    &case.to_string(),
                     json!([inputs]),
-                    &all_expected(inputs, 17),
-                );
+                    all_expected(inputs, 17),
+                ));
             }
+            assert_eq!(rows.len(), 9);
+            pure_batch(
+                public,
+                "composable-detached",
+                PureLane::Detached(&descriptor),
+                rows,
+            );
+        } else {
+            assert_eq!(rows.len(), 3);
+            pure_batch(
+                public,
+                "composable-restored",
+                PureLane::Source("composable-owned-implementations"),
+                rows,
+            );
         }
     }
     packages.retain();

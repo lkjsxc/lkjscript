@@ -248,7 +248,7 @@ pub(super) fn negatives(context: &mut Context) -> Result<(), DevError> {
                 .last()
                 .ok_or_else(|| DevError::corrupt("missing rejection command"))?;
             let output = process::read_bounded(
-                &context.evidence.join(&command.observation.stdout.path),
+                &context.evidence.join(&command.observation.stdout().path),
                 MAXIMUM_OUTPUT_BYTES,
             )?;
             let text = String::from_utf8(output)

@@ -45,6 +45,7 @@ pub(super) struct ChildFacts {
     pub(super) runners: u64,
     pub(super) requests: u64,
     pub(super) cleanup_complete: bool,
+    pub(super) source_semantics: Option<evidence::FileProof>,
 }
 
 impl Oracle {
@@ -82,6 +83,54 @@ impl Oracle {
             _ => Duration::from_secs(1200),
         }
     }
+    pub(super) fn source_owner(self) -> Option<crate::check::SourceOwner> {
+        match self {
+            Self::OfflinePackages => Some(crate::check::SourceOwner::OfflinePackages),
+            Self::PureTail => Some(crate::check::SourceOwner::PureTail),
+            _ => None,
+        }
+    }
+    pub(super) fn invocation(
+        self,
+        verifier: &Path,
+        candidate: &Path,
+        root: &Path,
+        source: &crate::check::AdmittedSource,
+    ) -> Result<Vec<String>, DevError> {
+        let mut command = vec![
+            verifier.display().to_string(),
+            self.name().to_owned(),
+            "--binary".to_owned(),
+            candidate.display().to_string(),
+            "--evidence-root".to_owned(),
+            root.display().to_string(),
+            "--machine".to_owned(),
+        ];
+        if let Some(owner) = self.source_owner() {
+            command.extend([
+                "--source-receipt".to_owned(),
+                source.owner_receipt(owner)?.display().to_string(),
+            ]);
+        }
+        Ok(command)
+    }
+    pub(super) fn verify_source(
+        self,
+        facts: &ChildFacts,
+        source: &crate::check::AdmittedSource,
+    ) -> Result<(), DevError> {
+        let expected = self
+            .source_owner()
+            .map(|owner| source.owner_proof(owner))
+            .transpose()?;
+        if facts.source_semantics == expected {
+            Ok(())
+        } else {
+            Err(DevError::corrupt(
+                "final boundary substituted its admitted source semantic receipt",
+            ))
+        }
+    }
     pub(super) fn read(
         self,
         receipt: &Path,
@@ -100,6 +149,7 @@ impl Oracle {
                     runners: r.runners,
                     requests: r.responses,
                     cleanup_complete: r.cleanup_complete,
+                    source_semantics: None,
                 }
             }
             Self::OutboundHttp => {
@@ -112,33 +162,36 @@ impl Oracle {
                     runners: r.runners,
                     requests: r.requests,
                     cleanup_complete: r.cleanup_complete,
+                    source_semantics: None,
                 }
             }
             Self::OfflinePackages => {
                 let r = offline_packages::read_transferred_receipt(receipt, candidate, verifier)?;
                 ChildFacts {
-                    candidate_sha256: r.candidate_sha256,
-                    verifier_sha256: r.verifier_sha256,
+                    candidate_sha256: r.candidate_sha256.clone(),
+                    verifier_sha256: r.verifier_sha256.clone(),
                     elapsed_nanoseconds: r.elapsed_nanoseconds,
-                    commands: u64::try_from(r.commands.len())
+                    commands: u64::try_from(r.command_count())
                         .map_err(|_| DevError::corrupt("command count overflow"))?,
-                    runners: u64::try_from(r.runners.len())
+                    runners: u64::try_from(r.runner_count())
                         .map_err(|_| DevError::corrupt("runner count overflow"))?,
-                    requests: 1,
+                    requests: u64::try_from(r.request_count())
+                        .map_err(|_| DevError::corrupt("request count overflow"))?,
                     cleanup_complete: r.cleanup_complete,
+                    source_semantics: Some(r.source_receipt_proof().clone()),
                 }
             }
             Self::PureTail => {
                 let r = pure_tail::read_transferred_receipt(receipt, candidate, verifier)?;
-                let commands = r.command_count();
                 ChildFacts {
-                    candidate_sha256: r.candidate_sha256,
-                    verifier_sha256: r.verifier_sha256,
+                    candidate_sha256: r.candidate_sha256.clone(),
+                    verifier_sha256: r.verifier_sha256.clone(),
                     elapsed_nanoseconds: r.elapsed_nanoseconds,
-                    commands,
-                    runners: 1,
-                    requests: 4,
+                    commands: r.command_count(),
+                    runners: r.runner_count(),
+                    requests: r.request_count(),
                     cleanup_complete: r.cleanup_complete,
+                    source_semantics: Some(r.source_receipt_proof().clone()),
                 }
             }
             Self::StatefulHttp => {
@@ -151,6 +204,7 @@ impl Oracle {
                     runners: 3,
                     requests: r.requests,
                     cleanup_complete: r.cleanup_complete,
+                    source_semantics: None,
                 }
             }
         })

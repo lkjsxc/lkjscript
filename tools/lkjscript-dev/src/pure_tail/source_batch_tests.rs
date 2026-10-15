@@ -1,4 +1,4 @@
-//! Mutate actual candidate output; no synthetic successful process or evaluator observations.
+//! Mutate actual source output; no synthetic successful invocation or evaluator observations.
 
 use super::*;
 

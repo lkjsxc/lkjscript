@@ -299,7 +299,7 @@ fn complete_full_original_admits_only_the_required_source_scope_and_refuses_faul
 }
 
 #[test]
-fn maintained_full_original_covers_all_twenty_three_source_gates() {
+fn maintained_full_original_covers_all_twenty_five_source_gates() {
     let temporary = tempfile::tempdir().expect("registry fixture");
     let registry =
         registry::base_registry(temporary.path(), temporary.path(), Path::new("/bin/true"))

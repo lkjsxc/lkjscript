@@ -215,10 +215,7 @@ pub(super) fn read(
         witness.smoke < witness.command,
         "source batch ordinary boundary ordering changed",
     )?;
-    let executable = Path::new(&receipt.isolated_root)
-        .join("lkjscript")
-        .display()
-        .to_string();
+    let executable = receipt.host_path.clone();
     let prefix = vec![
         executable,
         "--project".to_owned(),
@@ -358,24 +355,27 @@ fn command_output(
         command.command == expected
             && command.cwd == receipt.isolated_root
             && command.expects_success
-            && command.observation.status == process::ProcessStatus::Passed
-            && command.observation.exit_code == Some(0)
-            && command.observation.signal.is_none(),
+            && command.observation.returned_success()
+            && command.observation.reported_code() == Some(0)
+            && command
+                .observation
+                .as_process()
+                .is_none_or(|process| process.signal.is_none()),
         "source batch actual candidate command differs",
     )?;
     parse_records(
         "source-batch-process",
         &process::read_bounded(
-            &root.join(&command.observation.stdout.path),
+            &root.join(&command.observation.stdout().path),
             MAXIMUM_OUTPUT_BYTES,
         )?,
     )
     .map_err(|error| DevError::corrupt(format!("source batch process output: {error:?}")))
 }
 
-struct Binding(BTreeMap<(&'static str, &'static str), String>);
+pub(in crate::offline_packages) struct Binding(BTreeMap<(&'static str, &'static str), String>);
 impl Binding {
-    fn new(records: &[CompactRecord]) -> Result<Self, DevError> {
+    pub(in crate::offline_packages) fn new(records: &[CompactRecord]) -> Result<Self, DevError> {
         let mut values = BTreeMap::new();
         for (operation, keys) in [
             (
@@ -393,7 +393,10 @@ impl Binding {
         }
         Ok(Self(values))
     }
-    fn require(&self, records: &[CompactRecord]) -> Result<(), DevError> {
+    pub(in crate::offline_packages) fn require(
+        &self,
+        records: &[CompactRecord],
+    ) -> Result<(), DevError> {
         for ((operation, key), expected) in &self.0 {
             require(
                 field(records, operation, key)? == *expected,
@@ -546,7 +549,7 @@ fn executor(value: &Value) -> Result<(), DevError> {
     )
 }
 
-fn observations(records: &[CompactRecord]) -> Result<(), DevError> {
+pub(in crate::offline_packages) fn observations(records: &[CompactRecord]) -> Result<(), DevError> {
     for (name, reference, counter) in [
         ("production-observation", false, "instructions"),
         ("reference-observation", true, "expressions"),

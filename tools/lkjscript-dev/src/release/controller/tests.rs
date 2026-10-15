@@ -850,7 +850,7 @@ fn compare_errors_are_not_false_ancestry_and_known_git_relations_remain_distinct
 fn portable_terminal(content: &CandidateContent) -> Value {
     let observation = json!({"status":"passed","exit_code":0,"signal":null,"reason":null,"elapsed_nanoseconds":1,"cpu_nanoseconds":null,"peak_rss_kib":null,"stdout_limit_bytes":16777216,"stderr_limit_bytes":16777216,"stdout_limit_exhausted":false,"stderr_limit_exhausted":false,"stdout":{"path":"retained.log","kind":"file","mode":420,"bytes":0,"digest":"blake3:af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","link_target":null},"stderr":{"path":"retained.log","kind":"file","mode":420,"bytes":0,"digest":"blake3:af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","link_target":null}});
     let proof = json!({"name":"receipt.json","sha256":"2".repeat(64),"byte_length":8});
-    json!({"schema":{"identity":"lkjscript-candidate-terminal","version":1},"status":"candidate_accepted","phase":"complete","source_commit":SOURCE,"controller_source_commit":SOURCE,"tag":content.tag,"acceptance_contract":"lkjscript-final-candidate-acceptance-13","workload":"release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-13","target_triple":"x86_64-unknown-linux-musl","target_policy_sha256":super::super::target::policy_sha256().expect("policy"),"producer":{"github_actions":"true","repository":REPOSITORY,"workflow":"Release","job":"candidate","run_id":"17","run_attempt":"2","run_url":"https://github.com/lkjsxc/lkjscript/actions/runs/17","runner_os":"Linux","runner_architecture":"X64","runner_image_os":"ubuntu24","runner_image_version":"fixture-image"},"verifier":content.verifier,"assets":content.assets,"manifest_sha256":"3".repeat(64),"executable":{"name":"lkjscript","sha256":"4".repeat(64),"byte_length":8},"source_gates":23,"native_public_workers":16,"target_owners":6,"userlands":2,"proofs":[{"name":"release-source","receipt":proof},{"name":"native-public-harness","receipt":proof},{"name":"final-target","receipt":proof},{"name":"installation","receipt":proof}],"stages":[{"name":"target-admission","process":observation},{"name":"installation","process":observation},{"name":"installation-reader","process":observation}],"started_unix_nanoseconds":1,"completed_unix_nanoseconds":2,"elapsed_nanoseconds":1,"cleanup_complete":true,"failure":null})
+    json!({"schema":{"identity":"lkjscript-candidate-terminal","version":1},"status":"candidate_accepted","phase":"complete","source_commit":SOURCE,"controller_source_commit":SOURCE,"tag":content.tag,"acceptance_contract":"lkjscript-final-candidate-acceptance-14","workload":"release-source-semantic-matrices+six-target-owners+two-pinned-userlands+installed-recovery+seven-native-boundary-smokes-14","target_triple":"x86_64-unknown-linux-musl","target_policy_sha256":super::super::target::policy_sha256().expect("policy"),"producer":{"github_actions":"true","repository":REPOSITORY,"workflow":"Release","job":"candidate","run_id":"17","run_attempt":"2","run_url":"https://github.com/lkjsxc/lkjscript/actions/runs/17","runner_os":"Linux","runner_architecture":"X64","runner_image_os":"ubuntu24","runner_image_version":"fixture-image"},"verifier":content.verifier,"assets":content.assets,"manifest_sha256":"3".repeat(64),"executable":{"name":"lkjscript","sha256":"4".repeat(64),"byte_length":8},"source_gates":25,"native_boundary_workers":16,"native_boundary_smokes":7,"target_owners":6,"userlands":2,"proofs":[{"name":"release-source","receipt":proof},{"name":"native-boundary-smokes","receipt":proof},{"name":"final-target","receipt":proof},{"name":"installation","receipt":proof}],"stages":[{"name":"target-admission","process":observation},{"name":"installation","process":observation},{"name":"installation-reader","process":observation}],"started_unix_nanoseconds":1,"completed_unix_nanoseconds":2,"elapsed_nanoseconds":1,"cleanup_complete":true,"failure":null})
 }
 
 // Independent uncompressed ZIP fixture writer: production uses the platform unzip
@@ -1050,18 +1050,18 @@ fn actual_selection_dispatch_uses_authenticated_zip_bytes_and_portable_reader_be
     for (name, contract, workload) in [
         (
             "foreign-contract",
-            "lkjscript-final-candidate-acceptance-13-foreign",
+            "lkjscript-final-candidate-acceptance-14-foreign",
             terminal["workload"].as_str().unwrap(),
         ),
         (
             "foreign-workload",
             terminal["acceptance_contract"].as_str().unwrap(),
-            "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-13-foreign",
+            "release-source-semantic-matrices+six-target-owners+two-pinned-userlands+installed-recovery+seven-native-boundary-smokes-14-foreign",
         ),
         (
             "foreign-both",
-            "lkjscript-final-candidate-acceptance-13-foreign",
-            "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-13-foreign",
+            "lkjscript-final-candidate-acceptance-14-foreign",
+            "release-source-semantic-matrices+six-target-owners+two-pinned-userlands+installed-recovery+seven-native-boundary-smokes-14-foreign",
         ),
     ] {
         let mut mismatched = terminal.clone();
@@ -1099,12 +1099,12 @@ fn actual_selection_dispatch_uses_authenticated_zip_bytes_and_portable_reader_be
         ("missing", None),
     ] {
         let mut changed = terminal.clone();
-        changed["native_public_workers"] = workers.clone().unwrap_or(Value::Null);
+        changed["native_boundary_workers"] = workers.clone().unwrap_or(Value::Null);
         let canonical = super::super::candidate::canonical_terminal_fixture(changed)
             .expect("canonical worker terminal");
         let bytes = if workers.is_none() {
             let canonical = String::from_utf8(canonical).unwrap();
-            let field = "  \"native_public_workers\": null,\n";
+            let field = "  \"native_boundary_workers\": null,\n";
             assert_eq!(canonical.matches(field).count(), 1);
             canonical.replace(field, "").into_bytes()
         } else {

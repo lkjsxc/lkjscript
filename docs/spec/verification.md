@@ -31,14 +31,15 @@ authorizes cleanup. The checker remains bound to its compiled checkout. Set chec
 | product | Release CLI/copied product/packages/maintained assets/discovery |
 | service | Distributed/stateful/outbound HTTP and lkjournal service |
 | full --fresh | Complete standalone 29-gate acceptance |
-| release-source --fresh | 23 source gates plus required final-candidate union below |
+| release-source --fresh | 25 source gates plus required final-candidate union below |
 
 [Registry](../../tools/lkjscript-dev/src/check/registry.rs) and
 [selection](../../tools/lkjscript-dev/src/check/snapshot.rs) own exact commands, DAG,
 bounds and changed-path widening. Preserve all gates: safe Rust/lints, workspace
 all-target/all-feature/reference tests, checker/default release lifecycle, policy,
-guides, maintained assets and native planner. Six behavioral owners excluded from
-release-source run once against final bytes. Counts/labels never replace outcomes.
+guides, maintained assets and native planner. Full source semantic matrices and
+final-byte boundaries have separate receipts; six target owners remain mandatory.
+Counts/labels never replace outcomes.
 
 Selection covers every Git path state and mixed unions. Product/executable/example/
 unclassified tool inputs widen to full; catalog prose includes site tests, checker
@@ -46,17 +47,16 @@ edits include library tests and other prose retains policy/diff. Preserve no-fai
 and optimized test guards; test-debug remains separate interactive evidence.
 See [development verification](../development-verification.md).
 
-Release production uses thin LTO and 16 codegen units. release_build owns optimized
-product bytes; release_command_lifecycle uses the source-profile harness with an
-explicit admitted release candidate. Its Cargo debug output and candidate proof
-remain separate. Checker/site retain workspace Clippy/tests.
+release_build owns optimized bytes; lifecycle uses the source-profile harness with
+a separately admitted release candidate, not its Cargo debug output. Checker/site
+retain workspace Clippy/tests.
 
 Receipts bind complete source/input/DAG/command/toolchain/environment/dependency/
 verifier originals, bounded logs and immutable outputs. Honor producers: later Cargo
 features may replace shared paths. Reuse needs identical complete context and a
 permitting profile; final full/source evidence is fresh. Source admission accepts
 only maintained full or release-source originals: re-admit every producer gate
-under identical input/DAG/runtime bindings, then count the required 23-gate closure.
+under identical input/DAG/runtime bindings, then count the required 25-gate closure.
 Never rerun source after full or rewrite its receipt; final-byte proof stays mandatory.
 Drift, absent originals, skipped/unrun/failed/cancelled/unavailable work or unjoined
 cleanup cannot pass.
@@ -105,7 +105,7 @@ The following rules apply to every feature and existing case indexed below:
   custody, expose no partial success and preserve primary plus cleanup errors.
 - Public claims need literal ordinary authoring, drafts/reviewed edits, exact
   transports and complete independently expected detached results after removing
-  sources. Unit-only fixtures prove no copied-binary/final-byte capability.
+  sources. In-process public APIs may prove semantics, never actual CLI processes.
 - Observe live effects once. Missing output/cancel/cleanup/encoding failure proves
   neither rollback nor retry safety; receipt checking never replays effects.
 
@@ -130,7 +130,7 @@ Races accept one; accepted keyed retries preserve originals after descendants.
 Changed tokens/requests/origins, corrupt/disconnected ancestry, incomplete footprints,
 combined budget/cancel and staging/exposure interruptions cannot partly publish.
 Strict plan round-trips bind authored reads and refresh origin. Every native_refresh
-final-byte case remains required.
+semantic case remains required in the original source outcome inventory.
 
 ## Structured parallel ownership
 
@@ -201,18 +201,20 @@ x86_64-unknown-linux-musl pins/images/bounds. Independently admit regular non-sy
 little-endian ELF64 x86-64 without PT_INTERP/DT_NEEDED/GLIBC requirements; malformed/
 trailing/dynamic/foreign/contradictory bytes reject without ldd. Extracted final bytes
 pass both pinned musl/older-glibc Linux/amd64 userlands without network/host library
-mounts, plus all six owners. Bind source/policy/bytes/mode/outcomes/cleanup. Host
-proof cannot substitute; this proves neither universal portability nor sandboxing.
+mounts, plus six target owners and seven native boundary smokes. Bind source/policy/
+bytes/mode/outcomes/cleanup. Source semantics cannot impersonate final execution;
+this proves neither universal portability nor sandboxing.
 
 ## Transferable application evidence
 
-`lkjscript-dev offline-packages --binary PATH --evidence-root ABSENT_ABSOLUTE_PATH
---machine` uses copied product/closed environment outside source, no Cargo/semantic
-helpers. Its 3,600-second process allowance includes cleanup/evidence/self-admission;
-parent original-reader admission is additional. Focused --case is not aggregate.
-The five-package/eight-edge diamond retains 11 after D2 staging, mixed-closure refusal,
-12 after paired replacement and 28 tests once. Pre-export graph equals transport.
-All existing offline language/visibility/repair/source-deletion matrices remain.
+`offline-packages --evidence-root ABSENTDIR --machine` records full source semantics
+through public APIs with real files/owned loopbacks: every language/closure/repair matrix and
+independent oracle remains. Its 3,600-second allowance includes cleanup/evidence/
+self-admission; original-reader admission is additional. Focused --case is not full.
+`offline-packages --binary PATH --source-receipt ORIGINAL --evidence-root ABSENTDIR --machine`
+resolves the source owner via admitted GateReceipt proof, rechecks receipt/file
+digests and copies exact artifacts. The closed manifest binds actual candidate
+argv/SHA/results/join/cleanup outside source; source rows grant no process credit.
 
 Six owners remain independently required: distributed-http, outbound-http,
 offline-packages, pure-tail, stateful-http, service. Transferred roots are absent
@@ -224,15 +226,16 @@ matrices, never application policy, live relays or automatic GET replay.
 Contributor-only PostgreSQL 16.15 comparison remains separate: warm-up/three samples,
 >5x wall/>2x RSS/>4x durable bytes reject; it is no product/release dependency.
 
-Pure-tail retains copied author/export/check/build/detached execution, eight-frame
-VM/reference ceiling through 8,192 items, independent canonical trampoline and 2 MiB
-thread failure probes. Genuine nontail/frame/fuel controls, allocation/operand exact
-limits, cancellation and transaction rollback/recovery discriminate false reuse.
-Exact-self-tail slot reuse needs physical buffer identity, dirty-slot clearing,
-complete pre-mutation argument/callee admission and excluded task/borrow/transaction/
-read-view fallback. Preserve independent ledgers and no-refund accounting; physical
-reuse proves no throughput/RSS claim. The pure-tail owner retains 900-second/1 GiB
-owned-file bounds, complete mapping/forwarding/capture matrices and original readers.
+`pure-tail --evidence-root ABSENTDIR` proves full source semantics: all 111 batch
+rows, ordinary differential smoke and existing admission/type/task/cache/resource/
+tail/cancel/fault matrices, including 8,192-item transactional HTTP. Its isolated
+2 MiB stack probe remains an actual verifier child. Candidate
+`pure-tail --binary PATH --source-receipt ORIGINAL --evidence-root ABSENTDIR`
+authenticates that receipt and five exact fixture files, then starts exactly two
+copied-candidate children: source-free Command sum(8192)=33558528 and HTTP serve with
+four bounded requests covering success/trap/recovery/configured behavior. Require
+independent nominal bytes, rollback/revisions, signal shutdown and joined cleanup.
+Candidate execution is production-only; source matrix results are not final processes.
 
 ## Package and public-release evidence
 
@@ -248,41 +251,47 @@ public detached diamonds prove actual compiler adoption.
 
 ### Source and finalized-byte coverage
 
-Fresh release-source plus exact-final-candidate admission is release acceptance;
-full remains standalone complete. Main integration can precede hosted completion
-only with that release gate explicit.
+Fresh release-source plus full semantic owner receipts and exact-final-byte
+boundaries constitute release acceptance. Full remains standalone complete;
+mainline readiness and hosted/public completion remain distinct.
 
 | Claim | Required owner |
 | --- | --- |
-| Source safety/reference/checker/default lifecycle/assets/discovery | Fresh release-source DAG and original reader |
-| Native public semantic/ownership/Map/fold/compiler/storage behavior | Source-matched exact-final-byte public harness |
-| HTTP/offline/pure-tail/service | Six owners against extracted executable |
-| Static target/pinned userlands | Independent ELF/exact target |
-| Slots/locking/install/recovery | Native workspace plus candidate installation tier |
-| Transfer/anonymous exact/latest/small installed lifecycle | Authenticated pair/exact readers and public acquisition |
-| Whole candidate/publication completion | Original readers and authenticated terminal controller |
+| Source gates | Fresh DAG and original reader |
+| Full semantic matrices | Original workspace_tests public_cli outcomes and full offline/pure-tail receipts |
+| Final process boundaries | Six target owners and exactly seven native smokes |
+| Static target/userlands | Independent ELF and both pins |
+| Installation/transfer/publication | Separate recovery, authenticated exact/latest readers and trusted terminal |
 
 [Public inventory](../../tools/lkjscript-dev/src/release/candidate/public_inventory.rs)
-and siblings own exact required identities. All current/future Map, native-fold,
-incremental-unit, FIFO, data-sequence, owned-nominal, indexed-data, associated-BlockRead/
-read-view namespaces and native-owned/buffer/range/policy/parallel/read/refresh/topology
-families remain required. Inventory must exist before execution; absent/substituted/
-duplicate/ignored/failed/unrun cases reject even with exit 0/forged summary. Notices
-supply no pass credit; similar names/cost predicates cannot replace complete matrices.
-Cargo JSON selects source-matched public_cli, immutably copied and executed outside
-source under closed environment with explicit final-candidate path; no fallback.
-Check source/candidate/harness before/after, exact outcomes/logs and joined cleanup.
-[Candidate owner](../../tools/lkjscript-dev/src/release/candidate.rs) owns the sole
-current acceptance/workload pair; mixed terminal identities reject.
+owns all source test identities and seven exact smoke identities. Source admission
+requires one actual `ok` for every ordinary enumerated public_cli case from original
+workspace_tests stdout, never aggregate counts/notices or reconstructed summaries.
+Only `reviewed_change_plan_scale_streams_detail_beyond_stdout_envelope` may remain
+ignored. Missing/substituted/
+duplicate/newly ignored/failed/unrun cases reject. Original stderr must select one
+public_cli executable matching current Cargo JSON. Bind original source receipt,
+verifier and stdout/stderr FileProofs under the admitted source context.
+
+Final native proof runs exactly native_boundary_smokes::{review_refresh,
+cache_read_fifo,cache_write_fifo,publication_lock,detached_foreground,
+deployment_batch,shared_parallel_http}. Each marker needs an actual copied-candidate
+child with bound SHA/argv, closed environment, joined process and real cleanup.
+Select/copy the source-matched harness immutably; check source/harness/candidate
+identities before/after. No developer fallback or second semantic-matrix replay.
+The acceptance supplement binds original source semantics; standalone diagnostic
+harness output has no source acceptance or promotion credit. The
+[candidate owner](../../tools/lkjscript-dev/src/release/candidate.rs) owns the sole
+current workload/acceptance pair; mixed identities or a count other than seven reject.
 
 Finalize/extract/admit without rebuilding. [Release](../release.md) owns independent
-producer/source/run/artifact authentication, current authority, unchanged promotion
-and retention. Readers reject omitted/substituted/rehashed false evidence without
-effect replay; required ignored faults count only after execution. Transfer/public
-rebuild no product and replay no broad owners. Installed exact/latest retain literal
-structural/F64 review results 42→43, 1.75→2.75, -0.0/hello, wrong-review rejection and
-detached 43; project pure results compare reference. Simulated URLs cannot prove
-anonymous acquisition; exact-only cannot prove latest or execute different bytes.
+producer/source/run/artifact authentication, current authority and unchanged promotion.
+Readers reject omitted/substituted/rehashed false evidence without effect replay;
+required ignored faults count only after execution. Transfer/public rebuild no product
+and replay no broad owners. Installed exact/latest retain literal structural/F64
+review results 42→43, 1.75→2.75, -0.0/hello, wrong-review rejection and detached 43;
+project pure results compare reference. Simulated URLs cannot prove anonymous
+acquisition; exact-only cannot prove latest or execute different bytes.
 
 ## Contributor process completion
 
@@ -370,7 +379,7 @@ phantom actual: ordinary formals cannot conceal owners or borrow/consume them.
 IndexedData exports before suppliers. Retained/displaced values survive disposal;
 evaluation order, signed indices, module privacy and reservations remain exact.
 All four integer/Bool planner combinations retain independent outcomes/capacities.
-Checked indexing cannot scan/copy prefixes. Require complete indexed-data final
+Checked indexing cannot scan/copy prefixes. Require complete indexed-data source
 inventory, including category/mode/source forgeries and cleanup.
 
 ## Scoped owned-child read obligations
@@ -491,7 +500,7 @@ detached results, peek/LIFO adversaries and failure cleanup.
 [Owned records](owned-records.md) retain intrinsic affinity, full/phantom layout and
 depth/cycle admission, exact defining-module privacy and source-independent witnessed
 abstraction. Shape or transported private bytes grant no field rights. FIFO keeps
-exhaustive interleavings, guarded views, drain/reuse and every final-byte witness.
+exhaustive source interleavings, guarded views, drain/reuse and every family witness.
 Preserve child allocations, one custody envelope, no nominal prefix scan and full
 failure cleanup; count repacking/reversal separately.
 
@@ -515,9 +524,8 @@ targets × attached/detached require 24 complete results. Protected consume/esca
 foreign-field refusals preserve HEAD; detached cleanup leaves no handles/effects.
 Require exact identity and every future namespace case.
 
-The [read-view inventory](../../tools/lkjscript-dev/src/release/candidate/public_inventory_read_views.rs)
-additionally requires all four exact consumer-first five-literal/parent-drop/detached,
-source-alias/path/category refusal, joined/projected/passive custody and trap/fuel/
-subsequent-invocation witnesses. Independent complete source/category admission,
-exact result-source/witness and parent/ancestor custody cannot be replaced by host
-results, similarly named cases or source/full proof instead of finalized bytes.
+The [source inventory](../../tools/lkjscript-dev/src/release/candidate/public_inventory.rs)
+requires all four read-view consumer-first/source-category/joined-read/trap-recovery
+witnesses with exact result-source and ancestor custody. These complete semantic
+matrices use original source outcomes; the seven final native smokes separately
+prove their actual distribution boundaries. Similar names substitute for neither.

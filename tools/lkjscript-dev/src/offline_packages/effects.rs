@@ -41,76 +41,24 @@ fn transaction_cancellation(
     standalone: &Path,
     function: &str,
 ) -> Result<(), DevError> {
-    #[cfg(not(test))]
-    let verifier = std::env::current_exe()?;
-    #[cfg(test)]
-    let verifier = PathBuf::from(std::env::var_os("LKJSCRIPT_EFFECTS_VERIFIER").ok_or_else(
-        || DevError::usage("effect iteration requires an explicitly frozen verifier executable"),
-    )?);
-    let specification = process::ProcessSpec {
-        command: vec![
-            verifier.display().to_string(),
-            "effect-transaction-probe".into(),
-            standalone
-                .join("service.deployment.json")
-                .display()
-                .to_string(),
-            function.into(),
-        ],
-        cwd: context.root.clone(),
-        environment: BTreeMap::from([("LANG".into(), "C.UTF-8".into())]),
-        timeout: Duration::from_secs(120),
-        maximum_stdout_bytes: MAXIMUM_OUTPUT_BYTES,
-        maximum_stderr_bytes: MAXIMUM_OUTPUT_BYTES,
-        stdout_path: context.evidence.join("effect-transaction.stdout"),
-        stderr_path: context.evidence.join("effect-transaction.stderr"),
-        unavailable_exit_code: None,
-    };
-    let observation = process::run(&specification, &context.evidence);
-    context.receipt.runners.push(observation.clone());
-    require(
-        observation.status == process::ProcessStatus::Passed,
-        "source-bound effect transaction cancellation failed",
+    let descriptor = standalone.join("service.deployment.json");
+    context.receipt.effects.cancellation = context.probe_json(
+        "effect-transaction",
+        "contributor.effect_transaction_probe",
+        &[descriptor.display().to_string(), function.into()],
+        || lkjscript::platform::contributor::effect_transaction_probe(&descriptor, function),
     )?;
-    context.receipt.effects.cancellation = serde_json::from_slice(&process::read_bounded(
-        &specification.stdout_path,
-        MAXIMUM_OUTPUT_BYTES,
-    )?)?;
     Ok(())
 }
 
 fn resources(context: &mut Context, consumer: &Package) -> Result<(), DevError> {
-    #[cfg(not(test))]
-    let verifier = std::env::current_exe()?;
-    #[cfg(test)]
-    let verifier = PathBuf::from(std::env::var_os("LKJSCRIPT_EFFECTS_VERIFIER").ok_or_else(
-        || DevError::usage("effect iteration requires an explicitly frozen verifier executable"),
-    )?);
-    let specification = process::ProcessSpec {
-        command: vec![
-            verifier.display().to_string(),
-            "effect-probe".into(),
-            consumer.path.display().to_string(),
-        ],
-        cwd: context.root.clone(),
-        environment: BTreeMap::from([("LANG".into(), "C.UTF-8".into())]),
-        timeout: Duration::from_secs(180),
-        maximum_stdout_bytes: MAXIMUM_OUTPUT_BYTES,
-        maximum_stderr_bytes: MAXIMUM_OUTPUT_BYTES,
-        stdout_path: context.evidence.join("effect-resources.stdout"),
-        stderr_path: context.evidence.join("effect-resources.stderr"),
-        unavailable_exit_code: None,
-    };
-    let observation = process::run(&specification, &context.evidence);
-    context.receipt.runners.push(observation.clone());
-    require(
-        observation.status == process::ProcessStatus::Passed,
-        "source-bound effect resource probe failed",
+    let project = consumer.path.clone();
+    context.receipt.effects.resources = context.probe_json(
+        "effect-resources",
+        "contributor.effect_execution_probe",
+        &[project.display().to_string()],
+        || lkjscript::platform::contributor::effect_execution_probe(&project),
     )?;
-    context.receipt.effects.resources = serde_json::from_slice(&process::read_bounded(
-        &specification.stdout_path,
-        MAXIMUM_OUTPUT_BYTES,
-    )?)?;
     Ok(())
 }
 
@@ -1259,8 +1207,7 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
     super::effects_iteration_evidence::public(context, &standalone)?;
     resources(context, &consumer)?;
     let before_execution = crate::authority::observe_graph_authority(&consumer.path)?;
-    let round = crate::stateful_http::recursive_round(
-        &context.binary,
+    let round = super::runtime_semantic::http_round(
         &standalone,
         &context.evidence,
         "effects-initial",
@@ -1327,8 +1274,7 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
     )?;
     context.receipt.effects.rounds.push(round);
     transaction_cancellation(context, &standalone, &consumer.symbols["$transaction-jobs"])?;
-    let restarted = crate::stateful_http::recursive_round(
-        &context.binary,
+    let restarted = super::runtime_semantic::http_round(
         &standalone,
         &context.evidence,
         "effects-restarted",
@@ -1398,8 +1344,7 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
     context.receipt.effects.changed_consumer_revision = consumer.revision.clone();
     fs::copy(&successor, context.evidence.join("effect-successor.lkja"))?;
     fs::copy(&successor, standalone.join("application.lkja"))?;
-    let round = crate::stateful_http::recursive_round(
-        &context.binary,
+    let round = super::runtime_semantic::http_round(
         &standalone,
         &context.evidence,
         "effects-successor",
@@ -1451,8 +1396,7 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
         rebound == context.receipt.effects.artifact_bindings[0],
         "old supported bundle changed during recovery",
     )?;
-    let round = crate::stateful_http::recursive_round(
-        &context.binary,
+    let round = super::runtime_semantic::http_round(
         &standalone,
         &context.evidence,
         "effects-old-supported",

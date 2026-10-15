@@ -19,6 +19,7 @@ mod pure_tail_program;
 mod raw_websocket;
 mod release;
 mod scale;
+mod semantic_cli;
 mod service;
 mod stateful_http;
 mod stateful_http_program;
@@ -86,7 +87,10 @@ fn run(arguments: impl IntoIterator<Item = OsString>) -> Result<u8, DevError> {
                 "usage: lkjscript-dev release transferred <pair-run|pair-verify|installation-run|installation-verify> --exact-assets ABSOLUTE_DIRECTORY --latest-assets ABSOLUTE_DIRECTORY --tag TAG --commit SOURCE_COMMIT --acquisition simulated|anonymous --evidence-root ABSOLUTE_DIRECTORY --verifier-identity ABSOLUTE_FILE --expected-verifier-sha256 SHA256 --expected-verifier-bytes BYTES (run requires an absent evidence root; verify reads originals; exact-run/exact-verify omit latest-assets)"
             );
             println!(
-                "usage: lkjscript-dev pure-tail --binary PATH --evidence-root ABSENT_ABSOLUTE_PATH [--machine] | lkjscript-dev pure-tail-probe PROJECT (bounded resource evidence subprocess)"
+                "usage: lkjscript-dev pure-tail --evidence-root ABSENT_ABSOLUTE_PATH [--machine] (complete linked source semantics) | lkjscript-dev pure-tail --binary PATH --source-receipt ORIGINAL_SEMANTIC_RECEIPT --evidence-root ABSENT_ABSOLUTE_PATH [--machine] (final executable boundaries) | lkjscript-dev pure-tail-probe PROJECT (bounded resource evidence subprocess)"
+            );
+            println!(
+                "usage: lkjscript-dev offline-packages --evidence-root ABSENT_ABSOLUTE_PATH [--machine] (complete linked source semantics) | lkjscript-dev offline-packages --binary PATH --source-receipt ORIGINAL_SEMANTIC_RECEIPT --evidence-root ABSENT_ABSOLUTE_PATH [--machine] (final executable boundaries) | lkjscript-dev release admit --candidate ABSOLUTE_FILE --build-receipt ABSOLUTE_FILE --source-receipt ORIGINAL_CHECK_RECEIPT --evidence-root ABSENT_ABSOLUTE_PATH"
             );
             println!(
                 "usage: lkjscript-dev check <focused|changed|product|service|full|release-source|self-test> ... | lkjscript-dev data-oracle --binary PATH --bbs-receipt PATH --service-receipt PATH [--machine] | lkjscript-dev distributed-http [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev function-extraction-oracle --project PATH --function DECL --expression EXPR [--output ABSENT_PATH] | lkjscript-dev outbound-http [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev stateful-http [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev policy <no-python|product-surface> [--binary PATH] [--machine] | lkjscript-dev measure --cwd PATH --output DIR -- COMMAND [ARG ...] | lkjscript-dev release <target|build|admit|admission-verify|verifier|transferred|prepare|candidate|controller|verify> ... | lkjscript-dev scale <independent-modules|small-functions|wide-module|deep-chain|wide-fanout> ... | lkjscript-dev service [--binary PATH] [--machine]"

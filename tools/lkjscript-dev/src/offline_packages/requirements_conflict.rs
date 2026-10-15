@@ -3,11 +3,18 @@ use super::*;
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 
+struct Invocation {
+    command: Vec<String>,
+    cwd: PathBuf,
+    stdout_path: PathBuf,
+    stderr_path: PathBuf,
+}
+
 const MATERIAL: &str = "requirement-conflict";
 const REQUESTS: [(&str, i64); 2] = [("left", 10), ("right", 20)];
 const RESPONSE: &[u8] = b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
 
-fn barrier(listener: TcpListener) -> Result<Vec<String>, DevError> {
+pub(in crate::offline_packages) fn barrier(listener: TcpListener) -> Result<Vec<String>, DevError> {
     let mut connections = Vec::new();
     let mut requests = Vec::new();
     for _ in REQUESTS {
@@ -42,8 +49,8 @@ fn barrier(listener: TcpListener) -> Result<Vec<String>, DevError> {
     Ok(requests)
 }
 
-fn release_blocked_accepts(address: SocketAddr) {
-    // Called only after both owned product children have joined. A failed preflight may have
+pub(in crate::offline_packages) fn release_blocked_accepts(address: SocketAddr) {
+    // Called only after both owned public calls have joined. A failed preflight may have
     // made no request; bounded sentinels wake an accept without leaving a detached oracle.
     for _ in REQUESTS {
         if let Ok(mut stream) = TcpStream::connect_timeout(&address, Duration::from_millis(200)) {
@@ -53,7 +60,7 @@ fn release_blocked_accepts(address: SocketAddr) {
     }
 }
 
-fn state(bundle: &Path) -> Result<Value, DevError> {
+pub(in crate::offline_packages) fn state(bundle: &Path) -> Result<Value, DevError> {
     let root = bundle.join("numbers");
     let store = DataStore::open(&root, "race-cells", DataLimits::default())
         .map_err(|error| DevError::corrupt(error.to_string()))?;
@@ -80,7 +87,7 @@ fn state(bundle: &Path) -> Result<Value, DevError> {
     )
 }
 
-fn outcomes(values: &[Value]) -> Result<usize, DevError> {
+pub(in crate::offline_packages) fn outcomes(values: &[Value]) -> Result<usize, DevError> {
     require(values.len() == 2, "public conflict outcomes omitted")?;
     let conflict = json!({"case":"Aborted","value":{"case":"Conflict"}});
     for winner in 0..REQUESTS.len() {
@@ -96,7 +103,7 @@ fn outcomes(values: &[Value]) -> Result<usize, DevError> {
     ))
 }
 
-fn states(value: &Value, winner: usize) -> Result<(), DevError> {
+pub(in crate::offline_packages) fn states(value: &Value, winner: usize) -> Result<(), DevError> {
     for name in ["before", "after", "reopened"] {
         let snapshot = &value[name];
         require(
@@ -146,7 +153,7 @@ fn states(value: &Value, winner: usize) -> Result<(), DevError> {
     )
 }
 
-fn deployment(address: SocketAddr) -> Value {
+pub(in crate::offline_packages) fn deployment(address: SocketAddr) -> Value {
     let limits = lkjscript::platform::HttpClientLimits {
         total_timeout_milliseconds: 30_000,
         ..Default::default()
@@ -191,9 +198,9 @@ pub(super) fn workflow(context: &mut Context, source_bundle: &Path) -> Result<()
     let specs = REQUESTS
         .iter()
         .enumerate()
-        .map(|(offset, (key, default))| process::ProcessSpec {
+        .map(|(offset, (key, default))| Invocation {
             command: vec![
-                context.receipt.pinned_runtime_path.clone(),
+                context.receipt.host_path.clone(),
                 "run".into(),
                 "--deployment".into(),
                 descriptor.display().to_string(),
@@ -201,17 +208,12 @@ pub(super) fn workflow(context: &mut Context, source_bundle: &Path) -> Result<()
                 json!([key, default]).to_string(),
             ],
             cwd: context.root.clone(),
-            environment: BTreeMap::from([("LANG".into(), "C.UTF-8".into())]),
-            timeout: Duration::from_secs(40),
-            maximum_stdout_bytes: MAXIMUM_OUTPUT_BYTES,
-            maximum_stderr_bytes: MAXIMUM_OUTPUT_BYTES,
             stdout_path: context
                 .evidence
                 .join(format!("command-{:04}.stdout", first_index + offset)),
             stderr_path: context
                 .evidence
                 .join(format!("command-{:04}.stderr", first_index + offset)),
-            unavailable_exit_code: None,
         })
         .collect::<Vec<_>>();
     let evidence_root = &context.evidence;
@@ -224,8 +226,15 @@ pub(super) fn workflow(context: &mut Context, source_bundle: &Path) -> Result<()
         for spec in &specs {
             match std::thread::Builder::new()
                 .name("requirement-conflict-command".into())
-                .spawn_scoped(scope, move || process::run(spec, evidence_root))
-            {
+                .spawn_scoped(scope, move || {
+                    semantic_cli::execute_with_cancellation(
+                        &spec.command[1..],
+                        &spec.stdout_path,
+                        &spec.stderr_path,
+                        evidence_root,
+                        async { tokio::time::sleep(Duration::from_secs(40)).await },
+                    )
+                }) {
                 Ok(child) => children.push(child),
                 Err(error) => {
                     spawn_failure = Some(error);
@@ -244,15 +253,16 @@ pub(super) fn workflow(context: &mut Context, source_bundle: &Path) -> Result<()
             None => Ok((observations, requests)),
         }
     })?;
-    // All process and oracle resources have joined before any error is returned below.
+    // All invocation and oracle resources have joined before any error is returned below.
     for (spec, observation) in specs.iter().zip(observations) {
-        let observation = observation
-            .map_err(|_| DevError::infrastructure("public conflict process observer panicked"))?;
+        let observation = observation.map_err(|_| {
+            DevError::infrastructure("public conflict invocation observer panicked")
+        })?;
         context.receipt.commands.push(CommandEvidence {
             command: spec.command.clone(),
             cwd: spec.cwd.display().to_string(),
             expects_success: true,
-            observation,
+            observation: observation?,
         });
     }
     let requests =
@@ -266,8 +276,7 @@ pub(super) fn workflow(context: &mut Context, source_bundle: &Path) -> Result<()
         require(
             context.receipt.commands[first_index + offset]
                 .observation
-                .status
-                == process::ProcessStatus::Passed,
+                .returned_success(),
             "public conflict invocation failed instead of returning a normal outcome",
         )?;
         let output = parse_records(
@@ -361,10 +370,12 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
             .join("concurrent.deployment.json");
         require(
             command.expects_success
-                && command.observation.status == process::ProcessStatus::Passed
+                && command.observation.returned_success()
+                && command.observation.elapsed_nanoseconds()
+                    <= Duration::from_secs(40).as_nanos() as u64
                 && command.command
                     == [
-                        receipt.pinned_runtime_path.clone(),
+                        receipt.host_path.clone(),
                         "run".into(),
                         "--deployment".into(),
                         descriptor.display().to_string(),

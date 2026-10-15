@@ -613,10 +613,7 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
         "composition independent libraries or exact evolution absent",
     )?;
     let mut commands = Vec::new();
-    let copied = Path::new(&receipt.isolated_root)
-        .join("lkjscript")
-        .display()
-        .to_string();
+    let copied = receipt.host_path.clone();
     let consumer_apply: usize =
         serde_json::from_value(observation["authored"]["consumer"][1].clone())?;
     let created = output(root, consumer_apply)?;
@@ -824,11 +821,7 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
             let kind = if position == 0 { "plan" } else { "apply" };
             require(
                 command.expects_success
-                    && command.command[0]
-                        == Path::new(&receipt.isolated_root)
-                            .join("lkjscript")
-                            .display()
-                            .to_string()
+                    && command.command[0] == receipt.host_path.clone()
                     && command
                         .command
                         .windows(2)
@@ -942,7 +935,7 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
                 command.expects_success == expected.is_some()
                     && command.command
                         == [
-                            receipt.pinned_runtime_path.clone(),
+                            receipt.host_path.clone(),
                             "run".into(),
                             "--deployment".into(),
                             path.display().to_string(),

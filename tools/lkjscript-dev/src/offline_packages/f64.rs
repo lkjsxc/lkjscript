@@ -877,10 +877,7 @@ fn validate_standard(
         .first()
         .ok_or_else(|| DevError::corrupt("F64 producer authoring missing"))?
         .plan_command;
-    let copied = Path::new(&receipt.isolated_root)
-        .join("lkjscript")
-        .display()
-        .to_string();
+    let copied = receipt.host_path.clone();
     let expected_command = [copied, "package".into(), "builtin".into(), "inspect".into()];
     let mut inspections = 0;
     for (index, command) in receipt.commands.iter().enumerate().take(producer_plan) {
@@ -957,7 +954,7 @@ fn validate_artifacts(
             .ok_or_else(|| DevError::corrupt("F64 admitted artifact bundle identity missing"))?
             .to_owned();
         let expected_command = [
-            isolated.join("lkjscript").display().to_string(),
+            receipt.host_path.clone(),
             "--project".into(),
             isolated.join("f64-consumer").display().to_string(),
             "build".into(),
@@ -1002,7 +999,7 @@ fn validate_authoring(
         "F64 literal producer, consumer or edit authoring missing",
     )?;
     let isolated = Path::new(&receipt.isolated_root);
-    let copied = isolated.join("lkjscript").display().to_string();
+    let copied = receipt.host_path.clone();
     for (index, name, project, prelude, literal, result) in [
         (
             0,
@@ -1439,7 +1436,7 @@ pub(super) fn validate(
         "F64 data workflow does not transport the actual graph-produced halfway accumulator",
     )?;
     let isolated = Path::new(&receipt.isolated_root);
-    let copied = isolated.join("lkjscript").display().to_string();
+    let copied = receipt.host_path.clone();
     let mut installed = Vec::new();
     for (call, (name, artifact, target)) in numerical.calls.iter().zip(required) {
         require(
@@ -1481,7 +1478,7 @@ pub(super) fn validate(
             )?;
             installed.push(call.command);
             vec![
-                receipt.pinned_runtime_path.clone(),
+                receipt.host_path.clone(),
                 "run".into(),
                 "--deployment".into(),
                 isolated
@@ -1617,8 +1614,7 @@ mod tests {
             std::env::var_os("LKJSCRIPT_F64_ARGUMENT_VERIFIER").expect("original verifier"),
         );
         let mut receipt: Receipt = serde_json::from_slice(&fs::read(&source).unwrap()).unwrap();
-        let candidate = PathBuf::from(&receipt.pinned_runtime_path);
-        super::super::finite::read_focused(&source, &candidate, &verifier)
+        super::super::finite::read_focused(&source, &verifier)
             .expect("unaltered original passes current reader");
         let owned = tempfile::tempdir().unwrap();
         for file in &receipt.files {
@@ -1632,7 +1628,7 @@ mod tests {
         receipt.evidence_root = owned.path().display().to_string();
         let path = owned.path().join("receipt.json");
         fs::write(&path, evidence::encode_json(&receipt).unwrap()).unwrap();
-        super::super::finite::read_focused(&path, &candidate, &verifier)
+        super::super::finite::read_focused(&path, &verifier)
             .expect("owned relocated fixture passes");
         let numerical: NumericalEvidence =
             serde_json::from_str(&receipt.observations["f64"]).unwrap();
@@ -1653,7 +1649,7 @@ mod tests {
         arguments[length - 2] = "--arguments".into();
         arguments[length - 1] = input.clone();
         fs::write(&path, evidence::encode_json(&fault).unwrap()).unwrap();
-        let rejected = super::super::finite::read_focused(&path, &candidate, &verifier)
+        let rejected = super::super::finite::read_focused(&path, &verifier)
             .expect_err("inline substitution must not prove file delivery");
         assert!(
             rejected
@@ -1669,7 +1665,7 @@ mod tests {
             .find(|file| file.path == name)
             .unwrap() = evidence::proof(&owned.path().join(name), name.to_owned()).unwrap();
         fs::write(&path, evidence::encode_json(&fault).unwrap()).unwrap();
-        let rejected = super::super::finite::read_focused(&path, &candidate, &verifier)
+        let rejected = super::super::finite::read_focused(&path, &verifier)
             .expect_err("rehashed padding removal must not prove large file delivery");
         assert!(
             rejected
@@ -1690,7 +1686,7 @@ mod tests {
         assert_eq!(arguments[length - 2], "--result-file");
         arguments.truncate(length - 2);
         fs::write(&path, evidence::encode_json(&fault).unwrap()).unwrap();
-        let rejected = super::super::finite::read_focused(&path, &candidate, &verifier)
+        let rejected = super::super::finite::read_focused(&path, &verifier)
             .expect_err("inline result substitution must not prove result-file delivery");
         assert!(
             rejected
@@ -1711,14 +1707,13 @@ mod tests {
             .find(|file| file.path == name)
             .unwrap() = evidence::proof(&owned.path().join(name), name.to_owned()).unwrap();
         fs::write(&path, evidence::encode_json(&fault).unwrap()).unwrap();
-        let rejected = super::super::finite::read_focused(&path, &candidate, &verifier)
+        let rejected = super::super::finite::read_focused(&path, &verifier)
             .expect_err("rehashed result mutation must fail independent arithmetic expectation");
         assert!(rejected.to_string().contains("independently expected"));
         fs::write(owned.path().join(name), original).unwrap();
         fs::write(&path, evidence::encode_json(&receipt).unwrap()).unwrap();
-        super::super::finite::read_focused(&path, &candidate, &verifier)
+        super::super::finite::read_focused(&path, &verifier)
             .expect("healthy restored fixture passes");
-        super::super::finite::read_focused(&source, &candidate, &verifier)
-            .expect("originals remain untouched");
+        super::super::finite::read_focused(&source, &verifier).expect("originals remain untouched");
     }
 }

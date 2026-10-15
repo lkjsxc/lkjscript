@@ -28,7 +28,7 @@ use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const ADMISSION_SCHEMA: &str = "lkjscript-target-admission-receipt";
-const ADMISSION_SCHEMA_VERSION: u32 = 5;
+const ADMISSION_SCHEMA_VERSION: u32 = 6;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(120);
 const ORACLE_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 const IMAGE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
@@ -40,6 +40,7 @@ const MAXIMUM_ROOTFS_ARCHIVE_BYTES: u64 = 256 * 1024 * 1024;
 struct Options {
     candidate: PathBuf,
     build_receipt: PathBuf,
+    source_receipt: PathBuf,
     evidence_root: PathBuf,
 }
 
@@ -122,6 +123,7 @@ struct OracleObservation {
     runners: u64,
     requests: u64,
     cleanup_complete: bool,
+    source_semantics: Option<evidence::FileProof>,
     prerequisite: String,
 }
 
@@ -141,6 +143,7 @@ pub(super) struct TargetAdmissionReceipt {
     schema: SchemaIdentity,
     status: AdmissionStatus,
     source_commit: String,
+    source_semantics: crate::check::SourceProof,
     target_policy_sha256: String,
     target_triple: String,
     runtime_linkage: String,
@@ -181,6 +184,8 @@ pub(super) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
     super::require_absolute_regular(&options.build_receipt, "target build receipt")?;
     let source_commit = super::command_text("git", &["rev-parse", "HEAD"], &repository, 1024)?;
     super::validate_git_sha(&source_commit, "target admission source commit")?;
+    let source =
+        crate::check::AdmittedSource::read(&repository, &options.source_receipt, &source_commit)?;
     let build_receipt = target::read_build_receipt(&options.build_receipt, &options.candidate)?;
     if build_receipt.source_commit != source_commit {
         return Err(DevError::corrupt(
@@ -209,6 +214,7 @@ pub(super) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         &repository,
         &verifier_path,
         &options.candidate,
+        &source,
     )?;
     let classifications = vec![
         fresh(
@@ -233,11 +239,11 @@ pub(super) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         ),
         fresh(
             "offline_packages",
-            "transferred public-authored offline package closure and standalone HTTP oracle passed",
+            "admitted complete source package semantics plus exact final executable boundary passed",
         ),
         fresh(
             "pure_tail",
-            "transferred public pure-tail, bounded-stack and transactional HTTP oracle passed",
+            "admitted complete source tail semantics plus exact final command and transactional HTTP boundaries passed",
         ),
         fresh(
             "stateful_http",
@@ -255,6 +261,7 @@ pub(super) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         },
         status: AdmissionStatus::Passed,
         source_commit,
+        source_semantics: source.proof().clone(),
         target_policy_sha256: target::policy_sha256()?,
         target_triple: target::TARGET_TRIPLE.to_owned(),
         runtime_linkage: target::LINKAGE_MODEL.to_owned(),
@@ -273,7 +280,14 @@ pub(super) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         cleanup_complete: true,
         failure: None,
     };
-    validate_receipt(&receipt, &options.candidate, &build_receipt, &verifier_path)?;
+    source.unchanged()?;
+    validate_receipt(
+        &receipt,
+        &options.candidate,
+        &build_receipt,
+        &verifier_path,
+        &source,
+    )?;
     let receipt_path = evidence_root.join("receipt.json");
     let published = evidence::publish_json(&receipt_path, &receipt)?;
     let (receipt_sha256, receipt_bytes) = archive::sha256_file(&receipt_path)?;
@@ -312,6 +326,15 @@ pub(super) fn read_receipt(
     candidate: &Path,
     expected_source_commit: &str,
 ) -> Result<TargetAdmissionReceipt, DevError> {
+    let receipt = decode_receipt(path)?;
+    let repository = super::repository_root()?;
+    let original = receipt.source_semantics.original_path(&repository)?;
+    let source =
+        crate::check::AdmittedSource::read(&repository, &original, expected_source_commit)?;
+    read_receipt_with_source(path, candidate, expected_source_commit, &source)
+}
+
+fn decode_receipt(path: &Path) -> Result<TargetAdmissionReceipt, DevError> {
     let metadata = fs::symlink_metadata(path).map_err(|error| {
         DevError::infrastructure(format!(
             "inspect target admission receipt '{}': {error}",
@@ -340,6 +363,17 @@ pub(super) fn read_receipt(
             "target admission receipt is not in canonical evidence encoding",
         ));
     }
+    Ok(receipt)
+}
+
+pub(super) fn read_receipt_with_source(
+    path: &Path,
+    candidate: &Path,
+    expected_source_commit: &str,
+    source: &crate::check::AdmittedSource,
+) -> Result<TargetAdmissionReceipt, DevError> {
+    source.unchanged()?;
+    let receipt = decode_receipt(path)?;
     if receipt.source_commit != expected_source_commit {
         return Err(DevError::corrupt(
             "target admission receipt selects a foreign source commit",
@@ -348,7 +382,7 @@ pub(super) fn read_receipt(
     let build_path = Path::new(&receipt.build_receipt.path);
     let build_receipt = target::read_build_receipt(build_path, candidate)?;
     let verifier = current_verifier()?;
-    validate_receipt(&receipt, candidate, &build_receipt, &verifier)?;
+    validate_receipt(&receipt, candidate, &build_receipt, &verifier, source)?;
     if receipt.build_receipt != external_evidence(build_path)? {
         return Err(DevError::corrupt(
             "target admission build-receipt evidence changed",
@@ -373,6 +407,7 @@ pub(super) fn read_receipt(
                 return Err(DevError::corrupt("target child receipt is foreign"));
             }
             let facts = role.read(child_path, candidate, &verifier)?;
+            role.verify_source(&facts, source)?;
             if facts.verifier_sha256 != item.verifier_sha256
                 || facts.candidate_sha256 != item.candidate_sha256
                 || facts.commands != item.commands
@@ -380,6 +415,7 @@ pub(super) fn read_receipt(
                 || facts.requests != item.requests
                 || facts.elapsed_nanoseconds != item.elapsed_nanoseconds
                 || facts.cleanup_complete != item.cleanup_complete
+                || facts.source_semantics != item.source_semantics
             {
                 return Err(DevError::corrupt("target child facts differ"));
             }
@@ -387,7 +423,8 @@ pub(super) fn read_receipt(
             service::read_receipt(child_path, candidate)?;
         }
     }
-    originals::verify(path, &receipt, candidate, &verifier)?;
+    originals::verify(path, &receipt, candidate, &verifier, source)?;
+    source.unchanged()?;
     Ok(receipt)
 }
 
@@ -410,6 +447,7 @@ fn validate_receipt(
     candidate_path: &Path,
     build_receipt: &TargetBuildReceipt,
     verifier_path: &Path,
+    source: &crate::check::AdmittedSource,
 ) -> Result<(), DevError> {
     let observed_candidate = target::observe_candidate(candidate_path)?;
     let observed_verifier = executable_binding(verifier_path)?;
@@ -453,6 +491,8 @@ fn validate_receipt(
     if receipt.schema.identity != ADMISSION_SCHEMA
         || receipt.schema.version != ADMISSION_SCHEMA_VERSION
         || receipt.status != AdmissionStatus::Passed
+        || receipt.source_semantics != *source.proof()
+        || receipt.source_commit != source.source_commit()
         || receipt.target_policy_sha256 != target::policy_sha256()?
         || receipt.target_triple != target::TARGET_TRIPLE
         || receipt.runtime_linkage != target::LINKAGE_MODEL
@@ -479,6 +519,7 @@ fn validate_receipt(
             item.status != AdmissionStatus::Passed
                 || item.candidate_sha256 != receipt.candidate.sha256
                 || !item.cleanup_complete
+                || (item.name == "service_acceptance" && item.source_semantics.is_some())
         })
         || expected_classifications.as_slice() != observed_classifications
         || receipt.classifications.iter().any(|item| {
@@ -927,27 +968,21 @@ fn run_oracles(
     repository: &Path,
     verifier: &Path,
     candidate: &Path,
+    source: &crate::check::AdmittedSource,
 ) -> Result<Vec<OracleObservation>, DevError> {
     let mut observations = Vec::new();
     for role in ORACLES {
         let root = context.evidence_root.join(role.name());
         context.invoke(
             role.name(),
-            vec![
-                verifier.display().to_string(),
-                role.name().to_owned(),
-                "--binary".to_owned(),
-                candidate.display().to_string(),
-                "--evidence-root".to_owned(),
-                root.display().to_string(),
-                "--machine".to_owned(),
-            ],
+            role.invocation(verifier, candidate, &root, source)?,
             Expected::Passed,
             role.timeout(),
             false,
         )?;
         let path = root.join("receipt.json");
         let facts = role.read(&path, candidate, verifier)?;
+        role.verify_source(&facts, source)?;
         observations.push(OracleObservation {
             name: role.admission_name().to_owned(),
             status: AdmissionStatus::Passed,
@@ -959,6 +994,7 @@ fn run_oracles(
             runners: facts.runners,
             requests: facts.requests,
             cleanup_complete: facts.cleanup_complete,
+            source_semantics: facts.source_semantics,
             prerequisite: role.prerequisite().to_owned(),
         });
     }
@@ -1004,6 +1040,7 @@ fn run_oracles(
         runners: service.runners,
         requests: service.requests,
         cleanup_complete: service.cleanup_complete,
+        source_semantics: None,
         prerequisite: service::DATA_CONTRACT.to_owned(),
     });
     Ok(observations)
@@ -1332,7 +1369,7 @@ fn parse_options(mut arguments: impl Iterator<Item = OsString>) -> Result<Option
     while let Some(argument) = crate::next_utf8(&mut arguments, "target admission option")? {
         if !matches!(
             argument.as_str(),
-            "--candidate" | "--build-receipt" | "--evidence-root"
+            "--candidate" | "--build-receipt" | "--source-receipt" | "--evidence-root"
         ) {
             return Err(DevError::usage(format!(
                 "unknown target admission option '{argument}'"
@@ -1358,6 +1395,7 @@ fn parse_options(mut arguments: impl Iterator<Item = OsString>) -> Result<Option
     Ok(Options {
         candidate: take("--candidate")?,
         build_receipt: take("--build-receipt")?,
+        source_receipt: take("--source-receipt")?,
         evidence_root: take("--evidence-root")?,
     })
 }
@@ -1455,17 +1493,31 @@ mod tests {
             "/a",
             "--build-receipt",
             "/b",
+            "--source-receipt",
+            "/source",
             "--evidence-root",
             "/c",
         ])
         .expect("complete admission options");
         assert_eq!(parsed.candidate, Path::new("/a"));
+        assert_eq!(parsed.source_receipt, Path::new("/source"));
+        assert!(
+            parse(&[
+                "--candidate",
+                "/a",
+                "--build-receipt",
+                "/b",
+                "--evidence-root",
+                "/c"
+            ])
+            .is_err()
+        );
     }
 
     #[test]
     fn admission_schema_and_required_classifications_are_stable() {
         assert_eq!(ADMISSION_SCHEMA, "lkjscript-target-admission-receipt");
-        assert_eq!(ADMISSION_SCHEMA_VERSION, 5);
+        assert_eq!(ADMISSION_SCHEMA_VERSION, 6);
         assert_eq!(
             [
                 "static_linkage",

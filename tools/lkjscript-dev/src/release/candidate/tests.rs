@@ -50,8 +50,8 @@ fn terminal() -> Terminal {
         source_commit: "1".repeat(40),
         controller_source_commit: "1".repeat(40),
         tag: "v0.1.39".to_owned(),
-        acceptance_contract: "lkjscript-final-candidate-acceptance-13".to_owned(),
-        workload: "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-13"
+        acceptance_contract: "lkjscript-final-candidate-acceptance-14".to_owned(),
+        workload: "release-source-semantic-matrices+six-target-owners+two-pinned-userlands+installed-recovery+seven-native-boundary-smokes-14"
             .to_owned(),
         target_triple: "x86_64-unknown-linux-musl".to_owned(),
         target_policy_sha256: target::policy_sha256().expect("current target policy"),
@@ -79,11 +79,12 @@ fn terminal() -> Terminal {
         .collect(),
         manifest_sha256: Some(Sha256Digest::new("3".repeat(64)).expect("manifest digest")),
         executable: Some(identity("lkjscript")),
-        source_gates: 23,
-        native_public_workers: Some(16),
+        source_gates: 25,
+        native_boundary_workers: Some(16),
+        native_boundary_smokes: 7,
         target_owners: 6,
         userlands: 2,
-        proofs: ["release-source", "native-public-harness", "final-target", "installation"]
+        proofs: ["release-source", "native-boundary-smokes", "final-target", "installation"]
             .into_iter()
             .map(|name| Proof {
                 name: name.to_owned(),
@@ -119,7 +120,7 @@ fn candidate_terminal_admits_portable_recorded_workers_and_refuses_missing_or_in
     let path = temporary.path().join("terminal.json");
     for workers in [Some(1), Some(16), None, Some(0), Some(17)] {
         let mut recorded = terminal();
-        recorded.native_public_workers = workers;
+        recorded.native_boundary_workers = workers;
         write_terminal(&path, &recorded);
         let admitted = matches!(workers, Some(1 | 16));
         assert_eq!(read_terminal(&path).is_ok(), admitted, "{workers:?}");
@@ -130,7 +131,20 @@ fn candidate_terminal_admits_portable_recorded_workers_and_refuses_missing_or_in
         );
     }
     let canonical = String::from_utf8(evidence::encode_json(&terminal()).unwrap()).unwrap();
-    let field = "  \"native_public_workers\": 16,\n";
+    let field = "  \"native_boundary_workers\": 16,\n";
+    assert_eq!(canonical.matches(field).count(), 1);
+    fs::write(&path, canonical.replace(field, "")).unwrap();
+    assert!(read_terminal(&path).is_err());
+    for count in [0, 6, 8] {
+        let mut recorded = terminal();
+        recorded.native_boundary_smokes = count;
+        write_terminal(&path, &recorded);
+        assert!(
+            read_terminal(&path).is_err(),
+            "accepted {count} boundary smokes"
+        );
+    }
+    let field = "  \"native_boundary_smokes\": 7,\n";
     assert_eq!(canonical.matches(field).count(), 1);
     fs::write(&path, canonical.replace(field, "")).unwrap();
     assert!(read_terminal(&path).is_err());
@@ -344,7 +358,7 @@ fn candidate_requires_current_native_public_proof_without_relabelling_foreign_ev
     let mut missing = original.clone();
     missing
         .proofs
-        .retain(|proof| proof.name != "native-public-harness");
+        .retain(|proof| proof.name != "native-boundary-smokes");
     assert!(validate_terminal(&missing).is_err());
     let mut duplicate = original.clone();
     duplicate.proofs[1] = duplicate.proofs[0].clone();
@@ -353,8 +367,8 @@ fn candidate_requires_current_native_public_proof_without_relabelling_foreign_ev
     empty.proofs[1].receipt.byte_length = 0;
     assert!(validate_terminal(&empty).is_err());
     let mut foreign = missing;
-    foreign.acceptance_contract = "lkjscript-final-candidate-acceptance-13-foreign".to_owned();
-    foreign.workload = "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-13-foreign".to_owned();
+    foreign.acceptance_contract = "lkjscript-final-candidate-acceptance-14-foreign".to_owned();
+    foreign.workload = "release-source-semantic-matrices+six-target-owners+two-pinned-userlands+installed-recovery+seven-native-boundary-smokes-14-foreign".to_owned();
     assert!(validate_terminal(&foreign).is_err());
     let mut relabelled = foreign;
     relabelled.acceptance_contract = original.acceptance_contract;
@@ -369,26 +383,26 @@ fn candidate_terminal_rejects_foreign_and_mismatched_current_contract_then_recov
     let current = terminal();
     assert_eq!(
         current.acceptance_contract,
-        "lkjscript-final-candidate-acceptance-13"
+        "lkjscript-final-candidate-acceptance-14"
     );
     assert_eq!(
         current.workload,
-        "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-13"
+        "release-source-semantic-matrices+six-target-owners+two-pinned-userlands+installed-recovery+seven-native-boundary-smokes-14"
     );
     write_terminal(&path, &current);
     assert!(read_terminal(&path).is_ok());
     for (contract, workload) in [
         (
-            "lkjscript-final-candidate-acceptance-13-foreign",
+            "lkjscript-final-candidate-acceptance-14-foreign",
             current.workload.as_str(),
         ),
         (
             current.acceptance_contract.as_str(),
-            "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-13-foreign",
+            "release-source-semantic-matrices+six-target-owners+two-pinned-userlands+installed-recovery+seven-native-boundary-smokes-14-foreign",
         ),
         (
-            "lkjscript-final-candidate-acceptance-13-foreign",
-            "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-13-foreign",
+            "lkjscript-final-candidate-acceptance-14-foreign",
+            "release-source-semantic-matrices+six-target-owners+two-pinned-userlands+installed-recovery+seven-native-boundary-smokes-14-foreign",
         ),
     ] {
         let mut mismatched = current.clone();

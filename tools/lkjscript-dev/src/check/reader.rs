@@ -14,11 +14,20 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Component, Path};
 
-pub(crate) fn read_release_source_receipt(
+pub(super) struct AdmittedOriginal {
+    pub(super) path: std::path::PathBuf,
+    pub(super) repository: std::path::PathBuf,
+    pub(super) proof: FileProof,
+    pub(super) receipt: CheckReceipt,
+    pub(super) registry: registry::GateRegistry,
+    pub(super) gates: usize,
+}
+
+pub(super) fn read_release_source_receipt(
     path: &Path,
     repository: &Path,
     commit_sha: &str,
-) -> Result<usize, DevError> {
+) -> Result<AdmittedOriginal, DevError> {
     let path = canonical_regular(path)?;
     let repository = repository.canonicalize()?;
     let root = path
@@ -29,6 +38,7 @@ pub(crate) fn read_release_source_receipt(
             && path.file_name().is_some_and(|name| name == "receipt.json"),
         "source receipt is outside its producing checker run",
     )?;
+    let proof = evidence::proof(&path, evidence::relative(&repository, &path))?;
     let receipt: CheckReceipt = read_original(&path)?;
     let registry = registry::base_registry(&repository, root, &root.join("lkjscript-dev"))?;
     require(
@@ -39,7 +49,7 @@ pub(crate) fn read_release_source_receipt(
         .ok_or_else(|| DevError::infrastructure("source producer profile is absent"))?;
     let required = registry::profile("release-source")
         .ok_or_else(|| DevError::infrastructure("release-source profile is absent"))?;
-    admit_required_source(
+    let gates = admit_required_source(
         &path,
         &repository,
         commit_sha,
@@ -47,7 +57,16 @@ pub(crate) fn read_release_source_receipt(
         &registry,
         &requested,
         &required,
-    )
+    )?;
+    verify_retained(&repository, &path, &proof)?;
+    Ok(AdmittedOriginal {
+        path,
+        repository,
+        proof,
+        receipt,
+        registry,
+        gates,
+    })
 }
 
 fn admit_required_source(

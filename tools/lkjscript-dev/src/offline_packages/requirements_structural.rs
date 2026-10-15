@@ -259,7 +259,7 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<(), DevError> {
     )?;
     let original_root = Path::new(&receipt.isolated_root);
     let original_evidence = Path::new(&receipt.evidence_root);
-    let copied = original_root.join("lkjscript").display().to_string();
+    let copied = receipt.host_path.clone();
     for (name, package, flat, structural) in [
         (
             "producer",

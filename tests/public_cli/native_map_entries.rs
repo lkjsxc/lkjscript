@@ -5,6 +5,7 @@ mod cases;
 #[allow(dead_code)]
 #[path = "../native_components_support/mod.rs"]
 pub(super) mod support;
+use super::semantic_cli::Mode;
 use serde_json::{Value, json};
 use std::fs;
 use support::batch::BatchCase;
@@ -12,11 +13,21 @@ use support::{Native, digest, path, quoted};
 
 #[test]
 fn native_map_entries_preserve_results_and_linear_projection_work_after_detachment() {
-    let candidate = super::binary();
-    let candidate_hash = digest(&candidate);
-    let public = Native::from_candidate(&candidate);
-    assert_eq!(candidate_hash, digest(&public.root.join("lkjscript")));
-    let executable = digest(&public.root.join("lkjscript"));
+    let candidate = if std::env::var_os(super::RELEASE_CANDIDATE_ENVIRONMENT).is_some() {
+        Some(super::binary())
+    } else {
+        std::env::var_os("LKJSCRIPT_COMPONENT_CANDIDATE").map(std::path::PathBuf::from)
+    };
+    let public = candidate
+        .as_deref()
+        .map_or_else(Native::new, Native::from_candidate);
+    let mode = Mode::for_candidate(candidate.is_some());
+    assert_eq!(public.execution_evidence()["mode"], mode.label());
+    let candidate_hash = candidate.as_ref().map(|candidate| {
+        let hash = digest(candidate);
+        assert_eq!(hash, digest(&public.root.join("lkjscript")));
+        hash
+    });
     let standard = public.export(None, "standard");
     let project = public.project("application");
     public.stage(&project, &standard);
@@ -35,7 +46,8 @@ fn native_map_entries_preserve_results_and_linear_projection_work_after_detachme
         "../../examples/map-entry-projection/command.deployment.json"
     ))
     .unwrap();
-    let descriptor = public.input("command.deployment.json", &deployment.to_string());
+    let descriptor = public.root.join("command.deployment.json");
+    fs::write(&descriptor, deployment.to_string()).unwrap();
     let smoke = cases::input(8, 3);
     let arguments = public.input("attached.json", &json!([true, smoke, 3]).to_string());
     public.compare(
@@ -103,7 +115,7 @@ fn native_map_entries_preserve_results_and_linear_projection_work_after_detachme
         206,
         "every original detached matrix/refusal/recovery row"
     );
-    // The same complete inventory also exercises the selected product's source differential.
+    // The same complete inventory exercises the source differential in the selected mode.
     // Expectations and modeled work remain in this independent harness.
     let source_outputs =
         public.source_batch("map-matrix", &project, "map-entry-projection", &batch);
@@ -127,6 +139,7 @@ fn native_map_entries_preserve_results_and_linear_projection_work_after_detachme
     }
     fs::remove_dir_all(project).unwrap();
     fs::remove_file(public.root.join("standard.lkjp")).unwrap();
+    public.sources_detached();
     let outputs = public.batch("map-matrix", &descriptor, &batch);
     let mut rows = Vec::new();
     for (n, shape, k, nodes, first) in pairs {
@@ -152,14 +165,45 @@ fn native_map_entries_preserve_results_and_linear_projection_work_after_detachme
         &arguments,
         &cases::expected(&smoke, 3),
     );
+    if mode == Mode::HostSemantic {
+        assert_eq!(public.execution_evidence()["detached_binary_smokes"], 1);
+    }
     public.batch_controls(
         &descriptor,
         &json!([true, smoke, 3]),
         &cases::expected(&smoke, 3),
     );
-    support::source_batch::controls(&candidate);
-    assert_eq!(candidate_hash, digest(&candidate));
-    assert_eq!(executable, digest(&public.root.join("lkjscript")));
+    support::source_batch::controls_in(mode, &public.root.join("lkjscript"));
+    if let (Some(candidate), Some(expected)) = (&candidate, &candidate_hash) {
+        assert_eq!(&digest(candidate), expected);
+        assert_eq!(&digest(&public.root.join("lkjscript")), expected);
+    }
     assert_eq!(artifact_hash, digest(&artifact));
-    public.input("map-entry-matrix.json",&json!({"purpose":"Complete public result and modeled-work evidence, not a timing or publication receipt","status":"passed","binary_sha256":executable,"artifact_sha256":artifact_hash,"sources_deleted":true,"source_batch_rows":source_outputs.len(),"source_pairs":source_rows,"candidate_batch_rows":batch.len(),"pairs":rows}).to_string());
+    let validator = lkjscript::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    public.input(
+        "map-entry-matrix.json",
+        &json!({
+            "purpose":"Complete public result and modeled-work evidence, not a timing or publication receipt",
+            "status":"passed",
+            "execution":public.execution_evidence(),
+            "matrix_adapter":if mode == Mode::HostSemantic { "public-cli" } else { "selected-executable" },
+            "source_identity":{
+                "canonical_schema":lkjscript::platform::canonical_schema::CANONICAL_SCHEMA_HASH_HEX,
+                "validator_implementation":validator,
+            },
+            "selected_candidate":candidate.as_ref().map(|candidate| json!({
+                "path":candidate,"sha256":candidate_hash,
+            })),
+            "artifact_sha256":artifact_hash,
+            "sources_deleted":true,
+            "source_batch_rows":source_outputs.len(),
+            "source_pairs":source_rows,
+            "deployment_batch_rows":outputs.len(),
+            "pairs":rows,
+        })
+        .to_string(),
+    );
 }

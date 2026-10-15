@@ -222,16 +222,12 @@ fn request_bytes(cases: &[Case]) -> Result<Vec<u8>, DevError> {
 
 pub(super) fn execute(context: &mut Context, package: &Package) -> Result<(), DevError> {
     let authority = authority::observe_graph_authority(&package.path)?;
-    require(
-        digest(&context.binary)? == context.receipt.candidate_sha256,
-        "source batch candidate changed before its boundary",
-    )?;
     fs::write(
         context.output.join(HEAD_FILE),
         process::read_bounded(&package.path.join("HEAD"), 1024 * 1024)?,
     )?;
     let smoke_command_index = context.receipt.commands.len();
-    // Retain a real, separately prepared public source process after supplier removal.
+    // Separately prepare the ordinary public source call after supplier removal.
     context.run(package, "map", SMOKE_ARGUMENTS, SMOKE_EXPECTED)?;
     let cases = cases()?;
     let requests = request_bytes(&cases)?;
@@ -254,8 +250,7 @@ pub(super) fn execute(context: &mut Context, package: &Package) -> Result<(), De
     let authority_after = authority::observe_graph_authority(&package.path)?;
     require(
         authority == authority_after
-            && process::read_bounded(&input, MAXIMUM_BATCH_BYTES)? == requests
-            && digest(&context.binary)? == context.receipt.candidate_sha256,
+            && process::read_bounded(&input, MAXIMUM_BATCH_BYTES)? == requests,
         "source batch changed accepted authority or exact input bytes",
     )?;
     context.bound()?;
@@ -313,14 +308,16 @@ fn command_records(
         .ok_or_else(|| DevError::corrupt("source batch command index absent"))?;
     require(
         command.expected_success
-            && command.observation.status == process::ProcessStatus::Passed
-            && command.observation.exit_code == Some(0)
-            && command.observation.stdout.path == format!("command-{index:04}.stdout"),
-        "source batch boundary is not a successful actual candidate process",
+            && command.observation.as_semantic().is_some()
+            && command.observation.returned_success()
+            && command.observation.reported_code() == Some(0)
+            && command.observation.stdout().path == format!("command-{index:04}.stdout"),
+        "source batch boundary is not a successful linked public operation",
     )?;
-    evidence::verify_process_files(root, &command.observation)?;
+    command.observation.require_outcome(true)?;
+    command.observation.require_arguments(&command.command)?;
     records(&process::read_bounded(
-        &root.join(&command.observation.stdout.path),
+        &root.join(&command.observation.stdout().path),
         MAXIMUM_OUTPUT,
     )?)
 }
@@ -331,7 +328,6 @@ fn inspect(
     evidence: &Evidence,
 ) -> Result<BTreeMap<String, serde_json::Value>, DevError> {
     let isolated = Path::new(&receipt.isolated_root);
-    let program = isolated.join("lkjscript").display().to_string();
     let project = isolated.join("consumer").display().to_string();
     require(
         evidence.smoke_command_index.checked_add(1) == Some(evidence.command_index),
@@ -342,7 +338,6 @@ fn inspect(
     require(
         receipt.commands[evidence.smoke_command_index].command
             == [
-                program.clone(),
                 "--project".to_owned(),
                 project.clone(),
                 "run".to_owned(),
@@ -352,7 +347,6 @@ fn inspect(
             ]
             && receipt.commands[evidence.command_index].command
                 == [
-                    program,
                     "--project".to_owned(),
                     project,
                     "run".to_owned(),
@@ -362,7 +356,7 @@ fn inspect(
                     "--batch-result-file".to_owned(),
                     root.join(RESULT_FILE).display().to_string(),
                 ],
-        "source batch or ordinary smoke used foreign process arguments",
+        "source batch or ordinary smoke used foreign public operation arguments",
     )?;
     require(
         field(&smoke, "result", "status")? == "success"

@@ -4,6 +4,9 @@ use std::io::Write;
 use std::net::{SocketAddr, TcpStream};
 use std::time::{Duration, Instant};
 
+#[path = "native_resident.rs"]
+pub(super) mod resident;
+
 pub(super) struct Reply {
     pub status: u16,
     pub headers: String,
@@ -11,10 +14,15 @@ pub(super) struct Reply {
 }
 
 pub(super) struct Server {
-    child: support::SpawnedChild,
+    owner: Owner,
     output: PathBuf,
     errors: PathBuf,
     pub address: SocketAddr,
+}
+
+enum Owner {
+    Process(support::SpawnedChild),
+    Host(resident::Resident),
 }
 
 fn events(path: &Path) -> Vec<Value> {
@@ -45,6 +53,29 @@ impl Server {
     ) -> Self {
         let output = public.root.path().join(format!("{label}.stdout"));
         let errors = public.root.path().join(format!("{label}.stderr"));
+        if public.mode == crate::semantic_cli::Mode::HostSemantic
+            && resident::eligible(&[deployment.to_path_buf()], environment)
+        {
+            let host = resident::Resident::start(
+                vec![deployment.to_path_buf()],
+                false,
+                output.clone(),
+                errors.clone(),
+                Duration::from_secs(30),
+                Duration::from_secs(15),
+            );
+            let address = host.ready["local_address"]
+                .as_str()
+                .unwrap()
+                .parse()
+                .unwrap();
+            return Self {
+                owner: Owner::Host(host),
+                output,
+                errors,
+                address,
+            };
+        }
         let mut child = support::spawn(
             Command::new(&public.executable)
                 .args(["serve", "--deployment", path(deployment)])
@@ -65,7 +96,7 @@ impl Server {
             {
                 let address = ready["local_address"].as_str().unwrap().parse().unwrap();
                 return Self {
-                    child,
+                    owner: Owner::Process(child),
                     output,
                     errors,
                     address,
@@ -83,15 +114,40 @@ impl Server {
     }
 
     pub fn stop(self) {
-        self.stop_with_signal(rustix::process::Signal::INT);
+        match self.owner {
+            Owner::Host(host) => Self::checked_stop(host.stop(), true),
+            Owner::Process(child) => Self::stop_process(
+                child,
+                &self.output,
+                &self.errors,
+                rustix::process::Signal::INT,
+            ),
+        }
     }
 
-    pub fn stop_with_signal(mut self, signal: rustix::process::Signal) {
-        let pid = rustix::process::Pid::from_raw(i32::try_from(self.child.id()).unwrap()).unwrap();
+    pub fn stop_with_signal(self, signal: rustix::process::Signal) {
+        let process = match self.owner {
+            Owner::Process(child) => Some(child),
+            Owner::Host(host) => {
+                drop(host); // Join actual owned resources before failing this boundary assertion.
+                None
+            }
+        };
+        let child = process.expect("stop_with_signal requires an actual process owner");
+        Self::stop_process(child, &self.output, &self.errors, signal);
+    }
+
+    fn stop_process(
+        mut child: support::SpawnedChild,
+        output: &Path,
+        errors: &Path,
+        signal: rustix::process::Signal,
+    ) {
+        let pid = rustix::process::Pid::from_raw(i32::try_from(child.id()).unwrap()).unwrap();
         rustix::process::kill_process(pid, signal).unwrap();
         let until = Instant::now() + Duration::from_secs(15);
         loop {
-            if let Some(status) = self.child.try_wait().unwrap() {
+            if let Some(status) = child.try_wait().unwrap() {
                 assert!(
                     status.success(),
                     "native HTTP server failed to join: {status}"
@@ -101,12 +157,16 @@ impl Server {
             assert!(Instant::now() < until, "native HTTP shutdown deadline");
             std::thread::sleep(Duration::from_millis(10));
         }
-        assert!(self.child.wait_with_output().unwrap().status.success());
-        assert!(std::fs::read(&self.errors).unwrap().is_empty());
-        let stopped = events(&self.output)
+        assert!(child.wait_with_output().unwrap().status.success());
+        assert!(std::fs::read(errors).unwrap().is_empty());
+        let stopped = events(output)
             .into_iter()
             .find(|event| event["event"] == "stopped")
             .unwrap();
+        Self::checked_stop(stopped, false);
+    }
+
+    fn checked_stop(stopped: Value, host: bool) {
         assert_eq!(stopped["receipt"]["shutdown"]["admission_stopped"], true);
         assert_eq!(stopped["receipt"]["shutdown"]["remaining_tasks"], 0);
         assert_eq!(
@@ -117,6 +177,19 @@ impl Server {
         assert_eq!(stopped["receipt"]["runtime"]["worker_permits"], 0);
         assert_eq!(stopped["receipt"]["runtime"]["resident"]["active"], 0);
         assert_eq!(stopped["receipt"]["runtime"]["resident"]["queued"], 0);
+        assert_eq!(stopped["executor"]["dispatch_open"], false);
+        assert_eq!(stopped["executor"]["active_dispatches"], 0);
+        assert_eq!(stopped["executor"]["remaining_workers"], 0);
+        if host {
+            resident::check_executor(&stopped["executor"]).unwrap();
+        } else {
+            assert_eq!(stopped["executor"]["workers_received"], 0);
+            assert_eq!(stopped["executor"]["workers_handed_off"], 0);
+            assert_eq!(
+                stopped["executor"]["joined_workers"],
+                stopped["executor"]["workers_started"]
+            );
+        }
     }
 }
 

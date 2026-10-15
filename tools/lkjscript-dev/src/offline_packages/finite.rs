@@ -156,13 +156,10 @@ fn validate_rejections(receipt: &Receipt, root: &Path) -> Result<(), DevError> {
             .ok_or_else(|| DevError::corrupt("finite public rejection command missing"))?;
         require(
             !command.expects_success
-                && command.observation.exit_code == Some(2)
+                && command.observation.reported_code() == Some(2)
                 && command.command
                     == [
-                        Path::new(&receipt.isolated_root)
-                            .join("lkjscript")
-                            .display()
-                            .to_string(),
+                        receipt.host_path.clone(),
                         "--project".into(),
                         Path::new(&receipt.isolated_root)
                             .join("finite-library")
@@ -527,7 +524,7 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
         require(
             command.command
                 == [
-                    receipt.pinned_runtime_path.clone(),
+                    receipt.host_path.clone(),
                     "run".into(),
                     "--deployment".into(),
                     descriptor.display().to_string(),
@@ -537,7 +534,7 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
             "finite call used different invocation or executable",
         )?;
         let output = process::read_bounded(
-            &root.join(&command.observation.stdout.path),
+            &root.join(&command.observation.stdout().path),
             MAXIMUM_OUTPUT_BYTES,
         )?;
         let records = parse_records(label, &output)
@@ -601,34 +598,19 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
 }
 
 fn neutral(context: &mut Context, consumer: &Package) -> Result<(), DevError> {
-    let verifier = std::env::current_exe()?;
-    let spec = process::ProcessSpec {
-        command: vec![
-            verifier.display().to_string(),
-            "effect-probe".into(),
-            consumer.path.display().to_string(),
-            "--case".into(),
-            "finite-callable".into(),
-        ],
-        cwd: context.root.clone(),
-        environment: BTreeMap::from([("LANG".into(), "C.UTF-8".into())]),
-        timeout: Duration::from_secs(180),
-        maximum_stdout_bytes: MAXIMUM_OUTPUT_BYTES,
-        maximum_stderr_bytes: MAXIMUM_OUTPUT_BYTES,
-        stdout_path: context.evidence.join("finite-neutral.stdout"),
-        stderr_path: context.evidence.join("finite-neutral.stderr"),
-        unavailable_exit_code: None,
-    };
-    let observation = process::run(&spec, &context.evidence);
-    context.receipt.observations.insert(
-        "finite_neutral_runner".into(),
-        context.receipt.runners.len().to_string(),
-    );
-    context.receipt.runners.push(observation.clone());
-    require(
-        observation.status == process::ProcessStatus::Passed,
-        "finite neutral reference/production probe failed",
-    )
+    let index = context.receipt.runners.len();
+    let project = consumer.path.clone();
+    context.probe_json(
+        "finite-neutral",
+        "contributor.finite_callable_execution_probe",
+        &[project.display().to_string()],
+        || lkjscript::platform::contributor::finite_callable_execution_probe(&project),
+    )?;
+    context
+        .receipt
+        .observations
+        .insert("finite_neutral_runner".into(), index.to_string());
+    Ok(())
 }
 
 fn validate_neutral(receipt: &Receipt, root: &Path, artifact: &str) -> Result<(), DevError> {
@@ -643,13 +625,25 @@ fn validate_neutral(receipt: &Receipt, root: &Path, artifact: &str) -> Result<()
         .get(index)
         .ok_or_else(|| DevError::corrupt("finite runner absent"))?;
     require(
-        index + 1 == receipt.runners.len()
-            && runner.status == process::ProcessStatus::Passed
-            && runner.exit_code == Some(0)
-            && runner.signal.is_none(),
+        index.checked_add(1) == Some(receipt.runners.len())
+            && runner.as_semantic().is_some()
+            && runner.returned_success(),
         "finite neutral runner did not complete",
     )?;
     verify_observation_files(runner, &receipt.files, "finite-neutral")?;
+    let call = runner
+        .as_semantic()
+        .ok_or_else(|| DevError::corrupt("finite neutral linked call missing"))?;
+    require(
+        call.operation == "contributor.finite_callable_execution_probe"
+            && call.arguments
+                == [Path::new(&receipt.isolated_root)
+                    .join("finite-consumer")
+                    .display()
+                    .to_string()]
+            && call.elapsed_nanoseconds <= Duration::from_secs(180).as_nanos() as u64,
+        "finite neutral explicit fixture or time bound changed",
+    )?;
     let value: Value = serde_json::from_slice(&process::read_bounded(
         &root.join("finite-neutral.stdout"),
         MAXIMUM_OUTPUT_BYTES,
@@ -722,7 +716,7 @@ fn validate_neutral(receipt: &Receipt, root: &Path, artifact: &str) -> Result<()
     Ok(())
 }
 
-pub(super) fn read_focused(path: &Path, candidate: &Path, verifier: &Path) -> Result<(), DevError> {
+pub(super) fn read_focused(path: &Path, verifier: &Path) -> Result<(), DevError> {
     let bytes = process::read_bounded(path, 64 * 1024 * 1024)?;
     let receipt: Receipt = serde_json::from_slice(&bytes)?;
     let root = path
@@ -731,11 +725,11 @@ pub(super) fn read_focused(path: &Path, candidate: &Path, verifier: &Path) -> Re
     require(
         matches!(
             receipt.schema.as_str(),
-            "lkjscript-offline-finite-callable-2"
-                | "lkjscript-offline-requirement-parameters-5"
-                | "lkjscript-offline-f64-1"
-                | "lkjscript-offline-parameter-type-1"
-                | "lkjscript-offline-persistent-maps-2"
+            "lkjscript-offline-finite-callable-semantic-1"
+                | "lkjscript-offline-requirement-parameters-semantic-1"
+                | "lkjscript-offline-f64-semantic-1"
+                | "lkjscript-offline-parameter-type-semantic-1"
+                | "lkjscript-offline-persistent-maps-semantic-1"
         ) && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -744,40 +738,37 @@ pub(super) fn read_focused(path: &Path, candidate: &Path, verifier: &Path) -> Re
     )?;
     require(
         evidence::encode_json(&receipt)? == bytes
-            && receipt.candidate_sha256 == digest_file(candidate, MAXIMUM_EXECUTABLE_BYTES)?
-            && receipt.copied_candidate_sha256 == receipt.candidate_sha256
             && receipt.verifier_sha256 == digest_file(verifier, MAXIMUM_EXECUTABLE_BYTES)?,
         "finite child bytes or executables differ",
     )?;
     verify_file_inventory(&receipt, root)?;
     require(
-        receipt.environment_names == ["LANG"]
+        receipt
+            .environment_names
+            .windows(2)
+            .all(|pair| pair[0] < pair[1])
             && Path::new(&receipt.isolated_root).is_absolute()
-            && Path::new(&receipt.pinned_runtime_path).is_absolute()
-            && Path::new(&receipt.pinned_runtime_path) == candidate.canonicalize()?
+            && Path::new(&receipt.host_path).is_absolute()
+            && Path::new(&receipt.host_path) == verifier.canonicalize()?
             && Path::new(&receipt.evidence_root) == root.canonicalize()?,
         "finite execution paths or environment binding differ",
     )?;
-    let copied_foreground = matches!(
-        receipt.schema.as_str(),
-        "lkjscript-offline-parameter-type-1" | "lkjscript-offline-persistent-maps-2"
-    );
-    let pinned = if receipt.schema == "lkjscript-offline-requirement-parameters-5" {
+    let _ = if receipt.schema == "lkjscript-offline-requirement-parameters-semantic-1" {
         super::requirements::validate(&receipt, root)?
-    } else if receipt.schema == "lkjscript-offline-f64-1" {
+    } else if receipt.schema == "lkjscript-offline-f64-semantic-1" {
         require(
             receipt.inventories.len() == 3,
             "F64 focused source inventories incomplete",
         )?;
         super::f64::validate(&receipt, root, 3)?
-    } else if receipt.schema == "lkjscript-offline-parameter-type-1" {
+    } else if receipt.schema == "lkjscript-offline-parameter-type-semantic-1" {
         require(
             receipt.inventories.len() == 4,
             "parameter-type focused source inventories incomplete",
         )?;
         super::parameter_type::validate(&receipt, root, 0..4)?;
         Vec::new()
-    } else if receipt.schema == "lkjscript-offline-persistent-maps-2" {
+    } else if receipt.schema == "lkjscript-offline-persistent-maps-semantic-1" {
         require(
             receipt.inventories.len() == 4,
             "map focused source inventories incomplete",
@@ -789,28 +780,29 @@ pub(super) fn read_focused(path: &Path, candidate: &Path, verifier: &Path) -> Re
     };
     for (index, command) in receipt.commands.iter().enumerate() {
         require(
-            command.cwd == receipt.isolated_root
-                && command.observation.signal.is_none()
-                && command
-                    .observation
-                    .exit_code
-                    .is_some_and(|code| (code == 0) == command.expects_success),
-            "finite child command status or environment differs",
+            command.observation.as_semantic().is_some()
+                && command.command.first() == Some(&receipt.host_path),
+            "focused source fixture did not use the linked host",
         )?;
-        let installed = pinned.contains(&index)
-            || (!copied_foreground && command.command.get(1).is_some_and(|c| c == "run"));
+        command
+            .observation
+            .require_outcome(command.expects_success)?;
+        command
+            .observation
+            .require_arguments(&command.command[1..])?;
         require(
-            command.command.first()
-                == Some(&if installed {
-                    receipt.pinned_runtime_path.clone()
-                } else {
-                    Path::new(&receipt.isolated_root)
-                        .join("lkjscript")
-                        .display()
-                        .to_string()
-                }),
-            "finite child executable differs",
+            command.observation.elapsed_nanoseconds() <= MAXIMUM_LINKED_CALL_TIME.as_nanos() as u64,
+            "focused linked operation exceeded its time bound",
         )?;
+        let response = parse_records(
+            "focused-semantic-response",
+            &process::read_bounded(
+                &root.join(command.observation.stdout().path.clone()),
+                MAXIMUM_OUTPUT_BYTES,
+            )?,
+        )
+        .map_err(|_| DevError::corrupt("focused semantic response malformed"))?;
+        command.observation.require_public_response(&response)?;
         verify_observation_files(
             &command.observation,
             &receipt.files,

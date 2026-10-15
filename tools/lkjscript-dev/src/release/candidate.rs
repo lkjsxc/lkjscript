@@ -9,17 +9,19 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+mod boundary_evidence;
 pub(super) mod public_harness;
 mod public_inventory;
+mod source_outcomes;
 
-pub(super) const CONTRACT: &str = "lkjscript-final-candidate-acceptance-13";
+pub(super) const CONTRACT: &str = "lkjscript-final-candidate-acceptance-14";
 #[cfg(test)]
 pub(super) fn canonical_terminal_fixture(value: serde_json::Value) -> Result<Vec<u8>, DevError> {
     evidence::encode_json(&serde_json::from_value::<Terminal>(value)?)
 }
 #[cfg(test)]
 mod tests;
-const WORKLOAD: &str = "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-13";
+const WORKLOAD: &str = "release-source-semantic-matrices+six-target-owners+two-pinned-userlands+installed-recovery+seven-native-boundary-smokes-14";
 const MAXIMUM_RECEIPT_BYTES: u64 = 4 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -65,7 +67,8 @@ struct Terminal {
     manifest_sha256: Option<Sha256Digest>,
     executable: Option<ArtifactIdentity>,
     source_gates: usize,
-    native_public_workers: Option<usize>,
+    native_boundary_workers: Option<usize>,
+    native_boundary_smokes: usize,
     target_owners: usize,
     userlands: usize,
     proofs: Vec<Proof>,
@@ -147,7 +150,8 @@ fn accept(options: &Options) -> Result<u8, DevError> {
         manifest_sha256: None,
         executable: None,
         source_gates: 0,
-        native_public_workers: None,
+        native_boundary_workers: None,
+        native_boundary_smokes: 0,
         target_owners: 0,
         userlands: 0,
         proofs: Vec::new(),
@@ -228,11 +232,12 @@ fn execute(
 ) -> Result<(), DevError> {
     terminal.phase = "source-admission".to_owned();
     evidence::publish_json(&options.output, terminal)?;
-    terminal.source_gates = crate::check::read_release_source_receipt(
-        &options.source_receipt,
+    let source = public_harness::AdmittedSource::read(
         repository,
+        &options.source_receipt,
         &terminal.source_commit,
     )?;
+    terminal.source_gates = source.gates();
     terminal
         .proofs
         .push(proof("release-source", &options.source_receipt)?);
@@ -315,19 +320,21 @@ fn execute(
         terminal.verifier.byte_length,
     )?;
     let candidate = extracted.join("lkjscript");
-    terminal.phase = "native-public-harness".to_owned();
+    terminal.phase = "native-boundary-smokes".to_owned();
     evidence::publish_json(&options.output, terminal)?;
     let native_receipt = public_harness::accept(
         repository,
         &candidate,
         &terminal.source_commit,
-        &options.evidence_root.join("native-public-harness"),
+        &source,
+        &options.evidence_root.join("native-boundary-smokes"),
         control,
     )?;
-    terminal.native_public_workers = Some(native_receipt.workers);
+    terminal.native_boundary_workers = Some(native_receipt.workers);
+    terminal.native_boundary_smokes = native_receipt.boundaries;
     terminal
         .proofs
-        .push(proof("native-public-harness", &native_receipt.receipt)?);
+        .push(proof("native-boundary-smokes", &native_receipt.receipt)?);
     let target_root = options.evidence_root.join("target");
     let target_result = stage(
         options,
@@ -343,6 +350,8 @@ fn execute(
             display(&candidate),
             "--build-receipt".into(),
             display(&options.build_receipt),
+            "--source-receipt".into(),
+            display(source.path()),
             "--evidence-root".into(),
             display(&target_root),
         ],
@@ -361,7 +370,12 @@ fn execute(
         (Err(error), Ok(())) | (Ok(()), Err(error)) => return Err(error),
     }
     let target_receipt = target_root.join("receipt.json");
-    admission::read_receipt(&target_receipt, &candidate, &terminal.source_commit)?;
+    admission::read_receipt_with_source(
+        &target_receipt,
+        &candidate,
+        &terminal.source_commit,
+        &source,
+    )?;
     terminal.target_owners = 6;
     terminal.userlands = 2;
     terminal
@@ -614,7 +628,8 @@ fn validate_terminal(t: &Terminal) -> Result<(), DevError> {
             && t.source_gates == crate::check::RELEASE_SOURCE_GATE_COUNT
             // Portable evidence binds its producer's recorded count, not this
             // consuming host's current capacity.
-            && t.native_public_workers.is_some_and(public_harness::valid_workers)
+            && t.native_boundary_workers.is_some_and(public_harness::valid_workers)
+            && t.native_boundary_smokes == 7
             && t.target_owners == 6
             && t.userlands == 2
             && t.cleanup_complete
@@ -640,7 +655,7 @@ fn validate_terminal(t: &Terminal) -> Result<(), DevError> {
         ]) && t.assets.iter().all(|a| a.byte_length > 0)
             && t.proofs.iter().map(|p| p.name.as_str()).eq([
                 "release-source",
-                "native-public-harness",
+                "native-boundary-smokes",
                 "final-target",
                 "installation",
             ])

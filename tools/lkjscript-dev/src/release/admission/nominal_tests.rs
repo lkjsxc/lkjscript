@@ -78,9 +78,15 @@ fn rebind_offline_file(child: &mut Value, root: &Path, name: &str) {
         .find(|file| file["path"] == name)
         .expect("retained fault file belongs to original inventory") = proof.clone();
     for command in child["commands"].as_array_mut().expect("offline commands") {
-        for stream in ["stdout", "stderr"] {
-            if command["observation"][stream]["path"] == name {
-                command["observation"][stream] = proof.clone();
+        let observation = &mut command["observation"];
+        let streams = match observation["engine"].as_str().expect("current call engine") {
+            "semantic" => ["response", "diagnostics"],
+            "process" => ["stdout", "stderr"],
+            other => panic!("unsupported current call engine {other}"),
+        };
+        for stream in streams {
+            if observation["observation"][stream]["path"] == name {
+                observation["observation"][stream] = proof.clone();
             }
         }
     }
@@ -193,7 +199,7 @@ fn receipt_fault_readonly_original_restores_on_assertion_unwind() {
 }
 
 #[test]
-#[ignore = "requires LKJSCRIPT_NOMINAL_ADMISSION_FIXTURE from fresh exact target admission"]
+#[ignore = "requires owned target admission and its authenticated original source fixtures"]
 fn live_nominal_receipt_omissions_reject_at_target_admission() {
     let root = PathBuf::from(
         std::env::var_os("LKJSCRIPT_NOMINAL_ADMISSION_FIXTURE")
@@ -246,6 +252,29 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
         ProcessStatus::Passed,
         "actual admission baseline"
     );
+    let candidate = PathBuf::from(&baseline.candidate.path);
+    let verifier = PathBuf::from(&baseline.verifier.path);
+    let repository = super::super::repository_root().expect("compiled source repository");
+    assert!(
+        verifier
+            .canonicalize()
+            .expect("frozen verifier path")
+            .starts_with(repository.canonicalize().expect("compiled repository root")),
+        "owned admission verifier belongs to a different producing checkout"
+    );
+    // The frozen CLI baseline authenticated this exact SourceProof. This getter locates
+    // evidence only; the libtest executable cannot impersonate that frozen verifier.
+    let mut semantic_paths = BTreeMap::new();
+    for role in [Oracle::OfflinePackages, Oracle::PureTail] {
+        let owner = role.source_owner().expect("complete semantic owner");
+        let original = baseline
+            .source_semantics
+            .recorded_owner_path(&repository, owner)
+            .expect("authenticated recorded source owner original");
+        child_faults::read_semantic(role, &original, &verifier)
+            .expect("healthy original semantic owner before mutation");
+        semantic_paths.insert(role.name(), original);
+    }
     let mut results = Vec::new();
     // Fixed required inventory independent of the production ORACLES array.
     for name in [
@@ -274,6 +303,14 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
         );
     }
     let mut child_cases = child_faults::required_pointers();
+    assert_eq!(
+        child_cases
+            .iter()
+            .map(|(_, fields)| fields.len())
+            .sum::<usize>(),
+        238,
+        "complete source and unchanged HTTP pointer inventory"
+    );
     let mut added_pointer_faults = child_cases
         .iter()
         .map(|(_, fields)| fields.len())
@@ -392,7 +429,11 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
     }
     let mut constrained_omissions = 0;
     for (role, pointers) in child_cases {
-        let child_path = root.join(role.name()).join("receipt.json");
+        let semantic = role.source_owner().is_some();
+        let child_path = semantic_paths
+            .get(role.name())
+            .cloned()
+            .unwrap_or_else(|| root.join(role.name()).join("receipt.json"));
         let child_original = process::read_bounded(&child_path, MAXIMUM_RECEIPT_BYTES)
             .expect("bounded actual child receipt");
         originals.remember(&child_path, &child_original);
@@ -400,24 +441,37 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
         let mut reject_child = |fault: Value, label: &str| {
             let bytes = child_faults::encode(role, fault).expect("canonical typed mutation");
             fs::write(&child_path, bytes).expect("write owned child");
-            let mut aggregate = baseline.clone();
-            aggregate
-                .oracles
-                .iter_mut()
-                .find(|item| item.name == role.admission_name())
-                .expect("named oracle")
-                .receipt = external_evidence(&child_path).expect("recomputed child hash");
-            fs::write(
-                &path,
-                evidence::encode_json(&aggregate).expect("canonical aggregate"),
-            )
-            .expect("write rebound aggregate");
-            let rejected = invoke();
-            originals
-                .restore()
-                .expect("restore originals before assertion");
-            assert_eq!(rejected.0, ProcessStatus::Failed, "{} {label}", role.name());
-            results.push(serde_json::json!({"role":role.name(),"fault":label,"recomputed_outer_hash":true,"rejection":rejected.1}));
+            let rejection = if semantic {
+                let observed = child_faults::read_semantic(role, &child_path, &verifier);
+                originals
+                    .restore()
+                    .expect("restore originals before assertion");
+                observed
+                    .expect_err("actual semantic owner rejects altered original")
+                    .to_string()
+            } else {
+                let mut aggregate = baseline.clone();
+                aggregate
+                    .oracles
+                    .iter_mut()
+                    .find(|item| item.name == role.admission_name())
+                    .expect("named oracle")
+                    .receipt = external_evidence(&child_path).expect("recomputed child hash");
+                fs::write(
+                    &path,
+                    evidence::encode_json(&aggregate).expect("canonical aggregate"),
+                )
+                .expect("write rebound aggregate");
+                let rejected = invoke();
+                originals
+                    .restore()
+                    .expect("restore originals before assertion");
+                assert_eq!(rejected.0, ProcessStatus::Failed, "{} {label}", role.name());
+                rejected.1
+            };
+            results.push(serde_json::json!({"role":role.name(),"fault":label,
+                "owner":if semantic {"authenticated-source"} else {"final-candidate"},
+                "recomputed_outer_hash":!semantic,"rejection":rejection}));
         };
         for pointer in pointers {
             let mut fault = child.clone();
@@ -486,12 +540,67 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
             process::read_bounded(&child_path, MAXIMUM_RECEIPT_BYTES).expect("restored child"),
             child_original
         );
+        if semantic {
+            child_faults::read_semantic(role, &child_path, &verifier)
+                .expect("healthy source owner after its pointer and constraint mutations");
+        }
     }
+    let mut candidate_pointer_faults = 0;
+    for (role, pointers) in child_faults::boundary_pointers() {
+        let child_path = root.join(role.name()).join("receipt.json");
+        let child_original = fs::read(&child_path).expect("actual final-image boundary receipt");
+        originals.remember(&child_path, &child_original);
+        let child: Value = serde_json::from_slice(&child_original).expect("current boundary JSON");
+        for pointer in pointers {
+            let mut fault = child.clone();
+            *fault
+                .pointer_mut(pointer)
+                .expect("required candidate identity or invocation") = serde_json::json!("foreign");
+            fs::write(
+                &child_path,
+                child_faults::encode_boundary(role, fault)
+                    .expect("canonical final boundary mutation"),
+            )
+            .expect("write owned boundary fault");
+            let mut aggregate = baseline.clone();
+            aggregate
+                .oracles
+                .iter_mut()
+                .find(|item| item.name == role.admission_name())
+                .expect("final candidate owner")
+                .receipt = external_evidence(&child_path).expect("rebound boundary proof");
+            fs::write(
+                &path,
+                evidence::encode_json(&aggregate).expect("canonical aggregate"),
+            )
+            .expect("write rebound final aggregate");
+            let rejected = invoke();
+            originals
+                .restore()
+                .expect("restore source and final originals before assertion");
+            assert_eq!(
+                rejected.0,
+                ProcessStatus::Failed,
+                "{} candidate {pointer}",
+                role.name()
+            );
+            results.push(serde_json::json!({"role":role.name(),"fault":pointer,
+                "owner":"final-candidate","recomputed_outer_hash":true,"rejection":rejected.1}));
+            candidate_pointer_faults += 1;
+        }
+    }
+    assert_eq!(
+        candidate_pointer_faults, 6,
+        "complete relocated final candidate pointer inventory"
+    );
     // Nested structural evidence is stored as a string in the existing observation map. Decode
     // that string before changing each required discriminant; rebinding all containing hashes
     // forces the frozen owner to judge the evidence rather than reject an old outer checksum.
-    let child_root = root.join(Oracle::OfflinePackages.name());
-    let child_path = child_root.join("receipt.json");
+    let child_path = semantic_paths[Oracle::OfflinePackages.name()].clone();
+    let child_root = child_path
+        .parent()
+        .expect("original semantic owner root")
+        .to_path_buf();
     let child_original = process::read_bounded(&child_path, MAXIMUM_RECEIPT_BYTES)
         .expect("restored offline receipt");
     originals.remember(&child_path, &child_original);
@@ -592,40 +701,25 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
     let mut offline_fault = |fault: Value, label: &str, reason: Option<&str>| {
         fs::write(
             &child_path,
-            crate::offline_packages::encode_transferred_test_fixture(fault)
-                .expect("canonical offline original evidence fault"),
+            crate::offline_packages::encode_semantic_test_fixture(fault)
+                .expect("canonical offline source evidence fault"),
         )
-        .expect("write owned child fault");
-        let mut aggregate = baseline.clone();
-        aggregate
-            .oracles
-            .iter_mut()
-            .find(|item| item.name == Oracle::OfflinePackages.admission_name())
-            .expect("offline aggregate owner")
-            .receipt = external_evidence(&child_path).expect("rebound child proof");
-        fs::write(
-            &path,
-            evidence::encode_json(&aggregate).expect("canonical rebound aggregate"),
-        )
-        .expect("write aggregate fault");
-        let rejected = invoke();
+        .expect("write owned source fault");
+        let observed = child_faults::read_semantic(Oracle::OfflinePackages, &child_path, &verifier);
         originals
             .restore()
             .expect("restore all originals before fault assertion");
-        assert_eq!(
-            rejected.0,
-            ProcessStatus::Failed,
-            "offline original fault {label}"
-        );
+        let rejection = observed
+            .expect_err("actual offline semantic owner rejects altered evidence")
+            .to_string();
         if let Some(reason) = reason {
             assert!(
-                rejected.1.contains(reason),
-                "offline original fault {label} rejected outside its intended owner: {}",
-                rejected.1
+                rejection.contains(reason),
+                "offline source fault {label} rejected outside its intended owner: {rejection}"
             );
         }
         results.push(serde_json::json!({"role":"offline-packages","fault":label,
-            "recomputed_outer_hash":true,"rejection":rejected.1}));
+            "owner":"authenticated-source","canonical_owner_receipt":true,"rejection":rejection}));
     };
     let mut current_offline_faults = 0;
     for (name, pointers) in [
@@ -761,11 +855,16 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
         .and_then(|n| usize::try_from(n).ok())
         .expect("supplier apply command");
     let mut fault = child.clone();
-    *fault["commands"][apply_index]["command"]
+    *fault["commands"][apply_index]["invocation"]
         .as_array_mut()
         .expect("supplier command arguments")
         .last_mut()
         .expect("apply token") = serde_json::json!("foreign");
+    *fault["commands"][apply_index]["observation"]["observation"]["arguments"]
+        .as_array_mut()
+        .expect("semantic apply arguments")
+        .last_mut()
+        .expect("semantic apply token") = serde_json::json!("foreign");
     offline_fault(
         fault,
         "structural/foreign-flat-plan-token",
@@ -1029,11 +1128,13 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
     )
     .expect("supply corresponding alternative numerical result");
     let mut fault = child.clone();
-    *fault["commands"][numerical_command("direct-small")]["command"]
+    *fault["commands"][numerical_command("direct-small")]["invocation"]
         .as_array_mut()
         .expect("selected invocation arguments")
         .last_mut()
         .expect("literal JSON arguments") = Value::String(changed_input.to_owned());
+    *fault["commands"][numerical_command("direct-small")]["observation"]["observation"]["arguments"]
+        .as_array_mut().expect("semantic numerical arguments").last_mut().expect("literal semantic JSON arguments") = Value::String(changed_input.to_owned());
     rebind_offline_file(&mut fault, &child_root, name);
     rebind_offline_file(&mut fault, &child_root, &numerical_small);
     offline_fault(
@@ -1125,8 +1226,80 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
         Some("F64 original artifact/source binding"),
     );
 
-    let candidate = PathBuf::from(&baseline.candidate.path);
-    let verifier = PathBuf::from(&baseline.verifier.path);
+    for role in [Oracle::OfflinePackages, Oracle::PureTail] {
+        child_faults::read_semantic(role, &semantic_paths[role.name()], &verifier)
+            .expect("healthy original source owner after all semantic mutations");
+    }
+    // The old offline copied-candidate hash claim is now checked against the actual
+    // retained executable. Corrupt that independent copy and rebind its file proof;
+    // the final owner must still compare it with the unchanged selected candidate.
+    let boundary_root = root.join(Oracle::OfflinePackages.name());
+    let boundary_path = boundary_root.join("receipt.json");
+    let boundary_original = fs::read(&boundary_path).expect("actual offline final boundary");
+    originals.remember(&boundary_path, &boundary_original);
+    let copy_path = boundary_root.join("candidate");
+    let copy_original = process::read_bounded(&copy_path, 384 * 1024 * 1024)
+        .expect("actual retained candidate copy");
+    originals.remember(&copy_path, &copy_original);
+    let copy_permissions = fs::metadata(&copy_path)
+        .expect("actual retained copy mode")
+        .permissions();
+    fs::set_permissions(
+        &copy_path,
+        fs::Permissions::from_mode(copy_permissions.mode() | 0o200),
+    )
+    .expect("make owned candidate copy writable");
+    let mut copy_fault = copy_original;
+    copy_fault[0] ^= 1;
+    fs::write(&copy_path, copy_fault).expect("change only the independent retained copy");
+    fs::set_permissions(&copy_path, copy_permissions)
+        .expect("restore observed candidate copy mode");
+    let mut boundary: Value =
+        serde_json::from_slice(&boundary_original).expect("current final boundary JSON");
+    *boundary["files"]
+        .as_array_mut()
+        .expect("retained boundary files")
+        .iter_mut()
+        .find(|proof| proof["path"] == "candidate")
+        .expect("actual copied executable inventory entry") = serde_json::to_value(
+        evidence::proof(&copy_path, "candidate".to_owned())
+            .expect("recomputed actual copied-file proof"),
+    )
+    .expect("copy proof JSON");
+    fs::write(
+        &boundary_path,
+        child_faults::encode_boundary(Oracle::OfflinePackages, boundary)
+            .expect("canonical independent copy fault"),
+    )
+    .expect("write owned candidate-copy receipt");
+    let mut aggregate = baseline.clone();
+    aggregate
+        .oracles
+        .iter_mut()
+        .find(|item| item.name == Oracle::OfflinePackages.admission_name())
+        .expect("offline final owner")
+        .receipt = external_evidence(&boundary_path).expect("recomputed final boundary proof");
+    fs::write(
+        &path,
+        evidence::encode_json(&aggregate).expect("canonical aggregate"),
+    )
+    .expect("write rebound final candidate-copy fault");
+    let rejected = invoke();
+    originals
+        .restore()
+        .expect("restore all actual originals before copied-executable assertion");
+    assert_eq!(
+        rejected.0,
+        ProcessStatus::Failed,
+        "independent copied-candidate identity"
+    );
+    results.push(
+        serde_json::json!({"role":"offline-packages","fault":"/copied_candidate_sha256",
+        "owner":"final-candidate","mutation":"retained-candidate-copy-bytes",
+        "recomputed_file_proof":true,"recomputed_outer_hash":true,"rejection":rejected.1}),
+    );
+    let copied_candidate_faults = 1;
+
     for role in ORACLES {
         role.read(
             &root.join(role.name()).join("receipt.json"),
@@ -1162,11 +1335,31 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
             );
             executable_faults += 1;
         }
+        if file == &verifier {
+            for role in [Oracle::OfflinePackages, Oracle::PureTail] {
+                let rejection =
+                    child_faults::read_semantic(role, &semantic_paths[role.name()], &verifier)
+                        .expect_err("source owner rejects changed frozen verifier bytes");
+                results.push(
+                    serde_json::json!({"role":role.name(),"fault":"changed-executable-bytes",
+                    "owner":"authenticated-source","file":file,"rejection":rejection.to_string()}),
+                );
+                executable_faults += 1;
+            }
+        }
         originals
             .restore()
             .expect("restore executable bytes and mode");
     }
 
+    for role in [Oracle::OfflinePackages, Oracle::PureTail] {
+        child_faults::read_semantic(role, &semantic_paths[role.name()], &verifier)
+            .expect("healthy restored source owner after executable mutation");
+    }
+    assert_eq!(
+        executable_faults, 12,
+        "ten final-owner and two source-owner identity attacks"
+    );
     assert_eq!(
         invoke().0,
         ProcessStatus::Passed,
@@ -1181,12 +1374,18 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
         130 + added_pointer_faults
             + constrained_omissions
             + current_offline_faults
-            + executable_faults,
+            + executable_faults
+            + candidate_pointer_faults
+            + copied_candidate_faults,
         "complete current HTTP, nominal, recursive, requirement, and numerical target fault inventory"
     );
     scratch.close().expect("owned log cleanup");
     archive::write_new(&root.join("nominal-receipt-faults.json"), &evidence::encode_json(&serde_json::json!({
-        "schema":"lkjscript-nominal-target-receipt-faults-1",
+        "schema":"lkjscript-nominal-target-receipt-faults-2",
+        "source_semantics":baseline.source_semantics,
+        "source_and_http_pointer_inventory":238,"final_candidate_pointer_inventory":6,
+        "independent_candidate_copy_faults":copied_candidate_faults,
+        "removed_unique_attacks":0,
         "source_commit":baseline.source_commit,
         "candidate_sha256":baseline.candidate.sha256,
         "verifier_sha256":baseline.verifier.sha256,

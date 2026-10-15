@@ -1,4 +1,4 @@
-//! Finite matrices execute inside the exact selected product, with independent expectations.
+//! Finite matrices use public host adapters or the exact selected candidate, with independent expectations.
 use super::*;
 
 pub struct BatchCase {
@@ -63,7 +63,8 @@ impl BatchCase {
 
 impl Native {
     pub fn batch(&self, label: &str, descriptor: &Path, cases: &[BatchCase]) -> Vec<String> {
-        execute(
+        execute_in(
+            self.mode,
             &self.root,
             &self.root.join("lkjscript"),
             label,
@@ -116,8 +117,8 @@ impl Native {
 
         let input = self.input("conflict.input.jsonl", &valid_line);
         let conflict = self.input("conflict.result.jsonl", "preserved result");
-        let output = self.process_cli(
-            &self.root,
+        let output = self.batch_control(
+            "conflict",
             &[
                 "run",
                 "--deployment",
@@ -184,8 +185,8 @@ impl Native {
         let input = self.input(&format!("refused-{name}.input.jsonl"), requests);
         let result = self.root.join(format!("refused-{name}.result.jsonl"));
         assert!(!result.exists());
-        let output = self.process_cli(
-            &self.root,
+        let output = self.batch_control(
+            &format!("refused-{name}"),
             &[
                 "run",
                 "--deployment",
@@ -209,9 +210,25 @@ impl Native {
         );
         assert_eq!(fs::read(&input).unwrap(), requests.as_bytes());
     }
+
+    fn batch_control(&self, label: &str, arguments: &[&str], success: bool) -> String {
+        if self.mode == semantic_cli::Mode::HostSemantic {
+            batch_operation(
+                self.mode,
+                &self.root,
+                &self.root.join("lkjscript"),
+                label,
+                arguments,
+                success,
+            )
+        } else {
+            // Preserve the original boundary controls' exact process environment and logs.
+            self.process_cli(&self.root, arguments, success)
+        }
+    }
 }
 
-/// The executable path is authoritative in both source and explicit-candidate tests.
+/// Explicit executable callers retain the real process boundary.
 pub fn execute(
     root: &Path,
     executable: &Path,
@@ -219,7 +236,26 @@ pub fn execute(
     descriptor: &Path,
     cases: &[BatchCase],
 ) -> Vec<String> {
-    execute_refs(
+    execute_in(
+        semantic_cli::Mode::CandidateProcess,
+        root,
+        executable,
+        label,
+        descriptor,
+        cases,
+    )
+}
+
+pub fn execute_in(
+    mode: semantic_cli::Mode,
+    root: &Path,
+    executable: &Path,
+    label: &str,
+    descriptor: &Path,
+    cases: &[BatchCase],
+) -> Vec<String> {
+    execute_refs_in(
+        mode,
         root,
         executable,
         label,
@@ -229,6 +265,24 @@ pub fn execute(
 }
 
 pub(super) fn execute_refs(
+    root: &Path,
+    executable: &Path,
+    label: &str,
+    descriptor: &Path,
+    cases: &[&BatchCase],
+) -> Vec<String> {
+    execute_refs_in(
+        semantic_cli::Mode::CandidateProcess,
+        root,
+        executable,
+        label,
+        descriptor,
+        cases,
+    )
+}
+
+fn execute_refs_in(
+    mode: semantic_cli::Mode,
     root: &Path,
     executable: &Path,
     label: &str,
@@ -253,7 +307,8 @@ pub(super) fn execute_refs(
         requests.push('\n');
     }
     fs::write(&request_path, &requests).unwrap();
-    let summary = batch_process(
+    let summary = batch_operation(
+        mode,
         root,
         executable,
         label,
@@ -285,10 +340,7 @@ pub(super) fn execute_refs(
         (cases.len() - wanted_passed).to_string()
     );
     let outputs = fs::read_to_string(&result_path).unwrap();
-    let rows = outputs
-        .lines()
-        .map(|line| serde_json::from_str::<Value>(line).unwrap())
-        .collect::<Vec<_>>();
+    let rows = decode_rows(&outputs);
     assert_eq!(rows.len(), cases.len(), "complete candidate row inventory");
     let mut seen = BTreeSet::new();
     let mut observed = Vec::with_capacity(rows.len());
@@ -360,6 +412,100 @@ pub(super) fn execute_refs(
     assert_eq!(digest(&artifact), artifact_digest);
     assert_eq!(digest(executable), candidate_digest);
     observed
+}
+
+pub(super) fn decode_rows(outputs: &str) -> Vec<Value> {
+    use lkjscript::platform::json::{JsonIntegerPolicy, decode_strict_with_integer_policy};
+    assert!(outputs.ends_with('\n'), "complete JSONL response framing");
+    assert!(outputs.len() <= 64 * 1024 * 1024, "bounded batch aggregate");
+    outputs
+        .lines()
+        .map(|line| {
+            decode_strict_with_integer_policy(
+                line.as_bytes(),
+                JsonLimits {
+                    maximum_bytes: 4 * 1024 * 1024,
+                    maximum_string_bytes: 4 * 1024 * 1024,
+                    ..JsonLimits::default()
+                },
+                JsonIntegerPolicy::SignedOrUnsigned64,
+            )
+            .unwrap()
+        })
+        .collect()
+}
+
+pub(super) fn batch_operation(
+    mode: semantic_cli::Mode,
+    root: &Path,
+    executable: &Path,
+    label: &str,
+    arguments: &[&str],
+    success: bool,
+) -> String {
+    if mode != semantic_cli::Mode::HostSemantic {
+        return batch_process(root, executable, label, arguments, success);
+    }
+    host_operation(root, label, arguments, success, "public-cli", || {
+        let command_arguments = if arguments.first() == Some(&"--project") {
+            &arguments[2..]
+        } else {
+            arguments
+        };
+        semantic_cli::execute(
+            command_arguments,
+            arguments
+                .iter()
+                .map(|argument| (*argument).to_owned())
+                .collect(),
+        )
+        .unwrap_or_else(|| panic!("closed host batch route requires absolute explicit paths"))
+    })
+}
+
+pub(super) fn host_operation(
+    root: &Path,
+    label: &str,
+    arguments: &[&str],
+    success: bool,
+    adapter: &str,
+    operation: impl FnOnce() -> semantic_cli::Response,
+) -> String {
+    let evidence = root.join(format!("batch-{label}.command.json"));
+    assert!(!evidence.exists());
+    fs::write(
+        &evidence,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "arguments": arguments,
+            "execution_mode": semantic_cli::Mode::HostSemantic.label(),
+            "adapter": adapter,
+            "expected_success": success,
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    let response = operation();
+    fs::write(root.join(format!("batch-{label}.stdout")), &response.stdout).unwrap();
+    fs::write(root.join(format!("batch-{label}.stderr")), &response.stderr).unwrap();
+    fs::write(
+        root.join(format!("batch-{label}.terminal.json")),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "execution_mode": semantic_cli::Mode::HostSemantic.label(),
+            "adapter_status": response.code,
+            "success": response.success,
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        response.success,
+        success,
+        "{arguments:?}\n{}\n{}",
+        String::from_utf8_lossy(&response.stdout),
+        String::from_utf8_lossy(&response.stderr)
+    );
+    assert!(response.stderr.is_empty());
+    String::from_utf8(response.stdout).unwrap()
 }
 
 pub(super) fn batch_process(

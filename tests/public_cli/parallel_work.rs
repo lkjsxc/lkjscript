@@ -173,7 +173,7 @@ fn run(public: &Native, target: &str, n: usize, rounds: usize, seed: u8, label: 
         &json!([n, rounds, seed]).to_string(),
     );
     let output = public.root.path().join(format!("{label}.result.json"));
-    let records = public.cli(
+    let (mode, records) = public.cli_with_mode(
         &[
             "run",
             "--deployment",
@@ -208,10 +208,14 @@ fn run(public: &Native, target: &str, n: usize, rounds: usize, seed: u8, label: 
     assert_eq!(executor["dispatch_open"], false);
     assert_eq!(executor["active_dispatches"], 0);
     assert_eq!(executor["remaining_workers"], 0);
-    // This CLI invocation owns one executor; no foreign process can lend a worker.
-    assert_eq!(executor["workers_received"], 0);
-    assert_eq!(executor["workers_handed_off"], 0);
-    assert_eq!(executor["joined_workers"], executor["workers_started"]);
+    if mode == crate::semantic_cli::Mode::HostSemantic {
+        native_http::resident::check_executor(&executor).unwrap();
+    } else {
+        // An isolated product invocation cannot receive another process's workers.
+        assert_eq!(executor["workers_received"], 0);
+        assert_eq!(executor["workers_handed_off"], 0);
+        assert_eq!(executor["joined_workers"], executor["workers_started"]);
+    }
     assert!(
         observation["parallel_worker_dispatches"].as_u64().unwrap()
             <= observation["parallel_scopes"].as_u64().unwrap()
@@ -337,7 +341,7 @@ fn native_parallel_work_shared_cpu_service_and_independent_http_join_and_restart
                 expected(4096, 32, 0)
             );
         }
-        let stopped = group.stop(if cycle == 0 {
+        let stopped = group.shutdown(if cycle == 0 {
             Signal::INT
         } else {
             Signal::TERM
@@ -346,7 +350,12 @@ fn native_parallel_work_shared_cpu_service_and_independent_http_join_and_restart
         let executor = &stopped["shared_runtime"]["executor"];
         println!("public parallel work executor cycle {cycle}: {executor}");
         let started = executor["workers_started"].as_u64().unwrap();
-        if started > 0 {
+        let acquired = started
+            .checked_add(executor["workers_received"].as_u64().unwrap())
+            .unwrap();
+        if acquired > 0 {
+            // A received physical worker can move between live host owners after
+            // each dispatch; its receipt still proves reuse beyond local starts.
             assert!(executor["completed_dispatches"].as_u64().unwrap() > started);
         } else {
             // A zero ceiling or native thread-creation refusal can legitimately

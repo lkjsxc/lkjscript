@@ -10,13 +10,14 @@ inputs/source drift cannot pass through exclusions or raised limits.
 ## Coverage and admission
 
 [Verification](spec/verification.md) owns all gates, inventories and original-reader
-requirements: standalone full is 29 gates; release requires 23 fresh source gates
-plus exact-final-byte six owners/public harness/static ELF/two userlands/installation.
-A fresh full original supplies those 23 under identical context: re-admit all 29,
-preserving its bytes/profile. Final-byte owners remain mandatory.
+requirements: standalone full is 29 gates; release requires 25 fresh source gates,
+full semantic receipts and final six target owners/seven native smokes/ELF/two
+userlands/installation. A fresh full original supplies the 25 under identical
+context: re-admit all 29, preserving original bytes/profile. Source matrices and
+actual final processes retain separate proof.
 Transfer and anonymous exact/latest require small installed lifecycles without broad
-replay or rebuild. Every mandatory case passes once; uploads/skipped stages prove no
-terminal. [Bootstrap](../tools/bootstrap-verifier.sh) retains immutable tools;
+replay or rebuild. Every source case/final boundary needs admitted outcomes;
+uploads/skipped stages prove no terminal. [Bootstrap](../tools/bootstrap-verifier.sh) retains immutable tools;
 --with-controller includes controller. Honor producer dependencies/output copies
 and separate Cargo/checker concurrency. release target owns pinned musl policy;
 static linkage grants no hostile-code sandbox.
@@ -42,7 +43,7 @@ Use absent owned outputs and keep source, environment and tools stable.
 
 After fresh full with identical source/verifier/environment, pass its original
 receipt; skip release-source. Otherwise run release-source below, as hosted Release
-does. Host results never replace mandatory final-byte proof.
+does. Source semantics cannot replace mandatory final process boundaries.
 
 ```sh
 BOOTSTRAP_VERIFIER=/absolute/immutable/lkjscript-dev

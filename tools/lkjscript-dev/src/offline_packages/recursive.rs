@@ -3,6 +3,9 @@ use super::*;
 use crate::pure_tail_program::Request;
 use serde_json::{Value, json};
 
+#[path = "recursive_batch.rs"]
+mod batch;
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct RecursiveReceipt {
@@ -337,7 +340,7 @@ pub(super) fn validate(receipt: &RecursiveReceipt) -> Result<(), DevError> {
     )
 }
 
-fn session_steps() -> Vec<(usize, &'static str, Value)> {
+pub(super) fn session_steps() -> Vec<(usize, &'static str, Value)> {
     let empty = branch(vec![]);
     let a = branch(vec![empty.clone(), leaf(json!("a"))]);
     let z = branch(vec![empty.clone(), leaf(json!("z"))]);
@@ -429,8 +432,7 @@ fn sessions(
     )?;
     fs::remove_dir_all(&package.path)?;
     fs::remove_file(&package.container)?;
-    let observed = crate::service::nominal::probe_script(
-        &context.binary,
+    let observed = super::runtime_semantic::session_probe(
         &standalone,
         &context.evidence,
         "recursive-session",
@@ -564,6 +566,10 @@ fn forward(r: &mut Request, consumer: &Package, name: &str, result: &str) -> Res
     r.function(name, result, &body, &[("tree", argument)]);
     r.target(name, result, &[argument]);
     Ok(())
+}
+
+pub(super) fn validate_batches(receipt: &Receipt, root: &Path) -> Result<(), DevError> {
+    batch::read(receipt, root)
 }
 
 pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<(), DevError> {
@@ -790,147 +796,19 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
     context.receipt.recursive.producers_removed = !library.path.exists() && !consumer.path.exists();
     context.cache_recovery(&receiver_package, "recursive-received")?;
     context.cli(Some(&receiver_package.path), &["check"], true)?;
-    for (name, value) in super::recursive_schemas::values() {
-        let actual = output(context, &receiver_package, name, &value, &value)?;
-        context
-            .receipt
-            .recursive
-            .results
-            .insert(name.into(), actual);
-    }
-    let flip = output(
-        context,
-        &receiver_package,
-        "flip-next",
-        &json!({"case":"stop"}),
-        &json!({"case":"next","value":{"case":"stop"}}),
+    let receiver_export = context.receipt.commands.len();
+    context.export(&mut receiver_package)?;
+    batch::execute(context, &receiver_package, true)?;
+    batch::boundary(context, receiver_export)?;
+    let project = receiver_package.path.clone();
+    context.receipt.recursive.resources = context.probe_json(
+        "recursive-resources",
+        "contributor.recursive_execution_probe",
+        &[project.display().to_string()],
+        || lkjscript::platform::contributor::recursive_execution_probe(&project),
     )?;
-    context
-        .receipt
-        .recursive
-        .results
-        .insert("flip-next".into(), flip);
-    let specification = process::ProcessSpec {
-        command: vec![
-            std::env::current_exe()?.display().to_string(),
-            "recursive-probe".into(),
-            receiver_package.path.display().to_string(),
-        ],
-        cwd: context.root.clone(),
-        environment: BTreeMap::from([("LANG".into(), "C.UTF-8".into())]),
-        timeout: Duration::from_secs(120),
-        maximum_stdout_bytes: MAXIMUM_OUTPUT_BYTES,
-        maximum_stderr_bytes: MAXIMUM_OUTPUT_BYTES,
-        stdout_path: context.evidence.join("recursive-resources.stdout"),
-        stderr_path: context.evidence.join("recursive-resources.stderr"),
-        unavailable_exit_code: None,
-    };
-    let observation = process::run(&specification, &context.evidence);
-    require(
-        observation.status == process::ProcessStatus::Passed,
-        "source-bound recursive resource probe failed",
-    )?;
-    context.receipt.recursive.resources = serde_json::from_slice(&process::read_bounded(
-        &specification.stdout_path,
-        MAXIMUM_OUTPUT_BYTES,
-    )?)?;
-    context.receipt.runners.push(observation);
+    batch::execute(context, &receiver_package, false)?;
     let original = small();
-    for (name, target, expected) in [
-        ("small-leaves", "i64-flatten", json!([1, 2, 4])),
-        ("count", "count", json!(3)),
-        ("sum", "sum", json!(7)),
-        ("ordered-fold", "ordered-fold", json!(124)),
-        ("identity", "i64-map", original.clone()),
-        ("mapped", "mapped", map_expected(&original, 3, 5)),
-        ("composed", "composed", map_expected(&original, 3, 11)),
-        (
-            "composition-map",
-            "composition-map",
-            map_expected(&original, 3, 11),
-        ),
-        (
-            "retained",
-            "retained",
-            json!({"changed":map_expected(&original,3,5),"original":original}),
-        ),
-    ] {
-        let value = output(context, &receiver_package, target, &original, &expected)?;
-        context.receipt.recursive.results.insert(name.into(), value);
-    }
-    for (label, values) in [
-        ("text", vec![json!("a"), json!("bc")]),
-        ("owned", vec![json!({"text":"one"}), json!({"text":"two"})]),
-    ] {
-        let input = branch(vec![
-            leaf(values[0].clone()),
-            branch(vec![leaf(values[1].clone()), branch(vec![])]),
-        ]);
-        output(
-            context,
-            &receiver_package,
-            &format!("{label}-map"),
-            &input,
-            &input,
-        )?;
-        let actual = output(
-            context,
-            &receiver_package,
-            &format!("{label}-flatten"),
-            &input,
-            &json!(values),
-        )?;
-        context
-            .receipt
-            .recursive
-            .results
-            .insert(format!("{label}-leaves"), actual);
-    }
-    let empty = branch(vec![]);
-    let actual = output(context, &receiver_package, "trapped", &empty, &empty)?;
-    context
-        .receipt
-        .recursive
-        .results
-        .insert("empty-trap".into(), actual);
-    let trapped = context.cli(
-        Some(&receiver_package.path),
-        &[
-            "run",
-            "trapped",
-            "--arguments",
-            &json!([original]).to_string(),
-        ],
-        false,
-    )?;
-    require(
-        trapped.iter().all(|r| r.operation != "execution"),
-        "trapped map published a successful partial tree",
-    )?;
-    require(
-        field(&trapped, "diagnostic", "code")? == "normalized_integer_division",
-        "map did not trap on the second leaf before the fourth",
-    )?;
-    let reversed = branch(vec![leaf(json!(4)), leaf(json!(2)), leaf(json!(1))]);
-    let trapped = context.cli(
-        Some(&receiver_package.path),
-        &[
-            "run",
-            "trapped",
-            "--arguments",
-            &json!([reversed]).to_string(),
-        ],
-        false,
-    )?;
-    require(
-        field(&trapped, "diagnostic", "code")? == "normalized_integer_overflow"
-            && trapped.iter().all(|r| r.operation != "execution"),
-        "reversed traversal did not expose the first overflow before division",
-    )?;
-    context.receipt.recursive.results.insert(
-        "trap-order".into(),
-        json!(["normalized_integer_division", "normalized_integer_overflow"]),
-    );
     let large = balanced();
     let expected = ordered(&large)?;
     require(

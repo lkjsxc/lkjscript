@@ -8,6 +8,9 @@ mod support;
 
 #[path = "public_cli/map_candidate_binding.rs"]
 mod map_candidate_binding;
+#[cfg(unix)]
+#[path = "public_cli/native_boundary_smokes.rs"]
+mod native_boundary_smokes;
 #[path = "public_cli/native_map_entries.rs"]
 mod native_map_entries;
 

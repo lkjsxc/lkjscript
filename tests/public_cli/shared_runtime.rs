@@ -205,7 +205,7 @@ fn shared_runtime_edits_versions_and_keeps_secrets_configuration_and_data_privat
         assert_eq!(reply.status, 200);
         assert_eq!(note(&reply.body), text);
     }
-    let stopped = group.stop(Signal::TERM);
+    let stopped = group.shutdown(Signal::TERM);
     assert!(
         stopped["instances"][3]["receipt"]["runtime"]["resident"]["failed"]
             .as_u64()
@@ -278,7 +278,7 @@ fn shared_runtime_http_and_interactive_share_code_and_join_connected_peer() {
         .body,
         "7"
     );
-    let stopped = group.stop(Signal::INT);
+    let stopped = group.shutdown(Signal::INT);
     assert_eq!(
         stopped["instances"][1]["receipt"]["sessions"]["completed_sessions"],
         1

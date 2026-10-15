@@ -1,6 +1,5 @@
-//! Required native-language witnesses against the exact extracted candidate bytes.
-//! Source acceptance and archive/source correspondence remain independently owned.
-use super::{archive, file, public_inventory, require};
+//! Seven process boundaries against exact bytes, supplementing complete source semantics.
+use super::{archive, boundary_evidence, file, public_inventory, require, source_outcomes};
 use crate::{error::DevError, evidence, process};
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -20,7 +19,10 @@ pub(super) fn valid_workers(workers: usize) -> bool {
 pub(super) struct Accepted {
     pub(super) receipt: PathBuf,
     pub(super) workers: usize,
+    pub(super) boundaries: usize,
 }
+
+pub(super) use crate::check::AdmittedSource;
 
 #[derive(Serialize)]
 struct Phase {
@@ -35,16 +37,22 @@ struct Receipt {
     status: &'static str,
     phase: String,
     harness_source_commit: String,
+    purpose: &'static str,
+    verifier: super::ArtifactIdentity,
+    source_semantics: Option<crate::check::SourceProof>,
+    source_public_cases: Option<usize>,
     workers: usize,
     candidate: super::ArtifactIdentity,
     harness: Option<super::ArtifactIdentity>,
     inventory: Option<public_inventory::Inventory>,
+    boundaries: Vec<boundary_evidence::Accepted>,
     phases: Vec<Phase>,
     cleanup_complete: bool,
     failure: Option<String>,
 }
 
 struct Runner<'a> {
+    source: Option<&'a AdmittedSource>,
     root: &'a Path,
     control: &'a process::ProcessControl,
     receipt: Receipt,
@@ -97,6 +105,7 @@ impl Runner<'_> {
     }
 
     fn execute(&mut self, repository: &Path, candidate: &Path) -> Result<(), DevError> {
+        self.source_unchanged()?;
         let build = self.run(
             "build",
             [
@@ -130,7 +139,7 @@ impl Runner<'_> {
         let work = tempfile::Builder::new()
             .prefix("lkjscript-native-candidate-")
             .tempdir_in("/tmp")?;
-        let result = self.evaluate(&harness, candidate, work.path());
+        let result = self.evaluate(&harness, &original, candidate, work.path());
         let cleanup = work.close();
         match (result, cleanup) {
             (Ok(()), Ok(())) => {}
@@ -149,11 +158,35 @@ impl Runner<'_> {
             "native harness inputs changed or execution was cancelled",
         )?;
         source(repository, &self.receipt.harness_source_commit)?;
+        self.source_unchanged()?;
         self.receipt.cleanup_complete = true;
         Ok(())
     }
 
-    fn evaluate(&mut self, harness: &Path, candidate: &Path, work: &Path) -> Result<(), DevError> {
+    fn source_unchanged(&self) -> Result<(), DevError> {
+        require(
+            self.receipt.verifier
+                == file(&std::env::current_exe()?, super::verifier::EXECUTABLE_NAME)?,
+            "native boundary verifier changed",
+        )?;
+        if let Some(source) = self.source {
+            require(
+                source.source_commit() == self.receipt.harness_source_commit
+                    && self.receipt.source_semantics.as_ref() == Some(source.proof()),
+                "native boundary source binding differs from its admitted prerequisite",
+            )?;
+            source.unchanged()?;
+        }
+        Ok(())
+    }
+
+    fn evaluate(
+        &mut self,
+        harness: &Path,
+        original: &Path,
+        candidate: &Path,
+        work: &Path,
+    ) -> Result<(), DevError> {
         require(
             self.receipt.candidate == file(candidate, "lkjscript")?,
             "native public candidate differs from the admitted executable",
@@ -164,8 +197,10 @@ impl Runner<'_> {
         )?;
         let home = work.join("home");
         let temporary = work.join("tmp");
+        let boundary_root = self.root.join("boundaries");
         fs::create_dir(&home)?;
         fs::create_dir(&temporary)?;
+        fs::create_dir(&boundary_root)?;
         let environment = BTreeMap::from([
             ("PATH".to_owned(), String::new()),
             ("HOME".to_owned(), home.display().to_string()),
@@ -175,6 +210,10 @@ impl Runner<'_> {
             (
                 "LKJSCRIPT_RELEASE_CANDIDATE".to_owned(),
                 candidate.display().to_string(),
+            ),
+            (
+                "LKJSCRIPT_NATIVE_BOUNDARY_EVIDENCE".to_owned(),
+                boundary_root.display().to_string(),
             ),
         ]);
         let listing = self.run(
@@ -190,6 +229,13 @@ impl Runner<'_> {
             Duration::from_secs(60),
         )?;
         let inventory = public_inventory::inventory(&listing)?;
+        if let Some(source) = self.source {
+            let (stdout, stderr) = source.workspace_logs()?;
+            source_outcomes::harness(&stderr, source.repository(), original)?;
+            source_outcomes::passed(&stdout, &inventory)?;
+            source.unchanged()?;
+            self.receipt.source_public_cases = Some(inventory.all.len());
+        }
         let mut command = vec![
             harness.display().to_string(),
             "--exact".into(),
@@ -199,13 +245,14 @@ impl Runner<'_> {
         command.extend(inventory.selected.iter().cloned());
         self.receipt.inventory = Some(inventory);
         // The producer selects once; the receipt binds that count to this argv.
-        // Every selected case and the aggregate bound remain unchanged.
+        // The complete semantic matrices were admitted by their original source
+        // owner. This execution supplements them with seven explicit boundaries.
         let observed = self.run(
             "execute",
             command,
             work,
             environment,
-            Duration::from_secs(120 * 60),
+            Duration::from_secs(15 * 60),
         )?;
         let inventory = self
             .receipt
@@ -213,6 +260,8 @@ impl Runner<'_> {
             .as_ref()
             .ok_or_else(|| DevError::corrupt("missing public harness inventory"))?;
         public_inventory::passed(&observed, inventory)?;
+        self.receipt.boundaries = boundary_evidence::read(&boundary_root, &self.receipt.candidate)?;
+        self.save()?;
         require(
             self.receipt.candidate == file(candidate, "lkjscript")?,
             "native public candidate changed during execution",
@@ -230,6 +279,28 @@ pub(super) fn accept(
     repository: &Path,
     candidate: &Path,
     commit: &str,
+    source: &AdmittedSource,
+    root: &Path,
+    control: &process::ProcessControl,
+) -> Result<Accepted, DevError> {
+    run(repository, candidate, commit, Some(source), root, control)
+}
+
+fn diagnose(
+    repository: &Path,
+    candidate: &Path,
+    commit: &str,
+    root: &Path,
+    control: &process::ProcessControl,
+) -> Result<Accepted, DevError> {
+    run(repository, candidate, commit, None, root, control)
+}
+
+fn run(
+    repository: &Path,
+    candidate: &Path,
+    commit: &str,
+    source_semantics: Option<&AdmittedSource>,
     root: &Path,
     control: &process::ProcessControl,
 ) -> Result<Accepted, DevError> {
@@ -241,20 +312,30 @@ pub(super) fn accept(
     let workers = std::thread::available_parallelism()
         .map_or(1, |available| available.get().min(MAXIMUM_WORKERS));
     let mut runner = Runner {
+        source: source_semantics,
         root,
         control,
         receipt: Receipt {
             schema: super::SchemaIdentity {
-                identity: "lkjscript-native-public-harness".to_owned(),
-                version: 2,
+                identity: "lkjscript-native-boundary-harness".to_owned(),
+                version: 1,
             },
             status: "incomplete",
             phase: "created".to_owned(),
             harness_source_commit: commit.to_owned(),
+            purpose: if source_semantics.is_some() {
+                "candidate_acceptance_supplement"
+            } else {
+                "diagnostic_behavior_evidence"
+            },
+            verifier: file(&std::env::current_exe()?, super::verifier::EXECUTABLE_NAME)?,
+            source_semantics: source_semantics.map(|source| source.proof().clone()),
+            source_public_cases: None,
             workers,
             candidate: file(candidate, "lkjscript")?,
             harness: None,
             inventory: None,
+            boundaries: Vec::new(),
             phases: Vec::new(),
             cleanup_complete: false,
             failure: None,
@@ -277,6 +358,7 @@ pub(super) fn accept(
     result.map(|()| Accepted {
         receipt: root.join("receipt.json"),
         workers: runner.receipt.workers,
+        boundaries: runner.receipt.boundaries.len(),
     })
 }
 
@@ -303,7 +385,7 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
     let repository = harness_repository(&std::env::current_dir()?)?;
     let commit = super::super::command_text("git", &["rev-parse", "HEAD"], &repository, 1024)?;
     let cancellation = super::super::transferred::Cancellation::new()?;
-    let result = accept(
+    let result = diagnose(
         &repository,
         &candidate,
         &commit,
@@ -323,7 +405,7 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
     };
     println!(
         "{}",
-        serde_json::json!({"status":"passed", "receipt":accepted.receipt, "workers":accepted.workers})
+        serde_json::json!({"status":"passed", "purpose":"diagnostic_behavior_evidence", "receipt":accepted.receipt, "workers":accepted.workers})
     );
     Ok(0)
 }

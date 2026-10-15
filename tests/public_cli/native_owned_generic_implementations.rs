@@ -13,6 +13,111 @@ const ELEMENTS: &str = include_str!("../../examples/generic-owned-implementation
 const APPLICATION: &str =
     include_str!("../../examples/generic-owned-implementations/application.lkjc");
 
+pub(super) enum PureLane<'a> {
+    Source(&'a str),
+    Detached(&'a Path),
+    Process(&'a Path),
+}
+
+pub(super) fn pure_row(
+    id: impl Into<String>,
+    target: &str,
+    arguments: Value,
+    expected: Value,
+) -> (BatchCase, Value) {
+    let mut case = BatchCase::success(id, &arguments, expected.clone());
+    case.target = Some(target.to_owned());
+    (case, expected)
+}
+
+pub(super) fn pure_batch(
+    public: &Native,
+    label: &str,
+    lane: PureLane<'_>,
+    rows: Vec<(BatchCase, Value)>,
+) {
+    use lkjscript::platform::json::{
+        JsonIntegerPolicy, JsonLimits, decode_strict_with_integer_policy,
+    };
+    let source = matches!(&lane, PureLane::Source(_));
+    let (cases, expected): (Vec<_>, Vec<_>) = rows.into_iter().unzip();
+    let observed = match lane {
+        PureLane::Source(target) => source_batch::execute_in(
+            public.mode,
+            public.root.path(),
+            &public.executable,
+            label,
+            &public.project,
+            target,
+            &cases,
+        ),
+        PureLane::Detached(descriptor) => batch::execute_in(
+            public.mode,
+            public.root.path(),
+            &public.executable,
+            label,
+            descriptor,
+            &cases,
+        ),
+        // This one original nonempty detached row retains an actual process,
+        // including when the surrounding finite matrix uses host adapters.
+        PureLane::Process(descriptor) => batch::execute(
+            public.root.path(),
+            &public.executable,
+            label,
+            descriptor,
+            &cases,
+        ),
+    };
+    let prefix = if source { "source-batch" } else { "batch" };
+    let outputs = std::fs::read_to_string(
+        public
+            .root
+            .path()
+            .join(format!("{prefix}-{label}.result.jsonl")),
+    )
+    .unwrap();
+    assert_eq!(outputs.lines().count(), cases.len());
+    for (index, line) in outputs.lines().enumerate() {
+        // Keep run_expected's canonical result-file byte oracle, in addition
+        // to the shared reader's complete rows, bindings and cleanup checks.
+        let row = decode_strict_with_integer_policy(
+            line.as_bytes(),
+            JsonLimits {
+                maximum_bytes: 4 * 1024 * 1024,
+                maximum_string_bytes: 4 * 1024 * 1024,
+                ..JsonLimits::default()
+            },
+            JsonIntegerPolicy::SignedOrUnsigned64,
+        )
+        .unwrap();
+        assert_eq!(row["id"].as_str(), Some(cases[index].id.as_str()));
+        assert_eq!(row["exit_code"], 0);
+        assert_eq!(
+            row["result_json"].as_str().unwrap().as_bytes(),
+            serde_json::to_vec(&expected[index]).unwrap(),
+            "{}",
+            cases[index].id,
+        );
+        let records = parse_records("implementation pure row", observed[index].as_bytes()).unwrap();
+        let execution = compact_record(&records, "execution");
+        if source {
+            assert_eq!(compact_field(execution, "differential"), "equal");
+            for field in ["production-instructions", "reference-expressions"] {
+                assert!(compact_field(execution, field).parse::<u64>().unwrap() > 0);
+            }
+        } else {
+            let production: Value =
+                serde_json::from_str(compact_field(execution, "production-observation")).unwrap();
+            assert_eq!(production["capability_calls"], 0);
+            assert_eq!(production["live_handles_after"], 0);
+            let cleanup: Value = serde_json::from_str(compact_field(execution, "cleanup")).unwrap();
+            assert_eq!(cleanup["remaining_tasks"], 0);
+            assert_eq!(cleanup["cleanup_failures"], json!([]));
+        }
+    }
+}
+
 fn evidence_native(template: &str) -> Native {
     let mut public = Native::template(template);
     if std::env::var_os("LKJSCRIPT_RETAIN_PRODUCT_EVIDENCE").is_some() {
@@ -304,17 +409,23 @@ fn native_owned_generic_implementation_schemes_three_packages_nested_products_re
         all_expected(&[2, 7, 11, 3], 17)["product-flat"]["selected"],
         json!([23])
     );
-    for (case, inputs) in workloads.iter().enumerate() {
-        run_expected(
-            public,
-            "generic-owned-implementations",
-            &descriptor,
-            false,
-            &case.to_string(),
-            json!([inputs]),
-            &all_expected(inputs, 17),
-        );
-    }
+    pure_batch(
+        public,
+        "generic-original",
+        PureLane::Source("generic-owned-implementations"),
+        workloads
+            .iter()
+            .enumerate()
+            .map(|(case, inputs)| {
+                pure_row(
+                    format!("workload-{case}"),
+                    "generic-owned-implementations",
+                    json!([inputs]),
+                    all_expected(inputs, 17),
+                )
+            })
+            .collect(),
+    );
     // Demonstrate a meaningful accepted edit before restoring the independently tested source.
     assert!(draft.contains("(i64 17)"));
     let edit = public.input(
@@ -375,30 +486,51 @@ fn native_owned_generic_implementation_schemes_three_packages_nested_products_re
                 &json!({"left":length,"right":length}),
             );
         }
-        for ((target, offset, reverse), descriptor) in cases.iter().zip(&descriptors) {
-            let inputs = &boundary_inputs;
-            run_expected(
-                public,
-                target,
-                descriptor,
-                detached,
-                "513",
-                json!([inputs]),
-                &scenario_expected(inputs, *offset, *reverse, 17),
-            );
-        }
+        // These pure rows stay after the three ordinary task invocations;
+        // source preparation never crosses the accepted edit/restore boundary.
+        let mut rows: Vec<_> = cases
+            .iter()
+            .map(|(target, offset, reverse)| {
+                pure_row(
+                    format!("{target}-513"),
+                    target,
+                    json!([boundary_inputs]),
+                    scenario_expected(&boundary_inputs, *offset, *reverse, 17),
+                )
+            })
+            .collect();
         if detached {
+            // The first full513 row is the original first representation, now
+            // an explicit actual-process canary after every source is removed.
+            pure_batch(
+                public,
+                "generic-detached-process",
+                PureLane::Process(&descriptors[0]),
+                vec![rows.remove(0)],
+            );
             for (case, inputs) in workloads.iter().enumerate() {
-                run_expected(
-                    public,
+                rows.push(pure_row(
+                    format!("workload-{case}"),
                     "generic-owned-implementations",
-                    &descriptor,
-                    true,
-                    &case.to_string(),
                     json!([inputs]),
-                    &all_expected(inputs, 17),
-                );
+                    all_expected(inputs, 17),
+                ));
             }
+            assert_eq!(rows.len(), 13);
+            pure_batch(
+                public,
+                "generic-detached",
+                PureLane::Detached(&descriptor),
+                rows,
+            );
+        } else {
+            assert_eq!(rows.len(), 7);
+            pure_batch(
+                public,
+                "generic-restored",
+                PureLane::Source("generic-owned-implementations"),
+                rows,
+            );
         }
     }
     packages.retain();

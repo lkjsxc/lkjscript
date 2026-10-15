@@ -44,7 +44,7 @@ fn run(
     expected: Value,
 ) -> Result<(), DevError> {
     let command = context.receipt.commands.len();
-    let records = context.cli_copied_at(
+    let records = context.cli_detached_at(
         cwd,
         &[
             "run",
@@ -99,7 +99,7 @@ pub(super) fn validate(receipt: &Receipt, evidence_root: &Path) -> Result<Vec<us
         require(
             command.command
                 == vec![
-                    root.join("lkjscript").display().to_string(),
+                    receipt.host_path.clone(),
                     "run".into(),
                     "--deployment".into(),
                     root.join("named-bundle")
@@ -115,7 +115,7 @@ pub(super) fn validate(receipt: &Receipt, evidence_root: &Path) -> Result<Vec<us
         let records = parse_records(
             "named-execution",
             &process::read_bounded(
-                &evidence_root.join(&command.observation.stdout.path),
+                &evidence_root.join(&command.observation.stdout().path),
                 MAXIMUM_OUTPUT_BYTES,
             )?,
         )

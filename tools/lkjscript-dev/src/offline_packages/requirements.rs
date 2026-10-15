@@ -3,7 +3,7 @@ use super::*;
 #[path = "requirements_composition.rs"]
 mod composition;
 #[path = "requirements_conflict.rs"]
-mod conflict;
+pub(super) mod conflict;
 #[path = "requirements_scalar.rs"]
 mod scalar;
 #[path = "requirements_structural.rs"]
@@ -903,7 +903,7 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
     require(
         preflight_command.command
             == [
-                receipt.pinned_runtime_path.clone(),
+                receipt.host_path.clone(),
                 "run".into(),
                 "--deployment".into(),
                 preflight_descriptor.display().to_string(),
@@ -1130,7 +1130,7 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
         require(
             command.command
                 == [
-                    receipt.pinned_runtime_path.clone(),
+                    receipt.host_path.clone(),
                     "run".into(),
                     "--deployment".into(),
                     descriptor.display().to_string(),

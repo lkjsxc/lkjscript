@@ -156,12 +156,7 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
         &["build", "--output", &artifact.display().to_string()],
         true,
     )?;
-    let descriptor = json!({"artifact":"session.lkja","target":"live","listen":"127.0.0.1:0",
-        "runtime":{"maximum_concurrent_tasks":4,"maximum_queued_tasks":8,"request_deadline_milliseconds":30000,"shutdown_grace_milliseconds":3000,"cancellation_grace_milliseconds":1000},
-        "execution":{"instruction_fuel":1000000,"maximum_call_depth":256,"maximum_value_stack":4096},"http":null,
-        "session":{"maximum_active_sessions":2,"maximum_pending_handshakes":2,"maximum_message_bytes":4096,"maximum_frame_bytes":4096,"maximum_header_bytes":8192,"maximum_headers":32,"maximum_inbound_mailbox_items":2,"maximum_inbound_mailbox_bytes":8192,"maximum_outbound_mailbox_items":8,"maximum_outbound_mailbox_bytes":8192,"maximum_state_nodes":1024,"maximum_state_bytes":4096,"maximum_transition_messages":8,"maximum_transition_bytes":8192,"tick_interval_milliseconds":1000,"idle_timeout_milliseconds":60000,"maximum_lifetime_milliseconds":86400000,"close_grace_milliseconds":1000,"cancellation_grace_milliseconds":1000,"maximum_process_buffer_bytes":1048576},
-        "worker":null,"streams":{"maximum_chunk_bytes":4096,"maximum_buffered_chunks":4,"maximum_total_bytes":65536,"maximum_live_streams":16},"configuration":{},"secrets":[],
-        "grants":[{"requirement":"streams","sharing_domain":"nominal-session-streams","authority_revision":"9999999999999999999999999999999999999999999999999999999999999999","adapter":{"kind":"byte_stream"}}]});
+    let descriptor = descriptor();
     fs::write(
         standalone.join("session.deployment.json"),
         evidence::encode_json(&descriptor)?,
@@ -173,46 +168,44 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
     )?;
     fs::remove_dir_all(&package.path)?;
     fs::remove_file(&package.container)?;
-    let (observation, process) =
-        crate::service::nominal::probe(&context.binary, &standalone, &context.evidence)?;
-    context.receipt.nominal.session = observation;
-    context.receipt.runners.push(process);
-    let spec = process::ProcessSpec {
-        command: vec![
-            std::env::current_exe()?.display().to_string(),
-            "nominal-session-state-probe".into(),
-            standalone
-                .join("session.deployment.json")
-                .display()
-                .to_string(),
-            source.display().to_string(),
-            package.transport,
+    let (observation, call) = super::runtime_semantic::session_probe(
+        &standalone,
+        &context.evidence,
+        "nominal-session",
+        1,
+        &[
+            (0, "a", json!({"first":1,"second":"a"})),
+            (0, "b", json!({"first":2,"second":"ab"})),
         ],
-        cwd: standalone.clone(),
-        environment: BTreeMap::from([("LANG".into(), "C.UTF-8".into())]),
-        timeout: Duration::from_secs(120),
-        maximum_stdout_bytes: MAXIMUM_OUTPUT_BYTES,
-        maximum_stderr_bytes: MAXIMUM_OUTPUT_BYTES,
-        stdout_path: context.evidence.join("nominal-session-state.stdout"),
-        stderr_path: context.evidence.join("nominal-session-state.stderr"),
-        unavailable_exit_code: None,
-    };
-    let terminal = process::run(&spec, &context.evidence);
-    fs::remove_dir_all(&standalone)?;
-    require(
-        terminal.status == process::ProcessStatus::Passed,
-        "source-bound nominal session state probe failed",
     )?;
-    let states: serde_json::Value = serde_json::from_slice(&process::read_bounded(
-        &spec.stdout_path,
-        MAXIMUM_OUTPUT_BYTES,
-    )?)?;
+    context.receipt.nominal.session = observation;
+    context.receipt.runners.push(call);
+    let descriptor = standalone.join("session.deployment.json");
+    let source_bytes = process::read_bounded(&source, MAXIMUM_CONTAINER_BYTES)?;
+    let transport = package.transport;
+    let states = context.probe_json(
+        "nominal-session-state",
+        "contributor.nominal_session_state_probe",
+        &[
+            descriptor.display().to_string(),
+            source.display().to_string(),
+            transport.clone(),
+        ],
+        || {
+            lkjscript::platform::contributor::nominal_session_state_probe(
+                &descriptor,
+                &source_bytes,
+                &transport,
+            )
+        },
+    )?;
+    fs::remove_dir_all(&standalone)?;
     require(
         states["effects_replayed"] == false && states["cleanup"]["remaining_tasks"] == 0,
         "source-bound session cleanup or effect isolation failed",
     )?;
     context.receipt.nominal.retained_states = serde_json::from_value(states["states"].clone())?;
-    context.receipt.runners.push(terminal);
+
     Ok(())
 }
 
@@ -506,4 +499,13 @@ type.field parent=@Peer index=1 name=reason type=text
     }
     r.text.push_str(&format!("create.function as=$handler module=$module name=handler visibility=private result=@Decision effect=task body={body}\nadd.parameter as=$state function=$handler name=state type=@StateOption\nadd.parameter as=$event function=$handler name=event type=@event\neffect.requirement parent=$handler index=0 requirement=$streams\neffect.row as=@handler-effects\neffect.requirement parent=@handler-effects index=0 requirement=$streams\ntype.task-function as=@Handler result=@Decision effect=@handler-effects\ntype.argument parent=@Handler index=0 type=@StateOption\ntype.argument parent=@Handler index=1 type=@event\nadd.port as=$live component=$component name=live type=@Handler function=$handler\ncreate.target as=$target name=live component=$component port=$live runner=interactive\n"));
     r.text
+}
+
+pub(super) fn descriptor() -> serde_json::Value {
+    json!({"artifact":"session.lkja","target":"live","listen":"127.0.0.1:0",
+        "runtime":{"maximum_concurrent_tasks":4,"maximum_queued_tasks":8,"request_deadline_milliseconds":30000,"shutdown_grace_milliseconds":3000,"cancellation_grace_milliseconds":1000},
+        "execution":{"instruction_fuel":1000000,"maximum_call_depth":256,"maximum_value_stack":4096},"http":null,
+        "session":{"maximum_active_sessions":2,"maximum_pending_handshakes":2,"maximum_message_bytes":4096,"maximum_frame_bytes":4096,"maximum_header_bytes":8192,"maximum_headers":32,"maximum_inbound_mailbox_items":2,"maximum_inbound_mailbox_bytes":8192,"maximum_outbound_mailbox_items":8,"maximum_outbound_mailbox_bytes":8192,"maximum_state_nodes":1024,"maximum_state_bytes":4096,"maximum_transition_messages":8,"maximum_transition_bytes":8192,"tick_interval_milliseconds":1000,"idle_timeout_milliseconds":60000,"maximum_lifetime_milliseconds":86400000,"close_grace_milliseconds":1000,"cancellation_grace_milliseconds":1000,"maximum_process_buffer_bytes":1048576},
+        "worker":null,"streams":{"maximum_chunk_bytes":4096,"maximum_buffered_chunks":4,"maximum_total_bytes":65536,"maximum_live_streams":16},"configuration":{},"secrets":[],
+        "grants":[{"requirement":"streams","sharing_domain":"nominal-session-streams","authority_revision":"9999999999999999999999999999999999999999999999999999999999999999","adapter":{"kind":"byte_stream"}}]})
 }

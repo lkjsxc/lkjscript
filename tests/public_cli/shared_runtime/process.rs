@@ -5,10 +5,15 @@ use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
 pub(in super::super) struct Group {
-    child: support::SpawnedChild,
+    owner: Option<Owner>,
     output: PathBuf,
     errors: PathBuf,
     pub ready: Value,
+}
+
+enum Owner {
+    Process(support::SpawnedChild),
+    Host(super::super::native_http::resident::Resident),
 }
 
 fn events(path: &Path) -> Vec<Value> {
@@ -22,13 +27,58 @@ fn events(path: &Path) -> Vec<Value> {
 
 impl Group {
     pub fn start(public: &Native, descriptors: &[Value], environment: &[(&str, &str)]) -> Self {
+        Self::start_in(public, descriptors, environment, false)
+    }
+
+    /// PID and signal witnesses explicitly retain an actual process owner.
+    pub fn start_process(
+        public: &Native,
+        descriptors: &[Value],
+        environment: &[(&str, &str)],
+    ) -> Self {
+        Self::start_in(public, descriptors, environment, true)
+    }
+
+    fn start_in(
+        public: &Native,
+        descriptors: &[Value],
+        environment: &[(&str, &str)],
+        force_process: bool,
+    ) -> Self {
         let output = public.root.path().join("shared.stdout");
         let errors = public.root.path().join("shared.stderr");
+        let mut paths = Vec::new();
         let mut command = Command::new(&public.executable);
         command.arg("serve");
         for (index, descriptor) in descriptors.iter().enumerate() {
             let file = public.input(&format!("shared-{index}.json"), &descriptor.to_string());
-            command.arg("--deployment").arg(file);
+            command.arg("--deployment").arg(&file);
+            paths.push(file);
+        }
+        if !force_process
+            && public.mode == crate::semantic_cli::Mode::HostSemantic
+            && super::super::native_http::resident::eligible(&paths, environment)
+        {
+            let host = super::super::native_http::resident::Resident::start(
+                paths,
+                true,
+                output.clone(),
+                errors.clone(),
+                Duration::from_secs(60),
+                Duration::from_secs(20),
+            );
+            let ready = host.ready.clone();
+            assert!(ready.get("process_id").is_none());
+            assert_eq!(
+                ready["instances"].as_array().unwrap().len(),
+                descriptors.len()
+            );
+            return Self {
+                owner: Some(Owner::Host(host)),
+                output,
+                errors,
+                ready,
+            };
         }
         let mut child = support::spawn(
             command
@@ -65,7 +115,7 @@ impl Group {
                     "shared host did not launch application processes"
                 );
                 return Self {
-                    child,
+                    owner: Some(Owner::Process(child)),
                     output,
                     errors,
                     ready,
@@ -90,12 +140,37 @@ impl Group {
             .unwrap()
     }
 
+    /// Host semantic teardown uses cooperative cancellation. A process remainder
+    /// still receives the original explicitly selected operating-system signal.
+    pub fn shutdown(mut self, process_signal: Signal) -> Value {
+        match self.owner.take().unwrap() {
+            Owner::Host(host) => {
+                let actual = host.stop();
+                let observed = self.terminal(true);
+                assert_eq!(actual, observed);
+                observed
+            }
+            Owner::Process(child) => {
+                self.owner = Some(Owner::Process(child));
+                self.stop(process_signal)
+            }
+        }
+    }
+
     pub fn stop(mut self, signal: Signal) -> Value {
-        let pid = Pid::from_raw(i32::try_from(self.child.id()).unwrap()).unwrap();
+        let process = match self.owner.take().unwrap() {
+            Owner::Process(child) => Some(child),
+            Owner::Host(host) => {
+                drop(host);
+                None
+            }
+        };
+        let mut child = process.expect("signal teardown requires an actual shared process owner");
+        let pid = Pid::from_raw(i32::try_from(child.id()).unwrap()).unwrap();
         kill_process(pid, signal).unwrap();
         let until = Instant::now() + Duration::from_secs(20);
         loop {
-            if let Some(status) = self.child.try_wait().unwrap() {
+            if let Some(status) = child.try_wait().unwrap() {
                 assert!(
                     status.success(),
                     "group stop failed: {status}; {:?}; {}",
@@ -107,7 +182,11 @@ impl Group {
             assert!(Instant::now() < until, "group shutdown deadline");
             std::thread::sleep(Duration::from_millis(5));
         }
-        assert!(self.child.wait_with_output().unwrap().status.success());
+        assert!(child.wait_with_output().unwrap().status.success());
+        self.terminal(false)
+    }
+
+    fn terminal(&self, host: bool) -> Value {
         assert!(std::fs::read(&self.errors).unwrap().is_empty());
         let events = events(&self.output);
         assert_eq!(
@@ -140,13 +219,17 @@ impl Group {
         assert_eq!(stopped_executor["dispatch_open"], false);
         assert_eq!(stopped_executor["active_dispatches"], 0);
         assert_eq!(stopped_executor["remaining_workers"], 0);
-        // The fixed CLI service group has one executor owner in this process.
-        assert_eq!(stopped_executor["workers_received"], 0);
-        assert_eq!(stopped_executor["workers_handed_off"], 0);
-        assert_eq!(
-            stopped_executor["joined_workers"],
-            stopped_executor["workers_started"]
-        );
+        if host {
+            super::super::native_http::resident::check_executor(&stopped_executor).unwrap();
+        } else {
+            // The fixed CLI group has one executor owner in its isolated process.
+            assert_eq!(stopped_executor["workers_received"], 0);
+            assert_eq!(stopped_executor["workers_handed_off"], 0);
+            assert_eq!(
+                stopped_executor["joined_workers"],
+                stopped_executor["workers_started"]
+            );
+        }
         for instance in stopped["instances"].as_array().unwrap() {
             let receipt = &instance["receipt"];
             assert_eq!(receipt["shutdown"]["admission_stopped"], true);

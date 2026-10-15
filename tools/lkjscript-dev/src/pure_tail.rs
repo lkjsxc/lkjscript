@@ -1,11 +1,14 @@
-//! Bounded copied-public-executable acceptance for pure tail execution.
+//! Complete linked source semantics and bounded final executable tail boundaries.
 
+mod boundary;
+mod host_http;
 mod nominal_data;
 mod source_batch;
 
-use crate::{authority, error::DevError, evidence, process, pure_tail_program};
+use crate::{authority, error::DevError, evidence, process, pure_tail_program, semantic_cli};
 use lkjscript::platform::contributor::offline_producer_inventory;
 use lkjscript::platform::control::{CompactRecord, decode_logical_change_plan, parse_records};
+use semantic_cli::CallObservation;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
@@ -28,9 +31,6 @@ struct ValueWork {
     internal_guard_descendant_visits: u64,
     classification_decisions: u64,
     lists: ListWork,
-    // Historical list receipts predate the map storage observation. Map acceptance
-    // has its own required evidence in offline-packages; absence proves no map work.
-    #[serde(default)]
     maps: MapWork,
 }
 
@@ -310,8 +310,6 @@ fn verify_matrix(matrix: &[MatrixCell]) -> Result<(), DevError> {
 pub(crate) struct Receipt {
     schema: String,
     status: String,
-    pub(crate) candidate_sha256: String,
-    copied_candidate_sha256: String,
     pub(crate) verifier_sha256: String,
     isolated_root: String,
     evidence_root: String,
@@ -329,14 +327,13 @@ pub(crate) struct Receipt {
 #[serde(deny_unknown_fields)]
 struct CommandEvidence {
     command: Vec<String>,
-    observation: process::ProcessObservation,
+    observation: CallObservation,
     expected_success: bool,
 }
 
 struct Context {
     root: PathBuf,
     output: PathBuf,
-    binary: PathBuf,
     started: Instant,
     receipt: Receipt,
 }
@@ -353,6 +350,7 @@ struct Package {
 
 pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u8, DevError> {
     let mut binary = None;
+    let mut source_receipt = None;
     let mut output = None;
     let mut machine = false;
     while let Some(option) = crate::next_utf8(&mut arguments, "option")? {
@@ -369,17 +367,30 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
                         .ok_or_else(|| DevError::usage("missing evidence root"))?,
                 ))
             }
+            "--source-receipt" if source_receipt.is_none() => {
+                source_receipt = Some(PathBuf::from(
+                    crate::next_utf8(&mut arguments, "source receipt")?
+                        .ok_or_else(|| DevError::usage("missing source receipt"))?,
+                ))
+            }
             "--machine" if !machine => machine = true,
             _ => {
                 return Err(DevError::usage(
-                    "pure-tail requires --binary PATH --evidence-root ABSENT_ABSOLUTE_PATH [--machine]",
+                    "pure-tail requires --evidence-root ABSENT_ABSOLUTE_PATH [--binary PATH --source-receipt PATH] [--machine]",
                 ));
             }
         }
     }
-    let binary = binary.ok_or_else(|| DevError::usage("pure-tail requires --binary"))?;
-    let candidate_sha256 = digest(&binary)?;
     let output = output.ok_or_else(|| DevError::usage("pure-tail requires --evidence-root"))?;
+    match (binary, source_receipt) {
+        (Some(binary), Some(source)) => return boundary::command(&binary, &source, &output),
+        (None, None) => {}
+        _ => {
+            return Err(DevError::usage(
+                "final pure-tail requires both --binary and --source-receipt",
+            ));
+        }
+    }
     require(
         output.is_absolute()
             && !output
@@ -400,23 +411,13 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
     let root = tempfile::Builder::new()
         .prefix("lkjscript-pure-tail-")
         .tempdir()?;
-    let copied = root.path().join("lkjscript");
-    fs::copy(&binary, &copied)?;
-    let copied_candidate_sha256 = digest(&copied)?;
-    require(
-        candidate_sha256 == copied_candidate_sha256,
-        "candidate copy changed",
-    )?;
     let mut context = Context {
         root: root.path().to_path_buf(),
         output: output.clone(),
-        binary: copied,
         started: Instant::now(),
         receipt: Receipt {
-            schema: "lkjscript-pure-tail-acceptance-7".to_owned(),
+            schema: "lkjscript-pure-tail-semantic-1".to_owned(),
             status: "failed".to_owned(),
-            candidate_sha256,
-            copied_candidate_sha256,
             verifier_sha256: digest(&std::env::current_exe()?)?,
             isolated_root: root.path().display().to_string(),
             evidence_root: output.display().to_string(),
@@ -430,13 +431,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
             failure: None,
         },
     };
-    let result = workflow(&mut context).and_then(|()| {
-        require(
-            digest(&context.binary)? == context.receipt.candidate_sha256
-                && digest(&binary)? == context.receipt.candidate_sha256,
-            "candidate or copied candidate changed during execution",
-        )
-    });
+    let result = workflow(&mut context);
     context.receipt.elapsed_nanoseconds = u64::try_from(context.started.elapsed().as_nanos())
         .map_err(|_| DevError::corrupt("elapsed overflow"))?;
     root.close()?;
@@ -456,11 +451,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
     let proof = evidence::publish_json(&output.join("receipt.json"), &context.receipt)?;
     let success = context.receipt.status == "fresh passed" && context.receipt.cleanup_complete;
     if success {
-        read_transferred_receipt(
-            &output.join("receipt.json"),
-            &binary,
-            &std::env::current_exe()?,
-        )?;
+        read_semantic_receipt(&output.join("receipt.json"), &std::env::current_exe()?)?;
     }
     println!(
         "{}",
@@ -523,43 +514,36 @@ impl Context {
         expected_success: bool,
     ) -> Result<Vec<CompactRecord>, DevError> {
         let timeout = self.bound()?.min(Duration::from_secs(120));
-        let mut command = vec![self.binary.display().to_string()];
+        let mut command = Vec::new();
         if let Some(project) = project {
             command.extend(["--project".to_owned(), project.display().to_string()]);
         }
         command.extend(args.iter().map(|value| (*value).to_owned()));
         let index = self.receipt.commands.len();
-        let spec = process::ProcessSpec {
-            command,
-            cwd: self.root.clone(),
-            environment: BTreeMap::from([("LANG".to_owned(), "C.UTF-8".to_owned())]),
-            timeout,
-            maximum_stdout_bytes: MAXIMUM_OUTPUT,
-            maximum_stderr_bytes: MAXIMUM_OUTPUT,
-            stdout_path: self.output.join(format!("command-{index:04}.stdout")),
-            stderr_path: self.output.join(format!("command-{index:04}.stderr")),
-            unavailable_exit_code: None,
-        };
-        let observation = process::run(&spec, &self.output);
-        let passed = observation.status == process::ProcessStatus::Passed;
-        let failed = observation.status == process::ProcessStatus::Failed
-            && observation.exit_code.is_some_and(|code| code != 0);
+        let response = self.output.join(format!("command-{index:04}.stdout"));
+        let diagnostic = self.output.join(format!("command-{index:04}.stderr"));
+        let observation = semantic_cli::execute_with_cancellation(
+            &command,
+            &response,
+            &diagnostic,
+            &self.output,
+            async move { tokio::time::sleep(timeout).await },
+        )?;
+        observation.require_outcome(expected_success)?;
+        let in_time = u128::from(observation.elapsed_nanoseconds()) <= timeout.as_nanos();
         self.receipt.commands.push(CommandEvidence {
-            command: spec.command,
+            command,
             observation,
             expected_success,
         });
         require(
-            if expected_success { passed } else { failed },
-            &format!(
-                "public command {index} did not match expected success={expected_success}; see {}",
-                spec.stdout_path.display()
-            ),
+            in_time,
+            "linked public call exceeded its actual per-call elapsed admission bound",
         )?;
         self.bound()?;
         parse_records(
-            "pure-tail copied response",
-            &process::read_bounded(&spec.stdout_path, MAXIMUM_OUTPUT)?,
+            "pure-tail linked public response",
+            &process::read_bounded(&response, MAXIMUM_OUTPUT)?,
         )
         .map_err(|error| DevError::corrupt(format!("compact response: {error:?}")))
     }
@@ -749,7 +733,7 @@ impl Context {
         let passed = observation.status == process::ProcessStatus::Passed;
         self.receipt.commands.push(CommandEvidence {
             command: spec.command,
-            observation,
+            observation: CallObservation::Process(observation),
             expected_success: true,
         });
         require(
@@ -977,7 +961,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
             .commands
             .last()
             .ok_or_else(|| DevError::corrupt("factory projection command missing"))?;
-        factory_projections.insert(name.to_owned(), command.observation.stdout.path.clone());
+        factory_projections.insert(name.to_owned(), command.observation.stdout().path.clone());
     }
     context.receipt.outcomes.insert(
         "generic-factory-definitions".to_owned(),
@@ -1166,6 +1150,16 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
         "producer_removed".to_owned(),
         serde_json::json!(!library.path.exists()),
     );
+    fs::copy(
+        context.output.join("reviewed-clean.lkja"),
+        context.output.join("command.lkja"),
+    )?;
+    let descriptor = command_descriptor();
+    evidence::publish_json(&context.output.join("command.deployment.json"), &descriptor)?;
+    evidence::publish(
+        &context.output.join("command.arguments.json"),
+        &serde_json::to_vec(&vec![(1_i64..=8192).collect::<Vec<_>>()])?,
+    )?;
     standalone_http(context, &mut consumer, &mut standard)?;
     context.bound()?;
     Ok(())
@@ -1249,6 +1243,10 @@ fn standalone_http(
         container: PathBuf::new(),
         symbols: BTreeMap::new(),
     };
+    fs::copy(
+        http.path.join("service.deployment.json"),
+        context.output.join("http-template.deployment.json"),
+    )?;
     context.stage(&http, consumer)?;
     let module = context.cli(
         Some(&http.path),
@@ -1404,6 +1402,15 @@ fn standalone_http(
         "HTTP check/build changed accepted meaning or existing immutable inputs",
     )?;
     let bundle = field(&built, "artifact", "bundle")?;
+    require(
+        lkjscript::platform::contributor::strict_artifact_identity_probe(&process::read_bounded(
+            &artifact,
+            MAXIMUM_FILES_BYTES,
+        )?)
+        .map_err(|error| DevError::corrupt(error.to_string()))?
+            == bundle,
+        "HTTP public build differs from independently admitted artifact",
+    )?;
     let artifact_sha256 = digest(&artifact)?;
     let descriptor_path = standalone.join("service.deployment.json");
     let mut descriptor: serde_json::Value = serde_json::from_slice(&process::read_bounded(
@@ -1435,59 +1442,9 @@ fn standalone_http(
             "project directory remains before standalone HTTP",
         )?;
     }
-    let spec = process::ProcessSpec {
-        command: vec![
-            context.binary.display().to_string(),
-            "serve".to_owned(),
-            "--deployment".to_owned(),
-            descriptor_path.display().to_string(),
-        ],
-        cwd: standalone,
-        environment: BTreeMap::from([("LANG".to_owned(), "C.UTF-8".to_owned())]),
-        timeout: context.bound()?,
-        maximum_stdout_bytes: MAXIMUM_OUTPUT,
-        maximum_stderr_bytes: MAXIMUM_OUTPUT,
-        stdout_path: context.output.join("standalone.stdout"),
-        stderr_path: context.output.join("standalone.stderr"),
-        unavailable_exit_code: None,
-    };
-    let command = spec.command.clone();
-    let stdout = spec.stdout_path.clone();
-    let control = process::ProcessControl::default();
-    let child_control = control.clone();
-    let output = context.output.clone();
-    let (sender, receiver) = std::sync::mpsc::channel();
-    let thread = std::thread::Builder::new()
-        .name("pure-tail-http-observer".to_owned())
-        .spawn(move || {
-            let _ = sender.send(process::run_controlled(&spec, &output, &child_control));
-        })?;
+    let server = host_http::Server::start(&descriptor_path)?;
+    let address = server.address;
     let result: Result<(), DevError> = (|| {
-        let started = Instant::now();
-        let ready: serde_json::Value = loop {
-            require(
-                started.elapsed() < Duration::from_secs(30) && !thread.is_finished(),
-                "standalone HTTP readiness failed",
-            )?;
-            if stdout.exists() {
-                let bytes = process::read_bounded(&stdout, MAXIMUM_OUTPUT)?;
-                if let Some(end) = bytes.iter().position(|byte| *byte == b'\n') {
-                    break serde_json::from_slice(&bytes[..end])?;
-                }
-            }
-            std::thread::sleep(Duration::from_millis(20));
-        };
-        require(
-            ready["event"] == "ready"
-                && ready["ok"] == true
-                && ready["deployment"]["artifact_digest"] == bundle,
-            "standalone readiness has a foreign artifact",
-        )?;
-        let address = ready["local_address"]
-            .as_str()
-            .ok_or_else(|| DevError::corrupt("listener missing"))?
-            .parse()
-            .map_err(|_| DevError::corrupt("listener invalid"))?;
         let store = DataStore::open(&data_root, "tail", DataLimits::default())
             .map_err(|error| DevError::corrupt(error.to_string()))?;
         let data_scan = || -> Result<_, DevError> {
@@ -1605,52 +1562,59 @@ fn standalone_http(
         context.receipt.outcomes.insert("standalone_http".to_owned(),serde_json::json!({"fixed_response_length":8192,"fixed_response_sum":100691968,"mapped_data_matches_independent_typed_bytes":true,"initial_committed_changes":1,"initial_data_revisions":initial_revisions,"final_data_verification":store.verify().map_err(|error| DevError::corrupt(error.to_string()))?,"after_trap_changes":1,"after_recovery_changes":2,"configured_request":configured,"configured_response":"[8,11,17]","after_configured_changes":3,"maximum_live_transactions":1,"project_directories_absent":true,"committed":committed,"artifact_sha256":artifact_sha256,"pure_effects_replayed":false,"trap":"integer overflow inside the final fold callback after staging"}));
         Ok(())
     })();
-    control.interrupt();
-    let terminal = receiver.recv_timeout(Duration::from_secs(35)).or_else(|_| {
-        control.kill();
-        receiver.recv_timeout(Duration::from_secs(5))
-    });
-    thread
-        .join()
-        .map_err(|_| DevError::corrupt("HTTP observer thread failed"))?;
-    let terminal = terminal.map_err(|_| DevError::corrupt("HTTP runner did not terminate"))?;
-    let stopped = terminal.status == process::ProcessStatus::Passed;
+    // The HTTP owner is joined before propagating a request assertion failure.
+    match (result, server.finish()) {
+        (result, Ok(terminal)) => {
+            context
+                .receipt
+                .outcomes
+                .insert("source_http_owner".to_owned(), terminal);
+            result?;
+        }
+        (Ok(()), Err(cleanup)) => return Err(cleanup),
+        (Err(original), Err(cleanup)) => {
+            return Err(DevError::corrupt(format!(
+                "{original}; joined HTTP cleanup also failed: {cleanup}"
+            )));
+        }
+    }
+    let command = vec![
+        "pure-tail-transaction-probe".to_owned(),
+        descriptor_path.display().to_string(),
+        http.symbols["$write-fold"].clone(),
+    ];
+    let response = context.output.join("transaction-cancellation.stdout");
+    let diagnostic = context.output.join("transaction-cancellation.stderr");
+    let observation = semantic_cli::observe_json(
+        "pure-tail-transaction-probe",
+        &command,
+        &response,
+        &diagnostic,
+        &context.output,
+        || {
+            lkjscript::platform::contributor::pure_tail_transaction_probe(
+                &descriptor_path,
+                &http.symbols["$write-fold"],
+            )
+            .and_then(|value| {
+                serde_json::to_value(value).map_err(|error| {
+                    lkjscript::platform::Diagnostic::new(
+                        lkjscript::platform::DiagnosticClass::Corrupt,
+                        "pure_tail_probe_encoding",
+                        error.to_string(),
+                    )
+                })
+            })
+        },
+    )?;
+    observation.require_outcome(true)?;
     context.receipt.commands.push(CommandEvidence {
         command,
-        observation: terminal,
-        expected_success: true,
-    });
-    result?;
-    require(stopped, "HTTP runner did not shut down cleanly")?;
-    let spec = process::ProcessSpec {
-        command: vec![
-            std::env::current_exe()?.display().to_string(),
-            "pure-tail-transaction-probe".to_owned(),
-            descriptor_path.display().to_string(),
-            http.symbols["$write-fold"].clone(),
-        ],
-        cwd: context.root.clone(),
-        environment: BTreeMap::from([("LANG".to_owned(), "C.UTF-8".to_owned())]),
-        timeout: context.bound()?,
-        maximum_stdout_bytes: MAXIMUM_OUTPUT,
-        maximum_stderr_bytes: MAXIMUM_OUTPUT,
-        stdout_path: context.output.join("transaction-cancellation.stdout"),
-        stderr_path: context.output.join("transaction-cancellation.stderr"),
-        unavailable_exit_code: None,
-    };
-    let observation = process::run(&spec, &context.output);
-    let passed = observation.status == process::ProcessStatus::Passed;
-    context.receipt.commands.push(CommandEvidence {
-        command: spec.command,
         observation,
         expected_success: true,
     });
-    require(
-        passed,
-        "transaction cancellation probe failed; see transaction-cancellation.stderr",
-    )?;
     let cancellation: serde_json::Value =
-        serde_json::from_slice(&process::read_bounded(&spec.stdout_path, MAXIMUM_OUTPUT)?)?;
+        serde_json::from_slice(&process::read_bounded(&response, MAXIMUM_OUTPUT)?)?;
     require(
         cancellation["classification"] == "fresh passed"
             && cancellation["failure"]["code"] == "execution_cancelled"
@@ -1869,17 +1833,235 @@ fn directory_bytes(root: &Path) -> Result<u64, DevError> {
     Ok(bytes)
 }
 
-impl Receipt {
-    pub(crate) fn command_count(&self) -> u64 {
-        self.commands.len() as u64
+/// Only the complete current source reader can construct a reusable fixture.
+pub(crate) struct AdmittedFixture {
+    root: PathBuf,
+    source_receipt: evidence::FileProof,
+    receipt: Receipt,
+}
+
+#[cfg(test)]
+impl AdmittedFixture {
+    fn process_count(&self) -> u64 {
+        self.receipt
+            .commands
+            .iter()
+            .filter(|call| call.observation.as_process().is_some())
+            .count() as u64
     }
+}
+
+pub(crate) fn read_semantic_receipt(
+    path: &Path,
+    verifier: &Path,
+) -> Result<AdmittedFixture, DevError> {
+    let receipt = read_source_receipt(path, verifier)?;
+    let root = path
+        .parent()
+        .ok_or_else(|| DevError::corrupt("source receipt parent missing"))?
+        .canonicalize()?;
+    require(
+        digest(&root.join("command.lkja"))? == receipt.outcomes["reviewed_artifact_sha256"]
+            && process::read_bounded(&root.join("command.lkja"), MAXIMUM_FILES_BYTES)?
+                == process::read_bounded(&root.join("reviewed-clean.lkja"), MAXIMUM_FILES_BYTES)?
+            && digest(&root.join("standalone.lkja"))?
+                == receipt.outcomes["standalone_http"]["artifact_sha256"]
+            && process::read_bounded(&root.join("command.arguments.json"), MAXIMUM_OUTPUT)?
+                == serde_json::to_vec(&vec![(1_i64..=8192).collect::<Vec<_>>()])?,
+        "retained boundary fixtures differ from their complete source witnesses",
+    )?;
+    for name in ["command.lkja", "standalone.lkja"] {
+        lkjscript::platform::contributor::strict_artifact_identity_probe(&process::read_bounded(
+            &root.join(name),
+            MAXIMUM_FILES_BYTES,
+        )?)
+        .map_err(|error| DevError::corrupt(error.to_string()))?;
+    }
+    let isolated = Path::new(&receipt.isolated_root);
+    require_build_binding(
+        &receipt,
+        &root,
+        &isolated.join("consumer"),
+        &root.join("reviewed-clean.lkja"),
+        "command.lkja",
+    )?;
+    require_build_binding(
+        &receipt,
+        &root,
+        &isolated.join("http"),
+        &isolated.join("standalone/application.lkja"),
+        "standalone.lkja",
+    )?;
+    let descriptor: serde_json::Value = serde_json::from_slice(&process::read_bounded(
+        &root.join("command.deployment.json"),
+        MAXIMUM_OUTPUT,
+    )?)?;
+    require(
+        descriptor == command_descriptor(),
+        "retained Command descriptor changed",
+    )?;
+    let template =
+        process::read_bounded(&root.join("http-template.deployment.json"), MAXIMUM_OUTPUT)?;
+    let http = process::read_bounded(&root.join("standalone.deployment.json"), MAXIMUM_OUTPUT)?;
+    require_http_fixture(&template, &http)?;
+    let source_receipt = evidence::proof(path, path.canonicalize()?.display().to_string())?;
+    Ok(AdmittedFixture {
+        root,
+        source_receipt,
+        receipt,
+    })
+}
+
+fn require_http_fixture(template: &[u8], bytes: &[u8]) -> Result<(), DevError> {
+    use lkjscript::platform::deployment::{
+        AdapterDescriptor, DeploymentDescriptor, DeploymentGrant, decode_deployment,
+    };
+    use lkjscript::platform::{
+        data::DataLimits, http::HttpLimits, runtime::ResidentLimits, stream::StreamLimits,
+    };
+    let template =
+        decode_deployment(template).map_err(|error| DevError::corrupt(error.to_string()))?;
+    let descriptor =
+        decode_deployment(bytes).map_err(|error| DevError::corrupt(error.to_string()))?;
+    require(
+        template.grants.len() == 1,
+        "source HTTP template grants changed",
+    )?;
+    let revision = &template.grants[0].authority_revision;
+    require(
+        evidence::hex_identity(revision, "", 64) && revision != &"0".repeat(64),
+        "source starter stream authority missing",
+    )?;
+    let mut expected = DeploymentDescriptor {
+        contract_version: lkjscript::platform::deployment::DEPLOYMENT_CONTRACT_VERSION,
+        artifact: "generated/application.lkja".to_owned(),
+        target: "serve".to_owned(),
+        listen: Some("127.0.0.1:0".to_owned()),
+        runtime: Some(ResidentLimits {
+            maximum_concurrent_tasks: 16,
+            maximum_queued_tasks: 64,
+            request_deadline_milliseconds: 30_000,
+            shutdown_grace_milliseconds: 30_000,
+            cancellation_grace_milliseconds: 5_000,
+            ..Default::default()
+        }),
+        execution: Some(lkjscript::platform::execution::RunPolicy::unmetered()),
+        http: Some(HttpLimits {
+            maximum_request_body_bytes: 8 * 1024 * 1024,
+            maximum_response_body_bytes: 4 * 1024 * 1024,
+            maximum_header_bytes: 32 * 1024,
+            maximum_headers: 128,
+            ..Default::default()
+        }),
+        session: None,
+        worker: None,
+        streams: StreamLimits::default(),
+        configuration: BTreeMap::new(),
+        secrets: Vec::new(),
+        grants: vec![DeploymentGrant {
+            requirement: "streams".to_owned(),
+            sharing_domain: "http-request-streams".to_owned(),
+            authority_revision: revision.clone(),
+            adapter: AdapterDescriptor::ByteStream,
+        }],
+    };
+    require(
+        serde_json::to_value(&template)? == serde_json::to_value(&expected)?,
+        "source HTTP template differs from the exact ordinary starter contract",
+    )?;
+    expected.artifact = "application.lkja".to_owned();
+    expected.grants.push(DeploymentGrant {
+        requirement: "data".to_owned(),
+        sharing_domain: "pure-tail-data".to_owned(),
+        authority_revision: "7".repeat(64),
+        adapter: AdapterDescriptor::Data {
+            root: "data".to_owned(),
+            namespace: "tail".to_owned(),
+            limits: DataLimits {
+                maximum_live_transactions: 1,
+                ..Default::default()
+            },
+        },
+    });
+    require(
+        serde_json::to_value(&descriptor)? == serde_json::to_value(&expected)?,
+        "retained HTTP fixture changed the exact source-tested authorities or operational limits",
+    )
+}
+
+fn require_build_binding(
+    receipt: &Receipt,
+    evidence_root: &Path,
+    project: &Path,
+    original_output: &Path,
+    retained_artifact: &str,
+) -> Result<(), DevError> {
+    let expected = vec![
+        "--project".to_owned(),
+        project.display().to_string(),
+        "build".to_owned(),
+        "--output".to_owned(),
+        original_output.display().to_string(),
+    ];
+    let matching = receipt
+        .commands
+        .iter()
+        .filter(|call| call.command == expected)
+        .collect::<Vec<_>>();
+    require(
+        matching.len() == 1 && matching[0].expected_success,
+        "retained fixture has no unique original public build operation",
+    )?;
+    let observation = &matching[0].observation;
+    require(
+        observation.as_semantic().is_some(),
+        "source build must be a linked public operation",
+    )?;
+    observation.require_outcome(true)?;
+    observation.require_arguments(&expected)?;
+    let records = parse_records(
+        "original source fixture build",
+        &process::read_bounded(
+            &evidence_root.join(&observation.stdout().path),
+            MAXIMUM_OUTPUT,
+        )?,
+    )
+    .map_err(|error| DevError::corrupt(format!("fixture build response: {error:?}")))?;
+    let bytes = process::read_bounded(&evidence_root.join(retained_artifact), MAXIMUM_FILES_BYTES)?;
+    let bundle = lkjscript::platform::contributor::strict_artifact_identity_probe(&bytes)
+        .map_err(|error| DevError::corrupt(error.to_string()))?;
+    require(
+        field(&records, "artifact", "bundle")? == bundle
+            && field(&records, "artifact", "bytes")? == bytes.len().to_string()
+            && field(&records, "result", "status")? == "success"
+            && field(&records, "result", "command")? == "build"
+            && field(&records, "output", "path")? == original_output.display().to_string()
+            && field(&records, "output", "bytes")? == bytes.len().to_string()
+            && field(&records, "output", "visibility")? == "created"
+            && field(&records, "output", "durability")? == "synchronized"
+            && field(&records, "output", "stage-cleanup")? == "removed",
+        "retained fixture is foreign to its original actual public build response",
+    )
+}
+
+fn command_descriptor() -> serde_json::Value {
+    serde_json::json!({
+        "artifact":"command.lkja", "target":"sum", "listen":null,
+        "http":null, "session":null, "worker":null,
+        "streams":lkjscript::platform::stream::StreamLimits::default(),
+        "grants":[], "secrets":[], "configuration":{},
+    })
 }
 
 pub(crate) fn read_transferred_receipt(
     path: &Path,
     candidate: &Path,
     verifier: &Path,
-) -> Result<Receipt, DevError> {
+) -> Result<boundary::Receipt, DevError> {
+    boundary::read(path, candidate, verifier)
+}
+
+fn read_source_receipt(path: &Path, verifier: &Path) -> Result<Receipt, DevError> {
     let bytes = process::read_bounded(path, 16 * 1024 * 1024)?;
     let receipt: Receipt = serde_json::from_slice(&bytes)?;
     require(
@@ -1891,7 +2073,7 @@ pub(crate) fn read_transferred_receipt(
         .ok_or_else(|| DevError::corrupt("receipt parent missing"))?
         .canonicalize()?;
     require(
-        receipt.schema == "lkjscript-pure-tail-acceptance-7"
+        receipt.schema == "lkjscript-pure-tail-semantic-1"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -1901,10 +2083,8 @@ pub(crate) fn read_transferred_receipt(
         "pure-tail receipt is incomplete",
     )?;
     require(
-        receipt.candidate_sha256 == digest(candidate)?
-            && receipt.copied_candidate_sha256 == receipt.candidate_sha256
-            && receipt.verifier_sha256 == digest(verifier)?,
-        "pure-tail receipt has foreign executable bindings",
+        receipt.verifier_sha256 == digest(verifier)?,
+        "pure-tail semantic receipt has a foreign verifier/library producer",
     )?;
     require(
         receipt.elapsed_nanoseconds <= MAXIMUM_SECONDS * 1_000_000_000
@@ -1917,49 +2097,93 @@ pub(crate) fn read_transferred_receipt(
     )?;
     let isolated = Path::new(&receipt.isolated_root);
     let mut probes = BTreeSet::new();
-    for command in &receipt.commands {
-        evidence::verify_process_files(&root, &command.observation)?;
-        if command.command.first().map(Path::new) != Some(&isolated.join("lkjscript")) {
+    for (index, command) in receipt.commands.iter().enumerate() {
+        command
+            .observation
+            .require_outcome(command.expected_success)?;
+        let label = if let Some(observation) = command.observation.as_process() {
+            require_positive_probe(command)?;
+            evidence::verify_process_files(&root, observation)?;
             require(
-                command.command.first().map(Path::new) == Some(verifier),
-                "pure-tail command used a foreign executable",
+                command.command
+                    == [
+                        verifier.display().to_string(),
+                        "pure-tail-probe".to_owned(),
+                        isolated.join("consumer").display().to_string(),
+                    ]
+                    && observation.stdout.path == "bounded-stack.stdout"
+                    && command.expected_success
+                    && probes.insert("bounded-stack"),
+                "only the isolated source stack probe may have process evidence",
             )?;
-            let probe = command.command.get(1).map(String::as_str);
-            let valid = match probe {
-                Some("pure-tail-probe") => {
+            "bounded-stack".to_owned()
+        } else {
+            command.observation.require_arguments(&command.command)?;
+            let operation = if command
+                .command
+                .first()
+                .is_some_and(|value| value == "--project")
+            {
+                command.command.get(2)
+            } else {
+                command.command.first()
+            };
+            require(
+                command
+                    .observation
+                    .as_semantic()
+                    .is_some_and(|call| Some(&call.operation) == operation),
+                "semantic observation named a different public operation",
+            )?;
+            if command
+                .command
+                .first()
+                .is_some_and(|name| name == "pure-tail-transaction-probe")
+            {
+                require_positive_probe(command)?;
+                require(
                     command.command.len() == 3
-                        && command.command.get(2).map(Path::new) == Some(&isolated.join("consumer"))
-                        && command.observation.stdout.path == "bounded-stack.stdout"
-                }
-                Some("pure-tail-transaction-probe") => {
-                    command.command.len() == 4
-                        && command.command.get(2).map(Path::new)
+                        && command.expected_success
+                        && command.command.get(1).map(Path::new)
                             == Some(&isolated.join("standalone/service.deployment.json"))
                         && command
                             .command
-                            .get(3)
+                            .get(2)
                             .is_some_and(|id| evidence::hex_identity(id, "decl_", 32))
-                        && command.observation.stdout.path == "transaction-cancellation.stdout"
-                }
-                _ => false,
-            };
-            require(
-                valid && probes.insert(probe),
-                "pure-tail source-bound probe is foreign or duplicated",
-            )?;
-        }
-        require(
-            if command.expected_success {
-                command.observation.status == process::ProcessStatus::Passed
+                        && probes.insert("transaction-cancellation"),
+                    "source transaction probe arguments are foreign or duplicated",
+                )?;
+                "transaction-cancellation".to_owned()
             } else {
-                command.observation.status == process::ProcessStatus::Failed
-            },
-            "pure-tail command evidence did not pass its specified boundary",
-        )?;
+                require(
+                    command.observation.elapsed_nanoseconds() <= 120_000_000_000,
+                    "linked public call exceeded the 120 second admission bound",
+                )?;
+                format!("command-{index:04}")
+            }
+        };
+        command.observation.verify_files(&receipt.files, &label)?;
     }
+    require(probes.len() == 2, "pure-tail source probes omitted")?;
+    let owner = receipt
+        .outcomes
+        .get("source_http_owner")
+        .ok_or_else(|| DevError::corrupt("source HTTP owner evidence missing"))?;
     require(
-        probes.len() == 2,
-        "pure-tail source-bound probe evidence omitted",
+        owner["server"]["shutdown"]["admission_stopped"] == true
+            && owner["server"]["shutdown"]["remaining_tasks"] == 0
+            && owner["server"]["shutdown"]["cleanup_failures"] == serde_json::json!([])
+            && owner["server"]["runtime"]["resident"]["active"] == 0
+            && owner["server"]["runtime"]["resident"]["queued"] == 0
+            && owner["server"]["runtime"]["admission_permits"] == 0
+            && owner["server"]["runtime"]["worker_permits"] == 0
+            && owner["retained_application_shutdown"]["admission_stopped"] == true
+            && owner["retained_application_shutdown"]["remaining_tasks"] == 0
+            && owner["retained_application_shutdown"]["cleanup_failures"] == serde_json::json!([])
+            && owner["executor"]["remaining_workers"] == 0
+            && owner["executor"]["active_dispatches"] == 0
+            && owner["executor"]["dispatch_open"] == false,
+        "source HTTP owner did not join actual tasks/executor",
     )?;
     source_batch::read(&receipt, &root)?;
     require(
@@ -1988,11 +2212,10 @@ pub(crate) fn read_transferred_receipt(
             .as_str()
             .ok_or_else(|| DevError::corrupt("generic factory projection file missing"))?;
         require(
-            receipt
-                .commands
-                .iter()
-                .any(|command| command.expected_success && command.observation.stdout.path == file),
-            "factory projection is not a candidate command output",
+            receipt.commands.iter().any(|command| {
+                command.expected_success && command.observation.stdout().path == file
+            }),
+            "factory projection is not a linked public operation response",
         )?;
         let relative = Path::new(file);
         require(
@@ -2588,12 +2811,25 @@ pub(crate) fn read_transferred_receipt(
     Ok(receipt)
 }
 
+fn require_positive_probe(command: &CommandEvidence) -> Result<(), DevError> {
+    require(
+        command.expected_success,
+        "mandatory source probe was relabeled as an expected failure",
+    )?;
+    command.observation.require_outcome(true)
+}
+
 #[cfg(test)]
 pub(crate) fn encode_transferred_test_fixture(
     value: serde_json::Value,
 ) -> Result<Vec<u8>, DevError> {
-    let receipt: Receipt = serde_json::from_value(value)?;
+    let receipt: boundary::Receipt = serde_json::from_value(value)?;
     evidence::encode_json(&receipt)
+}
+
+#[cfg(test)]
+pub(crate) fn encode_semantic_test_fixture(value: serde_json::Value) -> Result<Vec<u8>, DevError> {
+    evidence::encode_json(&serde_json::from_value::<Receipt>(value)?)
 }
 
 #[cfg(test)]

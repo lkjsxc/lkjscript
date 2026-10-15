@@ -94,6 +94,44 @@ fn command(public: &Native, target: &str, arguments: Value, detached: bool) -> V
     value
 }
 
+fn encoding_deployment(public: &Native) -> PathBuf {
+    public.input("encoding-batch.deployment.json", &json!({
+        "artifact":"forms.lkja","target":"encode-batch","listen":null,"http":null,"session":null,"worker":null,
+        "streams":{"maximum_chunk_bytes":65536,"maximum_buffered_chunks":8,"maximum_total_bytes":1048576,"maximum_live_streams":1024},
+        "grants":[],"secrets":[],"configuration":{}
+    }).to_string())
+}
+
+fn detached_batch(public: &Native, label: &str, cases: &[BatchCase]) -> Vec<Value> {
+    let descriptor = encoding_deployment(public);
+    batch::execute_in(
+        public.mode,
+        public.root.path(),
+        &public.executable,
+        label,
+        &descriptor,
+        cases,
+    );
+    // Decode the actual product response after the shared reader checked each independent result.
+    // The roundtrip's next phase receives these bytes, never its expected encoder report.
+    let output = std::fs::read_to_string(
+        public
+            .root
+            .path()
+            .join(format!("batch-{label}.result.jsonl")),
+    )
+    .unwrap();
+    let actual: Vec<_> = output
+        .lines()
+        .map(|line| {
+            let row: Value = serde_json::from_str(line).unwrap();
+            serde_json::from_str(row["result_json"].as_str().unwrap()).unwrap()
+        })
+        .collect();
+    assert_eq!(actual.len(), cases.len());
+    actual
+}
+
 #[test]
 fn native_forms_encoding_matches_independent_bytes_limits_and_detached_roundtrips() {
     let library = author_library();
@@ -186,38 +224,89 @@ fn native_forms_encoding_matches_independent_bytes_limits_and_detached_roundtrip
             add_case(&mut cases, &mut expected, &values, limit, 1);
         }
     }
+    assert_eq!(samples.len(), 205, "complete independent sample inventory");
+    assert_eq!(
+        cases.len(),
+        674,
+        "complete independent encoding expectations"
+    );
+    let mut matrix = Vec::new();
+    let mut case_offset = 0;
+    for (inputs, outputs) in cases.chunks(16).zip(expected.chunks(16)) {
+        // Preserve each original invocation and its unchanged collection quota.
+        let width = if serde_json::to_vec(inputs).unwrap().len() > 4096 {
+            1
+        } else {
+            16
+        };
+        for (inputs, outputs) in inputs.chunks(width).zip(outputs.chunks(width)) {
+            let end = case_offset + inputs.len();
+            matrix.push(BatchCase::success(
+                format!("encoding-{case_offset}-{end}"),
+                &json!([inputs]),
+                json!(outputs),
+            ));
+            case_offset = end;
+        }
+    }
+    assert_eq!(case_offset, cases.len(), "every original case in order");
+    assert_eq!(
+        matrix.len(),
+        59,
+        "41 grouped and 18 single-case invocations"
+    );
     let producer = library.project.clone();
     drop(library);
     assert!(!producer.exists());
     let accepted = public.revision();
-    for detached in [false, true] {
-        if detached {
-            drop_source(&public);
-        }
-        for (inputs, outputs) in cases.chunks(16).zip(expected.chunks(16)) {
-            // Large cases run singly under the unchanged command collection quota.
-            // Do not confuse a batch's cumulative resource failure with invalid form data.
-            let width = if serde_json::to_vec(inputs).unwrap().len() > 4096 {
-                1
-            } else {
-                16
-            };
-            for (inputs, outputs) in inputs.chunks(width).zip(outputs.chunks(width)) {
-                let actual = command(&public, "encode-batch", json!([inputs]), detached);
-                assert_eq!(actual, json!(outputs));
-            }
-        }
-        if !detached {
-            assert_eq!(public.revision(), accepted);
-        }
-    }
+    source_batch::execute_in(
+        public.mode,
+        public.root.path(),
+        &public.executable,
+        "form-encoding-matrix",
+        &public.project,
+        "encode-batch",
+        &matrix,
+    );
+    assert_eq!(public.revision(), accepted);
+    assert!(
+        !public
+            .root
+            .path()
+            .join("source-batch-form-encoding-matrix.witness.lkjp")
+            .exists()
+    );
+    drop_source(&public);
+    detached_batch(&public, "form-encoding-matrix", &matrix);
+    // A nonempty subset also crosses the actual copied executable after source deletion.
+    batch::execute(
+        public.root.path(),
+        &public.executable,
+        "form-encoding-canary",
+        &encoding_deployment(&public),
+        &matrix[..1],
+    );
     // Exact bytes were checked independently first: mutually wrong codecs cannot pass by roundtrip alone.
-    for values in samples.chunks(16) {
+    let mut encode_rows = Vec::new();
+    for (index, values) in samples.chunks(16).enumerate() {
         let inputs: Vec<_> = values
             .iter()
             .map(|value| json!({"fields":fields(value),"maximum-bytes":8192,"maximum-fields":64}))
             .collect();
-        let encoded = command(&public, "encode-batch", json!([inputs]), true);
+        let reports: Vec<_> = values
+            .iter()
+            .map(|value| json!({"valid":true,"body":bytes(canonical(value).as_bytes()),"error":""}))
+            .collect();
+        encode_rows.push(BatchCase::success(
+            format!("roundtrip-encode-{index}"),
+            &json!([inputs]),
+            json!(reports),
+        ));
+    }
+    assert_eq!(encode_rows.len(), 13, "all original encoder invocations");
+    let encoded = detached_batch(&public, "form-roundtrip-encode", &encode_rows);
+    let mut decode_rows = Vec::new();
+    for (index, (values, encoded)) in samples.chunks(16).zip(encoded).enumerate() {
         let bodies: Vec<_> = encoded
             .as_array()
             .unwrap()
@@ -227,13 +316,20 @@ fn native_forms_encoding_matches_independent_bytes_limits_and_detached_roundtrip
                 item["body"].clone()
             })
             .collect();
-        let decoded = command(&public, "batch", json!([bodies]), true);
         let reports: Vec<_> = values
             .iter()
             .map(|value| json!({"valid":true,"fields":fields(value),"error":""}))
             .collect();
-        assert_eq!(decoded, json!(reports));
+        let mut row = BatchCase::success(
+            format!("roundtrip-decode-{index}"),
+            &json!([bodies]),
+            json!(reports),
+        );
+        row.target = Some("batch".to_owned());
+        decode_rows.push(row);
     }
+    assert_eq!(decode_rows.len(), 13, "all original decoder invocations");
+    detached_batch(&public, "form-roundtrip-decode", &decode_rows);
     eprintln!(
         "native form encoding: {} independent cases through project and detached paths; {} detached roundtrips",
         cases.len(),

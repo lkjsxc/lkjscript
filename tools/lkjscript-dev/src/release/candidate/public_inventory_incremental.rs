@@ -20,7 +20,3 @@ pub(super) fn admit(all: &BTreeSet<String>) -> Result<(), DevError> {
     }
     Ok(())
 }
-
-pub(super) fn selected(name: &str) -> bool {
-    name.starts_with(PREFIX)
-}

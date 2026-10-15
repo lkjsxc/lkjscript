@@ -1,43 +1,38 @@
 # Current status
 
-Updated 2026-10-15. Epoch Zero implementation is present in the current source;
-fresh acceptance, mainline delivery and hosted verification remain the next gate.
-The latest published release remains `v0.1.94`.
+Updated 2026-10-15. Main source `507efb03` has local full and candidate acceptance.
+Hosted [Verify](https://github.com/lkjsxc/lkjscript/actions/runs/38762806893) and
+[Release](https://github.com/lkjsxc/lkjscript/actions/runs/38767128052) completion
+remain pending; their live terminals own the outcome. No public promotion has
+completed. The latest published release remains `v0.1.94`.
 
 ## Current capabilities
 
-- Accepted typed meaning graphs, atomic publication and exact offline packages.
-- Affine ownership, nominal records/sequences, generic contract witnesses,
-  associated owned types, source-tied views and scoped parallel reads.
-- Transferable owners, reusable workers and shared multi-instance execution.
+- Accepted typed meaning, atomic publication and exact offline packages.
+- Affine ownership, generic witnesses, nominal records/sequences, associated owned
+  types, source-tied views, scoped parallel reads and shared multi-instance runtime.
 - Production bytecode checked against an independent canonical interpreter;
   native dependency validation, component analysis and stage planning.
-- One canonical schema fingerprint binding normalized production source and build
-  inputs; current-only codecs and regenerated maintained graph/transport/artifacts.
-- Bounded immutable supplier reuse and native test fixture pools; source and
-  deployment pure batches preserve independent case results and invocation cleanup.
-- Reduced VM admission/copy work, shared verifier bootstrap and compressed guidance;
-  complete semantic/resource matrices and process-boundary smoke tests remain required.
-
-These are source capabilities. Source acceptance, distributed-byte acceptance and
-publication have separate proof and authority.
+- Source-bound canonical schema/current-only codecs and regenerated maintained assets.
+- Immutable supplier/native fixture reuse, pure source/deployment batches, reduced VM
+  admission/copy work, shared verifier bootstrap and compressed guidance.
 
 ## Next milestone
 
-Complete dependency-complete changed/full and release-source acceptance, integrate
-through normal mainline flow, then obtain exact finalized-candidate acceptance and
-successful hosted Verify/Release terminals. Retain all required cases, independent
-oracles, safety policies, exact bytes and joined cleanup throughout.
+Complete the source/final-boundary split: admit every actual source semantic case
+from original logs/receipts, then run bounded real processes against final bytes.
+Native boundaries require seven exact smokes; offline and pure-tail retain full
+source semantics and authenticated fixtures for their separate candidate boundaries.
+Fresh follow-up acceptance, normal mainline integration and exact candidate/hosted
+terminals remain required. Two pinned userlands and installation recovery retain
+separate owners; source proof cannot impersonate final execution or publication.
 
-The retained full-suite baseline was 124.90 minutes. The requested local target
-below three minutes and hosted target below ten minutes remain unproven; focused
-improvements do not establish either complete-suite SLA.
+The retained baseline was 124.90 minutes. Complete local verification below three
+minutes and hosted completion below ten minutes remain unproven. Focused
+improvements do not establish either SLA.
 
-The next language increment is checked atomic graph changes with symbolic selectors.
-Regions, compositional effects and native backend/self-hosting expansion follow the
-language roadmap.
-
-[Verification](spec/verification.md) owns gates and proof;
-[release](release.md) owns exact candidate/publication acceptance;
-[roadmap](roadmap.md) owns subsequent language milestones. Original execution
-receipts retain actual outcomes outside this dashboard.
+Checked atomic changes with symbolic selectors remain the next language increment.
+Regions, compositional effects and native backend/self-hosting expansion follow
+[the roadmap](roadmap.md). [Verification](spec/verification.md) owns proof/gates;
+[release](release.md) owns exact candidate/publication acceptance. Original receipts
+retain execution outcomes outside this dashboard.

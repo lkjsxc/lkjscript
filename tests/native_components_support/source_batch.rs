@@ -1,5 +1,5 @@
-//! Actual source-process differential batches, independently expected and source-bound.
-use super::batch::{BatchCase, Expected, batch_process};
+//! Public source differential batches, independently expected and source-bound.
+use super::batch::{BatchCase, Expected, batch_operation, decode_rows, host_operation};
 use super::*;
 
 impl Native {
@@ -10,7 +10,8 @@ impl Native {
         target: &str,
         cases: &[BatchCase],
     ) -> Vec<String> {
-        execute(
+        execute_in(
+            self.mode,
             &self.root,
             &self.root.join("lkjscript"),
             label,
@@ -50,9 +51,30 @@ impl Binding {
     }
 }
 
-/// One ordinary run and package export witness bind the batch to this exact source and product.
-/// They are bounded boundary controls, rather than one independent preparation per matrix row.
+/// Explicit executable callers retain the real process boundary.
 pub fn execute(
+    root: &Path,
+    executable: &Path,
+    label: &str,
+    project: &Path,
+    target: &str,
+    cases: &[BatchCase],
+) -> Vec<String> {
+    execute_in(
+        semantic_cli::Mode::CandidateProcess,
+        root,
+        executable,
+        label,
+        project,
+        target,
+        cases,
+    )
+}
+
+/// An ordinary run and package export witness bind the batch to this exact source.
+/// Host calls retain the public differential owner; candidate calls execute the selected bytes.
+pub fn execute_in(
+    mode: semantic_cli::Mode,
     root: &Path,
     executable: &Path,
     label: &str,
@@ -89,7 +111,8 @@ pub fn execute(
     let smoke_result = root.join(format!("source-batch-{label}.smoke.result.json"));
     assert!(!arguments_path.exists() && !smoke_result.exists());
     fs::write(&arguments_path, &smoke.arguments_json).unwrap();
-    let ordinary = batch_process(
+    let ordinary = batch_operation(
+        mode,
         root,
         executable,
         &format!("source-{label}-ordinary"),
@@ -124,7 +147,8 @@ pub fn execute(
 
     let exported_path = root.join(format!("source-batch-{label}.witness.lkjp"));
     assert!(!exported_path.exists());
-    let exported = batch_process(
+    let exported = batch_operation(
+        mode,
         root,
         executable,
         &format!("source-{label}-package"),
@@ -162,7 +186,8 @@ pub fn execute(
         requests.push('\n');
     }
     fs::write(&request_path, &requests).unwrap();
-    let summary = batch_process(
+    let summary = batch_operation(
+        mode,
         root,
         executable,
         &format!("source-{label}"),
@@ -212,10 +237,7 @@ pub fn execute(
     assert_eq!(bytes.last(), Some(&b'\n'));
     assert_eq!(field(&summary, "output", "bytes"), bytes.len().to_string());
     let outputs = String::from_utf8(bytes).unwrap();
-    let rows = outputs
-        .lines()
-        .map(|line| serde_json::from_str::<Value>(line).unwrap())
-        .collect::<Vec<_>>();
+    let rows = decode_rows(&outputs);
     assert_eq!(rows.len(), cases.len(), "complete source row inventory");
     let mut seen = BTreeSet::new();
     let mut observed = Vec::with_capacity(rows.len());
@@ -295,7 +317,8 @@ pub fn execute(
             "path": exported_path,
             "sha256": exported_digest,
             "package_revision": field(&exported, "package", "package-revision"),
-            "candidate_sha256": candidate_digest,
+            "execution_mode": mode.label(),
+            "boundary_executable_sha256": candidate_digest,
             "source_head_sha256": Sha256::digest(&head).iter().map(|byte| format!("{byte:02x}")).collect::<String>(),
             "removed_before_detached_execution": true,
         })).unwrap(),
@@ -388,7 +411,12 @@ fn require_failure_observations(stdout: &str, code: &str, id: &str, deadline: Op
 
 /// Once per selected boundary matrix: setup and controls all use the actual candidate.
 pub fn controls(candidate: &Path) {
-    let public = Native::from_candidate(candidate);
+    controls_in(semantic_cli::Mode::CandidateProcess, candidate);
+}
+
+/// Preserve the complete refusal/recovery matrix in host mode without claiming process evidence.
+pub fn controls_in(mode: semantic_cli::Mode, candidate: &Path) {
+    let public = Native::create(candidate, mode);
     let executable = public.root.join("lkjscript");
     let project = public.project("source-batch-control");
     public.author(&project, r#"declarations.begin
@@ -423,6 +451,7 @@ declarations.end
     let late_malformed = format!("{valid_line}{{\"id\":\"late\",\"arguments_json\":\n");
     let absent = public.root.join("absent-project");
     refused(
+        mode,
         &public.root,
         &executable,
         "absent-before-open",
@@ -462,6 +491,7 @@ declarations.end
         ),
     ] {
         refused(
+            mode,
             &public.root,
             &executable,
             name,
@@ -474,6 +504,7 @@ declarations.end
     }
     // Even a valid current directory must not silently turn this route into discovery.
     refused(
+        mode,
         &project,
         &executable,
         "explicit-project",
@@ -484,6 +515,7 @@ declarations.end
         "cli_usage",
     );
     refused(
+        mode,
         &public.root,
         &executable,
         "absolute-project",
@@ -494,6 +526,7 @@ declarations.end
         "cli_usage",
     );
     refused(
+        mode,
         &public.root,
         &executable,
         "task-base",
@@ -558,7 +591,8 @@ declarations.end
     let conflict = public.root.join("source-conflict.result.jsonl");
     fs::write(&input, &valid_line).unwrap();
     fs::write(&conflict, b"preserved source result").unwrap();
-    let output = batch_process(
+    let output = batch_operation(
+        mode,
         &public.root,
         &executable,
         "source-conflict",
@@ -589,6 +623,7 @@ declarations.end
         *corrupted.last_mut().unwrap() ^= 1;
         fs::write(&head_path, &corrupted).unwrap();
         refused(
+            mode,
             &public.root,
             &executable,
             "corrupt-before-open",
@@ -600,6 +635,7 @@ declarations.end
         );
         assert_eq!(fs::read(&head_path).unwrap(), corrupted);
         refused(
+            mode,
             &public.root,
             &executable,
             "corrupt-source",
@@ -630,6 +666,7 @@ declarations.end
     reason = "closed actual-process controls preserve explicit boundary inputs"
 )]
 fn refused(
+    mode: semantic_cli::Mode,
     root: &Path,
     executable: &Path,
     name: &str,
@@ -655,13 +692,34 @@ fn refused(
         "--batch-result-file",
         path(&result),
     ]);
-    let output = batch_process(
-        root,
-        executable,
-        &format!("source-refused-{name}"),
-        &arguments,
-        false,
-    );
+    let label = format!("source-refused-{name}");
+    let output = if mode == semantic_cli::Mode::HostSemantic
+        && project.is_none_or(|project| !project.is_absolute())
+    {
+        // This public grammar rejects a missing/relative source project before reading any
+        // repository or request path. Do not supply a host cwd or execute a prepared owner.
+        host_operation(
+            root,
+            &label,
+            &arguments,
+            false,
+            "public-batch-parser",
+            || {
+                let full = arguments
+                    .iter()
+                    .map(|value| (*value).to_owned())
+                    .collect::<Vec<_>>();
+                let error = lkjscript::platform::cli::parse_run_batch(&full)
+                    .err()
+                    .unwrap_or_else(|| {
+                        panic!("missing/relative source project must refuse before preparation")
+                    });
+                semantic_cli::failure("run", &[error])
+            },
+        )
+    } else {
+        batch_operation(mode, root, executable, &label, &arguments, false)
+    };
     assert_eq!(field(&output, "diagnostic", "class"), class, "{name}");
     assert_eq!(field(&output, "diagnostic", "code"), code, "{name}");
     assert!(!result.exists(), "{name}: no partial aggregate");

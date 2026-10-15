@@ -115,15 +115,7 @@ pub(super) fn prepare(
             &artifact,
             context.evidence.join(format!("{name}-original.lkja")),
         )?;
-        let descriptor = json!({
-            "artifact":"application.lkja","target":"main","listen":null,"http":null,"session":null,"worker":null,
-            "streams":lkjscript::platform::stream::StreamLimits::default(),
-            "configuration":{"stride":{"kind":"i64","value":1},"offset":{"kind":"i64","value":index}},"secrets":[],
-            "grants":[
-                {"requirement":"config","sharing_domain":format!("foreground-{index}-config"),"authority_revision":"81".repeat(32),"adapter":{"kind":"configuration"}},
-                {"requirement":"data","sharing_domain":format!("foreground-{index}-data"),"authority_revision":"82".repeat(32),"adapter":{"kind":"data","root":"data","namespace":"foreground","limits":DataLimits{maximum_live_transactions:1,..Default::default()}}}
-            ]
-        });
+        let descriptor = descriptor(index);
         fs::write(
             bundle.join("command.deployment.json"),
             evidence::encode_json(&descriptor)?,
@@ -527,69 +519,56 @@ fn failure(
         "--arguments",
         arguments,
     ];
-    let records = if let Some(terminate) = signal {
-        let specification = process::ProcessSpec {
-            command: std::iter::once(context.receipt.pinned_runtime_path.clone())
-                .chain(arguments.iter().map(|s| (*s).to_owned()))
-                .collect(),
-            cwd: consumer.cwd.clone(),
-            environment: BTreeMap::from([("LANG".into(), "C.UTF-8".into())]),
-            timeout: Duration::from_secs(40),
-            maximum_stdout_bytes: MAXIMUM_OUTPUT_BYTES,
-            maximum_stderr_bytes: MAXIMUM_OUTPUT_BYTES,
-            stdout_path: context
-                .evidence
-                .join(format!("command-{command:04}.stdout")),
-            stderr_path: context
-                .evidence
-                .join(format!("command-{command:04}.stderr")),
-            unavailable_exit_code: None,
-        };
-        let control = process::ProcessControl::default();
-        let observed = std::thread::scope(|scope| {
-            let handle = scope.spawn(|| {
-                let deadline = Instant::now() + Duration::from_secs(30);
-                loop {
-                    if counter(consumer).is_ok_and(|value| value == expected_after) {
-                        if terminate {
-                            control.terminate();
-                        } else {
-                            control.interrupt();
-                        }
-                        return Ok(());
-                    }
-                    if Instant::now() >= deadline {
-                        control.kill();
-                        return Err(DevError::corrupt(
-                            "foreground commit was not visible before signal deadline",
-                        ));
-                    }
-                    std::thread::sleep(Duration::from_millis(10));
+    let records = if signal.is_some() {
+        let public_arguments = arguments
+            .iter()
+            .map(|value| (*value).to_owned())
+            .collect::<Vec<_>>();
+        let response_path = context
+            .evidence
+            .join(format!("command-{command:04}.stdout"));
+        let diagnostic_path = context
+            .evidence
+            .join(format!("command-{command:04}.stderr"));
+        let committed_observed = std::sync::atomic::AtomicBool::new(false);
+        let cancel = async {
+            let deadline = Instant::now() + Duration::from_secs(30);
+            loop {
+                if counter(consumer).is_ok_and(|value| value == expected_after) {
+                    committed_observed.store(true, std::sync::atomic::Ordering::Release);
+                    break;
                 }
-            });
-            let observation = process::run_controlled(&specification, &context.evidence, &control);
-            handle
-                .join()
-                .map_err(|_| DevError::infrastructure("foreground signal observer panicked"))??;
-            Ok::<_, DevError>(observation)
-        })?;
-        require(
-            observed.status == process::ProcessStatus::Failed
-                && observed.signal.is_none()
-                && observed.exit_code.is_some_and(|code| code != 0),
-            "foreground graceful signal did not produce a joined diagnostic exit",
+                if Instant::now() >= deadline {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        };
+        let observation = semantic_cli::execute_with_cancellation(
+            &public_arguments,
+            &response_path,
+            &diagnostic_path,
+            &context.evidence,
+            cancel,
         )?;
+        require(
+            committed_observed.load(std::sync::atomic::Ordering::Acquire),
+            "source cancellation did not independently observe its committed increment",
+        )?;
+        observation.require_outcome(false)?;
         context.receipt.commands.push(CommandEvidence {
-            command: specification.command,
+            command: std::iter::once(context.receipt.host_path.clone())
+                .chain(public_arguments)
+                .collect(),
             cwd: consumer.cwd.display().to_string(),
             expects_success: false,
-            observation: observed,
+            observation,
         });
         parse_records(
-            "foreground-signal",
-            &process::read_bounded(&specification.stdout_path, MAXIMUM_OUTPUT_BYTES)?,
+            "foreground-cancel",
+            &process::read_bounded(&response_path, MAXIMUM_OUTPUT_BYTES)?,
         )
-        .map_err(|e| DevError::corrupt(format!("signal diagnostic: {e:?}")))?
+        .map_err(|error| DevError::corrupt(format!("linked cancellation diagnostic: {error:?}")))?
     } else {
         context.cli_at(&consumer.cwd, None, &arguments, false)?
     };
@@ -797,7 +776,7 @@ fn lifecycle(context: &mut Context, consumer: &Consumer) -> Result<(), DevError>
     failure(
         context,
         consumer,
-        "sigint-after-commit",
+        "cancel-after-commit-first",
         &descriptor,
         "[0]",
         "execution_cancelled",
@@ -808,7 +787,7 @@ fn lifecycle(context: &mut Context, consumer: &Consumer) -> Result<(), DevError>
     failure(
         context,
         consumer,
-        "sigterm-after-commit",
+        "cancel-after-commit-second",
         &descriptor,
         "[0]",
         "execution_cancelled",
@@ -828,83 +807,19 @@ fn lifecycle(context: &mut Context, consumer: &Consumer) -> Result<(), DevError>
         true,
         None,
     )?;
-    broken_output(context, consumer)
-}
-
-fn broken_output(context: &mut Context, consumer: &Consumer) -> Result<(), DevError> {
-    let command = context.receipt.commands.len();
-    let spec = process::ProcessSpec {
-        command: vec![
-            context.receipt.pinned_runtime_path.clone(),
-            "run".into(),
-            "--deployment".into(),
-            consumer
-                .bundle
-                .join("command.deployment.json")
-                .display()
-                .to_string(),
-            "--arguments".into(),
-            "[0]".into(),
-        ],
-        cwd: consumer.cwd.clone(),
-        environment: BTreeMap::from([("LANG".into(), "C.UTF-8".into())]),
-        timeout: Duration::from_secs(30),
-        maximum_stdout_bytes: MAXIMUM_OUTPUT_BYTES,
-        maximum_stderr_bytes: MAXIMUM_OUTPUT_BYTES,
-        stdout_path: context
-            .evidence
-            .join(format!("command-{command:04}.stdout")),
-        stderr_path: context
-            .evidence
-            .join(format!("command-{command:04}.stderr")),
-        unavailable_exit_code: None,
-    };
-    let before = counter(consumer)?;
-    let observation = process::run_closed_stdout(&spec, &context.evidence);
     require(
-        observation.status == process::ProcessStatus::Failed && observation.signal.is_none(),
-        "broken output reported success or skipped graceful completion",
+        counter(consumer)? == 6,
+        "returned-output witness lost its pre-invocation counter",
     )?;
-    let error: Value = serde_json::from_slice(&process::read_bounded(
-        &spec.stderr_path,
-        MAXIMUM_OUTPUT_BYTES,
-    )?)?;
-    let code = error["code"]
-        .as_str()
-        .ok_or_else(|| DevError::corrupt("broken output diagnostic absent"))?
-        .to_owned();
-    let notes: Vec<String> = serde_json::from_value(error["notes"].clone())?;
-    require(
-        notes.iter().any(|s| {
-            s.contains("invocation and cleanup completed; earlier effects may be visible")
-        }),
-        "broken output omitted possible visibility and cleanup",
-    )?;
-    let after = counter(consumer)?;
-    require(
-        before == 6 && after == 7,
-        "broken output replayed the application",
-    )?;
-    context.receipt.commands.push(CommandEvidence {
-        command: spec.command,
-        cwd: consumer.cwd.display().to_string(),
-        expects_success: false,
-        observation,
-    });
-    context
-        .receipt
-        .effects
-        .foreground
-        .failures
-        .push(FailureCell {
-            label: "broken-output".into(),
-            command,
-            before,
-            after,
-            code,
-            notes,
-        });
-    Ok(())
+    run(
+        context,
+        consumer,
+        1,
+        "returned-output-after-commit",
+        0,
+        1,
+        7,
+    )
 }
 
 fn validate_cell(cell: &Cell) -> Result<(), DevError> {
@@ -968,13 +883,6 @@ pub(super) fn command_cwd(receipt: &ForegroundReceipt, index: usize) -> Option<&
         .map(|consumer| consumer.cwd.as_str())
 }
 
-pub(super) fn command_has_closed_stdout(receipt: &ForegroundReceipt, index: usize) -> bool {
-    receipt
-        .failures
-        .iter()
-        .any(|cell| cell.command == index && cell.label == "broken-output")
-}
-
 fn command_evidence<'a>(
     parent: &'a Receipt,
     index: usize,
@@ -996,7 +904,7 @@ fn command_evidence<'a>(
         command.cwd == consumer.cwd
             && command.command
                 == vec![
-                    parent.pinned_runtime_path.clone(),
+                    parent.host_path.clone(),
                     "run".into(),
                     "--deployment".into(),
                     Path::new(&consumer.bundle)
@@ -1016,7 +924,7 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
     require(
         receipt.schema == "lkjscript-foreground-1"
             && receipt.consumers.len() == 2
-            && receipt.cells.len() == 7,
+            && receipt.cells.len() == 8,
         "foreground child missing required composition cells",
     )?;
     let commands = receipt
@@ -1063,10 +971,9 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
         ("committed-then-trap", "normalized_integer_division", 1, 2),
         ("explicit-fuel", "normalized_instruction_steps", 2, 2),
         ("deadline-after-commit", "execution_deadline", 2, 3),
-        ("sigint-after-commit", "execution_cancelled", 3, 4),
-        ("sigterm-after-commit", "execution_cancelled", 4, 5),
+        ("cancel-after-commit-first", "execution_cancelled", 3, 4),
+        ("cancel-after-commit-second", "execution_cancelled", 4, 5),
         ("late-oversized-result", "normalized_json_type", 5, 6),
-        ("broken-output", "cli_output", 6, 7),
     ];
     require(
         receipt.failures.len() == failures.len(),
@@ -1084,7 +991,7 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
             ) == (label, code, before, after),
             "foreground failure workload or persisted count substituted",
         )?;
-        if index >= 8 && label != "broken-output" {
+        if index >= 8 {
             require(cell.notes.iter().any(|note|note=="foreground cleanup: admission-stopped=true remaining-owned-tasks=0 failures=0") && cell.notes.iter().any(|note|note.contains("earlier application effects may already be visible")),"foreground failed invocation omitted visibility/cleanup")?;
         }
         let arguments = match label {
@@ -1101,36 +1008,18 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
             parent,
             cell.command,
             1,
-            if label == "broken-output" {
-                "command.deployment.json"
-            } else {
-                "failure.deployment.json"
-            },
+            "failure.deployment.json",
             arguments,
         )?;
         require(
             !command.expects_success
-                && command.observation.status == process::ProcessStatus::Failed
-                && command.observation.signal.is_none(),
-            "foreground rejection lacks a completed diagnostic exit",
+                && !command.observation.returned_success()
+                && command
+                    .observation
+                    .as_process()
+                    .is_none_or(|process| process.signal.is_none()),
+            "foreground rejection lacks a completed diagnostic return",
         )?;
-        if label == "broken-output" {
-            let error: Value = serde_json::from_slice(&process::read_bounded(
-                &root.join(format!("command-{:04}.stderr", cell.command)),
-                MAXIMUM_OUTPUT_BYTES,
-            )?)?;
-            require(
-                error["code"] == code
-                    && error["notes"] == json!(cell.notes)
-                    && cell.notes.iter().any(|note| {
-                        note.contains(
-                            "invocation and cleanup completed; earlier effects may be visible",
-                        )
-                    }),
-                "broken output evidence substituted",
-            )?;
-            continue;
-        }
         let records = parse_records(
             "foreground-failure",
             &process::read_bounded(
@@ -1164,8 +1053,8 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
             &format!("[{}]", cell.n),
         )?;
         require(
-            command.expects_success && command.observation.status == process::ProcessStatus::Passed,
-            "foreground loop process did not complete successfully",
+            command.expects_success && command.observation.returned_success(),
+            "foreground loop public invocation did not complete successfully",
         )?;
         let records = parse_records(
             "loop-evidence",
@@ -1253,6 +1142,7 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
         ("independent-root", 1, 1, 2, 1),
         ("changed-callback", 0, 257, 258, 5),
         ("retained-bundle", 0, 257, 257, 6),
+        ("returned-output-after-commit", 1, 0, 1, 7),
     ]) {
         require(
             (
@@ -1274,7 +1164,7 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
                 && command.cwd == receipt.consumers[cell.consumer].cwd
                 && command.command
                     == vec![
-                        parent.pinned_runtime_path.clone(),
+                        parent.host_path.clone(),
                         "run".into(),
                         "--deployment".into(),
                         Path::new(&receipt.consumers[cell.consumer].bundle)
@@ -1284,8 +1174,8 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
                         "--arguments".into(),
                         format!("[{}]", cell.n),
                     ]
-                && command.observation.status == process::ProcessStatus::Passed,
-            "foreground process evidence differs",
+                && command.observation.returned_success(),
+            "foreground invocation evidence differs",
         )?;
         let records = parse_records(
             "foreground-evidence",
@@ -1310,4 +1200,16 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
         )?;
     }
     Ok(())
+}
+
+pub(super) fn descriptor(index: usize) -> Value {
+    json!({
+        "artifact":"application.lkja","target":"main","listen":null,"http":null,"session":null,"worker":null,
+        "streams":lkjscript::platform::stream::StreamLimits::default(),
+        "configuration":{"stride":{"kind":"i64","value":1},"offset":{"kind":"i64","value":index}},"secrets":[],
+        "grants":[
+            {"requirement":"config","sharing_domain":format!("foreground-{index}-config"),"authority_revision":"81".repeat(32),"adapter":{"kind":"configuration"}},
+            {"requirement":"data","sharing_domain":format!("foreground-{index}-data"),"authority_revision":"82".repeat(32),"adapter":{"kind":"data","root":"data","namespace":"foreground","limits":DataLimits{maximum_live_transactions:1,..Default::default()}}}
+        ]
+    })
 }

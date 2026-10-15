@@ -75,7 +75,7 @@ fn shared_runtime_admits_all_before_secrets_and_never_partially_announces_startu
     assert!(String::from_utf8_lossy(&output.stderr).contains("cli_output"));
 
     // The owned binary still starts cleanly after every rejected group.
-    let group = Group::start(&public, &[descriptor.clone(), descriptor], &[]);
+    let group = Group::start_process(&public, &[descriptor.clone(), descriptor], &[]);
     group.stop(Signal::TERM);
 }
 
@@ -120,7 +120,7 @@ fn shared_runtime_parse_and_aggregate_limits_reject_without_fallback() {
 fn shared_runtime_busy_instance_does_not_block_peer_and_signals_join_both() {
     let (public, descriptor) = super::super::resident_termination::author("http");
     for signal in [Signal::TERM, Signal::INT] {
-        let group = Group::start(&public, &[descriptor.clone(), descriptor.clone()], &[]);
+        let group = Group::start_process(&public, &[descriptor.clone(), descriptor.clone()], &[]);
         let mut busy =
             TcpStream::connect_timeout(&group.address(0), Duration::from_secs(5)).unwrap();
         busy.set_write_timeout(Some(Duration::from_secs(5)))

@@ -1,4 +1,4 @@
-//! Explicitly selected iteration through the copied public executable; no acceptance receipt.
+//! Explicit linked public-operation diagnostics; no acceptance receipt.
 use super::*;
 
 fn context() -> Context {
@@ -11,21 +11,14 @@ fn context() -> Context {
         .tempdir()
         .unwrap()
         .keep();
-    let binary = root.join("lkjscript");
-    fs::copy(
-        std::env::var_os("LKJSCRIPT_EFFECTS_CANDIDATE").expect("frozen candidate path"),
-        &binary,
-    )
-    .unwrap();
-    let digest = digest_file(&binary, MAXIMUM_EXECUTABLE_BYTES).unwrap();
+    let binary = std::env::current_exe().unwrap().canonicalize().unwrap();
     Context {
         root: root.clone(),
         evidence: evidence.clone(),
-        binary,
+        binary: binary.clone(),
         receipt: Receipt {
             schema: "iteration-only".into(),
             status: "not an acceptance receipt".into(),
-            candidate_sha256: digest.clone(),
             verifier_sha256: digest_file(
                 &std::env::var_os("LKJSCRIPT_EFFECTS_VERIFIER")
                     .map(PathBuf::from)
@@ -35,11 +28,10 @@ fn context() -> Context {
                 1_073_741_824,
             )
             .unwrap(),
-            copied_candidate_sha256: digest,
-            pinned_runtime_path: root.join("lkjscript").display().to_string(),
+            host_path: binary.display().to_string(),
             isolated_root: root.display().to_string(),
             evidence_root: evidence.display().to_string(),
-            environment_names: vec!["LANG".into()],
+            environment_names: semantic_cli::environment_names().unwrap(),
             elapsed_nanoseconds: 0,
             commands: vec![],
             runners: vec![],
@@ -58,8 +50,8 @@ fn context() -> Context {
 }
 
 #[test]
-#[ignore = "requires an explicitly frozen candidate and a fresh evidence directory"]
-fn copied_named_reference_iteration() {
+#[ignore = "requires an explicitly linked host and a fresh evidence directory"]
+fn linked_named_reference_iteration() {
     let mut context = context();
     let builtin = context
         .cli(None, &["package", "builtin", "inspect"], true)
@@ -139,7 +131,7 @@ fn standard(context: &mut Context) -> Package {
 }
 
 #[test]
-#[ignore = "requires an explicitly selected maintained project, frozen candidate and absent evidence path"]
+#[ignore = "requires an explicitly selected maintained project, linked host and absent evidence path"]
 fn author_task_standard_through_public_change() {
     let mut context = context();
     let mut standard = standard(&mut context);
@@ -171,7 +163,7 @@ fn author_task_standard_through_public_change() {
 }
 
 #[test]
-#[ignore = "requires a frozen candidate and absent evidence path; retains its isolated projects"]
+#[ignore = "requires a linked host and absent evidence path; retains its isolated projects"]
 fn author_transported_task_library_through_public_change() {
     let mut context = context();
     let standard = standard(&mut context);
@@ -213,7 +205,7 @@ fn author_transported_task_library_through_public_change() {
 }
 
 #[test]
-#[ignore = "requires frozen candidate and absent evidence path; retains disposable projects for diagnosis"]
+#[ignore = "requires linked host and absent evidence path; retains disposable projects for diagnosis"]
 fn copied_task_library_foreground_iteration() {
     let mut context = context();
     let mut standard = standard(&mut context);
@@ -243,7 +235,7 @@ fn copied_task_library_foreground_iteration() {
 }
 
 #[test]
-#[ignore = "requires frozen candidate and absent evidence path; retains disposable projects for diagnosis"]
+#[ignore = "requires linked host and absent evidence path; retains disposable projects for diagnosis"]
 fn copied_task_library_http_iteration() {
     let mut context = context();
     let mut standard = standard(&mut context);

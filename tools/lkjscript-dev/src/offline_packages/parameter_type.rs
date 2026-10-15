@@ -49,7 +49,7 @@ impl Evolution {
         )?;
         if project.is_none() && arguments.starts_with(&["run", "--deployment"]) && passes {
             // This authoring witness claims the copied executable outside the language checkout.
-            context.cli_copied_at(&context.root.clone(), arguments)
+            context.cli_detached_at(&context.root.clone(), arguments)
         } else {
             context.cli(project, arguments, passes)
         }
@@ -633,7 +633,7 @@ fn output(
     parse_records(
         "parameter-type-output",
         &process::read_bounded(
-            &root.join(&command.observation.stdout.path),
+            &root.join(&command.observation.stdout().path),
             MAXIMUM_OUTPUT_BYTES,
         )?,
     )
@@ -804,10 +804,7 @@ fn validate_authoring(
             select(new_library)
         ),
     ];
-    let copied = Path::new(&receipt.isolated_root)
-        .join("lkjscript")
-        .display()
-        .to_string();
+    let copied = receipt.host_path.clone();
     for (index, (name, body)) in ["producer", "consumer", "producer-edit", "consumer-edit"]
         .into_iter()
         .zip(bodies)
@@ -1138,10 +1135,7 @@ pub(super) fn validate(
         require(
             command.command
                 == vec![
-                    Path::new(&receipt.isolated_root)
-                        .join("lkjscript")
-                        .display()
-                        .to_string(),
+                    receipt.host_path.clone(),
                     "run".into(),
                     "--deployment".into(),
                     Path::new(&receipt.isolated_root)

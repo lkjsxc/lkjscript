@@ -1,4 +1,4 @@
-//! Independently checked inventory and libtest outcomes for final-byte acceptance.
+//! Full source semantic inventory and the explicit final-byte boundary supplement.
 use crate::error::DevError;
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -28,14 +28,6 @@ mod associated;
 #[path = "public_inventory_read_views.rs"]
 mod read_views;
 
-const FAMILIES: [&str; 6] = [
-    "native_owned_",
-    "native_byte_buffer_",
-    "native_byte_ranges_",
-    "resident_policy",
-    "native_parallel",
-    "native_refresh",
-];
 const REQUIRED_FAMILIES: [(&str, Option<&str>); 7] = [
     ("native_owned_", None),
     ("native_byte_buffer_", None),
@@ -49,11 +41,30 @@ const TOPOLOGY: &str = "copied_binary_authors_builds_and_serves_interactive_topo
 const MAP_MATRIX: &str = "native_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment";
 const MAXIMUM_TESTS: usize = 4096;
 
+pub(super) const BOUNDARIES: [&str; 7] = [
+    "review_refresh",
+    "cache_read_fifo",
+    "cache_write_fifo",
+    "publication_lock",
+    "detached_foreground",
+    "deployment_batch",
+    "shared_parallel_http",
+];
+
+pub(super) fn boundary_name(boundary: &str) -> String {
+    format!("native_boundary_smokes::{boundary}")
+}
+
 #[derive(Debug, serde::Serialize)]
 pub(super) struct Inventory {
     pub(super) all: BTreeSet<String>,
     pub(super) selected: BTreeSet<String>,
 }
+
+/// This separately invoked scale experiment is deliberately outside ordinary
+/// source acceptance. No other current or future public case may be ignored.
+pub(super) const OPT_IN_SCALE: &str =
+    "reviewed_change_plan_scale_streams_detail_beyond_stdout_envelope";
 
 fn require(condition: bool, message: &str) -> Result<(), DevError> {
     super::require(condition, message)
@@ -153,23 +164,14 @@ pub(super) fn inventory(output: &str) -> Result<Inventory, DevError> {
     storage::admit(&all)?;
     associated::admit(&all)?;
     read_views::admit(&all)?;
-    let selected = all
-        .iter()
-        .filter(|name| {
-            FAMILIES.iter().any(|family| name.contains(family))
-                || name.starts_with("native_map_entries::")
-                || folds::selected(name)
-                || incremental::selected(name)
-                || fifo::selected(name)
-                || sequences::selected(name)
-                || nominals::selected(name)
-                || storage::selected(name)
-                || associated::selected(name)
-                || read_views::selected(name)
-                || *name == TOPOLOGY
-        })
-        .cloned()
-        .collect();
+    let selected = BOUNDARIES
+        .map(boundary_name)
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    require(
+        selected.is_subset(&all),
+        "required exact native boundary smoke is absent",
+    )?;
     Ok(Inventory { all, selected })
 }
 
@@ -232,36 +234,4 @@ pub(super) fn passed(output: &str, inventory: &Inventory) -> Result<(), DevError
 
 #[cfg(test)]
 #[path = "public_inventory_tests.rs"]
-mod tests;
-
-#[cfg(test)]
-#[path = "public_inventory_map_tests.rs"]
-mod map_tests;
-
-#[cfg(test)]
-#[path = "public_inventory_fold_tests.rs"]
-mod fold_tests;
-
-#[cfg(test)]
-#[path = "public_inventory_incremental_tests.rs"]
-mod incremental_tests;
-
-#[cfg(test)]
-#[path = "public_inventory_fifo_tests.rs"]
-mod fifo_tests;
-
-#[cfg(test)]
-#[path = "public_inventory_sequences_tests.rs"]
-mod sequence_tests;
-
-#[cfg(test)]
-#[path = "public_inventory_nominals_tests.rs"]
-mod nominal_tests;
-
-#[cfg(test)]
-#[path = "public_inventory_storage_tests.rs"]
-mod storage_tests;
-
-#[cfg(test)]
-#[path = "public_inventory_associated_tests.rs"]
-mod associated_tests;
+pub(super) mod tests;

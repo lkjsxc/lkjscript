@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) fn listing() -> String {
+pub(crate) fn listing() -> String {
     let mut listing = [
         "owned::native_owned_producer: test",
         "buffers::native_byte_buffer_move: test",
@@ -40,10 +40,13 @@ pub(super) fn listing() -> String {
             listing.push_str(&format!("{prefix}{suffix}: test\n"));
         }
     }
+    for boundary in BOUNDARIES {
+        listing.push_str(&format!("{}: test\n", boundary_name(boundary)));
+    }
     listing
 }
 
-pub(super) fn success(inventory: &Inventory) -> String {
+pub(crate) fn success(inventory: &Inventory) -> String {
     let mut text = format!("\nrunning {} tests\n", inventory.selected.len());
     for name in &inventory.selected {
         text.push_str(&format!("test {name} ... ok\n"));
@@ -53,86 +56,50 @@ pub(super) fn success(inventory: &Inventory) -> String {
 }
 
 #[test]
-fn all_required_families_and_exact_topology_are_selected_without_unrelated_cases() {
-    let inventory = inventory(&listing()).unwrap();
-    assert_eq!(inventory.all.len(), 43);
-    assert_eq!(inventory.selected.len(), 42);
-    assert!(!inventory.selected.contains("unrelated_test"));
-    passed(&success(&inventory), &inventory).unwrap();
-}
-
-#[test]
-fn missing_families_or_topology_never_become_vacuous_success() {
+fn full_source_inventory_keeps_semantics_and_selects_only_seven_exact_boundaries() {
     let original = listing();
-    for (family, namespace) in REQUIRED_FAMILIES {
-        let text = original
-            .lines()
-            .filter(|line| {
-                let name = line.strip_suffix(": test").unwrap();
-                !required_family(name, family, namespace)
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        assert!(inventory(&text).is_err(), "omitted family {family}");
-    }
-    for name in [TOPOLOGY, MAP_MATRIX] {
-        let text = original.replace(&format!("{name}: test\n"), "");
-        assert!(inventory(&text).is_err(), "omitted exact witness {name}");
-    }
-    assert!(inventory("").is_err());
-    assert!(inventory(&original.replace(TOPOLOGY, &format!("prefix_{TOPOLOGY}"))).is_err());
-}
-
-#[test]
-fn required_parallel_namespaces_accept_nested_paths_and_reject_substring_impostors() {
-    let original = listing();
-    for (from, to) in [
-        (
-            "native_owned_products::parallel::native_parallel_joined",
-            "native_owned_products::parallel_extra::native_parallel_joined",
-        ),
-        (
-            "native_owned_products::parallel::native_parallel_joined",
-            "native_owned_products::prefix_parallel::native_parallel_joined",
-        ),
-        (
-            "native_owned_products::parallel::native_parallel_joined",
-            "native_owned_products::parallel::prefix_native_parallel_joined",
-        ),
-        (
-            "native_parallel_reads::native_parallel_reads_scoped",
-            "native_declarations::native_parallel_reads_extra::native_parallel_reads_scoped",
-        ),
-        (
-            "native_parallel_reads::native_parallel_reads_scoped",
-            "native_declarations::prefix_native_parallel_reads::native_parallel_reads_scoped",
-        ),
-        (
-            "native_parallel_reads::native_parallel_reads_scoped",
-            "native_parallel_reads::prefix_native_parallel_reads_scoped",
-        ),
-        (
-            "native_parallel_reads::native_parallel_reads_scoped",
-            "native_declarations::native_parallel_reads_scoped",
-        ),
-    ] {
-        assert!(
-            inventory(&original.replace(from, to)).is_err(),
-            "accepted impostor {to}"
-        );
-    }
-    let nested = original.replace(
-        "native_parallel_reads::native_parallel_reads_scoped",
-        "native_declarations::native_parallel_reads::nested::native_parallel_reads_scoped",
+    let checked = inventory(&original).unwrap();
+    assert_eq!((checked.all.len(), checked.selected.len()), (50, 7));
+    assert_eq!(
+        checked.selected,
+        BOUNDARIES.map(boundary_name).into_iter().collect()
     );
-    let inventory = inventory(&nested).unwrap();
-    assert_eq!(inventory.selected.len(), 42);
-    passed(&success(&inventory), &inventory).unwrap();
+    passed(&success(&checked), &checked).unwrap();
+    // Every required source semantic identity remains mandatory in the source-built
+    // harness, while its complete execution belongs to the original full source proof.
+    for name in checked
+        .all
+        .iter()
+        .filter(|name| name.as_str() != "unrelated_test")
+    {
+        let omitted = original.replace(&format!("{name}: test\n"), "");
+        assert!(inventory(&omitted).is_err(), "omitted {name}");
+        if ![
+            "owned::native_owned_producer",
+            "buffers::native_byte_buffer_move",
+            "ranges::native_byte_ranges_slice",
+            "resident_policy::deadline",
+            "native_declarations::native_owned_products::parallel::native_parallel_joined",
+            "native_parallel_reads::native_parallel_reads_scoped",
+            "native_refresh::reviewed",
+        ]
+        .contains(&name.as_str())
+        {
+            let substituted = original.replace(name, &format!("impostor::{name}"));
+            assert!(inventory(&substituted).is_err(), "substituted {name}");
+        }
+    }
+    let expanded = inventory(
+        &(original + "future_source_matrix: test\nnative_boundary_smokes::future_boundary: test\n"),
+    )
+    .unwrap();
+    assert_eq!(expanded.all.len(), 52);
+    assert_eq!(expanded.selected, checked.selected);
 }
 
 #[test]
-fn repeated_malformed_benchmark_and_excessive_inventory_records_reject() {
-    let text = listing();
+fn malformed_duplicate_and_excessive_inventory_never_weakens_exact_boundaries() {
+    let original = listing();
     for extra in [
         "unrelated_test: test\n",
         "other: benchmark\n",
@@ -140,9 +107,9 @@ fn repeated_malformed_benchmark_and_excessive_inventory_records_reject() {
         ": test\n",
         "not a record\n",
     ] {
-        assert!(inventory(&(text.clone() + extra)).is_err());
+        assert!(inventory(&(original.clone() + extra)).is_err());
     }
-    let mut many = text;
+    let mut many = original;
     for index in 0..4096 {
         many.push_str(&format!("extra_{index}: test\n"));
     }
@@ -150,26 +117,34 @@ fn repeated_malformed_benchmark_and_excessive_inventory_records_reject() {
 }
 
 #[test]
-fn a_successful_exit_or_summary_cannot_hide_unrun_ignored_or_duplicate_tests() {
-    let inventory = inventory(&listing()).unwrap();
-    let original = success(&inventory);
-    for changed in [
-        original.replace("42 passed", "7 passed"),
-        original.replace("0 ignored", "1 ignored"),
-        original.replace("0 failed", "1 failed"),
-        original.replace("0 measured", "1 measured"),
-        original.replace("1 filtered out", "2 filtered out"),
-        original.replace("running 42 tests", "running 0 tests"),
-        original.replacen(" ... ok", " ... ignored", 1),
-        original.replacen(" ... ok", " ... FAILED", 1),
-        original.lines().filter(|line| !line.starts_with("test buffers::")).collect::<Vec<_>>().join("\n"),
-        original.clone() + "test native_declarations::native_owned_products::parallel::native_parallel_joined ... ok\n",
-        original.clone() + "test unrelated_test ... ok\n",
-        original.clone() + &original,
-        "test result: ok. 42 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s\n".to_owned(),
-    ] {
-        assert!(passed(&changed, &inventory).is_err(), "accepted {changed}");
+fn boundary_outcomes_reject_missing_duplicate_foreign_failed_and_ignored_cases() {
+    let checked = inventory(&listing()).unwrap();
+    let complete = success(&checked);
+    for name in &checked.selected {
+        let record = format!("test {name} ... ok\n");
+        for changed in [
+            complete.replace(&record, ""),
+            complete.replace(&record, &format!("test {name} ... ignored\n")),
+            complete.replace(&record, &format!("test {name} ... FAILED\n")),
+            complete.replace(&record, &format!("test impostor::{name} ... ok\n")),
+            complete.clone() + &record,
+        ] {
+            assert!(
+                passed(&changed, &checked).is_err(),
+                "accepted incomplete {name}"
+            );
+        }
     }
+    for changed in [
+        complete.replace("7 passed", "6 passed"),
+        complete.replace("0 ignored", "1 ignored"),
+        complete.replace("0 failed", "1 failed"),
+        complete.replace("0 measured", "1 measured"),
+        complete.replace("43 filtered out", "42 filtered out"),
+        complete.replace("running 7 tests", "running 0 tests"),
+        complete.clone() + &complete,
+        "test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 43 filtered out; finished in 0.01s\n".to_owned(),
+    ] { assert!(passed(&changed, &checked).is_err()); }
 }
 
 fn artifact(source: &str, executable: serde_json::Value) -> serde_json::Value {
@@ -279,4 +254,51 @@ fn long_running_notices_never_replace_outcomes_or_grant_foreign_case_credit() {
     ] {
         assert!(passed(&changed, &inventory).is_err(), "accepted {changed}");
     }
+}
+
+#[test]
+fn required_parallel_namespaces_accept_nested_paths_and_reject_substring_impostors() {
+    let original = listing();
+    for (from, to) in [
+        (
+            "native_owned_products::parallel::native_parallel_joined",
+            "native_owned_products::parallel_extra::native_parallel_joined",
+        ),
+        (
+            "native_owned_products::parallel::native_parallel_joined",
+            "native_owned_products::prefix_parallel::native_parallel_joined",
+        ),
+        (
+            "native_owned_products::parallel::native_parallel_joined",
+            "native_owned_products::parallel::prefix_native_parallel_joined",
+        ),
+        (
+            "native_parallel_reads::native_parallel_reads_scoped",
+            "native_declarations::native_parallel_reads_extra::native_parallel_reads_scoped",
+        ),
+        (
+            "native_parallel_reads::native_parallel_reads_scoped",
+            "native_declarations::prefix_native_parallel_reads::native_parallel_reads_scoped",
+        ),
+        (
+            "native_parallel_reads::native_parallel_reads_scoped",
+            "native_parallel_reads::prefix_native_parallel_reads_scoped",
+        ),
+        (
+            "native_parallel_reads::native_parallel_reads_scoped",
+            "native_declarations::native_parallel_reads_scoped",
+        ),
+    ] {
+        assert!(
+            inventory(&original.replace(from, to)).is_err(),
+            "accepted impostor {to}"
+        );
+    }
+    let nested = original.replace(
+        "native_parallel_reads::native_parallel_reads_scoped",
+        "native_declarations::native_parallel_reads::nested::native_parallel_reads_scoped",
+    );
+    let inventory = inventory(&nested).unwrap();
+    assert_eq!(inventory.selected.len(), 7);
+    passed(&success(&inventory), &inventory).unwrap();
 }

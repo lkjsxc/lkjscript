@@ -530,53 +530,45 @@ pub(crate) fn base_registry(
     ]);
     outbound_http.cacheable = false;
     gates.push(outbound_http);
-    let mut offline_packages = gate(
-        "offline_packages",
-        vec![
-            path_string(self_test_executable),
-            "offline-packages".to_owned(),
-            "--binary".to_owned(),
-            path_string(&binary),
-            "--machine".to_owned(),
-        ],
-        &["release_command_lifecycle"],
-    );
-    offline_packages.identity_command = Some(vec![
-        "$HARNESS".to_owned(),
-        "offline-packages".to_owned(),
-        "--binary".to_owned(),
-        path_string(&binary),
-        "--machine".to_owned(),
-    ]);
-    offline_packages.cacheable = false;
-    offline_packages.timeout = crate::offline_packages::COMPLETE_PROCESS_TIMEOUT;
-    gates.push(offline_packages);
-    let mut pure_tail = gate(
-        "pure_tail",
-        vec![
-            path_string(self_test_executable),
-            "pure-tail".to_owned(),
-            "--binary".to_owned(),
-            path_string(&binary),
+    // These owners execute complete linked source semantics. Final candidate
+    // admission separately consumes their declared originals for bounded process checks.
+    for (name, command, output, timeout) in [
+        (
+            "offline_packages",
+            "offline-packages",
+            "offline-packages",
+            crate::offline_packages::COMPLETE_PROCESS_TIMEOUT,
+        ),
+        (
+            "pure_tail",
+            "pure-tail",
+            "pure-tail",
+            std::time::Duration::from_secs(900),
+        ),
+    ] {
+        let mut semantic = gate(
+            name,
+            vec![
+                path_string(self_test_executable),
+                command.to_owned(),
+                "--evidence-root".to_owned(),
+                path_string(&outputs.join(output)),
+                "--machine".to_owned(),
+            ],
+            &["fmt"],
+        );
+        semantic.identity_command = Some(vec![
+            "$HARNESS".to_owned(),
+            command.to_owned(),
             "--evidence-root".to_owned(),
-            path_string(&outputs.join("pure-tail")),
+            format!("$OUTPUT/{output}"),
             "--machine".to_owned(),
-        ],
-        &["release_command_lifecycle"],
-    );
-    pure_tail.identity_command = Some(vec![
-        "$HARNESS".to_owned(),
-        "pure-tail".to_owned(),
-        "--binary".to_owned(),
-        path_string(&binary),
-        "--evidence-root".to_owned(),
-        "$OUTPUT/pure-tail".to_owned(),
-        "--machine".to_owned(),
-    ]);
-    pure_tail.cacheable = false;
-    pure_tail.timeout = std::time::Duration::from_secs(900);
-    pure_tail.required_outputs = vec![outputs.join("pure-tail/receipt.json")];
-    gates.push(pure_tail);
+        ]);
+        semantic.cacheable = false;
+        semantic.timeout = timeout;
+        semantic.required_outputs = vec![outputs.join(output).join("receipt.json")];
+        gates.push(semantic);
+    }
     let mut stateful_http = gate(
         "stateful_http_application",
         vec![
@@ -941,9 +933,9 @@ pub(crate) fn profile(name: &str) -> Option<Vec<String>> {
             "service_acceptance",
             "diff_check",
         ],
-        // The six copied-candidate behavioral owners run against the final archive
-        // executable at target admission. This profile retains their source/reference
-        // tests, policy, host configuration and maintained-asset prerequisites.
+        // Four copied-candidate owners run only at final target admission. Offline
+        // and pure-tail semantics run here; their final process boundaries consume
+        // these exact declared source receipts without replaying the semantic matrices.
         "release-source" => &[
             "fmt",
             "checker_self_test",
@@ -952,6 +944,8 @@ pub(crate) fn profile(name: &str) -> Option<Vec<String>> {
             "workspace_tests",
             "release_build",
             "release_command_lifecycle",
+            "offline_packages",
+            "pure_tail",
             "generated_public_guides",
             "product_surface_audit",
             "standard_package_test",
@@ -1354,7 +1348,7 @@ mod tests {
                 .gate("offline_packages")
                 .expect("offline package oracle");
             assert!(!offline.cacheable);
-            assert_eq!(offline.dependencies, ["release_command_lifecycle"]);
+            assert_eq!(offline.dependencies, ["fmt"]);
             assert_eq!(offline.timeout, std::time::Duration::from_secs(3_600));
             assert_eq!(
                 requested.iter().any(|name| name == "pure_tail"),
@@ -1411,8 +1405,6 @@ mod tests {
         for name in [
             "distributed_http_application",
             "outbound_http_application",
-            "offline_packages",
-            "pure_tail",
             "stateful_http_application",
             "service_acceptance",
         ] {
@@ -1438,8 +1430,6 @@ mod tests {
         let candidate = [
             "distributed_http_application",
             "outbound_http_application",
-            "offline_packages",
-            "pure_tail",
             "stateful_http_application",
             "service_acceptance",
         ];
@@ -1461,6 +1451,18 @@ mod tests {
                 .any(|name| name == "release_command_lifecycle")
         );
         assert!(source.iter().any(|name| name == "workspace_tests"));
+        for name in ["offline_packages", "pure_tail"] {
+            assert!(source.iter().any(|selected| selected == name));
+            let owner = registry.gate(name).expect("linked source semantic owner");
+            assert_eq!(owner.dependencies, ["fmt"]);
+            assert!(!owner.command.iter().any(|argument| argument == "--binary"));
+            assert!(owner.required_inputs.is_empty());
+            assert_eq!(owner.required_outputs.len(), 1);
+            assert_eq!(
+                owner.required_outputs[0].file_name().unwrap(),
+                "receipt.json"
+            );
+        }
         assert_ne!(
             registry
                 .profile_digest("full", &profile("full").expect("full"))

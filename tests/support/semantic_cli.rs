@@ -105,7 +105,8 @@ pub fn execute(arguments: &[&str], full_arguments: Vec<String>) -> Option<Respon
     }
     let operation = *arguments.first()?;
     let project_independent = matches!(operation, "new" | "capabilities")
-        || arguments.starts_with(&["package", "builtin"]);
+        || arguments.starts_with(&["package", "builtin"])
+        || (operation == "run" && arguments.contains(&"--deployment"));
     if !project_independent && !full.windows(2).any(|pair| pair[0] == "--project") {
         return None;
     }
@@ -129,9 +130,7 @@ pub fn execute(arguments: &[&str], full_arguments: Vec<String>) -> Option<Respon
         "change" => platform::execute_change(full_arguments),
         "check" => single(platform::execute_check(full_arguments)),
         "build" => single(platform::execute_build(full_arguments)),
-        "run" if !arguments.contains(&"--deployment") => {
-            single(platform::execute_run(full_arguments))
-        }
+        "run" => single(run(full_arguments)),
         "package" => single(platform::execute_package_builtin(full_arguments)),
         _ => return None,
     };
@@ -143,6 +142,61 @@ pub fn execute(arguments: &[&str], full_arguments: Vec<String>) -> Option<Respon
             stderr: Vec::new(),
         },
         Err(diagnostics) => failure(operation, &diagnostics),
+    })
+}
+
+fn run(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
+    // Match the executable's dispatch order: either batch flag selects the batch parser,
+    // including malformed batches; deployment otherwise selects the foreground parser.
+    if arguments.iter().any(|argument| {
+        matches!(
+            argument.as_str(),
+            "--batch-input-file" | "--batch-result-file"
+        )
+    }) {
+        let options = platform::cli::parse_run_batch(&arguments)?;
+        return owned_runtime(move |runtime| {
+            runtime.block_on(platform::cli::execute_run_batch(
+                options,
+                std::future::pending(),
+            ))
+        });
+    }
+    if arguments.iter().any(|argument| argument == "--deployment") {
+        let options = platform::parse_foreground_run(&arguments)?;
+        return owned_runtime(move |runtime| {
+            runtime.block_on(platform::execute_foreground_run(
+                options,
+                std::future::pending(),
+            ))
+        });
+    }
+    platform::execute_run(arguments)
+}
+
+fn owned_runtime(
+    operation: impl FnOnce(tokio::runtime::Runtime) -> Result<Vec<u8>, Diagnostic> + Send,
+) -> Result<Vec<u8>, Diagnostic> {
+    // A joined thread also permits callers already inside a Tokio runtime. The public
+    // operation owns cancellation, blocking-task joins and executor cleanup; dropping
+    // this runtime waits for its remaining blocking work before the adapter returns.
+    std::thread::scope(|scope| {
+        scope
+            .spawn(move || {
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(|error| {
+                        Diagnostic::new(
+                            platform::DiagnosticClass::Infrastructure,
+                            "runtime_initialize",
+                            format!("host semantic runtime could not initialize: {error}"),
+                        )
+                    })?;
+                operation(runtime)
+            })
+            .join()
+            .unwrap()
     })
 }
 
@@ -163,6 +217,8 @@ fn absolute_external_paths(arguments: &[&str]) -> bool {
                 | "--deployment"
                 | "--arguments-file"
                 | "--result-file"
+                | "--batch-input-file"
+                | "--batch-result-file"
         ) && !Path::new(pair[1]).is_absolute()
         {
             return false;
@@ -177,7 +233,13 @@ pub fn failure(command: &str, diagnostics: &[Diagnostic]) -> Response {
     let infrastructure = exit_status_for(platform::DiagnosticClass::Infrastructure);
     let (code, stdout) = match diagnostics.first() {
         Some(first) => match failure_bytes(command, diagnostics) {
-            Ok(stdout) => (exit_status_for(first.class), stdout),
+            Ok(stdout) => (
+                match first.code.as_str() {
+                    "change_stale_base" | "change_authored_stale_base" => 7,
+                    _ => exit_status_for(first.class),
+                },
+                stdout,
+            ),
             Err(_) => (infrastructure, Vec::new()),
         },
         None => (infrastructure, Vec::new()),

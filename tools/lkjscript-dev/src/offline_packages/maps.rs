@@ -60,7 +60,7 @@ impl Witness {
             "duplicate persistent-map command label",
         )?;
         if project.is_none() && arguments.starts_with(&["run", "--deployment"]) && passes {
-            context.cli_copied_at(&context.root.clone(), arguments)
+            context.cli_detached_at(&context.root.clone(), arguments)
         } else {
             context.cli(project, arguments, passes)
         }
@@ -872,7 +872,7 @@ fn output(
     parse_records(
         "map-output",
         &process::read_bounded(
-            &root.join(&command.observation.stdout.path),
+            &root.join(&command.observation.stdout().path),
             MAXIMUM_OUTPUT_BYTES,
         )?,
     )
@@ -1038,7 +1038,7 @@ fn validate_authoring(receipt: &Receipt, root: &Path, witness: &Witness) -> Resu
             ("apply", vec!["--plan".to_owned(), token.clone()]),
         ] {
             let mut command = vec![
-                isolated.join("lkjscript").display().to_string(),
+                receipt.host_path.clone(),
                 "--project".to_owned(),
                 isolated.join(project).display().to_string(),
                 "change".to_owned(),
@@ -1144,7 +1144,7 @@ pub(super) fn validate(
             &witness,
             label,
             vec![
-                isolated.join("lkjscript").display().to_string(),
+                receipt.host_path.clone(),
                 "--project".into(),
                 isolated.join(directory).display().to_string(),
                 "status".into(),
@@ -1200,7 +1200,7 @@ pub(super) fn validate(
             &witness,
             &format!("{phase}-build"),
             vec![
-                isolated.join("lkjscript").display().to_string(),
+                receipt.host_path.clone(),
                 "--project".into(),
                 isolated.join("maps-consumer").display().to_string(),
                 "build".into(),
@@ -1266,7 +1266,7 @@ pub(super) fn validate(
             )? == case.arguments.as_bytes(),
             "map literal invocation input changed",
         )?;
-        let mut command = vec![isolated.join("lkjscript").display().to_string()];
+        let mut command = vec![receipt.host_path.clone()];
         if case.artifact {
             let name = format!("maps-{}-{}.deployment.json", case.phase, case.target);
             require(
@@ -1341,22 +1341,21 @@ mod tests {
             std::env::var_os("LKJSCRIPT_MAP_WINDOW_VERIFIER").expect("original verifier"),
         );
         let mut receipt: Receipt = serde_json::from_slice(&fs::read(&source).unwrap()).unwrap();
-        let candidate = PathBuf::from(&receipt.pinned_runtime_path);
         let full = match receipt.schema.as_str() {
-            "lkjscript-offline-packages-acceptance-20" => true,
-            "lkjscript-offline-persistent-maps-2" => false,
+            "lkjscript-offline-semantic-1" => true,
+            "lkjscript-offline-persistent-maps-semantic-1" => false,
             other => panic!("unsupported current map fixture workload: {other}"),
         };
         if full {
-            super::super::read_transferred_receipt(&source, &candidate, &verifier)
+            super::super::read_semantic_receipt(&source, &verifier)
                 .expect("authentic complete offline original passes");
         } else {
-            super::super::finite::read_focused(&source, &candidate, &verifier)
+            super::super::finite::read_focused(&source, &verifier)
                 .expect("authentic complete focused original passes");
         }
         let original_schema = receipt.schema.clone();
         let original_isolated = receipt.isolated_root.clone();
-        let original_runtime = receipt.pinned_runtime_path.clone();
+        let original_runtime = receipt.host_path.clone();
         let original_processes = serde_json::to_value(
             receipt
                 .commands
@@ -1385,13 +1384,10 @@ mod tests {
                         && copy.cleanup_complete
                         && copy.isolated_root == original_isolated
                         && !Path::new(&copy.isolated_root).exists()
-                        && copy.pinned_runtime_path == original_runtime
-                        && Path::new(&copy.pinned_runtime_path) == candidate.canonicalize()?
+                        && copy.host_path == original_runtime
+                        && Path::new(&copy.host_path) == verifier.canonicalize()?
                         && copy.evidence_root == root.display().to_string()
-                        && copy.environment_names == ["LANG"]
-                        && copy.candidate_sha256
-                            == digest_file(&candidate, MAXIMUM_EXECUTABLE_BYTES)?
-                        && copy.copied_candidate_sha256 == copy.candidate_sha256
+                        && copy.environment_names == receipt.environment_names
                         && copy.verifier_sha256
                             == digest_file(&verifier, MAXIMUM_EXECUTABLE_BYTES)?
                         && serde_json::to_value(
@@ -1410,9 +1406,9 @@ mod tests {
                         &format!("command-{index:04}"),
                     )?;
                 }
-                validate(&copy, &root, 43..47).map(|_| ())
+                validate(&copy, &root, 44..48).map(|_| ())
             } else {
-                super::super::finite::read_focused(path, &candidate, &verifier)
+                super::super::finite::read_focused(path, &verifier)
             }
         };
         let owned = tempfile::tempdir().unwrap();
