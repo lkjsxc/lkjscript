@@ -658,7 +658,7 @@ fn authored_type(
     Ok(match &object.form {
         TypeForm::AssociatedContractMember { .. }
         | TypeForm::AssociatedWitnessProjection { .. } => {
-            return Err(crate::platform::kernel::owned_associated_wire::unsupported_semantics());
+            return Err(crate::platform::kernel::owned_associated::unsupported_semantics());
         }
         TypeForm::ReadViewApplied { .. }
         | TypeForm::AssociatedReadViewMember { .. }

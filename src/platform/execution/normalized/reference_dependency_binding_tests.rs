@@ -28,9 +28,7 @@ fn consumer_of(supplier: &KernelSnapshot) -> KernelSnapshot {
     consumer.dependency_interfaces.clear();
     consumer.dependency_types = supplier.types.clone();
     let selection = DependencyRecord {
-        // This older binding generation is valid even when the supplier body is
-        // current. It is an encoding generation, not the supplier's generation.
-        graph_contract_version: 32,
+        graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
         package: supplier.root.package_id,
         semantic_revision: RevisionId::from_digest([61; 32]),
         package_revision: PackageRevisionDigest::from_bytes([62; 32]),
@@ -269,7 +267,7 @@ fn exact_supplier_binding_requires_consistent_authored_and_representation_select
     ] {
         let mut bad = consumer.clone();
         let mut shadow = selected.clone();
-        shadow.graph_contract_version = 33;
+
         match fault {
             "semantic-revision" => shadow.semantic_revision = RevisionId::from_digest([98; 32]),
             "package-revision" => {

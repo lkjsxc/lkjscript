@@ -83,6 +83,7 @@ impl ProductExtraction {
                 raw: raw.into_raw(),
                 origin: self.program,
                 class: Class::Free,
+                ordinary_type: Some(ty),
                 borrow: None,
             }
         } else {
@@ -213,6 +214,7 @@ impl Value {
             raw,
             origin: program.value_origin,
             class: Class::Free,
+            ordinary_type: Some(field.ty),
             borrow: None,
         })
     }
@@ -257,6 +259,7 @@ impl Value {
             raw,
             origin: program.value_origin,
             class: Class::Free,
+            ordinary_type: Some(*item),
             borrow: None,
         })
     }
@@ -308,6 +311,7 @@ impl Value {
             raw,
             origin: program.value_origin,
             class: Class::Free,
+            ordinary_type: Some(fields[index].ty),
             borrow: None,
         })
     }

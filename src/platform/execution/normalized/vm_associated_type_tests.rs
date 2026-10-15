@@ -226,6 +226,43 @@ fn associated_runtime_hits_bind_exact_witness_application_and_recheck_raw_rhs() 
 }
 
 #[test]
+fn associated_runtime_cannot_use_an_ordinary_substitution_as_witness_authority() {
+    let mut fixture = prepared_fixture(false);
+    let control = ExecutionControl::uncancelled();
+    fixture.program.prepared_type_lookup = prepared_types::PreparedTypeLookup::ordinary_for_test(
+        fixture.program.value_origin,
+        fixture.sequence,
+        fixture.left_sequence,
+        &fixture.bindings,
+        &control,
+    )
+    .unwrap();
+    assert_eq!(
+        fixture.program.prepared_type_lookup.get(
+            fixture.program.value_origin,
+            fixture.sequence,
+            &fixture.bindings,
+        ),
+        Ok(Some(fixture.left_sequence))
+    );
+    assert_eq!(
+        fixture.program.prepared_type_lookup.get_application(
+            fixture.program.value_origin,
+            fixture.left,
+            fixture.sequence,
+            &fixture.bindings,
+        ),
+        Ok(None)
+    );
+    // The closed witness itself remains valid. Absence of an exact application
+    // entry still refuses this nested associated template before ordinary reuse.
+    PreparedApplicationContext::new(&fixture.program, fixture.left, &fixture.bindings, &control)
+        .unwrap();
+    assert!(resolve_fixture(&fixture, fixture.left, &control).is_err());
+    assert!(resolve_fixture(&fixture, fixture.right, &control).is_err());
+}
+
+#[test]
 fn associated_runtime_refuses_each_independent_member_scope_and_origin_corruption() {
     let control = ExecutionControl::uncancelled();
     for fault in 0..8 {

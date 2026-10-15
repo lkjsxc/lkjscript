@@ -383,16 +383,7 @@ fn unit(f: &Fixture, scope: DeclarationReference, types: Vec<TypeObjectDigest>) 
         contract_version: COMPILER_UNIT_CONTRACT_VERSION,
         graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
         bytecode_contract_version: BYTECODE_CONTRACT_VERSION,
-        key: CompilationUnitKey::derive_for_tag(
-            &source,
-            optimization,
-            match &payload {
-                CompilationPayload::OwnedContract(_) => Some(1),
-                CompilationPayload::OwnedImplementation(_) => Some(2),
-                _ => None,
-            },
-        )
-        .unwrap(),
+        key: CompilationUnitKey::derive(&source, optimization).unwrap(),
         source,
         optimization,
         tables: CompilationTables {
@@ -820,10 +811,10 @@ fn artifact_aggregate_table_admission_keeps_each_family_binding_scope_exact() {
 }
 
 #[test]
-fn artifact_associated_table_helper_accepts_older_edge_encoding_for_current_foreign_owner() {
+fn artifact_associated_table_helper_requires_exact_foreign_scope_authority() {
     let foreign = PackageId::from_bytes([0x35; 16]).unwrap();
     let dependency = DependencyRecord {
-        graph_contract_version: 32,
+        graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
         package: foreign,
         semantic_revision: RevisionId::from_digest([8; 32]),
         package_revision: PackageRevisionDigest::of(b"point-reader foreign metadata only"),
@@ -897,7 +888,7 @@ fn artifact_associated_table_helper_accepts_older_edge_encoding_for_current_fore
     // cannot authorize naming the foreign contract in an associated projection.
     assert_bad_table(&f, &foreign_unit);
 
-    // Ordinary historical representation metadata remains usable alongside a
+    // Ordinary representation metadata remains usable alongside a
     // healthy local associated root; it supplies no foreign associated names.
     let mut f = fixture();
     f.read.dependencies.insert(foreign, dependency.clone());
@@ -908,16 +899,15 @@ fn artifact_associated_table_helper_accepts_older_edge_encoding_for_current_fore
         package: foreign,
         declaration: DeclarationId::migrate(SEED, 51),
     };
-    let mut header = OwnerHeader::new(
+    let header = OwnerHeader::new(
         OwnerKey::Declaration(nominal.declaration),
         OwnerKind::Record,
     );
-    header.contract_version = 32;
     f.read.representations.insert(
         (foreign, OwnerKey::Declaration(nominal.declaration)),
         PackageInterfaceRecord::RepresentationDeclaration(PackageInterfaceDeclaration {
             header,
-            name: Name::new("HistoricalData").unwrap(),
+            name: Name::new("ForeignData").unwrap(),
             payload: PackageInterfaceDeclarationPayload::Record {
                 type_parameters: vec![],
                 fields: vec![],

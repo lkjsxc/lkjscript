@@ -144,7 +144,7 @@ fn metadata_only_view_remains_positive_view_with_explicit_scope() {
     record.header.contract_version = 33;
     assert_eq!(
         predecessor.validate_local().unwrap_err().code,
-        "kernel_read_view_generation"
+        "kernel_owner_header"
     );
     let form = super::super::TypeForm::ReadViewApplied {
         declaration: declaration(1),
@@ -157,6 +157,6 @@ fn metadata_only_view_remains_positive_view_with_explicit_scope() {
     assert_eq!(object.child_type_count(), 0);
     assert_eq!(
         object.contract_version,
-        super::super::contract::ASSOCIATED_READ_VIEW_CONTRACT_VERSION
+        super::super::contract::TYPE_OBJECT_CONTRACT_VERSION
     );
 }

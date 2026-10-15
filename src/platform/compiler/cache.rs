@@ -38,8 +38,8 @@ const CACHE_LOCK_FILE: &str = "LOCK";
 const CACHE_HEAD_FILE: &str = "CURRENT";
 const CACHE_HEAD_STAGE_PREFIX: &str = ".CURRENT-stage-";
 const CACHE_HEAD_CONTRACT_VERSION: u16 = 1;
-const CACHE_HEAD_MAGIC: [u8; 8] = *b"LKJCMH01";
-const CACHE_HEAD_ENVELOPE_DOMAIN: &str = "lkjscript.compilation-cache-head-envelope.v1";
+const CACHE_HEAD_MAGIC: [u8; 8] = *b"LKJCMHED";
+const CACHE_HEAD_ENVELOPE_DOMAIN: &str = "lkjscript.compilation-cache-head-envelope";
 const MAXIMUM_CACHE_HEAD_BYTES: usize = 4 * 1024;
 
 #[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
@@ -605,17 +605,6 @@ fn bind_manifest_to_current(
     manifest: &CompilationManifest,
     view: &RepositoryView,
 ) -> Result<(), Diagnostic> {
-    if manifest.compiler_contract_version != COMPILER_UNIT_CONTRACT_VERSION
-        || manifest.bytecode_contract_version != BYTECODE_CONTRACT_VERSION
-        || manifest.graph_contract_version
-            != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
-    {
-        return Err(cache_error(
-            DiagnosticClass::Source,
-            "compilation_cache_contract_outdated",
-            "derived compilation was produced under a supported predecessor contract; rebuild it under the current compiler",
-        ));
-    }
     let package_revision = view.build_package_revision()?;
     if manifest.repository_id != view.current().head.repository_id
         || manifest.package_id != view.package()

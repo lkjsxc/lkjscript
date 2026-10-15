@@ -1,6 +1,45 @@
 use super::*;
 
 impl Fifo {
+    pub fn success_case(
+        &self,
+        id: impl Into<String>,
+        target: &str,
+        input: &Value,
+        expected: &Value,
+    ) -> BatchCase {
+        let mut case = BatchCase::success(id, input, expected.clone());
+        case.target = Some(target.to_owned());
+        case
+    }
+
+    pub fn failure_case(
+        &self,
+        id: impl Into<String>,
+        target: &str,
+        input: &Value,
+        class: &'static str,
+        code: &'static str,
+    ) -> BatchCase {
+        let mut case = BatchCase::failure(id, input, class, code);
+        case.target = Some(target.to_owned());
+        case
+    }
+
+    pub fn batch(&self, label: &str, cases: &[BatchCase]) -> Vec<Vec<CompactRecord>> {
+        let descriptor = self.consumer.root.path().join("fifo-cells.deployment.json");
+        let rows = self.consumer.batch(label, &descriptor, cases);
+        for records in &rows {
+            if let Some(execution) = records
+                .iter()
+                .find(|record| record.operation == "execution")
+            {
+                joined(execution);
+            }
+        }
+        rows
+    }
+
     pub fn run(
         &self,
         target: &str,

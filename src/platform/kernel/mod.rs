@@ -1,4 +1,4 @@
-//! Current Graph 10 semantic kernel behind the typed process boundary.
+//! Current semantic kernel behind the typed process boundary.
 //!
 //! These normalized records and complete oracles own current program meaning. The module remains
 //! crate-private so Rust representation is not elevated into the public language contract.
@@ -23,7 +23,6 @@ pub mod contract;
 mod digest;
 mod effect;
 mod expression;
-pub(crate) mod frozen_read_view_wire;
 mod id;
 mod implementation;
 mod infer;
@@ -36,7 +35,6 @@ mod namespace;
 pub(crate) mod owned_associated;
 #[cfg(test)]
 mod owned_associated_codec_tests;
-pub(crate) mod owned_associated_wire;
 mod owned_contract;
 pub(crate) mod owned_product;
 pub(crate) mod owned_record;
@@ -48,8 +46,6 @@ mod parallel_types_tests;
 pub(crate) mod share;
 pub(crate) mod transfer;
 pub use owned_contract::*;
-pub(crate) mod interface11;
-pub(crate) mod interface21;
 pub(crate) mod read_view;
 pub use read_view::*;
 mod reference;
@@ -60,14 +56,6 @@ mod scoped;
 mod state;
 mod type_object;
 mod validate;
-pub(crate) mod wire14;
-mod wire17;
-mod wire22;
-pub(crate) mod wire25;
-pub(crate) mod wire26;
-pub(crate) mod wire27;
-pub(crate) mod wire28;
-pub(crate) mod wire30;
 
 pub(crate) use affine::validate_affine_roots_with_limits;
 pub use codec::{

@@ -196,7 +196,8 @@ fn admit(
             context.as_ref(),
         )?;
         require(
-            observed.outputs.len() == gate.required_outputs.len()
+            observed.inputs == executor::expected_input_proofs(repository, gate, &dependencies)?
+                && observed.outputs.len() == gate.required_outputs.len()
                 && observed.retained_outputs.len() == observed.outputs.len(),
             "source output evidence is incomplete",
         )?;
@@ -218,6 +219,7 @@ fn admit(
                 name,
                 &observed.input_fingerprint,
                 process,
+                &observed.inputs,
                 &observed.outputs,
                 observed.cargo_origin.as_ref(),
             )? == observed.evidence_digest,
@@ -300,6 +302,7 @@ fn require(condition: bool, message: &str) -> Result<(), DevError> {
 mod tests {
     use super::super::model::{ExecutableProof, Gate, RuntimeIdentity};
     use super::*;
+    use crate::evidence::VerificationDigest;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn now() -> u128 {
@@ -366,6 +369,11 @@ mod tests {
         first.required_outputs.push(output.clone());
         let mut second = Gate::new("second", vec!["/bin/true".to_owned()]);
         second.dependencies.push("first".to_owned());
+        second.cacheable = false;
+        second.required_inputs.push(super::super::model::GateInput {
+            path: output.clone(),
+            producer: "first".to_owned(),
+        });
         let registry = registry::GateRegistry::new(vec![first, second]).expect("fixture registry");
         let requested = vec!["second".to_owned()];
         let selected = registry.closure(&requested).expect("fixture closure");
@@ -505,7 +513,7 @@ mod tests {
         // A later build replacing the mutable output does not replace its preserved original.
         fs::write(&output, b"different later build").expect("replace mutable output");
         read(&baseline).expect("original output retained");
-        for case in 0..12 {
+        for case in 0..14 {
             let mut fault = baseline.clone();
             match case {
                 0 => {
@@ -563,6 +571,23 @@ mod tests {
                 }
                 11 => {
                     fault.contract_version = 6;
+                }
+                12 | 13 => {
+                    let consumer = &mut fault.gates[1];
+                    if case == 12 {
+                        consumer.inputs.clear();
+                    } else {
+                        consumer.inputs[0].digest = Some(VerificationDigest::of(b"substitute"));
+                    }
+                    consumer.evidence_digest = cache::gate_evidence_digest(
+                        &consumer.name,
+                        &consumer.input_fingerprint,
+                        consumer.process.as_ref().expect("process"),
+                        &consumer.inputs,
+                        &consumer.outputs,
+                        consumer.cargo_origin.as_ref(),
+                    )
+                    .expect("coherently rehashed substitute input evidence");
                 }
                 _ => unreachable!(),
             }

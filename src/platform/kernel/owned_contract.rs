@@ -53,7 +53,7 @@ fn admit_dependency(
     Ok(())
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct OwnedContract {
     pub self_parameter: TypeParameterId,
@@ -82,7 +82,7 @@ pub struct OwnedMethodParameter {
     pub use_mode: ParameterUse,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct OwnedImplementation {
     pub type_parameters: Vec<TypeParameterId>,
@@ -103,43 +103,12 @@ pub struct AssociatedTypeMember {
     pub bound: AssociatedTypeBound,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AssociatedTypeBound {
     Owned,
     ReadViewFamily { scope_parameter: ReadScopeParameter },
 }
-
-impl Encode for AssociatedTypeBound {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> Result<(), bincode::error::EncodeError> {
-        match self {
-            Self::Owned => 1_u8.encode(encoder),
-            Self::ReadViewFamily { scope_parameter } => {
-                2_u8.encode(encoder)?;
-                scope_parameter.encode(encoder)
-            }
-        }
-    }
-}
-impl<C> Decode<C> for AssociatedTypeBound {
-    fn decode<D: bincode::de::Decoder<Context = C>>(
-        decoder: &mut D,
-    ) -> Result<Self, bincode::error::DecodeError> {
-        match u8::decode(decoder)? {
-            1 => Ok(Self::Owned),
-            2 => Ok(Self::ReadViewFamily {
-                scope_parameter: ReadScopeParameter::decode(decoder)?,
-            }),
-            _ => Err(bincode::error::DecodeError::Other(
-                "unknown associated owned type bound",
-            )),
-        }
-    }
-}
-bincode::impl_borrow_decode!(AssociatedTypeBound);
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -2949,7 +2918,7 @@ pub(super) fn ordinary_with_assumptions_at(
         match &t.form {
             TypeForm::AssociatedContractMember { .. }
             | TypeForm::AssociatedWitnessProjection { .. } => {
-                return Err(super::owned_associated_wire::unsupported_semantics());
+                return Err(super::owned_associated::unsupported_semantics());
             }
             TypeForm::ReadViewApplied { .. }
             | TypeForm::AssociatedReadViewMember { .. }

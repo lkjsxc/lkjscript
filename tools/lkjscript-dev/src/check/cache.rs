@@ -60,6 +60,8 @@ impl VerificationCache {
 
     pub(crate) fn store(&self, gate: &Gate, receipt: &GateReceipt) -> Result<String, DevError> {
         if !gate.cacheable
+            || !gate.required_inputs.is_empty()
+            || !receipt.inputs.is_empty()
             || receipt.status != GateStatus::Passed
             || receipt.execution != super::model::ExecutionKind::Fresh
         {
@@ -181,6 +183,7 @@ impl VerificationCache {
                 || record.identity_command != gate.identity_command()
                 || record.process.status != ProcessStatus::Passed
                 || super::cargo_origin::is_producer(gate)
+                || !gate.required_inputs.is_empty()
                 || record.cargo_origin.is_some()
             {
                 return Ok(CacheLoad {
@@ -199,6 +202,7 @@ impl VerificationCache {
                 &gate.name,
                 fingerprint,
                 &record.process,
+                &[],
                 &record.outputs,
                 record.cargo_origin.as_ref(),
             )? != record.evidence_digest
@@ -456,6 +460,7 @@ pub(crate) fn gate_evidence_digest(
     gate: &str,
     fingerprint: &VerificationDigest,
     process: &ProcessObservation,
+    inputs: &[FileProof],
     outputs: &[FileProof],
     cargo_origin: Option<&FileProof>,
 ) -> Result<VerificationDigest, DevError> {
@@ -477,6 +482,7 @@ pub(crate) fn gate_evidence_digest(
         stderr_limit_exhausted: bool,
         stdout: StreamIdentity<'a>,
         stderr: StreamIdentity<'a>,
+        inputs: &'a [FileProof],
         outputs: &'a [FileProof],
         cargo_origin: Option<&'a FileProof>,
     }
@@ -498,6 +504,7 @@ pub(crate) fn gate_evidence_digest(
             bytes: process.stderr.bytes,
             digest: process.stderr.digest.as_ref(),
         },
+        inputs,
         outputs,
         cargo_origin,
     })
@@ -647,7 +654,7 @@ mod tests {
         );
         let gate = Gate::new("gate", vec!["/bin/true".to_owned()]);
         let fingerprint = VerificationDigest::of(b"input");
-        let evidence_digest = gate_evidence_digest("gate", &fingerprint, &process, &[], None)
+        let evidence_digest = gate_evidence_digest("gate", &fingerprint, &process, &[], &[], None)
             .expect("gate evidence digest");
         let receipt = GateReceipt {
             name: "gate".to_owned(),
@@ -660,6 +667,7 @@ mod tests {
             completed_unix_nanoseconds: 2,
             elapsed_nanoseconds: process.elapsed_nanoseconds,
             process: Some(process),
+            inputs: Vec::new(),
             outputs: Vec::new(),
             retained_outputs: Vec::new(),
             cargo_origin: None,

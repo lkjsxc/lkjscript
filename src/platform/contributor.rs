@@ -90,16 +90,10 @@ pub fn strict_artifact_source_probe(
 }
 
 #[cfg(test)]
-mod nominal_cutover_tests;
-
-#[cfg(test)]
 pub(crate) mod owned_record_projection_tests;
 
 #[cfg(test)]
-pub(crate) mod effect_cutover_tests;
-
-#[cfg(test)]
-pub(crate) mod scoped_borrow_tests;
+mod current_adoption_tests;
 
 /// Neutral canonical type identity for independent contributor byte oracles. This
 /// performs no graph authoring, scope proof, layout derivation or value encoding.

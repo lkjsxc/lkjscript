@@ -228,16 +228,27 @@ fn associated_memory_closure_checks_imported_selection_and_owner_authority() {
     let mut older_encoding = f.source.clone();
     let mut older_selection = selection.clone();
     older_selection.graph_contract_version = 32;
-    let (digest, bytes) = encode_dependency(&older_selection).unwrap();
-    let decoded = decode_dependency(&bytes, &package, digest).unwrap();
-    assert_eq!(decoded, older_selection);
-    older_encoding.dependencies.insert(package, decoded);
-    // This is a supported selection encoding for the same exact interface;
-    // current foreign owners retain their own associated feature allowance.
-    Resolver::new(&older_encoding)
-        .admit_canonical_closure()
-        .unwrap();
-    assert!(accepts(&older_encoding));
+    assert_eq!(
+        encode_dependency(&older_selection).unwrap_err().code,
+        "kernel_dependency_contract"
+    );
+    let bytes = crate::platform::packed::encode_canonical(
+        contract::DEPENDENCY_MAGIC,
+        contract::DEPENDENCY_ENVELOPE_DOMAIN,
+        &older_selection,
+        contract::MAXIMUM_DEPENDENCY_BYTES,
+    )
+    .unwrap();
+    assert_eq!(
+        decode_dependency(&bytes, &package, DependencyObjectDigest::of(&bytes))
+            .unwrap_err()
+            .code,
+        "kernel_dependency_contract"
+    );
+    older_encoding.dependencies.insert(package, older_selection);
+    // Selection framing is admitted by the codecs and whole memory oracle;
+    // the occurrence resolver checks the selected interface's own authority.
+    assert!(!accepts(&older_encoding));
     let mut unsupported_encoding = f.source.clone();
     unsupported_encoding
         .dependencies
@@ -261,7 +272,7 @@ fn associated_memory_closure_checks_imported_selection_and_owner_authority() {
         Err(Failure::Authority)
     );
     for generation in [32, 35] {
-        let mut old_owner = older_encoding.clone();
+        let mut old_owner = f.source.clone();
         let records =
             std::sync::Arc::make_mut(old_owner.dependency_interfaces.get_mut(&revision).unwrap());
         let Some(PackageInterfaceRecord::Declaration(d)) =

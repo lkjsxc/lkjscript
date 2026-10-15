@@ -59,7 +59,7 @@ quota exhaustion and execution failures are not defaults. The closed
 uncreated store is opened. Capture safety and transient nominal wrapping grant no serialization
 eligibility. The caller continues to own keys, spaces, schema and migration policy.
 
-The observer derives only the independent frozen TypeObject 10 I64/Text scalar envelopes and
+The observer derives only the independent current I64/Text scalar envelopes and
 compares complete stored bytes after opening fresh snapshots. It retains every state observation,
 including unchanged HEAD on abort/no-write and a distinct HEAD for the independently completed
 store. It never commits an observer transaction. Two public imported updates use a distinct
@@ -109,27 +109,13 @@ then receives an ordinary five-unit surcharge edit. Reviewed exact dependency re
 old and new bundles: separately initialized stores yield 70 and 65, both with `Stock(6,2)`.
 These are fixed designed workload results, not application adoption or automatic migration.
 
-The official v0.1.40 predecessor fixture separately retains the actual same-store nested-owner
-rejection and already-supported raw helper participation returning `Committed(60)`. The current
-Graph 18 compiler requires rebuilding derived artifacts: the original three-package artifact now
-refuses at its exact source-format boundary without execution or store changes. A separately retained
-current-envelope control preserves its canonical source and instruction forms and is bound to the
-original transport by strict admission before fresh-store execution. Every original output,
-nested-owner rejection, participation, transaction counter and cleanup assertion remains required.
-This establishes the baseline distinction: the composable-library campaign added a maintained library
-and an early guard, while raw capability helpers could already participate in an ancestor transaction.
-The historical official preflight remains exact retained evidence, not current execution permission.
-
-The former `attempt-update -> UpdateAttempt<T>` API is preserved as authentic v0.1.36 source,
-package and artifact material under `tests/fixtures/transaction-outcome-predecessor`. It keeps its
-honest candidate-plus-primary-boolean meaning. Its original artifact now has five exact format-refusal
-checks with unchanged store snapshots. Current-envelope, public rebuilt and imported controls run
-against separate fresh stores and must preserve every result and publication behavior. The new
-library result is an explicit API change in this designed workload. The earlier authentic scalar
-predecessor fixture likewise retains both original refusals and current-envelope/rebuilt/imported
-executions. Original artifacts, provenance and historical observations are never rewritten;
-`tests/fixtures/owned-predecessor-compiler33` owns the independently reconstructed current controls;
-the compiler 29 and 30 controls remain unchanged at their artifact rebuild cuts.
+Fresh scalar controls author current I64/Text encoder functions through public change commands,
+export exact current transports and compile both the supplier and a separate importer. Strict artifact
+admission binds the complete source transport and accepted semantic revision. After an ordinary
+rename preserves prior immutable packs, both authoring projects are removed before four actual
+candidate executions compare complete independently specified scalar envelopes. Current transaction
+completion and participant semantics are exercised by the requirement and composition workflows
+above; retired API and historical envelope matrices are absent.
 
 Resource composition continues to use the public `DurableQueue` helper in
 `requirements.resource-library.structural.lkjc`. Transported execution changes the independently

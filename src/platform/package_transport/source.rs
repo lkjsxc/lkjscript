@@ -69,7 +69,7 @@ impl PackageReadiness {
         if cursor.take(8)? != READINESS_MAGIC {
             return Err(corrupt(
                 "package_readiness_contract",
-                "predecessor package selections are not code-complete readiness; restage exact source",
+                "package readiness does not use the current selection format",
             ));
         }
         let count = u32::from_be_bytes(cursor.array()?) as usize;
@@ -242,7 +242,7 @@ impl PackageContainer {
         if cursor.take(8)? != CONTAINER_MAGIC {
             return Err(corrupt(
                 "package_container_contract",
-                "expected a code-complete package container; predecessor bare packs and executable artifacts cannot be staged",
+                "expected a current code-complete package container",
             ));
         }
         let root = cursor.binding()?;
@@ -302,66 +302,13 @@ impl PackageContainer {
             }
             let object = cursor.take(length)?;
             if domain == ObjectDomain::Owner
-                && object.starts_with(b"LKJOWN")
                 && object.get(..8)
                     != Some(crate::platform::kernel::contract::OWNER_MAGIC.as_slice())
-                && object.get(..8)
-                    != Some(crate::platform::kernel::contract::PREDECESSOR_OWNER_MAGIC.as_slice())
-                && object.get(..8)
-                    != Some(crate::platform::kernel::contract::REQUIREMENT_OWNER_MAGIC.as_slice())
-                && object.get(..8)
-                    != Some(crate::platform::kernel::contract::TRANSACTION_OWNER_MAGIC.as_slice())
-                && object.get(..8)
-                    != Some(crate::platform::kernel::contract::SCALAR_OWNER_MAGIC.as_slice())
-                && object.get(..8)
-                    != Some(crate::platform::kernel::contract::OWNED_OWNER_MAGIC.as_slice())
-                && object.get(..8)
-                    != Some(crate::platform::kernel::contract::PRODUCT_OWNER_MAGIC.as_slice())
-                && object.get(..8)
-                    != Some(crate::platform::kernel::contract::CHOICE_OWNER_MAGIC.as_slice())
-                && object.get(..8)
-                    != Some(crate::platform::kernel::contract::PARALLEL_OWNER_MAGIC.as_slice())
-                && object.get(..8)
-                    != Some(crate::platform::kernel::contract::TRANSFER_OWNER_MAGIC.as_slice())
-                && object.get(..8)
-                    != Some(crate::platform::kernel::contract::OWNED_EFFECT_OWNER_MAGIC.as_slice())
-                && object.get(..8)
-                    != Some(crate::platform::kernel::contract::BORROW_OWNER_MAGIC.as_slice())
-                && object.get(..8)
-                    != Some(crate::platform::kernel::contract::SEQUENCE_OWNER_MAGIC.as_slice())
-                && object.get(..8)
-                    != Some(
-                        crate::platform::kernel::contract::PARAMETERIZED_CONTRACT_OWNER_MAGIC
-                            .as_slice(),
-                    )
-                && object.get(..8)
-                    != Some(crate::platform::kernel::contract::BORROW_RESULT_OWNER_MAGIC.as_slice())
-                && object.get(..8)
-                    != Some(
-                        crate::platform::kernel::contract::IMPLEMENTATION_SCHEME_OWNER_MAGIC
-                            .as_slice(),
-                    )
-                && object.get(..8)
-                    != Some(
-                        crate::platform::kernel::contract::COMPOSABLE_IMPLEMENTATION_OWNER_MAGIC
-                            .as_slice(),
-                    )
-                && object.get(..8)
-                    != Some(crate::platform::kernel::contract::SHARE_OWNER_MAGIC.as_slice())
-                && object.get(..8)
-                    != Some(
-                        crate::platform::kernel::contract::GENERALIZED_SEQUENCE_OWNER_MAGIC
-                            .as_slice(),
-                    )
-                && object.get(..8)
-                    != Some(crate::platform::kernel::contract::OWNED_RECORD_OWNER_MAGIC.as_slice())
-                && object.get(..8)
-                    != Some(crate::platform::kernel::contract::MIXED_STORAGE_OWNER_MAGIC.as_slice())
             {
                 return Err(package_error(
                     DiagnosticClass::Source,
                     "package_source_owner_contract",
-                    "package contains unsupported predecessor or foreign canonical owners; retain the export and use its matching executable, or rebuild from supported current meaning",
+                    "package owner does not use the current canonical schema",
                 ));
             }
             let key = ObjectKey::from_digest(domain, digest);
@@ -1480,54 +1427,28 @@ mod tests {
     include!("source_validation_reuse_tests.rs");
 
     #[test]
-    fn source_transport_preserves_supported_composite_and_task_owner_envelopes() {
-        let source = crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(
-            "declarations.begin\n(units (module create historical (function create value (visibility public) (returns I64) (effect pure) (body (i64 37)))))\ndeclarations.end\n",
-        ).unwrap();
-        for generation in [
-            19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34,
-        ] {
-            let mut historical = source.clone();
-            for owner in historical.owners.values_mut() {
-                owner.set_encoding_for_edit(generation);
-            }
-            historical.root.graph_contract_version = generation;
-            let directory = tempfile::tempdir().unwrap();
-            let repository =
-                GraphRepository::create(&directory.path().join("history"), &historical, None)
-                    .unwrap()
-                    .repository;
-            let exported = repository.export_package_container().unwrap();
-            let bytes = exported.container.encode().unwrap();
-            let decoded =
-                PackageContainer::decode(&bytes, exported.container.root.transport).unwrap();
-            let admitted = decoded.admit().unwrap();
-            let canonical = &admitted.packages[&admitted.container.root.package_revision].snapshot;
-            assert_eq!(canonical.root.graph_contract_version, generation);
-            assert_eq!(canonical.owners, historical.owners);
-            super::super::oracle::reconstruct(&admitted.container).unwrap();
-        }
-        // Current feature-free source may retain a supported Graph33 owner beside Graph34
-        // owners. Container admission preserves those exact bytes rather than rewriting them.
-        let mut mixed = source.clone();
-        let retained = mixed.owners.keys().next().copied().unwrap();
-        mixed
-            .owners
-            .get_mut(&retained)
-            .unwrap()
-            .set_encoding_for_edit(33);
+    fn source_transport_preserves_current_canonical_owner_bytes() {
+        let snapshot = crate::platform::kernel::tests::transport_snapshot();
         let directory = tempfile::tempdir().unwrap();
-        let exported = GraphRepository::create(&directory.path().join("mixed"), &mixed, None)
-            .unwrap()
-            .repository
-            .export_package_container()
-            .unwrap();
+        let repository =
+            GraphRepository::create(&directory.path().join("current"), &snapshot, None)
+                .unwrap()
+                .repository;
+        let exported = repository.export_package_container().unwrap();
         let bytes = exported.container.encode().unwrap();
         let decoded = PackageContainer::decode(&bytes, exported.container.root.transport).unwrap();
         let admitted = decoded.admit().unwrap();
         let canonical = &admitted.packages[&admitted.container.root.package_revision].snapshot;
-        assert_eq!(canonical.root.graph_contract_version, 34);
-        assert_eq!(canonical.owners, mixed.owners);
+        assert_eq!(canonical.owners, snapshot.owners);
+        for record in canonical.owners.values() {
+            let (digest, expected) = encode_owner(record).unwrap();
+            assert!(expected.starts_with(&crate::platform::kernel::contract::OWNER_MAGIC));
+            assert_eq!(
+                admitted.container.objects
+                    [&ObjectKey::from_digest(ObjectDomain::Owner, digest.bytes())],
+                expected
+            );
+        }
         super::super::oracle::reconstruct(&admitted.container).unwrap();
     }
 
@@ -1557,7 +1478,10 @@ mod tests {
         // Neutral rehash: neither the current proof encoder nor semantic validation produces
         // this certificate. The unknown producer policy cannot certify even unchanged source.
         let core = bincode::encode_to_vec(
-            transport.witness.core(),
+            (
+                crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH,
+                transport.witness.core(),
+            ),
             bincode::config::standard()
                 .with_little_endian()
                 .with_variable_int_encoding(),
@@ -1565,16 +1489,24 @@ mod tests {
         .unwrap();
         transport.witness.certificate =
             crate::platform::witness::ValidationCertificateDigest::of(&core);
-        let (digest, bytes) =
-            crate::platform::witness::encode_witness_manifest_content(&transport.witness).unwrap();
-        assert_eq!(
-            crate::platform::witness::decode_witness_manifest(&bytes, digest)
-                .unwrap_err()
-                .code,
-            "witness_validator_contract"
-        );
-        transport.validation_witness = digest;
-        let (digest, bytes) = transport.encode().unwrap();
+        let witness_bytes = crate::platform::packed::encode_canonical(
+            crate::platform::witness::contract::WITNESS_MAGIC,
+            crate::platform::witness::contract::WITNESS_ENVELOPE_DOMAIN,
+            &transport.witness,
+            crate::platform::witness::contract::MAXIMUM_WITNESS_MANIFEST_BYTES,
+        )
+        .unwrap();
+        transport.validation_witness =
+            crate::platform::witness::ValidationWitnessDigest::of(&witness_bytes);
+        assert!(transport.encode().is_err());
+        let bytes = crate::platform::packed::encode(
+            super::super::PACKAGE_TRANSPORT_MAGIC,
+            super::super::PACKAGE_TRANSPORT_ENVELOPE_DOMAIN,
+            &transport,
+            super::super::MAXIMUM_PACKAGE_TRANSPORT_BYTES,
+        )
+        .unwrap();
+        let digest = crate::platform::kernel::PackageTransportDigest::of(&bytes);
         container.root.transport = digest;
         container.selections = vec![container.root];
         container.objects.insert(
@@ -1585,55 +1517,126 @@ mod tests {
     }
 
     #[test]
-    fn historical_transport_metadata_requires_a_fresh_current_source_witness() {
+    fn foreign_validator_metadata_rejects_before_package_readiness() {
         let original = standard_source();
         let container = replace_validator_metadata(original.container.clone());
         assert_eq!(
             container.root.package_revision,
             original.container.root.package_revision
         );
-        let admitted = container.admit().unwrap();
-        let rebuilt = &admitted.packages[&container.root.package_revision];
-        assert!(rebuilt.witness.manifest.contract_is_current());
-        assert!(!rebuilt.transport.witness.contract_is_current());
-        assert_ne!(
-            rebuilt.witness.manifest_digest,
-            rebuilt.transport.validation_witness
+        assert_eq!(
+            container.admit().unwrap_err().code,
+            "witness_validator_contract"
         );
-        let prior = &original.packages[&container.root.package_revision].snapshot;
-        assert_eq!(rebuilt.snapshot.root, prior.root);
-        assert_eq!(rebuilt.snapshot.owners, prior.owners);
-        assert_eq!(rebuilt.snapshot.types, prior.types);
-        assert!(crate::platform::package_transport::oracle::reconstruct(&container).is_ok());
+        assert!(crate::platform::package_transport::oracle::reconstruct(&container).is_err());
+        assert_not_ready(&container.encode().unwrap(), container.root.transport);
     }
 
     #[test]
-    fn authentic_predecessor_expanding_supplier_rejects_before_readiness() {
-        let cases: &[(&[u8], &str)] = &[
-            (
-                include_bytes!(
-                    "../../../tests/fixtures/finite-callable-predecessor/expanding.lkjp"
-                ),
-                "package_transport_eadf507fa02900fdc122d45b325cab3d123d329af444fd4542501e55d3a45421",
-            ),
-            (
-                include_bytes!(
-                    "../../../tests/fixtures/finite-callable-predecessor/private-expanding.lkjp"
-                ),
-                "package_transport_f204ee9a82e5a6bb7ff502db3d2254722d80ae09a768412ec39375536a3c2b9f",
-            ),
-        ];
-        for (bytes, digest) in cases {
-            let digest = digest.parse().unwrap();
-            let container = PackageContainer::decode(bytes, digest).unwrap();
-            let error = container.admit().unwrap_err();
-            assert!(
-                error.message.contains("kernel_callable_expansion")
-                    || error.code == "kernel_callable_expansion",
-                "{error:?}"
+    fn coherently_rehashed_expanding_calls_and_unused_function_values_reject_before_readiness() {
+        for named in [false, true] {
+            let body = if named {
+                "(sequence (function-value growing (types T)) (i64 7))"
+            } else {
+                "(if (bool true) (i64 7) (call growing (types T)))"
+            };
+            let input = format!(
+                r#"declarations.begin
+(units (module create source_growth
+  (function create growing (visibility private) (effect pure)
+    (type-parameter create T) (returns I64) (body {body}))
+  (test create unchanged (visibility private)
+    (actual (call growing (types I64))) (expected (i64 7)))))
+declarations.end
+"#
             );
-            assert_not_ready(bytes, digest);
+            let snapshot =
+                crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(
+                    &input,
+                )
+                .unwrap();
+            let directory = tempfile::tempdir().unwrap();
+            let original =
+                GraphRepository::create(&directory.path().join("finite"), &snapshot, None)
+                    .unwrap()
+                    .repository
+                    .export_package_container()
+                    .unwrap();
+            let package = &original.packages[&original.container.root.package_revision];
+            let mut replacement = package
+                .snapshot
+                .owners
+                .values()
+                .find_map(|record| {
+                    let OwnerRecord::Expression(expression) = record else {
+                        return None;
+                    };
+                    match &expression.operation {
+                        ExpressionOperation::Call { type_arguments, .. }
+                        | ExpressionOperation::FunctionValue { type_arguments, .. }
+                            if type_arguments.iter().any(|ty| {
+                                matches!(
+                                    package.snapshot.types[ty].form,
+                                    TypeForm::TypeParameter { .. }
+                                )
+                            }) =>
+                        {
+                            Some(record.clone())
+                        }
+                        _ => None,
+                    }
+                })
+                .unwrap();
+            let OwnerRecord::Expression(expression) = &mut replacement else {
+                unreachable!()
+            };
+            let arguments = match &mut expression.operation {
+                ExpressionOperation::Call { type_arguments, .. }
+                | ExpressionOperation::FunctionValue { type_arguments, .. } => type_arguments,
+                _ => unreachable!(),
+            };
+            let (digest, type_bytes) = encode_type_object(
+                &TypeObject::new(TypeForm::List { item: arguments[0] }).unwrap(),
+            )
+            .unwrap();
+            arguments[0] = digest;
+            let mut hostile = rehash_owner(&original, replacement);
+            hostile.objects.insert(
+                ObjectKey::from_digest(ObjectDomain::Type, digest.bytes()),
+                type_bytes,
+            );
+            let bytes = hostile.encode().unwrap();
+            let decoded = PackageContainer::decode(&bytes, hostile.root.transport).unwrap();
+            let error = decoded.admit().unwrap_err();
+            assert_eq!(error.code, "kernel_callable_expansion", "{error:?}");
+            assert!(crate::platform::package_transport::oracle::reconstruct(&decoded).is_err());
+            assert_not_ready(&bytes, hostile.root.transport);
         }
+    }
+
+    #[test]
+    fn foreign_owner_envelopes_reject_before_package_readiness() {
+        let snapshot = crate::platform::kernel::tests::transport_snapshot();
+        let directory = tempfile::tempdir().unwrap();
+        let original = GraphRepository::create(&directory.path().join("current"), &snapshot, None)
+            .unwrap()
+            .repository
+            .export_package_container()
+            .unwrap();
+        let package = &original.packages[&original.container.root.package_revision];
+        let record = package.snapshot.owners.values().next().unwrap().clone();
+        let (_, mut bytes) = encode_owner(&record).unwrap();
+        bytes[..8].copy_from_slice(b"FOREIGN!");
+        let digest = OwnerObjectDigest::of(&bytes);
+        let hostile = rehash_encoded_owner(&original, record, digest, bytes);
+        let bytes = hostile.encode().unwrap();
+        assert_eq!(
+            PackageContainer::decode(&bytes, hostile.root.transport)
+                .unwrap_err()
+                .code,
+            "package_source_owner_contract"
+        );
+        assert_not_ready(&bytes, hostile.root.transport);
     }
 
     fn assert_not_ready(bytes: &[u8], transport: PackageTransportDigest) {
@@ -1762,34 +1765,6 @@ mod tests {
             );
             assert_not_ready(&bytes[..length], admitted.container.root.transport);
         }
-    }
-
-    #[test]
-    fn exact_graph12_producer_container_rejects_without_partial_readiness() {
-        let bytes = include_bytes!("../../../tests/fixtures/graph12-standard.lkjp");
-        let transport =
-            "package_transport_3622ee2fc83568216632888986134bbb87e8534dbdcab383c6e80d9757a0bcf1"
-                .parse()
-                .unwrap();
-        assert_eq!(
-            PackageContainer::decode(bytes, transport).unwrap_err().code,
-            "package_source_owner_contract"
-        );
-        assert_not_ready(bytes, transport);
-    }
-
-    #[test]
-    fn exact_graph13_effect_predecessor_rejects_without_partial_readiness() {
-        let bytes = include_bytes!("../../../tests/fixtures/graph13-standard.lkjp");
-        let transport =
-            "package_transport_c41a09e89199b7da9b247934d181b9745a8b8cb9b64c4e5b93fb1e8ff0991d45"
-                .parse()
-                .unwrap();
-        assert_eq!(
-            PackageContainer::decode(bytes, transport).unwrap_err().code,
-            "package_source_owner_contract"
-        );
-        assert_not_ready(bytes, transport);
     }
 
     #[test]
@@ -1925,7 +1900,7 @@ mod tests {
     }
 
     #[test]
-    fn readiness_ceiling_and_predecessor_rejection_are_exact() {
+    fn readiness_ceiling_and_foreign_container_rejection_are_exact() {
         let mut ready = PackageReadiness::default();
         for index in 0..super::super::MAXIMUM_PACKAGE_TRANSPORT_CANDIDATES {
             let mut digest = [0_u8; 32];
@@ -1943,12 +1918,12 @@ mod tests {
             PackageTransportDigest::from_bytes([1; 32]),
         );
         assert!(ready.encode().is_err());
-        assert!(PackageReadiness::decode(b"LKJPTS01").is_err());
+        assert!(PackageReadiness::decode(b"FOREIGN!").is_err());
         let source = standard_source();
-        for predecessor in [b"LKJPACK1".as_slice(), b"LKJART01".as_slice()] {
-            assert_not_ready(predecessor, source.container.root.transport);
+        for foreign in [b"FOREIGN!".as_slice(), b"BADKIND!".as_slice()] {
+            assert_not_ready(foreign, source.container.root.transport);
             assert_eq!(
-                PackageContainer::decode(predecessor, source.container.root.transport)
+                PackageContainer::decode(foreign, source.container.root.transport)
                     .unwrap_err()
                     .code,
                 "package_container_contract"
@@ -2355,7 +2330,7 @@ mod tests {
         let obsolete = replace_validator_metadata(hostile);
         assert_eq!(
             obsolete.admit().unwrap_err().code,
-            "kernel_type_nominal_expansion"
+            "witness_validator_contract"
         );
         assert_not_ready(&obsolete.encode().unwrap(), obsolete.root.transport);
     }

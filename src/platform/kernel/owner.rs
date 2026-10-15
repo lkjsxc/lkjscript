@@ -162,27 +162,6 @@ impl OwnerRecord {
             }
             Self::TypeParameter(record) => {
                 validate_header_domain(record.header, OwnerKind::TypeParameter)?;
-                if record.constraints.has_owned() && record.header.contract_version < 18 {
-                    return Err(owner_error(
-                        "kernel_owned_generation",
-                        "owned constraint requires Graph 18",
-                    ));
-                }
-                if record.constraints.requires_transfer() && record.header.contract_version < 22 {
-                    return Err(owner_error(
-                        "kernel_transfer_constraint_generation",
-                        "transferable constraints require Graph 22",
-                    ));
-                }
-                if record.constraints.requires_share()
-                    && record.header.contract_version
-                        < super::contract::SHARE_GRAPH_CONTRACT_VERSION
-                {
-                    return Err(owner_error(
-                        "kernel_share_constraint_generation",
-                        "shareable constraints require Graph 30",
-                    ));
-                }
                 validate_names([&record.name])
             }
             Self::Field(record) => {
@@ -310,74 +289,7 @@ pub struct DeclarationRecord {
 impl DeclarationRecord {
     fn validate_local(&self) -> Result<(), Diagnostic> {
         validate_header_domain(self.header, self.expected_kind())?;
-        if self.payload.has_associated_types()
-            && self.header.contract_version < super::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
-        {
-            return Err(owner_error(
-                "kernel_associated_encoding_generation",
-                "associated parents require Graph 33 or a supported successor profile",
-            ));
-        }
         validate_names([&self.name])?;
-        if self.header.contract_version < super::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
-            && self.payload.has_read_view_metadata()
-        {
-            return Err(owner_error(
-                "kernel_read_view_generation",
-                "view declarations and scope metadata require Graph 34",
-            ));
-        }
-        if self.header.contract_version < 32
-            && matches!(self.payload, DeclarationPayload::OwnedRecord { .. })
-        {
-            return Err(owner_error(
-                "kernel_owned_record_generation",
-                "nominal owned records require Graph 32",
-            ));
-        }
-        if self.header.contract_version < 29
-            && matches!(&self.payload, DeclarationPayload::OwnedImplementation(i)
-                if !i.implementation_parameters.is_empty() || i.methods.iter().any(|m| !m.implementations.is_empty()))
-        {
-            return Err(super::wire28::implementation_scheme_extension());
-        }
-        if self.header.contract_version < 28
-            && matches!(&self.payload, DeclarationPayload::OwnedImplementation(i)
-                if !i.type_parameters.is_empty() || i.methods.iter().any(|m| !m.type_arguments.is_empty()))
-        {
-            return Err(owner_error(
-                "kernel_implementation_scheme_generation",
-                "generic implementation schemes and mapped applications require Graph 28",
-            ));
-        }
-        if self.header.contract_version < 27
-            && match &self.payload {
-                DeclarationPayload::Function(f) => {
-                    !matches!(f.result.relation, super::ResultRelation::Value)
-                }
-                DeclarationPayload::OwnedContract(c) => c
-                    .methods
-                    .iter()
-                    .any(|m| !matches!(m.result.relation, super::ResultRelation::Value)),
-                _ => false,
-            }
-        {
-            return Err(owner_error(
-                "kernel_borrow_result_generation",
-                "source-tied borrowed results require Graph 27",
-            ));
-        }
-        if self.header.contract_version < 18
-            && (matches!(
-                self.payload,
-                DeclarationPayload::OwnedContract(_) | DeclarationPayload::OwnedImplementation(_)
-            ) || matches!(&self.payload, DeclarationPayload::Function(f) if !f.implementation_parameters.is_empty()))
-        {
-            return Err(owner_error(
-                "kernel_owned_generation",
-                "owned contracts require Graph 18",
-            ));
-        }
         match &self.payload {
             DeclarationPayload::ReadView(view) => view.validate_local(),
             DeclarationPayload::OwnedContract(c) => c.validate_local(),
@@ -1048,36 +960,29 @@ impl BindingRecord {
         if matches!(
             self.kind,
             BindingKind::ReadView | BindingKind::ReadViewBorrow
-        ) && (self.header.contract_version < super::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
-            || self.declared_type.is_none())
+        ) && self.declared_type.is_none()
         {
             return Err(owner_error(
                 "kernel_read_view_generation",
-                "view bindings require Graph 34 and an exact declared view type",
+                "view bindings require an exact declared view type",
             ));
         }
-        if self.kind == BindingKind::OwnedBorrow
-            && (self.header.contract_version < 24 || self.declared_type.is_none())
-        {
+        if self.kind == BindingKind::OwnedBorrow && self.declared_type.is_none() {
             return Err(owner_error(
                 "kernel_borrow_binding",
-                "borrowed child bindings require Graph 24 and exact type annotations",
+                "borrowed child bindings require exact type annotations",
             ));
         }
-        if self.kind == BindingKind::OwnedChoicePayload
-            && (self.header.contract_version < 20 || self.declared_type.is_none())
-        {
+        if self.kind == BindingKind::OwnedChoicePayload && self.declared_type.is_none() {
             return Err(owner_error(
                 "kernel_choice_binding",
-                "owned choice bindings require Graph 20 and exact type annotations",
+                "owned choice bindings require exact type annotations",
             ));
         }
-        if self.kind == BindingKind::OwnedUnpack
-            && (self.header.contract_version < 19 || self.declared_type.is_none())
-        {
+        if self.kind == BindingKind::OwnedUnpack && self.declared_type.is_none() {
             return Err(owner_error(
                 "kernel_product_binding",
-                "unpack bindings require Graph 19 and exact type annotations",
+                "unpack bindings require exact type annotations",
             ));
         }
         if (self.kind == BindingKind::Let && self.value.is_none())

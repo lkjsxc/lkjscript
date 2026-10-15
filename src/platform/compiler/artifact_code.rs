@@ -8,7 +8,6 @@ use crate::platform::semantic_id::ExpressionId;
 use std::cell::Cell;
 
 struct Read<'a> {
-    compiler_generation: u16,
     package: PackageId,
     owners: &'a BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
     runtime: &'a BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
@@ -251,21 +250,6 @@ impl CodeRead for Read<'_> {
                 .or_else(|| self.runtime.get(&(self.package, owner)))
                 .cloned()
         })?;
-        if self.compiler_generation < 14
-            && result.value.as_ref().is_some_and(|owner| {
-                owner.type_roots().iter().any(|ty| {
-                    self.types
-                        .get(ty)
-                        .is_some_and(|t| matches!(t.form, TypeForm::ByteBuffer))
-                })
-            })
-        {
-            return Err(artifact_error(
-                DiagnosticClass::Corrupt,
-                "artifact_buffer_generation",
-                "predecessor compiled control refers to a ByteBuffer contract",
-            ));
-        }
         Ok(result)
     }
     fn code_type(
@@ -336,7 +320,6 @@ pub(super) fn validate(
             representation_package = Some(*package);
         }
         let read = Read {
-            compiler_generation: unit.contract_version,
             package: *package,
             owners,
             runtime,
@@ -452,7 +435,6 @@ mod tests {
             )
             .unwrap();
             let read = Read {
-                compiler_generation: COMPILER_UNIT_CONTRACT_VERSION,
                 package: package.package,
                 owners: &owners,
                 runtime: &owners,
@@ -485,7 +467,7 @@ mod tests {
         }
     }
     #[test]
-    fn byte_buffer_predecessor_control_admission_checks_canonical_local_annotations() {
+    fn byte_buffer_control_admission_preserves_canonical_local_annotations() {
         let source =
             crate::platform::execution::normalized::tests::byte_buffer_tests::author("").unwrap();
         let buffer = encode_type_object(&TypeObject::new(TypeForm::ByteBuffer).unwrap())
@@ -506,9 +488,8 @@ mod tests {
             .collect();
         let runtime = BTreeMap::new();
         let interfaces = BTreeMap::new();
-        for generation in [13, 14] {
+        {
             let read = Read {
-                compiler_generation: generation,
                 package: source.root.package_id,
                 owners: &owners,
                 runtime: &runtime,
@@ -519,11 +500,7 @@ mod tests {
                 remaining: &Cell::new(crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK),
             };
             let result = read.code_owner(key);
-            if generation == 13 {
-                assert_eq!(result.unwrap_err().code, "artifact_buffer_generation");
-            } else {
-                assert_eq!(result.unwrap().value, source.owners.get(&key).cloned());
-            }
+            assert_eq!(result.unwrap().value, source.owners.get(&key).cloned());
         }
     }
 }

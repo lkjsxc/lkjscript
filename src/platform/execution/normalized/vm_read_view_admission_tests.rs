@@ -1122,3 +1122,43 @@ declarations.end"#;
     cell.validate(fixture.source.origin, true).unwrap();
     assert_eq!(cell.extract().unwrap(), 73);
 }
+
+#[test]
+fn checked_ordinary_child_refuses_a_real_borrowed_read_view_and_drains_custody() {
+    let fixture = Fixture::new();
+    let cells = super::super::super::owned_i64_cell::StorageObservation::start();
+    let cell = fixture.cell();
+    let control = ExecutionControl::uncancelled();
+    let (view, owner) = fixture.view(&cell);
+    let mut value = CheckedValue::read_view_controlled(
+        &fixture.program,
+        NormalizedValue::ReadView(view),
+        &control,
+    )
+    .unwrap();
+    let ordinary = fixture
+        .program
+        .types
+        .iter()
+        .find_map(|(ty, object)| matches!(object.form, TypeForm::I64).then_some(*ty))
+        .unwrap();
+    assert!(
+        !value
+            .has_exact_ordinary_type(&fixture.program, ordinary, &mut Default::default())
+            .unwrap()
+    );
+    value.set_view_borrowed();
+    assert!(value.validate_raw_consumption().is_err());
+    let program = Arc::new(fixture.program.clone());
+    let executor = crate::platform::runtime::structured::StructuredExecutor::for_test(1);
+    let handle = executor.handle();
+    let resources = NormalizedResourceScope::new().unwrap();
+    let mut machine =
+        super::super::self_tail_locals_tests::machine(&program, &handle, &resources, &control)
+            .unwrap();
+    assert!(machine.checked_product_child(value, ordinary).is_err());
+    drop(machine);
+    drop(owner);
+    assert_eq!(cell.extract().unwrap(), 73);
+    assert_eq!(cells.live(), (0, 0));
+}

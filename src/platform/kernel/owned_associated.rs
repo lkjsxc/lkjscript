@@ -1580,3 +1580,12 @@ impl<R: ExpressionRead + ?Sized> ExpressionRead for AssociatedRead<'_, R> {
         Ok(())
     }
 }
+
+/// Refuse semantic boundaries that do not admit associated owned types.
+pub(crate) fn unsupported_semantics() -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticClass::Source,
+        "owned_associated_semantics_unsupported",
+        "associated owned types are unsupported at this semantic boundary",
+    )
+}

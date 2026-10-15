@@ -311,14 +311,12 @@ impl Machine<'_> {
         function: &super::super::prepare::NormalizedFunction,
         implementation: &str,
         types: &[TypeObjectDigest],
-        arguments: Vec<CheckedValue>,
+        arguments: &mut Vec<CheckedValue>,
     ) -> Result<CheckedValue, ExecutionError> {
         self.control.check()?;
         match implementation {
             "core.cell.create" => {
-                let [scalar]: [CheckedValue; 1] = arguments
-                    .try_into()
-                    .map_err(|_| type_error("cell create arity"))?;
+                let [scalar] = take_intrinsic_arguments::<1>(arguments, "cell create arity")?;
                 let NormalizedValue::I64(scalar) = scalar.into_raw() else {
                     return Err(type_error("cell create type"));
                 };
@@ -332,9 +330,8 @@ impl Machine<'_> {
                 CheckedValue::memory(self.program, NormalizedValue::OwnedI64Cell(cell))
             }
             "core.cell.replace" => {
-                let [scalar, cell]: [CheckedValue; 2] = arguments
-                    .try_into()
-                    .map_err(|_| type_error("cell replace arity"))?;
+                let [scalar, cell] =
+                    take_intrinsic_arguments::<2>(arguments, "cell replace arity")?;
                 let (NormalizedValue::I64(scalar), NormalizedValue::OwnedI64Cell(cell)) =
                     (scalar.into_raw(), cell.into_raw())
                 else {
@@ -346,9 +343,7 @@ impl Machine<'_> {
                 CheckedValue::memory(self.program, NormalizedValue::OwnedI64Cell(cell))
             }
             "core.cell.read" => {
-                let [cell]: [CheckedValue; 1] = arguments
-                    .try_into()
-                    .map_err(|_| type_error("cell read arity"))?;
+                let [cell] = take_intrinsic_arguments::<1>(arguments, "cell read arity")?;
                 let NormalizedValue::OwnedI64Cell(cell) = cell.raw() else {
                     return Err(type_error("cell read type"));
                 };
@@ -359,9 +354,7 @@ impl Machine<'_> {
                 CheckedValue::scalar(self.program, NormalizedValue::I64(cell.read()?))
             }
             "core.cell.extract" | "core.cell.discard" => {
-                let [cell]: [CheckedValue; 1] = arguments
-                    .try_into()
-                    .map_err(|_| type_error("cell terminal arity"))?;
+                let [cell] = take_intrinsic_arguments::<1>(arguments, "cell terminal arity")?;
                 let NormalizedValue::OwnedI64Cell(cell) = cell.into_raw() else {
                     return Err(type_error("cell terminal type"));
                 };
@@ -390,9 +383,8 @@ impl Machine<'_> {
                 CheckedValue::memory(self.program, NormalizedValue::ByteBuffer(buffer))
             }
             "core.buffer.push" => {
-                let [octet, buffer]: [CheckedValue; 2] = arguments
-                    .try_into()
-                    .map_err(|_| type_error("buffer push arity"))?;
+                let [octet, buffer] =
+                    take_intrinsic_arguments::<2>(arguments, "buffer push arity")?;
                 let (NormalizedValue::I64(octet), NormalizedValue::ByteBuffer(buffer)) =
                     (octet.into_raw(), buffer.into_raw())
                 else {
@@ -435,9 +427,7 @@ impl Machine<'_> {
                 CheckedValue::scalar(self.program, NormalizedValue::I64(value))
             }
             "core.buffer.freeze" | "core.buffer.discard" => {
-                let [buffer]: [CheckedValue; 1] = arguments
-                    .try_into()
-                    .map_err(|_| type_error("buffer terminal arity"))?;
+                let [buffer] = take_intrinsic_arguments::<1>(arguments, "buffer terminal arity")?;
                 let NormalizedValue::ByteBuffer(buffer) = buffer.into_raw() else {
                     return Err(type_error("buffer terminal type"));
                 };
@@ -454,15 +444,15 @@ impl Machine<'_> {
             "identity_host" => match arguments.len() {
                 0 => CheckedValue::scalar(self.program, NormalizedValue::Unit),
                 1 => arguments
-                    .into_iter()
-                    .next()
+                    .pop()
                     .ok_or_else(|| type_error("identity arity changed")),
                 _ => Err(type_error("identity host received a foreign arity")),
             },
             "core.bytes.concat" => {
-                let [left, right]: [CheckedValue; 2] = arguments
-                    .try_into()
-                    .map_err(|_| type_error("byte concatenation received a foreign arity"))?;
+                let [left, right] = take_intrinsic_arguments::<2>(
+                    arguments,
+                    "byte concatenation received a foreign arity",
+                )?;
                 let (NormalizedValue::Bytes(left), NormalizedValue::Bytes(right)) =
                     (left.into_raw(), right.into_raw())
                 else {
@@ -482,9 +472,10 @@ impl Machine<'_> {
                 CheckedValue::scalar(self.program, NormalizedValue::Bytes(result?))
             }
             "core.bytes.slice" => {
-                let [value, start, end]: [CheckedValue; 3] = arguments
-                    .try_into()
-                    .map_err(|_| type_error("byte slicing received a foreign arity"))?;
+                let [value, start, end] = take_intrinsic_arguments::<3>(
+                    arguments,
+                    "byte slicing received a foreign arity",
+                )?;
                 let (
                     NormalizedValue::Bytes(value),
                     NormalizedValue::I64(start),
@@ -500,9 +491,10 @@ impl Machine<'_> {
                 CheckedValue::scalar(self.program, NormalizedValue::Bytes(result))
             }
             "core.bytes.copy" => {
-                let [value]: [CheckedValue; 1] = arguments
-                    .try_into()
-                    .map_err(|_| type_error("byte copying received a foreign arity"))?;
+                let [value] = take_intrinsic_arguments::<1>(
+                    arguments,
+                    "byte copying received a foreign arity",
+                )?;
                 let NormalizedValue::Bytes(value) = value.into_raw() else {
                     return Err(type_error("byte copying received a foreign value"));
                 };
@@ -575,9 +567,10 @@ impl Machine<'_> {
                 list.list_get(index)
             }
             "core.list.append" => {
-                let [list, child]: [CheckedValue; 2] = arguments
-                    .try_into()
-                    .map_err(|_| type_error("list append received a foreign arity"))?;
+                let [list, child] = take_intrinsic_arguments::<2>(
+                    arguments,
+                    "list append received a foreign arity",
+                )?;
                 let mut work = std::mem::take(&mut self.observation.value_work);
                 let program = self.program;
                 let maximum = self
@@ -591,9 +584,10 @@ impl Machine<'_> {
                 result
             }
             "core.option.some" => {
-                let [child]: [CheckedValue; 1] = arguments
-                    .try_into()
-                    .map_err(|_| type_error("option construction received a foreign arity"))?;
+                let [child] = take_intrinsic_arguments::<1>(
+                    arguments,
+                    "option construction received a foreign arity",
+                )?;
                 self.charge_collection(1, std::mem::size_of::<NormalizedValue>())?;
                 CheckedValue::option(self.program, Some(child), &mut self.observation.value_work)
             }
@@ -604,9 +598,10 @@ impl Machine<'_> {
                 CheckedValue::option(self.program, None, &mut self.observation.value_work)
             }
             "core.option.get-or" => {
-                let [option, fallback]: [CheckedValue; 2] = arguments
-                    .try_into()
-                    .map_err(|_| type_error("option lookup received a foreign arity"))?;
+                let [option, fallback] = take_intrinsic_arguments::<2>(
+                    arguments,
+                    "option lookup received a foreign arity",
+                )?;
                 Ok(option.option_get()?.unwrap_or(fallback))
             }
             "core.map.get" | "core.map.get-or" | "core.map.contains" | "core.map.insert"
@@ -689,9 +684,8 @@ impl Machine<'_> {
                 ])
             }
             "core.json.decode-or" | "core.data.decode-or" => {
-                let [bytes, fallback]: [CheckedValue; 2] = arguments
-                    .try_into()
-                    .map_err(|_| type_error("decoder received a foreign arity"))?;
+                let [bytes, fallback] =
+                    take_intrinsic_arguments::<2>(arguments, "decoder received a foreign arity")?;
                 let NormalizedValue::Bytes(bytes) = bytes.raw() else {
                     return Err(type_error("decoder input is not bytes"));
                 };
@@ -756,14 +750,36 @@ impl Machine<'_> {
             _ => {
                 // The remaining closed operations create scalars. In particular length reads
                 // an immediate collection header; scalar construction cannot certify a subtree.
-                let raw = call_core_intrinsic(
-                    self.program,
-                    function,
-                    implementation,
-                    types,
-                    arguments.into_iter().map(CheckedValue::into_raw).collect(),
-                    self.control,
-                )?;
+                // Ordinary intrinsic arities fit this inline buffer. Move their already
+                // admitted payloads without allocating a second argument vector; retain the
+                // same raw implementation and scalar-result admission for both paths.
+                let inline = arguments.len() <= 4;
+                #[cfg(test)]
+                let inline = inline && !self_tail_locals_tests::force_fresh_call_arguments();
+                let raw = if inline {
+                    let count = arguments.len();
+                    let mut raw = std::array::from_fn::<_, 4, _>(|_| NormalizedValue::Unit);
+                    for (slot, argument) in raw.iter_mut().zip(arguments.drain(..)) {
+                        *slot = argument.into_raw();
+                    }
+                    call_core_intrinsic_borrowed(
+                        self.program,
+                        function,
+                        implementation,
+                        types,
+                        &raw[..count],
+                        self.control,
+                    )?
+                } else {
+                    call_core_intrinsic(
+                        self.program,
+                        function,
+                        implementation,
+                        types,
+                        arguments.drain(..).map(CheckedValue::into_raw).collect(),
+                        self.control,
+                    )?
+                };
                 let value = CheckedValue::scalar(self.program, raw)?;
                 self.charge_external_value(value.raw())?;
                 Ok(value)
@@ -774,9 +790,9 @@ impl Machine<'_> {
     pub(super) fn checked_map(
         &mut self,
         implementation: &str,
-        arguments: Vec<CheckedValue>,
+        arguments: &mut Vec<CheckedValue>,
     ) -> Result<CheckedValue, ExecutionError> {
-        let mut arguments = arguments.into_iter();
+        let mut arguments = arguments.drain(..);
         let map = arguments
             .next()
             .ok_or_else(|| type_error("map intrinsic has no map"))?;
@@ -826,4 +842,16 @@ impl Machine<'_> {
             _ => Err(type_error("map intrinsic has foreign arity")),
         }
     }
+}
+
+// Check exact arity before moving the first slot. The intrinsic arities are at most
+// three, so shifting these short buffers retains capacity without another allocation.
+fn take_intrinsic_arguments<const N: usize>(
+    arguments: &mut Vec<CheckedValue>,
+    message: &'static str,
+) -> Result<[CheckedValue; N], ExecutionError> {
+    if arguments.len() != N {
+        return Err(type_error(message));
+    }
+    Ok(std::array::from_fn(|_| arguments.remove(0)))
 }

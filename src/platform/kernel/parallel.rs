@@ -71,53 +71,9 @@ pub(crate) fn admit_call_at_with_scope_authority(
     if scope_authority.binder != caller.map(ReadScopeBinder::Declaration)
         || scope_authority.lexical != caller
     {
-        // A retained pre-view function has ordinary declaration scope but no
-        // read-scope binder. Re-read that exact owner before accepting an empty
-        // authority; Graph 34 and every nonempty/foreign authority stay strict.
-        let legacy_empty = if scope_authority.binder.is_none()
-            && scope_authority.lexical.is_none()
-            && scope_authority.live_loans.is_empty()
-            && let Some(caller) = caller
-        {
-            read.validation_work()?;
-            match read.owner(OwnerKey::Declaration(caller.declaration))? {
-                Some(OwnerRecord::Declaration(parent))
-                    if parent.header.owner == OwnerKey::Declaration(caller.declaration)
-                        && contract::supported_graph_contract(parent.header.contract_version)
-                        && parent.header.contract_version
-                            < contract::READ_VIEW_GRAPH_CONTRACT_VERSION =>
-                {
-                    match parent.payload {
-                        DeclarationPayload::Function(function) => {
-                            let exact_kind = match function.effect {
-                                FunctionEffect::Pure => {
-                                    parent.header.kind == OwnerKind::PureFunction
-                                }
-                                FunctionEffect::Task { .. } => {
-                                    parent.header.kind == OwnerKind::TaskFunction
-                                }
-                            };
-                            exact_kind
-                                && function.read_scope_parameters.is_empty()
-                                && function.read_scope_sources.is_empty()
-                                && !matches!(
-                                    function.result.relation,
-                                    ResultRelation::ViewFrom { .. }
-                                )
-                        }
-                        _ => false,
-                    }
-                }
-                _ => false,
-            }
-        } else {
-            false
-        };
-        if !legacy_empty {
-            return Err(reject(
-                "parallel read-scope authority differs from its exact containing callable",
-            ));
-        }
+        return Err(reject(
+            "parallel read-scope authority differs from its exact containing callable",
+        ));
     }
     let Some(OwnerRecord::Expression(record)) = read.owner(OwnerKey::Expression(expression))?
     else {
@@ -690,10 +646,9 @@ mod occurrence_tests {
     }
 
     #[test]
-    fn parallel_legacy_empty_scope_authority_is_exact_and_cannot_authorize_graph34() {
-        let mut source =
-            crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(
-                r#"declarations.begin
+    fn parallel_requires_exact_scope_authority_for_current_callables() {
+        let source = crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(
+            r#"declarations.begin
 (units (module create legacy-parallel
   (function create child (visibility private) (effect (task))
     (returns I64) (body (i64 7)))
@@ -701,8 +656,8 @@ mod occurrence_tests {
     (returns (record (left I64) (right I64)))
     (body (parallel (call child) (call child))))))
 declarations.end"#,
-            )
-            .unwrap();
+        )
+        .unwrap();
         let parent = source
             .owners
             .values()
@@ -730,16 +685,6 @@ declarations.end"#,
                 _ => None,
             })
             .unwrap();
-        for owner in source.owners.values_mut() {
-            let generation = if matches!(owner, OwnerRecord::Expression(record)
-                if matches!(record.operation, ExpressionOperation::Parallel { .. }))
-            {
-                21
-            } else {
-                20
-            };
-            owner.set_encoding_for_edit(generation);
-        }
         validate_full(&source).unwrap();
         let loans = std::collections::BTreeSet::new();
         let empty = super::super::owned_associated::read_view_admission::ScopeAuthority {
@@ -747,11 +692,16 @@ declarations.end"#,
             lexical: None,
             live_loans: &loans,
         };
+        let exact = super::super::owned_associated::read_view_admission::ScopeAuthority {
+            binder: Some(ReadScopeBinder::Declaration(parent)),
+            lexical: Some(parent),
+            live_loans: &loans,
+        };
         let call = admit_call_at_with_scope_authority(
             &source,
             child,
             Some(parent.declaration),
-            empty,
+            exact,
             &OwnedAssociatedAdmission::new(),
         )
         .unwrap();
@@ -779,7 +729,7 @@ declarations.end"#,
                     .owners
                     .get_mut(&OwnerKey::Declaration(parent.declaration))
                     .unwrap()
-                    .set_encoding_for_edit(contract::READ_VIEW_GRAPH_CONTRACT_VERSION),
+                    .set_encoding_for_edit(contract::GRAPH_CONTRACT_VERSION - 1),
                 1 => {}
                 2 => {
                     forged
@@ -821,7 +771,7 @@ declarations.end"#,
     }
 
     #[test]
-    fn parallel_phantom_projection_uses_exact_child_generation_and_shared_budget() {
+    fn parallel_phantom_projection_uses_exact_lexical_scope_and_shared_budget() {
         let mut flow = fixture(FlowKind::Direct);
         let unit = flow
             .source
@@ -850,6 +800,27 @@ declarations.end"#,
             requirements: vec![],
             effect_parameters: vec![],
         };
+        let OwnerRecord::Expression(call) = flow
+            .source
+            .owners
+            .get(&OwnerKey::Expression(flow.call))
+            .unwrap()
+        else {
+            panic!("call expression");
+        };
+        let ExpressionOperation::Call { type_arguments, .. } = &call.operation else {
+            panic!("direct call");
+        };
+        let original_actual = type_arguments[0];
+        let mut foreign_actual = flow.source.types[&original_actual].clone();
+        let TypeForm::AssociatedWitnessProjection { scope, .. } = &mut foreign_actual.form else {
+            panic!("projected phantom actual");
+        };
+        *scope = flow.callee;
+        let foreign_actual_digest = encode_type_object(&foreign_actual).unwrap().0;
+        flow.source
+            .types
+            .insert(foreign_actual_digest, foreign_actual);
         let OwnerRecord::Expression(call) = flow
             .source
             .owners
@@ -921,27 +892,12 @@ declarations.end"#,
         else {
             panic!("call expression");
         };
-        // Owned associated projections remain supported in Graph 33. The
-        // actual refusal boundary is Graph 32, independently of newer views.
-        call.contract_version = contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION;
-        assert!(
-            admit_call_at(
-                &flow.source,
-                flow.call,
-                Some(flow.caller.declaration),
-                &OwnedAssociatedAdmission::new(),
-            )
-            .is_ok()
-        );
-        let OwnerRecord::Expression(call) = flow
-            .source
-            .owners
-            .get_mut(&OwnerKey::Expression(flow.call))
-            .unwrap()
-        else {
-            panic!("call expression");
+        let ExpressionOperation::Call { type_arguments, .. } = &mut call.operation else {
+            panic!("direct call");
         };
-        call.contract_version = contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION - 1;
+        // Even an unused metadata actual must have the caller's exact lexical
+        // witness scope. All records keep the current encoding contract.
+        type_arguments[0] = foreign_actual_digest;
         assert_eq!(
             admit_call_at(
                 &flow.source,
@@ -953,6 +909,27 @@ declarations.end"#,
             .unwrap()
             .class,
             DiagnosticClass::Semantic,
+        );
+        let OwnerRecord::Expression(call) = flow
+            .source
+            .owners
+            .get_mut(&OwnerKey::Expression(flow.call))
+            .unwrap()
+        else {
+            panic!("call expression");
+        };
+        let ExpressionOperation::Call { type_arguments, .. } = &mut call.operation else {
+            panic!("direct call");
+        };
+        type_arguments[0] = original_actual;
+        assert!(
+            admit_call_at(
+                &flow.source,
+                flow.call,
+                Some(flow.caller.declaration),
+                &OwnedAssociatedAdmission::new(),
+            )
+            .is_ok()
         );
     }
 }

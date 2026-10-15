@@ -2421,6 +2421,24 @@ impl Oracle<'_> {
     }
 }
 pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
+    if snapshot.root.graph_contract_version != contract::GRAPH_CONTRACT_VERSION
+        || snapshot
+            .owners
+            .values()
+            .any(|owner| owner.header().contract_version != contract::GRAPH_CONTRACT_VERSION)
+        || snapshot
+            .dependency_interfaces
+            .values()
+            .flat_map(|interface| interface.values())
+            .any(|owner| owner.header().contract_version != contract::GRAPH_CONTRACT_VERSION)
+        || snapshot
+            .types
+            .values()
+            .chain(snapshot.dependency_types.values())
+            .any(|object| object.contract_version != contract::TYPE_OBJECT_CONTRACT_VERSION)
+    {
+        return false;
+    }
     let mut associated_closure = associated::Resolver::new(snapshot);
     if associated_closure.admit_canonical_closure().is_err() {
         return false;

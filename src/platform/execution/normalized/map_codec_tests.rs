@@ -6,7 +6,6 @@ use super::*;
 use crate::platform::diagnostic::DiagnosticClass;
 use crate::platform::kernel::{ModuleRecord, ParameterUse};
 use crate::platform::semantic_id::ModuleId;
-use base64::Engine;
 
 struct Fixture {
     program: NormalizedProgram,
@@ -297,40 +296,21 @@ fn map_codecs_preserve_fixed_bytes_for_all_primitive_key_kinds() {
 }
 
 #[test]
-fn map_codecs_read_and_reproduce_genuine_predecessor_bytes() {
+fn map_codecs_decode_json_values_into_independently_constructed_current_bytes() {
     let fixture = fixture();
-    let predecessor: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../../tests/fixtures/map-predecessor.json"
-    ))
-    .unwrap();
-    assert_eq!(
-        predecessor["source_commit"],
-        "d77fb8bafab8a5a92b4d5251e62a9c44a41aea82"
-    );
-    assert_eq!(
-        predecessor["executable_sha256"],
-        "a30ace674685bbef5d2b15dc5b6566640b77b041f5c540a66e6a896c62a54b74"
-    );
-    let json = predecessor["json_value"].as_str().unwrap().as_bytes();
-    assert_eq!(json, br#"[["a",2],["b",7]]"#);
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(predecessor["typed_value_base64"].as_str().unwrap())
-        .unwrap();
+    let json = br#"[["a",2],["b",7]]"#;
     let ty = fixture.maps[3];
-    assert_eq!(
-        bytes,
-        envelope(
-            ty,
-            fixture.text,
-            4,
-            fixture.integer,
-            None,
-            &text_payload(&[("a", 2), ("b", 7)])
-        )
+    let bytes = envelope(
+        ty,
+        fixture.text,
+        4,
+        fixture.integer,
+        None,
+        &text_payload(&[("a", 2), ("b", 7)]),
     );
-    let arguments = &predecessor["arguments"][0];
+    let arguments = serde_json::json!([["a", 2], ["b", 7]]);
     let value =
-        codec::decode_value(&fixture.program, arguments, ty, JsonLimits::default()).unwrap();
+        codec::decode_value(&fixture.program, &arguments, ty, JsonLimits::default()).unwrap();
     assert_bytes(&fixture, &value, ty, json, &bytes);
 }
 

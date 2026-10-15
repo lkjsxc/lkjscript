@@ -14,10 +14,6 @@ use crate::platform::semantic_id::{RepositoryId, RevisionId};
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
-const PREDECESSOR_TRANSACTION_CONTRACT_VERSION: u16 = 5;
-const PREDECESSOR_TRANSACTION_MAGIC: [u8; 8] = *b"LKJTXN05";
-const PREDECESSOR_TRANSACTION_ENVELOPE_DOMAIN: &str = "lkjscript.transaction-envelope.v5";
-
 #[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct DigestEdit<D> {
@@ -71,7 +67,6 @@ pub enum TransactionBody {
         result_root: SemanticRootDigest,
         owners: Vec<OwnerTransactionEdit>,
         /// Complete proposal-supplied type objects, independent of physical deduplication.
-        /// Contract 5 preserves its original storage-addition inventory when read historically.
         supplied_types: Vec<TypeObjectDigest>,
         dependencies: Vec<DependencyTransactionEdit>,
         retirements: Vec<RetirementTransactionEdit>,
@@ -90,21 +85,23 @@ pub struct NormalizedTransaction {
 impl NormalizedTransaction {
     pub fn encode(&self) -> Result<(TransactionDigest, Vec<u8>), Diagnostic> {
         self.validate()?;
-        let (magic, domain) = transaction_envelope(self.contract_version)?;
-        let bytes =
-            crate::platform::packed::encode(magic, domain, self, MAXIMUM_TRANSACTION_BYTES)?;
+        let bytes = crate::platform::packed::encode_canonical(
+            TRANSACTION_MAGIC,
+            TRANSACTION_ENVELOPE_DOMAIN,
+            self,
+            MAXIMUM_TRANSACTION_BYTES,
+        )?;
         Ok((TransactionDigest::of(&bytes), bytes))
     }
 
     pub fn decode(bytes: &[u8], expected: TransactionDigest) -> Result<Self, Diagnostic> {
         require_digest(expected, bytes)?;
-        let (magic, domain) = if bytes.starts_with(&PREDECESSOR_TRANSACTION_MAGIC) {
-            transaction_envelope(PREDECESSOR_TRANSACTION_CONTRACT_VERSION)?
-        } else {
-            transaction_envelope(TRANSACTION_CONTRACT_VERSION)?
-        };
-        let value: Self =
-            crate::platform::packed::decode(bytes, magic, domain, MAXIMUM_TRANSACTION_BYTES)?;
+        let value: Self = crate::platform::packed::decode_canonical(
+            bytes,
+            TRANSACTION_MAGIC,
+            TRANSACTION_ENVELOPE_DOMAIN,
+            MAXIMUM_TRANSACTION_BYTES,
+        )?;
         value.validate()?;
         if value.encode()?.1 != bytes {
             return Err(transaction_error(
@@ -124,12 +121,11 @@ impl NormalizedTransaction {
     }
 
     fn validate(&self) -> Result<(), Diagnostic> {
-        if !matches!(
-            self.contract_version,
-            TRANSACTION_CONTRACT_VERSION | PREDECESSOR_TRANSACTION_CONTRACT_VERSION
-        ) || !crate::platform::kernel::contract::supported_graph_contract(
-            self.graph_contract_version,
-        ) {
+        if self.contract_version != TRANSACTION_CONTRACT_VERSION
+            || !crate::platform::kernel::contract::supported_graph_contract(
+                self.graph_contract_version,
+            )
+        {
             return Err(transaction_error(
                 DiagnosticClass::Source,
                 "publication_transaction_contract",
@@ -190,21 +186,6 @@ impl NormalizedTransaction {
             edit.objects.validate("retirement")?;
         }
         Ok(())
-    }
-}
-
-fn transaction_envelope(version: u16) -> Result<([u8; 8], &'static str), Diagnostic> {
-    match version {
-        TRANSACTION_CONTRACT_VERSION => Ok((TRANSACTION_MAGIC, TRANSACTION_ENVELOPE_DOMAIN)),
-        PREDECESSOR_TRANSACTION_CONTRACT_VERSION => Ok((
-            PREDECESSOR_TRANSACTION_MAGIC,
-            PREDECESSOR_TRANSACTION_ENVELOPE_DOMAIN,
-        )),
-        _ => Err(transaction_error(
-            DiagnosticClass::Source,
-            "publication_transaction_contract",
-            "transaction uses an unsupported contract",
-        )),
     }
 }
 

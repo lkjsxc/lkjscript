@@ -270,79 +270,8 @@ impl PackageInterfaceDeclaration {
 
     fn validate_local(&self) -> Result<(), Diagnostic> {
         validate_header(self.header)?;
-        if self.header.contract_version < 32
-            && matches!(
-                self.payload,
-                PackageInterfaceDeclarationPayload::OwnedRecord { .. }
-            )
-        {
-            return Err(interface_error(
-                DiagnosticClass::Semantic,
-                "kernel_owned_record_generation",
-                "nominal owned record interfaces require Graph 32",
-            ));
-        }
-        if self.header.contract_version < 29
-            && matches!(&self.payload, PackageInterfaceDeclarationPayload::OwnedImplementation(i)
-                if !i.implementation_parameters.is_empty() || i.methods.iter().any(|m| !m.implementations.is_empty()))
-        {
-            return Err(super::wire28::implementation_scheme_extension());
-        }
-        if self.header.contract_version < 28
-            && matches!(&self.payload, PackageInterfaceDeclarationPayload::OwnedImplementation(i)
-                if !i.type_parameters.is_empty()
-                    || i.methods.iter().any(|m| !m.type_arguments.is_empty()))
-        {
-            return Err(super::wire27::implementation_scheme_extension());
-        }
-        if self.header.contract_version < 27
-            && match &self.payload {
-                PackageInterfaceDeclarationPayload::Function(f) => {
-                    !matches!(f.result.relation, ResultRelation::Value)
-                }
-                PackageInterfaceDeclarationPayload::OwnedContract(c) => c
-                    .methods
-                    .iter()
-                    .any(|m| !matches!(m.result.relation, ResultRelation::Value)),
-                _ => false,
-            }
-        {
-            return Err(interface_error(
-                DiagnosticClass::Semantic,
-                "kernel_borrow_result_generation",
-                "source-tied borrowed results require Graph 27",
-            ));
-        }
-        if self.header.contract_version < 26
-            && match &self.payload {
-                PackageInterfaceDeclarationPayload::OwnedContract(c) => {
-                    !c.type_parameters.is_empty()
-                }
-                PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
-                    !i.type_arguments.is_empty()
-                }
-                PackageInterfaceDeclarationPayload::Function(f) => f
-                    .implementation_parameters
-                    .iter()
-                    .any(|p| !p.type_arguments.is_empty()),
-                _ => false,
-            }
-        {
-            return Err(interface_error(
-                DiagnosticClass::Semantic,
-                "kernel_parameterized_contract_generation",
-                "owned contract parameters and arguments require Graph 26",
-            ));
-        }
         let expected = match &self.payload {
             PackageInterfaceDeclarationPayload::ReadView(view) => {
-                if self.header.contract_version < 34 {
-                    return Err(interface_error(
-                        DiagnosticClass::Semantic,
-                        "kernel_read_view_generation",
-                        "read-view interfaces require Graph 34",
-                    ));
-                }
                 validate_ordered("read-view type parameters", &view.type_parameters)?;
                 view.validate_local()?;
                 OwnerKind::ReadView
@@ -402,7 +331,7 @@ impl PackageInterfaceDeclaration {
                         "a borrowed result requires an exact parameter of a pure function",
                     ));
                 }
-                validate_callable_scopes(self.header, signature)?;
+                validate_callable_scopes(signature)?;
                 if let FunctionEffect::Task {
                     effect_parameters: _,
                     requirements,
@@ -516,10 +445,7 @@ impl PackageInterfacePort {
     }
 }
 
-fn validate_callable_scopes(
-    header: OwnerHeader,
-    signature: &PackageFunctionSignature,
-) -> Result<(), Diagnostic> {
+fn validate_callable_scopes(signature: &PackageFunctionSignature) -> Result<(), Diagnostic> {
     let ids = signature
         .read_scope_parameters
         .iter()
@@ -531,17 +457,6 @@ fn validate_callable_scopes(
         &signature.read_scope_sources,
         |source| signature.parameters.contains(&source),
     )?;
-    if header.contract_version < 34
-        && (!ids.is_empty()
-            || !signature.read_scope_sources.is_empty()
-            || matches!(signature.result.relation, ResultRelation::ViewFrom { .. }))
-    {
-        return Err(interface_error(
-            DiagnosticClass::Semantic,
-            "kernel_read_view_generation",
-            "read scopes and view results require Graph 34",
-        ));
-    }
     for scope in signature
         .read_scope_sources
         .iter()

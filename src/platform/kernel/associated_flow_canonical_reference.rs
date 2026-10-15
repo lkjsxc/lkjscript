@@ -707,7 +707,7 @@ impl<'a, 'b> Adapter<'a, 'b> {
         self.budget.tick()?;
         let object = self.object(context.source.package, digest)?;
         if object.form.is_read_view()
-            && object.contract_version != contract::ASSOCIATED_READ_VIEW_CONTRACT_VERSION
+            && object.contract_version != contract::TYPE_OBJECT_CONTRACT_VERSION
         {
             return Err(model::Refusal::Scope);
         }
@@ -749,7 +749,8 @@ impl<'a, 'b> Adapter<'a, 'b> {
                 }
                 if !matches!(context.mode, TypeMode::Callable)
                     || *scope != context.source
-                    || !matches!(context.generation, 33 | 34)
+                    || context.generation
+                        != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
                 {
                     return Err(model::Refusal::Scope);
                 }
@@ -910,7 +911,7 @@ impl<'a, 'b> Adapter<'a, 'b> {
         self.budget.tick()?;
         let object = self.object(context.source.package, ty)?;
         if object.form.is_read_view()
-            && object.contract_version != contract::ASSOCIATED_READ_VIEW_CONTRACT_VERSION
+            && object.contract_version != contract::TYPE_OBJECT_CONTRACT_VERSION
         {
             return Err(model::Refusal::Scope);
         }
@@ -924,7 +925,7 @@ impl<'a, 'b> Adapter<'a, 'b> {
         if let TypeForm::AssociatedContractMember { contract, member } = object.form {
             if contract != context.source
                 || !matches!(context.mode, TypeMode::Contract)
-                || !matches!(context.generation, 33 | 34)
+                || context.generation != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
             {
                 return Err(model::Refusal::Scope);
             }

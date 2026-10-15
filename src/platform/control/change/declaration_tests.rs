@@ -46,15 +46,15 @@ declarations.end
     let flat = decode_compact_change("parameterized-flat.lkjc", flat.as_bytes()).unwrap();
     let native = decode_compact_change("parameterized-native.lkjc", native.as_bytes()).unwrap();
     let bytes = canonical_authored_intent_bytes(&native.semantic).unwrap();
-    assert_eq!(&bytes[..8], b"LKJACR39");
+    assert_eq!(&bytes[..8], b"LKJACHNG");
     assert_eq!(
         bytes,
         canonical_authored_intent_bytes(&flat.semantic).unwrap()
     );
     assert_eq!(native.request_commitment, flat.request_commitment);
     assert_eq!(
-        commitment_codec_identity(&bytes),
-        "lkjscript-authored-change-codec-39"
+        &bytes[8..40],
+        &crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH
     );
 }
 
@@ -101,15 +101,15 @@ declarations.end
             decode_compact_change("mixed-native.lkjc", format!("{header}{native}").as_bytes())
                 .unwrap();
         let bytes = canonical_authored_intent_bytes(&native.semantic).unwrap();
-        assert_eq!(&bytes[..8], b"LKJACR39");
+        assert_eq!(&bytes[..8], b"LKJACHNG");
         assert_eq!(
             bytes,
             canonical_authored_intent_bytes(&flat.semantic).unwrap()
         );
         assert_eq!(native.request_commitment, flat.request_commitment);
         assert_eq!(
-            commitment_codec_identity(&bytes),
-            "lkjscript-authored-change-codec-39"
+            &bytes[8..40],
+            &crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH
         );
     }
 }
@@ -133,7 +133,7 @@ fn parameterized_owned_witness_edges_bind_order_and_reject_malformed_children() 
     );
     assert_eq!(
         &canonical_authored_intent_bytes(&original.semantic).unwrap()[..8],
-        b"LKJACR39"
+        b"LKJACHNG"
     );
     let swapped = input
         .replace("index=0 type=byte-buffer", "index=1 type=byte-buffer")
@@ -338,56 +338,40 @@ declarations.end"#;
 #[test]
 fn native_transfer_and_share_constraint_sets_select_exact_canonical_codec() {
     use crate::platform::kernel::TypeParameterConstraints as C;
-    // The third column records each constraint form's historical introduced generation.
-    // Every freshly authored request now uses the complete codec39 profile.
-    for (names, expected, _historical_magic) in [
-        ("none", C::None, b"LKJACR14"),
-        ("capture-safe", C::CaptureSafe, b"LKJACR14"),
-        ("owned", C::Owned, b"LKJACR21"),
-        ("transferable", C::Transferable, b"LKJACR26"),
-        (
-            "capture-safe transferable",
-            C::CaptureSafeTransferable,
-            b"LKJACR26",
-        ),
-        ("owned transferable", C::OwnedTransferable, b"LKJACR26"),
-        (
-            "transferable capture-safe",
-            C::CaptureSafeTransferable,
-            b"LKJACR26",
-        ),
-        ("transferable owned", C::OwnedTransferable, b"LKJACR26"),
-        ("owned shareable", C::OwnedShareable, b"LKJACR34"),
-        ("shareable owned", C::OwnedShareable, b"LKJACR34"),
+    for (names, expected) in [
+        ("none", C::None),
+        ("capture-safe", C::CaptureSafe),
+        ("owned", C::Owned),
+        ("transferable", C::Transferable),
+        ("capture-safe transferable", C::CaptureSafeTransferable),
+        ("owned transferable", C::OwnedTransferable),
+        ("transferable capture-safe", C::CaptureSafeTransferable),
+        ("transferable owned", C::OwnedTransferable),
+        ("owned shareable", C::OwnedShareable),
+        ("shareable owned", C::OwnedShareable),
         (
             "owned transferable shareable",
             C::OwnedTransferableShareable,
-            b"LKJACR34",
         ),
         (
             "owned shareable transferable",
             C::OwnedTransferableShareable,
-            b"LKJACR34",
         ),
         (
             "transferable owned shareable",
             C::OwnedTransferableShareable,
-            b"LKJACR34",
         ),
         (
             "transferable shareable owned",
             C::OwnedTransferableShareable,
-            b"LKJACR34",
         ),
         (
             "shareable owned transferable",
             C::OwnedTransferableShareable,
-            b"LKJACR34",
         ),
         (
             "shareable transferable owned",
             C::OwnedTransferableShareable,
-            b"LKJACR34",
         ),
     ] {
         let input = format!(
@@ -398,7 +382,7 @@ fn native_transfer_and_share_constraint_sets_select_exact_canonical_codec() {
         assert!(decoded.semantic.changes.iter().any(|change| matches!(change,
             AuthoredChange::AddTypeParameter { parameter, .. } if parameter.constraints == expected)));
         let bytes = canonical_authored_intent_bytes(&decoded.semantic).unwrap();
-        assert_eq!(&bytes[..8], b"LKJACR39", "{names}");
+        assert_eq!(&bytes[..8], b"LKJACHNG", "{names}");
         let owner = OwnerKey::TypeParameter(
             crate::platform::semantic_id::TypeParameterId::migrate(b"constraint-set", 0),
         );
@@ -412,7 +396,7 @@ fn native_transfer_and_share_constraint_sets_select_exact_canonical_codec() {
         );
         assert_eq!(
             &canonical_authored_intent_bytes(&decoded.semantic).unwrap()[..8],
-            b"LKJACR39"
+            b"LKJACHNG"
         );
         let json = serde_json::to_vec(&expected).unwrap();
         assert_eq!(serde_json::from_slice::<C>(&json).unwrap(), expected);
@@ -491,11 +475,13 @@ fn transfer_and_share_constraints_round_trip_native_drafts_without_concrete_call
 }
 
 #[test]
-fn borrowed_task_mutations_promote_both_legacy_signature_owners() {
-    use crate::platform::kernel::{DeclarationPayload, OwnerRecord, ParameterUse};
-    let mut source = crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(
+fn borrowed_task_mutations_update_complete_current_signatures_without_rewriting_bodies() {
+    use crate::platform::kernel::{
+        DeclarationPayload, FunctionEffect, OwnerKind, OwnerRecord, ParameterUse,
+    };
+    let source = crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(
         r#"declarations.begin
-(units (module create legacy-task-contracts
+(units (module create task-contracts
   (function create helper (visibility public)
     (parameter create payload (type OwnedI64Cell) (use borrow))
     (returns I64) (effect pure) (body (i64 7)))
@@ -507,17 +493,6 @@ fn borrowed_task_mutations_promote_both_legacy_signature_owners() {
 declarations.end"#,
     )
     .unwrap();
-    for owner in source.owners.values_mut() {
-        match owner {
-            OwnerRecord::Declaration(declaration)
-                if matches!(declaration.payload, DeclarationPayload::Function(_)) =>
-            {
-                declaration.header.contract_version = 29;
-            }
-            OwnerRecord::Parameter(parameter) => parameter.header.contract_version = 29,
-            _ => {}
-        }
-    }
     let named = |name| {
         source
             .owners
@@ -554,7 +529,7 @@ declarations.end"#,
         "request base={}\nset.function-contract as=%helper function={helper} result=i64 effect=task\nset.parameter-use parameter={consuming_parameter} use=borrow\nadd.parameter as=$added function={empty} name=payload type=owned-i64-cell use=borrow\n",
         created.current.head.revision,
     );
-    let decoded = decode_compact_change("legacy-borrow-task.lkjc", input.as_bytes()).unwrap();
+    let decoded = decode_compact_change("borrowed-task-change.lkjc", input.as_bytes()).unwrap();
     let prepared = created
         .repository
         .prepare_authored_change(&decoded.semantic, decoded.options)
@@ -564,22 +539,19 @@ declarations.end"#,
     else {
         unreachable!()
     };
-    let promoted = owners
+    assert!(owners.iter().all(|entry| entry.owner != helper_parameter));
+    let signature = owners
         .iter()
-        .find(|entry| entry.owner == helper_parameter)
+        .find(|entry| entry.owner == consuming)
         .unwrap();
-    assert!(!promoted.dimensions.executable());
-    assert!(promoted.dimensions.validation_dependencies);
+    assert_eq!(signature.objects.before, signature.objects.after);
+    assert!(signature.dimensions.semantic_interface);
     assert!(
-        promoted
-            .classes
-            .contains(&crate::platform::publication::OwnerChangeClass::RelationSet)
-    );
-    assert!(
-        !promoted
+        signature
             .classes
             .contains(&crate::platform::publication::OwnerChangeClass::SemanticPayloadChanged)
     );
+    let added = prepared.allocated["$added"];
     created.repository.publish(&prepared.publication).unwrap();
     let current = created
         .repository
@@ -596,10 +568,29 @@ declarations.end"#,
             declaration.header.contract_version,
             crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
         );
+        assert_eq!(declaration.header.kind, OwnerKind::TaskFunction);
         let DeclarationPayload::Function(function) = &declaration.payload else {
             unreachable!()
         };
+        let OwnerRecord::Declaration(previous) = &source.owners[&owner] else {
+            unreachable!()
+        };
+        let DeclarationPayload::Function(previous) = &previous.payload else {
+            unreachable!()
+        };
+        assert_eq!(function.body, previous.body);
+        assert_eq!(function.result, previous.result);
+        assert_eq!(
+            current.owners[&OwnerKey::Expression(function.body)],
+            source.owners[&OwnerKey::Expression(previous.body)]
+        );
+        assert!(matches!(function.effect, FunctionEffect::Task { .. }));
         assert_eq!(function.parameters.len(), 1);
+        if owner == empty {
+            assert_eq!(OwnerKey::Parameter(function.parameters[0]), added);
+        } else {
+            assert_eq!(function.parameters, previous.parameters);
+        }
         let OwnerRecord::Parameter(parameter) =
             &current.owners[&OwnerKey::Parameter(function.parameters[0])]
         else {
@@ -611,6 +602,18 @@ declarations.end"#,
         );
         assert_eq!(parameter.use_mode, ParameterUse::Borrow);
     }
+    assert_eq!(
+        current.owners[&helper_parameter],
+        source.owners[&helper_parameter]
+    );
+    let OwnerRecord::Parameter(mut expected) = source.owners[&consuming_parameter].clone() else {
+        unreachable!()
+    };
+    expected.use_mode = ParameterUse::Borrow;
+    assert_eq!(
+        current.owners[&consuming_parameter],
+        OwnerRecord::Parameter(expected)
+    );
 }
 
 #[test]
@@ -664,7 +667,7 @@ declarations.end"#;
     let decoded = decode_compact_change("owned-authority.lkjc", input.as_bytes()).unwrap();
     assert_eq!(
         &canonical_authored_intent_bytes(&decoded.semantic).unwrap()[..8],
-        b"LKJACR39"
+        b"LKJACHNG"
     );
     let prepared = created
         .repository
@@ -799,8 +802,8 @@ fn native_owned_task_method_intent_is_distinct_and_pure_predecessor_stays_stable
     let pure = encode(&literal.replace("(returns Self)", "(returns Self) (effect pure)"));
     let task = encode(&literal.replace("(returns Self)", "(returns Self) (effect (task))"));
     assert_eq!(implicit, pure);
-    assert_eq!(&pure[..8], b"LKJACR39");
-    assert_eq!(&task[..8], b"LKJACR39");
+    assert_eq!(&pure[..8], b"LKJACHNG");
+    assert_eq!(&task[..8], b"LKJACHNG");
     assert_ne!(pure, task);
     for effect in ["(effect pure ignored)", "(effect)", "(other (task))"] {
         let invalid = literal.replace("(returns Self)", &format!("(returns Self) {effect}"));

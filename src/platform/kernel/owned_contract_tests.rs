@@ -33,16 +33,6 @@ fn owned_contract_owner_domains_are_canonical_and_exact() {
             decode_owner(&bytes, record.owner(), record.kind(), digest).unwrap(),
             *record
         );
-        for generation in [18, 19, 20] {
-            let mut historical = record.clone();
-            historical.set_encoding_for_edit(generation);
-            let (digest, bytes) = encode_owner(&historical).unwrap();
-            assert_eq!(&bytes[..8], format!("LKJOWN{generation}").as_bytes());
-            assert_eq!(
-                decode_owner(&bytes, historical.owner(), historical.kind(), digest).unwrap(),
-                historical
-            );
-        }
         let OwnerRecord::Declaration(mut forged) = record.clone() else {
             unreachable!()
         };

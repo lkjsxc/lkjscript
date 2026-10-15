@@ -12,9 +12,9 @@ use crate::error::DevError;
 use crate::process::{self, ProcessSpec, ProcessStatus};
 use archive::{ARCHIVE_NAME, CHECKSUM_NAME};
 use model::{
-    BuildIdentity, ExecutableIdentity, HostedContext, ManifestEncoding, NoticeIdentity,
-    PackagingIdentity, PayloadIdentity, ProductIdentity, PublicationMode, ReleaseManifest,
-    Sha256Digest, SourceIdentity, ToolchainIdentity,
+    BuildIdentity, ExecutableIdentity, HostedContext, NoticeIdentity, PackagingIdentity,
+    PayloadIdentity, ProductIdentity, ReleaseManifest, Sha256Digest, SourceIdentity,
+    ToolchainIdentity,
 };
 use serde::Serialize;
 
@@ -53,7 +53,6 @@ struct VerifyOptions {
     receipt: Option<PathBuf>,
     extract_to: Option<PathBuf>,
     expected_tag: Option<String>,
-    expected_publication_mode: Option<PublicationMode>,
 }
 
 #[derive(Debug)]
@@ -187,23 +186,21 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
     audit_notice(&notice_one)?;
 
     let manifest = ReleaseManifest {
-        encoding: ManifestEncoding::PublicationNeutral {
-            build: BuildIdentity {
-                target_policy_sha256: Sha256Digest::new(target::policy_sha256()?)
-                    .map_err(DevError::corrupt)?,
-                command: [
-                    "cargo",
-                    "build",
-                    "--release",
-                    "--locked",
-                    "--bin",
-                    "lkjscript",
-                    "--target",
-                    TARGET_TRIPLE,
-                ]
-                .map(str::to_owned)
-                .to_vec(),
-            },
+        build: BuildIdentity {
+            target_policy_sha256: Sha256Digest::new(target::policy_sha256()?)
+                .map_err(DevError::corrupt)?,
+            command: [
+                "cargo",
+                "build",
+                "--release",
+                "--locked",
+                "--bin",
+                "lkjscript",
+                "--target",
+                TARGET_TRIPLE,
+            ]
+            .map(str::to_owned)
+            .to_vec(),
         },
         product: ProductIdentity {
             name: PACKAGE_NAME.to_owned(),
@@ -358,14 +355,6 @@ fn verify(options: VerifyOptions) -> Result<u8, DevError> {
             "release tag mismatch: expected '{tag}'"
         )));
     }
-    if let Some(mode) = options.expected_publication_mode
-        && verified.manifest.legacy_publication_mode() != Some(mode)
-    {
-        return Err(DevError::corrupt(format!(
-            "publication mode mismatch: expected '{}'",
-            mode.as_str()
-        )));
-    }
     let checksum = fs::read(&options.checksums).map_err(|error| {
         DevError::infrastructure(format!("read release checksum file: {error}"))
     })?;
@@ -458,13 +447,8 @@ fn parse_verify(mut arguments: impl Iterator<Item = OsString>) -> Result<VerifyO
     let mut values = BTreeMap::new();
     while let Some(argument) = crate::next_utf8(&mut arguments, "release verify option")? {
         let name = match argument.as_str() {
-            "--archive"
-            | "--checksums"
-            | "--candidate"
-            | "--receipt"
-            | "--extract-to"
-            | "--expected-tag"
-            | "--expected-publication" => argument,
+            "--archive" | "--checksums" | "--candidate" | "--receipt" | "--extract-to"
+            | "--expected-tag" => argument,
             value => {
                 return Err(DevError::usage(format!(
                     "unknown release verify option '{value}'"
@@ -481,10 +465,6 @@ fn parse_verify(mut arguments: impl Iterator<Item = OsString>) -> Result<VerifyO
     let receipt = values.remove("--receipt").map(PathBuf::from);
     let extract_to = values.remove("--extract-to").map(PathBuf::from);
     let expected_tag = values.remove("--expected-tag");
-    let expected_publication_mode = values
-        .remove("--expected-publication")
-        .map(parse_publication)
-        .transpose()?;
     let options = VerifyOptions {
         archive: PathBuf::from(required(&mut values, "--archive")?),
         checksums: PathBuf::from(required(&mut values, "--checksums")?),
@@ -492,7 +472,6 @@ fn parse_verify(mut arguments: impl Iterator<Item = OsString>) -> Result<VerifyO
         receipt,
         extract_to,
         expected_tag,
-        expected_publication_mode,
     };
     if !values.is_empty() {
         return Err(DevError::usage("unconsumed release verify options"));
@@ -504,16 +483,6 @@ fn required(values: &mut BTreeMap<String, String>, name: &str) -> Result<String,
     values
         .remove(name)
         .ok_or_else(|| DevError::usage(format!("required option '{name}' is missing")))
-}
-
-fn parse_publication(value: String) -> Result<PublicationMode, DevError> {
-    match value.as_str() {
-        "dry-run" => Ok(PublicationMode::DryRun),
-        "release" => Ok(PublicationMode::Release),
-        _ => Err(DevError::usage(format!(
-            "publication mode must be 'dry-run' or 'release', observed '{value}'"
-        ))),
-    }
 }
 
 fn repository_root() -> Result<PathBuf, DevError> {
@@ -933,9 +902,7 @@ fn validate_manifest(manifest: &ReleaseManifest) -> Result<(), DevError> {
     )?;
     validate_git_sha(&manifest.source.tagged_commit_sha, "manifest commit SHA")?;
     validate_capabilities_digest(&manifest.executable.capabilities_digest)?;
-    if let ManifestEncoding::PublicationNeutral { build } = &manifest.encoding
-        && build.target_policy_sha256.as_str() != target::policy_sha256()?
-    {
+    if manifest.build.target_policy_sha256.as_str() != target::policy_sha256()? {
         return Err(DevError::corrupt(
             "manifest target policy differs from this producer",
         ));
@@ -1216,17 +1183,20 @@ mod tests {
     }
 
     #[test]
-    fn public_manifest_has_product_only_version_identity_and_rejects_predecessor_fields() {
+    fn public_manifest_has_product_only_version_identity_and_rejects_extra_fields() {
         let digest = "0".repeat(64);
         let mut current = serde_json::json!({
-            "publication_mode": "dry-run",
+            "format": "lkjscript-release-content-1",
+            "build": {
+                "target_policy_sha256": "8".repeat(64),
+                "command": ["cargo", "build", "--release", "--locked", "--bin", "lkjscript", "--target", TARGET_TRIPLE]
+            },
             "product": {"name": "lkjscript", "version": lkjscript::PRODUCT_VERSION},
             "source": {
                 "repository": REPOSITORY_IDENTITY,
                 "expected_release_tag": format!("v{}", lkjscript::PRODUCT_VERSION),
-                "tagged_commit_sha": "0".repeat(40),
-                "commit_timestamp_unix_seconds": 1,
-                "annotated_tag_object_sha": null
+                "commit_sha": "0".repeat(40),
+                "commit_timestamp_unix_seconds": 1
             },
             "target_triple": TARGET_TRIPLE,
             "toolchain": {"rustc": "rustc", "cargo": "cargo", "toolchain_channel": TOOLCHAIN_CHANNEL},
@@ -1288,19 +1258,7 @@ mod tests {
         ] {
             assert!(!encoded.contains(absent), "public manifest leaked {absent}");
         }
-        current["schema"] = serde_json::json!({"identity": "predecessor", "version": 2});
-        assert!(serde_json::from_value::<ReleaseManifest>(current.clone()).is_err());
-        current
-            .as_object_mut()
-            .expect("manifest object")
-            .remove("schema");
-        current["executable"]["cli_contract"] = serde_json::json!(12);
-        assert!(serde_json::from_value::<ReleaseManifest>(current.clone()).is_err());
-        current["executable"]
-            .as_object_mut()
-            .expect("executable object")
-            .remove("cli_contract");
-        current["executable"]["executable_registry_digest"] = serde_json::json!("7".repeat(64));
+        current["executable"]["unknown_field"] = serde_json::json!(true);
         assert!(serde_json::from_value::<ReleaseManifest>(current).is_err());
     }
 

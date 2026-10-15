@@ -87,15 +87,15 @@ fn associated_surface_native_intent_matches_literal_compact_complete_coordinates
     let compact = decode(&compact_body());
     let native = decode(&native_body());
     let bytes = canonical_authored_intent_bytes(&compact.semantic).unwrap();
-    assert_eq!(&bytes[..8], b"LKJACR39");
+    assert_eq!(&bytes[..8], b"LKJACHNG");
     assert_eq!(
         bytes,
         canonical_authored_intent_bytes(&native.semantic).unwrap()
     );
     assert_eq!(compact.request_commitment, native.request_commitment);
     assert_eq!(
-        commitment_codec_identity(&bytes),
-        "lkjscript-authored-change-codec-39"
+        &bytes[8..40],
+        &crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH
     );
     let AuthoredChange::CreateOwnedContract {
         associated_types,

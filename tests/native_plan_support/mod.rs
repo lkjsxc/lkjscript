@@ -2,6 +2,7 @@ use crate::components::{Dependency, Native, field, path};
 use serde_json::{Value, json};
 
 pub mod cases;
+pub mod literal_sources;
 pub mod oracle;
 
 pub const SOURCES: [(&str, &str); 10] = [
@@ -194,13 +195,23 @@ pub fn author(public: &Native) {
     }
     public.author(
         &application,
-        include_str!("../../examples/owned-worklists/reachability.lkjc"),
+        &literal_sources::grouped(
+            std::iter::once(include_str!(
+                "../../examples/owned-worklists/reachability.lkjc"
+            ))
+            .chain(SOURCES[..5].iter().map(|(_, source)| *source)),
+        ),
         &dependencies,
         true,
     );
-    for (_, source) in SOURCES {
-        public.author(&application, source, &dependencies, false);
-    }
+    // Keep both source families inside the ordinary per-request validation-work
+    // admission. Their combined request exceeds the unchanged affine-work limit.
+    public.author(
+        &application,
+        &literal_sources::grouped(SOURCES[5..].iter().map(|(_, source)| *source)),
+        &dependencies,
+        false,
+    );
     public.check(&application);
     for (module, _) in &SOURCES[5..] {
         public.unchanged(&application, module);

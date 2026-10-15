@@ -1,6 +1,9 @@
 //! Source-bound falsification of an actual completed target admission, through its frozen reader.
 use super::*;
 
+#[path = "child_faults.rs"]
+mod child_faults;
+
 // Faults touch authenticated originals only while the reader runs. Restore every remembered
 // file's bytes and permissions on ordinary exits and assertion unwinding, including failures
 // before a reader starts or after an omission fault removes a private review plan.
@@ -36,7 +39,16 @@ impl OriginalFiles {
     fn restore(&self) -> std::io::Result<()> {
         let mut failure = None;
         for (path, original) in &self.0 {
-            if let Err(error) = fs::write(path, &original.bytes)
+            let writable = match fs::symlink_metadata(path) {
+                Ok(metadata) => fs::set_permissions(
+                    path,
+                    fs::Permissions::from_mode(metadata.permissions().mode() | 0o200),
+                ),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(error) => Err(error),
+            };
+            if let Err(error) = writable
+                .and_then(|()| fs::write(path, &original.bytes))
                 .and_then(|()| fs::set_permissions(path, original.permissions.clone()))
             {
                 failure = Some(error);
@@ -152,6 +164,35 @@ fn receipt_fault_originals_restore_on_assertion_unwind() {
 }
 
 #[test]
+fn receipt_fault_readonly_original_restores_on_assertion_unwind() {
+    let root = tempfile::tempdir().expect("owned readonly fixture");
+    let path = root.path().join("verifier");
+    fs::write(&path, b"original verifier").expect("write owned verifier fixture");
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o555)).expect("readonly fixture");
+    let result = std::panic::catch_unwind(|| {
+        let mut originals = OriginalFiles(BTreeMap::new());
+        originals.remember(&path, b"original verifier");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("owned mutation");
+        fs::write(&path, b"corrupted verifier").expect("owned bytes");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o555)).expect("observed mode");
+        panic!("failure while readonly executable bytes are corrupted");
+    });
+    assert!(result.is_err());
+    assert_eq!(
+        fs::read(&path).expect("restored bytes"),
+        b"original verifier"
+    );
+    assert_eq!(
+        fs::metadata(path)
+            .expect("restored mode")
+            .permissions()
+            .mode()
+            & 0o7777,
+        0o555
+    );
+}
+
+#[test]
 #[ignore = "requires LKJSCRIPT_NOMINAL_ADMISSION_FIXTURE from fresh exact target admission"]
 fn live_nominal_receipt_omissions_reject_at_target_admission() {
     let root = PathBuf::from(
@@ -232,6 +273,11 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
             serde_json::json!({"fault":format!("omit-oracle/{name}"),"rejection":rejected.1}),
         );
     }
+    let mut child_cases = child_faults::required_pointers();
+    let mut added_pointer_faults = child_cases
+        .iter()
+        .map(|(_, fields)| fields.len())
+        .sum::<usize>();
     for (role, pointers) in [
         (
             Oracle::OfflinePackages,
@@ -295,14 +341,14 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
                 "/observations/artifact-nominal-reordered-arguments-exact",
                 "/observations/artifact-nominal-replaced-template-case-bound-exact",
                 "/observations/finite_commands",
-                "/observations/finite_artifact_rejections",
-                "/observations/finite_installed_upgrade_commands",
+                "/observations/finite_library",
+                "/observations/finite_public_rejection_false",
+                "/observations/finite_public_rejection_true",
                 "/observations/requirement_commands",
                 "/observations/requirement_sources_removed",
                 "/observations/requirement_retry",
                 "/observations/requirement_packages",
-                "/observations/requirement_predecessor",
-                "/observations/requirement_transaction_predecessor",
+                "/observations/requirement-scalars",
                 "/observations/requirement_conflict",
                 "/observations/requirement_queue",
                 "/observations/requirement_unencodable",
@@ -331,32 +377,28 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
             ],
         ),
     ] {
+        let required = &mut child_cases
+            .iter_mut()
+            .find(|(owner, _)| *owner == role)
+            .expect("complete current owner inventory")
+            .1;
+        for pointer in pointers {
+            if required.contains(&pointer) {
+                added_pointer_faults -= 1;
+            } else {
+                required.push(pointer);
+            }
+        }
+    }
+    let mut constrained_omissions = 0;
+    for (role, pointers) in child_cases {
         let child_path = root.join(role.name()).join("receipt.json");
         let child_original = process::read_bounded(&child_path, MAXIMUM_RECEIPT_BYTES)
             .expect("bounded actual child receipt");
         originals.remember(&child_path, &child_original);
         let child: Value = serde_json::from_slice(&child_original).expect("child JSON");
-        for pointer in pointers {
-            let mut fault = child.clone();
-            let selected = fault
-                .pointer_mut(pointer)
-                .expect("required independent observation");
-            *selected = match selected {
-                Value::Bool(_) => serde_json::json!(false),
-                Value::Number(_) => serde_json::json!(0),
-                Value::String(_) => serde_json::json!("foreign"),
-                Value::Array(_) => serde_json::json!([]),
-                Value::Object(_) => serde_json::json!({}),
-                _ => panic!("unsupported omission {pointer}"),
-            };
-            let bytes = match role {
-                Oracle::OfflinePackages => {
-                    crate::offline_packages::encode_transferred_test_fixture(fault)
-                }
-                Oracle::PureTail => crate::pure_tail::encode_transferred_test_fixture(fault),
-                _ => panic!("unexpected nominal owner"),
-            }
-            .expect("canonical typed omission");
+        let mut reject_child = |fault: Value, label: &str| {
+            let bytes = child_faults::encode(role, fault).expect("canonical typed mutation");
             fs::write(&child_path, bytes).expect("write owned child");
             let mut aggregate = baseline.clone();
             aggregate
@@ -374,13 +416,71 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
             originals
                 .restore()
                 .expect("restore originals before assertion");
-            assert_eq!(
-                rejected.0,
-                ProcessStatus::Failed,
-                "{} {pointer}",
-                role.name()
+            assert_eq!(rejected.0, ProcessStatus::Failed, "{} {label}", role.name());
+            results.push(serde_json::json!({"role":role.name(),"fault":label,"recomputed_outer_hash":true,"rejection":rejected.1}));
+        };
+        for pointer in pointers {
+            let mut fault = child.clone();
+            let selected = fault
+                .pointer_mut(pointer)
+                .expect("required independent observation");
+            *selected = match selected {
+                Value::Bool(value) => serde_json::json!(!*value),
+                Value::Number(value) => {
+                    serde_json::json!(if value.as_u64() == Some(0) { 999 } else { 0 })
+                }
+                Value::String(_) => serde_json::json!("foreign"),
+                Value::Array(_) => serde_json::json!([]),
+                Value::Object(_) => serde_json::json!({}),
+                _ => panic!("unsupported mutation {pointer}"),
+            };
+            reject_child(fault, pointer);
+        }
+        if matches!(role, Oracle::PureTail | Oracle::OfflinePackages) {
+            let section = if role == Oracle::PureTail {
+                "outcomes"
+            } else {
+                "observations"
+            };
+            let required: Vec<String> = if role == Oracle::PureTail {
+                child[section]
+                    .as_object()
+                    .expect("outcomes")
+                    .keys()
+                    .filter(|key| {
+                        key.ends_with("-generic-pair")
+                            || key.ends_with("-constant-text")
+                            || key.ends_with("-constant-lists")
+                            || key.as_str() == "generic-factory-definitions"
+                            || key.as_str() == "capture-safe-constraint-clear"
+                    })
+                    .cloned()
+                    .collect()
+            } else {
+                [
+                    "generic_capture_factory",
+                    "imported_capture_constraint",
+                    "rejection-kernel_type_constraint",
+                ]
+                .map(str::to_owned)
+                .to_vec()
+            };
+            assert!(
+                required.len() >= 3,
+                "independent constrained-outcome inventory"
             );
-            results.push(serde_json::json!({"role":role.name(),"fault":pointer,"recomputed_outer_hash":true,"rejection":rejected.1}));
+            for key in required {
+                let mut fault = child.clone();
+                assert!(
+                    fault[section]
+                        .as_object_mut()
+                        .expect("section")
+                        .remove(&key)
+                        .is_some()
+                );
+                reject_child(fault, &format!("omit-{section}/{key}"));
+                constrained_omissions += 1;
+            }
         }
         assert_eq!(
             process::read_bounded(&child_path, MAXIMUM_RECEIPT_BYTES).expect("restored child"),
@@ -419,13 +519,13 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
     )
     .expect("completed outcome indices");
     let condition_name = format!("command-{:04}.stdout", requirement_commands[9]);
-    let predecessor_artifact = "requirement-transaction-predecessor--predecessor.lkja";
+    let scalar_artifact = "requirement-scalars-producer.lkja";
     for name in [
         "requirement-consumer-structural.lkjplan",
         "requirement-supplier-structural.lkjplan",
         "requirement-consumer-structural.lkjc",
         "requirement-store-observations.json",
-        predecessor_artifact,
+        scalar_artifact,
         &condition_name,
         &before_name,
         &after_name,
@@ -527,6 +627,92 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
         results.push(serde_json::json!({"role":"offline-packages","fault":label,
             "recomputed_outer_hash":true,"rejection":rejected.1}));
     };
+    let mut current_offline_faults = 0;
+    for (name, pointers) in [
+        (
+            "finite_library",
+            vec!["/inventory", "/package", "/revision", "/transport"],
+        ),
+        (
+            "finite_public_rejection_false",
+            vec!["/command", "/revision", "/authority"],
+        ),
+        (
+            "finite_public_rejection_true",
+            vec!["/command", "/revision", "/authority"],
+        ),
+        (
+            "requirement-scalars",
+            vec![
+                "/sources_removed",
+                "/original_packs_preserved",
+                "/after",
+                "/edit_receipt",
+                "/producer_transport",
+                "/consumer_transport",
+                "/producer_binding/bundle",
+                "/producer_binding/source_transport",
+                "/producer_binding/package",
+                "/producer_binding/revision",
+                "/producer_binding/package_revision",
+                "/consumer_binding/bundle",
+                "/consumer_binding/source_transport",
+                "/consumer_binding/package",
+                "/consumer_binding/revision",
+                "/consumer_binding/package_revision",
+                "/producer_author/first",
+                "/producer_author/base",
+                "/producer_author/input",
+                "/producer_author/body",
+                "/producer_author/receipt",
+                "/consumer_author/first",
+                "/consumer_author/base",
+                "/consumer_author/input",
+                "/consumer_author/body",
+                "/consumer_author/receipt",
+                "/edit_author/first",
+                "/edit_author/base",
+                "/edit_author/input",
+                "/edit_author/body",
+                "/edit_author/receipt",
+                "/commands/0",
+            ],
+        ),
+    ] {
+        let observation: Value = serde_json::from_str(
+            child["observations"][name]
+                .as_str()
+                .expect("required current observation string"),
+        )
+        .expect("current nested observation");
+        for pointer in pointers {
+            let mut altered = observation.clone();
+            *altered
+                .pointer_mut(pointer)
+                .expect("required current nested discriminant") = Value::Null;
+            let mut fault = child.clone();
+            fault["observations"][name] = Value::String(altered.to_string());
+            offline_fault(fault, &format!("current/{name}/omit{pointer}"), None);
+            current_offline_faults += 1;
+        }
+    }
+    for author in ["producer_author", "consumer_author", "edit_author"] {
+        let mut observation: Value = serde_json::from_str(
+            child["observations"]["requirement-scalars"]
+                .as_str()
+                .expect("current scalar observation"),
+        )
+        .expect("scalar nested observation");
+        observation[author]["first"] = serde_json::json!(u64::MAX);
+        let mut fault = child.clone();
+        fault["observations"]["requirement-scalars"] = Value::String(observation.to_string());
+        offline_fault(
+            fault,
+            &format!("current/scalars/{author}/overflow"),
+            Some("overflow"),
+        );
+        current_offline_faults += 1;
+    }
     for pointer in [
         "/producer/commands",
         "/producer/revision",
@@ -753,16 +939,16 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
         Some("independent store revision, complete cells, or entry bytes omitted"),
     );
 
-    fs::remove_file(child_root.join(predecessor_artifact))
-        .expect("withhold owned authentic predecessor artifact");
+    fs::remove_file(child_root.join(scalar_artifact))
+        .expect("withhold owned current scalar artifact");
     let mut fault = child.clone();
     fault["files"]
         .as_array_mut()
         .expect("offline retained files")
-        .retain(|file| file["path"] != predecessor_artifact);
+        .retain(|file| file["path"] != scalar_artifact);
     offline_fault(
         fault,
-        "transaction-outcome/omit-authentic-predecessor-artifact",
+        "current-scalars/omit-current-source-bound-artifact",
         None,
     );
 
@@ -939,6 +1125,48 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
         Some("F64 original artifact/source binding"),
     );
 
+    let candidate = PathBuf::from(&baseline.candidate.path);
+    let verifier = PathBuf::from(&baseline.verifier.path);
+    for role in ORACLES {
+        role.read(
+            &root.join(role.name()).join("receipt.json"),
+            &candidate,
+            &verifier,
+        )
+        .expect("actual current owner baseline before executable mutation");
+    }
+    let mut executable_faults = 0;
+    for file in [&candidate, &verifier] {
+        let executable = process::read_bounded(file, 384 * 1024 * 1024)
+            .expect("bounded owned executable original");
+        originals.remember(file, &executable);
+        let permissions = fs::metadata(file)
+            .expect("original executable permissions")
+            .permissions();
+        fs::set_permissions(file, fs::Permissions::from_mode(permissions.mode() | 0o200))
+            .expect("make owned fault fixture writable");
+        let mut corrupted = executable;
+        corrupted[0] ^= 1;
+        fs::write(file, &corrupted).expect("write same-length owned executable fault");
+        fs::set_permissions(file, permissions).expect("restore observed executable mode");
+        for role in ORACLES {
+            let rejected = role.read(
+                &root.join(role.name()).join("receipt.json"),
+                &candidate,
+                &verifier,
+            );
+            let rejection = rejected.expect_err("current owner rejects changed executable bytes");
+            results.push(
+                serde_json::json!({"role":role.name(),"fault":"changed-executable-bytes",
+                "file":file,"rejection":rejection.to_string()}),
+            );
+            executable_faults += 1;
+        }
+        originals
+            .restore()
+            .expect("restore executable bytes and mode");
+    }
+
     assert_eq!(
         invoke().0,
         ProcessStatus::Passed,
@@ -950,8 +1178,11 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
     );
     assert_eq!(
         results.len(),
-        130,
-        "complete nominal, recursive, requirement, and numerical target fault inventory"
+        130 + added_pointer_faults
+            + constrained_omissions
+            + current_offline_faults
+            + executable_faults,
+        "complete current HTTP, nominal, recursive, requirement, and numerical target fault inventory"
     );
     scratch.close().expect("owned log cleanup");
     archive::write_new(&root.join("nominal-receipt-faults.json"), &evidence::encode_json(&serde_json::json!({

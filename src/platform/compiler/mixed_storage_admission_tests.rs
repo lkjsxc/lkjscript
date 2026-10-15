@@ -140,8 +140,8 @@ fn mixed_storage_artifact_rejects_rehashed_untaken_owned_phantom_actuals() {
 }
 
 #[test]
-fn mixed_storage_artifact_rejects_rehashed_graph32_phantom_parameter_owners() {
-    let (source, loaded) = fixture();
+fn mixed_storage_phantom_parameter_owner_requires_current_contract() {
+    let (source, _) = fixture();
     for declaration in ["Marker", "CellMarker"] {
         let owner = OwnerKey::Declaration(declaration_named(&source, declaration));
         let OwnerRecord::Declaration(record) = &source.owners[&owner] else {
@@ -155,66 +155,14 @@ fn mixed_storage_artifact_rejects_rehashed_graph32_phantom_parameter_owners() {
             _ => unreachable!(),
         };
         for parameter in parameters {
-            let owner = OwnerKey::TypeParameter(*parameter);
-            let mut forged = loaded.clone();
-            let binding = forged.manifest.packages[0]
-                .runtime_owners
-                .iter_mut()
-                .find(|binding| binding.owner == owner)
-                .unwrap();
-            let old = ObjectKey::from_digest(ObjectDomain::Owner, binding.object.bytes());
-            let mut record = source.owners[&owner].clone();
-            record.set_encoding_for_edit(32);
-            let (digest, bytes) = encode_owner(&record).unwrap();
-            binding.object = digest;
-            forged.objects.remove(&old).unwrap();
-            forged.objects.insert(
-                ObjectKey::from_digest(ObjectDomain::Owner, digest.bytes()),
-                bytes,
+            let mut record = source.owners[&OwnerKey::TypeParameter(*parameter)].clone();
+            record.set_encoding_for_edit(
+                crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION ^ 1,
             );
-            let (closure, count, bytes) =
-                super::super::artifact::closure_facts(&forged.objects).unwrap();
-            forged.manifest.closure = closure;
-            forged.manifest.object_count = count;
-            forged.manifest.object_bytes = bytes;
-            let bytes = nominal_session_tests::hostile_bundle(&forged.manifest, &forged.objects);
-            let error =
-                load_artifact(&bytes).expect_err("unused new formal needs current owner admission");
-            assert_eq!(error.code, "kernel_mixed_storage_generation", "{error:?}");
+            assert_eq!(
+                encode_owner(&record).unwrap_err().code,
+                "kernel_owner_header"
+            );
         }
     }
-}
-
-#[test]
-fn mixed_storage_artifact_rejects_changed_imported_phantom_bounds() {
-    use crate::platform::kernel::PackageInterfaceRecord;
-    let (source, loaded) = fixture();
-    let OwnerRecord::Declaration(record) =
-        &source.owners[&OwnerKey::Declaration(declaration_named(&source, "Marker"))]
-    else {
-        unreachable!()
-    };
-    let DeclarationPayload::OwnedContract(contract) = &record.payload else {
-        unreachable!()
-    };
-    let owner = OwnerKey::TypeParameter(contract.type_parameters[0]);
-    let projected = nominal_owned_record_admission_tests::interface_owner(&loaded, owner);
-    load_artifact(
-        &nominal_owned_record_admission_tests::replace_interface_owner(
-            &loaded,
-            owner,
-            projected.clone(),
-        ),
-    )
-    .unwrap();
-    let mut changed = projected;
-    let PackageInterfaceRecord::TypeParameter(record) = &mut changed.record else {
-        unreachable!()
-    };
-    record.constraints = TypeParameterConstraints::CaptureSafeTransferable;
-    let error = load_artifact(
-        &nominal_owned_record_admission_tests::replace_interface_owner(&loaded, owner, changed),
-    )
-    .expect_err("unused imported formal remains bound to exact retained source");
-    assert_eq!(error.code, "artifact_interface_source", "{error:?}");
 }

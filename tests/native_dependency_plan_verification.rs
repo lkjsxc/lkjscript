@@ -1,8 +1,17 @@
 //! A separately built native verifier checks untrusted results and is then consumed
 //! through an exact exported package by both native planning implementations.
+//! Host matrices share prepared code; candidate runs and bounded detached smoke runs
+//! execute the copied binary. Execution mode and cache observations remain explicit.
 #![allow(clippy::unwrap_used, clippy::panic)]
 #[path = "native_components_support/mod.rs"]
 mod components;
+#[allow(
+    dead_code,
+    reason = "shared semantic CLI support spans independent integration crates"
+)]
+#[path = "support/semantic_cli.rs"]
+mod semantic_cli;
+use components::copy_executable;
 #[allow(dead_code)]
 #[path = "native_plan_support/mod.rs"]
 mod plan;
@@ -188,6 +197,7 @@ fn native_checker_rejects_false_plans_and_guards_an_independent_producer()
         "raw_and_resource_refusals":6,"subsequent_recoveries":6,
         "outcome_verification":outcome_suite.summary(),"standalone_before_producer_executions":3,
         "source_projects_and_transports_deleted":true,"binary_sha256":executable_hash,
+        "execution":public.execution_evidence(),
         "verifier_artifact_sha256":verifier_hash,"producer_artifact_sha256":producer_hash,
         "verifier_transport_sha256":verifier_transport_hash,"observations":observations,
     }).to_string());

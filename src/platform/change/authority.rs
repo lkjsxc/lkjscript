@@ -227,9 +227,7 @@ fn stage_semantic_delta<S: ImmutableObjectStore + ?Sized>(
         graph_contract_version: if delta.is_empty() {
             root.graph_contract_version
         } else {
-            delta
-                .accepted_retry_encoding
-                .unwrap_or(crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
+            crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
         },
         repository_id: root.repository_id,
         package_id: root.package_id,

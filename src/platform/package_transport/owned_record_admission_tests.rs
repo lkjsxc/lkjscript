@@ -90,35 +90,39 @@ fn owned_record_transport_reconstructs_private_representation_without_exporting_
 }
 
 #[test]
-fn owned_record_transport_preserves_supported_graph31_owner_bytes_in_current_source() {
+fn owned_record_transport_preserves_current_owner_bytes_in_source() {
     let original = owned_record_transport();
     let package = &original.packages[&original.container.root.package_revision];
-    let mut historical = package
+    let mut replacement = package
         .snapshot
         .owners
         .values()
         .find(|record| matches!(record, OwnerRecord::Module(_)))
         .unwrap()
         .clone();
-    let OwnerRecord::Module(module) = &mut historical else {
+    let OwnerRecord::Module(module) = &mut replacement else {
         unreachable!()
     };
-    module.header.contract_version = 31;
-    let (digest, historical_bytes) = encode_owner(&historical).unwrap();
-    assert_eq!(&historical_bytes[..8], b"LKJOWN31");
+    module.name = Name::new("renamed_provider").unwrap();
+    let (digest, replacement_bytes) = encode_owner(&replacement).unwrap();
+    assert_eq!(
+        &replacement_bytes[..8],
+        &crate::platform::kernel::contract::OWNER_MAGIC
+    );
     let owner_key = ObjectKey::from_digest(ObjectDomain::Owner, digest.bytes());
-    let mixed = rehash_owner(&original, historical);
+    let mixed = rehash_owner(&original, replacement);
     let bytes = mixed.encode().unwrap();
     let decoded = PackageContainer::decode(&bytes, mixed.root.transport).unwrap();
     assert_eq!(decoded.encode().unwrap(), bytes);
     let admitted = decoded.admit().unwrap();
-    assert_eq!(admitted.container.objects[&owner_key], historical_bytes);
+    assert_eq!(admitted.container.objects[&owner_key], replacement_bytes);
     let snapshot = &admitted.packages[&admitted.container.root.package_revision].snapshot;
     assert!(
         snapshot
             .owners
             .values()
-            .any(|owner| owner.header().contract_version == 31)
+            .all(|owner| owner.header().contract_version
+                == crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
     );
     assert!(snapshot.owners.values().any(|owner| matches!(owner,
         OwnerRecord::Declaration(record) if record.header.contract_version == crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION

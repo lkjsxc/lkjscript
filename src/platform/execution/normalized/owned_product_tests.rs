@@ -36,7 +36,7 @@ fn owned_products_type_encoding_is_disjoint_and_fields_are_canonical() {
     })
     .unwrap();
     let (digest, bytes) = encode_type_object(&product).unwrap();
-    assert_eq!(&bytes[..8], b"LKJPRD01");
+    assert_eq!(&bytes[..8], &contract::TYPE_OBJECT_MAGIC);
     assert_eq!(decode_type_object(&bytes, digest).unwrap(), product);
     // Ordinary record encoding is still distinct, even before semantic admission
     // rejects the record's affine children.
@@ -46,9 +46,9 @@ fn owned_products_type_encoding_is_disjoint_and_fields_are_canonical() {
     .unwrap();
     let (ordinary, bytes) = encode_type_object(&record).unwrap();
     assert_ne!(digest, ordinary);
-    assert_eq!(&bytes[..8], b"LKJTYP10");
+    assert_eq!(&bytes[..8], &contract::TYPE_OBJECT_MAGIC);
     let mut disguised = product;
-    disguised.contract_version = 10;
+    disguised.contract_version = contract::TYPE_OBJECT_CONTRACT_VERSION + 1;
     let bytes = crate::platform::packed::encode(
         contract::TYPE_OBJECT_MAGIC,
         contract::TYPE_OBJECT_ENVELOPE_DOMAIN,
@@ -311,8 +311,8 @@ fn owned_products_composition_nested_cleanup_and_tail_transfer() {
 }
 
 #[test]
-fn owned_products_signature_only_requires_graph_19() {
-    use crate::platform::kernel::{encode_owner, validate_full};
+fn owned_products_signature_requires_current_root_and_owner_contracts() {
+    use crate::platform::kernel::{contract, validate_full};
     let source = byte_buffer_tests::author_only(
         r#"declarations.begin
 (units (module create signatures
@@ -325,24 +325,25 @@ declarations.end"#,
     validate_full(&source).unwrap();
     assert!(crate::platform::kernel::memory_reference::accepts(&source));
     prepare_snapshot(&source);
-    let mut old = source.clone();
-    old.root.graph_contract_version = 18;
-    for record in old.owners.values_mut() {
-        record.set_encoding_for_edit(18);
-        // Product types have their own additive envelope; all owner encodings
-        // are otherwise valid Graph 18 and rehash under the frozen domain.
-        encode_owner(record).unwrap();
-    }
-    let errors = validate_full(&old).unwrap_err();
+    let mut foreign = source.clone();
+    foreign.root.graph_contract_version = contract::GRAPH_CONTRACT_VERSION + 1;
+    let errors = validate_full(&foreign).unwrap_err();
     assert!(
-        errors.iter().any(|e| e.code == "kernel_product_generation"),
+        errors.iter().any(|e| e.code == "kernel_root_contract"),
         "{errors:?}"
     );
-    assert_ne!(
-        crate::platform::kernel::semantic_state_digest(&old).unwrap(),
-        crate::platform::kernel::semantic_state_digest(&source).unwrap()
-    );
-    assert!(!crate::platform::kernel::memory_reference::accepts(&old));
+    assert!(!crate::platform::kernel::memory_reference::accepts(
+        &foreign
+    ));
+    foreign.root.graph_contract_version = contract::GRAPH_CONTRACT_VERSION;
+    for record in foreign.owners.values_mut() {
+        record.set_encoding_for_edit(contract::GRAPH_CONTRACT_VERSION + 1);
+        assert!(record.validate_local().is_err());
+    }
+    assert!(validate_full(&foreign).is_err());
+    assert!(!crate::platform::kernel::memory_reference::accepts(
+        &foreign
+    ));
 }
 
 #[test]

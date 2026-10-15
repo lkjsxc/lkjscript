@@ -10,6 +10,39 @@ type TestResult<T = ()> = Result<T, ExecutionError>;
 
 thread_local! {
     static FRESH_LOCALS: Cell<bool> = const { Cell::new(false) };
+    static FRESH_CALL_ARGUMENTS: Cell<bool> = const { Cell::new(false) };
+    static CALL_ARGUMENT_STORAGE: Cell<(u64, u64)> = const { Cell::new((0, 0)) };
+}
+
+pub(super) fn force_fresh_call_arguments() -> bool {
+    FRESH_CALL_ARGUMENTS.with(Cell::get)
+}
+
+pub(super) fn observe_call_arguments(reused: bool, count: usize) {
+    if count != 0 {
+        CALL_ARGUMENT_STORAGE.with(|storage| {
+            let (fresh, reuse) = storage.get();
+            storage.set((fresh + u64::from(!reused), reuse + u64::from(reused)));
+        });
+    }
+}
+
+fn with_call_arguments<T>(fresh: bool, run: impl FnOnce() -> T) -> (T, (u64, u64)) {
+    struct Restore(bool, (u64, u64));
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            FRESH_CALL_ARGUMENTS.with(|flag| flag.set(self.0));
+            CALL_ARGUMENT_STORAGE.with(|storage| storage.set(self.1));
+        }
+    }
+    let restore = Restore(
+        FRESH_CALL_ARGUMENTS.with(|flag| flag.replace(fresh)),
+        CALL_ARGUMENT_STORAGE.with(|storage| storage.replace((0, 0))),
+    );
+    let result = run();
+    let storage = CALL_ARGUMENT_STORAGE.with(Cell::get);
+    drop(restore);
+    (result, storage)
 }
 
 pub(super) fn force_fresh_locals() -> bool {
@@ -97,7 +130,26 @@ const SOURCE: &str = r#"declarations.begin
       (in (call finish-cell (local cell))))))))
 declarations.end"#;
 
+type SharedFixture = (
+    Arc<NormalizedProgram>,
+    BTreeMap<String, FunctionIndex>,
+    Arc<crate::platform::kernel::KernelSnapshot>,
+);
+
+fn shared_fixture() -> TestResult<&'static SharedFixture> {
+    static FIXTURE: std::sync::OnceLock<TestResult<SharedFixture>> = std::sync::OnceLock::new();
+    match FIXTURE.get_or_init(build_fixture) {
+        Ok(fixture) => Ok(fixture),
+        Err(error) => Err(error.clone()),
+    }
+}
+
 fn fixture() -> TestResult<(Arc<NormalizedProgram>, BTreeMap<String, FunctionIndex>)> {
+    let (program, functions, _) = shared_fixture()?;
+    Ok((Arc::clone(program), functions.clone()))
+}
+
+fn build_fixture() -> TestResult<SharedFixture> {
     // Build a genuine authored canonical program through the maintained repository
     // APIs; every new fixture setup failure is propagated rather than panicking.
     use crate::platform::persistent_map::{MapContentDigest, MapRoot, PageDigest};
@@ -131,7 +183,7 @@ fn fixture() -> TestResult<(Arc<NormalizedProgram>, BTreeMap<String, FunctionInd
         .map_err(failure)?
         .repository;
     let base = repository.view_current().map_err(failure)?.revision();
-    let input = format!("request base={base}\n{SOURCE}");
+    let input = format!("request base={base}\n{SOURCE}\n{NESTED_SOURCE}\n{CHILD_SOURCE}");
     let decoded = crate::platform::control::decode_compact_change("reuse", input.as_bytes())
         .map_err(|diagnostics| failure(format!("{diagnostics:?}")))?;
     let plan = repository
@@ -144,9 +196,20 @@ fn fixture() -> TestResult<(Arc<NormalizedProgram>, BTreeMap<String, FunctionInd
         .reconstruct_full_oracle()
         .map_err(failure)?
         .value;
-    let program = crate::platform::normalized_lifecycle::prepare_repository(repository)
-        .map_err(failure)?
-        .program;
+    // This fixture has no package dependencies. Exercise ordinary compilation,
+    // linking, strict artifact loading and dense preparation directly; exporting a
+    // package transport would add an unrelated embedded native-planner dependency.
+    let compilation = crate::platform::compiler::build_clean(
+        &repository,
+        crate::platform::compiler::OptimizationPolicy::DeterministicBaseline,
+    )
+    .map_err(failure)?;
+    let linked =
+        crate::platform::compiler::link_artifact(&repository, compilation.manifest_digest, &[])
+            .map_err(failure)?;
+    let loaded =
+        crate::platform::compiler::load_artifact(&linked.artifact.bytes).map_err(failure)?;
+    let program = Arc::new(NormalizedProgram::prepare(loaded).map_err(failure)?);
     let functions = source
         .owners
         .iter()
@@ -164,7 +227,7 @@ fn fixture() -> TestResult<(Arc<NormalizedProgram>, BTreeMap<String, FunctionInd
                 .map(|function| (owner.name.to_string(), function))
         })
         .collect();
-    Ok((program, functions))
+    Ok((program, functions, Arc::new(source)))
 }
 
 fn function(functions: &BTreeMap<String, FunctionIndex>, name: &str) -> TestResult<FunctionIndex> {
@@ -199,7 +262,7 @@ fn callback(program: &NormalizedProgram, step: FunctionIndex) -> TestResult<Chec
     )
 }
 
-fn machine<'a>(
+pub(super) fn machine<'a>(
     program: &'a Arc<NormalizedProgram>,
     executor: &'a StructuredExecutorHandle,
     resources: &'a NormalizedResourceScope,
@@ -221,6 +284,9 @@ fn machine<'a>(
         control,
         remaining_steps: None,
         stack: Vec::new(),
+        call_arguments: Vec::new(),
+        call_type_facts: [None; 32],
+        next_call_type_fact: 0,
         frames: Vec::new(),
         incoming_view_scopes: Vec::new(),
         next_frame: 0,
@@ -753,6 +819,672 @@ fn self_tail_locals_fallback_preserves_application_and_borrow_custody() -> TestR
                     == Some(source),
                 "fallback stripped incoming borrow metadata",
             )?;
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn call_argument_reuse_preserves_results_traps_quotas_and_complete_observations() -> TestResult {
+    let (program, functions) = fixture()?;
+    let count = function(&functions, "count")?;
+    let even = function(&functions, "even")?;
+    let owned = function(&functions, "owned-main")?;
+    let step = function(&functions, "step")?;
+    let mut fresh_buffers = 0;
+    let mut reused_buffers = 0;
+    for (target, input, expected) in [
+        (count, 64, Ok(NormalizedValue::I64(0))),
+        (even, 31, Ok(NormalizedValue::Bool(false))),
+        (owned, 32, Ok(NormalizedValue::I64(137))),
+        (step, i64::MAX, Err("normalized_integer_overflow")),
+    ] {
+        for fuel in [None, Some(17)] {
+            let run = |fresh| {
+                with_call_arguments(fresh, || {
+                    let observer = std::sync::Mutex::new(None);
+                    let result = NormalizedVm::for_test(
+                        &program,
+                        NormalizedRunPolicy {
+                            instruction_steps: fuel,
+                            ..NormalizedRunPolicy::foreground()
+                        },
+                    )
+                    .observing_checked(&observer)
+                    .invoke_entry(
+                        NormalizedEntryPoint::Function(target),
+                        vec![NormalizedValue::I64(input)],
+                        None,
+                        &ExecutionControl::uncancelled(),
+                    )
+                    .map(|(value, _)| value);
+                    Ok::<_, ExecutionError>((
+                        result,
+                        observer
+                            .into_inner()
+                            .map_err(failure)?
+                            .ok_or_else(|| failure("missing observation"))?,
+                    ))
+                })
+            };
+            let (before, (allocations, _)) = run(true);
+            let (after, (growth, reuse)) = run(false);
+            let (before_value, before_work) = before?;
+            let (after_value, after_work) = after?;
+            require(
+                before_value == after_value,
+                "argument storage changed result or refusal",
+            )?;
+            require(
+                before_work == after_work,
+                "argument storage changed semantic work or quota accounting",
+            )?;
+            require(
+                before_work.live_call_frames_after == 0
+                    && before_work.live_handles_after == 0
+                    && before_work.live_locals_after == 0
+                    && before_work.live_operands_after == 0
+                    && before_work.live_transactions_after == 0
+                    && before_work.live_type_bindings_after == 0,
+                "argument storage retained execution custody",
+            )?;
+            if fuel.is_none() {
+                match &expected {
+                    Ok(expected) => {
+                        require(after_value? == *expected, "independent result differs")?
+                    }
+                    Err(code) => require(
+                        after_value.err().is_some_and(|error| error.code == *code),
+                        "independent trap differs",
+                    )?,
+                }
+            }
+            require(
+                growth <= allocations,
+                "reuse increased argument vector growth",
+            )?;
+            fresh_buffers += allocations;
+            reused_buffers += reuse;
+        }
+    }
+    require(
+        fresh_buffers > 200 && reused_buffers > 200,
+        "comparison did not exercise repeated argument transports",
+    )
+}
+
+#[test]
+fn call_argument_buffer_reuses_actual_storage_and_preserves_stack_boundaries() -> TestResult {
+    let (program, functions) = fixture()?;
+    let count = function(&functions, "count")?;
+    let add = function(&functions, "add")?;
+    let executor = crate::platform::runtime::structured::StructuredExecutor::for_test(1);
+    let resources = NormalizedResourceScope::new()?;
+    let control = ExecutionControl::uncancelled();
+    let handle = executor.handle();
+    let mut machine = machine(&program, &handle, &resources, &control)?;
+    machine.call_code(
+        code(&program, count)?,
+        vec![scalar(&program, 0)?],
+        BTreeMap::new(),
+        Some(count),
+        false,
+    )?;
+    machine.push(scalar(&program, 111)?)?;
+    let mut previous = None;
+    for _ in 0..64 {
+        machine.push(scalar(&program, 4)?)?;
+        machine.push(scalar(&program, 9)?)?;
+        let arguments = machine.pop_call_arguments(2)?;
+        let storage = (arguments.as_ptr(), arguments.capacity());
+        if let Some(previous) = previous {
+            require(storage == previous, "call argument storage was replaced")?;
+        }
+        previous = Some(storage);
+        machine.call(add, Arc::from([]), arguments)?;
+        require(
+            machine.pop()?.into_raw() == NormalizedValue::I64(13),
+            "argument order changed",
+        )?;
+        require(
+            machine.call_arguments.is_empty(),
+            "reusable buffer retained a value",
+        )?;
+    }
+    require(
+        machine.pop_call_arguments(2).is_err(),
+        "argument transport crossed its stack boundary",
+    )?;
+    require(
+        machine.pop()?.into_raw() == NormalizedValue::I64(111),
+        "refused pop altered the retained operand",
+    )?;
+    machine.push(CheckedValue::scalar(
+        &program,
+        NormalizedValue::Bool(false),
+    )?)?;
+    machine.push(scalar(&program, 9)?)?;
+    let arguments = machine.pop_call_arguments(2)?;
+    require(
+        machine.call(add, Arc::from([]), arguments).is_err(),
+        "foreign scalar bypassed intrinsic admission",
+    )?;
+    require(
+        machine.call_arguments.is_empty(),
+        "failed intrinsic retained an argument",
+    )?;
+    Ok(())
+}
+
+#[test]
+#[ignore = "matched argument-storage cost control; run explicitly"]
+fn call_argument_storage_cost_control() -> TestResult {
+    let (program, functions) = fixture()?;
+    let target = function(&functions, "count")?;
+    let input = 100_000;
+    let mut observations = Vec::new();
+    for fresh in [true, false] {
+        let started = std::time::Instant::now();
+        let (result, (growths, reuses)) = with_call_arguments(fresh, || {
+            invoke(&program, target, vec![NormalizedValue::I64(input)], false)
+        });
+        let elapsed = started.elapsed();
+        let (value, work) = result?;
+        require(
+            value == NormalizedValue::I64(0),
+            "cost control independent result differs",
+        )?;
+        observations.push(work.clone());
+        println!(
+            "{}",
+            serde_json::json!({
+                "control":"call-argument-storage", "fresh_buffers":fresh, "iterations":input,
+                "elapsed_nanoseconds":elapsed.as_nanos(), "buffer_growths":growths,
+                "buffer_reuses":reuses, "observation":work,
+            })
+        );
+    }
+    require(
+        observations[0] == observations[1],
+        "cost control changed semantic work",
+    )
+}
+
+#[test]
+fn call_template_facts_require_complete_admission_and_poll_cached_reads() -> TestResult {
+    let (program, _) = fixture()?;
+    let scalar = program
+        .types
+        .iter()
+        .find_map(|(ty, object)| matches!(object.form, TypeForm::I64).then_some(*ty))
+        .ok_or_else(|| failure("missing I64 type"))?;
+    let executor = crate::platform::runtime::structured::StructuredExecutor::for_test(1);
+    let resources = NormalizedResourceScope::new()?;
+    let control = ExecutionControl::uncancelled();
+    let handle = executor.handle();
+    let mut machine = machine(&program, &handle, &resources, &control)?;
+    require(
+        !machine.call_type_has_associated(scalar)?,
+        "I64 acquired an associated type occurrence",
+    )?;
+    let facts = machine.call_type_facts;
+    require(
+        facts
+            .iter()
+            .flatten()
+            .any(|(ty, associated)| *ty == scalar && !associated),
+        "complete successful fact was not retained",
+    )?;
+    require(
+        !machine.call_type_has_associated(scalar)? && machine.call_type_facts == facts,
+        "cache hit changed the derived fact",
+    )?;
+    let missing = TypeObjectDigest::from_bytes([0xa7; 32]);
+    require(
+        !program.types.contains_key(&missing),
+        "missing-type test identity exists",
+    )?;
+    require(
+        machine.call_type_has_associated(missing).is_err(),
+        "missing template received a cached fact",
+    )?;
+    require(
+        machine.call_type_facts == facts,
+        "failed admission populated the proof cache",
+    )?;
+    control.cancel();
+    require(
+        machine
+            .call_type_has_associated(scalar)
+            .err()
+            .is_some_and(|error| error.class == ExecutionFailureClass::Cancelled),
+        "cached template bypassed cancellation",
+    )
+}
+
+const NESTED_SOURCE: &str = r#"declarations.begin
+(units (module create nested
+  (type-alias Payload (map I64 (list I64)))
+  (type-alias Packet (owned-product (field cell OwnedI64Cell) (field data Payload) (field tag I64)))
+  (type-alias Values (owned-sequence Payload))
+  (type-alias Replaced (owned-product (field rest Values) (field value Payload)))
+  (type-alias Outcome (owned-choice (case accepted Payload) (case empty OwnedI64Cell)))
+  (external create nested-less (visibility private) (implementation core.i64.less)
+    (parameter create a (type I64)) (parameter create b (type I64)) (returns Bool))
+  (external create nested-subtract (visibility private) (implementation core.i64.subtract)
+    (parameter create a (type I64)) (parameter create b (type I64)) (returns I64))
+  (external create nested-new-cell (visibility private) (implementation core.cell.create)
+    (parameter create n (type I64)) (returns OwnedI64Cell))
+  (external create nested-finish-cell (visibility private) (implementation core.cell.extract)
+    (parameter create cell (type OwnedI64Cell) (use consume)) (returns I64))
+  (function create nested-product-loop (visibility public) (effect pure)
+    (parameter create n (type I64)) (parameter create payload (type Payload)) (returns I64)
+    (body (if (call nested-less (local n) (i64 1)) (i64 0)
+      (let (binding cell (type OwnedI64Cell) (call nested-new-cell (i64 19)))
+        (binding packet (type Packet) (pack-owned (type Packet)
+        (field cell (local cell)) (field data (local payload)) (field tag (local n))))
+        (in (unpack-owned (type Packet) (local packet)
+          (field cell (binding cell (type OwnedI64Cell)))
+          (field data (binding restored (type Payload))) (field tag (binding remaining (type I64)))
+          (in (sequence (call nested-finish-cell (local cell)) (call nested-product-loop (call nested-subtract (local remaining) (i64 1))
+            (local restored))))))))))
+  (function create nested-sequence-loop (visibility private) (effect pure)
+    (parameter create n (type I64)) (parameter create payload (type Payload))
+    (parameter create values (type Values) (use consume)) (returns Values)
+    (body (if (call nested-less (local n) (i64 1)) (local values)
+      (let (binding next (type Values)
+        (sequence-push (type Values) (local payload) (local values)))
+        (in (call nested-sequence-loop (call nested-subtract (local n) (i64 1))
+          (local payload) (local next)))))))
+  (function create nested-sequence-main (visibility public) (effect pure)
+    (parameter create n (type I64)) (parameter create payload (type Payload)) (returns I64)
+    (body (let
+      (binding empty (type Values) (sequence-empty (type Values)))
+      (binding values (type Values) (call nested-sequence-loop (local n) (local payload) (local empty)))
+      (in (sequence-length (type Values) (local values))))))
+  (function create nested-replace (visibility public) (effect pure)
+    (parameter create payload (type Payload)) (parameter create replacement (type Payload)) (returns Payload)
+    (body (let
+      (binding empty (type Values) (sequence-empty (type Values)))
+      (binding values (type Values) (sequence-push (type Values) (local payload) (local empty)))
+      (binding replaced (type Replaced)
+        (sequence-replace (type Values) (index (i64 0)) (local replacement) (local values)))
+      (in (unpack-owned (type Replaced) (local replaced)
+        (field rest (binding rest (type Values))) (field value (binding displaced (type Payload)))
+        (in (sequence (sequence-length (type Values) (local rest)) (local displaced))))))))
+  (function create nested-choice (visibility public) (effect pure)
+    (parameter create payload (type Payload)) (returns I64)
+    (body (let (binding chosen (type Outcome)
+      (choose-owned (type Outcome) (case accepted) (local payload)))
+      (in (match-owned (type Outcome) (local chosen)
+        (case accepted (binding payload (type Payload)) (in (sequence (local payload) (i64 31))))
+        (case empty (binding ignored (type OwnedI64Cell)) (in (i64 -1))))))))))
+declarations.end"#;
+
+const CHILD_SOURCE: &str = r#"declarations.begin
+(units (module create child-controls
+  (record create Alpha (visibility public) (field create tag (type I64)))
+  (record create Beta (visibility public) (field create tag (type I64)))
+  (record create Phantom (visibility public) (type-parameter create T)
+    (field create tag (type I64)))
+  (type-alias BoolChoice (owned-choice (case accepted (list Bool)) (case empty OwnedI64Cell)))
+  (type-alias BetaChoice (owned-choice (case accepted Beta) (case empty OwnedI64Cell)))
+  (type-alias PhantomChoice (owned-choice (case accepted (Phantom Bool)) (case empty OwnedI64Cell)))
+  (function create child-shapes (visibility public) (effect pure)
+    (parameter create ints (type (list I64))) (parameter create bools (type (list Bool)))
+    (parameter create alpha (type Alpha)) (parameter create beta (type Beta))
+    (parameter create phantom-int (type (Phantom I64)))
+    (parameter create phantom-bool (type (Phantom Bool)))
+    (parameter create bool-choice (type BoolChoice) (use borrow))
+    (parameter create beta-choice (type BetaChoice) (use borrow))
+    (parameter create phantom-choice (type PhantomChoice) (use borrow))
+    (returns Unit) (body (unit)))))
+declarations.end"#;
+
+#[test]
+fn checked_owned_child_instruction_refuses_wrong_list_nominal_and_generic_proofs() -> TestResult {
+    let (program, functions) = fixture()?;
+    let target = function(&functions, "child-shapes")?;
+    let parameters = &program.functions[target.0 as usize].parameters;
+    let executor = crate::platform::runtime::structured::StructuredExecutor::for_test(1);
+    let resources = NormalizedResourceScope::new()?;
+    let control = ExecutionControl::uncancelled();
+    let handle = executor.handle();
+    for (source, destination, choice, empty) in [
+        (0, 1, 6, false),
+        (0, 1, 6, true),
+        (2, 3, 7, false),
+        (4, 5, 8, false),
+    ] {
+        let source_type = parameters[source].ty;
+        let expected_type = parameters[destination].ty;
+        let raw = if source == 0 {
+            NormalizedValue::list(if empty {
+                vec![]
+            } else {
+                vec![NormalizedValue::I64(37)]
+            })?
+        } else {
+            let layout = *program
+                .record_instances
+                .get(&source_type)
+                .ok_or_else(|| failure("missing genuine nominal layout"))?;
+            NormalizedValue::Record(NormalizedRecord::Nominal {
+                layout,
+                fields: Arc::new(vec![NormalizedValue::I64(37)]),
+            })
+        };
+        let mut outcomes = Vec::new();
+        for strict in [true, false] {
+            let run = || -> TestResult<_> {
+                let storage = super::super::owned_product::StorageObservation::start();
+                let mut machine = machine(&program, &handle, &resources, &control)?;
+                let admitted = machine.admit(raw.clone(), source_type, None, true)?;
+                require(
+                    strict
+                        || admitted.has_exact_ordinary_type(
+                            &program,
+                            source_type,
+                            &mut machine.observation.value_work,
+                        )?,
+                    "input lacks its genuine exact proof",
+                )?;
+                require(
+                    !admitted.has_exact_ordinary_type(
+                        &program,
+                        expected_type,
+                        &mut machine.observation.value_work,
+                    )?,
+                    "foreign expected type reused an exact proof",
+                )?;
+                // Deliberately substitute a different, genuinely prepared choice
+                // operand into a tiny instruction stream. The production VM must
+                // re-admit the child rather than trust the previous root proof.
+                machine.call_code(
+                    NormalizedCode {
+                        parameter_count: 1,
+                        local_count: 1,
+                        instructions: Arc::from([
+                            NormalizedInstruction::LoadLocal {
+                                local: 0,
+                                use_mode: ParameterUse::Unrestricted,
+                            },
+                            NormalizedInstruction::ChooseOwned {
+                                choice_type: parameters[choice].ty,
+                                case: 0,
+                            },
+                            NormalizedInstruction::Return,
+                        ]),
+                    },
+                    vec![admitted],
+                    BTreeMap::new(),
+                    None,
+                    false,
+                )?;
+                let before = machine.observation.value_work.raw_result_admission_nodes;
+                let result = machine.run();
+                require(
+                    machine.observation.value_work.raw_result_admission_nodes > before,
+                    "mismatched proof bypassed raw fallback admission",
+                )?;
+                let outcome = match result {
+                    Ok(value) => {
+                        require(
+                            empty && matches!(value.raw(), NormalizedValue::OwnedChoice(_)),
+                            "wrong child escaped as an owned choice",
+                        )?;
+                        drop(value);
+                        None
+                    }
+                    Err(error) => {
+                        require(
+                            !empty,
+                            "compatible empty list lost full structural fallback",
+                        )?;
+                        Some((error.class, error.code))
+                    }
+                };
+                drop(machine);
+                require(
+                    storage.live() == (0, 0),
+                    "refused child retained owned storage",
+                )?;
+                Ok(outcome)
+            };
+            outcomes.push(if strict {
+                checked::force_strict_ordinary_children(run)
+            } else {
+                run()
+            }?);
+        }
+        require(
+            outcomes[0] == outcomes[1],
+            "exact proof changed strict instruction refusal",
+        )?;
+    }
+    Ok(())
+}
+
+fn nested_payload(width: i64, length: i64) -> TestResult<NormalizedValue> {
+    let control = ExecutionControl::uncancelled();
+    let mut entries = BTreeMap::new();
+    for key in 0..width {
+        let mut reserve = super::super::value::raw_map_reservation(&control);
+        let list = super::super::list::List::from_items(
+            (0..length)
+                .map(|index| NormalizedValue::I64(key * 100 + index))
+                .collect(),
+            super::super::value::MAXIMUM_ADMISSION_ITEMS,
+            &mut |charge| {
+                reserve(super::super::map::Charge {
+                    slots: charge.slots,
+                    bytes: charge.bytes,
+                })
+            },
+        )?;
+        entries.insert(NormalizedMapKey::I64(key), NormalizedValue::List(list));
+    }
+    let mut reserve = super::super::value::raw_map_reservation(&control);
+    super::super::map::Map::from_items(
+        entries,
+        super::super::value::MAXIMUM_ADMISSION_ITEMS,
+        &mut reserve,
+    )
+    .map(NormalizedValue::Map)
+}
+
+fn nested_run(
+    program: &Arc<NormalizedProgram>,
+    target: FunctionIndex,
+    arguments: Vec<NormalizedValue>,
+    policy: NormalizedRunPolicy,
+    strict: bool,
+) -> TestResult<(
+    Result<NormalizedValue, ExecutionError>,
+    NormalizedRunObservation,
+)> {
+    let run = || {
+        let observer = std::sync::Mutex::new(None);
+        let result = NormalizedVm::for_test(program, policy)
+            .observing_checked(&observer)
+            .invoke_entry(
+                NormalizedEntryPoint::Function(target),
+                arguments,
+                None,
+                &ExecutionControl::uncancelled(),
+            )
+            .map(|(value, _)| value);
+        Ok((
+            result,
+            observer
+                .into_inner()
+                .map_err(failure)?
+                .ok_or_else(|| failure("missing nested observation"))?,
+        ))
+    };
+    if strict {
+        checked::force_strict_ordinary_children(run)
+    } else {
+        run()
+    }
+}
+
+#[test]
+fn checked_owned_children_preserve_nested_data_reference_results_quotas_and_cleanup() -> TestResult
+{
+    let (program, functions, source) = shared_fixture()?;
+    let payload = nested_payload(8, 16)?;
+    for name in [
+        "nested-product-loop",
+        "nested-sequence-main",
+        "nested-replace",
+        "nested-choice",
+    ] {
+        let target = function(functions, name)?;
+        let (arguments, expected) = match name {
+            "nested-replace" => (
+                vec![payload.clone(), nested_payload(2, 3)?],
+                payload.clone(),
+            ),
+            "nested-choice" => (vec![payload.clone()], NormalizedValue::I64(31)),
+            "nested-product-loop" => (
+                vec![NormalizedValue::I64(3), payload.clone()],
+                NormalizedValue::I64(0),
+            ),
+            _ => (
+                vec![NormalizedValue::I64(3), payload.clone()],
+                NormalizedValue::I64(3),
+            ),
+        };
+        let mut retained = None;
+        for strict in [true, false] {
+            let (result, work) = nested_run(
+                program,
+                target,
+                arguments.clone(),
+                NormalizedRunPolicy::foreground(),
+                strict,
+            )?;
+            require(
+                result? == expected,
+                "checked child changed independent nested result",
+            )?;
+            require(
+                work.live_call_frames_after
+                    + work.live_handles_after
+                    + work.live_locals_after
+                    + work.live_operands_after
+                    + work.live_transactions_after
+                    + work.live_type_bindings_after
+                    == 0,
+                "checked child retained custody",
+            )?;
+            if let Some(before) = retained {
+                let before: NormalizedRunObservation = before;
+                require(
+                    before.instructions == work.instructions
+                        && before.calls == work.calls
+                        && before.tail_transfers == work.tail_transfers
+                        && before.capability_calls == work.capability_calls,
+                    "checked child changed language execution",
+                )?;
+                require(
+                    work.value_work.raw_result_admission_nodes
+                        < before.value_work.raw_result_admission_nodes,
+                    "nested fixture did not remove repeated subtree admission",
+                )?;
+            }
+            retained = Some(work.clone());
+            let (refused, stopped) = nested_run(
+                program,
+                target,
+                arguments.clone(),
+                NormalizedRunPolicy {
+                    instruction_steps: Some(1),
+                    ..NormalizedRunPolicy::foreground()
+                },
+                strict,
+            )?;
+            require(
+                refused
+                    .err()
+                    .is_some_and(|error| error.code == "normalized_instruction_steps"),
+                "finite instruction refusal changed",
+            )?;
+            require(
+                stopped.live_call_frames_after
+                    + stopped.live_handles_after
+                    + stopped.live_locals_after
+                    + stopped.live_operands_after
+                    == 0,
+                "quota exit retained checked child custody",
+            )?;
+        }
+        let reference = super::super::reference::NormalizedReferenceInterpreter::new(
+            source,
+            program,
+            NormalizedRunPolicy::foreground(),
+        )
+        .invoke(
+            program.functions[target.0 as usize].declaration,
+            arguments,
+            None,
+            &ExecutionControl::uncancelled(),
+        )?;
+        require(
+            reference.0 == expected,
+            "independent source reference differs",
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+#[ignore = "matched nested ordinary-child admission cost control; run explicitly"]
+fn checked_owned_children_nested_cost_control() -> TestResult {
+    let (program, functions, _) = shared_fixture()?;
+    let payload = nested_payload(128, 32)?;
+    for name in ["nested-product-loop", "nested-sequence-main"] {
+        let target = function(functions, name)?;
+        let mut before: Option<NormalizedRunObservation> = None;
+        for strict in [true, false] {
+            let started = std::time::Instant::now();
+            let (result, work) = nested_run(
+                program,
+                target,
+                vec![NormalizedValue::I64(256), payload.clone()],
+                NormalizedRunPolicy::foreground(),
+                strict,
+            )?;
+            let elapsed = started.elapsed();
+            require(
+                result?
+                    == NormalizedValue::I64(if name == "nested-product-loop" {
+                        0
+                    } else {
+                        256
+                    }),
+                "nested cost independent answer differs",
+            )?;
+            if let Some(before) = &before {
+                require(
+                    before.instructions == work.instructions
+                        && before.calls == work.calls
+                        && before.tail_transfers == work.tail_transfers
+                        && before.capability_calls == work.capability_calls,
+                    "nested cost execution changed",
+                )?;
+                require(
+                    work.value_work.raw_result_admission_nodes
+                        < before.value_work.raw_result_admission_nodes,
+                    "nested cost did not reuse sealed evidence",
+                )?;
+            }
+            println!(
+                "{}",
+                serde_json::json!({"control":"checked-owned-children", "target":name, "strict_admission":strict, "iterations":256, "map_entries":128, "list_items":32, "elapsed_nanoseconds":elapsed.as_nanos(), "observation":work})
+            );
+            before = Some(work);
         }
     }
     Ok(())

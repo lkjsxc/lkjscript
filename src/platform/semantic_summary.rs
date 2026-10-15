@@ -37,7 +37,7 @@ pub const MAXIMUM_MODULE_SUMMARY_ENCODED_BYTES: usize =
     MAXIMUM_MODULE_SUMMARY_PAYLOAD_BYTES + PACKED_ENVELOPE_BYTES;
 const MAXIMUM_SUMMARY_DECLARATIONS: usize = 100_000;
 const MAXIMUM_SUMMARY_DEPENDENCIES: usize = 2_000_000;
-const PACKED_ENVELOPE_BYTES: usize = 8 + 2 + 8 + 32;
+const PACKED_ENVELOPE_BYTES: usize = packed::CANONICAL_HEADER_BYTES + 32;
 
 #[derive(
     Decode, Encode, Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize,
@@ -974,7 +974,7 @@ mod tests {
         );
 
         let mut corrupt = bytes.clone();
-        corrupt[20] ^= 1;
+        corrupt[packed::CANONICAL_HEADER_BYTES] ^= 1;
         assert_eq!(
             ModuleSemanticSummary::decode(&corrupt)
                 .expect_err("checksum")
@@ -1008,8 +1008,8 @@ mod tests {
 
         let mut hostile = vec![0_u8; PACKED_ENVELOPE_BYTES];
         hostile[..8].copy_from_slice(&SUMMARY_MAGIC);
-        hostile[8..10].copy_from_slice(&packed::PACKED_ENVELOPE_VERSION.to_le_bytes());
-        hostile[10..18].copy_from_slice(
+        hostile[8..40].copy_from_slice(&crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH);
+        hostile[40..48].copy_from_slice(
             &(u64::try_from(MAXIMUM_MODULE_SUMMARY_PAYLOAD_BYTES).expect("limit") + 1)
                 .to_le_bytes(),
         );

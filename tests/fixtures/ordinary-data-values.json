@@ -1,0 +1,2484 @@
+{
+  "projects": [
+    {
+      "package_name": "standard",
+      "project": "packages/standard",
+      "artifact": "packages/standard/generated/standard.lkja",
+      "samples": [
+        {
+          "type": {
+            "kind": "list",
+            "item": {
+              "kind": "structural_record",
+              "fields": [
+                {
+                  "name": "attempt_count",
+                  "ty": {
+                    "kind": "i64"
+                  }
+                },
+                {
+                  "name": "available_at_milliseconds",
+                  "ty": {
+                    "kind": "i64"
+                  }
+                },
+                {
+                  "name": "job_id",
+                  "ty": {
+                    "kind": "text"
+                  }
+                },
+                {
+                  "name": "last_error_class",
+                  "ty": {
+                    "kind": "text"
+                  }
+                },
+                {
+                  "name": "lease_until_milliseconds",
+                  "ty": {
+                    "kind": "i64"
+                  }
+                },
+                {
+                  "name": "result",
+                  "ty": {
+                    "kind": "bytes"
+                  }
+                },
+                {
+                  "name": "state",
+                  "ty": {
+                    "kind": "text"
+                  }
+                }
+              ]
+            }
+          },
+          "payload": "00000002000000000000002a000000000000002a0000000c62696e64696e672d646174610000000c62696e64696e672d64617461000000000000002a000000030001ff0000000c62696e64696e672d64617461000000000000002a000000000000002a0000000c62696e64696e672d646174610000000c62696e64696e672d64617461000000000000002a000000030001ff0000000c62696e64696e672d64617461",
+          "value": [
+            {
+              "attempt_count": 42,
+              "available_at_milliseconds": 42,
+              "job_id": "binding-data",
+              "last_error_class": "binding-data",
+              "lease_until_milliseconds": 42,
+              "result": {
+                "$bytes": "AAH/"
+              },
+              "state": "binding-data"
+            },
+            {
+              "attempt_count": 42,
+              "available_at_milliseconds": 42,
+              "job_id": "binding-data",
+              "last_error_class": "binding-data",
+              "lease_until_milliseconds": 42,
+              "result": {
+                "$bytes": "AAH/"
+              },
+              "state": "binding-data"
+            }
+          ]
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_388aa498465975c5de5d579e6230a28a"
+            }
+          },
+          "payload": "00000000",
+          "value": {
+            "case": "Missing"
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_6001d0ce7a98e82819ac98f1f20dd3bb"
+            }
+          },
+          "payload": "00000002000000030001ff000000030001ff0000000200000000000000030001ff00000000000000030001ff000000030001ff000000030001ff0000000200000000000000030001ff00000000000000030001ff000000030001ff000000000000002a000000000000002a",
+          "value": {
+            "bytes": 42,
+            "continuation": {
+              "$bytes": "AAH/"
+            },
+            "items": [
+              {
+                "key": [
+                  {
+                    "case": "Bytes",
+                    "value": {
+                      "$bytes": "AAH/"
+                    }
+                  },
+                  {
+                    "case": "Bytes",
+                    "value": {
+                      "$bytes": "AAH/"
+                    }
+                  }
+                ],
+                "revision": {
+                  "$bytes": "AAH/"
+                },
+                "value": {
+                  "$bytes": "AAH/"
+                }
+              },
+              {
+                "key": [
+                  {
+                    "case": "Bytes",
+                    "value": {
+                      "$bytes": "AAH/"
+                    }
+                  },
+                  {
+                    "case": "Bytes",
+                    "value": {
+                      "$bytes": "AAH/"
+                    }
+                  }
+                ],
+                "revision": {
+                  "$bytes": "AAH/"
+                },
+                "value": {
+                  "$bytes": "AAH/"
+                }
+              }
+            ],
+            "work": 42
+          }
+        },
+        {
+          "type": {
+            "kind": "structural_record",
+            "fields": [
+              {
+                "name": "etag",
+                "ty": {
+                  "kind": "text"
+                }
+              },
+              {
+                "name": "key",
+                "ty": {
+                  "kind": "text"
+                }
+              },
+              {
+                "name": "modified_milliseconds",
+                "ty": {
+                  "kind": "i64"
+                }
+              },
+              {
+                "name": "size",
+                "ty": {
+                  "kind": "i64"
+                }
+              },
+              {
+                "name": "version",
+                "ty": {
+                  "kind": "text"
+                }
+              }
+            ]
+          },
+          "payload": "0000000c62696e64696e672d646174610000000c62696e64696e672d64617461000000000000002a000000000000002a0000000c62696e64696e672d64617461",
+          "value": {
+            "etag": "binding-data",
+            "key": "binding-data",
+            "modified_milliseconds": 42,
+            "size": 42,
+            "version": "binding-data"
+          }
+        },
+        {
+          "type": {
+            "kind": "i64"
+          },
+          "payload": "000000000000002a",
+          "value": 42
+        },
+        {
+          "type": {
+            "kind": "structural_record",
+            "fields": [
+              {
+                "name": "name",
+                "ty": {
+                  "kind": "text"
+                }
+              },
+              {
+                "name": "value",
+                "ty": {
+                  "kind": "bytes"
+                }
+              }
+            ]
+          },
+          "payload": "0000000c62696e64696e672d64617461000000030001ff",
+          "value": {
+            "name": "binding-data",
+            "value": {
+              "$bytes": "AAH/"
+            }
+          }
+        },
+        {
+          "type": {
+            "kind": "list",
+            "item": {
+              "kind": "named",
+              "declaration": {
+                "package": "pkg_10000000000000000000000000000001",
+                "declaration": "decl_14b03b7e7e25e1cf4bd5a5e3932e73ab"
+              }
+            }
+          },
+          "payload": "0000000200000000000000030001ff00000000000000030001ff",
+          "value": [
+            {
+              "case": "Bytes",
+              "value": {
+                "$bytes": "AAH/"
+              }
+            },
+            {
+              "case": "Bytes",
+              "value": {
+                "$bytes": "AAH/"
+              }
+            }
+          ]
+        },
+        {
+          "type": {
+            "kind": "list",
+            "item": {
+              "kind": "text"
+            }
+          },
+          "payload": "000000020000000c62696e64696e672d646174610000000c62696e64696e672d64617461",
+          "value": [
+            "binding-data",
+            "binding-data"
+          ]
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_6d1f5b65509eaf66c1fcd9383ab62f38"
+            }
+          },
+          "payload": "00000000",
+          "value": {
+            "case": "binary"
+          }
+        },
+        {
+          "type": {
+            "kind": "list",
+            "item": {
+              "kind": "named",
+              "declaration": {
+                "package": "pkg_10000000000000000000000000000001",
+                "declaration": "decl_5ad011a7306a7a1da03f982c3d96318c"
+              }
+            }
+          },
+          "payload": "000000020000000c62696e64696e672d64617461000000030001ff0000000c62696e64696e672d64617461000000030001ff",
+          "value": [
+            {
+              "digest": {
+                "$bytes": "AAH/"
+              },
+              "identity": "binding-data"
+            },
+            {
+              "digest": {
+                "$bytes": "AAH/"
+              },
+              "identity": "binding-data"
+            }
+          ]
+        },
+        {
+          "type": {
+            "kind": "list",
+            "item": {
+              "kind": "structural_record",
+              "fields": [
+                {
+                  "name": "name",
+                  "ty": {
+                    "kind": "text"
+                  }
+                },
+                {
+                  "name": "value",
+                  "ty": {
+                    "kind": "bytes"
+                  }
+                }
+              ]
+            }
+          },
+          "payload": "000000020000000c62696e64696e672d64617461000000030001ff0000000c62696e64696e672d64617461000000030001ff",
+          "value": [
+            {
+              "name": "binding-data",
+              "value": {
+                "$bytes": "AAH/"
+              }
+            },
+            {
+              "name": "binding-data",
+              "value": {
+                "$bytes": "AAH/"
+              }
+            }
+          ]
+        },
+        {
+          "type": {
+            "kind": "structural_record",
+            "fields": [
+              {
+                "name": "attempt_count",
+                "ty": {
+                  "kind": "i64"
+                }
+              },
+              {
+                "name": "available_at_milliseconds",
+                "ty": {
+                  "kind": "i64"
+                }
+              },
+              {
+                "name": "job_id",
+                "ty": {
+                  "kind": "text"
+                }
+              },
+              {
+                "name": "last_error_class",
+                "ty": {
+                  "kind": "text"
+                }
+              },
+              {
+                "name": "lease_until_milliseconds",
+                "ty": {
+                  "kind": "i64"
+                }
+              },
+              {
+                "name": "result",
+                "ty": {
+                  "kind": "bytes"
+                }
+              },
+              {
+                "name": "state",
+                "ty": {
+                  "kind": "text"
+                }
+              }
+            ]
+          },
+          "payload": "000000000000002a000000000000002a0000000c62696e64696e672d646174610000000c62696e64696e672d64617461000000000000002a000000030001ff0000000c62696e64696e672d64617461",
+          "value": {
+            "attempt_count": 42,
+            "available_at_milliseconds": 42,
+            "job_id": "binding-data",
+            "last_error_class": "binding-data",
+            "lease_until_milliseconds": 42,
+            "result": {
+              "$bytes": "AAH/"
+            },
+            "state": "binding-data"
+          }
+        },
+        {
+          "type": {
+            "kind": "structural_record",
+            "fields": [
+              {
+                "name": "chunk",
+                "ty": {
+                  "kind": "bytes"
+                }
+              },
+              {
+                "name": "done",
+                "ty": {
+                  "kind": "bool"
+                }
+              }
+            ]
+          },
+          "payload": "000000030001ff01",
+          "value": {
+            "chunk": {
+              "$bytes": "AAH/"
+            },
+            "done": true
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_6e5c5a9bb5bc737a12f9cc5f17b38f05"
+            }
+          },
+          "payload": "00000000",
+          "value": {
+            "case": "Forward"
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_14b03b7e7e25e1cf4bd5a5e3932e73ab"
+            }
+          },
+          "payload": "00000000000000030001ff",
+          "value": {
+            "case": "Bytes",
+            "value": {
+              "$bytes": "AAH/"
+            }
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_0159d5a184fab62b8047bd131b310d23"
+            }
+          },
+          "payload": "000000000000002a000000000000002a0000000c62696e64696e672d64617461000000030001ff",
+          "value": {
+            "attempt-number": 42,
+            "job-id": "binding-data",
+            "lease-until-milliseconds": 42,
+            "payload": {
+              "$bytes": "AAH/"
+            }
+          }
+        },
+        {
+          "type": {
+            "kind": "list",
+            "item": {
+              "kind": "named",
+              "declaration": {
+                "package": "pkg_10000000000000000000000000000001",
+                "declaration": "decl_badded042ccbe02746dabbd6d42429ab"
+              }
+            }
+          },
+          "payload": "00000002000000030001ff000000030001ff0000000200000000000000030001ff00000000000000030001ff000000030001ff000000030001ff0000000200000000000000030001ff00000000000000030001ff",
+          "value": [
+            {
+              "key": [
+                {
+                  "case": "Bytes",
+                  "value": {
+                    "$bytes": "AAH/"
+                  }
+                },
+                {
+                  "case": "Bytes",
+                  "value": {
+                    "$bytes": "AAH/"
+                  }
+                }
+              ],
+              "revision": {
+                "$bytes": "AAH/"
+              },
+              "value": {
+                "$bytes": "AAH/"
+              }
+            },
+            {
+              "key": [
+                {
+                  "case": "Bytes",
+                  "value": {
+                    "$bytes": "AAH/"
+                  }
+                },
+                {
+                  "case": "Bytes",
+                  "value": {
+                    "$bytes": "AAH/"
+                  }
+                }
+              ],
+              "revision": {
+                "$bytes": "AAH/"
+              },
+              "value": {
+                "$bytes": "AAH/"
+              }
+            }
+          ]
+        },
+        {
+          "type": {
+            "kind": "structural_record",
+            "fields": [
+              {
+                "name": "blake3",
+                "ty": {
+                  "kind": "text"
+                }
+              },
+              {
+                "name": "cleanup_pending",
+                "ty": {
+                  "kind": "bool"
+                }
+              },
+              {
+                "name": "key",
+                "ty": {
+                  "kind": "text"
+                }
+              },
+              {
+                "name": "size",
+                "ty": {
+                  "kind": "i64"
+                }
+              },
+              {
+                "name": "version",
+                "ty": {
+                  "kind": "text"
+                }
+              }
+            ]
+          },
+          "payload": "0000000c62696e64696e672d64617461010000000c62696e64696e672d64617461000000000000002a0000000c62696e64696e672d64617461",
+          "value": {
+            "blake3": "binding-data",
+            "cleanup_pending": true,
+            "key": "binding-data",
+            "size": 42,
+            "version": "binding-data"
+          }
+        },
+        {
+          "type": {
+            "kind": "list",
+            "item": {
+              "kind": "named",
+              "declaration": {
+                "package": "pkg_10000000000000000000000000000001",
+                "declaration": "decl_8b2cf37fae3bc1fd3cdd43367ac5b3e6"
+              }
+            }
+          },
+          "payload": "00000002000000030001ff000000030001ff000000030001ff000000030001ff",
+          "value": [
+            {
+              "revision": {
+                "$bytes": "AAH/"
+              },
+              "value": {
+                "$bytes": "AAH/"
+              }
+            },
+            {
+              "revision": {
+                "$bytes": "AAH/"
+              },
+              "value": {
+                "$bytes": "AAH/"
+              }
+            }
+          ]
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_5bc130a0a18c56cb0000a2e20cfbbc60"
+            }
+          },
+          "payload": "000000000000000c62696e64696e672d64617461000000030001ff",
+          "value": {
+            "case": "Exact",
+            "value": {
+              "digest": {
+                "$bytes": "AAH/"
+              },
+              "identity": "binding-data"
+            }
+          }
+        },
+        {
+          "type": {
+            "kind": "structural_record",
+            "fields": [
+              {
+                "name": "valid",
+                "ty": {
+                  "kind": "bool"
+                }
+              },
+              {
+                "name": "value",
+                "ty": {
+                  "kind": "i64"
+                }
+              }
+            ]
+          },
+          "payload": "01000000000000002a",
+          "value": {
+            "valid": true,
+            "value": 42
+          }
+        },
+        {
+          "type": {
+            "kind": "bytes"
+          },
+          "payload": "000000030001ff",
+          "value": {
+            "$bytes": "AAH/"
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_8b2cf37fae3bc1fd3cdd43367ac5b3e6"
+            }
+          },
+          "payload": "000000030001ff000000030001ff",
+          "value": {
+            "revision": {
+              "$bytes": "AAH/"
+            },
+            "value": {
+              "$bytes": "AAH/"
+            }
+          }
+        },
+        {
+          "type": {
+            "kind": "text"
+          },
+          "payload": "0000000c62696e64696e672d64617461",
+          "value": "binding-data"
+        },
+        {
+          "type": {
+            "kind": "structural_record",
+            "fields": [
+              {
+                "name": "key",
+                "ty": {
+                  "kind": "text"
+                }
+              },
+              {
+                "name": "value",
+                "ty": {
+                  "kind": "i64"
+                }
+              }
+            ]
+          },
+          "payload": "0000000c62696e64696e672d64617461000000000000002a",
+          "value": {
+            "key": "binding-data",
+            "value": 42
+          }
+        },
+        {
+          "type": {
+            "kind": "structural_record",
+            "fields": [
+              {
+                "name": "headers",
+                "ty": {
+                  "kind": "list",
+                  "item": {
+                    "kind": "structural_record",
+                    "fields": [
+                      {
+                        "name": "name",
+                        "ty": {
+                          "kind": "text"
+                        }
+                      },
+                      {
+                        "name": "value",
+                        "ty": {
+                          "kind": "bytes"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "name": "path",
+                "ty": {
+                  "kind": "text"
+                }
+              },
+              {
+                "name": "query",
+                "ty": {
+                  "kind": "text"
+                }
+              }
+            ]
+          },
+          "payload": "000000020000000c62696e64696e672d64617461000000030001ff0000000c62696e64696e672d64617461000000030001ff0000000c62696e64696e672d646174610000000c62696e64696e672d64617461",
+          "value": {
+            "headers": [
+              {
+                "name": "binding-data",
+                "value": {
+                  "$bytes": "AAH/"
+                }
+              },
+              {
+                "name": "binding-data",
+                "value": {
+                  "$bytes": "AAH/"
+                }
+              }
+            ],
+            "path": "binding-data",
+            "query": "binding-data"
+          }
+        },
+        {
+          "type": {
+            "kind": "list",
+            "item": {
+              "kind": "structural_record",
+              "fields": [
+                {
+                  "name": "blake3",
+                  "ty": {
+                    "kind": "text"
+                  }
+                },
+                {
+                  "name": "cleanup_pending",
+                  "ty": {
+                    "kind": "bool"
+                  }
+                },
+                {
+                  "name": "key",
+                  "ty": {
+                    "kind": "text"
+                  }
+                },
+                {
+                  "name": "size",
+                  "ty": {
+                    "kind": "i64"
+                  }
+                },
+                {
+                  "name": "version",
+                  "ty": {
+                    "kind": "text"
+                  }
+                }
+              ]
+            }
+          },
+          "payload": "000000020000000c62696e64696e672d64617461010000000c62696e64696e672d64617461000000000000002a0000000c62696e64696e672d646174610000000c62696e64696e672d64617461010000000c62696e64696e672d64617461000000000000002a0000000c62696e64696e672d64617461",
+          "value": [
+            {
+              "blake3": "binding-data",
+              "cleanup_pending": true,
+              "key": "binding-data",
+              "size": 42,
+              "version": "binding-data"
+            },
+            {
+              "blake3": "binding-data",
+              "cleanup_pending": true,
+              "key": "binding-data",
+              "size": 42,
+              "version": "binding-data"
+            }
+          ]
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_badded042ccbe02746dabbd6d42429ab"
+            }
+          },
+          "payload": "000000030001ff000000030001ff0000000200000000000000030001ff00000000000000030001ff",
+          "value": {
+            "key": [
+              {
+                "case": "Bytes",
+                "value": {
+                  "$bytes": "AAH/"
+                }
+              },
+              {
+                "case": "Bytes",
+                "value": {
+                  "$bytes": "AAH/"
+                }
+              }
+            ],
+            "revision": {
+              "$bytes": "AAH/"
+            },
+            "value": {
+              "$bytes": "AAH/"
+            }
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_5ad011a7306a7a1da03f982c3d96318c"
+            }
+          },
+          "payload": "0000000c62696e64696e672d64617461000000030001ff",
+          "value": {
+            "digest": {
+              "$bytes": "AAH/"
+            },
+            "identity": "binding-data"
+          }
+        },
+        {
+          "type": {
+            "kind": "bool"
+          },
+          "payload": "01",
+          "value": true
+        },
+        {
+          "type": {
+            "kind": "structural_record",
+            "fields": [
+              {
+                "name": "body",
+                "ty": {
+                  "kind": "bytes"
+                }
+              },
+              {
+                "name": "headers",
+                "ty": {
+                  "kind": "list",
+                  "item": {
+                    "kind": "structural_record",
+                    "fields": [
+                      {
+                        "name": "name",
+                        "ty": {
+                          "kind": "text"
+                        }
+                      },
+                      {
+                        "name": "value",
+                        "ty": {
+                          "kind": "bytes"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "name": "status",
+                "ty": {
+                  "kind": "i64"
+                }
+              }
+            ]
+          },
+          "payload": "000000030001ff000000020000000c62696e64696e672d64617461000000030001ff0000000c62696e64696e672d64617461000000030001ff000000000000002a",
+          "value": {
+            "body": {
+              "$bytes": "AAH/"
+            },
+            "headers": [
+              {
+                "name": "binding-data",
+                "value": {
+                  "$bytes": "AAH/"
+                }
+              },
+              {
+                "name": "binding-data",
+                "value": {
+                  "$bytes": "AAH/"
+                }
+              }
+            ],
+            "status": 42
+          }
+        },
+        {
+          "type": {
+            "kind": "unit"
+          },
+          "payload": "",
+          "value": null
+        }
+      ]
+    },
+    {
+      "package_name": "lkjournal",
+      "project": "applications/lkjournal",
+      "artifact": "applications/lkjournal/generated/lkjournal.lkja",
+      "samples": [
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_20000000000000000000000000000001",
+              "declaration": "decl_2bba5890266bcfd98bae3791548f52d2"
+            }
+          },
+          "payload": "000000000000002a0000000c62696e64696e672d646174610000000c62696e64696e672d646174610000000c62696e64696e672d64617461000000000000002a0000000c62696e64696e672d64617461",
+          "value": {
+            "created-at-ms": 42,
+            "digest": "binding-data",
+            "key": "binding-data",
+            "owner": "binding-data",
+            "size": 42,
+            "state": "binding-data"
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_20000000000000000000000000000001",
+              "declaration": "decl_c1d0588679314656007b983718a58099"
+            }
+          },
+          "payload": "0000000c62696e64696e672d64617461000000000000002a0000000c62696e64696e672d646174610000000c62696e64696e672d646174610000000c62696e64696e672d64617461",
+          "value": {
+            "kind": "binding-data",
+            "resource": {
+              "id": "binding-data",
+              "revision": 42,
+              "title": "binding-data"
+            },
+            "subscription": "binding-data"
+          }
+        },
+        {
+          "type": {
+            "kind": "list",
+            "item": {
+              "kind": "structural_record",
+              "fields": [
+                {
+                  "name": "attempt_count",
+                  "ty": {
+                    "kind": "i64"
+                  }
+                },
+                {
+                  "name": "available_at_milliseconds",
+                  "ty": {
+                    "kind": "i64"
+                  }
+                },
+                {
+                  "name": "job_id",
+                  "ty": {
+                    "kind": "text"
+                  }
+                },
+                {
+                  "name": "last_error_class",
+                  "ty": {
+                    "kind": "text"
+                  }
+                },
+                {
+                  "name": "lease_until_milliseconds",
+                  "ty": {
+                    "kind": "i64"
+                  }
+                },
+                {
+                  "name": "result",
+                  "ty": {
+                    "kind": "bytes"
+                  }
+                },
+                {
+                  "name": "state",
+                  "ty": {
+                    "kind": "text"
+                  }
+                }
+              ]
+            }
+          },
+          "payload": "00000002000000000000002a000000000000002a0000000c62696e64696e672d646174610000000c62696e64696e672d64617461000000000000002a000000030001ff0000000c62696e64696e672d64617461000000000000002a000000000000002a0000000c62696e64696e672d646174610000000c62696e64696e672d64617461000000000000002a000000030001ff0000000c62696e64696e672d64617461",
+          "value": [
+            {
+              "attempt_count": 42,
+              "available_at_milliseconds": 42,
+              "job_id": "binding-data",
+              "last_error_class": "binding-data",
+              "lease_until_milliseconds": 42,
+              "result": {
+                "$bytes": "AAH/"
+              },
+              "state": "binding-data"
+            },
+            {
+              "attempt_count": 42,
+              "available_at_milliseconds": 42,
+              "job_id": "binding-data",
+              "last_error_class": "binding-data",
+              "lease_until_milliseconds": 42,
+              "result": {
+                "$bytes": "AAH/"
+              },
+              "state": "binding-data"
+            }
+          ]
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_388aa498465975c5de5d579e6230a28a"
+            }
+          },
+          "payload": "00000000",
+          "value": {
+            "case": "Missing"
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_6001d0ce7a98e82819ac98f1f20dd3bb"
+            }
+          },
+          "payload": "00000002000000030001ff000000030001ff0000000200000000000000030001ff00000000000000030001ff000000030001ff000000030001ff0000000200000000000000030001ff00000000000000030001ff000000030001ff000000000000002a000000000000002a",
+          "value": {
+            "bytes": 42,
+            "continuation": {
+              "$bytes": "AAH/"
+            },
+            "items": [
+              {
+                "key": [
+                  {
+                    "case": "Bytes",
+                    "value": {
+                      "$bytes": "AAH/"
+                    }
+                  },
+                  {
+                    "case": "Bytes",
+                    "value": {
+                      "$bytes": "AAH/"
+                    }
+                  }
+                ],
+                "revision": {
+                  "$bytes": "AAH/"
+                },
+                "value": {
+                  "$bytes": "AAH/"
+                }
+              },
+              {
+                "key": [
+                  {
+                    "case": "Bytes",
+                    "value": {
+                      "$bytes": "AAH/"
+                    }
+                  },
+                  {
+                    "case": "Bytes",
+                    "value": {
+                      "$bytes": "AAH/"
+                    }
+                  }
+                ],
+                "revision": {
+                  "$bytes": "AAH/"
+                },
+                "value": {
+                  "$bytes": "AAH/"
+                }
+              }
+            ],
+            "work": 42
+          }
+        },
+        {
+          "type": {
+            "kind": "structural_record",
+            "fields": [
+              {
+                "name": "etag",
+                "ty": {
+                  "kind": "text"
+                }
+              },
+              {
+                "name": "key",
+                "ty": {
+                  "kind": "text"
+                }
+              },
+              {
+                "name": "modified_milliseconds",
+                "ty": {
+                  "kind": "i64"
+                }
+              },
+              {
+                "name": "size",
+                "ty": {
+                  "kind": "i64"
+                }
+              },
+              {
+                "name": "version",
+                "ty": {
+                  "kind": "text"
+                }
+              }
+            ]
+          },
+          "payload": "0000000c62696e64696e672d646174610000000c62696e64696e672d64617461000000000000002a000000000000002a0000000c62696e64696e672d64617461",
+          "value": {
+            "etag": "binding-data",
+            "key": "binding-data",
+            "modified_milliseconds": 42,
+            "size": 42,
+            "version": "binding-data"
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_20000000000000000000000000000001",
+              "declaration": "decl_afaded659c4320a08a3f06e8e7233400"
+            }
+          },
+          "payload": "0000000c62696e64696e672d646174610000000c62696e64696e672d64617461000000000000002a",
+          "value": {
+            "body": "binding-data",
+            "revision": 42,
+            "title": "binding-data"
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_20000000000000000000000000000001",
+              "declaration": "decl_fac7e1aad6e6d18f9d8e418b9017a0f6"
+            }
+          },
+          "payload": "0000000c62696e64696e672d64617461000000000000002a0000000c62696e64696e672d64617461",
+          "value": {
+            "id": "binding-data",
+            "revision": 42,
+            "title": "binding-data"
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_effe692dc8cecc3b5dafaec348b5622e"
+            }
+          },
+          "payload": "000000000000000c62696e64696e672d64617461",
+          "value": {
+            "case": "text",
+            "value": "binding-data"
+          }
+        },
+        {
+          "type": {
+            "kind": "i64"
+          },
+          "payload": "000000000000002a",
+          "value": 42
+        },
+        {
+          "type": {
+            "kind": "structural_record",
+            "fields": [
+              {
+                "name": "name",
+                "ty": {
+                  "kind": "text"
+                }
+              },
+              {
+                "name": "value",
+                "ty": {
+                  "kind": "bytes"
+                }
+              }
+            ]
+          },
+          "payload": "0000000c62696e64696e672d64617461000000030001ff",
+          "value": {
+            "name": "binding-data",
+            "value": {
+              "$bytes": "AAH/"
+            }
+          }
+        },
+        {
+          "type": {
+            "kind": "list",
+            "item": {
+              "kind": "named",
+              "declaration": {
+                "package": "pkg_20000000000000000000000000000001",
+                "declaration": "decl_afaded659c4320a08a3f06e8e7233400"
+              }
+            }
+          },
+          "payload": "000000020000000c62696e64696e672d646174610000000c62696e64696e672d64617461000000000000002a0000000c62696e64696e672d646174610000000c62696e64696e672d64617461000000000000002a",
+          "value": [
+            {
+              "body": "binding-data",
+              "revision": 42,
+              "title": "binding-data"
+            },
+            {
+              "body": "binding-data",
+              "revision": 42,
+              "title": "binding-data"
+            }
+          ]
+        },
+        {
+          "type": {
+            "kind": "list",
+            "item": {
+              "kind": "named",
+              "declaration": {
+                "package": "pkg_10000000000000000000000000000001",
+                "declaration": "decl_14b03b7e7e25e1cf4bd5a5e3932e73ab"
+              }
+            }
+          },
+          "payload": "0000000200000000000000030001ff00000000000000030001ff",
+          "value": [
+            {
+              "case": "Bytes",
+              "value": {
+                "$bytes": "AAH/"
+              }
+            },
+            {
+              "case": "Bytes",
+              "value": {
+                "$bytes": "AAH/"
+              }
+            }
+          ]
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_20000000000000000000000000000001",
+              "declaration": "decl_9490403d5c55d089f5ef01788d5b936d"
+            }
+          },
+          "payload": "01000000000000002a0000000c62696e64696e672d64617461",
+          "value": {
+            "id": "binding-data",
+            "job_enqueued": true,
+            "revision": 42
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_20000000000000000000000000000001",
+              "declaration": "decl_4de9be1713827fcac88fbeb9846a309d"
+            }
+          },
+          "payload": "0000000c62696e64696e672d646174610000000c62696e64696e672d64617461",
+          "value": {
+            "kind": "binding-data",
+            "subscription": "binding-data"
+          }
+        },
+        {
+          "type": {
+            "kind": "list",
+            "item": {
+              "kind": "text"
+            }
+          },
+          "payload": "000000020000000c62696e64696e672d646174610000000c62696e64696e672d64617461",
+          "value": [
+            "binding-data",
+            "binding-data"
+          ]
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_d50d3cf51bf092ed8b1437e1664010fc"
+            }
+          },
+          "payload": "000000020000000c62696e64696e672d64617461000000030001ff0000000c62696e64696e672d64617461000000030001ff000000030001ff000000000000002a",
+          "value": {
+            "body": {
+              "$bytes": "AAH/"
+            },
+            "headers": [
+              {
+                "name": "binding-data",
+                "value": {
+                  "$bytes": "AAH/"
+                }
+              },
+              {
+                "name": "binding-data",
+                "value": {
+                  "$bytes": "AAH/"
+                }
+              }
+            ],
+            "status": 42
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_20000000000000000000000000000001",
+              "declaration": "decl_b243ae949a301bee6bf954705b11c4ae"
+            }
+          },
+          "payload": "000000000000002a0000000c62696e64696e672d64617461",
+          "value": {
+            "actor": "binding-data",
+            "expires-at-ms": 42
+          }
+        },
+        {
+          "type": {
+            "kind": "structural_record",
+            "fields": [
+              {
+                "name": "attempt_id",
+                "ty": {
+                  "kind": "text"
+                }
+              },
+              {
+                "name": "attempt_number",
+                "ty": {
+                  "kind": "i64"
+                }
+              },
+              {
+                "name": "job_id",
+                "ty": {
+                  "kind": "text"
+                }
+              },
+              {
+                "name": "lease_until_milliseconds",
+                "ty": {
+                  "kind": "i64"
+                }
+              },
+              {
+                "name": "payload",
+                "ty": {
+                  "kind": "bytes"
+                }
+              }
+            ]
+          },
+          "payload": "0000000c62696e64696e672d64617461000000000000002a0000000c62696e64696e672d64617461000000000000002a000000030001ff",
+          "value": {
+            "attempt_id": "binding-data",
+            "attempt_number": 42,
+            "job_id": "binding-data",
+            "lease_until_milliseconds": 42,
+            "payload": {
+              "$bytes": "AAH/"
+            }
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_a2baeefacf23b620d7f814eda4cfe0ba"
+            }
+          },
+          "payload": "0000000c62696e64696e672d64617461000000000000002a",
+          "value": {
+            "code": 42,
+            "reason": "binding-data"
+          }
+        },
+        {
+          "type": {
+            "kind": "structural_record",
+            "fields": [
+              {
+                "name": "error",
+                "ty": {
+                  "kind": "text"
+                }
+              },
+              {
+                "name": "valid",
+                "ty": {
+                  "kind": "bool"
+                }
+              },
+              {
+                "name": "value",
+                "ty": {
+                  "kind": "named",
+                  "declaration": {
+                    "package": "pkg_20000000000000000000000000000001",
+                    "declaration": "decl_7c8ad8bf9d355ae3990da952d0b699e5"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": "0000000c62696e64696e672d64617461010000000c62696e64696e672d646174610000000c62696e64696e672d64617461",
+          "value": {
+            "error": "binding-data",
+            "valid": true,
+            "value": {
+              "body": "binding-data",
+              "title": "binding-data"
+            }
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_6d1f5b65509eaf66c1fcd9383ab62f38"
+            }
+          },
+          "payload": "00000000",
+          "value": {
+            "case": "binary"
+          }
+        },
+        {
+          "type": {
+            "kind": "list",
+            "item": {
+              "kind": "named",
+              "declaration": {
+                "package": "pkg_10000000000000000000000000000001",
+                "declaration": "decl_5ad011a7306a7a1da03f982c3d96318c"
+              }
+            }
+          },
+          "payload": "000000020000000c62696e64696e672d64617461000000030001ff0000000c62696e64696e672d64617461000000030001ff",
+          "value": [
+            {
+              "digest": {
+                "$bytes": "AAH/"
+              },
+              "identity": "binding-data"
+            },
+            {
+              "digest": {
+                "$bytes": "AAH/"
+              },
+              "identity": "binding-data"
+            }
+          ]
+        },
+        {
+          "type": {
+            "kind": "list",
+            "item": {
+              "kind": "structural_record",
+              "fields": [
+                {
+                  "name": "name",
+                  "ty": {
+                    "kind": "text"
+                  }
+                },
+                {
+                  "name": "value",
+                  "ty": {
+                    "kind": "bytes"
+                  }
+                }
+              ]
+            }
+          },
+          "payload": "000000020000000c62696e64696e672d64617461000000030001ff0000000c62696e64696e672d64617461000000030001ff",
+          "value": [
+            {
+              "name": "binding-data",
+              "value": {
+                "$bytes": "AAH/"
+              }
+            },
+            {
+              "name": "binding-data",
+              "value": {
+                "$bytes": "AAH/"
+              }
+            }
+          ]
+        },
+        {
+          "type": {
+            "kind": "structural_record",
+            "fields": [
+              {
+                "name": "attempt_count",
+                "ty": {
+                  "kind": "i64"
+                }
+              },
+              {
+                "name": "available_at_milliseconds",
+                "ty": {
+                  "kind": "i64"
+                }
+              },
+              {
+                "name": "job_id",
+                "ty": {
+                  "kind": "text"
+                }
+              },
+              {
+                "name": "last_error_class",
+                "ty": {
+                  "kind": "text"
+                }
+              },
+              {
+                "name": "lease_until_milliseconds",
+                "ty": {
+                  "kind": "i64"
+                }
+              },
+              {
+                "name": "result",
+                "ty": {
+                  "kind": "bytes"
+                }
+              },
+              {
+                "name": "state",
+                "ty": {
+                  "kind": "text"
+                }
+              }
+            ]
+          },
+          "payload": "000000000000002a000000000000002a0000000c62696e64696e672d646174610000000c62696e64696e672d64617461000000000000002a000000030001ff0000000c62696e64696e672d64617461",
+          "value": {
+            "attempt_count": 42,
+            "available_at_milliseconds": 42,
+            "job_id": "binding-data",
+            "last_error_class": "binding-data",
+            "lease_until_milliseconds": 42,
+            "result": {
+              "$bytes": "AAH/"
+            },
+            "state": "binding-data"
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_20000000000000000000000000000001",
+              "declaration": "decl_5c4a0493d548b91ec768dbe77e5d5116"
+            }
+          },
+          "payload": "0000000c62696e64696e672d646174610000000c62696e64696e672d646174610000000c62696e64696e672d646174610000000c62696e64696e672d64617461000000000000002a",
+          "value": {
+            "body": "binding-data",
+            "id": "binding-data",
+            "owner": "binding-data",
+            "revision": 42,
+            "title": "binding-data"
+          }
+        },
+        {
+          "type": {
+            "kind": "structural_record",
+            "fields": [
+              {
+                "name": "chunk",
+                "ty": {
+                  "kind": "bytes"
+                }
+              },
+              {
+                "name": "done",
+                "ty": {
+                  "kind": "bool"
+                }
+              }
+            ]
+          },
+          "payload": "000000030001ff01",
+          "value": {
+            "chunk": {
+              "$bytes": "AAH/"
+            },
+            "done": true
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_20000000000000000000000000000001",
+              "declaration": "decl_88977a57abb2da6b23a1d4bf3c14e0b0"
+            }
+          },
+          "payload": "000000000000002a0000000c62696e64696e672d646174610000000c62696e64696e672d64617461",
+          "value": {
+            "base": 42,
+            "body": "binding-data",
+            "title": "binding-data"
+          }
+        },
+        {
+          "type": {
+            "kind": "list",
+            "item": {
+              "kind": "structural_record",
+              "fields": [
+                {
+                  "name": "attempt_id",
+                  "ty": {
+                    "kind": "text"
+                  }
+                },
+                {
+                  "name": "attempt_number",
+                  "ty": {
+                    "kind": "i64"
+                  }
+                },
+                {
+                  "name": "job_id",
+                  "ty": {
+                    "kind": "text"
+                  }
+                },
+                {
+                  "name": "lease_until_milliseconds",
+                  "ty": {
+                    "kind": "i64"
+                  }
+                },
+                {
+                  "name": "payload",
+                  "ty": {
+                    "kind": "bytes"
+                  }
+                }
+              ]
+            }
+          },
+          "payload": "000000020000000c62696e64696e672d64617461000000000000002a0000000c62696e64696e672d64617461000000000000002a000000030001ff0000000c62696e64696e672d64617461000000000000002a0000000c62696e64696e672d64617461000000000000002a000000030001ff",
+          "value": [
+            {
+              "attempt_id": "binding-data",
+              "attempt_number": 42,
+              "job_id": "binding-data",
+              "lease_until_milliseconds": 42,
+              "payload": {
+                "$bytes": "AAH/"
+              }
+            },
+            {
+              "attempt_id": "binding-data",
+              "attempt_number": 42,
+              "job_id": "binding-data",
+              "lease_until_milliseconds": 42,
+              "payload": {
+                "$bytes": "AAH/"
+              }
+            }
+          ]
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_20000000000000000000000000000001",
+              "declaration": "decl_b3b6346b590da5e5e8c3efff9a88dbe9"
+            }
+          },
+          "payload": "0000000c62696e64696e672d64617461000000000000002a",
+          "value": {
+            "id": "binding-data",
+            "revision": 42
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_6e5c5a9bb5bc737a12f9cc5f17b38f05"
+            }
+          },
+          "payload": "00000000",
+          "value": {
+            "case": "Forward"
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_14b03b7e7e25e1cf4bd5a5e3932e73ab"
+            }
+          },
+          "payload": "00000000000000030001ff",
+          "value": {
+            "case": "Bytes",
+            "value": {
+              "$bytes": "AAH/"
+            }
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_0159d5a184fab62b8047bd131b310d23"
+            }
+          },
+          "payload": "000000000000002a000000000000002a0000000c62696e64696e672d64617461000000030001ff",
+          "value": {
+            "attempt-number": 42,
+            "job-id": "binding-data",
+            "lease-until-milliseconds": 42,
+            "payload": {
+              "$bytes": "AAH/"
+            }
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_20000000000000000000000000000001",
+              "declaration": "decl_1edaa425bf1cf5d907ddbf5a2f63cab4"
+            }
+          },
+          "payload": "000000000000002a0000000c62696e64696e672d646174610000000c62696e64696e672d64617461",
+          "value": {
+            "actor": "binding-data",
+            "created-at-ms": 42,
+            "password-hash": "binding-data"
+          }
+        },
+        {
+          "type": {
+            "kind": "list",
+            "item": {
+              "kind": "named",
+              "declaration": {
+                "package": "pkg_10000000000000000000000000000001",
+                "declaration": "decl_effe692dc8cecc3b5dafaec348b5622e"
+              }
+            }
+          },
+          "payload": "00000002000000000000000c62696e64696e672d64617461000000000000000c62696e64696e672d64617461",
+          "value": [
+            {
+              "case": "text",
+              "value": "binding-data"
+            },
+            {
+              "case": "text",
+              "value": "binding-data"
+            }
+          ]
+        },
+        {
+          "type": {
+            "kind": "list",
+            "item": {
+              "kind": "named",
+              "declaration": {
+                "package": "pkg_10000000000000000000000000000001",
+                "declaration": "decl_badded042ccbe02746dabbd6d42429ab"
+              }
+            }
+          },
+          "payload": "00000002000000030001ff000000030001ff0000000200000000000000030001ff00000000000000030001ff000000030001ff000000030001ff0000000200000000000000030001ff00000000000000030001ff",
+          "value": [
+            {
+              "key": [
+                {
+                  "case": "Bytes",
+                  "value": {
+                    "$bytes": "AAH/"
+                  }
+                },
+                {
+                  "case": "Bytes",
+                  "value": {
+                    "$bytes": "AAH/"
+                  }
+                }
+              ],
+              "revision": {
+                "$bytes": "AAH/"
+              },
+              "value": {
+                "$bytes": "AAH/"
+              }
+            },
+            {
+              "key": [
+                {
+                  "case": "Bytes",
+                  "value": {
+                    "$bytes": "AAH/"
+                  }
+                },
+                {
+                  "case": "Bytes",
+                  "value": {
+                    "$bytes": "AAH/"
+                  }
+                }
+              ],
+              "revision": {
+                "$bytes": "AAH/"
+              },
+              "value": {
+                "$bytes": "AAH/"
+              }
+            }
+          ]
+        },
+        {
+          "type": {
+            "kind": "structural_record",
+            "fields": [
+              {
+                "name": "blake3",
+                "ty": {
+                  "kind": "text"
+                }
+              },
+              {
+                "name": "cleanup_pending",
+                "ty": {
+                  "kind": "bool"
+                }
+              },
+              {
+                "name": "key",
+                "ty": {
+                  "kind": "text"
+                }
+              },
+              {
+                "name": "size",
+                "ty": {
+                  "kind": "i64"
+                }
+              },
+              {
+                "name": "version",
+                "ty": {
+                  "kind": "text"
+                }
+              }
+            ]
+          },
+          "payload": "0000000c62696e64696e672d64617461010000000c62696e64696e672d64617461000000000000002a0000000c62696e64696e672d64617461",
+          "value": {
+            "blake3": "binding-data",
+            "cleanup_pending": true,
+            "key": "binding-data",
+            "size": 42,
+            "version": "binding-data"
+          }
+        },
+        {
+          "type": {
+            "kind": "list",
+            "item": {
+              "kind": "named",
+              "declaration": {
+                "package": "pkg_20000000000000000000000000000001",
+                "declaration": "decl_fac7e1aad6e6d18f9d8e418b9017a0f6"
+              }
+            }
+          },
+          "payload": "000000020000000c62696e64696e672d64617461000000000000002a0000000c62696e64696e672d646174610000000c62696e64696e672d64617461000000000000002a0000000c62696e64696e672d64617461",
+          "value": [
+            {
+              "id": "binding-data",
+              "revision": 42,
+              "title": "binding-data"
+            },
+            {
+              "id": "binding-data",
+              "revision": 42,
+              "title": "binding-data"
+            }
+          ]
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_20000000000000000000000000000001",
+              "declaration": "decl_7c8ad8bf9d355ae3990da952d0b699e5"
+            }
+          },
+          "payload": "0000000c62696e64696e672d646174610000000c62696e64696e672d64617461",
+          "value": {
+            "body": "binding-data",
+            "title": "binding-data"
+          }
+        },
+        {
+          "type": {
+            "kind": "list",
+            "item": {
+              "kind": "named",
+              "declaration": {
+                "package": "pkg_10000000000000000000000000000001",
+                "declaration": "decl_8b2cf37fae3bc1fd3cdd43367ac5b3e6"
+              }
+            }
+          },
+          "payload": "00000002000000030001ff000000030001ff000000030001ff000000030001ff",
+          "value": [
+            {
+              "revision": {
+                "$bytes": "AAH/"
+              },
+              "value": {
+                "$bytes": "AAH/"
+              }
+            },
+            {
+              "revision": {
+                "$bytes": "AAH/"
+              },
+              "value": {
+                "$bytes": "AAH/"
+              }
+            }
+          ]
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_5bc130a0a18c56cb0000a2e20cfbbc60"
+            }
+          },
+          "payload": "000000000000000c62696e64696e672d64617461000000030001ff",
+          "value": {
+            "case": "Exact",
+            "value": {
+              "digest": {
+                "$bytes": "AAH/"
+              },
+              "identity": "binding-data"
+            }
+          }
+        },
+        {
+          "type": {
+            "kind": "structural_record",
+            "fields": [
+              {
+                "name": "valid",
+                "ty": {
+                  "kind": "bool"
+                }
+              },
+              {
+                "name": "value",
+                "ty": {
+                  "kind": "i64"
+                }
+              }
+            ]
+          },
+          "payload": "01000000000000002a",
+          "value": {
+            "valid": true,
+            "value": 42
+          }
+        },
+        {
+          "type": {
+            "kind": "structural_record",
+            "fields": [
+              {
+                "name": "error",
+                "ty": {
+                  "kind": "text"
+                }
+              },
+              {
+                "name": "valid",
+                "ty": {
+                  "kind": "bool"
+                }
+              },
+              {
+                "name": "value",
+                "ty": {
+                  "kind": "named",
+                  "declaration": {
+                    "package": "pkg_20000000000000000000000000000001",
+                    "declaration": "decl_88977a57abb2da6b23a1d4bf3c14e0b0"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": "0000000c62696e64696e672d6461746101000000000000002a0000000c62696e64696e672d646174610000000c62696e64696e672d64617461",
+          "value": {
+            "error": "binding-data",
+            "valid": true,
+            "value": {
+              "base": 42,
+              "body": "binding-data",
+              "title": "binding-data"
+            }
+          }
+        },
+        {
+          "type": {
+            "kind": "bytes"
+          },
+          "payload": "000000030001ff",
+          "value": {
+            "$bytes": "AAH/"
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_8b2cf37fae3bc1fd3cdd43367ac5b3e6"
+            }
+          },
+          "payload": "000000030001ff000000030001ff",
+          "value": {
+            "revision": {
+              "$bytes": "AAH/"
+            },
+            "value": {
+              "$bytes": "AAH/"
+            }
+          }
+        },
+        {
+          "type": {
+            "kind": "text"
+          },
+          "payload": "0000000c62696e64696e672d64617461",
+          "value": "binding-data"
+        },
+        {
+          "type": {
+            "kind": "structural_record",
+            "fields": [
+              {
+                "name": "key",
+                "ty": {
+                  "kind": "text"
+                }
+              },
+              {
+                "name": "value",
+                "ty": {
+                  "kind": "i64"
+                }
+              }
+            ]
+          },
+          "payload": "0000000c62696e64696e672d64617461000000000000002a",
+          "value": {
+            "key": "binding-data",
+            "value": 42
+          }
+        },
+        {
+          "type": {
+            "kind": "structural_record",
+            "fields": [
+              {
+                "name": "headers",
+                "ty": {
+                  "kind": "list",
+                  "item": {
+                    "kind": "structural_record",
+                    "fields": [
+                      {
+                        "name": "name",
+                        "ty": {
+                          "kind": "text"
+                        }
+                      },
+                      {
+                        "name": "value",
+                        "ty": {
+                          "kind": "bytes"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "name": "path",
+                "ty": {
+                  "kind": "text"
+                }
+              },
+              {
+                "name": "query",
+                "ty": {
+                  "kind": "text"
+                }
+              }
+            ]
+          },
+          "payload": "000000020000000c62696e64696e672d64617461000000030001ff0000000c62696e64696e672d64617461000000030001ff0000000c62696e64696e672d646174610000000c62696e64696e672d64617461",
+          "value": {
+            "headers": [
+              {
+                "name": "binding-data",
+                "value": {
+                  "$bytes": "AAH/"
+                }
+              },
+              {
+                "name": "binding-data",
+                "value": {
+                  "$bytes": "AAH/"
+                }
+              }
+            ],
+            "path": "binding-data",
+            "query": "binding-data"
+          }
+        },
+        {
+          "type": {
+            "kind": "list",
+            "item": {
+              "kind": "structural_record",
+              "fields": [
+                {
+                  "name": "blake3",
+                  "ty": {
+                    "kind": "text"
+                  }
+                },
+                {
+                  "name": "cleanup_pending",
+                  "ty": {
+                    "kind": "bool"
+                  }
+                },
+                {
+                  "name": "key",
+                  "ty": {
+                    "kind": "text"
+                  }
+                },
+                {
+                  "name": "size",
+                  "ty": {
+                    "kind": "i64"
+                  }
+                },
+                {
+                  "name": "version",
+                  "ty": {
+                    "kind": "text"
+                  }
+                }
+              ]
+            }
+          },
+          "payload": "000000020000000c62696e64696e672d64617461010000000c62696e64696e672d64617461000000000000002a0000000c62696e64696e672d646174610000000c62696e64696e672d64617461010000000c62696e64696e672d64617461000000000000002a0000000c62696e64696e672d64617461",
+          "value": [
+            {
+              "blake3": "binding-data",
+              "cleanup_pending": true,
+              "key": "binding-data",
+              "size": 42,
+              "version": "binding-data"
+            },
+            {
+              "blake3": "binding-data",
+              "cleanup_pending": true,
+              "key": "binding-data",
+              "size": 42,
+              "version": "binding-data"
+            }
+          ]
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_badded042ccbe02746dabbd6d42429ab"
+            }
+          },
+          "payload": "000000030001ff000000030001ff0000000200000000000000030001ff00000000000000030001ff",
+          "value": {
+            "key": [
+              {
+                "case": "Bytes",
+                "value": {
+                  "$bytes": "AAH/"
+                }
+              },
+              {
+                "case": "Bytes",
+                "value": {
+                  "$bytes": "AAH/"
+                }
+              }
+            ],
+            "revision": {
+              "$bytes": "AAH/"
+            },
+            "value": {
+              "$bytes": "AAH/"
+            }
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_5ad011a7306a7a1da03f982c3d96318c"
+            }
+          },
+          "payload": "0000000c62696e64696e672d64617461000000030001ff",
+          "value": {
+            "digest": {
+              "$bytes": "AAH/"
+            },
+            "identity": "binding-data"
+          }
+        },
+        {
+          "type": {
+            "kind": "bool"
+          },
+          "payload": "01",
+          "value": true
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_20000000000000000000000000000001",
+              "declaration": "decl_85cd487aa938f14edd8b74683f68b22c"
+            }
+          },
+          "payload": "0000000c62696e64696e672d646174610000000c62696e64696e672d64617461",
+          "value": {
+            "code": "binding-data",
+            "kind": "binding-data"
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_20000000000000000000000000000001",
+              "declaration": "decl_86a09f82f6aa4c9ae66b9233bf16be55"
+            }
+          },
+          "payload": "0000000c62696e64696e672d646174610000000c62696e64696e672d646174610000000c62696e64696e672d64617461000000000000002a",
+          "value": {
+            "body": "binding-data",
+            "id": "binding-data",
+            "revision": 42,
+            "title": "binding-data"
+          }
+        },
+        {
+          "type": {
+            "kind": "structural_record",
+            "fields": [
+              {
+                "name": "body",
+                "ty": {
+                  "kind": "bytes"
+                }
+              },
+              {
+                "name": "headers",
+                "ty": {
+                  "kind": "list",
+                  "item": {
+                    "kind": "structural_record",
+                    "fields": [
+                      {
+                        "name": "name",
+                        "ty": {
+                          "kind": "text"
+                        }
+                      },
+                      {
+                        "name": "value",
+                        "ty": {
+                          "kind": "bytes"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "name": "status",
+                "ty": {
+                  "kind": "i64"
+                }
+              }
+            ]
+          },
+          "payload": "000000030001ff000000020000000c62696e64696e672d64617461000000030001ff0000000c62696e64696e672d64617461000000030001ff000000000000002a",
+          "value": {
+            "body": {
+              "$bytes": "AAH/"
+            },
+            "headers": [
+              {
+                "name": "binding-data",
+                "value": {
+                  "$bytes": "AAH/"
+                }
+              },
+              {
+                "name": "binding-data",
+                "value": {
+                  "$bytes": "AAH/"
+                }
+              }
+            ],
+            "status": 42
+          }
+        },
+        {
+          "type": {
+            "kind": "named",
+            "declaration": {
+              "package": "pkg_10000000000000000000000000000001",
+              "declaration": "decl_b939d019fb10a24344c2c947a20f2c02"
+            }
+          },
+          "payload": "00000000",
+          "value": {
+            "case": "continue"
+          }
+        },
+        {
+          "type": {
+            "kind": "unit"
+          },
+          "payload": "",
+          "value": null
+        }
+      ]
+    }
+  ]
+}

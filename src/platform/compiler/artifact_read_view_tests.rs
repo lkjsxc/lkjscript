@@ -6,11 +6,7 @@ fn manifest(version: u16) -> ArtifactManifest {
     let empty = PersistentMap::empty(&mut MemoryPageStore::default(), &mut MapWork::default())
         .unwrap()
         .root();
-    let (graph, compiler, bytecode) = match version {
-        40 => (33, 33, 27),
-        41 => (34, 34, 28),
-        _ => unreachable!(),
-    };
+    let (graph, compiler, bytecode) = (34, 34, 28);
     ArtifactManifest {
         contract_version: version,
         graph_contract_version: graph,
@@ -37,156 +33,38 @@ fn manifest(version: u16) -> ArtifactManifest {
 }
 
 #[test]
-fn read_view_writer_and_retained_predecessor_have_distinct_exact_wire_profiles() {
-    assert_eq!(ARTIFACT_CONTRACT_VERSION, 41);
-    assert_eq!(
-        ARTIFACT_MANIFEST_CONTRACT_IDENTITY,
-        "lkjscript-artifact-manifest-41"
+fn artifact_manifest_and_bundle_bind_the_current_canonical_schema() {
+    let expected = manifest(41);
+    let (digest, bytes) = expected.encode().unwrap();
+    assert_eq!(&bytes[..8], &ARTIFACT_MANIFEST_MAGIC);
+    assert_eq!(ArtifactManifest::decode(&bytes, digest).unwrap(), expected);
+    let mut foreign = bytes;
+    foreign[8] ^= 1;
+    let digest = ArtifactManifestDigest::from_bytes(
+        ObjectKey::for_bytes(ObjectDomain::ArtifactManifest, &foreign)
+            .digest
+            .bytes(),
     );
     assert_eq!(
-        ARTIFACT_BUNDLE_CONTRACT_IDENTITY,
-        "lkjscript-artifact-bundle-41"
+        ArtifactManifest::decode(&foreign, digest).unwrap_err().code,
+        "packed_schema"
     );
-    for version in [40, 41] {
-        let expected = manifest(version);
-        let (digest, bytes) = expected.encode().unwrap();
-        assert_eq!(
-            &bytes[..8],
-            if version == 40 {
-                b"LKJAMF40"
-            } else {
-                b"LKJAMF41"
-            }
-        );
-        assert_eq!(ArtifactManifest::decode(&bytes, digest).unwrap(), expected);
-        let mut relabelled = bytes;
-        relabelled[..8].copy_from_slice(if version == 40 {
-            b"LKJAMF41"
-        } else {
-            b"LKJAMF40"
-        });
-        let forged_digest = ArtifactManifestDigest::from_bytes(
-            ObjectKey::for_bytes(ObjectDomain::ArtifactManifest, &relabelled)
-                .digest
-                .bytes(),
-        );
-        assert!(ArtifactManifest::decode(&relabelled, forged_digest).is_err());
-    }
-    for (version, graph, compiler, bytecode) in [
-        (40, 34, 34, 28),
-        (40, 33, 34, 28),
-        (40, 34, 33, 27),
-        (41, 33, 33, 27),
-        (41, 34, 33, 27),
-        (41, 33, 34, 28),
-    ] {
-        let mut mixed = manifest(version);
-        mixed.graph_contract_version = graph;
-        mixed.compiler_contract_version = compiler;
-        mixed.bytecode_contract_version = bytecode;
-        assert_eq!(
-            mixed.encode().unwrap_err().code,
-            "artifact_manifest_contract"
-        );
-    }
-}
 
-#[test]
-fn genuine_retained_standard_preserves_its_original_profile_and_canonical_bytes() {
-    use sha2::Digest;
-    // This original .95 asset is an independent producer oracle. The current loader
-    // must admit the original package/unit closure without upgrading its envelope.
-    let bytes = include_bytes!("fixtures/standard-artifact40.lkja");
-    let sha256 = sha2::Sha256::digest(bytes)
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
-    assert_eq!(
-        sha256,
-        "05649e55bc2bda66375a9bc380f0446bce524bbb46cbe761be3c485131cbfa10"
-    );
-    assert_eq!(&bytes[..8], b"LKJART40");
+    let bytes = include_bytes!("../../../packages/standard/generated/standard.lkja");
     let loaded = load_artifact(bytes).unwrap();
+    assert_eq!(loaded.manifest.contract_version, ARTIFACT_CONTRACT_VERSION);
+    let mut foreign = bytes.to_vec();
+    foreign[8] ^= 1;
     assert_eq!(
-        (
-            loaded.manifest.contract_version,
-            loaded.manifest.graph_contract_version,
-            loaded.manifest.compiler_contract_version,
-            loaded.manifest.bytecode_contract_version,
-        ),
-        (40, 33, 33, 27),
+        load_artifact(&foreign).unwrap_err().code,
+        "artifact_bundle_schema"
     );
-    let (manifest_digest, encoded) = loaded.manifest.encode().unwrap();
-    let length = read_u64(bytes, 12, "test_manifest_length").unwrap() as usize;
+    let mut truncated = bytes.to_vec();
+    truncated.truncate(BUNDLE_HEADER_BYTES - 1);
     assert_eq!(
-        &encoded,
-        &bytes[BUNDLE_HEADER_BYTES..BUNDLE_HEADER_BYTES + length]
+        load_artifact(&truncated).unwrap_err().code,
+        "artifact_bundle_length"
     );
-    assert_eq!(
-        manifest_digest.bytes(),
-        read_array::<32>(bytes, 28, "test_manifest_digest").unwrap()
-    );
-
-    // The regenerated maintained asset remains an independent current-profile control.
-    let current_bytes = include_bytes!("../../../packages/standard/generated/standard.lkja");
-    assert_eq!(&current_bytes[..8], b"LKJART41");
-    let current = load_artifact(current_bytes).unwrap();
-    assert_eq!(
-        (
-            current.manifest.contract_version,
-            current.manifest.graph_contract_version,
-            current.manifest.compiler_contract_version,
-            current.manifest.bytecode_contract_version
-        ),
-        (41, 34, 34, 28)
-    );
-    let (digest, encoded) = current.manifest.encode().unwrap();
-    let length = read_u64(current_bytes, 12, "test_manifest_length").unwrap() as usize;
-    assert_eq!(
-        &encoded,
-        &current_bytes[BUNDLE_HEADER_BYTES..BUNDLE_HEADER_BYTES + length]
-    );
-    assert_eq!(
-        digest.bytes(),
-        read_array::<32>(current_bytes, 28, "test_manifest_digest").unwrap()
-    );
-}
-
-#[test]
-fn predecessor_type_admission_finds_a_view_in_an_unused_phantom_actual() {
-    use crate::platform::kernel::{ReadScopeBinder, ReadScopeReference};
-    use crate::platform::semantic_id::ReadScopeParameterId;
-    let declaration = DeclarationReference {
-        package: PackageId::migrate(b"read-view-artifact-generation", 0),
-        declaration: DeclarationId::migrate(b"read-view-artifact-generation", 0),
-    };
-    let view = TypeObject::new(TypeForm::ReadViewApplied {
-        declaration,
-        arguments: vec![],
-        read_scope: ReadScopeArgument::Parameter(ReadScopeReference {
-            binder: ReadScopeBinder::Declaration(declaration),
-            parameter: ReadScopeParameterId::migrate(b"read-view-artifact-generation", 0),
-        }),
-    })
-    .unwrap();
-    let view_digest = encode_type_object(&view).unwrap().0;
-    let phantom = TypeObject::new(TypeForm::Applied {
-        declaration: DeclarationReference {
-            declaration: DeclarationId::migrate(b"read-view-artifact-generation", 1),
-            ..declaration
-        },
-        arguments: vec![view_digest],
-    })
-    .unwrap();
-    let phantom_digest = encode_type_object(&phantom).unwrap().0;
-    let types = BTreeMap::from([(view_digest, view), (phantom_digest, phantom)]);
-    assert_eq!(
-        validate_read_view_generation_closure(BTreeSet::from([phantom_digest]), &types)
-            .unwrap_err()
-            .code,
-        "kernel_read_view_generation",
-    );
-    assert!(validate_read_view_generation_closure(BTreeSet::new(), &types).is_ok());
 }
 
 #[test]

@@ -71,8 +71,8 @@ fn maintained_descriptors_name_the_current_artifact_and_exact_targets() {
 }
 
 #[test]
-fn removed_descriptor_versions_reject_before_artifact_or_live_effects() {
-    let temporary = tempfile::tempdir().expect("isolated predecessor descriptor");
+fn unknown_descriptor_fields_reject_before_artifact_or_live_effects() {
+    let temporary = tempfile::tempdir().expect("isolated invalid descriptor");
     for (name, descriptor_name, operation, nested) in [
         ("top", "service.deployment.json", "serve", None),
         (
@@ -92,15 +92,15 @@ fn removed_descriptor_versions_reject_before_artifact_or_live_effects() {
         .expect("current descriptor JSON");
         value["artifact"] = serde_json::json!("missing-artifact.lkja");
         match nested {
-            Some(owner) => value[owner]["contract_version"] = serde_json::json!(1),
-            None => value["contract_version"] = serde_json::json!(1),
+            Some(owner) => value[owner]["unknown_policy"] = serde_json::json!(true),
+            None => value["unknown_policy"] = serde_json::json!(true),
         }
         let descriptor_path = temporary.path().join(format!("{name}.json"));
         std::fs::write(
             &descriptor_path,
-            serde_json::to_vec(&value).expect("predecessor descriptor JSON"),
+            serde_json::to_vec(&value).expect("invalid descriptor JSON"),
         )
-        .expect("write predecessor descriptor");
+        .expect("write invalid descriptor");
         let output = run_isolated(
             temporary.path(),
             &[
@@ -124,7 +124,7 @@ fn removed_descriptor_versions_reject_before_artifact_or_live_effects() {
             1,
             "{name}"
         );
-        std::fs::remove_file(&descriptor_path).expect("remove predecessor descriptor");
+        std::fs::remove_file(&descriptor_path).expect("remove invalid descriptor");
     }
 }
 
@@ -174,51 +174,37 @@ fn maintained_descriptors_cover_every_selected_component_requirement() {
 #[test]
 fn checked_in_service_artifact_uses_current_bundle_contract() {
     let bytes = std::fs::read(repository().join(ARTIFACT)).expect("read maintained artifact");
-    assert_eq!(bytes.get(..8), Some(b"LKJART41".as_slice()));
-    assert_ne!(bytes.get(..8), Some(b"LKJART40".as_slice()));
-    assert_ne!(bytes.get(..8), Some(b"LKJART39".as_slice()));
-    assert_ne!(bytes.get(..8), Some(b"LKJART38".as_slice()));
-    assert_ne!(bytes.get(..8), Some(b"LKJART37".as_slice()));
-    assert_ne!(bytes.get(..8), Some(b"LKJART36".as_slice()));
-    assert_ne!(bytes.get(..8), Some(b"LKJART35".as_slice()));
-    assert_ne!(bytes.get(..8), Some(b"LKJART34".as_slice()));
-    assert_ne!(bytes.get(..8), Some(b"LKJART33".as_slice()));
-    assert_ne!(bytes.get(..8), Some(b"LKJART31".as_slice()));
-    assert_ne!(bytes.get(..8), Some(b"LKJART29".as_slice()));
-    assert_ne!(bytes.get(..8), Some(b"LKJART28".as_slice()));
-    assert_ne!(bytes.get(..8), Some(b"LKJART27".as_slice()));
-    assert_ne!(bytes.get(..8), Some(b"LKJART24".as_slice()));
-    assert_ne!(bytes.get(..8), Some(b"LKJART20".as_slice()));
-    assert_ne!(bytes.get(..8), Some(b"LKJART19".as_slice()));
-    assert_ne!(bytes.get(..8), Some(b"LKJART18".as_slice()));
-    assert_ne!(bytes.get(..8), Some(b"LKJART17".as_slice()));
-    assert_ne!(bytes.get(..8), Some(b"LKJART16".as_slice()));
-    assert_ne!(bytes.get(..8), Some(b"LKJART15".as_slice()));
-    assert_ne!(bytes.get(..8), Some(b"LKJART14".as_slice()));
-    assert_ne!(bytes.get(..8), Some(b"LKJART10".as_slice()));
-    assert_ne!(bytes.get(..8), Some(b"LKJART04".as_slice()));
+    assert_eq!(bytes.get(..8), Some(b"LKJARTFC".as_slice()));
+    assert_eq!(
+        bytes.get(8..40),
+        Some(lkjscript::platform::canonical_schema::CANONICAL_SCHEMA_HASH.as_slice()),
+    );
+    lkjscript::platform::contributor::strict_artifact_admission_probe(&bytes)
+        .expect("strict current service artifact admission");
     assert!(bytes.len() < 128 * 1024 * 1024);
 }
 
 #[test]
-fn every_public_resident_command_rejects_predecessor_artifacts_before_readiness() {
-    let temporary = tempfile::tempdir().expect("isolated predecessor deployment");
-    for magic in [
-        b"LKJART17",
-        b"LKJART16",
-        b"LKJART15",
-        b"LKJART14",
-        b"LKJART13",
-        b"LKJART12",
-        b"LKJART04",
+fn every_public_resident_command_rejects_invalid_current_artifacts_before_readiness() {
+    let current = std::fs::read(repository().join(ARTIFACT)).expect("read maintained artifact");
+    lkjscript::platform::contributor::strict_artifact_admission_probe(&current)
+        .expect("healthy current artifact before independent mutations");
+    let temporary = tempfile::tempdir().expect("isolated invalid artifact deployments");
+    for (fault, code, class, exit) in [
+        ("schema", "artifact_bundle_schema", "source", 2),
+        ("checksum", "artifact_bundle_checksum", "corrupt", 5),
     ] {
-        let artifact = temporary.path().join(format!(
-            "predecessor-{}.lkja",
-            String::from_utf8_lossy(magic)
-        ));
-        let mut predecessor = vec![0_u8; 100];
-        predecessor[..8].copy_from_slice(magic);
-        std::fs::write(&artifact, predecessor).expect("write minimal predecessor marker");
+        let artifact = temporary.path().join(format!("{fault}.lkja"));
+        let mut invalid = current.clone();
+        match fault {
+            "schema" => invalid[8] ^= 1,
+            "checksum" => {
+                let checksum = invalid.len() - 40;
+                invalid[checksum] ^= 1;
+            }
+            _ => unreachable!(),
+        }
+        std::fs::write(&artifact, &invalid).expect("write mutated current artifact");
         for (name, operation, source) in [
             ("http", "serve", "service.deployment.json"),
             ("interactive", "serve", "live.deployment.json"),
@@ -227,17 +213,13 @@ fn every_public_resident_command_rejects_predecessor_artifacts_before_readiness(
             let mut descriptor = descriptor(source);
             descriptor.artifact = artifact
                 .file_name()
-                .expect("predecessor artifact name")
+                .expect("invalid artifact name")
                 .to_string_lossy()
                 .into_owned();
-            let path = temporary
-                .path()
-                .join(format!("{name}-{}.json", String::from_utf8_lossy(magic)));
-            std::fs::write(
-                &path,
-                serde_json::to_vec(&descriptor).expect("encode isolated descriptor"),
-            )
-            .expect("write isolated descriptor");
+            let path = temporary.path().join(format!("{name}-{fault}.json"));
+            let descriptor_bytes =
+                serde_json::to_vec(&descriptor).expect("encode isolated descriptor");
+            std::fs::write(&path, &descriptor_bytes).expect("write isolated descriptor");
             let output = run_isolated(
                 temporary.path(),
                 &[
@@ -246,12 +228,30 @@ fn every_public_resident_command_rejects_predecessor_artifacts_before_readiness(
                     path.to_str().expect("UTF-8 descriptor path"),
                 ],
             );
-            assert_eq!(output.status.code(), Some(2), "{name}");
-            assert!(output.stderr.is_empty(), "{name}");
+            assert_eq!(output.status.code(), Some(exit), "{name}/{fault}");
+            assert!(output.stderr.is_empty(), "{name}/{fault}");
             let stdout = String::from_utf8(output.stdout).expect("diagnostic UTF-8");
-            assert!(stdout.contains("artifact_bundle_contract"), "{stdout}");
+            let failure: serde_json::Value =
+                serde_json::from_str(&stdout).expect("one failure event before readiness");
+            assert_eq!(failure["ok"], false, "{name}/{fault}: {stdout}");
+            assert_eq!(failure["status"], "failure", "{name}/{fault}: {stdout}");
+            assert_eq!(failure["error"]["code"], code, "{name}/{fault}: {stdout}");
+            assert_eq!(failure["error"]["class"], class, "{name}/{fault}: {stdout}");
             assert!(!stdout.contains("\"event\":\"ready\""), "{stdout}");
+            assert_eq!(std::fs::read(&artifact).unwrap(), invalid, "{name}/{fault}");
+            assert_eq!(
+                std::fs::read(&path).unwrap(),
+                descriptor_bytes,
+                "{name}/{fault}"
+            );
+            assert_eq!(
+                std::fs::read_dir(temporary.path()).unwrap().count(),
+                2,
+                "{name}/{fault}: artifact admission must precede adapter state creation",
+            );
+            std::fs::remove_file(&path).expect("remove isolated descriptor");
         }
+        std::fs::remove_file(&artifact).expect("remove mutated current artifact");
     }
 }
 

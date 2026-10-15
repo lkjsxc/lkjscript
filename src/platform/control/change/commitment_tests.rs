@@ -1,12 +1,7 @@
-//! Fixed request vectors for the actual normalization/commitment path.
-//!
-//! Originally introduced identities were checked at ae83a2fb (18), 94dad92d (19),
-//! f9c2630b (20), caeb9229 (21), 0dadaed8 (22), 5847e021 (23), and 605a7cf8 (24).
-//! Frozen predecessor bytes remain content-only controls, separate from current authored39
-//! typed requests. Historical commitments were calculated independently of the production
-//! selector/hasher, with every budget dimension fixed at 100 and both options present.
+//! Independent current authored-byte vectors and request commitment controls.
 
 use super::*;
+use crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH;
 use crate::platform::change::{
     AuthoredChangeAdmission, AuthoredLiteralUpdate, AuthoredLiteralValue, CanonicalEditAdmission,
     CanonicalMapUpdateAdmission, CanonicalReadAdmission, ChangeBudget, ImpactAdmission,
@@ -15,7 +10,7 @@ use crate::platform::change::{
 };
 use crate::platform::semantic_id::{MethodId, RequirementParameterId, TypeParameterId};
 
-fn frozen_budget() -> ChangeBudget {
+fn bounded_budget() -> ChangeBudget {
     ChangeBudget {
         authored: AuthoredChangeAdmission {
             maximum_operations: 100,
@@ -120,9 +115,10 @@ fn unhex(value: &str) -> Vec<u8> {
         .collect()
 }
 
-fn literal_intent(magic: &[u8; 8], body: &str) -> Vec<u8> {
+fn literal_intent(body: &str) -> Vec<u8> {
     [
-        magic.as_slice(),
+        b"LKJACHNG".as_slice(),
+        &CANONICAL_SCHEMA_HASH,
         &unhex(concat!(
             "0707070707070707070707070707070707070707070707070707070707070707",
             "00000000000000000000000000000001",
@@ -132,35 +128,46 @@ fn literal_intent(magic: &[u8; 8], body: &str) -> Vec<u8> {
     .concat()
 }
 
-fn assert_golden(
-    change: AuthoredChange,
-    magic: &[u8; 8],
-    historical_body: &str,
-    historical_commitment: &str,
-    current_body: &str,
-) {
-    let budget = frozen_budget().validate().unwrap();
+fn independent_commitment(
+    intent: &[u8],
+    budget: &[u8],
+    options: &PublicationOptions,
+) -> ChangeRequestCommitment {
+    fn field(hasher: &mut blake3::Hasher, bytes: &[u8]) {
+        hasher.update(&(bytes.len() as u64).to_be_bytes());
+        hasher.update(bytes);
+    }
+    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.change-request-commitment.v1");
+    field(&mut hasher, b"lkjscript-authored-change");
+    field(&mut hasher, intent);
+    field(&mut hasher, budget);
+    for option in [
+        options.idempotency_key.as_deref(),
+        options.intent.as_deref(),
+    ] {
+        hasher.update(&[u8::from(option.is_some())]);
+        if let Some(value) = option {
+            field(&mut hasher, value.as_bytes());
+        }
+    }
+    ChangeRequestCommitment(*hasher.finalize().as_bytes())
+}
+
+fn assert_golden(change: AuthoredChange, current_body: &str) {
+    let budget = bounded_budget().validate().unwrap();
     let options = PublicationOptions {
-        idempotency_key: Some("historical-commitment".to_owned()),
-        intent: Some("frozen-options".to_owned()),
+        idempotency_key: Some("current-commitment".to_owned()),
+        intent: Some("current-options".to_owned()),
     };
     let expected_budget = [
-        b"LKJABG01".as_slice(),
+        b"LKJABUDG".as_slice(),
+        &CANONICAL_SCHEMA_HASH,
         &[0, 0, 0, 0, 0, 0, 0, 100].repeat(46),
     ]
     .concat();
     assert_eq!(
         crate::platform::change::canonical_authored_budget_bytes(budget).unwrap(),
         expected_budget
-    );
-    // Historical bytes are immutable content controls; the current typed encoder never emits
-    // these predecessor layouts. No current encoded request has its magic rewritten here.
-    let historical_intent = literal_intent(magic, historical_body);
-    assert_eq!(
-        change_request_commitment_from_bytes(&historical_intent, &expected_budget, &options)
-            .unwrap()
-            .to_string(),
-        historical_commitment,
     );
     let semantic = AuthoredChangeSet {
         base: RevisionId::from_digest([7; 32]),
@@ -169,31 +176,25 @@ fn assert_golden(
         budget,
     };
     let normalized = normalize_change_request(semantic, options.clone()).unwrap();
-    // These independent full current layouts cover the typed encoder. The historical fixed
-    // hashes separately constrain the hashing protocol; current comparisons do not claim a new
-    // independent fixed hash or a historical semantic admission.
-    let current_intent = literal_intent(b"LKJACR39", current_body);
+    let current_intent = literal_intent(current_body);
     assert_eq!(
         crate::platform::change::canonical_authored_intent_bytes(&normalized.semantic).unwrap(),
         current_intent,
     );
     assert_eq!(
         normalized.request_commitment,
-        change_request_commitment_from_bytes(&current_intent, &expected_budget, &options).unwrap(),
+        independent_commitment(&current_intent, &expected_budget, &options),
     );
 }
 
 #[test]
-fn historical_generations_18_through_24_keep_original_commitment_goldens() {
+fn literal_and_owned_contracts_commit_complete_current_bytes() {
     assert_golden(
         AuthoredChange::SetConstant {
             constant: declaration(),
             ty: AuthoredType::I64 {},
             value: expression(AuthoredExpressionOperation::I64 { value: 42 }),
         },
-        b"LKJACR18",
-        "2c0101010101010101010101010101010101030003000000000000002a",
-        "request_f77bce029c7a09a56790e53a53d5944be56795d4b6709203d9a0af0c09fe9676",
         "2c0101010101010101010101010101010101030003000000000000002a",
     );
     assert_golden(
@@ -204,23 +205,14 @@ fn historical_generations_18_through_24_keep_original_commitment_goldens() {
                 value: AuthoredLiteralValue::I64 { value: 42 },
             }],
         },
-        b"LKJACR19",
-        "2f010101010101010101010101010101010100000000000000010202020202020202020202020202020201000000000000002a",
-        "request_22698d797bf0622fcf7bbba7b2c5a9592ad36d225424ed86afb19f695204ef89",
         "2f010101010101010101010101010101010100000000000000010202020202020202020202020202020201000000000000002a",
     );
     assert_golden(
         contract(AuthoredType::ByteBuffer {}),
-        b"LKJACR20",
-        "1501010101010101010101010101010101011401",
-        "request_60137b8cd919eb08b80ab8f0763692132f417aafe8738e1f2d9c984547df018e",
         "15010101010101010101010101010101010114010000000000000000000000000000000001",
     );
     assert_golden(
         contract(AuthoredType::OwnedI64Cell {}),
-        b"LKJACR21",
-        "1501010101010101010101010101010101011501",
-        "request_f3c87495d55c7008ad1eca40b808ef119bf8a7a3edb3ebf49f7d4b0bb522e852",
         "15010101010101010101010101010101010115010000000000000000000000000000000001",
     );
     assert_golden(
@@ -230,9 +222,6 @@ fn historical_generations_18_through_24_keep_original_commitment_goldens() {
                 ty: AuthoredType::OwnedI64Cell {},
             }],
         }),
-        b"LKJACR22",
-        "150101010101010101010101010101010101160000000000000001000000000000000576616c75651501",
-        "request_f0ec305efde9aeac71f82a805967adf16b8146f0ffe565a57b83ab8689cf9e9d",
         "150101010101010101010101010101010101160000000000000001000000000000000576616c756515010000000000000000000000000000000001",
     );
     assert_golden(
@@ -248,9 +237,6 @@ fn historical_generations_18_through_24_keep_original_commitment_goldens() {
                 },
             ],
         }),
-        b"LKJACR23",
-        "150101010101010101010101010101010101170000000000000002000000000000000576616c7565150000000000000005656d7074790101",
-        "request_0a5055ced42d390efe1c86706572c3ddb5e70791b3c89d3f37344ce44abef19d",
         "150101010101010101010101010101010101170000000000000002000000000000000576616c7565150000000000000005656d70747901010000000000000000000000000000000001",
     );
     assert_golden(
@@ -276,20 +262,14 @@ fn historical_generations_18_through_24_keep_original_commitment_goldens() {
                 },
             }],
         },
-        b"LKJACR24",
-        "570101010101010101010101010101010101080103030303030303030303030303030303000000000000000104040404040404040404040404040404000000000000000372756e0000000000000000030200000000000000000000000000000000",
-        "request_9e20770ef4474c7202a8d2d24822b64a73e1b1849f2a280518d57b7d648c49a9",
         "6601010101010101010101010101010101010801030303030303030303030303030303030000000000000000000000000000000104040404040404040404040404040404000000000000000372756e000000000000000003010000000000000000000000000000000002000000000000000000000000000000000000000000000000",
     );
 }
 
 #[test]
-fn earlier_generations_keep_historical_commitment_goldens() {
+fn scalar_and_task_contracts_commit_complete_current_bytes() {
     assert_golden(
         contract(AuthoredType::I64 {}),
-        b"LKJACR14",
-        "1501010101010101010101010101010101010301",
-        "request_ea816f82a586627593ccb73b59c72d76faddb0cc384c4b38cc04e1fab5dc5c36",
         "15010101010101010101010101010101010103010000000000000000000000000000000001",
     );
     assert_golden(
@@ -306,22 +286,16 @@ fn earlier_generations_keep_historical_commitment_goldens() {
                 }],
             },
         },
-        b"LKJACR15",
-        "150101010101010101010101010101010101030200000000000000000000000000000001040202020202020202020202020202020203030303030303030303030303030303",
-        "request_fdedfc09bb3f62aecd53452c5da5059f6c308c0647f4fe88e2704deb5fa2aee0",
         "1501010101010101010101010101010101010301000000000000000000000000000000000200000000000000000000000000000001040202020202020202020202020202020203030303030303030303030303030303",
     );
     assert_golden(
         contract(AuthoredType::F64 {}),
-        b"LKJACR17",
-        "1501010101010101010101010101010101011301",
-        "request_b13f2acf848f550ce59fb0fa3561929e4df8b871aac889d7d7889585eec13c3d",
         "15010101010101010101010101010101010113010000000000000000000000000000000001",
     );
 }
 
 #[test]
-fn current_parallel_generation_25_keeps_its_commitment_golden() {
+fn parallel_intent_commits_both_complete_calls() {
     let child = || {
         expression(AuthoredExpressionOperation::Call {
             function: AuthoredDeclarationReference::Local {
@@ -344,72 +318,12 @@ fn current_parallel_generation_25_keeps_its_commitment_golden() {
                 right: Box::new(child()),
             }),
         },
-        b"LKJACR25",
-        "2301010101010101010101010101010101010024000b000000000000000001010202020202020202020202020202020200000000000000000000000000000000000b000000000000000001010202020202020202020202020202020200000000000000000000000000000000",
-        "request_8fe7ca95ee147d46a87f38a830350911814c41cf5d3628800ada9c2f6d282abb",
         "2301010101010101010101010101010101010024003900000000000000000000000000000000010102020202020202020202020202020202000000000000000000000000000000000000000000000000003900000000000000000000000000000000010102020202020202020202020202020202000000000000000000000000000000000000000000000000",
     );
 }
 
 #[test]
-fn unsupported_and_future_magics_keep_the_existing_current_identity_fallback() {
-    for intent in [b"".as_slice(), b"LKJACR13", b"LKJACR99", b"unknown"] {
-        assert_eq!(
-            commitment_codec_identity(intent),
-            AUTHORED_CHANGE_CODEC_IDENTITY
-        );
-    }
-    assert_eq!(
-        commitment_codec_identity(b"LKJACR38"),
-        "lkjscript-authored-change-codec-38",
-    );
-    assert_eq!(
-        commitment_codec_identity(b"LKJACR16"),
-        "lkjscript-authored-change-codec-16"
-    );
-    assert_eq!(
-        commitment_codec_identity(b"LKJACR35"),
-        "lkjscript-authored-change-codec-35"
-    );
-    assert_eq!(
-        commitment_codec_identity(b"LKJACR36"),
-        "lkjscript-authored-change-codec-36"
-    );
-    assert_eq!(
-        commitment_codec_identity(b"LKJACR37"),
-        "lkjscript-authored-change-codec-37"
-    );
-    assert_eq!(
-        commitment_codec_identity(b"LKJACR28"),
-        "lkjscript-authored-change-codec-28"
-    );
-    assert_eq!(
-        commitment_codec_identity(b"LKJACR29"),
-        "lkjscript-authored-change-codec-29"
-    );
-    assert_eq!(
-        commitment_codec_identity(b"LKJACR31"),
-        "lkjscript-authored-change-codec-31"
-    );
-    // These generations used the current codec34 fallback before this increment.
-    for intent in [b"LKJACR32", b"LKJACR33", b"LKJACR34"] {
-        assert_eq!(
-            commitment_codec_identity(intent),
-            "lkjscript-authored-change-codec-34"
-        );
-    }
-    assert_eq!(
-        commitment_codec_identity(b"LKJACR17"),
-        "lkjscript-authored-change-codec-17"
-    );
-    assert_eq!(
-        commitment_codec_identity(b"LKJACR26"),
-        "lkjscript-authored-change-codec-26"
-    );
-}
-
-#[test]
-fn implementation_authority_uses_codec27_and_empty_application_keeps_frozen_codec21_bytes() {
+fn implementation_authority_and_empty_application_commit_complete_current_bytes() {
     let local = |byte| AuthoredDeclarationReference::Local {
         declaration: DeclarationSelector::Id {
             declaration: DeclarationId::from_bytes([byte; 16]).unwrap(),
@@ -434,29 +348,14 @@ fn implementation_authority_uses_codec27_and_empty_application_keeps_frozen_code
                 arguments: vec![expression(AuthoredExpressionOperation::I64 { value: 42 })],
             }),
         }],
-        budget: frozen_budget(),
+        budget: bounded_budget(),
     };
-    // Literal independent wire vectors: generation, base, list framing, change and expression.
-    let prefix = unhex(concat!(
-        "0707070707070707070707070707070707070707070707070707070707070707",
-        "00000000000000000000000000000001",
-    ));
-    let historical_empty = [
-        b"LKJACR21".as_slice(),
-        &prefix,
-        &unhex("230101010101010101010101010101010101001e010102020202020202020202020202020202000000000000000000000000000000010101010303030303030303030303030303030300000000000000010003000000000000002a"),
-    ].concat();
-    assert_eq!(
-        commitment_codec_identity(&historical_empty),
-        "lkjscript-authored-change-codec-21"
-    );
-    let old = request(Vec::new(), Vec::new());
+    let empty = request(Vec::new(), Vec::new());
     let current_empty = literal_intent(
-        b"LKJACR39",
         "230101010101010101010101010101010101003a000000000000000000000000000000000101020202020202020202020202020202020000000000000000000000000000000000000000000000010101010303030303030303030303030303030300000000000000010003000000000000002a",
     );
     assert_eq!(
-        crate::platform::change::canonical_authored_intent_bytes(&old).unwrap(),
+        crate::platform::change::canonical_authored_intent_bytes(&empty).unwrap(),
         current_empty
     );
 
@@ -467,17 +366,7 @@ fn implementation_authority_uses_codec27_and_empty_application_keeps_frozen_code
             requirement: RequirementId::from_bytes([5; 16]).unwrap(),
         }],
     );
-    let historical_authority = [
-        b"LKJACR27".as_slice(),
-        &prefix,
-        &unhex("23010101010101010101010101010101010100250000000000000001010404040404040404040404040404040405050505050505050505050505050505000000000000000100000000000000000000000000000000010102020202020202020202020202020202000000000000000000000000000000010101010303030303030303030303030303030300000000000000010003000000000000002a"),
-    ].concat();
-    assert_eq!(
-        commitment_codec_identity(&historical_authority),
-        "lkjscript-authored-change-codec-27"
-    );
     let current_authority = literal_intent(
-        b"LKJACR39",
         "230101010101010101010101010101010101003a00000000000000010104040404040404040404040404040404050505050505050505050505050505050000000000000001000000000000000000000000000000000101020202020202020202020202020202020000000000000000000000000000000000000000000000010101010303030303030303030303030303030300000000000000010003000000000000002a",
     );
     assert_eq!(
@@ -485,15 +374,16 @@ fn implementation_authority_uses_codec27_and_empty_application_keeps_frozen_code
         current_authority
     );
     let options = PublicationOptions {
-        idempotency_key: Some("historical-commitment".to_owned()),
-        intent: Some("frozen-options".to_owned()),
+        idempotency_key: Some("current-commitment".to_owned()),
+        intent: Some("current-options".to_owned()),
     };
-    let budget = crate::platform::change::canonical_authored_budget_bytes(frozen_budget()).unwrap();
-    for (request, intent) in [(old, current_empty), (authority, current_authority)] {
+    let budget =
+        crate::platform::change::canonical_authored_budget_bytes(bounded_budget()).unwrap();
+    for (request, intent) in [(empty, current_empty), (authority, current_authority)] {
         let normalized = normalize_change_request(request, options.clone()).unwrap();
         assert_eq!(
             normalized.request_commitment,
-            change_request_commitment_from_bytes(&intent, &budget, &options).unwrap()
+            independent_commitment(&intent, &budget, &options)
         );
     }
     for request in [
@@ -508,7 +398,7 @@ fn implementation_authority_uses_codec27_and_empty_application_keeps_frozen_code
     ] {
         assert_eq!(
             &crate::platform::change::canonical_authored_intent_bytes(&request).unwrap()[..8],
-            b"LKJACR39",
+            b"LKJACHNG",
         );
     }
 }

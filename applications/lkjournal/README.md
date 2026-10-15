@@ -16,43 +16,29 @@ Its stable modules are:
   exact-requirement-bound helper processing, metadata borrow, renewal, completion, and retry/failure
   meaning.
 
-Accepted source and preceding normalized artifact identity:
+Current authority and derived artifact identity:
 
 - repository: `repo_95f988c5423fe3eb823c329ef0832d51`;
 - package: `pkg_20000000000000000000000000000001`;
-- semantic revision: `rev_a1d97c5d7deda1ece8e2e3383bd7a58ae1e267838368ec5b42678e40c9eb1640`;
-- semantic state: `semantic_state_3832cd12c3fee672d0bdfb975cb363cbc457f6ef45f15cb44a62d40ab47f2dee`;
-- package revision: `package_revision_ea6eadedd5ab831a94a875c9b309b7b35a91bbda918d14639cfe72436b287df7`;
-- artifact manifest: `artifact_manifest_5bc2b36e3f2b6f5aa7c7feaad88c9309584f902706b3a453cbf57f12ffab01f1`;
-- artifact bundle: `artifact_bundle_ada895500133e3710df2d4088b8f7be1b2c7a137423ff8934d78d10a1c3018e3`;
+- semantic revision: `rev_f4b23a41ab20663095eeac65e19b3c0e17258e763b8337437f9c4c44351be4c5`;
+- semantic state: `semantic_state_ee0c46d127bba47f9ae2ae190f209e93ed03a9a57da9467a2241391d3980a46c`;
+- package revision: `package_revision_82e1255dba4dc181c9ffd0fac5ad619ed97ad491a34855c915be13fdd274e83b`;
+- artifact manifest: `artifact_manifest_522703193ccb0e3ddd91a82cae03fea275a572d48862b45820fce7f1d7bb9e26`;
+- artifact bundle: `artifact_bundle_f82a2ebf67a237f0a968788bca146ad5b1a36f5baf220b648a9a1823afd0c27c`;
 - 2,044 live root semantic owners and one exact built-in standard dependency.
 
-The original Graph 13 materialization preserved all existing application owner identities and behavior.
-Its exact standard dependency includes graph-owned composition, persistent-list mapping and pair;
-this cutover changes encoding, the dependency and generated artifact. Unchanged nominal and nested typed-data bytes retain their layout
-identities and require no operational-data migration.
-
-The binary64 campaign updates the exact standard supplier selection through public plan/apply and
-rebuilds the artifact under the successor compiler. All 2,040 application owners and deployment
-settings retain their meaning. The application requires no data migration.
-
-The composable-cell campaign replaces the exact standard dependency through the
-[reviewed public request](requests/20260922-standard-cells.lkjc) and regenerates the artifact.
-It preserves all application owners, deployment settings and behavior. This is compatibility
-maintenance; lkjournal does not adopt the new cell policy. Existing data and retained dependencies
-remain intact.
-
-The additive standard `list-window` update keeps this exact supplier selection. The application
-does not call the new function; checking and rebuilding with the successor executable preserve
-accepted HEAD and the complete existing artifact bytes. The 37 tests below belong to this pinned
-dependency, independently of the newer built-in standard package's 45 tests.
+The application binds one exact standard supplier. Dependency changes use reviewed
+public plan/apply, as in the [retained request](requests/20260922-standard-cells.lkjc),
+then regenerate the derived artifact. Checking/building does not change semantic
+HEAD or operational data. The supplier's tests belong to this exact closure, not
+the separately maintained built-in standard selection.
 
 ## Inspect and verify current authority
 
 From the repository root:
 
 ```sh
-cargo build --workspace --release --locked
+cargo build --release --locked -p lkjscript --bin lkjscript
 target/release/lkjscript status --project applications/lkjournal
 target/release/lkjscript query --project applications/lkjournal owners --limit 20
 target/release/lkjscript inspect --project applications/lkjournal owner module \
@@ -93,9 +79,9 @@ empty 404 and invokes none of them.
 
 ## Current service, interactive, and worker boundary
 
-All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,376,596-byte
+All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,500,625-byte
 current compiled bundle (SHA-256
-`c4b845bb015775d00708aaf71690dee785a8f234dbd6f6a1dc75594d1d1375ec`). The service descriptor
+`bec643b58e969c2ee518a56dfcb45e3bda329523266d3cefdaa0fa616693987e`). The service descriptor
 resolves `serve`, the worker descriptor resolves `work`, and `live.deployment.json` resolves
 `lkjournal-live-1`. Preparation strictly loads the standalone bundle,
 validates the runner, route-indexed handler and component requirement closure, grants, secrets, and adapters, and emits
@@ -203,31 +189,8 @@ Contributor-only `lkjscript-dev data-oracle` separately uses an exact PostgreSQL
 neutral migration and differential/resource evidence. That tool is not a deployment provider,
 application helper, public import path, or permanent dual reader/writer.
 
-The Owned-generic compiler refresh rebuilds the derived artifact through public
-build with compiler unit 15, bytecode 11 and artifact 22. It preserves accepted
-HEAD, exact standard selection, application owners and operational data.
-
-The owned-product metadata continuation rebuilt the derived bundle for compiler
-unit 17, bytecode 13 and artifact 24 through public build, preserving those accepted
-inputs. This does not update running deployments or migrate application data.
-It neither deploys this application nor changes operational state.
-
-The structured parallel compiler refresh rebuilds the current bundle for compiler
-19, bytecode 15 and artifact 26 through public check/build. All 44 application and
-exact-supplier tests agree between production and reference execution. Accepted
-HEAD, dependency selection, application behavior and operational data are unchanged.
-
-The scoped-read compiler refresh rebuilds the current bundle for
-compiler 30, bytecode 25 and artifact 37 through public check/build. All 44 tests
-agree between production and reference execution. Accepted HEAD, exact historical
-standard supplier, application behavior and operational data remain unchanged.
-
-The preceding derived bundle used compiler 33, bytecode 27 and artifact 40 through
-ordinary public check/build. All 44 application and exact-supplier tests pass
-with zero failures and agreement between both evaluators. Accepted HEAD and its
-pinned standard supplier remain unchanged; this application does not yet adopt
-nominal owned records. Running deployments and operational data retain their
-separate authority. The [release notes](../../docs/releases/v0.1.92.md)
-identify the format cut; [status](../../docs/status.md) owns delivery and publication.
-
-The .96 compilation refresh selects artifact_bundle_3d41df53e672b30dbfd7f1bd558fea33feeb5842b874a2b20b6930cbb1d5e326 (1,376,596 bytes, SHA-256 c4b845bb015775d00708aaf71690dee785a8f234dbd6f6a1dc75594d1d1375ec), using compiler 34, bytecode 28 and artifact 41. Its two public builds are byte-identical and all 44 source/supplier checks report zero failures and differential equality; the [separate rebuild receipt](../../.artifacts/associated-read-views/consumer-assets-installation-proposals/sourcef87c8b-four-families-first/receipt.json) binds their original source f87c8b7fa80e03bb8e3901746aa14a845fc509161916ca07eef92c55d32ed550. Accepted HEAD and exact suppliers remain unchanged. This compilation refresh supplies no final source, release or additional runtime acceptance.
+The generated bundle must match public build output under the current schema.
+Regenerate it after schema changes, preserving the accepted graph and exact
+supplier selection. Deployments and operational data have separate authority;
+rebuilding neither updates running services nor supplies source-full, final-byte
+or publication acceptance. [Status](../../docs/status.md) records those outcomes.

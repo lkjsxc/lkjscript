@@ -96,17 +96,17 @@ Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_6818785d8919028a69659b24df495b2d7a42f2676a95fd1aa0ae143a32623013`;
-- package revision: `package_revision_cdf12369ee92d1ac490ab2f13ac3dccaa7ed7a187ed42e784ecb9b091eb19f01`;
-- package transport: `package_transport_be856691be8136690b69c0369e35ab5dcbd7f59ac4730e35c6fd3d8df29ffe95`;
-- artifact manifest: `artifact_manifest_a44449008887afec47433fe219d7566fa6bdbbf80ee550d986233d71b9e4d868`;
-- artifact bundle: `artifact_bundle_fbac7b94dee0a93032ee6374748ebb317de5f682f13516577ce9c7bce880df62`;
-- artifact bundle size: 1,276,861 bytes;
+- semantic revision: `rev_17a9ce13f8ac2dfb3e458cf876fadb76882958da8614cbee9213d50445614903`;
+- package revision: `package_revision_aebfc42f9c09ec0ba23a38c8d82873183f87f8b835eae232d2d877aa1f51f7a0`;
+- package transport: `package_transport_4c34e7a7b849e8f48917e124693d8cc27db2aa8c81d4eae3328142d2e539c9d0`;
+- artifact manifest: `artifact_manifest_2fda9238eeea6882503877771ebbcc9e6558a799051f2bfaa61e46f7ab2666ce`;
+- artifact bundle: `artifact_bundle_ea1f4ed73e574549a3e002f47b9d76becfb279470f179326508fc87a0ef3f017`;
+- artifact bundle size: 1,395,603 bytes;
 - 2,800 live semantic owners, 291 compiler units, and 116 graph tests.
 
-The public check passes all 116 tests with zero failures and agreement between
-production and reference execution. Source-full and finalized-archive acceptance
-remain separate obligations recorded by status.
+The public check requires agreement between production and reference execution for
+all 116 tests. Source-full and finalized-archive acceptance remain separate
+obligations recorded by [status](../../docs/status.md).
 
 Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose
 ordinary parametric records with pure functions. Mapping invokes the first callback then the second,
@@ -155,8 +155,7 @@ returns an empty list. Both signed I64 extremes are valid inputs. The pure body 
 tail-recursive helper use ordinary indexed reads and persistent append, without a new intrinsic.
 The [literal native request](requests/20260923-list-window.lkjc) and eight graph tests cover ranges,
 empty input, extreme bounds, Unicode and structural records. The maintained transported aggregation
-consumer uses it for ordered entry pages and consumer-owned nominal events. Existing exact package
-selections remain valid; lkjournal retains its prior supplier and byte-identical artifact.
+consumer uses it for ordered entry pages and consumer-owned nominal events.
 
 `task-fold-left<Item,State;E>(List<Item>, State, TaskFunction(State,Item)->State ! E)->State ! E`
 and `task-map<Input,Output;E>(List<Input>, TaskFunction(Input)->Output ! E)->List<Output> ! E`
@@ -166,8 +165,9 @@ task step and uses persistent append. Every callback runs once in input order; e
 none. Additional traversal control space is constant, while indexed reads retain their existing
 cost. The library holds no grants and declares no concrete consumer requirements. Caller allowances,
 component bindings, canonical grant counters and lexical transactions remain invocation boundaries.
-The fresh transported configuration/data workload is recorded separately from maintained application
-behavior in the [effect campaign](../../docs/campaigns/202609111843.md).
+The [offline package owner](../../tools/lkjscript-dev/src/offline_packages.rs)
+verifies transported configuration/data composition separately from maintained
+application behavior.
 
 `iteration-step<State,Output>` is the ordinary public nominal variant `continue(State) | done(Output)`.
 `task-iterate<State,Output;E>(State, TaskFunction(State)->iteration-step<State,Output> ! E)->Output ! E`
@@ -175,15 +175,13 @@ invokes the callback once per decision, continuing with its next state or return
 Immediate completion invokes once. State and output are unconstrained ordinary types. The function
 has no implicit iteration limit, scheduler or exception conversion; execution budgets and effect
 admission still apply. Its implementation and the fold loop use ordinary task tail calls in both
-evaluators, with invocation resources and ancestor transaction continuations preserved. Fresh
-transported adoption is tracked by the [task iteration campaign](../../docs/campaigns/202609121214.md).
+evaluators, with invocation resources and ancestor transaction continuations preserved.
 
 `function-compose<A,B,C>(outer: Function(B)->C, inner: Function(A)->B) -> Function(A)->C`
 uses `bind` over its private generic graph helper. Four maintained graph tests fix composition
 order and heterogeneous `I64 -> Bool -> Text` instantiation. Runtime bound prefixes may capture
 other checked pure callables or recursively safe immutable data; bare unconstrained stored type
-parameters, secrets, streams, and resources are rejected. The Graph 14 cutover retains these bodies;
-unchanged TypeObject 10 bytes and typed-data layout identities remain current.
+parameters, secrets, streams, and resources are rejected.
 
 The `HttpClient` interface has exactly one idempotent, possibly externally visible `get` operation.
 It accepts only ordered headers and returns status, ordered headers, and whole body bytes; endpoint,
@@ -213,12 +211,8 @@ aliases. Negative, past-end and empty-buffer indexing traps, including both sign
 I64 extremes; a caller can guard with `bytes-length`. The closed representation
 primitive is `core.bytes.get`. Its [native declaration and six fixed graph tests](requests/20260924-bytes-get.lkjc)
 cover NUL, ASCII and individual UTF-8 octets. Independent evaluator/public tests cover
-all 256 octets, invalid encodings and bounds. The maintained repository policy now
-inspects Bytes directly; it no longer receives an integer-list expansion.
-
-This addition is development source after v0.1.44, not a capability of that frozen
-release. Its exact new standard requires the byte-index intrinsic. Old exact
-standard closures remain usable and unchanged consumers retain their selections.
+all 256 octets, invalid encodings and bounds. The maintained repository policy
+inspects Bytes directly.
 
 `text-join(items: List<Text>, separator: Text) -> Text` is an ordinary pure function.
 Empty input returns empty text; a singleton returns its item; separators occur exactly
@@ -229,11 +223,10 @@ directly. This has logarithmic recursive depth but still copies concatenated tex
 retains the existing list-index cost. It introduces no intrinsic or output-limit change.
 The [native request](requests/20260924-text-join.lkjc) adds twelve fixed graph tests;
 the [native text guide](../../docs/guides/native-text.md) demonstrates ordinary mapping,
-caller-owned HTML escaping and detached execution. The maintained reference-page tool
-now uses this function instead of its own range implementation. Other exact consumers
-are unchanged. This function is development source after the frozen v0.1.44 release.
+caller-owned HTML escaping and detached execution. The maintained reference-page
+tool uses this function.
 
-## Byte ranges and explicit copies (development v0.1.61)
+## Byte ranges and explicit copies
 
 `bytes-slice(bytes: Bytes, start: I64, end: I64) -> Bytes` selects `[start, end)` with
 strict `0 <= start <= end <= bytes-length(bytes)` bounds. Invalid bounds trap;
@@ -251,16 +244,9 @@ Both operations remain ordinary immutable Bytes and introduce no region or borro
 The closed primitives are `core.bytes.slice` and `core.bytes.copy`. The
 [literal native request](requests/20260930-byte-ranges.lkjc) adds ten fixed graph
 tests. The [native guide](../../docs/guides/native-byte-ranges.md) covers exact library
-composition, captures, map keys and source-free command execution. A predecessor
-runtime rejects the expanded standard at closure admission. Old exact suppliers and
-unchanged applications are not implicitly upgraded; see [status](../../docs/status.md)
-for the separately published executable.
+composition, captures, map keys and source-free command execution.
 
-## Unreleased byte construction and UTF-8 results
-
-These additions require development source after v0.1.45. The immutable v0.1.45
-executable does not support their closed intrinsic names. Old exact suppliers and
-unchanged application artifacts are not upgraded implicitly.
+## Byte construction and UTF-8 results
 
 `bytes-from-list(octets: List<I64>) -> Bytes` constructs the exact unsigned byte
 sequence. Empty input is valid. Values outside 0 through 255 trap; they are never
@@ -279,64 +265,20 @@ The closed primitives are `core.bytes.from-list` and `core.bytes.to-text-result`
 The [literal public request](requests/20260925-byte-conversion.lkjc) adds two exact
 externals and twelve fixed graph tests, without changing graph or data encodings.
 
-## Owned-generic compiler refresh
+## Derived assets
 
-The first-order [Owned increment](../../docs/spec/owned-generics.md) rebuilds the
-standard transport/interface projection and derived artifact through public
-export/build. Accepted HEAD and all standard operations/tests retain their meaning.
-The scalar-cell primitives are available as closed externals; this campaign adds
-no standard graph operation. Exact retained older suppliers remain source inputs
-and require current derived artifacts.
-
-The [owned-product refresh](../../docs/campaigns/20261001-owned-products.md) derives
-the Graph 19 transport and compiler 16 / bytecode 12 / artifact 23 bundle
-through the same public owners. The [metadata continuation](../../docs/campaigns/20261001-owned-product-metadata.md)
-refreshed the derived bundle to compiler 17 / bytecode 13 / artifact 24.
-Accepted HEAD and standard program meaning remain unchanged; this is a compiler
-refresh, not product adoption in the standard library.
-
-The [structured parallel refresh](../../docs/campaigns/20261002-structured-parallel.md)
-derived the Graph 21 transport and compiler 19 / bytecode 15 / artifact 26
-bundle through public export/build. All 89 graph tests agree between production and
-reference execution; accepted HEAD and standard operations retain their meaning.
-
-The earlier refresh for scoped task borrowing derives the interface 18 transport
-through public export and the compiler 30 / bytecode 25 / artifact 37 bundle
-through public check/build. All 96 tests agree between production and reference
-execution. The package revision and transport pins at that checkpoint selected those
-wrappers; that refresh retained accepted HEAD and existing standard meaning.
-The [current release notes](../../docs/releases/v0.1.92.md) identify the selected
-compatibility boundary; [status](../../docs/status.md) owns actual acceptance.
-
-The generalized sequence increment used Graph 31 and interface 19, with compiler
-31, bytecode 26 and artifact 38. Public check/build/export regenerated the derived
-owners from the accepted standard, including the ordinary-data wrappers and
-replacement operation. All 116 graph tests agreed between both evaluators.
-
-The nominal owned-record refresh used Graph 32 and interface 20, with
-compiler 32, bytecode 27 and artifact 39. The native FIFO migration updates the
-accepted standard to public `Fifo<T: Owned>`. Public check/build/export derives
-that increment's transport and bundle; all 116 graph tests passed with zero
-failures and agreement between production and reference execution. Exact retained
-older suppliers remain separate source inputs and require current derived artifacts.
-
-The mixed-contract refresh exports Graph 33/interface 21 wrappers and rebuilds
-the derived bundle for compiler 33, bytecode 27 and artifact 40. Accepted semantic
-revision and all native standard graphs remain unchanged, while exported package
-revision, transport and artifact identities change at their explicit format
-boundaries. Retained consumers preserve their exact historical supplier selections.
-The current public check passes all 116 tests with agreement between production
-and reference execution; source-full and finalized-byte acceptance remain separate.
-
-The read-view contract refresh exports Graph 34/interface 22 and rebuilds the
-derived bundle for compiler 34, bytecode 28 and artifact 41. The accepted semantic
-revision and native standard graphs remain unchanged. Public check passes all
-116 tests with equal production and reference results; existing consumers retain
-their exact supplier selections.
+Public check/build/export regenerate the maintained bundle and transport from
+accepted meaning. Only the current canonical schema is admitted. Its conservative
+fingerprint binds the complete normalized production source closure, manifests,
+lockfile and derivation policy, rather than type layouts alone; see
+[the schema owner](../../build.rs). Regenerate affected assets after a schema change.
+Rebuilding derives new bytes without changing semantic HEAD, running deployments
+or operational data. [Status](../../docs/status.md) owns actual acceptance and
+publication; graph tests alone do not establish either.
 
 ## Native owned FIFO
 
-The current source adds `fifo-empty<T: Owned>`, `fifo-length`, `fifo-push`,
+The standard exports `fifo-empty<T: Owned>`, `fifo-length`, `fifo-push`,
 `fifo-pop`, `fifo-front` and `fifo-discard` as ordinary pure graph functions.
 Their public nominal `Fifo<T: Owned>` contains incoming and outgoing owned
 sequences, with representation access private to the exact core module.
@@ -357,5 +299,4 @@ representation, allocation, lifetime and resource limits. Ten fixed
 graph tests cover order, empty reuse, mixed stacks, repeated front reads and
 nested cleanup. The [independent consumer](../../examples/owned-fifo/README.md)
 exercises transported generic code and source-free execution over three distinct
-owned element representations. These development additions are not present in
-the immutable v0.1.89 executable; publication remains separately accepted.
+owned element representations. Publication remains separately accepted.

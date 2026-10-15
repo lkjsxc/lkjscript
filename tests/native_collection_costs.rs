@@ -1,10 +1,18 @@
 //! Public cost ceilings permit future proof propagation; they do not require rescanning.
+//! Host runs share admitted programs; explicit candidates execute the selected binary.
 #![allow(clippy::unwrap_used, clippy::panic)]
+#[allow(
+    dead_code,
+    reason = "shared semantic CLI support spans independent integration crates"
+)]
+#[path = "support/semantic_cli.rs"]
+mod semantic_cli;
 #[allow(dead_code)]
 #[path = "native_components_support/mod.rs"]
 mod support;
 use serde_json::{Value, json};
 use std::fs;
+use support::copy_executable;
 use support::{Native, digest, field, path, quoted};
 
 const SOURCE: &str = include_str!("../examples/owned-metadata-costs/workload.lkjc");
@@ -88,6 +96,7 @@ fn native_collection_selection_cost_matrix_is_observed_without_host_results() {
     let descriptor = public.input("collection-cost.deployment.json", &deployment.to_string());
     fs::remove_dir_all(&project).unwrap();
     fs::remove_file(public.root.join("standard.lkjp")).unwrap();
+    public.sources_detached();
     let mut rows = Vec::new();
     for mode in 0_u64..=4 {
         for n in [0, 8, 64, 256, 1024] {
@@ -184,6 +193,7 @@ fn native_collection_selection_cost_matrix_is_observed_without_host_results() {
         "modes":{"0":"list-get","1":"map-get-or","2":"pack-unpack",
             "3":"pack-drop","4":"borrowed-field"},"rows":rows,
         "binary_sha256":executable_hash,"artifact_sha256":artifact_hash,
+        "execution":public.execution_evidence(),
         "source_project_and_transport_deleted":true,"status":"passed",
         "cost_ceilings_allow_lower_future_work":true
     }).to_string());

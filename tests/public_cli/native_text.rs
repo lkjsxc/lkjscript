@@ -138,31 +138,119 @@ fn native_text_join_matches_independent_ordered_values_before_and_after_source_r
     let deployment = descriptor(&public, "batch");
     let (inputs, expected) = cases();
     assert_eq!(inputs.len(), 2197);
-    let input = public.input("cases.json", &json!([inputs]).to_string());
+    // This is a collection of independent joins. Combining all of them into one
+    // list-map invocation exceeds the ordinary cumulative allocation quota.
+    // Keep the complete ordered matrix, including the largest join by itself,
+    // and give each bounded group the unchanged production/reference budgets.
+    let mut ranges = Vec::new();
+    let (mut start, mut items) = (0, 0);
+    for (index, input) in inputs.iter().enumerate() {
+        let length = input["items"].as_array().unwrap().len();
+        if start < index && (index - start == 128 || items + length > 8192) {
+            ranges.push(start..index);
+            start = index;
+            items = 0;
+        }
+        items += length;
+    }
+    ranges.push(start..inputs.len());
+    assert_eq!(ranges.last().unwrap(), &(inputs.len() - 1..inputs.len()));
+    assert_eq!(
+        inputs.last().unwrap()["items"].as_array().unwrap().len(),
+        32768
+    );
+    assert_eq!(ranges.iter().map(|range| range.len()).sum::<usize>(), 2197);
+    let partitions = ranges
+        .iter()
+        .enumerate()
+        .map(|(index, range)| {
+            let mut case = BatchCase::success(
+                format!("text-partition-{index}"),
+                &json!([&inputs[range.clone()]]),
+                json!(&expected[range.clone()]),
+            );
+            case.target = Some("batch".to_owned());
+            // Keep ordinary source defaults and the detached descriptor defaults
+            // exactly; neither path overrides or replenishes a row's quotas.
+            case
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(partitions.len(), 20, "complete bounded partition inventory");
     for detached in [false, true] {
         if detached {
             std::fs::remove_dir_all(&public.project).unwrap();
             std::fs::remove_file(&draft).unwrap();
             std::fs::remove_file(public.root.path().join("text.lkjc")).unwrap();
+            // The source batch helper removes its canonical source-binding witness
+            // before returning, so it cannot supply meaning to detached execution.
+            assert!(
+                !public
+                    .root
+                    .path()
+                    .join("source-batch-text-join.witness.lkjp")
+                    .exists()
+            );
         }
-        let output = public.root.path().join(format!("values-{detached}.json"));
-        let mut arguments = if detached {
-            vec!["run", "--deployment", path(&deployment)]
+        let records = if detached {
+            public.batch("text-join", &deployment, &partitions)
         } else {
-            vec!["run", "batch"]
+            public.source_batch("text-join", "batch", &partitions)
         };
-        arguments.extend([
+        assert_eq!(records.len(), ranges.len());
+        for row in &records {
+            let execution = compact_record(row, "execution");
+            assert_eq!(compact_field(execution, "target"), "batch");
+            if detached {
+                super::native_indexed_data::joined(execution);
+            } else {
+                assert_eq!(compact_field(execution, "differential"), "equal");
+            }
+        }
+        // Read the actual published row values after the shared reader has checked
+        // every closed row, independent expectation, authority and joined executor.
+        let result = public.root.path().join(if detached {
+            "batch-text-join.result.jsonl"
+        } else {
+            "source-batch-text-join.result.jsonl"
+        });
+        let rows = std::fs::read_to_string(result).unwrap();
+        let rows = rows
+            .lines()
+            .map(|line| serde_json::from_str::<Value>(line).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(rows.len(), ranges.len());
+        let mut observed = Vec::with_capacity(expected.len());
+        for (row, range) in rows.iter().zip(&ranges) {
+            let values =
+                serde_json::from_str::<Vec<String>>(row["result_json"].as_str().unwrap()).unwrap();
+            assert_eq!(values, expected[range.clone()]);
+            observed.extend(values);
+        }
+        assert_eq!(observed, expected);
+    }
+    // The largest literal edge also crosses an ordinary source-free process
+    // boundary independently of both batch readers and aggregate result files.
+    let encoded = &partitions.last().unwrap().arguments_json;
+    let input = public.input("largest-singleton.json", encoded);
+    let result = public.root.path().join("largest-singleton-result.json");
+    let records = public.cli(
+        &[
+            "run",
+            "--deployment",
+            path(&deployment),
             "--arguments-file",
             path(&input),
             "--result-file",
-            path(&output),
-        ]);
-        public.cli(&arguments, true);
-        assert_eq!(
-            serde_json::from_slice::<Vec<String>>(&std::fs::read(output).unwrap()).unwrap(),
-            expected
-        );
-    }
+            path(&result),
+        ],
+        true,
+    );
+    super::native_indexed_data::joined(compact_record(&records, "execution"));
+    assert_eq!(std::fs::read(input).unwrap(), encoded.as_bytes());
+    assert_eq!(
+        serde_json::from_slice::<Vec<String>>(&std::fs::read(result).unwrap()).unwrap(),
+        vec![expected.last().unwrap().clone()]
+    );
 }
 
 #[test]

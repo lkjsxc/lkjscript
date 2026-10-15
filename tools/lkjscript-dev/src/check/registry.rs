@@ -1,4 +1,4 @@
-use super::model::{CHECK_CONTRACT_VERSION, DagManifest, DagNode, Gate};
+use super::model::{CHECK_CONTRACT_VERSION, DagManifest, DagNode, Gate, GateInput};
 use crate::error::DevError;
 use crate::evidence::VerificationDigest;
 use serde::Serialize;
@@ -107,6 +107,8 @@ impl GateRegistry {
                 name: name.clone(),
                 dependencies: gate.dependencies.clone(),
                 command: gate.identity_command().to_vec(),
+                required_inputs: gate.required_inputs.clone(),
+                environment: gate.environment.clone(),
                 cacheable: gate.cacheable,
                 unavailable_exit_code: gate.unavailable_exit_code,
             });
@@ -143,6 +145,8 @@ impl GateRegistry {
             cacheable: bool,
             unavailable_exit_code: Option<i32>,
             required_outputs: Vec<String>,
+            required_inputs: &'a [GateInput],
+            environment: &'a BTreeMap<String, String>,
         }
         let gates = self
             .gates
@@ -156,6 +160,8 @@ impl GateRegistry {
                 maximum_stderr_bytes: gate.maximum_stderr_bytes,
                 cacheable: gate.cacheable,
                 unavailable_exit_code: gate.unavailable_exit_code,
+                required_inputs: &gate.required_inputs,
+                environment: &gate.environment,
                 required_outputs: gate
                     .required_outputs
                     .iter()
@@ -204,6 +210,43 @@ impl GateRegistry {
                     )));
                 }
             }
+            let mut inputs = BTreeSet::new();
+            for input in &gate.required_inputs {
+                if gate.cacheable
+                    || !gate.dependencies.contains(&input.producer)
+                    || !self
+                        .gate(&input.producer)?
+                        .required_outputs
+                        .contains(&input.path)
+                    || gate.required_outputs.contains(&input.path)
+                    || !inputs.insert(&input.path)
+                {
+                    return Err(DevError::infrastructure(format!(
+                        "gate '{}' has an unbound, repeated, cacheable or overwritten input",
+                        gate.name
+                    )));
+                }
+            }
+            // Environment additions are data bindings, never compiler/Cargo routing overrides.
+            if gate
+                .environment
+                .keys()
+                .any(|name| name != "LKJSCRIPT_RELEASE_CANDIDATE")
+                || gate
+                    .environment
+                    .get("LKJSCRIPT_RELEASE_CANDIDATE")
+                    .is_some_and(|candidate| {
+                        !gate
+                            .required_inputs
+                            .iter()
+                            .any(|input| input.path.to_str() == Some(candidate.as_str()))
+                    })
+            {
+                return Err(DevError::infrastructure(format!(
+                    "gate '{}' has an unsupported or unbound environment addition",
+                    gate.name
+                )));
+            }
         }
         Ok(())
     }
@@ -216,6 +259,8 @@ impl GateRegistry {
             maximum_stdout_bytes: u64,
             maximum_stderr_bytes: u64,
             outputs: Vec<String>,
+            inputs: &'a [GateInput],
+            environment: &'a BTreeMap<String, String>,
         }
         let mut owners: BTreeMap<Vec<u8>, String> = BTreeMap::new();
         for gate in &self.gates {
@@ -224,6 +269,8 @@ impl GateRegistry {
                 timeout_nanoseconds: gate.timeout.as_nanos(),
                 maximum_stdout_bytes: gate.maximum_stdout_bytes,
                 maximum_stderr_bytes: gate.maximum_stderr_bytes,
+                inputs: &gate.required_inputs,
+                environment: &gate.environment,
                 outputs: gate
                     .required_outputs
                     .iter()
@@ -395,7 +442,10 @@ pub(crate) fn base_registry(
         "release_build",
         &[
             "build",
-            "--workspace",
+            "--package",
+            "lkjscript",
+            "--bin",
+            "lkjscript",
             "--release",
             "--locked",
             "--message-format=json",
@@ -403,6 +453,8 @@ pub(crate) fn base_registry(
         &["fmt"],
     );
     release.required_outputs.push(binary.clone());
+    // Workspace tools are covered by source tests and built by the immutable
+    // bootstrap. This gate produces only the optimized executable it declares.
     // Re-observe Cargo selection; its own compilation cache remains enabled.
     release.cacheable = false;
     gates.push(release);
@@ -410,8 +462,9 @@ pub(crate) fn base_registry(
         "release_command_lifecycle",
         &[
             "test",
+            "--workspace",
+            "--all-features",
             "--locked",
-            "--release",
             "--message-format=json",
             "--test",
             "public_cli",
@@ -421,9 +474,20 @@ pub(crate) fn base_registry(
         ],
         &["release_build"],
     );
-    // Cargo's release test build can select a different feature-unified executable at the
-    // same output path. Bind that last producer before any copied-candidate oracle starts.
-    release_lifecycle.required_outputs.push(binary.clone());
+    // Reuse the source test profile. Its Cargo outputs retain their own cold-origin
+    // proof; the optimized candidate is a separately bound input, never a claimed
+    // output of this test-profile compilation.
+    release_lifecycle
+        .required_outputs
+        .push(cargo_target.join("debug/lkjscript"));
+    release_lifecycle.required_inputs.push(GateInput {
+        path: binary.clone(),
+        producer: "release_build".to_owned(),
+    });
+    release_lifecycle.environment.insert(
+        "LKJSCRIPT_RELEASE_CANDIDATE".to_owned(),
+        path_string(&binary),
+    );
     release_lifecycle.cacheable = false;
     gates.push(release_lifecycle);
     let mut distributed_http = gate(
@@ -1314,8 +1378,8 @@ mod tests {
     }
 
     #[test]
-    fn copied_candidate_oracles_wait_for_the_last_release_binary_producer() -> Result<(), DevError>
-    {
+    fn copied_candidate_oracles_wait_for_a_lifecycle_bound_to_the_optimized_candidate()
+    -> Result<(), DevError> {
         let temporary = tempfile::tempdir().expect("temporary registry repository");
         let target = super::super::cargo_origin_context::Context::target(temporary.path())?;
         let registry = base_registry(temporary.path(), temporary.path(), Path::new("/bin/true"))
@@ -1323,9 +1387,26 @@ mod tests {
         let lifecycle = registry
             .gate("release_command_lifecycle")
             .expect("release lifecycle");
+        assert_eq!(lifecycle.required_outputs, [target.join("debug/lkjscript")]);
+        assert!(
+            !lifecycle
+                .command
+                .iter()
+                .any(|argument| argument == "--release")
+        );
         assert_eq!(
-            lifecycle.required_outputs,
-            [target.join("release/lkjscript")]
+            lifecycle.required_inputs,
+            [GateInput {
+                path: target.join("release/lkjscript"),
+                producer: "release_build".to_owned(),
+            }]
+        );
+        assert_eq!(
+            lifecycle.environment,
+            BTreeMap::from([(
+                "LKJSCRIPT_RELEASE_CANDIDATE".to_owned(),
+                path_string(&target.join("release/lkjscript"))
+            ),])
         );
         for name in [
             "distributed_http_application",

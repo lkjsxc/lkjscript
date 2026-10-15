@@ -10,7 +10,7 @@ mod fixture;
 mod negative;
 #[path = "native_data_sequences/oracle.rs"]
 mod oracle;
-use fixture::{DataSequences, failed_join};
+use fixture::{DataSequences, failed_join, failure_case, success_case};
 
 #[test]
 fn native_data_sequences_generic_export_finite_model_and_detached_execution() {
@@ -136,25 +136,26 @@ fn native_data_sequences_generic_export_finite_model_and_detached_execution() {
         if detached {
             data.detach();
         }
+        let mut executions = Vec::new();
         for batch in cases.chunks(128) {
             let expected: Vec<_> = batch
                 .iter()
                 .map(|actions| oracle::expected(actions))
                 .collect();
-            data.expected(
+            data.queue_expected(
                 "data-trace-batch",
                 &json!([batch]),
                 &json!(expected),
-                detached,
+                &mut executions,
             );
         }
         for length in [31, 32, 33, 256, 1024] {
             let actions = oracle::burst(length);
-            data.expected(
+            data.queue_expected(
                 "data-trace",
                 &json!([actions]),
                 &oracle::expected(&actions),
-                detached,
+                &mut executions,
             );
         }
         let extremes = vec![
@@ -164,12 +165,27 @@ fn native_data_sequences_generic_export_finite_model_and_detached_execution() {
             oracle::action(3, -1),
             oracle::action(1, 0),
         ];
-        data.expected(
+        data.queue_expected(
             "data-trace",
             &json!([extremes]),
             &oracle::expected(&extremes),
-            detached,
+            &mut executions,
         );
+        if detached {
+            assert_eq!(executions.len(), cases.len().div_ceil(128) + 6);
+            data.batch("data-finite-model", &executions);
+            // The complete matrix shares candidate preparation; a nonempty ordinary
+            // copied-binary run independently retains the source-free CLI boundary.
+            let actions = oracle::burst(33);
+            data.expected(
+                "data-trace",
+                &json!([actions]),
+                &oracle::expected(&actions),
+                true,
+            );
+        } else {
+            data.source_batch("data-finite-model", &executions);
+        }
         data.verify_identity();
     }
 }
@@ -183,52 +199,68 @@ fn native_data_sequences_immutable_reads_survive_replacement_removal_disposal_an
         if detached {
             data.detach();
         }
+        let mut executions = Vec::new();
         for (before, after) in [(i64::MIN, i64::MAX), (-1, 0), (0, 1), (41, -9)] {
-            data.expected(
+            data.queue_expected(
                 "data-scalar",
                 &json!([before, after]),
                 &oracle::snapshot(&json!(before), &json!(after)),
-                detached,
+                &mut executions,
             );
         }
         for (before, after) in [(false, true), (true, false)] {
-            data.expected(
+            data.queue_expected(
                 "data-bool",
                 &json!([before, after]),
                 &oracle::snapshot(&json!(before), &json!(after)),
-                detached,
+                &mut executions,
             );
         }
         for (before, after) in [(&original, &replacement), (&replacement, &original)] {
-            data.expected(
+            data.queue_expected(
                 "data-nested",
                 &json!([before, after]),
                 &oracle::snapshot(before, after),
-                detached,
+                &mut executions,
             );
         }
         if detached {
-            let records = data.expected("data-transfer", &json!([original,replacement]), &json!({"before":original,"displaced":original,"after":replacement,"side":original}), true);
-            let observation: Value = serde_json::from_str(compact_field(
-                compact_record(&records, "execution"),
-                "production-observation",
-            ))
-            .unwrap();
-            assert_eq!(observation["parallel_scopes"], 1);
-            assert!(observation["parallel_worker_dispatches"].as_u64().unwrap() > 0);
-            let records = data.expected(
-                "data-shared",
+            assert_eq!(
+                executions.len(),
+                8,
+                "all detached pure immutable-read cases"
+            );
+            data.batch("data-immutable-reads", &executions);
+            // Task callable kind remains an ordinary foreground boundary even with
+            // an empty effect row; each run retains actual structured-worker evidence.
+            for (target, expected) in [
+                (
+                    "data-transfer",
+                    json!({"before":original,"displaced":original,"after":replacement,"side":original}),
+                ),
+                (
+                    "data-shared",
+                    json!({"left":original,"right":original,"after":replacement}),
+                ),
+            ] {
+                let records =
+                    data.expected(target, &json!([original, replacement]), &expected, true);
+                let observation: Value = serde_json::from_str(compact_field(
+                    compact_record(&records, "execution"),
+                    "production-observation",
+                ))
+                .unwrap();
+                assert_eq!(observation["parallel_scopes"], 1);
+                assert!(observation["parallel_worker_dispatches"].as_u64().unwrap() > 0);
+            }
+            data.expected(
+                "data-nested",
                 &json!([original, replacement]),
-                &json!({"left":original,"right":original,"after":replacement}),
+                &oracle::snapshot(&original, &replacement),
                 true,
             );
-            let observation: Value = serde_json::from_str(compact_field(
-                compact_record(&records, "execution"),
-                "production-observation",
-            ))
-            .unwrap();
-            assert_eq!(observation["parallel_scopes"], 1);
-            assert!(observation["parallel_worker_dispatches"].as_u64().unwrap() > 0);
+        } else {
+            data.source_batch("data-immutable-reads", &executions);
         }
         data.verify_identity();
     }
@@ -241,14 +273,27 @@ fn native_data_sequences_owned_replacement_preserves_displaced_custody() {
         if detached {
             data.detach();
         }
+        let mut executions = Vec::new();
         for (original, replacement) in [(7, 42), (i64::MIN, i64::MAX), (i64::MAX, i64::MIN), (0, 0)]
         {
-            data.expected(
+            data.queue_expected(
                 "data-owned-replace",
                 &json!([original, replacement]),
                 &json!({"displaced":original,"first":replacement,"last":9,"length":2}),
-                detached,
+                &mut executions,
             );
+        }
+        if detached {
+            assert_eq!(executions.len(), 4, "all detached owned replacements");
+            data.batch("data-owned-replacements", &executions);
+            data.expected(
+                "data-owned-replace",
+                &json!([7, 42]),
+                &json!({"displaced":7,"first":42,"last":9,"length":2}),
+                true,
+            );
+        } else {
+            data.source_batch("data-owned-replacements", &executions);
         }
         data.verify_identity();
     }
@@ -260,87 +305,115 @@ fn native_data_sequences_bounds_and_fuel_refusals_join_cleanup_and_recover() {
     let descriptor_path = data.consumer.root.path().join("data-trace.deployment.json");
     let mut limited: Value =
         serde_json::from_slice(&std::fs::read(descriptor_path).unwrap()).unwrap();
-    for detached in [false, true] {
-        if detached {
-            data.detach();
+    let mut executions = Vec::new();
+    for index in [i64::MIN, -1, 2, i64::MAX] {
+        for (target, arguments) in [
+            ("data-get", json!([index])),
+            ("data-replace", json!([index, 42])),
+        ] {
+            executions.push(failure_case(
+                target,
+                &arguments,
+                "semantic",
+                "normalized_sequence_index",
+                executions.len(),
+            ));
+            executions.push(success_case(
+                "data-get",
+                &json!([0]),
+                &json!(7),
+                executions.len(),
+            ));
+            executions.push(success_case(
+                "data-replace",
+                &json!([1, 42]),
+                &json!({"displaced":9,"current":42,"length":2}),
+                executions.len(),
+            ));
         }
-        for index in [i64::MIN, -1, 2, i64::MAX] {
-            for (target, arguments) in [
-                ("data-get", json!([index])),
-                ("data-replace", json!([index, 42])),
-            ] {
-                let (records, _) = data.run(target, &arguments, detached, false);
-                let diagnostic = compact_record(&records, "diagnostic");
-                assert_eq!(compact_field(diagnostic, "class"), "semantic");
-                assert_eq!(
-                    compact_field(diagnostic, "code"),
-                    "normalized_sequence_index"
-                );
-                if detached {
-                    failed_join(diagnostic);
-                }
-                data.expected("data-get", &json!([0]), &json!(7), detached);
-                data.expected(
-                    "data-replace",
-                    &json!([1, 42]),
-                    &json!({"displaced":9,"current":42,"length":2}),
-                    detached,
-                );
-            }
-        }
-        let (records, _) = data.run("data-order", &json!([]), detached, false);
-        let diagnostic = compact_record(&records, "diagnostic");
-        assert_eq!(
-            compact_field(diagnostic, "code"),
-            "normalized_list_index",
-            "replacement index evaluates before value"
-        );
-        if detached {
-            failed_join(diagnostic);
-        }
-        let (records, _) = data.run(
-            "data-empty-get",
-            &json!([[1, "inadmissible-final-element"]]),
-            detached,
-            false,
-        );
-        let diagnostic = compact_record(&records, "diagnostic");
-        assert_eq!(compact_field(diagnostic, "class"), "source");
-        assert_eq!(
-            compact_field(diagnostic, "code"),
-            "normalized_json_type",
-            "complete input admission precedes execution"
-        );
-        let (records, _) = data.run("data-empty-get", &json!([[]]), detached, false);
-        let diagnostic = compact_record(&records, "diagnostic");
-        assert_eq!(
-            compact_field(diagnostic, "code"),
-            "normalized_sequence_index"
-        );
-        if detached {
-            failed_join(diagnostic);
-        }
-        data.verify_identity();
     }
+    executions.push(failure_case(
+        "data-order",
+        &json!([]),
+        "semantic",
+        "normalized_list_index",
+        executions.len(),
+    ));
+    executions.push(failure_case(
+        "data-empty-get",
+        &json!([[1, "inadmissible-final-element"]]),
+        "source",
+        "normalized_json_type",
+        executions.len(),
+    ));
+    executions.push(failure_case(
+        "data-empty-get",
+        &json!([[]]),
+        "semantic",
+        "normalized_sequence_index",
+        executions.len(),
+    ));
+    assert_eq!(
+        executions.len(),
+        27,
+        "every attached refusal and recovery row"
+    );
+    data.source_batch("data-refusals-and-recovery", &executions);
+    data.detach();
     let actions = oracle::burst(256);
     for fuel in [100, 4096] {
         limited["execution"] = json!({"instruction_fuel":fuel,"maximum_call_depth":4096,"maximum_value_stack":1000000});
-        data.consumer
-            .input("data-limited.deployment.json", &limited.to_string());
-        let (records, _) = data.run("data-limited", &json!([actions]), true, false);
-        let diagnostic = compact_record(&records, "diagnostic");
-        assert_eq!(compact_field(diagnostic, "class"), "resource");
-        assert_eq!(
-            compact_field(diagnostic, "code"),
-            "normalized_instruction_steps"
+        assert_eq!(limited["target"], "data-trace");
+        let mut refused = failure_case(
+            "data-trace",
+            &json!([actions]),
+            "resource",
+            "normalized_instruction_steps",
+            executions.len(),
         );
-        failed_join(diagnostic);
-        data.expected(
+        refused.execution = Some(limited["execution"].clone());
+        executions.push(refused);
+        executions.push(success_case(
             "data-trace",
             &json!([actions]),
             &oracle::expected(&actions),
-            true,
-        );
+            executions.len(),
+        ));
     }
+    assert_eq!(
+        executions.len(),
+        31,
+        "every detached refusal and recovery row"
+    );
+    let observations = data.batch("data-refusals-and-recovery", &executions);
+    let mut runtime_refusals = 0;
+    for records in &observations {
+        if let Some(diagnostic) = records
+            .iter()
+            .find(|record| record.operation == "diagnostic")
+            && matches!(compact_field(diagnostic, "class"), "semantic" | "resource")
+        {
+            failed_join(diagnostic);
+            runtime_refusals += 1;
+        }
+    }
+    assert_eq!(
+        runtime_refusals, 12,
+        "every executed refusal joined cleanup"
+    );
+    let (records, _) = data.run("data-get", &json!([2]), true, false);
+    let diagnostic = compact_record(&records, "diagnostic");
+    assert_eq!(compact_field(diagnostic, "class"), "semantic");
+    assert_eq!(
+        compact_field(diagnostic, "code"),
+        "normalized_sequence_index"
+    );
+    failed_join(diagnostic);
+    data.expected(
+        "data-replace",
+        &json!([1, 42]),
+        &json!({"displaced":9,"current":42,"length":2}),
+        true,
+    );
     data.verify_identity();
 }

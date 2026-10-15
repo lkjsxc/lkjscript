@@ -225,16 +225,17 @@ fn borrowed_task_artifact_requires_the_current_scoped_child_envelope() {
     let (source, loaded) = fixture(SOURCE);
     let (key, original) = unit(&source, &loaded, "joined");
     let current = effect_tests::replace_unit(&loaded, key, &original, vec![]);
-    for generation in 30_u16..37 {
-        let mut previous = current.clone();
-        previous[..8].copy_from_slice(format!("LKJART{generation}").as_bytes());
-        previous[8..10].copy_from_slice(&generation.to_be_bytes());
-        let error = load_artifact(&previous)
-            .expect_err("Graph 30 cannot lend current child rights through an older envelope");
-        assert_eq!(
-            error.code, "artifact_bundle_contract",
-            "{generation}: {error:?}"
-        );
+    load_artifact(&current).unwrap();
+    for (position, expected) in [
+        (0, "artifact_bundle_contract"),
+        (8, "artifact_bundle_schema"),
+        (40, "artifact_bundle_flags"),
+    ] {
+        let mut invalid = current.clone();
+        invalid[position] ^= 1;
+        let error = load_artifact(&invalid)
+            .expect_err("foreign enclosing metadata cannot lend current scoped child rights");
+        assert_eq!(error.code, expected, "offset={position}: {error:?}");
         assert_eq!(error.class, crate::platform::DiagnosticClass::Source);
     }
 }

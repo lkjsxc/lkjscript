@@ -1,4 +1,4 @@
-//! Content-addressed, structural version-10 type objects.
+//! Content-addressed structural type objects under the current canonical schema.
 
 use super::ReadScopeArgument;
 use super::contract::{MAXIMUM_CHILDREN, TYPE_OBJECT_CONTRACT_VERSION};
@@ -23,29 +23,7 @@ pub struct TypeObject {
 impl TypeObject {
     pub fn new(form: TypeForm) -> Result<Self, Diagnostic> {
         let object = Self {
-            contract_version: if form.is_read_view() {
-                super::contract::ASSOCIATED_READ_VIEW_CONTRACT_VERSION
-            } else if form.is_owned_associated() {
-                super::contract::OWNED_ASSOCIATED_CONTRACT_VERSION
-            } else if matches!(form, TypeForm::OwnedSequence { .. }) {
-                super::contract::OWNED_SEQUENCE_TYPE_CONTRACT_VERSION
-            } else if matches!(form, TypeForm::OwnedChoice { .. }) {
-                super::contract::OWNED_CHOICE_TYPE_CONTRACT_VERSION
-            } else if matches!(form, TypeForm::OwnedProduct { .. }) {
-                super::contract::OWNED_PRODUCT_TYPE_CONTRACT_VERSION
-            } else if matches!(form, TypeForm::OwnedI64Cell) {
-                super::contract::OWNED_CELL_TYPE_CONTRACT_VERSION
-            } else if matches!(form, TypeForm::ByteBuffer) {
-                super::contract::BYTE_BUFFER_TYPE_CONTRACT_VERSION
-            } else if matches!(form, TypeForm::F64) {
-                super::contract::F64_TYPE_CONTRACT_VERSION
-            } else if let TypeForm::TaskFunction { effect, .. } = &form {
-                task_generation(effect)
-            } else if matches!(form, TypeForm::Applied { .. }) {
-                super::contract::NOMINAL_APPLICATION_CONTRACT_VERSION
-            } else {
-                TYPE_OBJECT_CONTRACT_VERSION
-            },
+            contract_version: TYPE_OBJECT_CONTRACT_VERSION,
             form,
         };
         object.validate_local()?;
@@ -53,35 +31,12 @@ impl TypeObject {
     }
 
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
-        let expected = if self.form.is_read_view() {
-            super::contract::ASSOCIATED_READ_VIEW_CONTRACT_VERSION
-        } else if self.form.is_owned_associated() {
-            super::contract::OWNED_ASSOCIATED_CONTRACT_VERSION
-        } else if matches!(self.form, TypeForm::OwnedSequence { .. }) {
-            super::contract::OWNED_SEQUENCE_TYPE_CONTRACT_VERSION
-        } else if matches!(self.form, TypeForm::OwnedChoice { .. }) {
-            super::contract::OWNED_CHOICE_TYPE_CONTRACT_VERSION
-        } else if matches!(self.form, TypeForm::OwnedProduct { .. }) {
-            super::contract::OWNED_PRODUCT_TYPE_CONTRACT_VERSION
-        } else if matches!(self.form, TypeForm::OwnedI64Cell) {
-            super::contract::OWNED_CELL_TYPE_CONTRACT_VERSION
-        } else if matches!(self.form, TypeForm::ByteBuffer) {
-            super::contract::BYTE_BUFFER_TYPE_CONTRACT_VERSION
-        } else if matches!(self.form, TypeForm::F64) {
-            super::contract::F64_TYPE_CONTRACT_VERSION
-        } else if let TypeForm::TaskFunction { effect, .. } = &self.form {
-            task_generation(effect)
-        } else if matches!(self.form, TypeForm::Applied { .. }) {
-            super::contract::NOMINAL_APPLICATION_CONTRACT_VERSION
-        } else {
-            TYPE_OBJECT_CONTRACT_VERSION
-        };
-        if self.contract_version != expected {
+        if self.contract_version != TYPE_OBJECT_CONTRACT_VERSION {
             return Err(type_error(
                 "kernel_type_contract",
                 format!(
-                    "type object contract {} does not match its canonical form generation {expected}",
-                    self.contract_version
+                    "type object contract {} does not match the current contract {}",
+                    self.contract_version, TYPE_OBJECT_CONTRACT_VERSION
                 ),
             ));
         }
@@ -254,23 +209,20 @@ pub enum TypeForm {
         parameters: Vec<TypeObjectDigest>,
         result: TypeObjectDigest,
     },
-    /// Positive-arity nominal identity. Its wire form has a separate explicit envelope/tag;
-    /// it is never encoded as a new ordinal in the retained base-type envelope.
+    /// Positive-arity nominal identity with ordered type arguments.
     Applied {
         declaration: DeclarationReference,
         arguments: Vec<TypeObjectDigest>,
     },
-    /// Disjoint encoding preserves the bytes of all existing pure and nominal forms.
     TaskFunction {
         parameters: Vec<TypeObjectDigest>,
         result: TypeObjectDigest,
         effect: super::EffectRow,
     },
-    /// A disjoint envelope preserves every predecessor type object's bytes.
     F64,
     ByteBuffer,
     OwnedI64Cell,
-    /// Explicit affine structure; never encoded in the ordinary base type envelope.
+    /// Explicit affine product structure.
     OwnedProduct {
         fields: Vec<StructuralTypeField>,
     },
@@ -451,12 +403,4 @@ fn require_count(label: &str, count: usize, allow_zero: bool) -> Result<(), Diag
 
 fn type_error(code: &str, message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Semantic, code, message)
-}
-
-fn task_generation(effect: &super::EffectRow) -> u16 {
-    if effect.requirements.iter().any(|r| r.concrete().is_none()) {
-        2
-    } else {
-        super::contract::TASK_FUNCTION_CONTRACT_VERSION
-    }
 }

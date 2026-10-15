@@ -20,6 +20,7 @@ fn packet(program: ValueOrigin, cell: &OwnedI64Cell, guards: Vec<Value>) -> Valu
         raw: NormalizedValue::OwnedI64Cell(cell.borrow().unwrap()),
         origin: program,
         class: Class::Memory,
+        ordinary_type: None,
         borrow: Some(Box::new(BorrowMetadata {
             source: None,
             placement: None,

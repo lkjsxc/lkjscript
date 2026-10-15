@@ -1,7 +1,10 @@
 #![allow(clippy::unwrap_used, clippy::panic)]
 //! Exercise the actual invocation/encoding owner with retained physical workers.
 //! Pure language targets cannot themselves start structured child tasks today.
-use super::super::runner::execute_pure_artifact_invocation;
+use super::super::runner::{
+    execute_pure_artifact_invocation, execute_pure_artifact_invocation_observed,
+    require_pure_artifact_target, run_pure_artifact_command_observed,
+};
 use super::*;
 use crate::platform::diagnostic::DiagnosticClass;
 use crate::platform::runtime::structured::{StructuredExecutor, StructuredExecutorHandle};
@@ -56,6 +59,83 @@ fn pure_artifact_success_joins_its_executor_before_returning_bytes() {
     // The owner is still alive: Drop cannot be the source of this joined state.
     assert_joined(&observer);
     assert!(!control.is_cancelled());
+}
+
+#[test]
+fn observed_pure_artifact_receipt_retains_actual_join_and_fresh_vm_counters() {
+    let (program, target) = fixture();
+    let policy = NormalizedCommandPolicy::default();
+    let control = ExecutionControl::uncancelled();
+    let invocation =
+        prepare_command_invocation(&program, &target, b"[]", policy.json, &control).unwrap();
+    let mut executor = warmed_executor();
+    let observer = executor.handle();
+    let receipt = execute_pure_artifact_invocation_observed(
+        &program,
+        invocation,
+        policy,
+        &control,
+        &mut executor,
+    )
+    .unwrap();
+    assert_eq!(receipt.result_json, b"null");
+    assert_eq!(receipt.executor, observer.observe());
+    assert_joined(&observer);
+    assert!(receipt.production.instructions > 0);
+    for _ in 0..2 {
+        let fresh = run_pure_artifact_command_observed(
+            &program,
+            &target,
+            b"[]",
+            policy,
+            &ExecutionControl::uncancelled(),
+        )
+        .unwrap();
+        assert_eq!(fresh.result_json, receipt.result_json);
+        assert_eq!(fresh.production, receipt.production);
+        assert!(!fresh.executor.dispatch_open);
+        assert_eq!(fresh.executor.active_dispatches, 0);
+        assert_eq!(fresh.executor.remaining_workers, 0);
+        assert_eq!(fresh.executor.workers_started, 0);
+    }
+}
+
+#[test]
+fn pure_batch_target_admission_rejects_task_identity_and_requirement_authority() {
+    for task in [false, true] {
+        let mut snapshot = normalized_worker_snapshot(task, false);
+        for record in snapshot.owners.values_mut() {
+            if let OwnerRecord::Target(target) = record
+                && target.name.as_str() == "work"
+            {
+                target.runner = RunnerKind::Command;
+            }
+        }
+        let program = prepare_snapshot(&snapshot);
+        let result = require_pure_artifact_target(&program, &Name::new("work").unwrap());
+        if task {
+            assert_eq!(
+                result.unwrap_err().code,
+                "normalized_runner_grants_required"
+            );
+        } else {
+            assert!(result.is_ok());
+        }
+    }
+    let program = prepare_snapshot(&crate::platform::kernel::tests::witness_snapshot());
+    assert_eq!(
+        require_pure_artifact_target(&program, &Name::new("command").unwrap())
+            .unwrap_err()
+            .code,
+        "normalized_runner_grants_required"
+    );
+    let program = prepare_snapshot(&normalized_worker_snapshot(false, false));
+    assert_eq!(
+        require_pure_artifact_target(&program, &Name::new("work").unwrap())
+            .unwrap_err()
+            .code,
+        "deployment_command_runner"
+    );
 }
 
 #[test]

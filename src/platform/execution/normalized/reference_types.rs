@@ -163,12 +163,9 @@ fn index_node<T>(allocated: &mut usize) -> Result<(), ExecutionError> {
     allocate::<usize>(allocated, 3)
 }
 
-// Associated Owned meaning exists in the finite Graph 33/34 reader set.
-// A read-view provenance requirement never inherits the older Owned permission.
-pub(super) fn associated_generation_admitted(version: u16, read_view: bool) -> bool {
+// Every semantic occurrence is admitted under the current graph contract.
+pub(super) fn associated_generation_admitted(version: u16, _read_view: bool) -> bool {
     version == crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
-        || (!read_view
-            && version == crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION)
 }
 
 fn associated_owner_generation_admitted(root: u16, owner: u16, read_view: bool) -> bool {

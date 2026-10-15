@@ -529,7 +529,7 @@ fn literal_edit_same_kind_core_noop_does_not_publish_a_revision() {
 }
 
 #[test]
-fn literal_edit_codec_keeps_legacy_body_identity_and_observes_float_bits() {
+fn literal_edit_codec_binds_current_body_identity_and_float_bits() {
     let fixture = Fixture::new();
     let mut request = fixture.edit().semantic;
     let mut update = literals(&request)
@@ -556,7 +556,7 @@ fn literal_edit_codec_keeps_legacy_body_identity_and_observes_float_bits() {
             literals: vec![update.clone()],
         }];
         let bytes = crate::platform::change::canonical_authored_intent_bytes(&request).unwrap();
-        assert_eq!(&bytes[..8], b"LKJACR39");
+        assert_eq!(&bytes[..8], b"LKJACHNG");
         assert!(fingerprints.insert(bytes));
     }
     request.changes = vec![AuthoredChange::ReplaceFunctionBody {
@@ -569,7 +569,7 @@ fn literal_edit_codec_keeps_legacy_body_identity_and_observes_float_bits() {
     let bytes = crate::platform::change::canonical_authored_intent_bytes(&request).unwrap();
     assert_eq!(
         &bytes[..8],
-        b"LKJACR39",
+        b"LKJACHNG",
         "fresh requests use the current authored encoding domain"
     );
 }

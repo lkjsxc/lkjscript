@@ -666,10 +666,9 @@ pub(super) fn validate_history_base(
     transaction: &NormalizedTransaction,
     semantic_diff: &SemanticDiff,
 ) -> Result<(), Diagnostic> {
-    if !matches!(
-        (transaction.contract_version, semantic_diff.contract_version),
-        (TRANSACTION_CONTRACT_VERSION, SEMANTIC_DIFF_CONTRACT_VERSION) | (5, 3)
-    ) {
+    if transaction.contract_version != TRANSACTION_CONTRACT_VERSION
+        || semantic_diff.contract_version != SEMANTIC_DIFF_CONTRACT_VERSION
+    {
         return Err(publication_error(
             DiagnosticClass::Corrupt,
             "publication_history_type_contract",

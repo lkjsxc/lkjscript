@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod bootstrap_tests;
 mod cache;
 mod cargo_origin;
 mod cargo_origin_context;

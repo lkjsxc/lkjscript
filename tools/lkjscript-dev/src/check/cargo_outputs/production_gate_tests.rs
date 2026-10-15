@@ -233,6 +233,7 @@ fn origin_single_build(
         FreshInput {
             repository,
             gate,
+            inputs: Vec::new(),
             program: Some(Path::new(env!("CARGO"))),
             fingerprint,
             stdout_path: run.join(format!("{}.stdout.log", gate.name)),
@@ -677,6 +678,7 @@ impl CargoOriginFixture {
             FreshInput {
                 repository,
                 gate: &gate,
+                inputs: Vec::new(),
                 program: Some(Path::new(env!("CARGO"))),
                 fingerprint,
                 stdout_path: directory.join("cargo-origin.stdout.log"),

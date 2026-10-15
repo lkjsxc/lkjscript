@@ -75,6 +75,7 @@ fn cargo_output_cache_requires_original_producer_binding_on_store_and_load() -> 
         &gate.name,
         &forged.input_fingerprint,
         &forged_process,
+        &forged.inputs,
         &forged.outputs,
         forged.cargo_origin.as_ref(),
     )?;

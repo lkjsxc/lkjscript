@@ -34,13 +34,13 @@ Supported execution still uses explicit component targets; pure `run` remains pu
 
 ## Preserved meaning and admission
 
-The retained [Graph 13 transition inventory](../../tests/fixtures/graph13-effect-cutover.json) binds
-the actual startup observation at `f5bc5db6485affe92daf4ced2c026027121d5bec`, all predecessor owner
-identities and meaning hashes, explicit additions/port replacements, retirements and local type bytes.
-The immutable Graph 10 typed-data and Graph 12 nominal fixtures remain independent predecessor
-oracles; their tests account only for the explicitly enumerated successor changes. Actual predecessor
-standard transport/artifact fixtures are retained for strict rejection, with no automatic converter.
-All 2,842 predecessor owners remain; the standard adds 86 graph owners and lkjournal keeps all 2,040.
+Current acceptance uses one HEAD schema. Exact scope/source commitments have independent
+literal tests in `change/request/read_view_codec_tests.rs`; ordinary typed persistence retains
+all 89 independent JSON/payload vectors in `execution/normalized/ordinary_data_values_tests.rs`,
+with structural type selectors resolved against the current graph. The maintained queue-worker
+test checks borrowed payload access before consuming the same lease. Historical transition
+inventories remain in [Git history](https://github.com/lkjsxc/lkjscript/blob/fa158b7e86a48af0dc6c6e28f548493723aef39b/tests/fixtures/graph13-effect-cutover.json)
+and do not participate in current admission or acceptance.
 
 Production and reference derive their own effect closure, signatures and allowances. They share
 neutral identities and value carriers, not a production authority oracle. Raw descriptors carry an

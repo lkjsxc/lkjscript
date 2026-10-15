@@ -1588,7 +1588,7 @@ pub(crate) fn canonical_authored_budget_bytes(budget: ChangeBudget) -> Result<Ve
     codec::encode_budget(budget)
 }
 
-/// Preserves historical allocation goldens without admitting their predecessor graph as current.
+/// Derives allocation identities from current canonical intent without publication.
 #[cfg(test)]
 pub(crate) fn authored_source_owners<B: CanonicalBaseRead + ?Sized>(
     base: &B,
@@ -1603,24 +1603,6 @@ pub(crate) fn authored_source_owners<B: CanonicalBaseRead + ?Sized>(
     budget.check_allocated_identities(total_identity_count)?;
     let bytes = codec::encode_authored_intent(request, &definitions)?;
     let seed = allocation_seed(base, &bytes)?;
-    allocate_symbols(&seed, &definitions)
-}
-
-/// Literal historical allocation evidence, never used by public request lowering.
-#[cfg(test)]
-pub(crate) fn authored_source_owners_from_frozen_intent<B: CanonicalBaseRead + ?Sized>(
-    base: &B,
-    request: &AuthoredChangeSet,
-    frozen_intent: &[u8],
-) -> Result<BTreeMap<String, OwnerKey>, Diagnostic> {
-    let operation_count = references::admitted_operations(request)?;
-    let budget = request
-        .budget
-        .validate_request_counts(operation_count, request.preconditions.len())?;
-    let (definitions, count) =
-        collect_symbol_definitions(request, budget.authored.maximum_allocated_identities)?;
-    budget.check_allocated_identities(count)?;
-    let seed = allocation_seed(base, frozen_intent)?;
     allocate_symbols(&seed, &definitions)
 }
 
@@ -2479,9 +2461,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             }
             if working.original.as_ref() != Some(&working.record) {
                 working.record.set_encoding_for_edit(
-                    self.base
-                        .accepted_retry_encoding()
-                        .unwrap_or(crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION),
+                    crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
                 );
             }
             let (after, _) = encode_owner(&working.record)?;
@@ -2501,13 +2481,8 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             let WorkingDependency {
                 before,
                 original,
-                mut record,
+                record,
             } = working;
-            if let (Some(generation), Some(record)) =
-                (self.base.accepted_retry_encoding(), &mut record)
-            {
-                record.graph_contract_version = generation;
-            }
             match (before, record) {
                 (None, Some(record)) => edits.push(PrimitiveEdit::InsertDependency { record }),
                 (Some(before), Some(record)) => {
@@ -2529,10 +2504,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 (None, None) => {}
             }
         }
-        for (_, mut record) in self.retirements {
-            if let Some(generation) = self.base.accepted_retry_encoding() {
-                record.graph_contract_version = generation;
-            }
+        for (_, record) in self.retirements {
             edits.push(PrimitiveEdit::InsertRetirement { record });
         }
         Ok(AuthoredLowering {

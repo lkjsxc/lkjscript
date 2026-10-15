@@ -5,6 +5,7 @@
 //! exception: their graph-owned set semantics require canonical target/method/selector/port order.
 
 use super::*;
+use crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     AnnotationClass, DeclarationVisibility, DocumentationClass, ExternalVisibility,
@@ -12,9 +13,8 @@ use crate::platform::kernel::{
 };
 use crate::platform::package::RunnerKind;
 
-// The associated read-view cut commits complete scope inventories and one result relation.
-const INTENT_MAGIC: [u8; 8] = *b"LKJACR39";
-const BUDGET_MAGIC: [u8; 8] = *b"LKJABG01";
+const INTENT_MAGIC: [u8; 8] = *b"LKJACHNG";
+const BUDGET_MAGIC: [u8; 8] = *b"LKJABUDG";
 const MAXIMUM_BUDGET_BYTES: usize = 1_024;
 
 #[cfg(test)]
@@ -31,6 +31,7 @@ pub(super) fn encode_authored_intent(
 ) -> Result<Vec<u8>, Diagnostic> {
     let mut writer = Writer::new(MAXIMUM_AUTHORED_CHANGE_BYTES);
     writer.raw(&INTENT_MAGIC)?;
+    writer.raw(&CANONICAL_SCHEMA_HASH)?;
     writer.raw(&request.base.bytes())?;
     writer.list(&request.preconditions, |writer, precondition| {
         writer.precondition(precondition)
@@ -67,6 +68,7 @@ pub(super) fn authored_http_route_sort_key(
 pub(super) fn encode_budget(budget: ChangeBudget) -> Result<Vec<u8>, Diagnostic> {
     let mut writer = Writer::new(MAXIMUM_BUDGET_BYTES);
     writer.raw(&BUDGET_MAGIC)?;
+    writer.raw(&CANONICAL_SCHEMA_HASH)?;
     for maximum in [
         budget.authored.maximum_operations,
         budget.authored.maximum_preconditions,
@@ -2941,7 +2943,8 @@ mod tests {
         assert_eq!(first, renamed);
         assert_eq!(&first[..8], &INTENT_MAGIC);
         // A literal protocol layout, independent of Writer and the allocation collector.
-        let mut expected = b"LKJACR39".to_vec();
+        let mut expected = b"LKJACHNG".to_vec();
+        expected.extend_from_slice(&CANONICAL_SCHEMA_HASH);
         expected.extend_from_slice(&[9; 32]);
         let count = |bytes: &mut Vec<u8>, value: u64| {
             bytes.extend_from_slice(&value.to_be_bytes());
@@ -2973,42 +2976,37 @@ mod tests {
         expected.extend_from_slice(&[6, 6, 7]); // Local; symbolic local; function parameter domain.
         count(&mut expected, 1);
         assert_eq!(first, expected);
-        // Frozen codec14 bytes retain the predecessor identity as content-only evidence;
-        // no current intent is patched or represented as historical encoder output.
-        let mut historical = b"LKJACR14".to_vec();
-        historical.extend_from_slice(&[9; 32]);
-        count(&mut historical, 0); // Preconditions.
-        count(&mut historical, 2); // Operations.
-        historical.extend_from_slice(&[1, 1]); // Module creation and symbol domain.
-        count(&mut historical, 1);
-        count(&mut historical, 11);
-        historical.extend_from_slice(b"application");
-        historical.extend_from_slice(&[2, 2]); // Function creation and declaration domain.
-        count(&mut historical, 1);
-        historical.extend_from_slice(&[3, 1]); // Symbolic module reference.
-        count(&mut historical, 1);
-        count(&mut historical, 8);
-        historical.extend_from_slice(b"identity");
-        historical.push(3); // Public.
-        count(&mut historical, 0); // Type parameters.
-        count(&mut historical, 1); // Value parameters.
-        historical.push(7); // Parameter symbol domain.
-        count(&mut historical, 1);
-        count(&mut historical, 5);
-        historical.extend_from_slice(b"value");
-        historical.extend_from_slice(&[5, 1, 0, 5]); // Text parameter, unrestricted, no resource, Text result.
-        historical.extend_from_slice(&[1, 1, 12]); // Pure, body symbol, expression domain.
-        count(&mut historical, 1);
-        historical.extend_from_slice(&[6, 6, 7]); // Local expression, symbol reference, parameter domain.
-        count(&mut historical, 1);
-        assert_eq!(
-            crate::platform::semantic_id::encode_hex(blake3::hash(&historical).as_bytes()),
-            "073725ec7d23ee566d493e9dceb01fb850964bf2f381e9a21552f12de778a5cf"
-        );
     }
 
     #[test]
-    fn owned_sequence_intent_selects_generation_for_types_and_each_operation() {
+    fn current_intent_keeps_repeated_and_alpha_renamed_allocations_stable() {
+        let base = crate::platform::kernel::tests::witness_snapshot();
+        let first = connected_request("$module", "$function", "$parameter", "$body");
+        let renamed = connected_request("$m", "$f", "$p", "$expression");
+        let first_ids = authored_source_owners(&base, &first).unwrap();
+        assert_eq!(first_ids, authored_source_owners(&base, &first).unwrap());
+        let renamed_ids = authored_source_owners(&base, &renamed).unwrap();
+        for (first, renamed) in [
+            ("$module", "$m"),
+            ("$function", "$f"),
+            ("$parameter", "$p"),
+            ("$body", "$expression"),
+        ] {
+            assert_eq!(first_ids[first], renamed_ids[renamed]);
+        }
+    }
+
+    #[test]
+    fn schema_header_counts_toward_exact_authored_byte_admission() {
+        let mut writer = Writer::new(INTENT_MAGIC.len() + CANONICAL_SCHEMA_HASH.len());
+        writer.raw(&INTENT_MAGIC).unwrap();
+        writer.raw(&CANONICAL_SCHEMA_HASH).unwrap();
+        assert_eq!(writer.raw(&[0]).unwrap_err().code, "change_authored_bytes");
+        assert_eq!(writer.finish().len(), 40);
+    }
+
+    #[test]
+    fn owned_sequence_intent_commits_types_and_each_operation() {
         let mut type_request = connected_request("$module", "$function", "$parameter", "$body");
         let AuthoredChange::CreateFunction { result, .. } = &mut type_request.changes[1] else {
             panic!("fixture function")
@@ -3017,7 +3015,7 @@ mod tests {
             item: Box::new(AuthoredType::OwnedI64Cell {}),
         };
         let encoded = canonical_authored_intent_bytes(&type_request).unwrap();
-        assert_eq!(&encoded[..8], b"LKJACR39");
+        assert_eq!(&encoded[..8], b"LKJACHNG");
 
         let scalar = |value| {
             Box::new(AuthoredExpression {
@@ -3064,7 +3062,7 @@ mod tests {
             };
             body.operation = operation;
             let encoded = canonical_authored_intent_bytes(&request).unwrap();
-            assert_eq!(&encoded[..8], b"LKJACR39");
+            assert_eq!(&encoded[..8], b"LKJACHNG");
             assert!(encodings.insert(encoded));
         }
     }
@@ -3110,7 +3108,7 @@ mod tests {
     }
 
     #[test]
-    fn generalized_sequence_operations_select_generation_and_commit_each_operand() {
+    fn generalized_sequence_operations_commit_each_operand() {
         let scalar = |value| {
             Box::new(AuthoredExpression {
                 symbol: None,
@@ -3124,7 +3122,7 @@ mod tests {
             };
             body.operation = operation;
             let bytes = canonical_authored_intent_bytes(&request).unwrap();
-            assert_eq!(&bytes[..8], b"LKJACR39");
+            assert_eq!(&bytes[..8], b"LKJACHNG");
             bytes
         };
         // Invalid scalar annotations isolate the operation's commitment.
@@ -3154,7 +3152,7 @@ mod tests {
     }
 
     #[test]
-    fn mixed_storage_codec_commits_ordinary_phantom_bounds_in_generation37() {
+    fn mixed_storage_codec_commits_ordinary_phantom_bounds() {
         use crate::platform::kernel::TypeParameterConstraints as C;
         let parameter = |symbol: &str| AuthoredTypeParameterReference::Symbol {
             symbol: symbol.to_owned(),
@@ -3216,9 +3214,9 @@ mod tests {
         let capture =
             canonical_authored_intent_bytes(&request(C::CaptureSafeTransferable)).unwrap();
         let owned = canonical_authored_intent_bytes(&request(C::Owned)).unwrap();
-        assert_eq!(&ordinary[..8], b"LKJACR39");
-        assert_eq!(&capture[..8], b"LKJACR39");
-        assert_eq!(&owned[..8], b"LKJACR39");
+        assert_eq!(&ordinary[..8], b"LKJACHNG");
+        assert_eq!(&capture[..8], b"LKJACHNG");
+        assert_eq!(&owned[..8], b"LKJACHNG");
         assert_ne!(ordinary, capture);
     }
 

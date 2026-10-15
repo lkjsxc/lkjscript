@@ -1,5 +1,5 @@
 use super::*;
-use crate::release_container::tests::{fixture, gzip, neutral_fixture};
+use crate::release_container::tests::{fixture, gzip};
 use std::fs;
 use std::os::unix::fs::{PermissionsExt, symlink};
 fn archive(root: &Path, tag: &str) -> (PathBuf, String) {
@@ -71,20 +71,17 @@ fn native_install_select_inventory_and_immutable_conflicts() {
 }
 
 #[test]
-fn native_neutral_install_preserves_legacy_receipts_and_recovery_selection() {
+fn native_current_install_preserves_other_slots_and_recovery_selection() {
     let temp = tempfile::tempdir().unwrap();
-    let prefix = temp.path().join("mixed installation");
-    let (legacy_archive, legacy_digest) = archive(temp.path(), "v0.1.32");
-    let legacy = install(&prefix, &legacy_archive, &legacy_digest, true).unwrap();
-    assert_eq!(
-        legacy.version.publication,
-        "declared-dry-run/unverified-publication"
-    );
-    let old_slot = legacy.version.path.parent().unwrap();
+    let prefix = temp.path().join("installation");
+    let (first_archive, first_digest) = archive(temp.path(), "v0.1.32");
+    let first = install(&prefix, &first_archive, &first_digest, true).unwrap();
+    assert_eq!(first.version.publication, "neutral/unverified-publication");
+    let old_slot = first.version.path.parent().unwrap();
     let old_receipt = fs::read(old_slot.join(RECEIPT)).unwrap();
     let old_manifest = fs::read(old_slot.join("RELEASE-MANIFEST.json")).unwrap();
 
-    let neutral_bytes = gzip(&neutral_fixture("v0.1.39", None));
+    let neutral_bytes = gzip(&fixture("v0.1.39", None));
     let neutral_archive = temp.path().join("neutral.tar.gz");
     fs::write(&neutral_archive, &neutral_bytes).unwrap();
     let neutral_digest = container::sha256_bytes(&neutral_bytes).unwrap();
@@ -107,7 +104,9 @@ fn native_neutral_install_preserves_legacy_receipts_and_recovery_selection() {
     );
 
     let selected = fs::read_link(prefix.join("bin/lkjscript")).unwrap();
-    let conflicting = gzip(&neutral_fixture("v0.1.32", None));
+    let mut conflicting_tar = fixture("v0.1.32", None);
+    conflicting_tar.resize(conflicting_tar.len().next_multiple_of(10240), 0);
+    let conflicting = gzip(&conflicting_tar);
     fs::write(&neutral_archive, &conflicting).unwrap();
     let digest = container::sha256_bytes(&conflicting).unwrap();
     assert_eq!(

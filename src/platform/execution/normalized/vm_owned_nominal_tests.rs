@@ -150,6 +150,7 @@ fn nominal_metadata_projection_is_bounded_and_rejects_same_shape_foreign_identit
             assert_eq!(projected.class, Class::Free);
             assert!(projected.borrow.is_none());
             assert_eq!(projected.raw(), &f.raw(count));
+            assert_eq!(projected.ordinary_type, Some(f.payload));
         }
         assert_eq!(products.created(), before);
         assert!(
@@ -270,6 +271,7 @@ fn nominal_projection_rejects_raw_mutation_and_failed_adoption_after_shape_resto
         raw: NormalizedValue::OwnedProduct(token.borrow().unwrap()),
         origin: f.program.value_origin,
         class: Class::Memory,
+        ordinary_type: None,
         borrow: None,
     };
     assert!(
@@ -302,6 +304,7 @@ fn nominal_projection_rejects_raw_mutation_and_failed_adoption_after_shape_resto
         raw: NormalizedValue::OwnedProduct(token.borrow().unwrap()),
         origin: f.program.value_origin,
         class: Class::Memory,
+        ordinary_type: None,
         borrow: None,
     };
     assert!(

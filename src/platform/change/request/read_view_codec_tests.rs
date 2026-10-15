@@ -158,7 +158,8 @@ fn value_result_still_commits_unused_scope_formals_sources_and_their_order() {
         }],
         effect: AuthoredFunctionEffect::Pure {},
     };
-    let mut literal = b"LKJACR39".to_vec();
+    let mut literal = b"LKJACHNG".to_vec();
+    literal.extend_from_slice(&CANONICAL_SCHEMA_HASH);
     literal.extend_from_slice(&[9; 32]);
     count(&mut literal, 0);
     count(&mut literal, 1);

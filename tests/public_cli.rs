@@ -34,6 +34,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use support::copy_executable;
+use support::semantic_cli;
 
 const APPLICATION: &str = "applications/lkjournal";
 const RELEASE_CANDIDATE_ENVIRONMENT: &str = "LKJSCRIPT_RELEASE_CANDIDATE";
@@ -994,22 +995,21 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .expect("singular ordinary type profile");
     assert_eq!(base_type.identity, "lkjscript-type-object-10");
     assert_eq!(base_type.version, 10);
-    assert!(base_type.magic_values.contains(&"LKJTYP10"));
-    assert!(!base_type.magic_values.contains(&"LKJTYP11"));
+    assert_eq!(base_type.magic_values, &["LKJTYPES"]);
     let witness = contract_descriptors()
         .iter()
         .find(|descriptor| descriptor.key == ContractKey::SemanticFacts)
         .expect("current witness profile");
-    assert_eq!(witness.identity, "lkjscript-validation-witness-10");
+    assert_eq!(witness.identity, "lkjscript-validation-witness");
     assert_eq!(witness.version, 10);
-    assert_eq!(witness.magic_values, &["LKJWIT10"]);
+    assert_eq!(witness.magic_values, &["LKJWITNS"]);
     let summary = contract_descriptors()
         .iter()
         .find(|descriptor| descriptor.key == ContractKey::SemanticSummary)
         .expect("current summary profile");
-    assert_eq!(summary.identity, "lkjscript-owner-summary-12");
+    assert_eq!(summary.identity, "lkjscript-owner-summary");
     assert_eq!(summary.version, 12);
-    assert_eq!(summary.magic_values, &["LKJSUM17"]);
+    assert_eq!(summary.magic_values, &["LKJSUMRY"]);
     let capabilities = compact_success(&["capabilities"]);
     assert_eq!(capabilities[0].operation, "product");
     assert_eq!(

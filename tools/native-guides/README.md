@@ -8,7 +8,7 @@ observes authoritative registry/interface metadata and numeric adapter defaults,
 admits typed arguments, executes pure commands and publishes derived files.
 No Rust replacement for this capability-reference renderer has been integrated.
 Its strict grant-free artifact embedding uses `platform::native_tool::PureTool`,
-which is also used by the retained [repository-policy predecessor](../native-policy/README.md)
+which is also used by the [repository-policy oracle](../native-policy/README.md)
 in differential tests. The required production no-Python gate now classifies
 observations directly in Rust. Preparation for this native guide program is shared
 only for immutable code; invocation state and cancellation remain per call.
@@ -18,8 +18,7 @@ embedded Markdown; it does not replace this capability-reference generator.
 This is native development-tool adoption, not compiler self-hosting. The program
 needs no Python, Node, shell subprocess or compiler checkout at runtime. The
 bootstrap compiler, semantic observers and platform adapters remain Rust. The
-program uses the existing exact standard library without a special intrinsic.
-It is not part of the frozen public v0.1.44 executable.
+program uses the exact standard library without a special intrinsic.
 
 ## Authority and regeneration
 
@@ -31,9 +30,8 @@ synchronized authority. `create.lkjc` now creates the tool with standard text-jo
 `reference-pages.lkjc` extends its observed `guides` module. Fresh reproduction
 substitutes only `BASE` and, for the extension, `GUIDES` with observed identities.
 Maintained edits are drafted from accepted meaning, not replayed over existing owners.
-The reviewed `text-join.lkjc` edit preserves the public join identity, explicitly selects
-the new exact standard and retires its redundant private range helper. The historical
-initial creation input remains in Git history.
+The reviewed `text-join.lkjc` request preserves the public join identity and selects
+the exact standard implementation. Original authoring requests remain provenance.
 
 From the compiler repository root, using a compatible installed executable:
 
@@ -109,29 +107,13 @@ graph/artifact encodings and application data are unchanged.
 The pure embedded program cannot opt into tasks or component grants. Normal typed
 input/output bounds and cancellation remain in force. Balanced concatenation
 avoids repeatedly copying the document prefix; this is not a claim of superior
-speed to Rust. The campaign records matched generation costs and their limits.
+speed to Rust. Matched measurements must retain complete output equality, build
+warmth, preparation/invocation costs and unfavorable samples separately.
 
-For accepted source `ee2c6079`, seven alternating fresh-process pairs measured
-complete eight-page generation at median 458.215 ms, versus 389.797 ms for the
-accepted two-native-page predecessor. Outputs were byte-checked per revision;
-filesystem caches were not flushed. The host executable grew by 254,272 bytes.
-These same-machine command costs are not application-runtime or peak-memory
-measurements. See the [completion campaign](../../docs/campaigns/202609240132.md)
-for the full fresh 26-gate source result, reproducibility, costs and delivery boundary.
-
-Compiler or artifact contract changes require rebuilding this derived artifact
-through public check/build while preserving accepted HEAD and its exact standard
-supplier. After replacing it, rebuild the host and regenerate/verify the reference
-pages through public capabilities. The native program remains their content owner.
-The [current release notes](../../docs/releases/v0.1.92.md) identify the selected
-compatibility boundary; [status](../../docs/status.md) owns actual acceptance.
-
-The preceding derived bundle used compiler 33, bytecode 27 and artifact 40:
-`artifact_bundle_ebc76b9c1c108648f62e19809fe6f878aa2793867d1bb128d4363f8962aaa891`,
-1,178,170 bytes. The [canonical edit](requests/20261004-structural-forms.lkjc)
-replaces a stale structural-form count with “All supported structural forms”,
-updating exactly one Text expression while preserving owner identities and the exact
-standard supplier. Public check/build runs all 79 native and supplier tests with
-agreement between the two evaluators.
-
-The .96 compilation refresh selects artifact_bundle_bd6647daaa0e509ea4bde30df66bde8a146527f38fb1b8a0085467d8c357ebc0 (1,179,039 bytes, SHA-256 3cc8a0f8382bd507cbfd0636d0fefdd888aa7e3f3fb15f77e28066f2f09f9f15), using compiler 34, bytecode 28 and artifact 41. Its two public builds are byte-identical and all 79 source/supplier checks report zero failures and differential equality; the [separate rebuild receipt](../../.artifacts/associated-read-views/consumer-assets-installation-proposals/sourcef87c8b-four-families-first/receipt.json) binds their original source f87c8b7fa80e03bb8e3901746aa14a845fc509161916ca07eef92c55d32ed550. Accepted HEAD and exact suppliers remain unchanged. This compilation refresh supplies no final source, release or additional runtime acceptance.
+Schema changes require public check/build to regenerate `generated/guides.lkja`
+without changing accepted HEAD or exact suppliers. Rebuild the host, then regenerate
+and verify reference pages through public capabilities. The native program remains
+their content owner. The [structural-form request](requests/20261004-structural-forms.lkjc)
+is a retained example of an identity-preserving content edit.
+[Status](../../docs/status.md) owns actual source/final-byte/publication acceptance;
+artifact regeneration alone supplies none of those terminals.

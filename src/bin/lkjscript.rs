@@ -19,6 +19,7 @@ use lkjscript::platform::{
 #[path = "lkjscript/shared_serve.rs"]
 mod shared_serve;
 
+use lkjscript::platform::cli::{execute_run_batch, parse_run_batch};
 use serde::Serialize;
 use serde_json::json;
 use std::io::Write;
@@ -322,10 +323,56 @@ fn compact_build(arguments: Vec<String>) -> ExitCode {
 }
 
 fn compact_run(arguments: Vec<String>) -> ExitCode {
+    if arguments.iter().any(|argument| {
+        matches!(
+            argument.as_str(),
+            "--batch-input-file" | "--batch-result-file"
+        )
+    }) {
+        return finite_run_batch(&arguments);
+    }
     if arguments.iter().any(|argument| argument == "--deployment") {
         return foreground_run(&arguments);
     }
     compact_finite("run", execute_run(arguments))
+}
+
+fn finite_run_batch(arguments: &[String]) -> ExitCode {
+    let options = match parse_run_batch(arguments) {
+        Ok(options) => options,
+        Err(error) => return write_compact_failure("run", &error),
+    };
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            return write_compact_failure(
+                "run",
+                &Diagnostic::new(
+                    lkjscript::platform::DiagnosticClass::Infrastructure,
+                    "runtime_initialize",
+                    format!("pure batch runtime could not initialize: {error}"),
+                ),
+            );
+        }
+    };
+    let outcome = runtime.block_on(async {
+        let mut signals = ProcessTermination::register("foreground_signal")?;
+        execute_run_batch(options, signals.wait()).await
+    });
+    match outcome {
+        Ok(bytes) => match write_bytes(&bytes) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(mut error) => {
+                error.notes.push("the complete pure batch result file is already published; stdout failure does not remove it".to_owned());
+                write_stderr_diagnostic(&error);
+                ExitCode::from(exit_for(&error))
+            }
+        },
+        Err(error) => write_compact_failure("run", &error),
+    }
 }
 
 fn foreground_run(arguments: &[String]) -> ExitCode {

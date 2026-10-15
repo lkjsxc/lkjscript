@@ -377,14 +377,7 @@ fn owned_read_artifact_rejects_coherent_untaken_view_to_owner_counterfeit() {
         test: summary.test,
         validation_dependencies: summary.validation_dependencies,
     };
-    unit.key = CompilationUnitKey::derive_generation(
-        &unit.source,
-        unit.optimization,
-        unit.contract_version,
-        unit.bytecode_contract_version,
-        unit.graph_contract_version,
-    )
-    .unwrap();
+    unit.key = CompilationUnitKey::derive(&unit.source, unit.optimization).unwrap();
     unit.validate()
         .expect("coherent counterfeit has valid compiled structure");
     let altered = replace_reference_owners(

@@ -8371,21 +8371,9 @@ fn packed_store_interruptions_keep_head_old_until_exact_retry() {
 }
 
 #[test]
-fn repository_rejects_predecessor_head_and_missing_accepted_pack() {
+fn repository_rejects_missing_accepted_pack() {
     let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let predecessor = temporary.path().join("predecessor");
     let logical = crate::platform::kernel::tests::witness_snapshot();
-    let _ = GraphRepository::create(&predecessor, &logical, None).expect("create repository");
-    let mut head = std::fs::read(predecessor.join("HEAD")).expect("HEAD bytes");
-    head[..8].copy_from_slice(b"LKJHEAD6");
-    std::fs::write(predecessor.join("HEAD"), head).expect("replace test HEAD");
-    assert_eq!(
-        GraphRepository::open(&predecessor)
-            .expect_err("predecessor HEAD must reject")
-            .code,
-        "packed_contract"
-    );
-
     let missing = temporary.path().join("missing-pack");
     let _ = GraphRepository::create(&missing, &logical, None).expect("create repository");
     for entry in std::fs::read_dir(missing.join("packs")).expect("pack directory") {

@@ -1,4 +1,4 @@
-//! Generation-neutral recipe parity oracle independent of recipe intent construction.
+//! Current recipes compared with literal public declarations, independently of recipe intent.
 
 use super::*;
 use crate::platform::kernel::{
@@ -11,12 +11,9 @@ use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
 
-const PROJECTION_DOMAIN: &str = "lkjscript.recipe.generation-neutral.v2";
-
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 struct RecipeProjection {
-    digest: String,
-    bytes: usize,
+    meaning: Vec<String>,
     owners: usize,
     types: usize,
     expressions: usize,
@@ -24,20 +21,14 @@ struct RecipeProjection {
 }
 
 #[test]
-fn recipes_match_captured_generation_neutral_projections() {
+fn recipes_match_complete_current_literal_meaning() {
     let temporary = tempfile::TempDir::new().expect("temporary recipe projection root");
     let cases = [
-        (
-            ProjectTemplate::Minimal,
-            "recipe_projection_dc27526c20ccfb33f3392631ff37554adde67aa74db73afc896b5b4f0d9bf2f2",
-            0,
-            0,
-            0,
-            0,
-        ),
+        (ProjectTemplate::Minimal, None, None, 0, 0, 0, 0),
         (
             ProjectTemplate::Command,
-            "recipe_projection_b83d0cad81bbc51e28b7979763079f8605eac167f29207ec0defea2c39d13469",
+            Some(include_str!("fixtures/command.lkjc")),
+            Some(include_str!("fixtures/command.deployment.json")),
             10,
             2,
             4,
@@ -45,7 +36,8 @@ fn recipes_match_captured_generation_neutral_projections() {
         ),
         (
             ProjectTemplate::Http,
-            "recipe_projection_e2cd47d1efd34aab0298a9dfcfb2b5c995734f56fcee5bf13c5c903835e4315c",
+            Some(include_str!("fixtures/http.lkjc")),
+            Some(include_str!("fixtures/http.deployment.json")),
             21,
             12,
             10,
@@ -53,14 +45,15 @@ fn recipes_match_captured_generation_neutral_projections() {
         ),
         (
             ProjectTemplate::NostrRelayInfo,
-            "recipe_projection_4a6c48bb61c2148e6521a45978f18d4eaa1176eadd17002bf5d91bdeaef625ae",
+            Some(include_str!("fixtures/nostr-relay-info.lkjc")),
+            Some(include_str!("fixtures/nostr-relay-info.deployment.json")),
             56,
             12,
             43,
             87,
         ),
     ];
-    for (template, expected_digest, owners, types, expressions, relations) in cases {
+    for (template, literal, descriptor, owners, types, expressions, relations) in cases {
         let path = temporary.path().join(template.name());
         if template == ProjectTemplate::NostrRelayInfo {
             create_project_with_relay(&path, template.name(), "ws://127.0.0.1:7447/nostr")
@@ -83,53 +76,74 @@ fn recipes_match_captured_generation_neutral_projections() {
             "{} relations",
             template.name()
         );
-        let captured = predecessor_policy_projection(&path, &projection).unwrap_or(projection);
+        let expected_path = temporary
+            .path()
+            .join(format!("{}-literal", template.name()));
+        create_literal_project(&expected_path, template.name(), literal);
         assert_eq!(
-            captured.digest,
-            expected_digest,
-            "{} captured projection ({} bytes)",
-            template.name(),
-            captured.bytes
+            projection,
+            recipe_projection(&expected_path),
+            "{} complete current owner/type/body/dependency/relation meaning",
+            template.name()
+        );
+        assert_eq!(
+            deployment_projection(&path),
+            descriptor.map(|value| {
+                serde_json::from_str::<Value>(value).expect("literal current descriptor")
+            })
         );
     }
 }
 
-// Preserve the frozen graph/topology/deployment oracle rather than replacing its digest
-// with whatever the changed recipe produces. Independently assert the exact new policy,
-// then back out only that intentional field change in this owned disposable descriptor.
-fn predecessor_policy_projection(
-    path: &Path,
-    current: &RecipeProjection,
-) -> Option<RecipeProjection> {
-    let descriptor = path.join(STARTER_HTTP_DESCRIPTOR_PATH);
-    if !descriptor.exists() {
-        return None;
-    }
-    let original = std::fs::read(&descriptor).expect("owned current recipe descriptor");
-    let mut value: Value = serde_json::from_slice(&original).expect("current recipe JSON");
-    assert_eq!(
-        value["execution"],
-        serde_json::json!({
-            "instruction_fuel": null, "maximum_call_depth": 4096, "maximum_value_stack": 1000000,
-            "maximum_allocated_bytes": null, "maximum_collection_items": null,
-            "maximum_capability_calls": null
-        })
+// This side uses literal public syntax rather than recipes.rs, RecipeExpressions or
+// create_project's lowering. Exact current supplier revisions remain in the projection.
+fn create_literal_project(path: &Path, name: &str, literal: Option<&str>) {
+    let snapshot = empty_snapshot(
+        RepositoryId::generate().expect("literal repository"),
+        PackageId::generate().expect("literal package"),
+        Name::new(name).expect("literal package name"),
     );
-    value["execution"] = serde_json::json!({
-        "instruction_fuel": 10000000, "maximum_call_depth": 4096, "maximum_value_stack": 1000000
+    let supplier = literal.map(|_| {
+        crate::platform::builtin_standard::BuiltinStandard::load()
+            .expect("current literal supplier")
     });
-    std::fs::write(
-        &descriptor,
-        serde_json::to_vec(&value).expect("legacy policy JSON"),
-    )
-    .expect("substitute only owned deployment policy");
-    let previous = recipe_projection(path);
-    std::fs::write(&descriptor, original).expect("restore owned current descriptor");
-    assert_ne!(
-        current.digest, previous.digest,
-        "policy change must be observable"
-    );
-    Some(previous)
+    let transports = supplier
+        .iter()
+        .map(|supplier| supplier.transport())
+        .collect::<Vec<_>>();
+    let created =
+        GraphRepository::create_with_package_transports(path, &snapshot, None, &transports)
+            .expect("create independent literal repository");
+    if let Some(literal) = literal {
+        let tail = literal
+            .strip_prefix("request base=BASE\n")
+            .expect("literal fixture has exactly one current request binding");
+        let supplier = supplier.as_ref().expect("literal supplier selection");
+        let source = format!(
+            "request base={}\nadd.dependency package={} semantic-revision={} package-revision={}\n{tail}",
+            created.current.head.revision,
+            supplier.package,
+            supplier.semantic_revision,
+            supplier.package_revision,
+        );
+        let request = crate::platform::control::decode_compact_change_in_repository(
+            "current-recipe-oracle.lkjc",
+            source.as_bytes(),
+            &created.repository,
+        )
+        .expect("decode independent literal recipe");
+        let prepared = created
+            .repository
+            .prepare_authored_change(&request.semantic, request.options)
+            .expect("independently prepare literal recipe");
+        assert!(matches!(
+            created
+                .repository
+                .publish(&prepared.publication)
+                .expect("publish independent literal recipe"),
+            PublicationOutcome::Accepted { .. }
+        ));
+    }
 }
 
 fn recipe_projection(path: &Path) -> RecipeProjection {
@@ -315,13 +329,12 @@ fn recipe_projection(path: &Path) -> RecipeProjection {
     for owner in snapshot.owners.keys() {
         assert!(
             identities.contains_key(&owner.to_string()),
-            "recipe projection has no generation-neutral label for {owner}"
+            "recipe projection has no semantic identity label for {owner}"
         );
     }
 
-    // Task rows include recipe-local requirement identities, so their type digests
-    // vary with each fresh repository. Normalize that meaning and its type parents
-    // without changing the predecessor pure/scalar projection identities.
+    // Every type identity depends on current canonical bytes. Label all types by their
+    // complete current structure after child and recipe-local identity substitution.
     let mut pending = snapshot
         .types
         .keys()
@@ -335,23 +348,22 @@ fn recipe_projection(path: &Path) -> RecipeProjection {
             if children.iter().any(|child| pending.contains(child)) {
                 continue;
             }
-            if matches!(
-                object.form,
-                crate::platform::kernel::TypeForm::TaskFunction { .. }
-            ) || children
-                .iter()
-                .any(|child| identities.contains_key(&child.to_string()))
-            {
-                let meaning = normalized_json(object, &identities);
-                let digest = blake3::hash(meaning.as_bytes()).to_hex();
-                identities.insert(ty.to_string(), format!("type:task-projection:{digest}"));
-            }
+            let meaning = normalized_json(object, &identities);
+            let digest = blake3::hash(meaning.as_bytes()).to_hex();
+            identities.insert(ty.to_string(), format!("type:{digest}"));
             pending.remove(&ty);
         }
         assert!(pending.len() < before, "recipe type projection cycle");
     }
 
-    let mut lines = vec![format!("package-name {}", snapshot.root.package_name)];
+    assert!(
+        snapshot.retirements.is_empty(),
+        "fresh recipe has no retirements"
+    );
+    let mut lines = vec![
+        format!("package-name {}", snapshot.root.package_name),
+        format!("graph-contract {}", snapshot.root.graph_contract_version),
+    ];
     for (owner, record) in &snapshot.owners {
         let label = identity(&identities, *owner);
         lines.push(format!(
@@ -390,15 +402,9 @@ fn recipe_projection(path: &Path) -> RecipeProjection {
             endpoint(relation.target, snapshot.root.package_id, &identities),
         ));
     }
-    lines.push(format!("deployment {}", deployment_projection(path)));
     lines.sort();
-    let projection = lines.join("\n") + "\n";
-    let mut hasher = blake3::Hasher::new_derive_key(PROJECTION_DOMAIN);
-    hasher.update(&(projection.len() as u64).to_be_bytes());
-    hasher.update(projection.as_bytes());
     RecipeProjection {
-        digest: format!("recipe_projection_{}", hasher.finalize().to_hex()),
-        bytes: projection.len(),
+        meaning: lines,
         owners: snapshot.owners.len(),
         types: snapshot.types.len(),
         expressions: snapshot
@@ -629,7 +635,7 @@ fn identity(identities: &BTreeMap<String, String>, value: impl ToString) -> Stri
     let value = value.to_string();
     identities
         .get(&value)
-        .unwrap_or_else(|| panic!("missing generation-neutral identity for {value}"))
+        .unwrap_or_else(|| panic!("missing semantic identity for {value}"))
         .clone()
 }
 
@@ -657,7 +663,10 @@ fn normalize_semantic_sets(value: &mut Value) {
                 }
                 _ => {}
             }
-            if fields.contains_key("requirements") && fields.contains_key("parameters") {
+            if fields.len() == 2
+                && fields.contains_key("requirements")
+                && fields.contains_key("parameters")
+            {
                 sort_json_array(fields.get_mut("requirements"));
                 sort_json_array(fields.get_mut("parameters"));
             }
@@ -678,83 +687,129 @@ fn sort_json_array(value: Option<&mut Value>) {
 }
 
 #[test]
-fn recipe_projection_preserves_nonempty_implementation_meaning() {
+fn recipe_projection_retains_every_current_field_and_ordered_operand() {
     use serde_json::json;
-    let observe = |mut value: Value| {
-        normalize_strings(&mut value, &BTreeMap::new());
-        value
-    };
-    let base = json!({"kind": "function", "body": "same-body"});
-    let mut empty = base.clone();
-    empty["implementation_parameters"] = json!([]);
-    assert_eq!(observe(base.clone()), observe(empty));
-    let mut selected = base.clone();
-    selected["implementation_parameters"] = json!([{"contract": "first", "self_type": "owned-T"}]);
-    assert_ne!(observe(base), observe(selected.clone()));
-    let mut changed = selected.clone();
-    changed["implementation_parameters"][0]["contract"] = json!("second");
-    assert_ne!(observe(selected), observe(changed));
-    assert_ne!(
-        observe(json!({})),
-        observe(json!({"implementation_parameters": []}))
-    );
-}
-
-#[test]
-fn recipe_projection_preserves_actual_borrowed_result_sources() {
-    use serde_json::json;
-    let observe = |mut value: Value| {
-        normalize_strings(&mut value, &BTreeMap::new());
-        value
-    };
-    let ordinary = json!({"kind": "function", "result": "owned-type"});
-    let mut explicit_ordinary = ordinary.clone();
-    explicit_ordinary["result_borrow"] = json!(null);
-    assert_eq!(observe(ordinary.clone()), observe(explicit_ordinary));
-    let mut borrowed = ordinary.clone();
-    borrowed["result_borrow"] = json!("exact-source-a");
-    assert_ne!(observe(ordinary), observe(borrowed.clone()));
-    let mut alternate = borrowed.clone();
-    alternate["result_borrow"] = json!("exact-source-b");
-    assert_ne!(observe(borrowed), observe(alternate));
-    assert_ne!(observe(json!({})), observe(json!({"result_borrow": null})));
-}
-
-#[test]
-fn recipe_projection_retains_view_relation_and_unused_scope_meaning() {
-    use serde_json::json;
-    let observe = |mut value: Value| {
-        normalize_strings(&mut value, &BTreeMap::new());
-        value
-    };
-    let ordinary = json!({"kind":"function","result":"T"});
-    let current = json!({"kind":"function","result":{"ty":"T","relation":{"kind":"value"}},"read_scope_parameters":[],"read_scope_sources":[]});
-    assert_eq!(observe(ordinary.clone()), observe(current.clone()));
-    let read = json!({"kind":"function","result":{"ty":"T","relation":{"kind":"read_from","source":"source-a"}}});
-    assert_eq!(
-        observe(read),
-        observe(json!({"kind":"function","result":"T","result_borrow":"source-a"}))
-    );
-    let view = json!({"kind":"function","result":{"ty":"T","relation":{"kind":"view_from","source":"source-a","scope":"scope-a"}}});
-    assert_ne!(observe(ordinary), observe(view.clone()));
-    for (field, replacement) in [("source", "source-b"), ("scope", "scope-b")] {
-        let mut changed = view.clone();
-        changed["result"]["relation"][field] = json!(replacement);
-        assert_ne!(observe(view.clone()), observe(changed));
+    let current = json!({
+        "kind":"function", "contract_version":34,
+        "result":{"ty":"T","relation":{"kind":"value"}},
+        "read_scope_parameters":[], "read_scope_sources":[],
+        "implementation_parameters":[], "effect_parameters":[],
+        "requirement_parameters":[], "type_parameters":[],
+        "parameters":["first", "second"],
+        "body":{"kind":"call", "function":"function-a", "arguments":["left", "right"],
+            "type_arguments":[], "effect_arguments":[], "requirement_arguments":[],
+            "read_scope_arguments":[], "implementations":[]}
+    });
+    let observe = |value: &Value| normalized_json(value, &BTreeMap::new());
+    assert_eq!(observe(&current), serde_json::to_string(&current).unwrap());
+    for field in [
+        "contract_version",
+        "result",
+        "read_scope_parameters",
+        "read_scope_sources",
+        "implementation_parameters",
+        "effect_parameters",
+        "requirement_parameters",
+        "type_parameters",
+    ] {
+        let mut changed = current.clone();
+        changed.as_object_mut().unwrap().remove(field);
+        assert_ne!(
+            observe(&current),
+            observe(&changed),
+            "retain explicit current {field}"
+        );
     }
-    let mut unused = current.clone();
-    unused["read_scope_parameters"] = json!([{"id":"unused","name":"scope"}]);
-    assert_ne!(observe(current), observe(unused));
-    assert_ne!(
-        observe(json!({})),
-        observe(json!({"read_scope_parameters":[]}))
-    );
+    for field in [
+        "type_arguments",
+        "effect_arguments",
+        "requirement_arguments",
+        "read_scope_arguments",
+        "implementations",
+    ] {
+        let mut changed = current.clone();
+        changed["body"].as_object_mut().unwrap().remove(field);
+        assert_ne!(
+            observe(&current),
+            observe(&changed),
+            "retain current call {field}"
+        );
+    }
+    let mut results = std::collections::BTreeSet::from([observe(&current)]);
+    for relation in [
+        json!({"kind":"read_from","source":"source-a"}),
+        json!({"kind":"read_from","source":"source-b"}),
+        json!({"kind":"view_from","source":"source-a","scope":"scope-a"}),
+        json!({"kind":"view_from","source":"source-a","scope":"scope-b"}),
+    ] {
+        let mut changed = current.clone();
+        changed["result"]["relation"] = relation;
+        assert_ne!(observe(&current), observe(&changed));
+        assert!(
+            results.insert(observe(&changed)),
+            "result source and scope stay exact"
+        );
+    }
+    let mut unused_scope = current.clone();
+    unused_scope["read_scope_parameters"] = json!([{"id":"unused", "name":"scope"}]);
+    assert_ne!(observe(&current), observe(&unused_scope));
+    let mut reversed = current.clone();
+    reversed["parameters"].as_array_mut().unwrap().reverse();
+    assert_ne!(observe(&current), observe(&reversed));
+    let mut reversed = current.clone();
+    reversed["body"]["arguments"]
+        .as_array_mut()
+        .unwrap()
+        .reverse();
+    assert_ne!(observe(&current), observe(&reversed));
+    let dependency = json!({"graph_contract_version":34, "package":"supplier",
+        "semantic_revision":"revision-a", "package_revision":"package-a"});
+    for field in [
+        "graph_contract_version",
+        "semantic_revision",
+        "package_revision",
+    ] {
+        let mut changed = dependency.clone();
+        changed.as_object_mut().unwrap().remove(field);
+        assert_ne!(
+            observe(&dependency),
+            observe(&changed),
+            "retain supplier {field}"
+        );
+    }
+}
+
+#[test]
+fn current_literal_oracle_detects_recipe_body_and_requirement_changes() {
+    let temporary = tempfile::tempdir().unwrap();
+    for (name, literal, from, to) in [
+        (
+            "command",
+            include_str!("fixtures/command.lkjc"),
+            "(static-text \"hello\")",
+            "(static-text \"goodbye\")",
+        ),
+        (
+            "http",
+            include_str!("fixtures/http.lkjc"),
+            "maximum_calls 10000",
+            "maximum_calls 9999",
+        ),
+    ] {
+        assert!(literal.contains(from));
+        let original = temporary.path().join(format!("{name}-original"));
+        let changed = temporary.path().join(format!("{name}-changed"));
+        create_literal_project(&original, name, Some(literal));
+        create_literal_project(&changed, name, Some(&literal.replace(from, to)));
+        assert_ne!(
+            recipe_projection(&original),
+            recipe_projection(&changed),
+            "{name} mutation"
+        );
+    }
 }
 
 fn normalize_strings(value: &mut Value, identities: &BTreeMap<String, String>) {
-    if value["kind"] == "concrete" && value["reference"].get("requirement").is_some() {
-        *value = value["reference"].clone();
-    }
     match value {
         Value::String(text) => {
             if let Some(normalized) = identities.get(text) {
@@ -767,108 +822,6 @@ fn normalize_strings(value: &mut Value, identities: &BTreeMap<String, String>) {
             }
         }
         Value::Object(values) => {
-            // Generation is compared separately from recipe meaning. Exact dependency selection
-            // changes with maintained materialization; its stable package identity remains here.
-            values.remove("contract_version");
-            values.remove("graph_contract_version");
-            if values.get("kind").and_then(Value::as_str) == Some("function") {
-                // Only the two unchanged historical result relationships have a neutral
-                // carrier spelling. View results and real scope inventories stay distinct.
-                if !values.contains_key("result_borrow") {
-                    let historical = values.get("result").and_then(|value| {
-                        let result = value.as_object()?;
-                        if result.len() != 2 {
-                            return None;
-                        }
-                        let ty = result.get("ty")?.clone();
-                        let relation = result.get("relation")?.as_object()?;
-                        match relation.get("kind")?.as_str()? {
-                            "value" if relation.len() == 1 => Some((ty, None)),
-                            "read_from" if relation.len() == 2 => {
-                                Some((ty, Some(relation.get("source")?.clone())))
-                            }
-                            _ => None,
-                        }
-                    });
-                    if let Some((ty, source)) = historical {
-                        values.insert("result".to_owned(), ty);
-                        if let Some(source) = source {
-                            values.insert("result_borrow".to_owned(), source);
-                        }
-                    }
-                }
-                for key in ["read_scope_parameters", "read_scope_sources"] {
-                    if values
-                        .get(key)
-                        .is_some_and(|value| value.as_array().is_some_and(Vec::is_empty))
-                    {
-                        values.remove(key);
-                    }
-                }
-            }
-            if matches!(
-                values.get("kind").and_then(Value::as_str),
-                Some("call" | "implementation_call" | "function_value" | "method_call")
-            ) && values
-                .get("read_scope_arguments")
-                .is_some_and(|value| value.as_array().is_some_and(Vec::is_empty))
-            {
-                values.remove("read_scope_arguments");
-            }
-            // Empty function witnesses mean the same as their pre-18 absence.
-            // Nonempty operands and unrelated data fields must remain observable.
-            if values.get("kind").and_then(Value::as_str) == Some("function")
-                && values
-                    .get("implementation_parameters")
-                    .is_some_and(|value| value.as_array().is_some_and(Vec::is_empty))
-            {
-                values.remove("implementation_parameters");
-            }
-            // Ordinary results retain their pre-27 meaning. Preserve every
-            // actual borrowed-result source and every unrelated null field.
-            if values.get("kind").and_then(Value::as_str) == Some("function")
-                && values.get("result_borrow").is_some_and(Value::is_null)
-            {
-                values.remove("result_borrow");
-            }
-            // Effect arity zero preserves predecessor meaning; task kind and every nonempty
-            // row/application remain represented in this generation-neutral observation.
-            for key in [
-                "effect_parameters",
-                "effect_arguments",
-                "requirement_parameters",
-                "requirement_arguments",
-            ] {
-                if values
-                    .get(key)
-                    .is_some_and(|value| value.as_array().is_some_and(Vec::is_empty))
-                {
-                    values.remove(key);
-                }
-            }
-            // Graph 13 makes zero-arity nominal declarations and constructors explicit.
-            // Keep the pre-existing monomorphic recipe projection, while retaining every
-            // nonempty vector so a parametric semantic change still changes this oracle.
-            if matches!(
-                values.get("kind").and_then(Value::as_str),
-                Some("record" | "variant")
-            ) {
-                for key in ["type_parameters", "type_arguments"] {
-                    if values
-                        .get(key)
-                        .is_some_and(|value| value.as_array().is_some_and(Vec::is_empty))
-                    {
-                        values.remove(key);
-                    }
-                }
-            }
-            if values.contains_key("package")
-                && values.contains_key("semantic_revision")
-                && values.contains_key("package_revision")
-            {
-                values.remove("semantic_revision");
-                values.remove("package_revision");
-            }
             for value in values.values_mut() {
                 normalize_strings(value, identities);
             }
@@ -892,59 +845,44 @@ fn endpoint(
     }
 }
 
-fn deployment_projection(path: &Path) -> String {
+fn deployment_projection(path: &Path) -> Option<Value> {
     let command = path.join(STARTER_COMMAND_DESCRIPTOR_PATH);
-    if command.exists() {
-        assert!(path.join(STARTER_HTTP_ARTIFACT_DIRECTORY).is_dir());
-        assert!(!path.join(STARTER_HTTP_ARTIFACT_PATH).exists());
-        assert!(!path.join(STARTER_HTTP_DESCRIPTOR_PATH).exists());
-        let value: Value =
-            serde_json::from_slice(&std::fs::read(command).expect("command auxiliary"))
-                .expect("command JSON");
-        assert_eq!(
-            value,
-            serde_json::json!({
-                "artifact":"generated/application.lkja", "target":"main", "listen":null,
-                "http":null, "session":null, "worker":null,
-                "streams":{"maximum_chunk_bytes":65536,"maximum_buffered_chunks":8,
-                    "maximum_total_bytes":67108864,"maximum_live_streams":1024},
-                "configuration":{},"secrets":[],"grants":[]
-            })
-        );
-        // Preserve the captured predecessor graph projection. The newly added operator
-        // auxiliary is checked independently in full above, including absent policy fields.
-        return "none".to_owned();
-    }
-    let descriptor = path.join(STARTER_HTTP_DESCRIPTOR_PATH);
-    if !descriptor.exists() {
+    let http = path.join(STARTER_HTTP_DESCRIPTOR_PATH);
+    let descriptor = if command.exists() {
+        assert!(!http.exists());
+        command
+    } else if http.exists() {
+        http
+    } else {
         assert!(!path.join(STARTER_HTTP_ARTIFACT_DIRECTORY).exists());
-        return "none".to_owned();
-    }
+        return None;
+    };
     assert!(path.join(STARTER_HTTP_ARTIFACT_DIRECTORY).is_dir());
-    let mut value: Value = serde_json::from_slice(
-        &std::fs::read(&descriptor).expect("read recipe projection deployment"),
-    )
-    .expect("decode recipe projection deployment");
-    normalize_authority_revisions(&mut value);
-    serde_json::to_string(&value).expect("encode recipe projection deployment")
-}
-
-fn normalize_authority_revisions(value: &mut Value) {
-    match value {
-        Value::Object(fields) => {
-            for (name, value) in fields {
-                if name == "authority_revision" {
-                    *value = Value::String("<fresh-authority-revision>".to_owned());
-                } else {
-                    normalize_authority_revisions(value);
-                }
-            }
-        }
-        Value::Array(values) => {
-            for value in values {
-                normalize_authority_revisions(value);
-            }
-        }
-        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+    assert!(!path.join(STARTER_HTTP_ARTIFACT_PATH).exists());
+    let bytes = std::fs::read(&descriptor).expect("current deployment descriptor");
+    crate::platform::deployment::decode_deployment(&bytes).expect("strict current descriptor");
+    let mut value: Value = serde_json::from_slice(&bytes).expect("current descriptor JSON");
+    let mut revisions = std::collections::BTreeSet::new();
+    for grant in value["grants"]
+        .as_array_mut()
+        .expect("current grant inventory")
+    {
+        let revision = grant["authority_revision"]
+            .as_str()
+            .expect("fresh grant authority");
+        assert_eq!(revision.len(), 64);
+        assert!(revision.bytes().all(|byte| byte.is_ascii_hexdigit()));
+        assert_ne!(revision, "0".repeat(64));
+        assert!(
+            revisions.insert(revision.to_owned()),
+            "grant authorities must be distinct"
+        );
+        grant["authority_revision"] = Value::String(format!(
+            "authority:{}",
+            grant["requirement"]
+                .as_str()
+                .expect("exact grant requirement")
+        ));
     }
+    Some(value)
 }

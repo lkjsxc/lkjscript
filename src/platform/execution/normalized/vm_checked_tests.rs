@@ -111,7 +111,8 @@ fn raw_generic_structural_identity_reserves_scratch_before_cloning_or_encoding()
         .map(|field| field.name.as_str().len() as u64)
         .sum();
     let vector_bytes = (fields.len() * std::mem::size_of::<StructuralTypeField>()) as u64;
-    assert!(required >= name_bytes + vector_bytes + 2 * encoded.len() as u64 - 50);
+    let payload = bincode::encode_to_vec(&concrete, bincode::config::standard()).unwrap();
+    assert!(required >= name_bytes + vector_bytes + payload.len() as u64 + encoded.len() as u64);
     assert_eq!(charges, 1);
     assert_eq!(
         resolve(&program, Some(required), &control).0.unwrap(),

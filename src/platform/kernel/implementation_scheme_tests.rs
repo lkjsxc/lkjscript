@@ -332,7 +332,7 @@ fn generic_implementation_application_roots_retain_unused_arguments() {
     };
     let expression = ExpressionRecord {
         id: crate::platform::semantic_id::ExpressionId::migrate(b"scheme-root-test", 1),
-        contract_version: 28,
+        contract_version: contract::GRAPH_CONTRACT_VERSION,
         operation: ExpressionOperation::MethodCall {
             witness: operand,
             contract: declaration(&source, "Reader"),
@@ -347,7 +347,7 @@ fn generic_implementation_application_roots_retain_unused_arguments() {
     predecessor.contract_version = 27;
     assert_eq!(
         predecessor.validate_local().unwrap_err().code,
-        "kernel_implementation_scheme_generation"
+        "kernel_expression_contract"
     );
 }
 

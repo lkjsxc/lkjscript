@@ -80,7 +80,7 @@ fn view_borrow_roles_follow_exact_canonical_binding_identity_and_kind() {
 #[test]
 fn borrowed_call_adoption_distinguishes_affine_view_and_owned_read() {
     let id = BindingId::migrate(SEED, 0);
-    let mut expression = ExpressionRecord::new(
+    let expression = ExpressionRecord::new(
         ExpressionId::migrate(SEED, 0),
         ExpressionOperation::BorrowCall {
             call: ExpressionId::migrate(SEED, 1),
@@ -104,51 +104,30 @@ fn borrowed_call_adoption_distinguishes_affine_view_and_owned_read() {
         );
     }
     assert!(ownership_contributions(&OwnerRecord::Expression(expression.clone())).is_err());
-    expression.contract_version = 33;
-    assert_eq!(
-        ownership_contributions(&OwnerRecord::Expression(expression)).unwrap()
-            [&OwnerKey::Binding(id)]
-            .role,
-        OwnershipRole::ExpressionBinding {
-            role: BindingContainerRole::OwnedBorrow,
-            ordinal: 0
-        }
-    );
 }
 
 #[test]
-fn retained_validator40_certificate_cannot_be_resigned_as_current_admission() {
+fn foreign_validator_cannot_be_resigned_as_current_admission() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let witness = rebuild_full_witness(&snapshot).unwrap();
-    let mut stale = witness.manifest;
-    stale.validator_contract =
-        ValidatorContractDigest::of(include_bytes!("fixtures/validator_40_material.bin"));
-    stale.certificate = super::codec::certificate_digest(&stale.core()).unwrap();
-    let (digest, bytes) = encode_witness_manifest_content(&stale).unwrap();
+    let mut foreign = witness.manifest;
+    foreign.validator_contract = ValidatorContractDigest::from_bytes([0x5a; 32]);
+    foreign.certificate = super::codec::certificate_digest(&foreign.core()).unwrap();
+    let bytes = crate::platform::packed::encode_canonical(
+        super::contract::WITNESS_MAGIC,
+        super::contract::WITNESS_ENVELOPE_DOMAIN,
+        &foreign,
+        super::contract::MAXIMUM_WITNESS_MANIFEST_BYTES,
+    )
+    .unwrap();
+    assert!(!foreign.contract_is_current());
     assert_eq!(
-        decode_historical_witness_manifest(&bytes, digest).unwrap(),
-        stale
-    );
-    assert!(!stale.contract_is_current());
-    assert_eq!(
-        decode_witness_manifest(&bytes, digest).unwrap_err().code,
+        decode_witness_manifest(&bytes, ValidationWitnessDigest::of(&bytes))
+            .unwrap_err()
+            .code,
         "witness_validator_contract"
     );
-    assert!(encode_witness_manifest(&stale).is_err());
-
-    stale.contract_version = 9;
-    stale.graph_contract_version = 33;
-    stale.certificate = super::codec::certificate_digest(&stale.core()).unwrap();
-    let (digest, bytes) = encode_witness_manifest_content(&stale).unwrap();
-    assert!(bytes.starts_with(b"LKJWIT09"));
-    assert_eq!(
-        decode_historical_witness_manifest(&bytes, digest).unwrap(),
-        stale
-    );
-    assert!(decode_witness_manifest(&bytes, digest).is_err());
-    stale.graph_contract_version = 34;
-    stale.certificate = super::codec::certificate_digest(&stale.core()).unwrap();
-    assert!(encode_witness_manifest_content(&stale).is_err());
+    assert!(encode_witness_manifest(&foreign).is_err());
 }
 
 #[test]
@@ -234,66 +213,6 @@ fn complete_witness_admission_rejects_missing_field_type_in_unused_view_owner() 
 }
 
 #[test]
-fn frozen_summary11_bytes_keep_original_kind_schema_and_never_supply_current_cache_proof() {
-    let snapshot = crate::platform::kernel::tests::witness_snapshot();
-    let witness = rebuild_full_witness(&snapshot).unwrap();
-    let mut summary = witness
-        .summaries
-        .values()
-        .find(|summary| summary.kind == OwnerKind::PureFunction)
-        .unwrap()
-        .clone();
-    summary.contract_version = 11;
-    let literal = (
-        11_u16,
-        summary.owner,
-        5_u32,
-        summary.record,
-        summary.semantic_interface,
-        summary.implementation,
-        summary.type_digest,
-        summary.effect,
-        summary.capability,
-        summary.relations,
-        summary.presentation,
-        summary.test,
-        summary.validation_dependencies,
-    );
-    let expected = crate::platform::packed::encode(
-        *b"LKJSUM16",
-        "lkjscript.owner-summary.envelope.v11",
-        &literal,
-        super::contract::MAXIMUM_OWNER_SUMMARY_BYTES,
-    )
-    .unwrap();
-    let (digest, bytes) = encode_owner_summary_content(&summary).unwrap();
-    assert_eq!(
-        bytes, expected,
-        "literal original field order and pure-function ordinal must survive"
-    );
-    assert_eq!(
-        decode_historical_owner_summary(&bytes, digest).unwrap(),
-        summary
-    );
-    assert!(decode_owner_summary(&bytes, digest).is_err());
-    assert!(encode_owner_summary(&summary).is_err());
-
-    summary.kind = OwnerKind::ReadView;
-    assert!(encode_owner_summary_content(&summary).is_err());
-    let forged = crate::platform::packed::encode(
-        *b"LKJSUM16",
-        "lkjscript.owner-summary.envelope.v11",
-        &summary,
-        super::contract::MAXIMUM_OWNER_SUMMARY_BYTES,
-    )
-    .unwrap();
-    assert!(
-        decode_historical_owner_summary(&forged, OwnerSummaryDigest::of(&forged)).is_err(),
-        "rehashed predecessor bytes cannot import the new read-view kind"
-    );
-}
-
-#[test]
 fn constructor_local_view_binding_under_let_keeps_exact_role_and_initializer_owner() {
     let ordinary_id = BindingId::migrate(SEED, 200);
     let view_id = BindingId::migrate(SEED, 201);
@@ -364,22 +283,13 @@ fn constructor_local_view_binding_under_let_keeps_exact_role_and_initializer_own
         }))
         .is_err()
     );
-    expression.contract_version = 33;
-    assert!(
-        ownership_contributions_with_bindings(
-            &OwnerRecord::Expression(expression.clone()),
-            resolve
-        )
-        .is_err(),
-        "pre34 Let cannot contain a view binding"
-    );
     expression.operation = ExpressionOperation::Let {
         bindings: vec![ordinary_id],
         body: ExpressionId::migrate(SEED, 203),
     };
     assert_eq!(
-        ownership_contributions(&OwnerRecord::Expression(expression)).unwrap()
-            [&OwnerKey::Binding(ordinary_id)]
+        ownership_contributions_with_bindings(&OwnerRecord::Expression(expression), resolve)
+            .unwrap()[&OwnerKey::Binding(ordinary_id)]
             .role,
         OwnershipRole::ExpressionBinding {
             role: BindingContainerRole::Let,

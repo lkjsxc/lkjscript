@@ -27,20 +27,11 @@ independent storage suppliers, then append the explicit default Flat wrapper.
 Finish requests author/export the checker before the producer and bind the
 checked consumer to queried exact declarations. These requests are provenance;
 the accepted editable project remains the program-meaning authority. The
-[original .95 provenance](requests/blockread-adoption/provenance.json) binds all 27
+[original provenance](requests/blockread-adoption/provenance.json) binds all 27
 requests, exact suppliers, accepted project and public proof.
 
-The preceding .95 asset is **3,710,645 bytes**, SHA-256
-`5bd6a9568d59df598d1f0a3a7b5538036697db9d04355753f042fe61103bad7d`.
-Its original, rebuilt and clean-consumer builds are byte-identical. The accepted
-project HEAD file is bound by SHA-256
-`526434a7451d263e204f33cc8273e1b414dc430b4a23e677e04af5bb403970fb`.
-[Status](../../docs/status.md) binds the exact public author/build/runtime proof
-and the remaining integrated-source and finalized-byte acceptance.
-
-The original **25** files directly under `requests/` remain historical provenance
-for the preceding asset. They include the original `entrypoint.lkjc` declaration
-body and admitted `compiler-entrypoint.lkjc`. The historical admitted
+The original files directly under `requests/` remain provenance. They include the
+`entrypoint.lkjc` declaration body and admitted `compiler-entrypoint.lkjc`. The admitted
 `checked-consumer-exact.lkjc` uses queried exact owners because exported names
 `Outcome`, `flat` and `chunked` are ambiguous. The original refused
 `checked-consumer.lkjc` and its diagnostic remain preserved; that proposal never
@@ -57,14 +48,9 @@ lkjscript --project tools/native-package-plan/project change draft \
 An untouched draft plans unchanged. A maintained rebuild must match the selected
 artifact's exact bytes while the accepted project and suppliers remain unchanged.
 No external semantic generator, graph writer or host-produced plan participates.
-Current authoring evidence is indexed under
-`.artifacts/associated-owned-types/native-blockread-asset-rebuild-proposal/`.
-The runtime proof archives retain the supplier projects and exports; current
-provenance binds their exact archive locations and inventories.
-The prior supplier proof remains under
-`.artifacts/native-package-planner/native-asset-first/`. Historical asset identities
-and measured costs do not attest the replacement's cost. Fresh integrated-source
-acceptance and finalized distribution remain separate.
+Schema changes require public check/build to regenerate `generated/package-plan.lkja`.
+Preserve exact request/provenance originals; rebuilding does not supply fresh source,
+runtime or finalized-byte acceptance. [Status](../../docs/status.md) owns those outcomes.
 
 The target takes one ordinary Proposal positional argument:
 
@@ -118,5 +104,5 @@ See the [independent checker](../../examples/dependency-plan/verification/README
 and [planner](../../examples/dependency-plan/README.md) for the native algorithm and
 complete-outcome contracts.
 
-The .96 compilation refresh selects artifact_bundle_787f9a47624dba6e19f24d3255a6acd8e21dc9936104e6a92b75f49a8b9171d6 (3,713,432 bytes, SHA-256 c4fe6143f0efe9a178d47a46ff261bf7788cc11061cfbb70cd944c9bfbc939c5), using compiler 34, bytecode 28 and artifact 41. Its two public builds are byte-identical and all 176 source/supplier checks report zero failures and differential equality; the [separate rebuild receipt](../../.artifacts/associated-read-views/consumer-assets-installation-proposals/sourcef87c8b-four-families-first/receipt.json) binds their original source f87c8b7fa80e03bb8e3901746aa14a845fc509161916ca07eef92c55d32ed550. Accepted HEAD and exact suppliers remain unchanged. This compilation refresh supplies no final source, release or additional runtime acceptance.
-The original provenance retains its exact current_requests and runtime_scope fields; their original bytes, source and counts are not rewritten for this rebuild.
+The original provenance retains its exact current_requests and runtime_scope fields;
+asset regeneration does not rewrite their original bytes, source or counts.

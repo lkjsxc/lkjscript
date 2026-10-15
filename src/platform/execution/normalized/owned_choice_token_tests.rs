@@ -30,7 +30,7 @@ fn owned_choice_type_encoding_is_disjoint_and_cases_are_canonical() {
     })
     .unwrap();
     let (digest, bytes) = encode_type_object(&choice).unwrap();
-    assert_eq!(&bytes[..8], b"LKJCHO01");
+    assert_eq!(&bytes[..8], &contract::TYPE_OBJECT_MAGIC);
     assert_eq!(decode_type_object(&bytes, digest).unwrap(), choice);
     let product = TypeObject::new(TypeForm::OwnedProduct {
         fields: cases.clone(),
@@ -38,7 +38,7 @@ fn owned_choice_type_encoding_is_disjoint_and_cases_are_canonical() {
     .unwrap();
     assert_ne!(digest, encode_type_object(&product).unwrap().0);
     let mut disguised = choice;
-    disguised.contract_version = 10;
+    disguised.contract_version = contract::TYPE_OBJECT_CONTRACT_VERSION + 1;
     let bytes = crate::platform::packed::encode(
         contract::TYPE_OBJECT_MAGIC,
         contract::TYPE_OBJECT_ENVELOPE_DOMAIN,

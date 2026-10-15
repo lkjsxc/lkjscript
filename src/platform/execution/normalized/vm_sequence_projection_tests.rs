@@ -74,6 +74,7 @@ fn checked_sequence_get_retains_large_data_without_descendant_walks_or_owner_loa
                 .unwrap();
             assert_eq!(before.since().node_visits, 0);
             assert_eq!(selected.class, Class::Free);
+            assert_eq!(selected.ordinary_type, Some(f.payload));
             assert!(selected.borrow.is_none());
             assert_eq!(selected.raw(), &f.raw(count));
         }
@@ -98,6 +99,7 @@ fn checked_sequence_get_rejects_raw_prefix_and_restored_shape_without_admission(
             raw: NormalizedValue::OwnedSequence(sequence.borrow().unwrap()),
             origin: f.program.value_origin,
             class: Class::Memory,
+            ordinary_type: None,
             borrow: None,
         };
         assert!(project(&f, &forged_read).is_err());

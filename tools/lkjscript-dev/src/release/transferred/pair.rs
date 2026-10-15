@@ -3,10 +3,9 @@ use super::*;
 use std::io::Read;
 use std::os::unix::fs::MetadataExt;
 
+mod continuity;
 mod installation;
-mod legacy;
 mod lifecycle;
-mod recovery;
 use installation::Acquisition;
 
 const PAIR_SCHEMA: &str = "lkjscript-transferred-pair";
@@ -273,8 +272,7 @@ struct PairReceipt {
     receipt_verification_nanoseconds: u64,
     routes: Vec<RouteReceipt>,
     equality: Option<Equality>,
-    recovery: Option<recovery::Recovery>,
-    legacy: Option<legacy::LegacyUpgrade>,
+    continuity: Option<continuity::Continuity>,
     cleanup_complete: bool,
     failure: Option<String>,
 }
@@ -368,8 +366,7 @@ fn initial_receipt(options: &PairOptions, verifier: &Path) -> Result<PairReceipt
             ]
         },
         equality: None,
-        recovery: None,
-        legacy: None,
+        continuity: None,
         cleanup_complete: false,
         failure: None,
     })
@@ -494,25 +491,14 @@ fn execute_pair(
         checkpoint(options, verifier, receipt, control)?;
     }
     if options.tier == Tier::CandidateInstallation {
-        receipt.phase = "installation-recovery".to_owned();
+        receipt.phase = "current-selector-continuity".to_owned();
         persist(options, receipt)?;
-        receipt.recovery = Some(recovery::run(
+        receipt.continuity = Some(continuity::run(
             options,
             receipt.routes[0]
                 .admission
                 .as_ref()
-                .ok_or_else(|| DevError::corrupt("missing recovery archive"))?,
-            control,
-        )?);
-        persist(options, receipt)?;
-        receipt.phase = "legacy-manager-recovery".to_owned();
-        persist(options, receipt)?;
-        receipt.legacy = Some(legacy::run(
-            options,
-            &receipt.routes[0]
-                .admission
-                .clone()
-                .ok_or_else(|| DevError::corrupt("missing legacy recovery archive"))?,
+                .ok_or_else(|| DevError::corrupt("missing continuity admission"))?,
             control,
         )?);
         persist(options, receipt)?;
@@ -605,9 +591,8 @@ fn validate_admission(
     super::super::validate_manifest(&admitted.manifest)?;
     require(
         admitted.manifest.source.expected_release_tag == options.tag
-            && admitted.manifest.source.tagged_commit_sha == options.commit
-            && admitted.manifest.is_publication_neutral(),
-        "pair tag, source or neutral content encoding mismatch",
+            && admitted.manifest.source.tagged_commit_sha == options.commit,
+        "pair tag or source mismatch",
     )?;
     require(
         archive::sha256_bytes(&archive::canonical_json(&admitted.manifest)?)?
@@ -813,28 +798,19 @@ fn validate(receipt: &PairReceipt, options: &PairOptions, verifier: &Path) -> Re
             "route lifecycle is outside this pair",
         )?;
     }
-    match (options.tier, &receipt.recovery) {
-        (Tier::CandidateInstallation, Some(recovered)) => recovery::validate(
+    match (options.tier, &receipt.continuity) {
+        (Tier::CandidateInstallation, Some(continuity)) => continuity::validate(
             options,
             receipt.routes[0]
                 .admission
                 .as_ref()
-                .ok_or_else(|| DevError::corrupt("missing recovery admission"))?,
-            recovered,
+                .ok_or_else(|| DevError::corrupt("missing continuity admission"))?,
+            continuity,
         )?,
         (Tier::BoundarySmoke | Tier::BoundaryExactSmoke, None) => (),
         _ => {
             return Err(DevError::corrupt(
-                "installation recovery disposition disagrees with tier",
-            ));
-        }
-    }
-    match (options.tier, &receipt.legacy) {
-        (Tier::CandidateInstallation, Some(legacy)) => legacy::validate(options, legacy)?,
-        (Tier::BoundarySmoke | Tier::BoundaryExactSmoke, None) => (),
-        _ => {
-            return Err(DevError::corrupt(
-                "legacy recovery disposition disagrees with tier",
+                "selector continuity disposition disagrees with tier",
             ));
         }
     }
@@ -853,15 +829,12 @@ fn validate(receipt: &PairReceipt, options: &PairOptions, verifier: &Path) -> Re
 }
 
 fn clean(options: &PairOptions, receipt: &PairReceipt) -> Result<bool, DevError> {
-    for directory in ["recovery", "legacy-manager"] {
-        if options
-            .evidence_root
-            .join(directory)
-            .join("runtime")
-            .try_exists()?
-        {
-            return Ok(false);
-        }
+    if options
+        .evidence_root
+        .join("current-continuity/runtime")
+        .try_exists()?
+    {
+        return Ok(false);
     }
     for route in &receipt.routes {
         if !route.lifecycle.as_ref().is_some_and(|l| l.cleanup_complete) {

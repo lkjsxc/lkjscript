@@ -49,14 +49,15 @@ const WORKER_HELPER_FUNCTION: &str = "decl_7f443401f4946c55fa239c5430e8ad93";
 const WORKER_BORROWER_FUNCTION: &str = "decl_08eec4f6b013dea79cfed578f85b7db9";
 const WORKER_QUEUE_REQUIREMENT: &str = "req_0cebded5cb056cda5484e39aa40594ad";
 const SERVICE_ARTIFACT_RELATIVE: &str = "generated/lkjournal.lkja";
-const SERVICE_ARTIFACT_SHA256: &str =
-    "c4b845bb015775d00708aaf71690dee785a8f234dbd6f6a1dc75594d1d1375ec";
-const HTTP_REQUEST_TYPE: &str =
-    "type_object_b84486b5e78230fd2b9c4bdcedc6f4ee1fb08838bc3b178aab0d3fb5967a6a44";
-const HTTP_RESPONSE_TYPE: &str =
-    "type_object_f8f50c70db1af80a836ea1eb63c388326fe94b15ba62571b14c960b8204cf1da";
-const TEXT_TYPE: &str =
-    "type_object_d8907b140f33643f5e02a15377e67645703815b56e0440c1ccd68f838e2829e3";
+
+fn maintained_service_artifact_sha256() -> String {
+    // Bind disk input to the maintained bytes compiled into this verifier, independently
+    // of the candidate executable and the receipt being checked.
+    sha256_hex(include_bytes!(
+        "../../../applications/lkjournal/generated/lkjournal.lkja"
+    ))
+}
+
 const EXPECTED_HTTP_ROUTES: [(&str, &str, &str, &str, &str, &str); 11] = [
     ("GET", "/", "exact", "", "home", "home"),
     ("GET", "/health", "exact", "", "health", "health-route"),
@@ -941,7 +942,7 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
         &artifact_path,
         MAXIMUM_ARTIFACT_BYTES,
         "maintained service artifact bundle",
-        SERVICE_ARTIFACT_SHA256,
+        &maintained_service_artifact_sha256(),
     )
     .map_err(|error| DevError::corrupt(format!("observe service artifact: {}", error.message)))?;
     let result = receipt
@@ -1229,7 +1230,7 @@ fn execute(
             &artifact,
             MAXIMUM_ARTIFACT_BYTES,
             "maintained service artifact bundle",
-            SERVICE_ARTIFACT_SHA256,
+            &maintained_service_artifact_sha256(),
         )?);
         run_acceptance(&mut context, &binary)
     })();
@@ -5227,9 +5228,58 @@ fn independent_capture_names(selector: &IndependentHttpRouteSelector) -> Vec<&st
     }
 }
 
+struct IndependentHttpTypeIdentities {
+    request: String,
+    response: String,
+    text: String,
+}
+
+fn independent_http_type_identities() -> Result<IndependentHttpTypeIdentities, ServiceFailure> {
+    fn identity(form: Value) -> Result<String, ServiceFailure> {
+        let bytes = serde_json::to_vec(&form)
+            .map_err(|error| ServiceFailure::infrastructure("route_oracle_type", error))?;
+        lkjscript::platform::contributor::canonical_type_object_identity(&bytes)
+            .map(|(_, text)| text)
+            .map_err(|error| ServiceFailure::infrastructure("route_oracle_type", error))
+    }
+
+    // Specify the boundary structurally; share only neutral canonical type identity.
+    // Candidate route inspection supplies neither expected shapes nor expected digests.
+    let text = identity(serde_json::json!({"kind":"text"}))?;
+    let bytes = identity(serde_json::json!({"kind":"bytes"}))?;
+    let integer = identity(serde_json::json!({"kind":"i64"}))?;
+    let header = identity(serde_json::json!({"kind":"structural_record","fields":[
+        {"name":"name","ty":text},
+        {"name":"value","ty":bytes}
+    ]}))?;
+    let headers = identity(serde_json::json!({"kind":"list","item":header}))?;
+    let stream = identity(serde_json::json!({"kind":"stream","item":bytes}))?;
+    let query_values = identity(serde_json::json!({"kind":"list","item":text}))?;
+    let query = identity(serde_json::json!({"kind":"map","key":text,"value":query_values}))?;
+    let request = identity(serde_json::json!({"kind":"structural_record","fields":[
+        {"name":"body","ty":stream},
+        {"name":"headers","ty":headers},
+        {"name":"method","ty":text},
+        {"name":"path","ty":text},
+        {"name":"query","ty":text},
+        {"name":"query_parameters","ty":query}
+    ]}))?;
+    let response = identity(serde_json::json!({"kind":"structural_record","fields":[
+        {"name":"body","ty":bytes},
+        {"name":"headers","ty":headers},
+        {"name":"status","ty":integer}
+    ]}))?;
+    Ok(IndependentHttpTypeIdentities {
+        request,
+        response,
+        text,
+    })
+}
+
 fn independently_validate_http_signature(
     route: &HttpRouteObservation,
 ) -> Result<(), ServiceFailure> {
+    let types = independent_http_type_identities()?;
     let expected_signature = if route.captures.is_empty() {
         "(HttpRequest)->HttpResponse".to_owned()
     } else {
@@ -5243,7 +5293,7 @@ fn independently_validate_http_signature(
     let parameter_shape = route.parameters.len() == route.captures.len().saturating_add(1)
         && route.parameters.first().is_some_and(|parameter| {
             parameter.index == 0
-                && parameter.ty == HTTP_REQUEST_TYPE
+                && parameter.ty == types.request
                 && parameter.use_mode == "unrestricted"
                 && parameter.requirement == "none"
         })
@@ -5254,14 +5304,14 @@ fn independently_validate_http_signature(
             .zip(&route.captures)
             .all(|(parameter, capture)| {
                 parameter.name == *capture
-                    && parameter.ty == TEXT_TYPE
+                    && parameter.ty == types.text
                     && parameter.use_mode == "unrestricted"
                     && parameter.requirement == "none"
             });
     require(
         route.signature == expected_signature
             && parameter_shape
-            && route.result == HTTP_RESPONSE_TYPE
+            && route.result == types.response
             && route.effect == "task",
         "route_oracle_signature",
         "HTTP route captures do not index the handler's ordered unrestricted Text suffix",
@@ -7172,7 +7222,7 @@ definition.expression id=expr_55555555555555555555555555555555 form=call read-sc
     }
 
     #[test]
-    fn maintained_service_artifact_matches_its_reviewed_pin() {
+    fn maintained_service_artifact_matches_its_compiled_reference() {
         let repository = repository_root().expect("repository");
         let artifact = repository
             .join("applications/lkjournal")
@@ -7182,9 +7232,9 @@ definition.expression id=expr_55555555555555555555555555555555 form=call read-sc
             &artifact,
             MAXIMUM_ARTIFACT_BYTES,
             "maintained service artifact bundle",
-            SERVICE_ARTIFACT_SHA256,
+            &maintained_service_artifact_sha256(),
         )
-        .expect("review the service pin when regenerating the maintained application artifact");
+        .expect("maintained artifact must match the compiled verifier reference");
 
         let temporary = tempfile::tempdir().expect("owned corruption fixture");
         let changed = temporary.path().join("changed.lkja");
@@ -7196,9 +7246,9 @@ definition.expression id=expr_55555555555555555555555555555555 form=call read-sc
             &changed,
             MAXIMUM_ARTIFACT_BYTES,
             "changed fixture",
-            SERVICE_ARTIFACT_SHA256,
+            &maintained_service_artifact_sha256(),
         )
-        .expect_err("an unreviewed artifact must still reject");
+        .expect_err("a modified artifact must still reject");
         assert_eq!(failure.code, "service_artifact_sha256");
     }
 
@@ -7210,6 +7260,7 @@ definition.expression id=expr_55555555555555555555555555555555 form=call read-sc
 
     #[test]
     fn independent_http_route_set_is_order_invariant_and_strict() {
+        let types = independent_http_type_identities().expect("independent HTTP type identities");
         let route = |id: &str, method: &str, path: &str, port: &str| HttpRouteObservation {
             id: id.to_owned(),
             method: method.to_owned(),
@@ -7227,11 +7278,11 @@ definition.expression id=expr_55555555555555555555555555555555 form=call read-sc
                 id: "param_00000000000000000000000000000000".to_owned(),
                 index: 0,
                 name: "request".to_owned(),
-                ty: HTTP_REQUEST_TYPE.to_owned(),
+                ty: types.request.clone(),
                 use_mode: "unrestricted".to_owned(),
                 requirement: "none".to_owned(),
             }],
-            result: HTTP_RESPONSE_TYPE.to_owned(),
+            result: types.response.clone(),
             effect: "task".to_owned(),
         };
         let pattern_route = |id: &str, method: &str, path: &str, captures: &[&str], port: &str| {
@@ -7263,7 +7314,7 @@ definition.expression id=expr_55555555555555555555555555555555 form=call read-sc
                         id: format!("param_{:032x}", index.saturating_add(1)),
                         index: index.saturating_add(1) as u64,
                         name: (*capture).to_owned(),
-                        ty: TEXT_TYPE.to_owned(),
+                        ty: types.text.clone(),
                         use_mode: "unrestricted".to_owned(),
                         requirement: "none".to_owned(),
                     }
@@ -7418,6 +7469,21 @@ definition.expression id=expr_55555555555555555555555555555555 form=call read-sc
                 .code,
             "route_oracle_signature"
         );
+
+        for dimension in 0..3 {
+            let mut mistyped = broad.clone();
+            match dimension {
+                0 => mistyped.parameters[0].ty = types.response.clone(),
+                1 => mistyped.parameters[1].ty = types.request.clone(),
+                _ => mistyped.result = types.request.clone(),
+            }
+            assert_eq!(
+                independently_validate_http_routes(&[mistyped])
+                    .expect_err("request, capture and response type identities must remain exact")
+                    .code,
+                "route_oracle_signature"
+            );
+        }
 
         let mut shared_port_drift = two_capture;
         shared_port_drift.port = broad.port.clone();

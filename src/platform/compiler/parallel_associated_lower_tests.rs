@@ -881,15 +881,6 @@ fn ordinary_parallel_literal_bytes_and_cached_fresh_unit_bytes_remain_identical(
         OptimizationPolicy::DeterministicBaseline,
     )
     .unwrap();
-    // Byte27 remains exact through the private frozen DTO. Byte28 adds one
-    // empty read-scope argument vector per limb; ordinals/targets stay fixed.
-    let frozen_literal = [0, 0, 2, 38, 0, 0, 0, 0, 0, 0, 1, 0, 0, 27];
-    let frozen = super::super::wire33::Code33::try_from(code(&receipt.unit)).unwrap();
-    assert_eq!(
-        bincode::encode_to_vec(&frozen, bincode::config::standard()).unwrap(),
-        frozen_literal
-    );
-    assert_eq!(CompiledCode::from(frozen), *code(&receipt.unit));
     // parameter/local counts; two instructions; Parallel38; six empty
     // type/witness/scope inventories; target0/args0,target1/args0,result0; Return27.
     let literal = [0, 0, 2, 38, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 27];

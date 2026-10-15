@@ -314,7 +314,7 @@ execution. The offline runner and receipt reader now require all four exact case
 a format rejection cannot stand in for semantic admission. The compiler test
 reconstructs and byte-compares the current fixtures. Their provenance and the
 create-new-only regeneration command are recorded in
-[the fixture owner](../../tests/fixtures/finite-callable-current/README.md).
+[the fixture owner](https://github.com/lkjsxc/lkjscript/blob/fa158b7e86a48af0dc6c6e28f548493723aef39b/tests/fixtures/finite-callable-current/README.md).
 
 The first fixture-generation launcher combined an unqualified filter with `--exact`
 and selected zero tests; its successful process exit is not a test pass.

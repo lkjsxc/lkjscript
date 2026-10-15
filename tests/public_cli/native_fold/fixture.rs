@@ -185,6 +185,34 @@ impl Folds {
         (records, value)
     }
 
+    pub fn source_batch(&self, label: &str, target: &str, cases: &[BatchCase]) {
+        let outcomes = self.consumer.source_batch(label, target, cases);
+        assert_eq!(outcomes.len(), cases.len());
+    }
+
+    pub fn batch(&self, label: &str, target: &str, cases: &[BatchCase]) {
+        let descriptor = self
+            .consumer
+            .root
+            .path()
+            .join(format!("{target}.deployment.json"));
+        let outcomes = self.consumer.batch(label, &descriptor, cases);
+        assert_eq!(outcomes.len(), cases.len());
+        for records in outcomes {
+            if let Some(execution) = records
+                .iter()
+                .find(|record| record.operation == "execution")
+            {
+                cases::joined(execution);
+            } else {
+                let diagnostic = compact_record(&records, "diagnostic");
+                if compact_field(diagnostic, "code") == "normalized_list_index" {
+                    cases::failed_join(diagnostic);
+                }
+            }
+        }
+    }
+
     pub fn verify_identity(&self) {
         for (path, expected) in &self.identities {
             assert_eq!(&blake3::hash(&std::fs::read(path).unwrap()), expected);

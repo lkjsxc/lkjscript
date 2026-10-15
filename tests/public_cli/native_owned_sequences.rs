@@ -184,12 +184,12 @@ fn expected(inputs: &[i64], marker: i64) -> Value {
 
 fn clean_execution(records: &[CompactRecord], calls: u64, parallel: bool) {
     let execution = compact_record(records, "execution");
-    let Some(observation) = super::super::compact_field(execution, "production-observation") else {
-        // Pure project execution reports differential work; the detached runs below
-        // separately report and check full foreground lifecycle observations.
+    if let Some(differential) = super::super::compact_field(execution, "differential") {
+        // Source batches separately validate actual VM/reference/executor cleanup;
+        // ordinary source runs retain these same differential work assertions.
         assert_eq!(calls, 0);
         assert!(!parallel);
-        assert_eq!(compact_field(execution, "differential"), "equal");
+        assert_eq!(differential, "equal");
         assert!(
             compact_field(execution, "production-instructions")
                 .parse::<u64>()
@@ -203,7 +203,8 @@ fn clean_execution(records: &[CompactRecord], calls: u64, parallel: bool) {
                 > 0
         );
         return;
-    };
+    }
+    let observation = compact_field(execution, "production-observation");
     let observation: Value = serde_json::from_str(observation).unwrap();
     assert_eq!(observation["capability_calls"], json!(calls));
     assert_eq!(observation["live_handles_after"], json!(0));
@@ -270,39 +271,49 @@ fn native_owned_sequence_three_packages_generic_reads_pop_drain_reuse_and_detach
         vec![0, 255, 128],
         (0..513).map(|n| n % 17).collect(),
     ];
-    for detached in [false, true] {
-        if detached {
-            packages.detach();
-        }
-        for (case, inputs) in workloads.iter().enumerate() {
-            let arguments = public.input(
-                &format!("arguments-{detached}-{case}.json"),
-                &json!([inputs]).to_string(),
-            );
-            let result = public
-                .root
-                .path()
-                .join(format!("result-{detached}-{case}.json"));
-            let mut args = if detached {
-                vec!["run", "--deployment", path(&deployment)]
-            } else {
-                vec!["run", "owned-sequences"]
-            };
-            args.extend([
-                "--arguments-file",
-                path(&arguments),
-                "--result-file",
-                path(&result),
-            ]);
-            let records = public.cli(&args, true);
-            // This expected result is independent of the generic algorithm, carrier methods and compiler.
-            assert_eq!(
-                serde_json::from_slice::<Value>(&std::fs::read(result).unwrap()).unwrap(),
-                expected(inputs, 41)
-            );
-            clean_execution(&records, 0, false);
-        }
+    // Expected results are independent of the generic algorithm, carrier methods and compiler.
+    let cases: Vec<_> = workloads
+        .iter()
+        .enumerate()
+        .map(|(case, inputs)| {
+            BatchCase::success(
+                format!("owned-sequences-{case}"),
+                &json!([inputs]),
+                expected(inputs, 41),
+            )
+        })
+        .collect();
+    assert_eq!(cases.len(), 5, "all attached generic sequence workloads");
+    for records in public.source_batch("owned-sequences", "owned-sequences", &cases) {
+        clean_execution(&records, 0, false);
     }
+    packages.detach();
+    assert_eq!(cases.len(), 5, "all detached generic sequence workloads");
+    for records in public.batch("owned-sequences", &deployment, &cases) {
+        clean_execution(&records, 0, false);
+    }
+    // Independently retain an ordinary nonempty copied-binary run after every
+    // authoring project and input transport has been removed.
+    let inputs = &workloads[2];
+    let arguments = public.input("detached-smoke.json", &json!([inputs]).to_string());
+    let result = public.root.path().join("detached-smoke-result.json");
+    let records = public.cli(
+        &[
+            "run",
+            "--deployment",
+            path(&deployment),
+            "--arguments-file",
+            path(&arguments),
+            "--result-file",
+            path(&result),
+        ],
+        true,
+    );
+    assert_eq!(
+        serde_json::from_slice::<Value>(&std::fs::read(result).unwrap()).unwrap(),
+        expected(inputs, 41)
+    );
+    clean_execution(&records, 0, false);
     packages.retain("three-packages");
 }
 
@@ -445,56 +456,36 @@ declarations.end
             .replacen("(i64 41)", "(i64 42)", 1),
         "literal editing preserves every sequence, source, index and view identity"
     );
+    let mut cases = Vec::new();
     for index in [i64::MIN, -1, 1, i64::MAX, 0] {
-        let arguments = public.input(&format!("bounds-{index}.json"), &json!([index]).to_string());
-        let result = public
-            .root
-            .path()
-            .join(format!("bounds-result-{index}.json"));
-        let records = public.cli(
-            &[
-                "run",
-                "owned-sequence-bounds",
-                "--arguments-file",
-                path(&arguments),
-                "--result-file",
-                path(&result),
-            ],
-            index == 0,
-        );
-        if index == 0 {
-            assert_eq!(
-                serde_json::from_slice::<Value>(&std::fs::read(result).unwrap()).unwrap(),
-                json!(2)
-            );
-            clean_execution(&records, 0, false);
+        cases.push(if index == 0 {
+            BatchCase::success(format!("bounds-{index}"), &json!([index]), json!(2))
         } else {
-            assert!(!result.exists());
-            assert!(
-                records
-                    .iter()
-                    .any(|record| record.operation == "diagnostic"),
-                "{records:?}"
-            );
+            BatchCase::failure(
+                format!("bounds-{index}"),
+                &json!([index]),
+                "semantic",
+                "normalized_sequence_index",
+            )
+        });
+    }
+    let mut edited = BatchCase::success(
+        "edited-application",
+        &json!([[2, 3, 7]]),
+        expected(&[2, 3, 7], 42),
+    );
+    edited.target = Some("owned-sequences".to_owned());
+    cases.push(edited);
+    assert_eq!(
+        cases.len(),
+        6,
+        "every original bounds and edited-application row"
+    );
+    for records in public.source_batch("owned-sequence-bounds", "owned-sequence-bounds", &cases) {
+        if records.iter().any(|record| record.operation == "execution") {
+            clean_execution(&records, 0, false);
         }
     }
-    let arguments = public.input("edited-arguments.json", "[[2,3,7]]");
-    let result = public.root.path().join("edited-result.json");
-    public.cli(
-        &[
-            "run",
-            "owned-sequences",
-            "--arguments-file",
-            path(&arguments),
-            "--result-file",
-            path(&result),
-        ],
-        true,
-    );
-    assert_eq!(
-        serde_json::from_slice::<Value>(&std::fs::read(result).unwrap()).unwrap(),
-        expected(&[2, 3, 7], 42)
-    );
     packages.retain("rejections-and-edit");
 }
 

@@ -307,14 +307,6 @@ fn byte_buffer_forged_artifact_cannot_erase_modes_results_moves_or_cleanup() {
                 "generation" => {
                     changed.contract_version = 13;
                     changed.bytecode_contract_version = 9;
-                    changed.key = CompilationUnitKey::derive_generation(
-                        &changed.source,
-                        changed.optimization,
-                        13,
-                        9,
-                        changed.graph_contract_version,
-                    )
-                    .unwrap();
                     assert_eq!(
                         changed.validate().unwrap_err().code,
                         "compiler_unit_contract"

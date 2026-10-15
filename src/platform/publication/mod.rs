@@ -66,10 +66,10 @@ pub use transaction::{
 };
 
 #[cfg(test)]
+mod current_validation_tests;
+#[cfg(test)]
 mod refresh_tests;
 #[cfg(test)]
 mod repository_tests;
 #[cfg(test)]
 mod tests;
-#[cfg(test)]
-mod upgrade_tests;

@@ -17,9 +17,9 @@ use std::fmt;
 
 pub const COMPILATION_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-compilation-manifest-3";
 pub const COMPILATION_MANIFEST_CONTRACT_VERSION: u16 = 3;
-pub(crate) const COMPILATION_MANIFEST_MAGIC: [u8; 8] = *b"LKJCMF03";
+pub(crate) const COMPILATION_MANIFEST_MAGIC: [u8; 8] = *b"LKJCMNFT";
 pub(crate) const COMPILATION_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.compilation-manifest-envelope.v3";
+    "lkjscript.compilation-manifest-envelope";
 pub(crate) const MAXIMUM_COMPILATION_MANIFEST_BYTES: usize = 64 * 1024;
 pub(crate) const MAXIMUM_COMPILATION_UNITS: u64 = 10_000_000;
 
@@ -152,7 +152,7 @@ pub struct CompilationManifest {
 impl CompilationManifest {
     pub fn encode(&self) -> Result<(CompilationManifestDigest, Vec<u8>), Diagnostic> {
         self.validate()?;
-        let bytes = crate::platform::packed::encode(
+        let bytes = crate::platform::packed::encode_canonical(
             COMPILATION_MANIFEST_MAGIC,
             COMPILATION_MANIFEST_ENVELOPE_DOMAIN,
             self,
@@ -168,7 +168,7 @@ impl CompilationManifest {
     pub fn decode(bytes: &[u8], expected: CompilationManifestDigest) -> Result<Self, Diagnostic> {
         let key = ObjectKey::from_digest(ObjectDomain::CompilationManifest, expected.bytes());
         key.verify(bytes).map_err(store_diagnostic)?;
-        let value: Self = crate::platform::packed::decode(
+        let value: Self = crate::platform::packed::decode_canonical(
             bytes,
             COMPILATION_MANIFEST_MAGIC,
             COMPILATION_MANIFEST_ENVELOPE_DOMAIN,
@@ -187,36 +187,14 @@ impl CompilationManifest {
 
     pub(crate) fn validate(&self) -> Result<(), Diagnostic> {
         if self.contract_version != COMPILATION_MANIFEST_CONTRACT_VERSION
-            || !matches!(
-                (
-                    self.graph_contract_version,
-                    self.compiler_contract_version,
-                    self.bytecode_contract_version
-                ),
-                (14, 10, 6)
-                    | (15, 11, 7)
-                    | (16, 12, 8)
-                    | (17, 13, 9)
-                    | (17, 14, 10)
-                    | (18, 15, 11)
-                    | (19, 16, 12)
-                    | (19, 17, 13)
-                    | (20, 18, 14)
-                    | (21, 19, 15)
-                    | (21, 20, 16)
-                    | (21, 21, 17)
-                    | (22, 22, 17)
-                    | (23, 23, 18)
-                    | (24, 24, 19)
-                    | (25, 25, 20)
-                    | (27, 27, 22)
-                    | (28, 28, 23)
-                    | (29, 29, 24)
-                    | (30, 30, 25)
-                    | (31, 31, 26)
-                    | (32, 32, 27)
-                    | (33, 33, 27)
-                    | (34, 34, 28)
+            || (
+                self.graph_contract_version,
+                self.compiler_contract_version,
+                self.bytecode_contract_version,
+            ) != (
+                crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+                COMPILER_UNIT_CONTRACT_VERSION,
+                BYTECODE_CONTRACT_VERSION,
             )
         {
             return Err(manifest_error(
@@ -278,16 +256,16 @@ mod tests {
     use crate::platform::persistent_map::{MapWork, MemoryPageStore, PersistentMap};
 
     #[test]
-    fn current_manifest_generation_round_trips_and_rejects_mixed_contracts() {
+    fn current_manifest_round_trips_and_binds_every_contract_dimension() {
         let mut pages = MemoryPageStore::default();
         let units = PersistentMap::empty(&mut pages, &mut MapWork::default())
             .unwrap()
             .root();
         let mut manifest = CompilationManifest {
             contract_version: 3,
-            graph_contract_version: 31,
-            compiler_contract_version: 31,
-            bytecode_contract_version: 26,
+            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+            compiler_contract_version: COMPILER_UNIT_CONTRACT_VERSION,
+            bytecode_contract_version: BYTECODE_CONTRACT_VERSION,
             repository_id: RepositoryId::migrate(b"shareable-manifest", 0),
             package_id: PackageId::migrate(b"shareable-manifest", 0),
             revision: RevisionId::from_digest([1; 32]),
@@ -297,47 +275,24 @@ mod tests {
             optimization: OptimizationPolicy::DeterministicBaseline,
             units,
         };
-        for (graph, compiler, bytecode) in [
-            (29, 29, 24),
-            (30, 30, 25),
-            (31, 31, 26),
-            (32, 32, 27),
-            (33, 33, 27),
-            (34, 34, 28),
-        ] {
-            manifest.graph_contract_version = graph;
-            manifest.compiler_contract_version = compiler;
-            manifest.bytecode_contract_version = bytecode;
-            let (digest, bytes) = manifest.encode().unwrap();
+        manifest.graph_contract_version = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+        manifest.compiler_contract_version = COMPILER_UNIT_CONTRACT_VERSION;
+        manifest.bytecode_contract_version = BYTECODE_CONTRACT_VERSION;
+        let (digest, bytes) = manifest.encode().unwrap();
+        assert_eq!(
+            CompilationManifest::decode(&bytes, digest).unwrap(),
+            manifest
+        );
+        for dimension in 0..4 {
+            let mut foreign = manifest.clone();
+            match dimension {
+                0 => foreign.contract_version ^= 1,
+                1 => foreign.graph_contract_version ^= 1,
+                2 => foreign.compiler_contract_version ^= 1,
+                _ => foreign.bytecode_contract_version ^= 1,
+            }
             assert_eq!(
-                CompilationManifest::decode(&bytes, digest).unwrap(),
-                manifest
-            );
-        }
-        for (graph, compiler, bytecode) in [
-            (29, 30, 25),
-            (30, 29, 24),
-            (30, 30, 24),
-            (30, 29, 25),
-            (29, 29, 25),
-            (31, 30, 25),
-            (30, 31, 26),
-            (31, 31, 25),
-            (31, 32, 27),
-            (32, 31, 26),
-            (32, 32, 26),
-            (32, 33, 27),
-            (33, 32, 27),
-            (33, 33, 26),
-            (34, 33, 28),
-            (33, 34, 28),
-            (34, 34, 27),
-        ] {
-            manifest.graph_contract_version = graph;
-            manifest.compiler_contract_version = compiler;
-            manifest.bytecode_contract_version = bytecode;
-            assert_eq!(
-                manifest.encode().unwrap_err().code,
+                foreign.encode().unwrap_err().code,
                 "compilation_manifest_contract"
             );
         }

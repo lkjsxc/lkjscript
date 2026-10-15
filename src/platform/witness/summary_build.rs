@@ -663,12 +663,7 @@ where
     ) -> Result<Option<crate::platform::kernel::DependencyObjectDigest>, Diagnostic>,
 {
     let mut material = Material::new(kind);
-    // Graph 30 makes an owner's generation part of read-contract admission.
-    // Preserve predecessor dimensions, while binding a promoted owner to the
-    // proof rules that admit its scoped task reads.
-    if owner_contract_version >= crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION {
-        material.piece(3, &owner_contract_version)?;
-    }
+    material.piece(3, &owner_contract_version)?;
     for edge in outgoing {
         let propagation = edge.kind.propagation();
         if matches!(
@@ -1204,37 +1199,7 @@ fn local_summary(
                 }
                 DeclarationPayload::OwnedContract(c) => {
                     interface.raw_piece(2, &[9]);
-                    if !c.associated_types.is_empty() {
-                        if record.header.contract_version == 33 {
-                            interface.piece(10, &crate::platform::kernel::owned_associated_wire::FrozenAssociatedOwnedBody33::contract(c)?)?;
-                        } else if record.header.contract_version
-                            == crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
-                        {
-                            interface.piece(10, &crate::platform::kernel::owned_associated_wire::AssociatedOwnedBody::contract(c)?)?;
-                        } else {
-                            return Err(witness_error(
-                                DiagnosticClass::Semantic,
-                                "kernel_associated_encoding_generation",
-                                "associated contract summary requires its exact Graph33 or Graph34 profile",
-                            ));
-                        }
-                    } else if record.header.contract_version < 26 {
-                        interface.piece(
-                            10,
-                            &crate::platform::kernel::wire25::OwnedContract25::try_from(c.clone())?,
-                        )?;
-                    } else if record.header.contract_version == 26 {
-                        interface.piece(
-                            10,
-                            &crate::platform::kernel::wire26::OwnedContract26::try_from(c.clone())?,
-                        )?;
-                    } else if record.header.contract_version
-                        < crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
-                    {
-                        interface.piece(10, &crate::platform::kernel::frozen_read_view_wire::OwnedContract33::try_from(c.clone())?)?;
-                    } else {
-                        interface.piece(10, c)?;
-                    }
+                    interface.piece(10, c)?;
                     for method in &c.methods {
                         if let FunctionEffect::Task { requirements, .. } = &method.effect {
                             effect.piece(3, &(method.id, &method.effect))?;
@@ -1244,85 +1209,12 @@ fn local_summary(
                 }
                 DeclarationPayload::OwnedImplementation(i) => {
                     interface.raw_piece(2, &[10]);
-                    if !i.associated_types.is_empty() {
-                        if record.header.contract_version == 33 {
-                            interface.piece(10, &crate::platform::kernel::owned_associated_wire::FrozenAssociatedOwnedBody33::implementation(i)?)?;
-                            let frozen = i.associated_types.iter().cloned()
-                                .map(crate::platform::kernel::frozen_read_view_wire::AssociatedTypeBinding33::try_from)
-                                .collect::<Result<Vec<_>, _>>()?;
-                            implementation.piece(11, &frozen)?;
-                        } else if record.header.contract_version
-                            == crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
-                        {
-                            interface.piece(10, &crate::platform::kernel::owned_associated_wire::AssociatedOwnedBody::implementation(i)?)?;
-                            implementation.piece(11, &i.associated_types)?;
-                        } else {
-                            return Err(witness_error(
-                                DiagnosticClass::Semantic,
-                                "kernel_associated_encoding_generation",
-                                "associated implementation summary requires its exact Graph33 or Graph34 profile",
-                            ));
-                        }
-                    } else if record.header.contract_version < 26 {
-                        interface.piece(
-                            10,
-                            &crate::platform::kernel::wire25::OwnedImplementation25::try_from(
-                                i.clone(),
-                            )?,
-                        )?;
-                    } else if record.header.contract_version < 28 {
-                        interface.piece(
-                            10,
-                            &crate::platform::kernel::wire27::OwnedImplementation27::try_from(
-                                i.clone(),
-                            )?,
-                        )?;
-                    } else if record.header.contract_version < 29 {
-                        interface.piece(
-                            10,
-                            &crate::platform::kernel::wire28::OwnedImplementation28::try_from(
-                                i.clone(),
-                            )?,
-                        )?;
-                    } else if record.header.contract_version
-                        < crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
-                    {
-                        interface.piece(10, &crate::platform::kernel::frozen_read_view_wire::OwnedImplementation33::try_from(i.clone())?)?;
-                    } else {
-                        interface.piece(10, i)?;
-                    }
-                    if record.header.contract_version < 28 {
-                        let frozen = i.methods.iter().cloned()
-                            .map(crate::platform::kernel::wire27::OwnedMethodImplementation27::try_from)
-                            .collect::<Result<Vec<_>, _>>()?;
-                        implementation.piece(5, &frozen)?;
-                    } else if record.header.contract_version < 29 {
-                        let frozen = i.methods.iter().cloned()
-                            .map(crate::platform::kernel::wire28::OwnedMethodImplementation28::try_from)
-                            .collect::<Result<Vec<_>, _>>()?;
-                        implementation.piece(5, &frozen)?;
-                    } else if record.header.contract_version
-                        < crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
-                    {
-                        let frozen = i.methods.iter().cloned()
-                            .map(crate::platform::kernel::frozen_read_view_wire::OwnedMethodImplementation33::try_from)
-                            .collect::<Result<Vec<_>, _>>()?;
-                        implementation.piece(5, &frozen)?;
-                    } else {
-                        implementation.piece(5, &i.methods)?;
-                    }
+                    interface.piece(10, i)?;
+                    implementation.piece(11, &i.associated_types)?;
+                    implementation.piece(5, &i.methods)?;
                 }
                 DeclarationPayload::Function(function) => {
-                    if !function.implementation_parameters.is_empty() {
-                        if record.header.contract_version < 26 {
-                            let frozen = function.implementation_parameters.iter().cloned()
-                                .map(crate::platform::kernel::wire25::ImplementationParameter25::try_from)
-                                .collect::<Result<Vec<_>, _>>()?;
-                            interface.piece(10, &frozen)?;
-                        } else {
-                            interface.piece(10, &function.implementation_parameters)?;
-                        }
-                    }
+                    interface.piece(10, &function.implementation_parameters)?;
                     interface.piece(7, &function.effect_parameters)?;
                     if !function.requirement_parameters.is_empty() {
                         interface.piece(9, &function.requirement_parameters)?;
@@ -1330,19 +1222,9 @@ fn local_summary(
                     interface.raw_piece(2, &[5]);
                     interface.piece(4, &function.type_parameters)?;
                     interface.piece(5, &function.parameters)?;
-                    if record.header.contract_version
-                        < crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
-                    {
-                        let frozen = crate::platform::kernel::frozen_read_view_wire::FrozenFunctionDeclaration33::try_from(function.clone())?;
-                        interface.piece(6, &frozen.result)?;
-                        if let Some(source) = frozen.result_borrow {
-                            interface.piece(11, &source)?;
-                        }
-                    } else {
-                        interface.piece(6, &function.result)?;
-                        interface.piece(12, &function.read_scope_parameters)?;
-                        interface.piece(13, &function.read_scope_sources)?;
-                    }
+                    interface.piece(6, &function.result)?;
+                    interface.piece(12, &function.read_scope_parameters)?;
+                    interface.piece(13, &function.read_scope_sources)?;
                     implementation.piece(2, &function.body)?;
                     effect.piece(1, &function.effect)?;
                     if let FunctionEffect::Task {
@@ -1421,44 +1303,13 @@ fn local_summary(
         }
         OwnerRecord::Binding(record) => {
             presentation.piece(1, &record.name)?;
-            if record.header.contract_version
-                < crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
-            {
-                implementation.piece(
-                    1,
-                    &crate::platform::kernel::frozen_read_view_wire::FrozenBindingKind33::try_from(
-                        record.kind,
-                    )?,
-                )?;
-            } else {
-                implementation.piece(1, &record.kind)?;
-            }
+            implementation.piece(1, &record.kind)?;
             implementation.piece(2, &record.value)?;
             implementation.piece(3, &record.declared_type)?;
         }
         OwnerRecord::Expression(record) => {
             implementation.piece(1, &record.id)?;
-            if record.contract_version < 28 {
-                implementation.piece(
-                    2,
-                    &crate::platform::kernel::wire27::ExpressionOperation27::try_from(
-                        record.operation.clone(),
-                    )?,
-                )?;
-            } else if record.contract_version < 29 {
-                implementation.piece(
-                    2,
-                    &crate::platform::kernel::wire28::ExpressionOperation28::try_from(
-                        record.operation.clone(),
-                    )?,
-                )?;
-            } else if record.contract_version
-                < crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
-            {
-                implementation.piece(2, &crate::platform::kernel::frozen_read_view_wire::FrozenExpressionOperation33::try_from(record.operation.clone())?)?;
-            } else {
-                implementation.piece(2, &record.operation)?;
-            }
+            implementation.piece(2, &record.operation)?;
         }
         OwnerRecord::Requirement(record) => {
             presentation.piece(1, &record.name)?;

@@ -305,10 +305,8 @@ pub(crate) struct AdmissionIds {
 
 /// Small source fixture shared only by kernel/source-loader tests. The false arm and parameter
 /// are present in accepted meaning even though the constant true condition never visits them.
-pub(crate) fn admission_snapshot(
-    floating: bool,
-    generation: u16,
-) -> (KernelSnapshot, AdmissionIds) {
+pub(crate) fn admission_snapshot(floating: bool) -> (KernelSnapshot, AdmissionIds) {
+    let generation = contract::GRAPH_CONTRACT_VERSION;
     let mut snapshot = transport_snapshot();
     snapshot.owners.clear();
     snapshot.types.clear();
@@ -438,7 +436,7 @@ pub(crate) fn admission_snapshot(
 
 #[test]
 fn f64_complete_graph_admission_checks_unused_types_and_unreachable_branch_meaning() {
-    let (mut snapshot, ids) = admission_snapshot(false, 16);
+    let (mut snapshot, ids) = admission_snapshot(false);
     let f64_type = intern(&mut snapshot, TypeForm::F64);
     let list = intern(&mut snapshot, TypeForm::List { item: f64_type });
     let OwnerRecord::Parameter(parameter) = snapshot
@@ -450,17 +448,8 @@ fn f64_complete_graph_admission_checks_unused_types_and_unreachable_branch_meani
     };
     let old_list = std::mem::replace(&mut parameter.ty, list);
     snapshot.types.remove(&old_list);
-    let errors = validate_full(&snapshot).unwrap_err();
-    assert!(
-        errors
-            .iter()
-            .any(|error| error.code == "kernel_type_graph_generation"),
-        "{errors:?}"
-    );
-
-    snapshot.root.graph_contract_version = 17;
     validate_full(&snapshot).unwrap();
-    snapshot.types.get_mut(&f64_type).unwrap().contract_version = 10;
+    snapshot.types.get_mut(&f64_type).unwrap().contract_version = 0;
     let errors = validate_full(&snapshot).unwrap_err();
     assert!(
         errors
@@ -469,7 +458,7 @@ fn f64_complete_graph_admission_checks_unused_types_and_unreachable_branch_meani
         "{errors:?}"
     );
 
-    let (mut snapshot, ids) = admission_snapshot(false, 17);
+    let (mut snapshot, ids) = admission_snapshot(false);
     let OwnerRecord::Expression(expression) = snapshot
         .owners
         .get_mut(&OwnerKey::Expression(ids.unchosen))
@@ -491,7 +480,7 @@ fn f64_complete_graph_admission_checks_unused_types_and_unreachable_branch_meani
 
 #[test]
 fn f64_canonical_owner_decoder_rejects_rehashed_nan_bits_in_an_unreachable_arm() {
-    let (snapshot, ids) = admission_snapshot(true, 17);
+    let (snapshot, ids) = admission_snapshot(true);
     let owner = &snapshot.owners[&OwnerKey::Expression(ids.unchosen)];
     let (_, bytes) = encode_owner(owner).unwrap();
     let expected = [0, 0, 0, 0, 0, 0, 0xf8, 0x7f];
@@ -509,7 +498,7 @@ fn f64_canonical_owner_decoder_rejects_rehashed_nan_bits_in_an_unreachable_arm()
         let mut hostile = bytes.clone();
         hostile[positions[0]..positions[0] + 8].copy_from_slice(&malformed);
         let end = hostile.len() - 32;
-        let mut checksum = blake3::Hasher::new_derive_key("lkjscript.kernel.owner-envelope.v17");
+        let mut checksum = blake3::Hasher::new_derive_key(contract::OWNER_ENVELOPE_DOMAIN);
         checksum.update(&(end as u64).to_be_bytes());
         checksum.update(&hostile[..end]);
         hostile[end..].copy_from_slice(checksum.finalize().as_bytes());

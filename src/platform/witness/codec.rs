@@ -2,10 +2,8 @@
 
 use super::contract::{
     MAXIMUM_OWNER_SUMMARY_BYTES, MAXIMUM_WITNESS_MANIFEST_BYTES, OWNER_SUMMARY_CONTRACT_VERSION,
-    OWNER_SUMMARY_ENVELOPE_DOMAIN, OWNER_SUMMARY_MAGIC, PREDECESSOR_OWNER_SUMMARY_CONTRACT_VERSION,
-    PREDECESSOR_OWNER_SUMMARY_ENVELOPE_DOMAIN, PREDECESSOR_OWNER_SUMMARY_MAGIC,
-    PREDECESSOR_WITNESS_CONTRACT_VERSION, PREDECESSOR_WITNESS_ENVELOPE_DOMAIN,
-    PREDECESSOR_WITNESS_MAGIC, WITNESS_CONTRACT_VERSION, WITNESS_ENVELOPE_DOMAIN, WITNESS_MAGIC,
+    OWNER_SUMMARY_ENVELOPE_DOMAIN, OWNER_SUMMARY_MAGIC, WITNESS_CONTRACT_VERSION,
+    WITNESS_ENVELOPE_DOMAIN, WITNESS_MAGIC,
 };
 use super::summary::{CertificateCore, OwnerSummary, ValidationWitnessManifest};
 use super::{OwnerSummaryDigest, ValidationCertificateDigest, ValidationWitnessDigest};
@@ -18,43 +16,16 @@ pub fn encode_owner_summary(
     summary: &OwnerSummary,
 ) -> Result<(OwnerSummaryDigest, Vec<u8>), Diagnostic> {
     validate_summary(summary)?;
-    encode_owner_summary_content(summary)
-}
-
-/// Preserves an original supported summary object for historical inspection. Its
-/// dimensions are derived content; only complete current admission can issue proof.
-pub(crate) fn encode_owner_summary_content(
-    summary: &OwnerSummary,
-) -> Result<(OwnerSummaryDigest, Vec<u8>), Diagnostic> {
-    validate_summary_content(summary)?;
-    let bytes = if summary.contract_version == PREDECESSOR_OWNER_SUMMARY_CONTRACT_VERSION {
-        packed::encode(
-            PREDECESSOR_OWNER_SUMMARY_MAGIC,
-            PREDECESSOR_OWNER_SUMMARY_ENVELOPE_DOMAIN,
-            &super::frozen_summary11::OwnerSummary11::try_from(summary)?,
-            MAXIMUM_OWNER_SUMMARY_BYTES,
-        )?
-    } else {
-        packed::encode(
-            OWNER_SUMMARY_MAGIC,
-            OWNER_SUMMARY_ENVELOPE_DOMAIN,
-            summary,
-            MAXIMUM_OWNER_SUMMARY_BYTES,
-        )?
-    };
+    let bytes = packed::encode_canonical(
+        OWNER_SUMMARY_MAGIC,
+        OWNER_SUMMARY_ENVELOPE_DOMAIN,
+        summary,
+        MAXIMUM_OWNER_SUMMARY_BYTES,
+    )?;
     Ok((OwnerSummaryDigest::of(&bytes), bytes))
 }
 
 pub fn decode_owner_summary(
-    bytes: &[u8],
-    expected_digest: OwnerSummaryDigest,
-) -> Result<OwnerSummary, Diagnostic> {
-    let summary = decode_historical_owner_summary(bytes, expected_digest)?;
-    validate_summary(&summary)?;
-    Ok(summary)
-}
-
-pub(crate) fn decode_historical_owner_summary(
     bytes: &[u8],
     expected_digest: OwnerSummaryDigest,
 ) -> Result<OwnerSummary, Diagnostic> {
@@ -64,24 +35,14 @@ pub(crate) fn decode_historical_owner_summary(
             "owner-summary bytes do not match the expected digest",
         ));
     }
-    let summary: OwnerSummary = if bytes.starts_with(&PREDECESSOR_OWNER_SUMMARY_MAGIC) {
-        let frozen: super::frozen_summary11::OwnerSummary11 = packed::decode(
-            bytes,
-            PREDECESSOR_OWNER_SUMMARY_MAGIC,
-            PREDECESSOR_OWNER_SUMMARY_ENVELOPE_DOMAIN,
-            MAXIMUM_OWNER_SUMMARY_BYTES,
-        )?;
-        frozen.into()
-    } else {
-        packed::decode(
-            bytes,
-            OWNER_SUMMARY_MAGIC,
-            OWNER_SUMMARY_ENVELOPE_DOMAIN,
-            MAXIMUM_OWNER_SUMMARY_BYTES,
-        )?
-    };
-    validate_summary_content(&summary)?;
-    let (digest, canonical) = encode_owner_summary_content(&summary)?;
+    let summary: OwnerSummary = packed::decode_canonical(
+        bytes,
+        OWNER_SUMMARY_MAGIC,
+        OWNER_SUMMARY_ENVELOPE_DOMAIN,
+        MAXIMUM_OWNER_SUMMARY_BYTES,
+    )?;
+    validate_summary(&summary)?;
+    let (digest, canonical) = encode_owner_summary(&summary)?;
     if digest != expected_digest || canonical != bytes {
         return Err(codec_error(
             "witness_summary_canonical",
@@ -95,33 +56,16 @@ pub fn encode_witness_manifest(
     manifest: &ValidationWitnessManifest,
 ) -> Result<(ValidationWitnessDigest, Vec<u8>), Diagnostic> {
     validate_manifest(manifest)?;
-    encode_witness_manifest_content(manifest)
-}
-
-/// Canonical historical metadata, never a reusable validation proof. Source-package admission
-/// rebuilds a current witness from every canonical owner before publishing readiness. Keep the
-/// repository/cache codec above strict even when unchanged source has older validator metadata.
-pub(crate) fn encode_witness_manifest_content(
-    manifest: &ValidationWitnessManifest,
-) -> Result<(ValidationWitnessDigest, Vec<u8>), Diagnostic> {
-    validate_manifest_content(manifest)?;
-    let (magic, domain) = manifest_profile(manifest.contract_version)?;
-    let bytes = packed::encode(magic, domain, manifest, MAXIMUM_WITNESS_MANIFEST_BYTES)?;
+    let bytes = packed::encode_canonical(
+        WITNESS_MAGIC,
+        WITNESS_ENVELOPE_DOMAIN,
+        manifest,
+        MAXIMUM_WITNESS_MANIFEST_BYTES,
+    )?;
     Ok((ValidationWitnessDigest::of(&bytes), bytes))
 }
 
 pub fn decode_witness_manifest(
-    bytes: &[u8],
-    expected_digest: ValidationWitnessDigest,
-) -> Result<ValidationWitnessManifest, Diagnostic> {
-    let manifest = decode_historical_witness_manifest(bytes, expected_digest)?;
-    validate_manifest(&manifest)?;
-    Ok(manifest)
-}
-
-/// Authenticates the supported canonical witness envelope and its original certificate.
-/// Historical acceptance is not a proof that this root satisfies the current validator.
-pub(crate) fn decode_historical_witness_manifest(
     bytes: &[u8],
     expected_digest: ValidationWitnessDigest,
 ) -> Result<ValidationWitnessManifest, Diagnostic> {
@@ -131,18 +75,14 @@ pub(crate) fn decode_historical_witness_manifest(
             "validation-witness bytes do not match the expected digest",
         ));
     }
-    let (magic, domain) = if bytes.starts_with(&PREDECESSOR_WITNESS_MAGIC) {
-        (
-            PREDECESSOR_WITNESS_MAGIC,
-            PREDECESSOR_WITNESS_ENVELOPE_DOMAIN,
-        )
-    } else {
-        (WITNESS_MAGIC, WITNESS_ENVELOPE_DOMAIN)
-    };
-    let manifest: ValidationWitnessManifest =
-        packed::decode(bytes, magic, domain, MAXIMUM_WITNESS_MANIFEST_BYTES)?;
-    validate_manifest_content(&manifest)?;
-    let (digest, canonical) = encode_witness_manifest_content(&manifest)?;
+    let manifest: ValidationWitnessManifest = packed::decode_canonical(
+        bytes,
+        WITNESS_MAGIC,
+        WITNESS_ENVELOPE_DOMAIN,
+        MAXIMUM_WITNESS_MANIFEST_BYTES,
+    )?;
+    validate_manifest(&manifest)?;
+    let (digest, canonical) = encode_witness_manifest(&manifest)?;
     if digest != expected_digest || canonical != bytes {
         return Err(codec_error(
             "witness_manifest_canonical",
@@ -188,7 +128,14 @@ pub(crate) fn certificate_digest(
     let configuration = bincode::config::standard()
         .with_little_endian()
         .with_variable_int_encoding();
-    let bytes = bincode::encode_to_vec(core, configuration).map_err(|error| {
+    let bytes = bincode::encode_to_vec(
+        (
+            crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH,
+            core,
+        ),
+        configuration,
+    )
+    .map_err(|error| {
         codec_error(
             "witness_certificate_encode",
             format!("validation certificate encoding failed: {error}"),
@@ -204,18 +151,6 @@ fn validate_summary(summary: &OwnerSummary) -> Result<(), Diagnostic> {
             "owner summary uses a foreign summary contract",
         ));
     }
-    validate_summary_content(summary)
-}
-
-fn validate_summary_content(summary: &OwnerSummary) -> Result<(), Diagnostic> {
-    if summary.contract_version != OWNER_SUMMARY_CONTRACT_VERSION
-        && summary.contract_version != PREDECESSOR_OWNER_SUMMARY_CONTRACT_VERSION
-    {
-        return Err(codec_error(
-            "witness_summary_contract",
-            "owner summary uses an unsupported summary contract",
-        ));
-    }
     if !summary.kind.accepts_owner(summary.owner) {
         return Err(codec_error(
             "witness_summary_owner_kind",
@@ -226,32 +161,10 @@ fn validate_summary_content(summary: &OwnerSummary) -> Result<(), Diagnostic> {
 }
 
 fn validate_manifest(manifest: &ValidationWitnessManifest) -> Result<(), Diagnostic> {
-    validate_manifest_content(manifest)?;
     if !manifest.contract_is_current() {
         return Err(codec_error(
             "witness_validator_contract",
             "validation witness is not reusable under the current graph and validator contracts",
-        ));
-    }
-    Ok(())
-}
-
-fn validate_manifest_content(manifest: &ValidationWitnessManifest) -> Result<(), Diagnostic> {
-    manifest_profile(manifest.contract_version)?;
-    if manifest.contract_version == PREDECESSOR_WITNESS_CONTRACT_VERSION
-        && manifest.graph_contract_version
-            >= crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
-    {
-        return Err(codec_error(
-            "witness_manifest_contract",
-            "the frozen Witness9 profile cannot attest Graph34 read-view meaning",
-        ));
-    }
-    if !crate::platform::kernel::contract::supported_graph_contract(manifest.graph_contract_version)
-    {
-        return Err(codec_error(
-            "witness_validator_contract",
-            "validation witness uses a predecessor or foreign graph contract",
         ));
     }
     let certificate = certificate_digest(&manifest.core())?;
@@ -262,20 +175,6 @@ fn validate_manifest_content(manifest: &ValidationWitnessManifest) -> Result<(),
         ));
     }
     Ok(())
-}
-
-fn manifest_profile(version: u16) -> Result<([u8; 8], &'static str), Diagnostic> {
-    match version {
-        WITNESS_CONTRACT_VERSION => Ok((WITNESS_MAGIC, WITNESS_ENVELOPE_DOMAIN)),
-        PREDECESSOR_WITNESS_CONTRACT_VERSION => Ok((
-            PREDECESSOR_WITNESS_MAGIC,
-            PREDECESSOR_WITNESS_ENVELOPE_DOMAIN,
-        )),
-        _ => Err(codec_error(
-            "witness_manifest_contract",
-            "validation witness uses an unsupported witness contract",
-        )),
-    }
 }
 
 fn codec_error(code: &str, message: impl Into<String>) -> Diagnostic {

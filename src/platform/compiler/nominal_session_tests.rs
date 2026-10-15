@@ -9,129 +9,6 @@ pub(super) fn hostile_bundle(
     objects: &BTreeMap<ObjectKey, Vec<u8>>,
 ) -> Vec<u8> {
     assert!(objects.len() < 10_000);
-    let (magic, end_magic, checksum_domain) = match manifest.contract_version {
-        18 => (
-            *b"LKJART18",
-            *b"LKJAEN18",
-            "lkjscript.artifact-bundle.complete.v18",
-        ),
-        19 => (
-            *b"LKJART19",
-            *b"LKJAEN19",
-            "lkjscript.artifact-bundle.complete.v19",
-        ),
-        20 => (
-            *b"LKJART20",
-            *b"LKJAEN20",
-            "lkjscript.artifact-bundle.complete.v20",
-        ),
-        21 => (
-            *b"LKJART21",
-            *b"LKJAEN21",
-            "lkjscript.artifact-bundle.complete.v21",
-        ),
-        22 => (
-            *b"LKJART22",
-            *b"LKJAEN22",
-            "lkjscript.artifact-bundle.complete.v22",
-        ),
-        23 => (
-            *b"LKJART23",
-            *b"LKJAEN23",
-            "lkjscript.artifact-bundle.complete.v23",
-        ),
-        24 => (
-            *b"LKJART24",
-            *b"LKJAEN24",
-            "lkjscript.artifact-bundle.complete.v24",
-        ),
-        25 => (
-            *b"LKJART25",
-            *b"LKJAEN25",
-            "lkjscript.artifact-bundle.complete.v25",
-        ),
-        26 => (
-            *b"LKJART26",
-            *b"LKJAEN26",
-            "lkjscript.artifact-bundle.complete.v26",
-        ),
-        27 => (
-            *b"LKJART27",
-            *b"LKJAEN27",
-            "lkjscript.artifact-bundle.complete.v27",
-        ),
-        28 => (
-            *b"LKJART28",
-            *b"LKJAEN28",
-            "lkjscript.artifact-bundle.complete.v28",
-        ),
-        29 => (
-            *b"LKJART29",
-            *b"LKJAEN29",
-            "lkjscript.artifact-bundle.complete.v29",
-        ),
-        30 => (
-            *b"LKJART30",
-            *b"LKJAEN30",
-            "lkjscript.artifact-bundle.complete.v30",
-        ),
-        31 => (
-            *b"LKJART31",
-            *b"LKJAEN31",
-            "lkjscript.artifact-bundle.complete.v31",
-        ),
-        32 => (
-            *b"LKJART32",
-            *b"LKJAEN32",
-            "lkjscript.artifact-bundle.complete.v32",
-        ),
-        33 => (
-            *b"LKJART33",
-            *b"LKJAEN33",
-            "lkjscript.artifact-bundle.complete.v33",
-        ),
-        34 => (
-            *b"LKJART34",
-            *b"LKJAEN34",
-            "lkjscript.artifact-bundle.complete.v34",
-        ),
-        35 => (
-            *b"LKJART35",
-            *b"LKJAEN35",
-            "lkjscript.artifact-bundle.complete.v35",
-        ),
-        36 => (
-            *b"LKJART36",
-            *b"LKJAEN36",
-            "lkjscript.artifact-bundle.complete.v36",
-        ),
-        37 => (
-            *b"LKJART37",
-            *b"LKJAEN37",
-            "lkjscript.artifact-bundle.complete.v37",
-        ),
-        38 => (
-            *b"LKJART38",
-            *b"LKJAEN38",
-            "lkjscript.artifact-bundle.complete.v38",
-        ),
-        39 => (
-            *b"LKJART39",
-            *b"LKJAEN39",
-            "lkjscript.artifact-bundle.complete.v39",
-        ),
-        40 => (
-            *b"LKJART40",
-            *b"LKJAEN40",
-            "lkjscript.artifact-bundle.complete.v40",
-        ),
-        41 => (
-            *b"LKJART41",
-            *b"LKJAEN41",
-            "lkjscript.artifact-bundle.complete.v41",
-        ),
-        other => panic!("unexpected forged-artifact generation {other}"),
-    };
     let (digest, manifest_bytes) = manifest.encode().unwrap();
     let mut builder = PackBuilder::default();
     for (key, bytes) in objects {
@@ -139,8 +16,8 @@ pub(super) fn hostile_bundle(
     }
     let segments = builder.seal_targeted(4 * 1024 * 1024).unwrap();
     let mut bytes = Vec::new();
-    bytes.extend_from_slice(&magic);
-    bytes.extend_from_slice(&manifest.contract_version.to_be_bytes());
+    bytes.extend_from_slice(&ARTIFACT_BUNDLE_MAGIC);
+    bytes.extend_from_slice(&crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH);
     bytes.extend_from_slice(&0_u16.to_be_bytes());
     bytes.extend_from_slice(&(manifest_bytes.len() as u64).to_be_bytes());
     bytes.extend_from_slice(&(segments.len() as u64).to_be_bytes());
@@ -152,11 +29,11 @@ pub(super) fn hostile_bundle(
         bytes.extend_from_slice(&segment.bytes);
     }
     assert!(bytes.len() < 4 * 1024 * 1024);
-    let mut hash = blake3::Hasher::new_derive_key(checksum_domain);
+    let mut hash = blake3::Hasher::new_derive_key(ARTIFACT_BUNDLE_CHECKSUM_DOMAIN);
     hash.update(&(bytes.len() as u64).to_be_bytes());
     hash.update(&bytes);
     bytes.extend_from_slice(hash.finalize().as_bytes());
-    bytes.extend_from_slice(&end_magic);
+    bytes.extend_from_slice(&ARTIFACT_BUNDLE_END_MAGIC);
     bytes
 }
 
@@ -233,7 +110,7 @@ fn rehashed_compiled_and_canonical_expanding_cycle_rejects_independently() {
         ObjectKey::from_digest(ObjectDomain::Owner, digest.bytes()),
         bytes,
     );
-    let bytes = crate::platform::packed::encode(
+    let bytes = crate::platform::packed::encode_canonical(
         COMPILER_UNIT_MAGIC,
         COMPILER_UNIT_ENVELOPE_DOMAIN,
         &unit,
@@ -363,7 +240,7 @@ fn interactive_artifact(loaded: &LoadedArtifact) -> Vec<u8> {
             panic!("target unit")
         };
         *runner = RunnerKind::Interactive;
-        let bytes = crate::platform::packed::encode(
+        let bytes = crate::platform::packed::encode_canonical(
             COMPILER_UNIT_MAGIC,
             COMPILER_UNIT_ENVELOPE_DOMAIN,
             &unit,

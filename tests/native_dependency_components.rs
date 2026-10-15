@@ -1,9 +1,17 @@
-//! Native compiler-tooling witness; the host supplies only inputs and an independent oracle.
+//! Native compiler-tooling witness with an independent oracle. Host matrices share admitted
+//! code; exact candidates and one detached smoke per artifact retain the executable boundary.
 #![allow(clippy::unwrap_used, clippy::panic)]
+#[allow(
+    dead_code,
+    reason = "shared semantic CLI support spans independent integration crates"
+)]
+#[path = "support/semantic_cli.rs"]
+mod semantic_cli;
 #[path = "native_components_support/mod.rs"]
 mod support;
 use serde_json::{Value, json};
 use std::fs;
+use support::copy_executable;
 use support::{Native, cases, digest, field, oracle, path, quoted};
 
 const LIBRARY: &str = include_str!("../examples/owned-worklists/library.lkjc");
@@ -191,6 +199,7 @@ fn native_components_partition_complete_candidates_across_storage_and_detachment
         "graphs":proposals.len(), "exhaustive_three_vertex_graphs":512,
         "matched_batch_executions":4, "single_executions":2, "empty_batch_executions":2,
         "binary_sha256":executable_hash, "artifact_sha256":artifact_hash,
+        "execution":public.execution_evidence(),
         "source_projects_and_transports_deleted":true, "status":"passed",
         "observations":observations,
         "source_bytes":SOURCES.iter().map(|(name, source)| json!({"module":name,"bytes":source.len()})).collect::<Vec<_>>()

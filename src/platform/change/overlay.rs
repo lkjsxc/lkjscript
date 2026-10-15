@@ -324,10 +324,7 @@ impl<'a> KernelOverlay<'a, KernelSnapshot> {
         apply_exact_edits(&mut retirements, &self.delta.retirements);
         let mut root = self.base.root.clone();
         if !self.delta.is_empty() {
-            root.graph_contract_version = self
-                .delta
-                .accepted_retry_encoding
-                .unwrap_or(crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION);
+            root.graph_contract_version = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
         }
         root.owners = count_root(root.owners, owners.len());
         root.dependencies = count_root(root.dependencies, dependencies.len());

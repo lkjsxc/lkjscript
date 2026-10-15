@@ -100,6 +100,7 @@ impl RevisionCore {
             ));
         }
         let mut hasher = blake3::Hasher::new_derive_key(REVISION_IDENTITY_DIGEST_DOMAIN);
+        hasher.update(&crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH);
         hasher.update(&(bytes.len() as u64).to_be_bytes());
         hasher.update(&bytes);
         Ok(RevisionId::from_digest(*hasher.finalize().as_bytes()))
@@ -114,7 +115,7 @@ impl RevisionCore {
             return Err(revision_error(
                 DiagnosticClass::Source,
                 "publication_revision_contract",
-                "revision uses a predecessor or foreign graph or history contract",
+                "revision uses an unknown graph or history contract",
             ));
         }
         if self.parents.len() > 2 || self.parents.windows(2).any(|pair| pair[0] >= pair[1]) {
@@ -146,8 +147,7 @@ impl ValidationEvidenceBinding {
         witness_digest: ValidationWitnessDigest,
         witness: &ValidationWitnessManifest,
     ) -> Result<(), Diagnostic> {
-        let (authenticated, _) =
-            crate::platform::witness::encode_witness_manifest_content(witness)?;
+        let (authenticated, _) = crate::platform::witness::encode_witness_manifest(witness)?;
         if self.semantic_state != core.semantic_state
             || self.witness_contract_version != witness.contract_version
             || self.witness != witness_digest
@@ -203,7 +203,7 @@ impl RevisionRecord {
 
     pub fn encode(&self) -> Result<(RevisionObjectDigest, Vec<u8>), Diagnostic> {
         self.validate()?;
-        let bytes = crate::platform::packed::encode(
+        let bytes = crate::platform::packed::encode_canonical(
             REVISION_MAGIC,
             REVISION_ENVELOPE_DOMAIN,
             self,
@@ -220,7 +220,7 @@ impl RevisionRecord {
                 "revision bytes disagree with their object digest",
             ));
         }
-        let value: Self = crate::platform::packed::decode(
+        let value: Self = crate::platform::packed::decode_canonical(
             bytes,
             REVISION_MAGIC,
             REVISION_ENVELOPE_DOMAIN,
@@ -283,11 +283,16 @@ pub struct HeadRecord {
 impl HeadRecord {
     pub fn encode(&self) -> Result<Vec<u8>, Diagnostic> {
         self.validate()?;
-        crate::platform::packed::encode(HEAD_MAGIC, HEAD_ENVELOPE_DOMAIN, self, MAXIMUM_HEAD_BYTES)
+        crate::platform::packed::encode_canonical(
+            HEAD_MAGIC,
+            HEAD_ENVELOPE_DOMAIN,
+            self,
+            MAXIMUM_HEAD_BYTES,
+        )
     }
 
     pub fn decode(bytes: &[u8]) -> Result<Self, Diagnostic> {
-        let value: Self = crate::platform::packed::decode(
+        let value: Self = crate::platform::packed::decode_canonical(
             bytes,
             HEAD_MAGIC,
             HEAD_ENVELOPE_DOMAIN,
@@ -313,7 +318,7 @@ impl HeadRecord {
             return Err(revision_error(
                 DiagnosticClass::Source,
                 "publication_head_contract",
-                "HEAD uses a predecessor or foreign contract",
+                "HEAD uses an unknown contract",
             ));
         }
         Ok(())

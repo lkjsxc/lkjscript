@@ -35,24 +35,22 @@ pub(super) fn fixture_members(root: &Path) -> Vec<archive::tests::TestMember> {
     members[1].bytes = owner;
     let hash = |bytes: &[u8]| archive::sha256_bytes(bytes).expect("digest");
     let manifest = ReleaseManifest {
-        encoding: ManifestEncoding::PublicationNeutral {
-            build: BuildIdentity {
-                target_policy_sha256: Sha256Digest::new(target::policy_sha256().expect("policy"))
-                    .expect("policy digest"),
-                command: [
-                    "cargo",
-                    "build",
-                    "--release",
-                    "--locked",
-                    "--bin",
-                    "lkjscript",
-                    "--target",
-                    "x86_64-unknown-linux-musl",
-                ]
-                .into_iter()
-                .map(str::to_owned)
-                .collect(),
-            },
+        build: BuildIdentity {
+            target_policy_sha256: Sha256Digest::new(target::policy_sha256().expect("policy"))
+                .expect("policy digest"),
+            command: [
+                "cargo",
+                "build",
+                "--release",
+                "--locked",
+                "--bin",
+                "lkjscript",
+                "--target",
+                "x86_64-unknown-linux-musl",
+            ]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
         },
         product: ProductIdentity {
             name: "lkjscript".to_owned(),

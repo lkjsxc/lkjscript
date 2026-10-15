@@ -107,53 +107,37 @@ fn signature() -> CompiledSignature {
 }
 
 #[test]
-fn genuine_predecessor_unit_literals_reencode_exactly_and_cannot_carry_view_extensions() {
-    for bytes in [
-        include_bytes!("../../../tests/fixtures/associated-codec-base/unit-contract-base.bin")
-            .as_slice(),
-        include_bytes!(
-            "../../../tests/fixtures/associated-codec-base/unit-implementation-base.bin"
-        )
-        .as_slice(),
-    ] {
-        let key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, bytes);
-        let unit = CompilationUnit::decode(bytes, key).unwrap();
-        assert_eq!(
-            (
-                unit.contract_version,
-                unit.graph_contract_version,
-                unit.bytecode_contract_version
-            ),
-            (33, 33, 27)
-        );
-        assert_eq!(unit.encode().unwrap(), (key, bytes.to_vec()));
-        let mut forged = unit.clone();
-        forged
-            .tables
-            .read_view_fields
-            .push(crate::platform::kernel::ReadViewFieldReference {
-                declaration: reference(1),
-                field: "field_00000000000000000000000000000001".parse().unwrap(),
-            });
-        forged.tables.declarations.push(reference(1));
-        assert!(forged.encode().is_err());
-        let mut current = unit;
-        current.contract_version = 34;
-        current.graph_contract_version = 34;
-        current.bytecode_contract_version = 28;
-        let tag = associated_unit_body(&current.payload)
-            .unwrap()
-            .map(|b| b.tag());
-        current.key =
-            CompilationUnitKey::derive_for_tag(&current.source, current.optimization, tag).unwrap();
-        let (current_key, encoded) = current.encode().unwrap();
-        assert_eq!(&encoded[..8], b"LKJCUN34");
-        assert_ne!(encoded, bytes);
-        assert_eq!(
-            CompilationUnit::decode(&encoded, current_key).unwrap(),
-            current
-        );
-    }
+fn foreign_unit_schema_is_rejected_before_decoding_payload() {
+    let source = source();
+    let mut signature = signature();
+    signature.result.relation = ResultRelation::Value;
+    let unit = CompilationUnit {
+        contract_version: COMPILER_UNIT_CONTRACT_VERSION,
+        graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+        bytecode_contract_version: BYTECODE_CONTRACT_VERSION,
+        key: CompilationUnitKey::derive(&source, OptimizationPolicy::DeterministicBaseline)
+            .unwrap(),
+        source,
+        optimization: OptimizationPolicy::DeterministicBaseline,
+        tables: tables(),
+        payload: CompilationPayload::Function {
+            signature,
+            code: CompiledCode {
+                parameter_count: 2,
+                local_count: 2,
+                instructions: vec![CompiledInstruction::Unit, CompiledInstruction::Return],
+            },
+        },
+    };
+    let (key, bytes) = unit.encode().unwrap();
+    assert_eq!(CompilationUnit::decode(&bytes, key).unwrap(), unit);
+    let mut foreign = bytes;
+    foreign[8] ^= 1;
+    let key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &foreign);
+    assert_eq!(
+        CompilationUnit::decode(&foreign, key).unwrap_err().code,
+        "packed_schema"
+    );
 }
 
 #[test]

@@ -131,14 +131,8 @@ fn retained(template: Option<&str>) -> Native {
         Native::template(template)
     } else {
         let root = tempfile::tempdir().unwrap();
-        let executable = root.path().join("lkjscript");
-        copy_executable(&binary(), &executable);
         let project = root.path().join("project");
-        Native {
-            root,
-            executable,
-            project,
-        }
+        Native::at(root, project, semantic_cli::Mode::selected())
     };
     if std::env::var_os("LKJSCRIPT_RETAIN_PRODUCT_EVIDENCE").is_some() {
         public.root.disable_cleanup(true);

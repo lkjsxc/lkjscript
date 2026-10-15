@@ -1,7 +1,12 @@
 //! Strict, bounded public graph-native command projection.
 
 mod history;
+mod pure_batch;
 mod refresh;
+mod source_batch;
+
+pub use pure_batch::{PureRunBatchOptions, execute_pure_run_batch, parse_pure_run_batch};
+pub use source_batch::{RunBatchOptions, execute_run_batch, parse_run_batch};
 
 use super::builtin_discovery::{
     BUILTIN_QUERY_DEFAULT_BYTES, BUILTIN_QUERY_DEFAULT_ITEMS, BUILTIN_QUERY_ORDERING,
@@ -897,7 +902,7 @@ pub async fn execute_foreground_run(
     options: ForegroundRunOptions,
     cancellation: impl std::future::Future<Output = ()>,
 ) -> Result<Vec<u8>, Diagnostic> {
-    use super::deployment::{PreparedDeployment, foreground_visibility};
+    use super::deployment::PreparedDeployment;
     let started = std::time::Instant::now();
     let control = ExecutionControl::uncancelled();
     let preparation_control = control.clone();
@@ -942,6 +947,16 @@ pub async fn execute_foreground_run(
     };
     let preparation_nanoseconds = started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64;
     let receipt = prepared.run_foreground(invocation, cancellation).await?;
+    foreground_receipt_output(receipt, result_file, preparation_nanoseconds, false)
+}
+
+fn foreground_receipt_output(
+    receipt: super::deployment::ForegroundCommandReceipt,
+    result_file: Option<PathBuf>,
+    preparation_nanoseconds: u64,
+    batch_row: bool,
+) -> Result<Vec<u8>, Diagnostic> {
+    use super::deployment::foreground_visibility;
     let cleanup_note = format!(
         "foreground cleanup: admission-stopped={} remaining-owned-tasks={} failures={}",
         receipt.shutdown.admission_stopped,
@@ -949,14 +964,21 @@ pub async fn execute_foreground_run(
         receipt.shutdown.cleanup_failures.len()
     );
     let result = (|| {
-        let result = String::from_utf8(receipt.result_json).map_err(|_| {
-            Diagnostic::new(
-                DiagnosticClass::Corrupt,
-                "run_result_utf8",
-                "typed foreground result is not UTF-8 JSON",
-            )
-        })?;
-        let result = RunResultOutput::new(result, result_file);
+        let result = if batch_row {
+            RunResultOutput {
+                field: ("value-location", "batch-row".to_owned()),
+                file: None,
+            }
+        } else {
+            let result = String::from_utf8(receipt.result_json).map_err(|_| {
+                Diagnostic::new(
+                    DiagnosticClass::Corrupt,
+                    "run_result_utf8",
+                    "typed foreground result is not UTF-8 JSON",
+                )
+            })?;
+            RunResultOutput::new(result, result_file)
+        };
         let mut public_observation = serde_json::to_value(&receipt.production).map_err(|_| {
             Diagnostic::new(
                 DiagnosticClass::Infrastructure,
@@ -1120,14 +1142,31 @@ pub fn execute_run(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
         NormalizedCommandPolicy::default(),
         &ExecutionControl::default(),
     )?;
-    let result = String::from_utf8(run.result_json).map_err(|_| {
-        Diagnostic::new(
-            DiagnosticClass::Corrupt,
-            "run_result_utf8",
-            "normalized typed result is not canonical UTF-8 JSON",
-        )
-    })?;
-    let result = RunResultOutput::new(result, result_file);
+    source_run_receipt_output(&prepared, run, result_file, None, false)
+}
+
+fn source_run_receipt_output(
+    prepared: &PreparedApplication,
+    run: super::execution::normalized::NormalizedCommandReceipt,
+    result_file: Option<PathBuf>,
+    executor: Option<&super::runtime::structured::StructuredExecutorObservation>,
+    batch_row: bool,
+) -> Result<Vec<u8>, Diagnostic> {
+    let result = if batch_row {
+        RunResultOutput {
+            field: ("value-location", "batch-row".to_owned()),
+            file: None,
+        }
+    } else {
+        let result = String::from_utf8(run.result_json).map_err(|_| {
+            Diagnostic::new(
+                DiagnosticClass::Corrupt,
+                "run_result_utf8",
+                "normalized typed result is not canonical UTF-8 JSON",
+            )
+        })?;
+        RunResultOutput::new(result, result_file)
+    };
     let mut output = compact_response_writer()?;
     append_compact_record(
         &mut output,
@@ -1137,339 +1176,352 @@ pub fn execute_run(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
             ("command", "run".to_owned()),
         ],
     )?;
-    append_lifecycle_records(&mut output, &prepared)?;
-    append_compact_record(
-        &mut output,
-        "execution",
-        &[
-            ("target", run.target.as_str().to_owned()),
-            result.field,
-            ("differential", run.differential.to_owned()),
+    append_lifecycle_records(&mut output, prepared)?;
+    let mut execution = vec![
+        ("target", run.target.as_str().to_owned()),
+        result.field,
+        ("differential", run.differential.to_owned()),
+        (
+            "production-instructions",
+            run.production.instructions.to_string(),
+        ),
+        (
+            "reference-expressions",
+            run.reference.expressions.to_string(),
+        ),
+        (
+            "production-peak-call-frames",
+            run.production.maximum_call_depth.to_string(),
+        ),
+        (
+            "reference-peak-call-frames",
+            run.reference.maximum_call_depth.to_string(),
+        ),
+        (
+            "production-tail-transfers",
+            run.production.tail_transfers.to_string(),
+        ),
+        (
+            "reference-tail-transfers",
+            run.reference.tail_transfers.to_string(),
+        ),
+        (
+            "production-input-admission-nodes",
+            run.production.value_work.input_admission_nodes.to_string(),
+        ),
+        (
+            "production-raw-result-admission-nodes",
+            run.production
+                .value_work
+                .raw_result_admission_nodes
+                .to_string(),
+        ),
+        (
+            "production-constructor-child-visits",
+            run.production
+                .value_work
+                .constructor_child_visits
+                .to_string(),
+        ),
+        (
+            "production-capture-admission-nodes",
+            run.production
+                .value_work
+                .capture_admission_nodes
+                .to_string(),
+        ),
+        (
+            "production-guard-descendants",
+            run.production
+                .value_work
+                .internal_guard_descendant_visits
+                .to_string(),
+        ),
+        (
+            "production-classification-decisions",
+            run.production
+                .value_work
+                .classification_decisions
+                .to_string(),
+        ),
+        (
+            "production-list-node-visits",
+            run.production.value_work.lists.node_visits.to_string(),
+        ),
+        (
+            "production-list-element-handle-copies",
+            run.production
+                .value_work
+                .lists
+                .element_handle_copies
+                .to_string(),
+        ),
+        (
+            "production-list-element-handle-allocations",
+            run.production
+                .value_work
+                .lists
+                .element_handle_allocations
+                .to_string(),
+        ),
+        (
+            "production-list-element-slots-reserved",
+            run.production
+                .value_work
+                .lists
+                .element_slots_reserved
+                .to_string(),
+        ),
+        (
+            "production-list-branch-slot-copies",
+            run.production
+                .value_work
+                .lists
+                .branch_slot_copies
+                .to_string(),
+        ),
+        (
+            "production-list-branch-slots-reserved",
+            run.production
+                .value_work
+                .lists
+                .branch_slots_reserved
+                .to_string(),
+        ),
+        (
+            "production-list-nodes-allocated",
+            run.production.value_work.lists.nodes_allocated.to_string(),
+        ),
+        (
+            "production-list-full-materializations",
+            run.production
+                .value_work
+                .lists
+                .full_materializations
+                .to_string(),
+        ),
+        (
+            "production-list-materialized-elements",
+            run.production
+                .value_work
+                .lists
+                .materialized_elements
+                .to_string(),
+        ),
+        (
+            "production-allocated-bytes",
+            run.production.allocated_bytes.to_string(),
+        ),
+        (
+            "production-map-node-visits",
+            run.production.value_work.maps.node_visits.to_string(),
+        ),
+        (
+            "production-map-nodes-allocated",
+            run.production.value_work.maps.nodes_allocated.to_string(),
+        ),
+        (
+            "production-map-entry-handles-allocated",
+            run.production
+                .value_work
+                .maps
+                .entry_handles_allocated
+                .to_string(),
+        ),
+        (
+            "production-map-entry-handle-copies",
+            run.production
+                .value_work
+                .maps
+                .entry_handle_copies
+                .to_string(),
+        ),
+        (
+            "production-map-key-bytes-copied",
+            run.production.value_work.maps.key_bytes_copied.to_string(),
+        ),
+        (
+            "production-type-derivation-steps",
+            run.production.type_derivation_steps.to_string(),
+        ),
+        (
+            "production-type-metadata-bytes",
+            run.production.type_metadata_bytes.to_string(),
+        ),
+        (
+            "reference-type-derivation-steps",
+            run.reference.type_derivation_steps.to_string(),
+        ),
+        (
+            "reference-type-metadata-bytes",
+            run.reference.type_metadata_bytes.to_string(),
+        ),
+        (
+            "production-collection-items",
+            run.production.collection_items.to_string(),
+        ),
+        (
+            "production-allocation-charges",
+            run.production.allocation_charges.to_string(),
+        ),
+        (
+            "reference-input-admission-nodes",
+            run.reference.value_work.input_admission_nodes.to_string(),
+        ),
+        (
+            "reference-raw-result-admission-nodes",
+            run.reference
+                .value_work
+                .raw_result_admission_nodes
+                .to_string(),
+        ),
+        (
+            "reference-constructor-child-visits",
+            run.reference
+                .value_work
+                .constructor_child_visits
+                .to_string(),
+        ),
+        (
+            "reference-capture-admission-nodes",
+            run.reference.value_work.capture_admission_nodes.to_string(),
+        ),
+        (
+            "reference-guard-descendants",
+            run.reference
+                .value_work
+                .internal_guard_descendant_visits
+                .to_string(),
+        ),
+        (
+            "reference-classification-decisions",
+            run.reference
+                .value_work
+                .classification_decisions
+                .to_string(),
+        ),
+        (
+            "reference-list-node-visits",
+            run.reference.value_work.lists.node_visits.to_string(),
+        ),
+        (
+            "reference-list-element-handle-copies",
+            run.reference
+                .value_work
+                .lists
+                .element_handle_copies
+                .to_string(),
+        ),
+        (
+            "reference-list-element-handle-allocations",
+            run.reference
+                .value_work
+                .lists
+                .element_handle_allocations
+                .to_string(),
+        ),
+        (
+            "reference-list-element-slots-reserved",
+            run.reference
+                .value_work
+                .lists
+                .element_slots_reserved
+                .to_string(),
+        ),
+        (
+            "reference-list-branch-slot-copies",
+            run.reference
+                .value_work
+                .lists
+                .branch_slot_copies
+                .to_string(),
+        ),
+        (
+            "reference-list-branch-slots-reserved",
+            run.reference
+                .value_work
+                .lists
+                .branch_slots_reserved
+                .to_string(),
+        ),
+        (
+            "reference-list-nodes-allocated",
+            run.reference.value_work.lists.nodes_allocated.to_string(),
+        ),
+        (
+            "reference-list-full-materializations",
+            run.reference
+                .value_work
+                .lists
+                .full_materializations
+                .to_string(),
+        ),
+        (
+            "reference-list-materialized-elements",
+            run.reference
+                .value_work
+                .lists
+                .materialized_elements
+                .to_string(),
+        ),
+        (
+            "reference-allocated-bytes",
+            run.reference.allocated_bytes.to_string(),
+        ),
+        (
+            "reference-map-node-visits",
+            run.reference.value_work.maps.node_visits.to_string(),
+        ),
+        (
+            "reference-map-nodes-allocated",
+            run.reference.value_work.maps.nodes_allocated.to_string(),
+        ),
+        (
+            "reference-map-entry-handles-allocated",
+            run.reference
+                .value_work
+                .maps
+                .entry_handles_allocated
+                .to_string(),
+        ),
+        (
+            "reference-map-entry-handle-copies",
+            run.reference
+                .value_work
+                .maps
+                .entry_handle_copies
+                .to_string(),
+        ),
+        (
+            "reference-map-key-bytes-copied",
+            run.reference.value_work.maps.key_bytes_copied.to_string(),
+        ),
+        (
+            "reference-allocation-charges",
+            run.reference.allocation_charges.to_string(),
+        ),
+        (
+            "reference-collection-items",
+            run.reference.collection_items.to_string(),
+        ),
+    ];
+    if let Some(executor) = executor {
+        execution.extend([
             (
-                "production-instructions",
-                run.production.instructions.to_string(),
+                "production-observation",
+                source_batch::observation_json(&run.production)?,
             ),
             (
-                "reference-expressions",
-                run.reference.expressions.to_string(),
+                "reference-observation",
+                source_batch::observation_json(&run.reference)?,
             ),
             (
-                "production-peak-call-frames",
-                run.production.maximum_call_depth.to_string(),
+                "executor-observation",
+                source_batch::observation_json(executor)?,
             ),
-            (
-                "reference-peak-call-frames",
-                run.reference.maximum_call_depth.to_string(),
-            ),
-            (
-                "production-tail-transfers",
-                run.production.tail_transfers.to_string(),
-            ),
-            (
-                "reference-tail-transfers",
-                run.reference.tail_transfers.to_string(),
-            ),
-            (
-                "production-input-admission-nodes",
-                run.production.value_work.input_admission_nodes.to_string(),
-            ),
-            (
-                "production-raw-result-admission-nodes",
-                run.production
-                    .value_work
-                    .raw_result_admission_nodes
-                    .to_string(),
-            ),
-            (
-                "production-constructor-child-visits",
-                run.production
-                    .value_work
-                    .constructor_child_visits
-                    .to_string(),
-            ),
-            (
-                "production-capture-admission-nodes",
-                run.production
-                    .value_work
-                    .capture_admission_nodes
-                    .to_string(),
-            ),
-            (
-                "production-guard-descendants",
-                run.production
-                    .value_work
-                    .internal_guard_descendant_visits
-                    .to_string(),
-            ),
-            (
-                "production-classification-decisions",
-                run.production
-                    .value_work
-                    .classification_decisions
-                    .to_string(),
-            ),
-            (
-                "production-list-node-visits",
-                run.production.value_work.lists.node_visits.to_string(),
-            ),
-            (
-                "production-list-element-handle-copies",
-                run.production
-                    .value_work
-                    .lists
-                    .element_handle_copies
-                    .to_string(),
-            ),
-            (
-                "production-list-element-handle-allocations",
-                run.production
-                    .value_work
-                    .lists
-                    .element_handle_allocations
-                    .to_string(),
-            ),
-            (
-                "production-list-element-slots-reserved",
-                run.production
-                    .value_work
-                    .lists
-                    .element_slots_reserved
-                    .to_string(),
-            ),
-            (
-                "production-list-branch-slot-copies",
-                run.production
-                    .value_work
-                    .lists
-                    .branch_slot_copies
-                    .to_string(),
-            ),
-            (
-                "production-list-branch-slots-reserved",
-                run.production
-                    .value_work
-                    .lists
-                    .branch_slots_reserved
-                    .to_string(),
-            ),
-            (
-                "production-list-nodes-allocated",
-                run.production.value_work.lists.nodes_allocated.to_string(),
-            ),
-            (
-                "production-list-full-materializations",
-                run.production
-                    .value_work
-                    .lists
-                    .full_materializations
-                    .to_string(),
-            ),
-            (
-                "production-list-materialized-elements",
-                run.production
-                    .value_work
-                    .lists
-                    .materialized_elements
-                    .to_string(),
-            ),
-            (
-                "production-allocated-bytes",
-                run.production.allocated_bytes.to_string(),
-            ),
-            (
-                "production-map-node-visits",
-                run.production.value_work.maps.node_visits.to_string(),
-            ),
-            (
-                "production-map-nodes-allocated",
-                run.production.value_work.maps.nodes_allocated.to_string(),
-            ),
-            (
-                "production-map-entry-handles-allocated",
-                run.production
-                    .value_work
-                    .maps
-                    .entry_handles_allocated
-                    .to_string(),
-            ),
-            (
-                "production-map-entry-handle-copies",
-                run.production
-                    .value_work
-                    .maps
-                    .entry_handle_copies
-                    .to_string(),
-            ),
-            (
-                "production-map-key-bytes-copied",
-                run.production.value_work.maps.key_bytes_copied.to_string(),
-            ),
-            (
-                "production-type-derivation-steps",
-                run.production.type_derivation_steps.to_string(),
-            ),
-            (
-                "production-type-metadata-bytes",
-                run.production.type_metadata_bytes.to_string(),
-            ),
-            (
-                "reference-type-derivation-steps",
-                run.reference.type_derivation_steps.to_string(),
-            ),
-            (
-                "reference-type-metadata-bytes",
-                run.reference.type_metadata_bytes.to_string(),
-            ),
-            (
-                "production-collection-items",
-                run.production.collection_items.to_string(),
-            ),
-            (
-                "production-allocation-charges",
-                run.production.allocation_charges.to_string(),
-            ),
-            (
-                "reference-input-admission-nodes",
-                run.reference.value_work.input_admission_nodes.to_string(),
-            ),
-            (
-                "reference-raw-result-admission-nodes",
-                run.reference
-                    .value_work
-                    .raw_result_admission_nodes
-                    .to_string(),
-            ),
-            (
-                "reference-constructor-child-visits",
-                run.reference
-                    .value_work
-                    .constructor_child_visits
-                    .to_string(),
-            ),
-            (
-                "reference-capture-admission-nodes",
-                run.reference.value_work.capture_admission_nodes.to_string(),
-            ),
-            (
-                "reference-guard-descendants",
-                run.reference
-                    .value_work
-                    .internal_guard_descendant_visits
-                    .to_string(),
-            ),
-            (
-                "reference-classification-decisions",
-                run.reference
-                    .value_work
-                    .classification_decisions
-                    .to_string(),
-            ),
-            (
-                "reference-list-node-visits",
-                run.reference.value_work.lists.node_visits.to_string(),
-            ),
-            (
-                "reference-list-element-handle-copies",
-                run.reference
-                    .value_work
-                    .lists
-                    .element_handle_copies
-                    .to_string(),
-            ),
-            (
-                "reference-list-element-handle-allocations",
-                run.reference
-                    .value_work
-                    .lists
-                    .element_handle_allocations
-                    .to_string(),
-            ),
-            (
-                "reference-list-element-slots-reserved",
-                run.reference
-                    .value_work
-                    .lists
-                    .element_slots_reserved
-                    .to_string(),
-            ),
-            (
-                "reference-list-branch-slot-copies",
-                run.reference
-                    .value_work
-                    .lists
-                    .branch_slot_copies
-                    .to_string(),
-            ),
-            (
-                "reference-list-branch-slots-reserved",
-                run.reference
-                    .value_work
-                    .lists
-                    .branch_slots_reserved
-                    .to_string(),
-            ),
-            (
-                "reference-list-nodes-allocated",
-                run.reference.value_work.lists.nodes_allocated.to_string(),
-            ),
-            (
-                "reference-list-full-materializations",
-                run.reference
-                    .value_work
-                    .lists
-                    .full_materializations
-                    .to_string(),
-            ),
-            (
-                "reference-list-materialized-elements",
-                run.reference
-                    .value_work
-                    .lists
-                    .materialized_elements
-                    .to_string(),
-            ),
-            (
-                "reference-allocated-bytes",
-                run.reference.allocated_bytes.to_string(),
-            ),
-            (
-                "reference-map-node-visits",
-                run.reference.value_work.maps.node_visits.to_string(),
-            ),
-            (
-                "reference-map-nodes-allocated",
-                run.reference.value_work.maps.nodes_allocated.to_string(),
-            ),
-            (
-                "reference-map-entry-handles-allocated",
-                run.reference
-                    .value_work
-                    .maps
-                    .entry_handles_allocated
-                    .to_string(),
-            ),
-            (
-                "reference-map-entry-handle-copies",
-                run.reference
-                    .value_work
-                    .maps
-                    .entry_handle_copies
-                    .to_string(),
-            ),
-            (
-                "reference-map-key-bytes-copied",
-                run.reference.value_work.maps.key_bytes_copied.to_string(),
-            ),
-            (
-                "reference-allocation-charges",
-                run.reference.allocation_charges.to_string(),
-            ),
-            (
-                "reference-collection-items",
-                run.reference.collection_items.to_string(),
-            ),
-        ],
-    )?;
+        ]);
+    }
+    append_compact_record(&mut output, "execution", &execution)?;
     publish_run_result(&mut output, result.file)?;
     Ok(output.finish())
 }

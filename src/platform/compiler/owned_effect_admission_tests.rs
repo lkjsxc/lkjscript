@@ -168,12 +168,3 @@ fn owned_effect_artifact_rejects_rehashed_erasure_and_requirement_rebinding() {
         );
     }
 }
-
-#[test]
-fn owned_effect_compiler22_bytes_require_rebuild_before_payload_decoding() {
-    let bytes = b"LKJCUN22invalid predecessor payload";
-    let key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, bytes);
-    let error = CompilationUnit::decode(bytes, key).unwrap_err();
-    assert_eq!(error.class, crate::platform::DiagnosticClass::Source);
-    assert_eq!(error.code, "compiler_unit_contract");
-}

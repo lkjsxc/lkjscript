@@ -69,6 +69,7 @@ fn web_editor_starter_is_editable_offline_and_preserves_conditional_saves() {
         root,
         executable,
         project,
+        mode: semantic_cli::Mode::process(),
     };
     let created = public.cli(
         &["new", path(&public.project), "--template", "web-editor"],

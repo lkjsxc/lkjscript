@@ -187,6 +187,7 @@ impl Fixture {
             FreshInput {
                 repository: &self.repository,
                 gate,
+                inputs: Vec::new(),
                 program: Some(Path::new(env!("CARGO"))),
                 fingerprint: VerificationDigest::of(b"real-cargo-origin-lifecycle-fixture"),
                 stdout_path: specification.stdout_path,
@@ -1400,5 +1401,96 @@ fn combined_history_capacity_control(
             owner.context(),
         )?;
     }
+    Ok(())
+}
+
+#[test]
+fn cached_schema_generator_is_observed_without_claiming_a_cold_compilation() -> Result<(), DevError>
+{
+    let mut fixture = Fixture::new()?;
+    fs::write(
+        fixture.repository.join("build.rs"),
+        format!(
+            "fn main() -> Result<(), Box<dyn std::error::Error>> {{\n\
+             let out = std::env::var_os(\"OUT_DIR\").ok_or(\"missing output\")?;\n\
+             std::fs::write(std::path::Path::new(&out).join(\"canonical_schema.rs\"), {:?})?;\n\
+             println!(\"cargo:rerun-if-changed=build.rs\");\n\
+             Ok(())\n}}\n",
+            lkjscript::platform::canonical_schema::generated_source(),
+        ),
+    )?;
+    git(&fixture.repository, "add generator", &["add", "build.rs"])?;
+    fixture.snapshot = snapshot::capture(&fixture.repository)?;
+    let owner = fixture.owner()?;
+    let checked = fixture.writer("schema-unadmitted-writer", &["check", "--locked"])?;
+    let prior = fixture.execute(&owner, &checked)?;
+    passed(&prior)?;
+    require(
+        prior.cargo_origin.is_none(),
+        "nonproducer minted a compilation origin",
+    )?;
+    let mut gate = fixture.writer(
+        "schema-product",
+        &["build", "--workspace", "--locked", "--message-format=json"],
+    )?;
+    gate.required_outputs = vec![fixture.target.join("debug/lkjscript")];
+    let receipt = fixture.execute(&owner, &gate)?;
+    passed(&receipt)?;
+    let proof = read_proof(&fixture.repository, origin(&receipt)?)?;
+    let generator = proof
+        .units
+        .iter()
+        .find(|entry| units::schema_generator(&entry.unit))
+        .ok_or_else(|| test_error("observed schema generator is absent"))?;
+    require(
+        generator.unit.fresh && generator.cold_proof.is_none(),
+        "cached script compilation was relabeled as cold",
+    )?;
+    refused(
+        exact_cold_unit(&proof, &generator.unit),
+        "observed generator became a cold source origin",
+    )?;
+    require(
+        owner
+            .state
+            .lock()
+            .map_err(|_| test_error("schema ledger poisoned"))?
+            .origins
+            .iter()
+            .all(|origin| !units::schema_generator(&origin.unit)),
+        "observed generator entered the compilation-origin ledger",
+    )?;
+    verify(
+        &fixture.repository,
+        &gate,
+        observation(&receipt)?,
+        origin(&receipt)?,
+        owner.context(),
+    )?;
+    let warm = fixture.execute(&owner, &gate)?;
+    passed(&warm)?;
+    let generated = proof
+        .units
+        .iter()
+        .flat_map(|entry| &entry.unit.filenames)
+        .find(|file| file.path.ends_with("/out/canonical_schema.rs"))
+        .ok_or_else(|| test_error("generated schema proof is absent"))?;
+    fs::write(&generated.path, "tampered before warm capture")?;
+    let rejected = fixture.execute(&owner, &gate)?;
+    require(
+        rejected.status == GateStatus::Failed
+            && rejected
+                .reason
+                .as_deref()
+                .is_some_and(|reason| reason.contains("generated schema bytes differ")),
+        "tampered generated schema entered warm compilation evidence",
+    )?;
+    verify(
+        &fixture.repository,
+        &gate,
+        observation(&receipt)?,
+        origin(&receipt)?,
+        owner.context(),
+    )?;
     Ok(())
 }

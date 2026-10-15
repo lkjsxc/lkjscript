@@ -3,172 +3,6 @@ use super::*;
 use crate::platform::kernel::{EffectParameterRecord, EffectRow, FunctionEffect};
 use crate::platform::semantic_id::EffectParameterId;
 
-#[test]
-fn strict_artifact_rejects_fully_rehashed_expanding_canonical_applications() {
-    // These complete containers have coherent canonical and compiled applications and all
-    // outer hashes. A recorded, temporary rejected-rule producer made them without execution.
-    // The independent loader must reject their bodies even when every producer assertion agrees.
-    let mut expected_artifacts = Vec::new();
-    for (name, bytes) in [
-        (
-            "direct",
-            include_bytes!(
-                "../../../tests/fixtures/finite-callable-predecessor/expanding-direct.lkja"
-            )
-            .as_slice(),
-        ),
-        (
-            "named",
-            include_bytes!(
-                "../../../tests/fixtures/finite-callable-predecessor/expanding-named.lkja"
-            )
-            .as_slice(),
-        ),
-    ] {
-        // The original remains rejected at the declared derived-format cut.
-        assert_eq!(
-            load_artifact(bytes).unwrap_err().code,
-            "compiler_unit_contract"
-        );
-        let compiler32 = match name {
-            "direct" => include_bytes!(
-                "../../../tests/fixtures/finite-callable-compiler32/expanding-direct.lkja"
-            )
-            .as_slice(),
-            "named" => include_bytes!(
-                "../../../tests/fixtures/finite-callable-compiler32/expanding-named.lkja"
-            )
-            .as_slice(),
-            _ => unreachable!(),
-        };
-        assert_eq!(
-            load_artifact(compiler32).unwrap_err().code,
-            "artifact_bundle_contract",
-            "{name}: original compiler32 derived fixture remains frozen"
-        );
-        // Re-envelope the exact frozen instructions and source to exercise current semantics.
-        let current = predecessor_attack_tests::current_derived_fixture(bytes);
-        if let Some(directory) = std::env::var_os("LKJSCRIPT_WRITE_FINITE_FIXTURES") {
-            use std::io::Write;
-            let destination =
-                std::path::Path::new(&directory).join(format!("expanding-{name}.lkja"));
-            std::fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(destination)
-                .unwrap()
-                .write_all(&current)
-                .unwrap();
-        }
-        let (previous, retained, frozen, predecessor, expected) = match name {
-            "direct" => (
-                include_bytes!(
-                    "../../../tests/fixtures/finite-callable-compiler28/expanding-direct.lkja"
-                )
-                .as_slice(),
-                include_bytes!(
-                    "../../../tests/fixtures/finite-callable-compiler29/expanding-direct.lkja"
-                )
-                .as_slice(),
-                include_bytes!(
-                    "../../../tests/fixtures/finite-callable-compiler30/expanding-direct.lkja"
-                )
-                .as_slice(),
-                include_bytes!(
-                    "../../../tests/fixtures/finite-callable-compiler31/expanding-direct.lkja"
-                )
-                .as_slice(),
-                include_bytes!(
-                    "../../../tests/fixtures/finite-callable-compiler33/expanding-direct.lkja"
-                )
-                .as_slice(),
-            ),
-            "named" => (
-                include_bytes!(
-                    "../../../tests/fixtures/finite-callable-compiler28/expanding-named.lkja"
-                )
-                .as_slice(),
-                include_bytes!(
-                    "../../../tests/fixtures/finite-callable-compiler29/expanding-named.lkja"
-                )
-                .as_slice(),
-                include_bytes!(
-                    "../../../tests/fixtures/finite-callable-compiler30/expanding-named.lkja"
-                )
-                .as_slice(),
-                include_bytes!(
-                    "../../../tests/fixtures/finite-callable-compiler31/expanding-named.lkja"
-                )
-                .as_slice(),
-                include_bytes!(
-                    "../../../tests/fixtures/finite-callable-compiler33/expanding-named.lkja"
-                )
-                .as_slice(),
-            ),
-            _ => unreachable!(),
-        };
-        // The retained Graph 28 derived fixture remains frozen at its own rebuild cut.
-        assert_eq!(
-            load_artifact(previous).unwrap_err().code,
-            "artifact_bundle_contract"
-        );
-        assert_eq!(
-            load_artifact(frozen).unwrap_err().code,
-            "artifact_bundle_contract",
-            "{name}: original compiler30 derived fixture remains frozen"
-        );
-        assert_eq!(
-            load_artifact(predecessor).unwrap_err().code,
-            "artifact_bundle_contract",
-            "{name}: original compiler31 derived fixture remains frozen"
-        );
-        let error = load_artifact(&current).unwrap_err();
-        assert_eq!(error.code, "kernel_callable_expansion", "{name}: {error:?}");
-        assert_eq!(error.class, crate::platform::DiagnosticClass::Semantic);
-        println!("strict-expanding-artifact {name}: {}", error.code);
-        expected_artifacts.push((name, retained, expected, current));
-    }
-    for (name, retained, expected, current) in expected_artifacts {
-        let expected_sha256 = match name {
-            "direct" => "8280a500d9e45503617056b2b22150468fccbacd5faf7d9983b8377dc7b7133d",
-            "named" => "d6a270adb2993d422c9039695e37ff0fe8900fc6def4632d8ae6ef919d76d93a",
-            _ => unreachable!(),
-        };
-        predecessor_attack_tests::assert_frozen33_fixture_identity(expected, expected_sha256);
-        let frozen_error = load_artifact(expected).unwrap_err();
-        assert_eq!(
-            frozen_error.code, "kernel_callable_expansion",
-            "{name}: {frozen_error:?}"
-        );
-        assert_eq!(
-            frozen_error.class,
-            crate::platform::DiagnosticClass::Semantic
-        );
-        let expected_current = predecessor_attack_tests::current_derived_fixture(expected);
-        assert!(
-            current == expected_current,
-            "current {name} source and instructions differ from the pinned compiler33 fixture"
-        );
-        assert_eq!(
-            load_artifact(retained).unwrap_err().code,
-            "artifact_bundle_contract",
-            "{name}: original compiler29 derived fixture remains frozen"
-        );
-        let retained_current = predecessor_attack_tests::current_derived_fixture(retained);
-        assert!(
-            current == retained_current,
-            "current {name} fixture must preserve exact source and instructions"
-        );
-    }
-}
-
-#[test]
-fn exact_effect_predecessor_artifact_rejects_before_preparation() {
-    let bytes = include_bytes!("../../../tests/fixtures/graph13-standard.lkja");
-    let error = load_artifact(bytes).unwrap_err();
-    assert_eq!(error.code, "artifact_bundle_contract", "{error:?}");
-}
-
 fn fixture() -> LoadedArtifact {
     let mut snapshot =
         crate::platform::execution::normalized::tests::effect_tests::library_composition();
@@ -341,56 +175,20 @@ fn replace_unit_checked(
     // admission. Every changed enclosing digest is recomputed before the strict reader runs.
     // An explicitly rejected-unit control also carries invalid code through the full
     // rehashed bundle. Ordinary callers still require neutral unit-level admission.
-    let (magic, domain) = match unit.contract_version {
-        11 => (*b"LKJCUN11", "lkjscript.compiler-unit-envelope.v11"),
-        12 => (*b"LKJCUN12", "lkjscript.compiler-unit-envelope.v12"),
-        13 => (*b"LKJCUN13", "lkjscript.compiler-unit-envelope.v13"),
-        14 => (*b"LKJCUN14", "lkjscript.compiler-unit-envelope.v14"),
-        15 => (*b"LKJCUN15", "lkjscript.compiler-unit-envelope.v15"),
-        16 => (*b"LKJCUN16", "lkjscript.compiler-unit-envelope.v16"),
-        17 => (*b"LKJCUN17", "lkjscript.compiler-unit-envelope.v17"),
-        18 => (*b"LKJCUN18", "lkjscript.compiler-unit-envelope.v18"),
-        19 => (*b"LKJCUN19", "lkjscript.compiler-unit-envelope.v19"),
-        20 => (*b"LKJCUN20", "lkjscript.compiler-unit-envelope.v20"),
-        21 => (*b"LKJCUN21", "lkjscript.compiler-unit-envelope.v21"),
-        22 => (*b"LKJCUN22", "lkjscript.compiler-unit-envelope.v22"),
-        23 => (*b"LKJCUN23", "lkjscript.compiler-unit-envelope.v23"),
-        24 => (*b"LKJCUN24", "lkjscript.compiler-unit-envelope.v24"),
-        25 => (*b"LKJCUN25", "lkjscript.compiler-unit-envelope.v25"),
-        26 => (*b"LKJCUN26", "lkjscript.compiler-unit-envelope.v26"),
-        27 => (*b"LKJCUN27", "lkjscript.compiler-unit-envelope.v27"),
-        28 => (*b"LKJCUN28", "lkjscript.compiler-unit-envelope.v28"),
-        29 => (*b"LKJCUN29", "lkjscript.compiler-unit-envelope.v29"),
-        30 => (*b"LKJCUN30", "lkjscript.compiler-unit-envelope.v30"),
-        31 => (*b"LKJCUN31", "lkjscript.compiler-unit-envelope.v31"),
-        32 => (*b"LKJCUN32", "lkjscript.compiler-unit-envelope.v32"),
-        33 => (*b"LKJCUN33", "lkjscript.compiler-unit-envelope.v33"),
-        34 => (*b"LKJCUN34", "lkjscript.compiler-unit-envelope.v34"),
-        other => panic!("unexpected forged-unit generation {other}"),
-    };
-    let bytes = if unit.contract_version == 33 {
-        // Preserve the predecessor physical schema even for independently rehashed
-        // structural mutations. Unified current records are never written under old magic.
-        crate::platform::compiler::wire33::encode(unit).unwrap()
-    } else {
-        crate::platform::packed::encode(
-            magic,
-            domain,
-            unit,
-            super::super::unit::MAXIMUM_COMPILER_UNIT_BYTES,
-        )
-        .unwrap()
-    };
+    let bytes = crate::platform::packed::encode_canonical(
+        COMPILER_UNIT_MAGIC,
+        COMPILER_UNIT_ENVELOPE_DOMAIN,
+        unit,
+        super::super::unit::MAXIMUM_COMPILER_UNIT_BYTES,
+    )
+    .unwrap();
     let key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &bytes);
     if let Some(expected) = structural_rejection {
         assert_eq!(
             CompilationUnit::decode(&bytes, key).unwrap_err().code,
             expected
         );
-    } else if matches!(
-        unit.contract_version,
-        33 | super::super::unit::COMPILER_UNIT_CONTRACT_VERSION
-    ) {
+    } else if unit.contract_version == super::super::unit::COMPILER_UNIT_CONTRACT_VERSION {
         CompilationUnit::decode(&bytes, key).expect("structurally valid forged unit");
     } else {
         assert_eq!(

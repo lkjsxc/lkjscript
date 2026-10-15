@@ -455,7 +455,9 @@ impl<'a> Resolver<'a> {
         // dependency record's generation describes its encoding, not that owner.
         if [owner, self.source.root.graph_contract_version]
             .into_iter()
-            .all(|generation| matches!(generation, 33 | 34))
+            .all(|generation| {
+                generation == crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+            })
         {
             Ok(())
         } else {
@@ -744,7 +746,7 @@ impl<'a> Resolver<'a> {
             let object = self.object(ty)?.clone();
             // Type-object profile and containing Graph generation are separate.
             if object.form.is_read_view()
-                && object.contract_version != contract::ASSOCIATED_READ_VIEW_CONTRACT_VERSION
+                && object.contract_version != contract::TYPE_OBJECT_CONTRACT_VERSION
             {
                 return Err(Failure::Generation);
             }

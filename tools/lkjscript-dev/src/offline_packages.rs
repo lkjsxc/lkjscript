@@ -21,12 +21,9 @@ mod parameter_type;
 mod recursive;
 mod recursive_data;
 mod recursive_data_program;
-#[cfg(test)]
-mod recursive_measurements;
 mod recursive_program;
 mod recursive_schemas;
 mod requirements;
-mod requirements_predecessor;
 mod requirements_queue;
 
 use crate::{error::DevError, evidence, process};
@@ -130,14 +127,13 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
                 if !matches!(
                     selected.as_str(),
                     "finite-callable"
-                        | "validator-upgrade"
                         | "requirement-parameters"
                         | "f64"
                         | "parameter-type"
                         | "persistent-maps"
                 ) {
                     return Err(DevError::usage(
-                        "offline-packages --case accepts finite-callable, validator-upgrade, requirement-parameters, f64, parameter-type, or persistent-maps",
+                        "offline-packages --case accepts finite-callable, requirement-parameters, f64, parameter-type, or persistent-maps",
                     ));
                 }
                 selected_case = Some(selected);
@@ -180,13 +176,12 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         binary: copied,
         receipt: Receipt {
             schema: match selected_case.as_deref() {
-                Some("finite-callable") => "lkjscript-offline-finite-callable-1",
-                Some("validator-upgrade") => "lkjscript-offline-validator-upgrade-1",
-                Some("requirement-parameters") => "lkjscript-offline-requirement-parameters-4",
+                Some("finite-callable") => "lkjscript-offline-finite-callable-2",
+                Some("requirement-parameters") => "lkjscript-offline-requirement-parameters-5",
                 Some("f64") => "lkjscript-offline-f64-1",
                 Some("parameter-type") => "lkjscript-offline-parameter-type-1",
                 Some("persistent-maps") => "lkjscript-offline-persistent-maps-2",
-                _ => "lkjscript-offline-packages-acceptance-19",
+                _ => "lkjscript-offline-packages-acceptance-20",
             }
             .to_owned(),
             status: "failed".to_owned(),
@@ -214,7 +209,6 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
     };
     let outcome = (match selected_case.as_deref() {
         Some("finite-callable") => finite::focused(&mut context),
-        Some("validator-upgrade") => finite::upgrade(&mut context),
         Some("requirement-parameters") => requirements::focused(&mut context),
         Some("f64") => f64::focused(&mut context),
         Some("parameter-type") => parameter_type::focused(&mut context),
@@ -1871,7 +1865,7 @@ pub(crate) fn read_transferred_receipt(
         "offline receipt encoding or path is noncanonical",
     )?;
     require(
-        receipt.schema == "lkjscript-offline-packages-acceptance-19"
+        receipt.schema == "lkjscript-offline-packages-acceptance-20"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete

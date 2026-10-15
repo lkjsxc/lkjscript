@@ -1,7 +1,7 @@
-//! Declaration-sized compiler units for normalized Graph 14 authority.
+//! Declaration-sized compiler units over canonical meaning authority.
 //!
-//! This boundary is intentionally separate from the predecessor recursive-AST compiler. It reads
-//! exact stable-ID records through the same revision-pinned surfaces as validation and emits
+//! This boundary reads exact stable-ID records through the same revision-pinned validation
+//! surfaces and emits
 //! typed dense operands. Root repositories and admitted immutable dependency views use this same
 //! compiler and strict artifact linker.
 
@@ -17,9 +17,6 @@ mod link;
 mod lower;
 pub(crate) mod manifest;
 pub(crate) mod unit;
-#[cfg(test)]
-mod wire10;
-mod wire33;
 
 pub(crate) use artifact::{
     ARTIFACT_BUNDLE_CHECKSUM_DOMAIN, ARTIFACT_BUNDLE_DIGEST_DOMAIN, ARTIFACT_BUNDLE_END_MAGIC,
@@ -46,17 +43,13 @@ pub use manifest::{
     CompilationBinding, CompilationManifest, CompilationManifestDigest, CompilerUnitObjectDigest,
 };
 pub(crate) use manifest::{COMPILATION_MANIFEST_ENVELOPE_DOMAIN, COMPILATION_MANIFEST_MAGIC};
-pub(crate) use unit::{
-    ASSOCIATED_UNIT_ENVELOPE_DOMAIN, ASSOCIATED_UNIT_KEY_DOMAIN, COMPILER_UNIT_ENVELOPE_DOMAIN,
-    COMPILER_UNIT_KEY_DOMAIN, COMPILER_UNIT_MAGIC, FROZEN_ASSOCIATED_UNIT_ENVELOPE_DOMAIN,
-    FROZEN_ASSOCIATED_UNIT_KEY_DOMAIN, FROZEN_ASSOCIATED_UNIT_MAGIC,
-    FROZEN_COMPILER_UNIT_ENVELOPE_DOMAIN, FROZEN_COMPILER_UNIT_KEY_DOMAIN,
-    FROZEN_COMPILER_UNIT_MAGIC,
-};
 pub use unit::{
     BYTECODE_CONTRACT_IDENTITY, BYTECODE_CONTRACT_VERSION, COMPILER_UNIT_CONTRACT_IDENTITY,
     COMPILER_UNIT_CONTRACT_VERSION, CompilationPayload, CompilationSource, CompilationUnit,
     CompilationUnitKey, CompiledCode, CompiledInstruction, OptimizationPolicy,
+};
+pub(crate) use unit::{
+    COMPILER_UNIT_ENVELOPE_DOMAIN, COMPILER_UNIT_KEY_DOMAIN, COMPILER_UNIT_MAGIC,
 };
 
 #[cfg(test)]

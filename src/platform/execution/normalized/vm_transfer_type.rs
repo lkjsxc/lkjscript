@@ -203,16 +203,24 @@ pub(super) fn resolve_application_in(
     if contains_associated(program, template, 0, work)? {
         return Err(reject());
     }
-    scan_context(
-        program,
-        template,
-        TypeContext {
-            ordinary: OrdinaryBindings::Map(context.ordinary()),
-            associated: *context.environment(),
-            scopes: application_scopes(program, context)?,
-        },
-        work,
-    )
+    let type_context = TypeContext {
+        ordinary: OrdinaryBindings::Map(context.ordinary()),
+        associated: *context.environment(),
+        scopes: application_scopes(program, context)?,
+    };
+    if let Some(actual) = program
+        .prepared_type_lookup
+        .get(program.value_origin, template, context.ordinary())
+        .map_err(|()| reject())?
+    {
+        // Ordinary substitutions are advisory here: their key has no read
+        // scopes, so retain the complete current application-context check.
+        if matches_context(program, template, actual, type_context, 0, work)? {
+            work.control.check()?;
+            return Ok(actual);
+        }
+    }
+    scan_context(program, template, type_context, work)
 }
 
 fn application_scopes<'a>(
@@ -501,11 +509,7 @@ fn matches_context(
         .map_err(context_error)?
     {
         if template.contract_version
-            != if template.form.is_read_view() {
-                crate::platform::kernel::contract::ASSOCIATED_READ_VIEW_CONTRACT_VERSION
-            } else {
-                crate::platform::kernel::contract::OWNED_ASSOCIATED_CONTRACT_VERSION
-            }
+            != crate::platform::kernel::contract::TYPE_OBJECT_CONTRACT_VERSION
         {
             return Err(reject());
         }

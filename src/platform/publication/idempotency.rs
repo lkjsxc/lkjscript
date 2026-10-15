@@ -70,7 +70,7 @@ impl IdempotencyBinding {
 
     pub fn encode(&self) -> Result<Vec<u8>, Diagnostic> {
         self.validate()?;
-        crate::platform::packed::encode(
+        crate::platform::packed::encode_canonical(
             IDEMPOTENCY_BINDING_MAGIC,
             IDEMPOTENCY_BINDING_ENVELOPE_DOMAIN,
             self,
@@ -79,7 +79,7 @@ impl IdempotencyBinding {
     }
 
     pub fn decode(bytes: &[u8]) -> Result<Self, Diagnostic> {
-        let value: Self = crate::platform::packed::decode(
+        let value: Self = crate::platform::packed::decode_canonical(
             bytes,
             IDEMPOTENCY_BINDING_MAGIC,
             IDEMPOTENCY_BINDING_ENVELOPE_DOMAIN,
@@ -108,7 +108,7 @@ impl IdempotencyBinding {
             return Err(idempotency_error(
                 DiagnosticClass::Source,
                 "publication_idempotency_contract",
-                "idempotency binding uses a predecessor or foreign contract",
+                "idempotency binding uses an unknown contract",
             ));
         }
         validate_idempotency_key(&self.key)?;
@@ -332,13 +332,6 @@ mod tests {
                 .unwrap_err()
                 .code,
             "publication_idempotency_key_binding"
-        );
-
-        let mut predecessor = first.encode().unwrap();
-        predecessor[..8].copy_from_slice(b"LKJIDEM0");
-        assert_eq!(
-            IdempotencyBinding::decode(&predecessor).unwrap_err().code,
-            "packed_contract"
         );
     }
 

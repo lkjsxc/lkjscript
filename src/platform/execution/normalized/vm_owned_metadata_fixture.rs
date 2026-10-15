@@ -2,8 +2,59 @@
 use super::super::super::super::owned_i64_cell::OwnedI64Cell;
 use super::super::super::super::owned_product::OwnedProduct;
 use super::super::*;
-use crate::platform::compiler::load_artifact;
+use crate::platform::compiler::{
+    LoadedArtifact, OptimizationPolicy, build_clean, link_artifact, load_artifact,
+};
 use crate::platform::kernel::{StructuralTypeField, TypeObject, encode_type_object};
+use crate::platform::publication::GraphRepository;
+use std::sync::OnceLock;
+
+const SOURCE: &str = r#"declarations.begin
+(units (module create checked-value-fixture
+  (external create add (visibility public) (implementation core.i64.add)
+    (parameter create a (type I64)) (parameter create b (type I64)) (returns I64))
+  (function create unit (visibility public) (effect pure) (returns Unit) (body (unit)))
+  (function create flag (visibility public) (effect pure)
+    (parameter create value (type Bool)) (returns Bool) (body (local value)))))
+declarations.end"#;
+
+fn source_key(source: &str) -> [u8; 32] {
+    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.checked-value-test-fixture");
+    hasher.update(&crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH);
+    hasher.update(&crate::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH);
+    for part in ["owned-byte-buffer", "DeterministicBaseline", source] {
+        hasher.update(&(part.len() as u64).to_be_bytes());
+        hasher.update(part.as_bytes());
+    }
+    *hasher.finalize().as_bytes()
+}
+
+fn base_artifact() -> &'static LoadedArtifact {
+    static BASE: OnceLock<([u8; 32], LoadedArtifact)> = OnceLock::new();
+    let key = source_key(SOURCE);
+    let (bound, artifact) = BASE.get_or_init(|| {
+        // These adversarial projection tests need a preparation origin and basic
+        // scalar/callable types, rather than the full maintained standard closure.
+        // Retain real authoring, compilation and strict loading once per binary.
+        let source =
+            super::super::super::super::tests::byte_buffer_tests::author_only(SOURCE).unwrap();
+        crate::platform::kernel::validate_full(&source).unwrap();
+        let temporary = tempfile::tempdir().unwrap();
+        let repository = GraphRepository::create(&temporary.path().join("checked"), &source, None)
+            .unwrap()
+            .repository;
+        let compilation =
+            build_clean(&repository, OptimizationPolicy::DeterministicBaseline).unwrap();
+        let linked = link_artifact(&repository, compilation.manifest_digest, &[]).unwrap();
+        let artifact = load_artifact(&linked.artifact.bytes).unwrap();
+        artifact.require_current_admission(|| Ok(())).unwrap();
+        assert_eq!(artifact.manifest.packages.len(), 1);
+        temporary.close().unwrap();
+        (key, artifact)
+    });
+    assert_eq!(*bound, key);
+    artifact
+}
 
 pub(in super::super) struct Fixture {
     pub program: NormalizedProgram,
@@ -24,11 +75,10 @@ fn add(program: &mut NormalizedProgram, form: TypeForm, ordinary: bool) -> TypeO
 }
 impl Fixture {
     pub fn new(depth: usize) -> Self {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("packages/standard/generated/standard.lkja");
-        let mut program =
-            NormalizedProgram::prepare(load_artifact(&std::fs::read(path).unwrap()).unwrap())
-                .unwrap();
+        // Every fixture still owns a fresh preparation, origin and mutable type
+        // inventory. Sharing a prepared program here would weaken foreign-origin
+        // and table-mutation controls, unlike caching the immutable admitted input.
+        let mut program = NormalizedProgram::prepare(base_artifact().clone()).unwrap();
         let integer = add(&mut program, TypeForm::I64, true);
         let mut payload = add(&mut program, TypeForm::List { item: integer }, true);
         for _ in 0..depth {
@@ -131,4 +181,40 @@ pub(in super::super) fn token(value: &Value) -> &OwnedProduct {
         panic!("product")
     };
     token
+}
+
+#[test]
+fn cached_projection_input_keeps_preparations_origins_and_mutations_independent() {
+    let mut first = Fixture::new(8);
+    let second = Fixture::new(8);
+    assert_ne!(first.program.value_origin, second.program.value_origin);
+    assert_ne!(first.domain, second.domain);
+    assert_eq!(first.payload, second.payload);
+    assert_eq!(
+        first.program.artifact().bundle_digest,
+        second.program.artifact().bundle_digest
+    );
+    let value = first.admit(first.raw(3)).unwrap();
+    assert!(
+        value
+            .has_exact_ordinary_type(&first.program, first.payload, &mut ValueWork::default())
+            .unwrap()
+    );
+    assert!(
+        value
+            .has_exact_ordinary_type(&second.program, second.payload, &mut ValueWork::default())
+            .is_err()
+    );
+    first.program.types.remove(&first.payload).unwrap();
+    first.program.ordinary_types.remove(&first.payload);
+    assert!(second.program.types.contains_key(&second.payload));
+    assert!(second.program.ordinary_types.contains(&second.payload));
+    let third = Fixture::new(8);
+    assert!(third.program.types.contains_key(&third.payload));
+    assert!(third.program.ordinary_types.contains(&third.payload));
+    assert_ne!(third.program.value_origin, second.program.value_origin);
+    assert_ne!(source_key(SOURCE), source_key(&format!("{SOURCE}\n")));
+    base_artifact()
+        .require_current_admission(|| Ok(()))
+        .unwrap();
 }

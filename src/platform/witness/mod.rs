@@ -12,16 +12,12 @@ mod codec;
 pub(crate) mod contract;
 mod digest;
 mod entry;
-mod frozen_summary11;
 mod full;
 mod ownership;
 mod summary;
 mod summary_build;
 
 pub(crate) use codec::bind_witness_manifest;
-pub(crate) use codec::decode_historical_witness_manifest;
-pub(crate) use codec::encode_witness_manifest_content;
-pub(crate) use codec::{decode_historical_owner_summary, encode_owner_summary_content};
 pub use codec::{
     decode_owner_summary, decode_witness_manifest, encode_owner_summary, encode_witness_manifest,
 };

@@ -18,22 +18,9 @@ pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-34";
 pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 34;
 pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-28";
 pub const BYTECODE_CONTRACT_VERSION: u16 = 28;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN34";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v34";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v34";
-pub(crate) const ASSOCIATED_UNIT_MAGIC: [u8; 8] = *b"LKJCAU02";
-pub(crate) const ASSOCIATED_UNIT_ENVELOPE_DOMAIN: &str =
-    "lkjscript.compiler-unit-associated-envelope.v2";
-pub(crate) const ASSOCIATED_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-associated-key.v2";
-pub(crate) const FROZEN_COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN33";
-pub(crate) const FROZEN_COMPILER_UNIT_ENVELOPE_DOMAIN: &str =
-    "lkjscript.compiler-unit-envelope.v33";
-pub(crate) const FROZEN_COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v33";
-pub(crate) const FROZEN_ASSOCIATED_UNIT_MAGIC: [u8; 8] = *b"LKJCAU01";
-pub(crate) const FROZEN_ASSOCIATED_UNIT_ENVELOPE_DOMAIN: &str =
-    "lkjscript.compiler-unit-associated-envelope.v1";
-pub(crate) const FROZEN_ASSOCIATED_UNIT_KEY_DOMAIN: &str =
-    "lkjscript.compiler-unit-associated-key.v1";
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUNIT";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -53,110 +40,10 @@ impl CompilationUnitKey {
         source: &CompilationSource,
         optimization: OptimizationPolicy,
     ) -> Result<Self, Diagnostic> {
-        Self::derive_for_tag(source, optimization, None)
-    }
-
-    pub(crate) fn derive_for_tag(
-        source: &CompilationSource,
-        optimization: OptimizationPolicy,
-        associated_tag: Option<u8>,
-    ) -> Result<Self, Diagnostic> {
-        Self::derive_for_profile(
-            source,
-            optimization,
-            COMPILER_UNIT_CONTRACT_VERSION,
-            BYTECODE_CONTRACT_VERSION,
-            crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-            associated_tag,
-        )
-    }
-
-    pub(crate) fn derive_for_profile(
-        source: &CompilationSource,
-        optimization: OptimizationPolicy,
-        compiler_contract_version: u16,
-        bytecode_contract_version: u16,
-        graph_contract_version: u16,
-        associated_tag: Option<u8>,
-    ) -> Result<Self, Diagnostic> {
-        if !matches!(
-            (
-                compiler_contract_version,
-                bytecode_contract_version,
-                graph_contract_version
-            ),
-            (33, 27, 33) | (34, 28, 34)
-        ) {
-            return Err(unit_error(
-                DiagnosticClass::Source,
-                "compiler_unit_contract",
-                "compiler key uses an unsupported exact profile",
-            ));
-        }
         let core = CompilationKeyCore {
-            compiler_contract_version,
-            bytecode_contract_version,
-            graph_contract_version,
-            source: source.clone(),
-            optimization,
-        };
-        let configuration = bincode::config::standard();
-        let bytes = match associated_tag {
-            Some(tag @ (1 | 2)) => bincode::encode_to_vec(
-                (
-                    crate::platform::kernel::contract::OWNED_ASSOCIATED_CONTRACT_VERSION,
-                    tag,
-                    core,
-                ),
-                configuration,
-            ),
-            Some(_) => {
-                return Err(unit_error(
-                    DiagnosticClass::Infrastructure,
-                    "compiler_associated_key_tag",
-                    "unknown associated compiler-unit key profile",
-                ));
-            }
-            None => bincode::encode_to_vec(core, configuration),
-        }
-        .map_err(|error| {
-            unit_error(
-                DiagnosticClass::Infrastructure,
-                "compiler_unit_key_encode",
-                format!("failed to encode compiler-unit key: {error}"),
-            )
-        })?;
-        let domain = if associated_tag.is_some() {
-            if compiler_contract_version == 33 {
-                FROZEN_ASSOCIATED_UNIT_KEY_DOMAIN
-            } else {
-                ASSOCIATED_UNIT_KEY_DOMAIN
-            }
-        } else {
-            if compiler_contract_version == 33 {
-                FROZEN_COMPILER_UNIT_KEY_DOMAIN
-            } else {
-                COMPILER_UNIT_KEY_DOMAIN
-            }
-        };
-        let mut hasher = blake3::Hasher::new_derive_key(domain);
-        hasher.update(&(bytes.len() as u64).to_be_bytes());
-        hasher.update(&bytes);
-        Ok(Self(*hasher.finalize().as_bytes()))
-    }
-
-    #[cfg(test)]
-    pub(crate) fn derive_generation(
-        source: &CompilationSource,
-        optimization: OptimizationPolicy,
-        compiler_contract_version: u16,
-        bytecode_contract_version: u16,
-        graph_contract_version: u16,
-    ) -> Result<Self, Diagnostic> {
-        let core = CompilationKeyCore {
-            compiler_contract_version,
-            bytecode_contract_version,
-            graph_contract_version,
+            compiler_contract_version: COMPILER_UNIT_CONTRACT_VERSION,
+            bytecode_contract_version: BYTECODE_CONTRACT_VERSION,
+            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
             source: source.clone(),
             optimization,
         };
@@ -167,8 +54,8 @@ impl CompilationUnitKey {
                 format!("failed to encode compiler-unit key: {error}"),
             )
         })?;
-        let domain = format!("lkjscript.compiler-unit-key.v{compiler_contract_version}");
-        let mut hasher = blake3::Hasher::new_derive_key(&domain);
+        let mut hasher = blake3::Hasher::new_derive_key(COMPILER_UNIT_KEY_DOMAIN);
+        hasher.update(&crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH);
         hasher.update(&(bytes.len() as u64).to_be_bytes());
         hasher.update(&bytes);
         Ok(Self(*hasher.finalize().as_bytes()))
@@ -223,83 +110,6 @@ pub struct CompilationUnit {
     pub tables: CompilationTables,
     pub payload: CompilationPayload,
 }
-
-fn associated_unit_body(
-    payload: &CompilationPayload,
-) -> Result<Option<crate::platform::kernel::owned_associated_wire::AssociatedOwnedBody>, Diagnostic>
-{
-    use crate::platform::kernel::owned_associated_wire::AssociatedOwnedBody;
-    match payload {
-        CompilationPayload::OwnedContract(c) if !c.associated_types.is_empty() => {
-            AssociatedOwnedBody::contract(c).map(Some)
-        }
-        CompilationPayload::OwnedImplementation(i) if !i.associated_types.is_empty() => {
-            AssociatedOwnedBody::implementation(i).map(Some)
-        }
-        _ => Ok(None),
-    }
-}
-
-struct AssociatedUnitWire(CompilationUnit);
-impl Encode for AssociatedUnitWire {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> Result<(), bincode::error::EncodeError> {
-        let unit = &self.0;
-        let body = associated_unit_body(&unit.payload)
-            .map_err(|e| bincode::error::EncodeError::OtherString(e.message))?
-            .ok_or(bincode::error::EncodeError::Other(
-                "unit has no associated inventory",
-            ))?;
-        crate::platform::kernel::contract::OWNED_ASSOCIATED_CONTRACT_VERSION.encode(encoder)?;
-        body.tag().encode(encoder)?;
-        unit.contract_version.encode(encoder)?;
-        unit.graph_contract_version.encode(encoder)?;
-        unit.bytecode_contract_version.encode(encoder)?;
-        unit.key.encode(encoder)?;
-        unit.source.encode(encoder)?;
-        unit.optimization.encode(encoder)?;
-        unit.tables.encode(encoder)?;
-        body.encode_data(encoder)
-    }
-}
-impl<C> Decode<C> for AssociatedUnitWire {
-    fn decode<D: bincode::de::Decoder<Context = C>>(
-        decoder: &mut D,
-    ) -> Result<Self, bincode::error::DecodeError> {
-        use crate::platform::kernel::owned_associated_wire::{AssociatedOwnedBody, decode_version};
-        decode_version(decoder)?;
-        let tag = u8::decode(decoder)?;
-        let contract_version = u16::decode(decoder)?;
-        let graph_contract_version = u16::decode(decoder)?;
-        let bytecode_contract_version = u16::decode(decoder)?;
-        let key = CompilationUnitKey::decode(decoder)?;
-        let source = CompilationSource::decode(decoder)?;
-        let optimization = OptimizationPolicy::decode(decoder)?;
-        let tables = CompilationTables::decode(decoder)?;
-        let payload = match AssociatedOwnedBody::decode_data(tag, decoder)?.into_payload() {
-            crate::platform::kernel::DeclarationPayload::OwnedContract(c) => {
-                CompilationPayload::OwnedContract(c)
-            }
-            crate::platform::kernel::DeclarationPayload::OwnedImplementation(i) => {
-                CompilationPayload::OwnedImplementation(i)
-            }
-            _ => unreachable!("associated body has only owned parent forms"),
-        };
-        Ok(Self(CompilationUnit {
-            contract_version,
-            graph_contract_version,
-            bytecode_contract_version,
-            key,
-            source,
-            optimization,
-            tables,
-            payload,
-        }))
-    }
-}
-bincode::impl_borrow_decode!(AssociatedUnitWire);
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct CompilationTables {
@@ -577,7 +387,7 @@ pub enum CompiledInstruction {
         binding: u32,
         outcome: CompiledTransactionOutcome,
     },
-    /// Fixed little-endian scalar bytes; predecessor instruction ordinals remain unchanged.
+    /// Fixed little-endian scalar bytes.
     F64(crate::platform::binary64::Binary64),
     PackOwned {
         product_type: u32,
@@ -775,23 +585,12 @@ pub struct CompiledVariantJump {
 impl CompilationUnit {
     pub fn encode(&self) -> Result<(ObjectKey, Vec<u8>), Diagnostic> {
         self.validate()?;
-        let bytes = if self.contract_version == 33 {
-            super::wire33::encode(self)?
-        } else if associated_unit_body(&self.payload)?.is_some() {
-            crate::platform::packed::encode(
-                ASSOCIATED_UNIT_MAGIC,
-                ASSOCIATED_UNIT_ENVELOPE_DOMAIN,
-                &AssociatedUnitWire(self.clone()),
-                MAXIMUM_COMPILER_UNIT_BYTES,
-            )?
-        } else {
-            crate::platform::packed::encode(
-                COMPILER_UNIT_MAGIC,
-                COMPILER_UNIT_ENVELOPE_DOMAIN,
-                self,
-                MAXIMUM_COMPILER_UNIT_BYTES,
-            )?
-        };
+        let bytes = crate::platform::packed::encode_canonical(
+            COMPILER_UNIT_MAGIC,
+            COMPILER_UNIT_ENVELOPE_DOMAIN,
+            self,
+            MAXIMUM_COMPILER_UNIT_BYTES,
+        )?;
         Ok((
             ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &bytes),
             bytes,
@@ -808,62 +607,12 @@ impl CompilationUnit {
                 "compiler-unit bytes disagree with their exact object-domain digest",
             ));
         }
-        // Derived generations 10–32 require a rebuild from supported canonical owners.
-        // Refuse before decoding; old bytes never acquire current instruction meaning.
-        if [
-            b"LKJCUN10",
-            b"LKJCUN11",
-            b"LKJCUN12",
-            b"LKJCUN13",
-            b"LKJCUN14",
-            b"LKJCUN15",
-            b"LKJCUN16",
-            b"LKJCUN17",
-            b"LKJCUN18",
-            b"LKJCUN19",
-            b"LKJCUN20",
-            b"LKJCUN21",
-            b"LKJCUN22",
-            b"LKJCUN23",
-            b"LKJCUN24",
-            b"LKJCUN25",
-            b"LKJCUN26",
-            b"LKJCUN27",
-            b"LKJCUN28",
-            b"LKJCUN29",
-            b"LKJCUN30",
-            b"LKJCUN31",
-            b"LKJCUN32",
-        ]
-        .iter()
-        .any(|magic| bytes.starts_with(*magic))
-        {
-            return Err(unit_error(
-                DiagnosticClass::Source,
-                "compiler_unit_contract",
-                "predecessor compiler units require rebuilding from canonical meaning",
-            ));
-        }
-        let unit: Self = if bytes.starts_with(&FROZEN_COMPILER_UNIT_MAGIC)
-            || bytes.starts_with(&FROZEN_ASSOCIATED_UNIT_MAGIC)
-        {
-            super::wire33::decode(bytes)?
-        } else if bytes.starts_with(&ASSOCIATED_UNIT_MAGIC) {
-            let wire: AssociatedUnitWire = crate::platform::packed::decode(
-                bytes,
-                ASSOCIATED_UNIT_MAGIC,
-                ASSOCIATED_UNIT_ENVELOPE_DOMAIN,
-                MAXIMUM_COMPILER_UNIT_BYTES,
-            )?;
-            wire.0
-        } else {
-            crate::platform::packed::decode(
-                bytes,
-                COMPILER_UNIT_MAGIC,
-                COMPILER_UNIT_ENVELOPE_DOMAIN,
-                MAXIMUM_COMPILER_UNIT_BYTES,
-            )?
-        };
+        let unit: Self = crate::platform::packed::decode_canonical(
+            bytes,
+            COMPILER_UNIT_MAGIC,
+            COMPILER_UNIT_ENVELOPE_DOMAIN,
+            MAXIMUM_COMPILER_UNIT_BYTES,
+        )?;
         unit.validate()?;
         let (actual, canonical) = unit.encode()?;
         if actual != expected || canonical != bytes {
@@ -881,13 +630,11 @@ impl CompilationUnit {
             self.contract_version,
             self.bytecode_contract_version,
             self.graph_contract_version,
-        ) != (34, 28, 34)
-            && (
-                self.contract_version,
-                self.bytecode_contract_version,
-                self.graph_contract_version,
-            ) != (33, 27, 33)
-        {
+        ) != (
+            COMPILER_UNIT_CONTRACT_VERSION,
+            BYTECODE_CONTRACT_VERSION,
+            crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+        ) {
             return Err(unit_error(
                 DiagnosticClass::Source,
                 "compiler_unit_contract",
@@ -915,15 +662,7 @@ impl CompilationUnit {
                 "compiler-unit source test digest presence disagrees with its owner kind",
             ));
         }
-        let tag = associated_unit_body(&self.payload)?.map(|body| body.tag());
-        let expected_key = CompilationUnitKey::derive_for_profile(
-            &self.source,
-            self.optimization,
-            self.contract_version,
-            self.bytecode_contract_version,
-            self.graph_contract_version,
-            tag,
-        )?;
+        let expected_key = CompilationUnitKey::derive(&self.source, self.optimization)?;
         if self.key != expected_key {
             return Err(unit_error(
                 DiagnosticClass::Corrupt,

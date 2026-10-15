@@ -868,13 +868,8 @@ impl GraphRepository {
             load_parent_binding(&store, binding.repository_id, *parent, &mut parent_work)?.head;
         let mut base_publication = read_publication(&store, base_head)?;
         base_publication.store_work.add(parent_work);
-        let hidden_type_objects = match &accepted.semantic_diff.body {
-            crate::platform::publication::SemanticDiffBody::Change { supplied_types, .. }
-                if accepted.transaction.contract_version == 5 =>
-            {
-                supplied_types.iter().copied().collect()
-            }
-            crate::platform::publication::SemanticDiffBody::Change { .. } => BTreeSet::new(),
+        match &accepted.semantic_diff.body {
+            crate::platform::publication::SemanticDiffBody::Change { .. } => {}
             crate::platform::publication::SemanticDiffBody::Bootstrap { .. } => {
                 return Err(repository_error(
                     DiagnosticClass::Corrupt,
@@ -882,15 +877,10 @@ impl GraphRepository {
                     "accepted idempotency result has a bootstrap semantic diff",
                 ));
             }
-        };
+        }
         Ok(Some(
-            RepositoryView::new_idempotency_base(
-                base_publication,
-                store,
-                hidden_type_objects,
-                binding.result,
-            )
-            .reconcile_validation()?,
+            RepositoryView::new_idempotency_base(base_publication, store, binding.result)
+                .reconcile_validation()?,
         ))
     }
 
@@ -1465,20 +1455,6 @@ fn read_publication<S: ImmutableObjectStore + ?Sized>(
         &mut store_work,
     )?;
     let semantic_diff = SemanticDiff::decode(&diff_bytes, revision.publication.semantic_diff)?;
-    if !matches!(
-        (
-            transaction.contract_version,
-            semantic_diff.contract_version,
-            receipt.contract_version
-        ),
-        (5, 3, 5) | (6, 4, 6)
-    ) {
-        return Err(repository_error(
-            DiagnosticClass::Corrupt,
-            "publication_repository_history_contract",
-            "accepted transaction, semantic diff and receipt do not share one type-inventory interpretation",
-        ));
-    }
     let root_bytes = read_required(
         store,
         ObjectDomain::SemanticRoot,
@@ -1493,7 +1469,7 @@ fn read_publication<S: ImmutableObjectStore + ?Sized>(
         revision.publication.validation.witness.bytes(),
         &mut store_work,
     )?;
-    let witness = crate::platform::witness::decode_historical_witness_manifest(
+    let witness = crate::platform::witness::decode_witness_manifest(
         &witness_bytes,
         revision.publication.validation.witness,
     )?;
@@ -1596,7 +1572,7 @@ fn load_parent_binding<S: ImmutableObjectStore + ?Sized>(
         revision.publication.validation.witness.bytes(),
         work,
     )?;
-    let witness = crate::platform::witness::decode_historical_witness_manifest(
+    let witness = crate::platform::witness::decode_witness_manifest(
         &witness_bytes,
         revision.publication.validation.witness,
     )?;

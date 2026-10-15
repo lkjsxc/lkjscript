@@ -121,6 +121,19 @@ impl PreparedTypeLookup {
     }
 
     #[cfg(test)]
+    pub(in super::super) fn ordinary_for_test(
+        origin: ValueOrigin,
+        template: TypeObjectDigest,
+        result: TypeObjectDigest,
+        bindings: &Bindings,
+        control: &crate::platform::execution::ExecutionControl,
+    ) -> Result<Self, Diagnostic> {
+        let mut work = Budget::new(control);
+        work.remember_type_substitution(template, result, bindings)?;
+        Ok(work.finish_type_lookup(origin))
+    }
+
+    #[cfg(test)]
     pub(in super::super) fn corrupt_application(
         &mut self,
         function: FunctionIndex,

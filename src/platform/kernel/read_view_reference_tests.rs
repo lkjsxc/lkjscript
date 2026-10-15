@@ -164,7 +164,7 @@ fn environment(caller: DeclarationReference, callee: DeclarationReference) -> Re
 }
 
 #[test]
-fn view_reference_positive_category_retained_graph33_owned_and_exact34_view() {
+fn view_reference_positive_categories_and_foreign_owner_contract_rejection() {
     let (mut source, _caller, callee, _view, ty) = fixture();
     let cell = intern(&mut source, TypeForm::OwnedI64Cell);
     let mut resolver = Resolver::new(&source);
@@ -173,6 +173,7 @@ fn view_reference_positive_category_retained_graph33_owned_and_exact34_view() {
         Ok(ReadCategory::ReadView)
     );
     assert_eq!(resolver.owned_type(ty, occurrence(callee), 0), Ok(false));
+    assert_eq!(resolver.owned_type(cell, occurrence(callee), 0), Ok(true));
     assert!(!Oracle(&source, Some(callee)).ordinary(ty));
     assert!(!Oracle(&source, Some(callee)).capture_safe(ty));
     let OwnerRecord::Declaration(d) = source
@@ -184,12 +185,23 @@ fn view_reference_positive_category_retained_graph33_owned_and_exact34_view() {
     };
     d.header.contract_version = 33;
     let mut resolver = Resolver::new(&source);
-    assert!(resolver.current(occurrence(callee)).is_ok());
-    assert_eq!(resolver.owned_type(cell, occurrence(callee), 0), Ok(true));
+    assert_eq!(
+        resolver.current(occurrence(callee)),
+        Err(Failure::Generation)
+    );
     assert_eq!(
         resolver.read_view_category(ty, occurrence(callee)),
         Err(Failure::Generation)
     );
+    // Ordinary category queries do not admit the containing owner encoding.
+    // The owner codec and whole memory oracle enforce that separate boundary.
+    assert_eq!(
+        encode_owner(&source.owners[&OwnerKey::Declaration(callee.declaration)])
+            .unwrap_err()
+            .code,
+        "kernel_owner_header"
+    );
+    assert!(!accepts(&source));
 }
 
 #[test]
@@ -199,13 +211,13 @@ fn view_reference_complete_unused_scope_maps_precede_cache_and_bind_owner() {
     let good = environment(caller, callee);
     assert_eq!(
         source.types[&ty].contract_version,
-        contract::ASSOCIATED_READ_VIEW_CONTRACT_VERSION
+        contract::TYPE_OBJECT_CONTRACT_VERSION
     );
     let output = resolver.substitute_view(ty, &good, 0).unwrap();
     assert_eq!(resolver.read_view_scope(output), Ok(Some(scope(caller, 0))));
     assert_eq!(
         resolver.object(output).unwrap().contract_version,
-        contract::ASSOCIATED_READ_VIEW_CONTRACT_VERSION
+        contract::TYPE_OBJECT_CONTRACT_VERSION
     );
     let mut missing = good.clone();
     missing.scopes.remove(&ReadScopeReference {
@@ -701,7 +713,7 @@ fn view_reference_exact_family_witness_and_unused_binding_kind_are_complete() {
 }
 
 #[test]
-fn view_reference_lexical_authority_uses_function34_and_native_owned_loan_generations() {
+fn view_reference_lexical_authority_requires_current_function_and_owned_loans() {
     use crate::platform::semantic_id::{BindingId, ParameterId};
     let (mut source, caller, _, _, _) = fixture();
     let cell = intern(&mut source, TypeForm::OwnedI64Cell);
@@ -719,7 +731,7 @@ fn view_reference_lexical_authority_uses_function34_and_native_owned_loan_genera
         OwnerKey::Parameter(parameter),
         OwnerRecord::Parameter(ParameterRecord {
             header: OwnerHeader {
-                contract_version: 33,
+                contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
                 ..OwnerHeader::new(OwnerKey::Parameter(parameter), OwnerKind::Parameter)
             },
             parent: ParameterParent::Function(caller.declaration),
@@ -734,7 +746,7 @@ fn view_reference_lexical_authority_uses_function34_and_native_owned_loan_genera
         OwnerKey::Binding(binding),
         OwnerRecord::Binding(BindingRecord {
             header: OwnerHeader {
-                contract_version: 24,
+                contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
                 ..OwnerHeader::new(OwnerKey::Binding(binding), OwnerKind::Binding)
             },
             kind: BindingKind::OwnedBorrow,
@@ -747,7 +759,7 @@ fn view_reference_lexical_authority_uses_function34_and_native_owned_loan_genera
     source.owners.insert(
         OwnerKey::Expression(local),
         OwnerRecord::Expression(ExpressionRecord {
-            contract_version: 24,
+            contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
             id: local,
             operation: ExpressionOperation::Local {
                 value: LocalValueReference::FunctionParameter(parameter),
@@ -758,7 +770,7 @@ fn view_reference_lexical_authority_uses_function34_and_native_owned_loan_genera
     source.owners.insert(
         OwnerKey::Expression(unit),
         OwnerRecord::Expression(ExpressionRecord {
-            contract_version: 24,
+            contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
             id: unit,
             operation: ExpressionOperation::Unit {},
         }),
@@ -767,7 +779,7 @@ fn view_reference_lexical_authority_uses_function34_and_native_owned_loan_genera
     source.owners.insert(
         OwnerKey::Expression(borrow),
         OwnerRecord::Expression(ExpressionRecord {
-            contract_version: 24,
+            contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
             id: borrow,
             operation: ExpressionOperation::BorrowOwnedField {
                 product_type: product,
@@ -818,7 +830,7 @@ fn view_reference_lexical_authority_uses_function34_and_native_owned_loan_genera
     else {
         panic!()
     };
-    e.contract_version = 24;
+    e.contract_version = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
     let OwnerRecord::Declaration(d) = source
         .owners
         .get_mut(&OwnerKey::Declaration(caller.declaration))

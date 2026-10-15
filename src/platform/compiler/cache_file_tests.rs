@@ -125,7 +125,7 @@ fn cache_fifo_admission_child() {
 }
 
 #[test]
-fn predecessor_compilation_cache_rebuilds_without_reusing_old_units_or_changing_authority() {
+fn foreign_profile_compilation_cache_rebuilds_without_changing_authority() {
     let source = crate::platform::kernel::tests::witness_snapshot();
     let directory = tempfile::tempdir().unwrap();
     let repository = GraphRepository::create(&directory.path().join("repository"), &source, None)
@@ -134,26 +134,30 @@ fn predecessor_compilation_cache_rebuilds_without_reusing_old_units_or_changing_
     let before = repository.current().unwrap().head;
     let current = build_clean(&repository, OptimizationPolicy::DeterministicBaseline).unwrap();
     let mut predecessor = current.manifest.clone();
-    predecessor.graph_contract_version = 31;
-    predecessor.compiler_contract_version = 31;
-    predecessor.bytecode_contract_version = 26;
-    let (_, bytes) = predecessor.encode().unwrap();
+    predecessor.compiler_contract_version ^= 1;
+    let bytes = crate::platform::packed::encode_canonical(
+        crate::platform::compiler::COMPILATION_MANIFEST_MAGIC,
+        crate::platform::compiler::COMPILATION_MANIFEST_ENVELOPE_DOMAIN,
+        &predecessor,
+        MAXIMUM_COMPILATION_MANIFEST_BYTES,
+    )
+    .unwrap();
     let old = install_derived_manifest(&repository, &current.manifest, bytes);
     let error = load_current_compilation(&repository)
         .expect_err("a predecessor derived cache never becomes an exact-current hit");
     assert_eq!(error.class, DiagnosticClass::Source);
-    assert_eq!(error.code, "compilation_cache_contract_outdated");
+    assert_eq!(error.code, "compilation_manifest_contract");
     assert_eq!(
         load_exact_current_compilation(&repository, old)
             .unwrap_err()
             .code,
-        "compilation_cache_contract_outdated"
+        "compilation_manifest_contract"
     );
     assert_eq!(
         crate::platform::compiler::link_artifact(&repository, old, &[])
             .unwrap_err()
             .code,
-        "compilation_cache_contract_outdated"
+        "compilation_manifest_contract"
     );
     let rebuilt = build_clean(&repository, OptimizationPolicy::DeterministicBaseline).unwrap();
     assert_eq!(rebuilt.manifest_digest, current.manifest_digest);
@@ -169,7 +173,7 @@ fn predecessor_compilation_cache_rebuilds_without_reusing_old_units_or_changing_
 }
 
 #[test]
-fn corrupt_predecessor_manifest_remains_corrupt_before_cache_recovery() {
+fn corrupt_foreign_profile_manifest_remains_corrupt_before_cache_recovery() {
     let source = crate::platform::kernel::tests::witness_snapshot();
     let directory = tempfile::tempdir().unwrap();
     let repository = GraphRepository::create(&directory.path().join("repository"), &source, None)
@@ -178,10 +182,14 @@ fn corrupt_predecessor_manifest_remains_corrupt_before_cache_recovery() {
     let before = repository.current().unwrap().head;
     let current = build_clean(&repository, OptimizationPolicy::DeterministicBaseline).unwrap();
     let mut predecessor = current.manifest.clone();
-    predecessor.graph_contract_version = 31;
-    predecessor.compiler_contract_version = 31;
-    predecessor.bytecode_contract_version = 26;
-    let (_, mut bytes) = predecessor.encode().unwrap();
+    predecessor.compiler_contract_version ^= 1;
+    let mut bytes = crate::platform::packed::encode_canonical(
+        crate::platform::compiler::COMPILATION_MANIFEST_MAGIC,
+        crate::platform::compiler::COMPILATION_MANIFEST_ENVELOPE_DOMAIN,
+        &predecessor,
+        MAXIMUM_COMPILATION_MANIFEST_BYTES,
+    )
+    .unwrap();
     *bytes.last_mut().unwrap() ^= 1;
     install_derived_manifest(&repository, &current.manifest, bytes);
     let error = load_current_compilation(&repository)

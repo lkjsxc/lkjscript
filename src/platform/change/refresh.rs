@@ -190,9 +190,6 @@ pub(crate) struct RecordedWitnessBase<'a, W: ?Sized> {
 }
 
 impl<B: CanonicalBaseRead + ?Sized> CanonicalBaseRead for RecordedCanonicalBase<'_, B> {
-    fn accepted_retry_encoding(&self) -> Option<u16> {
-        self.base.accepted_retry_encoding()
-    }
     fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
         self.base.validation_checkpoint()
     }

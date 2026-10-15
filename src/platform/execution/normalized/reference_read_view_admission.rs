@@ -4874,19 +4874,23 @@ impl Resolver<'_, '_> {
                 self.scan(condition, context, locals, syntax, Use::Value, depth + 1)?;
                 let mut left = self.fork_locals(locals)?;
                 let mut right = self.fork_locals(locals)?;
-                let a = self.scan(when_true, context, &mut left, syntax, demand, depth + 1)?;
+                let mut a = self.scan(when_true, context, &mut left, syntax, demand, depth + 1)?;
                 let b = self.scan(when_false, context, &mut right, syntax, demand, depth + 1)?;
                 if a.ty.is_some() && b.ty.is_some() && a.ty != b.ty {
                     return Err(invalid("untaken branch changes result type"));
                 }
-                if (a.source != b.source || a.scopes != b.scopes || a.read != b.read)
-                    && (self.value_category(&a, context)? == ValueCategory::ReadView
-                        || a.read
-                        || b.read)
+                let category = self.value_category(&a, context)?;
+                if (a.source != b.source
+                    || a.read != b.read
+                    || (category == ValueCategory::ReadView && a.scopes != b.scopes))
+                    && (category == ValueCategory::ReadView || a.read || b.read)
                 {
                     return Err(invalid(
                         "untaken branch changes selected source lineage/scope",
                     ));
+                }
+                if category == ValueCategory::Owned && a.read {
+                    common_scope_permissions(&mut a, &b, &mut self.budget)?;
                 }
                 self.merge_locals(&mut left, &right, context)?;
                 *locals = left;
@@ -7019,13 +7023,13 @@ impl Resolver<'_, '_> {
                             branch.insert(LocalValueReference::MatchPayload(binding), local);
                         }
                     }
-                    let value =
+                    let mut value =
                         self.scan(arm.body, context, &mut branch, syntax, demand, depth + 1)?;
                     if let Some(binding) = arm.payload_binding {
                         branch.remove(&LocalValueReference::MatchPayload(binding));
                     }
                     if let Some(previous) = &result {
-                        compare_branch_values(previous, &value)?;
+                        compare_branch_values(&mut value, previous, &mut self.budget)?;
                     }
                     if let Some(previous) = &mut state {
                         self.merge_locals(previous, &branch, context)?;
@@ -7396,11 +7400,19 @@ impl Resolver<'_, '_> {
                             BindingKind::OwnedChoicePayload
                         }),
                     )?;
-                    let value =
+                    let mut value =
                         self.scan(arm.body, &nested, &mut branch, syntax, demand, depth + 1)?;
                     branch.remove(&LocalValueReference::LexicalBinding(arm.binding));
+                    // The arm's loan permission ends here. Its returned Owned read can
+                    // retain the same source, but cannot grant this departed lexical scope.
+                    if let Some(callable) = context.owner {
+                        value.scopes.remove(&ReadScopeArgument::Lexical {
+                            callable,
+                            binding: arm.binding,
+                        });
+                    }
                     if let Some(previous) = &result {
-                        compare_branch_values(previous, &value)?;
+                        compare_branch_values(&mut value, previous, &mut self.budget)?;
                     }
                     if let Some(previous) = &mut state {
                         self.merge_locals(previous, &branch, context)?;
@@ -7702,8 +7714,13 @@ impl Resolver<'_, '_> {
             syntax,
             Some(BindingKind::OwnedBorrow),
         )?;
-        let result = self.scan(body, &nested, locals, syntax, demand, depth + 1)?;
+        let mut result = self.scan(body, &nested, locals, syntax, demand, depth + 1)?;
         locals.remove(&LocalValueReference::LexicalBinding(binding));
+        // This permission is valid only inside the loan body. Keep the exact
+        // returned source/read/type and all enclosing source scopes intact.
+        result
+            .scopes
+            .remove(&ReadScopeArgument::Lexical { callable, binding });
         Ok(result)
     }
 }
@@ -7786,16 +7803,33 @@ fn unique<T: Ord>(values: &[T], what: &str) -> Result<()> {
     }
 }
 
-fn compare_branch_values(left: &Value, right: &Value) -> Result<()> {
+fn common_scope_permissions(
+    left: &mut Value,
+    right: &Value,
+    budget: &mut Budget<'_>,
+) -> Result<()> {
+    // Owned read scopes are available permissions, not new source identities.
+    // A join can retain only permission proved on every path. This never
+    // invents a common source or widens a scope; view types keep exact scopes.
+    for _ in &left.scopes {
+        budget.step(0)?;
+    }
+    left.scopes.retain(|scope| right.scopes.contains(scope));
+    Ok(())
+}
+
+fn compare_branch_values(left: &mut Value, right: &Value, budget: &mut Budget<'_>) -> Result<()> {
     if left.ty.is_some() && right.ty.is_some() && left.ty != right.ty {
         return Err(invalid("match branches change canonical type"));
     }
-    if (left.read || right.read)
-        && (left.source != right.source || left.scopes != right.scopes || left.read != right.read)
-    {
+    if (left.read || right.read) && (left.source != right.source || left.read != right.read) {
         return Err(invalid(
             "inactive match arm changes borrowed source lineage",
         ));
+    }
+    // These matches belong to scan_ordinary, which rejects ReadView results.
+    if left.read {
+        common_scope_permissions(left, right, budget)?;
     }
     Ok(())
 }

@@ -23,6 +23,13 @@ pub(super) fn rejects_artifact_free_cargo_claim_and_recovers(
     producer.required_outputs.push(output.clone());
     let mut consumer = Gate::new("second", vec!["/bin/true".into()]);
     consumer.dependencies.push("first".into());
+    consumer.cacheable = false;
+    consumer
+        .required_inputs
+        .push(super::super::model::GateInput {
+            path: output.clone(),
+            producer: "first".to_owned(),
+        });
     let registry =
         registry::GateRegistry::new(vec![producer, consumer]).expect("Cargo claim registry");
     let requested = vec!["second".to_owned()];
@@ -78,6 +85,7 @@ pub(super) fn rejects_artifact_free_cargo_claim_and_recovers(
                 &gate.name,
                 &observed.input_fingerprint,
                 observed.process.as_ref().expect("process"),
+                &observed.inputs,
                 &observed.outputs,
                 None,
             )

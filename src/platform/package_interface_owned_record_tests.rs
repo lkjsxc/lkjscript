@@ -230,32 +230,7 @@ fn interface20_checks_unused_parameter_bounds_and_recursive_owned_layouts() {
 }
 
 #[test]
-fn interface20_rejects_owned_layouts_disguised_as_interface19() {
-    let fixture = layout_fixture();
-    for value in fixture.owners.values() {
-        let mut hostile = value.clone();
-        hostile.contract_version = 19;
-        assert!(hostile.encode().is_err());
-        let bytes = crate::platform::packed::encode(
-            *b"LKJPIF19",
-            "lkjscript.package-interface-owner-envelope.v19",
-            &hostile,
-            MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
-        )
-        .unwrap();
-        assert!(
-            PackageInterfaceOwner::decode(
-                &bytes,
-                hostile.owner(),
-                PackageInterfaceOwnerDigest::of(&bytes)
-            )
-            .is_err()
-        );
-    }
-}
-
-#[test]
-fn interface20_retains_historical_private_data_layout_generation() {
+fn interface_retains_current_private_ordinary_data_layout() {
     let mut fixture = layout_fixture();
     let PackageInterfaceRecord::RepresentationDeclaration(record) = &mut fixture
         .owners
@@ -265,25 +240,12 @@ fn interface20_retains_historical_private_data_layout_generation() {
     else {
         unreachable!()
     };
-    record.header.contract_version = 31;
     record.header.kind = OwnerKind::Record;
     record.payload = PackageInterfaceDeclarationPayload::Record {
         type_parameters: Vec::new(),
         fields: vec![fixture.inner_field],
     };
-    let field = fixture
-        .owners
-        .get_mut(&OwnerKey::Field(fixture.inner_field))
-        .unwrap();
-    field.contract_version = 19;
-    let PackageInterfaceRecord::Field(field) = &mut field.record else {
-        unreachable!()
-    };
-    field.header.contract_version = 31;
     assert!(validate_layout(&fixture).is_ok());
-    let mut marker = fixture.owners[&OwnerKey::Declaration(fixture.inner)].clone();
-    marker.contract_version = 19;
-    assert!(marker.encode().is_err());
 }
 
 type OwnedLayoutDag = (

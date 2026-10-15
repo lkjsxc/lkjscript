@@ -79,222 +79,8 @@ jobs:
         run: |
           set -euo pipefail
           cargo fetch --locked
-          capture_bootstrap_source() {
-            source_head=$(git rev-parse HEAD) || return "$?"
-            source_tree=$(git rev-parse 'HEAD^{tree}') || return "$?"
-            source_status=$(git status --porcelain=v1 --untracked-files=all) || return "$?"
-            jq -n --arg source "$source_head" --arg tree "$source_tree" --arg status "$source_status" \
-              '{source:$source,tree:$tree,status:$status}' > "$1"
-          }
-          bootstrap_value_hash() {
-            local line
-            line=$(printf '%s' "$1" | sha256sum) || return "$?"
-            printf '%s' "${line%% *}"
-          }
-          bootstrap_file_proof() {
-            local path=$1 maximum=$2 parent next before after mode bytes hash rest
-            if [[ ! -e "$path" && ! -L "$path" ]]; then
-              parent=$(dirname -- "$path") || return "$?"
-              while [[ ! -e "$parent" && ! -L "$parent" ]]; do
-                next=$(dirname -- "$parent") || return "$?"
-                [[ "$next" != "$parent" ]] || return 1
-                parent=$next
-              done
-              [[ -d "$parent" && -x "$parent" ]] || return 1
-              jq -cn --arg path "$path" '{path:$path,kind:"absent"}'
-              return "$?"
-            fi
-            if [[ ! -f "$path" || -L "$path" ]]; then
-              jq -cn --arg path "$path" '{path:$path,kind:"unsupported"}'
-              return "$?"
-            fi
-            before=$(stat -c '%a|%s|%d|%i|%y|%z' -- "$path") || return "$?"
-            IFS='|' read -r mode bytes rest <<< "$before"
-            [[ "$mode" =~ ^[0-7]+$ && "$bytes" =~ ^[0-9]+$ ]] || return 1
-            printf -v mode '%04o' "$((8#$mode))"
-            if (( bytes > maximum )); then
-              jq -cn --arg path "$path" --arg mode "$mode" --argjson bytes "$bytes" \
-                '{path:$path,mode:$mode,kind:"oversized",bytes:$bytes}'
-              return "$?"
-            fi
-            hash=$(head -c "$((maximum + 1))" -- "$path" | sha256sum) || return "$?"
-            after=$(stat -c '%a|%s|%d|%i|%y|%z' -- "$path") || return "$?"
-            [[ "$before" == "$after" ]] || return 1
-            jq -cn --arg path "$path" --arg mode "$mode" --argjson bytes "$bytes" \
-              --arg sha256 "${hash%% *}" '{path:$path,mode:$mode,kind:"file",bytes:$bytes,sha256:$sha256}'
-          }
-          bootstrap_context() {
-            local output=$1 repo name value digest item kind current next paths sorted exported bytes
-            local parent_environment='{}' override_states='{}' configs='[]' errors='[]'
-            local cargo_proof rustc_proof child_environment count=0 total=0
-            local -A candidates=() overrides=()
-            repo=$(readlink -e "$PWD") || return "$?"
-            if [[ "$repo" != "$PWD" ]]; then errors=$(jq -c '.+=["checkout is not canonical"]' <<< "$errors") || return "$?"; fi
-            for name in HOME bootstrap_cargo_home bootstrap_rustup_home bootstrap_target; do
-              value=${!name}
-              current=$(readlink -m -- "$value") || return "$?"
-              if [[ "$value" != /* || "$current" != "$value" ]]; then
-                errors=$(jq -c --arg name "$name" '.+=["path absent or not canonical: "+$name]' <<< "$errors") || return "$?"
-              fi
-            done
-            [[ -n "$PATH" ]] || return 1
-            for name in HOME PATH CARGO_HOME RUSTUP_HOME LANG LC_ALL TMPDIR TZ CARGO_TERM_COLOR CARGO_NET_OFFLINE \
-              CARGO_BUILD_JOBS CARGO_ABOUT_VERSION CARGO_ABOUT_ARCHIVE_SHA256; do
-              if [[ -v "$name" ]]; then
-                value=${!name}
-                digest=$(bootstrap_value_hash "$value") || return "$?"
-                parent_environment=$(jq -c --arg name "$name" --arg sha256 "$digest" \
-                  '.[$name]={state:"set",value_sha256:$sha256}' <<< "$parent_environment") || return "$?"
-                if [[ ( "$name" == CARGO_HOME || "$name" == RUSTUP_HOME ) && -z "$value" ]]; then
-                  errors=$(jq -c --arg name "$name" '.+=["empty home override: "+$name]' <<< "$errors") || return "$?"
-                fi
-              else
-                parent_environment=$(jq -c --arg name "$name" '.[$name]={state:"unset"}' <<< "$parent_environment") || return "$?"
-              fi
-            done
-            for name in AR CC CFLAGS CXX CXXFLAGS PKG_CONFIG_PATH RANLIB RUSTC RUSTC_WRAPPER RUSTC_WORKSPACE_WRAPPER \
-              RUSTFLAGS RUSTDOC RUSTDOCFLAGS RUSTC_BOOTSTRAP RUSTUP_TOOLCHAIN SOURCE_DATE_EPOCH CARGO_BUILD_TARGET \
-              CARGO_ENCODED_RUSTFLAGS CARGO_ENCODED_RUSTDOCFLAGS CARGO_TARGET_DIR; do overrides[$name]=1; done
-            exported=$(compgen -e) || return "$?"
-            while IFS= read -r name; do
-              case "$name" in
-                CARGO_HOME|CARGO_NET_OFFLINE|CARGO_TERM_COLOR|CARGO_BUILD_JOBS|CARGO_ABOUT_VERSION|CARGO_ABOUT_ARCHIVE_SHA256) ;;
-                CARGO_*) overrides[$name]=1 ;;
-              esac
-            done <<< "$exported"
-            sorted=$(printf '%s\n' "${!overrides[@]}" | LC_ALL=C sort) || return "$?"
-            while IFS= read -r name; do
-              if [[ -v "$name" ]]; then
-                digest=$(bootstrap_value_hash "${!name}") || return "$?"
-                override_states=$(jq -c --arg name "$name" --arg sha256 "$digest" \
-                  '.[$name]={state:"set",value_sha256:$sha256}' <<< "$override_states") || return "$?"
-                errors=$(jq -c --arg name "$name" '.+=["unsupported build override: "+$name]' <<< "$errors") || return "$?"
-              else
-                override_states=$(jq -c --arg name "$name" '.[$name]={state:"unset"}' <<< "$override_states") || return "$?"
-              fi
-            done <<< "$sorted"
-            current=$repo
-            while :; do
-              (( count += 1 )); (( count <= 64 )) || return 1
-              candidates["${current%/}/.cargo/config"]=1; candidates["${current%/}/.cargo/config.toml"]=1
-              [[ "$current" != / ]] || break
-              next=$(dirname -- "$current") || return "$?"
-              current=$next
-            done
-            candidates["${bootstrap_cargo_home%/}/config"]=1; candidates["${bootstrap_cargo_home%/}/config.toml"]=1
-            (( ${#candidates[@]} <= 130 )) || return 1
-            paths=$(printf '%s\n' "${!candidates[@]}" | LC_ALL=C sort) || return "$?"
-            while IFS= read -r current; do
-              item=$(bootstrap_file_proof "$current" 1048576) || return "$?"
-              kind=$(jq -er '.kind' <<< "$item") || return "$?"
-              configs=$(jq -c --argjson item "$item" '.+=[$item]' <<< "$configs") || return "$?"
-              bytes=$(jq -er '.bytes // 0' <<< "$item") || return "$?"
-              total=$((total + bytes)); (( total <= 8388608 )) || return 1
-              if [[ "$kind" != absent ]]; then
-                errors=$(jq -c '.+=["bootstrap requires absent effective Cargo configs"]' <<< "$errors") || return "$?"
-              fi
-            done <<< "$paths"
-            cargo_proof=$(bootstrap_file_proof "$bootstrap_cargo" 536870912) || return "$?"
-            rustc_proof=$(bootstrap_file_proof "$bootstrap_rustc" 536870912) || return "$?"
-            if ! jq -e --argjson cargo "$cargo_proof" --argjson rustc "$rustc_proof" \
-              '$cargo.kind=="file" and $rustc.kind=="file" and ($cargo.path|startswith("/")) and ($rustc.path|startswith("/"))' \
-              <<< null > /dev/null; then errors=$(jq -c '.+=["compiler/Cargo is not a regular absolute file"]' <<< "$errors") || return "$?"; fi
-            child_environment=$(jq -cn --args '$ARGS.positional|map(split("=")|{key:.[0],value:(.[1:]|join("="))})|from_entries' \
-              "${bootstrap_env[@]}") || return "$?"
-            if [[ -v CARGO_BUILD_JOBS && ! "$CARGO_BUILD_JOBS" =~ ^[1-9][0-9]*$ ]]; then
-              errors=$(jq -c '.+=["CARGO_BUILD_JOBS must be a positive integer"]' <<< "$errors") || return "$?"
-            fi
-            jq -nS --arg repo "$repo" --arg target "$bootstrap_target" --argjson errors "$errors" \
-              --argjson parent "$parent_environment" --argjson overrides "$override_states" --argjson configs "$configs" \
-              --argjson cargo "$cargo_proof" --argjson rustc "$rustc_proof" --argjson child "$child_environment" \
-              '{schema:"lkjscript.bootstrap_context.no_config_no_override.v1",repository:$repo,target:$target,
-                supported:($errors|length==0),errors:$errors,parent_environment:$parent,override_states:$overrides,
-                configs:$configs,executables:{cargo:$cargo,rustc:$rustc},child_environment:$child}' > "$output"
-          }
-          bootstrap_root=$(mktemp -d "$RUNNER_TEMP/candidate-bootstrap.XXXXXXXX")
-          bootstrap_target="$bootstrap_root/target"
-          test -d "$bootstrap_root" && test ! -L "$bootstrap_root"
-          test ! -e "$bootstrap_target" && test ! -L "$bootstrap_target"
-          evidence="$RUNNER_TEMP/bootstrap-evidence"
-          mkdir -m 0700 "$evidence" "$RUNNER_TEMP/trusted-tools"
-          bootstrap_cargo=$(rustup which --toolchain 1.98.0 cargo)
-          bootstrap_cargo=$(readlink -e "$bootstrap_cargo")
-          bootstrap_rustc=$(rustup which --toolchain 1.98.0 rustc)
-          bootstrap_rustc=$(readlink -e "$bootstrap_rustc")
-          bootstrap_sysroot=$("$bootstrap_rustc" --print sysroot)
-          bootstrap_sysroot_rustc=$(readlink -e "$bootstrap_sysroot/bin/rustc")
-          test "$bootstrap_sysroot_rustc" = "$bootstrap_rustc"
-          bootstrap_cargo_home=${CARGO_HOME-$HOME/.cargo}
-          bootstrap_rustup_home=${RUSTUP_HOME-$HOME/.rustup}
-          bootstrap_env=(
-            "HOME=$HOME" "PATH=$PATH" "CARGO_HOME=$bootstrap_cargo_home" "RUSTUP_HOME=$bootstrap_rustup_home"
-            "CARGO_TARGET_DIR=$bootstrap_target" "RUSTC=$bootstrap_rustc" "CARGO_NET_OFFLINE=true"
-            "CARGO_TERM_COLOR=never" "LANG=C"
-          )
-          if [[ -v CARGO_BUILD_JOBS ]]; then bootstrap_env+=("CARGO_BUILD_JOBS=$CARGO_BUILD_JOBS"); fi
-          capture_bootstrap_source "$evidence/bootstrap-source-before.json"
-          bootstrap_context "$evidence/bootstrap-context-before.json"
-          jq -e ' .supported == true ' "$evidence/bootstrap-context-before.json" > /dev/null
-          jq -e --arg expected "$GITHUB_SHA" '.source == $expected and .status == ""' \
-            "$evidence/bootstrap-source-before.json" > /dev/null
-          { "$bootstrap_cargo" --version; "$bootstrap_rustc" --version --verbose; } > "$evidence/bootstrap-toolchain.txt"
-          jq -n --arg target "$bootstrap_target" --arg cwd "$PWD" --arg cargo "$bootstrap_cargo" \
-            --slurpfile context "$evidence/bootstrap-context-before.json" \
-            --arg started_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{cwd:$cwd,started_at:$started_at,launcher:["env","-i"],environment:$context[0].child_environment,argv:[$cargo,"build","--release","--locked","-p","lkjscript-dev","--bins","--target-dir",$target,"--message-format=json"]}' \
-            > "$evidence/bootstrap-command.json"
-          set +e
-          env -i "${bootstrap_env[@]}" "$bootstrap_cargo" build --release --locked -p lkjscript-dev --bins \
-            --target-dir "$bootstrap_target" --message-format=json \
-            > "$evidence/bootstrap-cargo.jsonl" 2> "$evidence/bootstrap-cargo.stderr"
-          bootstrap_status=$?
-          set -e
-          jq -n --argjson exit_code "$bootstrap_status" \
-            --arg completed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{completed_at:$completed_at,exit_code:$exit_code}' > "$evidence/bootstrap-process.json"
-          capture_bootstrap_source "$evidence/bootstrap-source-after.json"
-          bootstrap_context "$evidence/bootstrap-context-after.json"
-          test "$bootstrap_status" -eq 0
-          cmp "$evidence/bootstrap-source-before.json" "$evidence/bootstrap-source-after.json"
-          cmp "$evidence/bootstrap-context-before.json" "$evidence/bootstrap-context-after.json"
-          jq -e ' .supported == true ' "$evidence/bootstrap-context-after.json" > /dev/null
-          jq -e -s --arg manifest "$GITHUB_WORKSPACE/tools/lkjscript-dev/Cargo.toml" \
-            --arg source_root "$GITHUB_WORKSPACE/tools/lkjscript-dev/src" \
-            --arg workspace "$GITHUB_WORKSPACE/" \
-            --arg target "$bootstrap_target/release" \
-            --slurpfile source "$evidence/bootstrap-source-before.json" '
-            def tool($name; $entry):
-              [.[] | select(.reason == "compiler-artifact" and .manifest_path == $manifest
-                and .target.name == $name and .target.kind == ["bin"]
-                and .target.src_path == ($source_root + "/" + $entry)
-                and .profile.test == false and .profile.opt_level == "3"
-                and .fresh == false and .executable == ($target + "/" + $name))]
-              | if length == 1 then .[0] else error("missing or ambiguous fresh bootstrap artifact") end;
-            [.[] | select(.reason == "compiler-artifact"
-              and (.manifest_path | startswith($workspace)))] as $workspace_artifacts
-            | if ($workspace_artifacts | length) == 0
-              or any($workspace_artifacts[]; .fresh != false)
-              then error("bootstrap workspace artifact was not freshly built") else . end
-            | [.[] | select(.reason == "build-finished")] as $finished
-            | if ($finished | length) != 1 or $finished[0].success != true
-              then error("bootstrap did not finish successfully") else . end
-            | tool("lkjscript-dev"; "main.rs") as $checker
-            | tool("lkjscript-release-controller"; "release/controller_main.rs") as $controller
-            | {source:$source[0],checker:$checker,controller:$controller,build_finished:$finished[0],workspace_artifacts:$workspace_artifacts}
-            ' "$evidence/bootstrap-cargo.jsonl" > "$evidence/bootstrap-selection.json"
-          checker=$(jq -er '.checker.executable' "$evidence/bootstrap-selection.json")
-          test -f "$checker" && test ! -L "$checker"
-          controller=$(jq -er '.controller.executable' "$evidence/bootstrap-selection.json")
-          test -f "$controller" && test ! -L "$controller"
-          cp "$checker" "$RUNNER_TEMP/trusted-tools/lkjscript-dev"
-          cp "$controller" "$RUNNER_TEMP/trusted-tools/lkjscript-release-controller"
-          chmod 0555 "$RUNNER_TEMP/trusted-tools/lkjscript-dev"
-          chmod 0555 "$RUNNER_TEMP/trusted-tools/lkjscript-release-controller"
-          cmp "$checker" "$RUNNER_TEMP/trusted-tools/lkjscript-dev"
-          cmp "$controller" "$RUNNER_TEMP/trusted-tools/lkjscript-release-controller"
-          sha256sum "$checker" "$controller" "$RUNNER_TEMP/trusted-tools/"* \
-            > "$evidence/tools.sha256"
-          sha256sum "$evidence"/bootstrap-* > "$evidence/bootstrap-evidence.sha256"
+          bash tools/bootstrap-verifier.sh --output "$RUNNER_TEMP/trusted-tools" \
+            --expected-source "$GITHUB_SHA" --with-controller
           echo "VERIFIER=$RUNNER_TEMP/trusted-tools/lkjscript-dev" >> "$GITHUB_ENV"
 
       - name: Authenticate candidate source and controller
@@ -304,6 +90,17 @@ jobs:
           set -euo pipefail
           "$RUNNER_TEMP/trusted-tools/lkjscript-release-controller" candidate-context \
             --output "$RUNNER_TEMP/candidate-context"
+
+      - name: Retain the exact verifier for source and candidate acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(sed -n '/^\[package\]$/,/^\[/s/^version = "\([^"]*\)"$/\1/p' Cargo.toml)
+          # Source evidence binds executable mode as well as bytes. Retain the
+          # required 0755 handoff before it governs any check target origins.
+          "$VERIFIER" release verifier prepare --executable "$VERIFIER" \
+            --output "$RUNNER_TEMP/candidate-verifier" --tag "v$version" --commit "$GITHUB_SHA"
+          echo "VERIFIER=$RUNNER_TEMP/candidate-verifier/lkjscript-dev" >> "$GITHUB_ENV"
 
       - name: Download and verify pinned cargo-about
         shell: bash
@@ -366,7 +163,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -m 0700 "$RUNNER_TEMP/candidate-build" "$RUNNER_TEMP/candidate-acceptance"
-          "$VERIFIER" release build --output "$RUNNER_TEMP/candidate-build/lkjscript" \
+          env -u CARGO_TARGET_DIR "$VERIFIER" release build --output "$RUNNER_TEMP/candidate-build/lkjscript" \
             --receipt "$RUNNER_TEMP/candidate-build/build-receipt.json"
           version=$(sed -n '/^\[package\]$/,/^\[/s/^version = "\([^"]*\)"$/\1/p' Cargo.toml)
           tag="v$version"
@@ -374,15 +171,15 @@ jobs:
             --cargo-about "$RUNNER_TEMP/cargo-about/cargo-about" \
             --cargo-about-archive "$RUNNER_TEMP/cargo-about.tar.gz" \
             --output "$RUNNER_TEMP/candidate-assets" --tag "$tag"
-          "$VERIFIER" release verifier prepare --executable "$VERIFIER" \
-            --output "$RUNNER_TEMP/candidate-verifier" --tag "$tag" --commit "$GITHUB_SHA"
 
       - name: Admit the final candidate and original evidence
         id: acceptance
         shell: bash
         run: |
           set -euo pipefail
-          "$RUNNER_TEMP/candidate-verifier/lkjscript-dev" release candidate accept \
+          # Re-admit source originals with the same approved environment and
+          # exact verifier that produced them; the fixed build above has no override.
+          CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target" "$VERIFIER" release candidate accept \
             --assets "$RUNNER_TEMP/candidate-assets" \
             --source-receipt "${{ steps.source.outputs.receipt }}" \
             --build-receipt "$RUNNER_TEMP/candidate-build/build-receipt.json" \
@@ -423,7 +220,7 @@ jobs:
           name: candidate-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/candidate-context
-            ${{ runner.temp }}/bootstrap-evidence
+            ${{ runner.temp }}/trusted-tools/evidence
             ${{ runner.temp }}/source-summary.json
             ${{ github.workspace }}/.artifacts/lkjscript-dev/check
             ${{ github.workspace }}/.artifacts/lkjscript-dev/service

@@ -319,7 +319,7 @@ fn from_json(
         }
         TypeForm::AssociatedContractMember { .. }
         | TypeForm::AssociatedWitnessProjection { .. } => {
-            Err(crate::platform::kernel::owned_associated_wire::unsupported_semantics())
+            Err(crate::platform::kernel::owned_associated::unsupported_semantics())
         }
         TypeForm::Unit if value.is_null() => Ok(NormalizedValue::Unit),
         TypeForm::Unit => Err(type_error(path, "expected null for Unit")),

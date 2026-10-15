@@ -733,7 +733,7 @@ fn reference_associated_combined_unused_body_rejects_untaken_source_consume_and_
         .owners
         .get_mut(&OwnerKey::Expression(case.wrapper))
         .unwrap()
-        .set_encoding_for_edit(33);
+        .set_encoding_for_edit(crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION);
     complete(&case.fixture).unwrap();
 
     let ExpressionOperation::ImplementationCall { arguments, .. } =
@@ -782,7 +782,7 @@ fn reference_associated_combined_unused_body_rejects_untaken_source_consume_and_
         .owners
         .get_mut(&OwnerKey::Expression(case.wrapper))
         .unwrap()
-        .set_encoding_for_edit(33);
+        .set_encoding_for_edit(crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION);
     complete(&case.fixture).unwrap();
 }
 
@@ -1346,36 +1346,32 @@ fn reference_associated_combined_nominal_context_retains_exact_formals_through_p
         records[1].package,
         OwnerKey::Declaration(records[1].declaration),
     );
-    // Synthetic nominal reader controls retain both supported Owned generations;
-    // these edited headers provide no transport or artifact acceptance evidence.
-    for generation in [
-        crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
-        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+    // Current nominal reader controls provide no transport or artifact admission.
+    let generation = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+    for key in [
+        OwnerKey::Declaration(records[0].declaration),
+        OwnerKey::Declaration(records[1].declaration),
+        OwnerKey::TypeParameter(formals[0]),
+        OwnerKey::TypeParameter(formals[1]),
+        OwnerKey::Field(fields[0]),
+        OwnerKey::Field(fields[1]),
     ] {
-        for key in [
-            OwnerKey::Declaration(records[0].declaration),
-            OwnerKey::Declaration(records[1].declaration),
-            OwnerKey::TypeParameter(formals[0]),
-            OwnerKey::TypeParameter(formals[1]),
-            OwnerKey::Field(fields[0]),
-            OwnerKey::Field(fields[1]),
-        ] {
-            fixture
-                .source
-                .owners
-                .get_mut(&key)
-                .unwrap()
-                .set_encoding_for_edit(generation);
-        }
-        let proof = derive(&fixture).unwrap();
-        let nominal = &proof.executables[&context];
-        assert_eq!(nominal.occurrences[&context.1], generation);
-        assert_eq!(nominal.occurrences[&OwnerKey::Field(fields[1])], generation);
-        assert_eq!(
-            nominal.roots[&(OwnerKey::Field(fields[1]), field_types[1])],
-            field_types[1]
-        );
+        fixture
+            .source
+            .owners
+            .get_mut(&key)
+            .unwrap()
+            .set_encoding_for_edit(generation);
     }
+    let proof = derive(&fixture).unwrap();
+    let nominal = &proof.executables[&context];
+    assert_eq!(nominal.occurrences[&context.1], generation);
+    assert_eq!(nominal.occurrences[&OwnerKey::Field(fields[1])], generation);
+    assert_eq!(
+        nominal.roots[&(OwnerKey::Field(fields[1]), field_types[1])],
+        field_types[1]
+    );
+
     let proof = derive(&fixture).unwrap();
     let healthy = super::reference_types::associated_schema_fixture(
         &[&fixture.source],

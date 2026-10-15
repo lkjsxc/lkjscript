@@ -5,6 +5,12 @@ use std::process::{Child, ChildStdout, Command, Output, Stdio};
 use std::thread;
 use std::time::Duration;
 
+#[allow(
+    dead_code,
+    reason = "shared test support is used by several integration binaries"
+)]
+pub mod semantic_cli;
+
 const EXECUTABLE_BUSY_ATTEMPTS: usize = 12;
 const EXECUTABLE_BUSY_DELAY: Duration = Duration::from_millis(50);
 

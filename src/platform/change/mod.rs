@@ -90,8 +90,6 @@ pub use request::{
     ResolvedOwnerReference, ResolvedReferenceBindings, ResolvedReferencePackage,
     lower_authored_changes,
 };
-#[cfg(test)]
-pub(crate) use request::{authored_source_owners, authored_source_owners_from_frozen_intent};
 pub(crate) use request::{
     canonical_authored_budget_bytes, canonical_authored_intent_bytes,
     lower_authored_changes_with_publication_base, lower_authored_changes_with_source_owners,

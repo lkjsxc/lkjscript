@@ -134,46 +134,6 @@ fn result_carrier_commits_kind_source_and_scope_without_body_changes() {
 }
 
 #[test]
-fn exact_pre34_function_summary_material_remains_separate_from_current_result_shape() {
-    let mut record = function_record();
-    let f = function(&mut record);
-    f.read_scope_parameters.clear();
-    f.read_scope_sources.clear();
-    f.result.relation = ResultRelation::ReadFrom {
-        source: ParameterId::migrate(SEED, 0),
-    };
-    let OwnerRecord::Declaration(d) = &mut record else {
-        unreachable!()
-    };
-    d.header.contract_version = 33;
-    let predecessor = summarize(&record);
-    let mut literal = Material::new(OwnerKind::PureFunction);
-    literal.piece(1, &DeclarationVisibility::Public).unwrap();
-    literal.piece(7, &Vec::<EffectParameterId>::new()).unwrap();
-    literal.raw_piece(2, &[5]);
-    literal.piece(4, &Vec::<TypeParameterId>::new()).unwrap();
-    literal
-        .piece(
-            5,
-            &vec![ParameterId::migrate(SEED, 0), ParameterId::migrate(SEED, 1)],
-        )
-        .unwrap();
-    literal.piece(6, &scalar()).unwrap();
-    literal.piece(11, &ParameterId::migrate(SEED, 0)).unwrap();
-    assert_eq!(
-        predecessor.semantic_interface,
-        literal.finish(INTERFACE_DIGEST_DOMAIN)
-    );
-    let OwnerRecord::Declaration(d) = &mut record else {
-        unreachable!()
-    };
-    d.header.contract_version = 34;
-    let current = summarize(&record);
-    assert_ne!(predecessor.semantic_interface, current.semantic_interface);
-    assert_eq!(predecessor.implementation, current.implementation);
-}
-
-#[test]
 fn inline_view_fields_bind_complete_kind_scope_and_phantom_type_inventory() {
     let owner = OwnerKey::Declaration(reference(2).declaration);
     let mut record = OwnerRecord::Declaration(DeclarationRecord {

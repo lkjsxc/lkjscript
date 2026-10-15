@@ -96,6 +96,7 @@ fn consuming_extraction_moves_large_payload_and_checks_child_custody_without_des
             assert_eq!(checks, 1);
             assert_eq!(before.since().node_visits, 0);
             assert_eq!(payload.class, Class::Free);
+            assert_eq!(payload.ordinary_type, Some(f.payload));
             assert!(payload.borrow.is_none());
             assert_eq!(payload.raw(), &f.raw(count));
             assert_eq!(child.class, Class::Memory);
@@ -155,6 +156,7 @@ fn consuming_extraction_rejects_unadmitted_raw_storage_even_with_valid_shape_or_
             raw: NormalizedValue::OwnedProduct(f.storage(raw)),
             origin: f.program.value_origin,
             class: Class::Memory,
+            ordinary_type: None,
             borrow: None,
         };
         assert!(extract(&f, forged).is_err());
@@ -297,6 +299,7 @@ fn consuming_extraction_rejects_read_inert_foreign_domain_and_live_loan_placemen
         raw: value.raw().clone(),
         origin: f.program.value_origin,
         class: Class::Memory,
+        ordinary_type: None,
         borrow: None,
     };
     assert!(extract(&f, inert).is_err());

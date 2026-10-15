@@ -154,7 +154,7 @@ fn imported(snapshot: &KernelSnapshot) -> KernelSnapshot {
     imported.dependencies.insert(
         package,
         DependencyRecord {
-            graph_contract_version: 33,
+            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
             package,
             semantic_revision: RevisionId::from_digest([196; 32]),
             package_revision: revision,

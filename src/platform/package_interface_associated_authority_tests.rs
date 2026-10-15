@@ -6,9 +6,9 @@ use crate::platform::semantic_id::*;
 
 const SEED: &[u8] = b"associated-interface-authority";
 
-fn frozen_header(owner: OwnerKey, kind: OwnerKind) -> OwnerHeader {
+fn current_header(owner: OwnerKey, kind: OwnerKind) -> OwnerHeader {
     OwnerHeader {
-        contract_version: 33,
+        contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
         owner,
         kind,
     }
@@ -43,7 +43,7 @@ fn intern(types: &mut BTreeMap<TypeObjectDigest, TypeObject>, form: TypeForm) ->
 
 fn owner(record: PackageInterfaceRecord) -> PackageInterfaceOwner {
     PackageInterfaceOwner {
-        contract_version: 21,
+        contract_version: PACKAGE_INTERFACE_CONTRACT_VERSION,
         record,
     }
 }
@@ -56,7 +56,7 @@ fn declaration(
 ) -> PackageInterfaceOwner {
     owner(PackageInterfaceRecord::Declaration(
         PackageInterfaceDeclaration {
-            header: frozen_header(OwnerKey::Declaration(id), kind),
+            header: current_header(OwnerKey::Declaration(id), kind),
             name: Name::new(name).unwrap(),
             payload,
         },
@@ -171,7 +171,7 @@ fn fixture() -> Fixture {
     consumer_owners.insert(
         OwnerKey::TypeParameter(ordinary),
         owner(PackageInterfaceRecord::TypeParameter(TypeParameterRecord {
-            header: frozen_header(OwnerKey::TypeParameter(ordinary), OwnerKind::TypeParameter),
+            header: current_header(OwnerKey::TypeParameter(ordinary), OwnerKind::TypeParameter),
             declaration: function.declaration,
             name: Name::new("T").unwrap(),
             constraints: TypeParameterConstraints::Owned,
@@ -180,7 +180,7 @@ fn fixture() -> Fixture {
     consumer_owners.insert(
         OwnerKey::Parameter(parameter),
         owner(PackageInterfaceRecord::Parameter(ParameterRecord {
-            header: frozen_header(OwnerKey::Parameter(parameter), OwnerKind::Parameter),
+            header: current_header(OwnerKey::Parameter(parameter), OwnerKind::Parameter),
             parent: ParameterParent::Function(function.declaration),
             name: Name::new("value").unwrap(),
             ty: projection,
@@ -231,7 +231,7 @@ fn fixture() -> Fixture {
     supplier_owners.insert(
         OwnerKey::TypeParameter(contract_self),
         owner(PackageInterfaceRecord::TypeParameter(TypeParameterRecord {
-            header: frozen_header(
+            header: current_header(
                 OwnerKey::TypeParameter(contract_self),
                 OwnerKind::TypeParameter,
             ),
@@ -301,7 +301,7 @@ fn fixture() -> Fixture {
     supplier_owners.insert(
         OwnerKey::Parameter(mapped_parameter),
         owner(PackageInterfaceRecord::Parameter(ParameterRecord {
-            header: frozen_header(OwnerKey::Parameter(mapped_parameter), OwnerKind::Parameter),
+            header: current_header(OwnerKey::Parameter(mapped_parameter), OwnerKind::Parameter),
             parent: ParameterParent::Function(mapped_function.declaration),
             name: Name::new("cell").unwrap(),
             ty: cell,
@@ -411,7 +411,7 @@ fn private_output(f: &mut Fixture) -> (TypeObjectDigest, FieldId) {
     f.supplier_interface.owners.insert(
         OwnerKey::Field(field_id),
         owner(PackageInterfaceRecord::Field(FieldRecord {
-            header: frozen_header(OwnerKey::Field(field_id), OwnerKind::Field),
+            header: current_header(OwnerKey::Field(field_id), OwnerKind::Field),
             declaration: declaration_id,
             name: Name::new("cell").unwrap(),
             ty: f.cell,
@@ -480,7 +480,7 @@ fn public_private_output(f: &mut Fixture) -> (TypeObjectDigest, FieldId) {
     f.supplier_interface.owners.insert(
         OwnerKey::Field(field_id),
         owner(PackageInterfaceRecord::Field(FieldRecord {
-            header: frozen_header(OwnerKey::Field(field_id), OwnerKind::Field),
+            header: current_header(OwnerKey::Field(field_id), OwnerKind::Field),
             declaration: declaration_id,
             name: Name::new("private_cell").unwrap(),
             ty: private,
@@ -522,11 +522,11 @@ fn public_private_output(f: &mut Fixture) -> (TypeObjectDigest, FieldId) {
 fn revision(package: PackageId, n: u8, dependencies: Vec<DependencyRecord>) -> PackageRevision {
     PackageRevision {
         contract_version: 1,
-        graph_contract_version: 33,
+        graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
         package,
         revision: crate::platform::publication::RevisionCore {
             contract_version: crate::platform::publication::contract::REVISION_CONTRACT_VERSION,
-            graph_contract_version: 33,
+            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
             repository_id: RepositoryId::migrate(SEED, u64::from(n)),
             parents: vec![],
             semantic_state: SemanticStateDigest::from_bytes([n; 32]),
@@ -550,7 +550,7 @@ fn closure(
         f.consumer,
         2,
         vec![DependencyRecord {
-            graph_contract_version: 33,
+            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
             package: f.supplier,
             semantic_revision: supplier.revision.revision_id().unwrap(),
             package_revision: supplier_id,
@@ -624,9 +624,8 @@ fn associated_interface_local_proof_retains_foreign_obligation_and_exact_lexical
 }
 
 #[test]
-fn associated_interface_occurrences_check_each_owner_generation_and_forbid_private_field_authority()
-{
-    for version in [32, 35] {
+fn associated_interface_occurrences_require_current_owners_and_forbid_private_field_authority() {
+    for version in [0, u16::MAX] {
         for key_kind in 0..3 {
             let mut f = fixture();
             let key = match key_kind {
@@ -656,7 +655,7 @@ fn associated_interface_occurrences_check_each_owner_generation_and_forbid_priva
     f.consumer_interface.owners.insert(
         OwnerKey::Field(field),
         owner(PackageInterfaceRecord::Field(FieldRecord {
-            header: frozen_header(OwnerKey::Field(field), OwnerKind::Field),
+            header: current_header(OwnerKey::Field(field), OwnerKind::Field),
             declaration: f.function.declaration,
             name: Name::new("private_view").unwrap(),
             ty: f.projection,
@@ -674,7 +673,7 @@ fn associated_interface_occurrences_check_each_owner_generation_and_forbid_priva
         .owners
         .get_mut(&OwnerKey::Parameter(f.parameter))
         .unwrap()
-        .contract_version = 20;
+        .contract_version = 0;
     assert!(
         local_proof(
             &f,
@@ -752,7 +751,7 @@ fn associated_interface_exact_closure_discharges_foreign_obligations_and_checks_
                 f.consumer_interface.owners.insert(
                     OwnerKey::Parameter(id),
                     owner(PackageInterfaceRecord::Parameter(ParameterRecord {
-                        header: frozen_header(OwnerKey::Parameter(id), OwnerKind::Parameter),
+                        header: current_header(OwnerKey::Parameter(id), OwnerKind::Parameter),
                         parent: ParameterParent::Function(f.function.declaration),
                         name: Name::new("orphan").unwrap(),
                         ty: f.projection,
@@ -773,8 +772,8 @@ fn associated_interface_exact_closure_discharges_foreign_obligations_and_checks_
 }
 
 #[test]
-fn associated_interface_exact_closure_rejects_selection_generation_and_representation_authority() {
-    for version in [32, 35] {
+fn associated_interface_exact_closure_rejects_foreign_selection_and_representation_authority() {
+    for version in [0, u16::MAX] {
         for mutation in 0..2 {
             let (mut revisions, interfaces, consumer, supplier) = closure(fixture());
             let selected = revisions
@@ -797,7 +796,7 @@ fn associated_interface_exact_closure_rejects_selection_generation_and_represent
             .get_mut(&if mutation == 0 { consumer } else { supplier })
             .unwrap()
             .revision
-            .graph_contract_version = 32;
+            .graph_contract_version = u16::MAX;
         assert_eq!(
             validate_package_interface_closure(&revisions, &interfaces)
                 .unwrap_err()
@@ -805,41 +804,6 @@ fn associated_interface_exact_closure_rejects_selection_generation_and_represent
             DiagnosticClass::Semantic
         );
     }
-    // DependencyRecord's version describes its encoding, not its target's authority. Retain a
-    // genuinely encoded Graph32 edge selecting exact Graph33 meaning, and rekey the changed parent.
-    let f = fixture();
-    let consumer_package = f.consumer;
-    let supplier_package = f.supplier;
-    let PublicFixtureClosure {
-        mut revisions,
-        mut interfaces,
-    } = public_fixture_closure(f).unwrap();
-    let consumer = *revisions
-        .iter()
-        .find(|(_, revision)| revision.package == consumer_package)
-        .unwrap()
-        .0;
-    let supplier = *revisions
-        .iter()
-        .find(|(_, revision)| revision.package == supplier_package)
-        .unwrap()
-        .0;
-    let mut changed = revisions.remove(&consumer).unwrap();
-    changed.dependencies[0].graph_contract_version = 32;
-    let edge = &changed.dependencies[0];
-    let (digest, bytes) = encode_dependency(edge).unwrap();
-    assert_eq!(
-        decode_dependency(&bytes, &edge.package, digest).unwrap(),
-        *edge
-    );
-    revisions[&supplier]
-        .matches_dependency(supplier, edge)
-        .unwrap();
-    let changed_id = changed.encode().unwrap().0;
-    revisions.insert(changed_id, changed);
-    let descriptor = interfaces.remove(&consumer).unwrap();
-    interfaces.insert(changed_id, descriptor);
-    validate_package_interface_closure(&revisions, &interfaces).unwrap();
     let f = fixture();
     let contract_key = OwnerKey::Declaration(f.contract.declaration);
     let (mut revisions, interfaces, consumer, _) = closure(f);
@@ -1384,7 +1348,7 @@ fn associated_interface_borrow_function_uses_exact_source_parameter_owner() {
                 else {
                     unreachable!()
                 };
-                parameter.header.contract_version = if mutation == 3 { 32 } else { 35 };
+                parameter.header.contract_version = if mutation == 3 { 0 } else { u16::MAX };
             }
             5 => {
                 let PackageInterfaceRecord::Parameter(parameter) = &mut f
@@ -1563,7 +1527,7 @@ fn public_fixture_closure_with(
         f.consumer,
         2,
         vec![DependencyRecord {
-            graph_contract_version: 33,
+            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
             package: f.supplier,
             semantic_revision: supplier.revision.revision_id()?,
             package_revision: supplier_id,
@@ -1659,7 +1623,7 @@ fn associated_interface_complete_type_phase_checks_nonborrow_nested_and_each_own
                 f.consumer_interface.owners.insert(
                     OwnerKey::Parameter(id),
                     owner(PackageInterfaceRecord::Parameter(ParameterRecord {
-                        header: frozen_header(OwnerKey::Parameter(id), OwnerKind::Parameter),
+                        header: current_header(OwnerKey::Parameter(id), OwnerKind::Parameter),
                         parent: ParameterParent::Function(f.function.declaration),
                         name: Name::new("orphan").unwrap(),
                         ty: f.projection,
@@ -1678,7 +1642,7 @@ fn associated_interface_complete_type_phase_checks_nonborrow_nested_and_each_own
                 else {
                     unreachable!()
                 };
-                parameter.header.contract_version = if mutation == 1 { 32 } else { 35 };
+                parameter.header.contract_version = if mutation == 1 { 0 } else { u16::MAX };
             }
             _ => {
                 let malformed = intern(
@@ -1697,25 +1661,10 @@ fn associated_interface_complete_type_phase_checks_nonborrow_nested_and_each_own
             }
         }
         let error = load_public_interface(f.consumer, &f.consumer_interface).unwrap_err();
-        if mutation == 2 {
-            // The frozen interface21 envelope rejects Graph35 at the newer interface floor.
-            // Retain that refusal, then isolate the unsupported owner header behind a valid
-            // current envelope. Neither failure reaches semantic occurrence admission.
+        if matches!(mutation, 1 | 2) {
             assert_eq!(error.class, DiagnosticClass::Corrupt);
             assert_eq!(error.code, "package_interface_closure");
-            assert!(
-                error
-                    .message
-                    .contains("Graph 34 owners require interface generation 22")
-            );
-            f.consumer_interface
-                .owners
-                .get_mut(&OwnerKey::Parameter(f.parameter))
-                .unwrap()
-                .contract_version = PACKAGE_INTERFACE_CONTRACT_VERSION;
-            let error = load_public_interface(f.consumer, &f.consumer_interface).unwrap_err();
-            assert_eq!(error.class, DiagnosticClass::Semantic);
-            assert_eq!(error.code, "kernel_owner_header");
+            assert!(error.message.contains("foreign graph contract"));
         } else {
             assert_eq!(
                 error.class,

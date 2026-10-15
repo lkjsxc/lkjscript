@@ -242,6 +242,67 @@ impl DataSequences {
         assert_eq!(&actual.unwrap(), expected, "{target}, detached={detached}");
         records
     }
+
+    pub fn queue_expected(
+        &self,
+        target: &str,
+        input: &Value,
+        expected: &Value,
+        cases: &mut Vec<BatchCase>,
+    ) {
+        assert!(TARGETS.contains(&target));
+        cases.push(success_case(target, input, expected, cases.len()));
+    }
+
+    pub fn source_batch(&self, label: &str, cases: &[BatchCase]) {
+        assert!(self.supplier.project.exists());
+        assert!(self.consumer.project.exists());
+        self.verify_identity();
+        for row in self.consumer.source_batch(label, "data-trace", cases) {
+            if let Some(execution) = row.iter().find(|record| record.operation == "execution") {
+                assert_eq!(compact_field(execution, "differential"), "equal");
+            }
+        }
+        self.verify_identity();
+    }
+
+    pub fn batch(&self, label: &str, cases: &[BatchCase]) -> Vec<Vec<CompactRecord>> {
+        assert!(!self.supplier.project.exists());
+        assert!(!self.consumer.project.exists());
+        assert!(!self.generic.path.exists());
+        let descriptor = self.consumer.root.path().join("data-trace.deployment.json");
+        let records = self.consumer.batch(label, &descriptor, cases);
+        for row in &records {
+            if let Some(execution) = row.iter().find(|record| record.operation == "execution") {
+                joined(execution);
+            }
+        }
+        self.verify_identity();
+        records
+    }
+}
+
+pub(super) fn success_case(
+    target: &str,
+    input: &Value,
+    expected: &Value,
+    serial: usize,
+) -> BatchCase {
+    let mut case = BatchCase::success(format!("{target}-{serial}"), input, expected.clone());
+    case.target = Some(target.to_owned());
+    case
+}
+
+pub(super) fn failure_case(
+    target: &str,
+    input: &Value,
+    class: &'static str,
+    code: &'static str,
+    serial: usize,
+) -> BatchCase {
+    let mut case = BatchCase::failure(format!("{target}-{serial}"), input, class, code);
+    case.target = Some(target.to_owned());
+    case
 }
 
 pub(super) fn joined(execution: &CompactRecord) {

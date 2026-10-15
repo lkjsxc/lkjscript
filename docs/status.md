@@ -1,30 +1,43 @@
 # Current status
 
-Snapshot: 2026-10-15. Work is paused at the user's request with the bounded native-verification packing candidate in [draft PR #15](https://github.com/lkjsxc/lkjscript/pull/15), on `work/native-verification-packing-20261015`, based on accepted main `fa158b7e86a48af0dc6c6e28f548493723aef39b`. **Fresh full29 and mainline integration remain pending.** This checkpoint changes three test files and reporting documentation; language/runtime code, deployment descriptors, generated assets and scaling factors are unchanged.
+Updated 2026-10-15. Epoch Zero implementation is present in the current source;
+fresh acceptance, mainline delivery and hosted verification remain the next gate.
+The latest published release remains `v0.1.94`.
 
-The [focused run](/home/coder/workspace/lkjscript-self-tail-locals-20261014/.artifacts/self-tail-final-first/native-verification-packing-checkpoint-20261015-first/subprocess.json) passed a cold pinned compilation, all **six packing controls**, and the exact native checker integration case. It preserved source and compiler/configuration context throughout execution. The [comparison](/home/coder/workspace/lkjscript-self-tail-locals-20261014/.artifacts/self-tail-final-first/native-verification-packing-checkpoint-20261015-first/comparison.stdout) confirms exact ordered input/result equality across **18 groups**, with unchanged independent oracles, authoring coverage, policies, refusals, recovery and joined cleanup. Both runs used the identical copied production CLI, SHA-256 `6969ad34cc257ba719d8182f160b3553d1df12f3845e0c5eb736fe8b5478ca24`. Reporting edits followed these tests and are not another acceptance run.
+## Current capabilities
 
-The attempted full29 on `5e4fa6f0` found five `single_range_in_vec_init` Clippy errors in test assertions. The remaining work was deliberately cancelled after the user's stop request; the [original terminal](/home/coder/workspace/lkjscript-self-tail-locals-20261014/.artifacts/self-tail-final-first/native-packing-full29-20261015-first/subprocess.json) records cancellation, complete owned-process cleanup, and stable source/compiler context. Native logs remain at `/tmp/lkjscript-origin-reporting-20261014-odTYkJ/source/.artifacts/lkjscript-dev/check/1792043588989209825-643852-0/`. Commit `df7c36dfa79eb6ae208db59d98e4a8d0c1f5cef4` expresses those five exact singleton-range assertions as slices, without suppressing lints or changing packing behavior. The [focused repair verification](/home/coder/workspace/lkjscript-self-tail-locals-20261014/.artifacts/self-tail-final-first/native-packing-clippy-fix-20261015-first/receipt.json) passed workspace formatting, workspace all-target/all-feature Clippy with warnings denied, pinned integration-target compilation, and all six packing controls. The other eight integration-target cases were filtered out in this repair check. This is not completed full acceptance; the earlier native checker result retains its original source binding.
+- Accepted typed meaning graphs, atomic publication and exact offline packages.
+- Affine ownership, nominal records/sequences, generic contract witnesses,
+  associated owned types, source-tied views and scoped parallel reads.
+- Transferable owners, reusable workers and shared multi-instance execution.
+- Production bytecode checked against an independent canonical interpreter;
+  native dependency validation, component analysis and stage planning.
+- One canonical schema fingerprint binding normalized production source and build
+  inputs; current-only codecs and regenerated maintained graph/transport/artifacts.
+- Bounded immutable supplier reuse and native test fixture pools; source and
+  deployment pure batches preserve independent case results and invocation cleanup.
+- Reduced VM admission/copy work, shared verifier bootstrap and compressed guidance;
+  complete semantic/resource matrices and process-boundary smoke tests remain required.
 
-The [single diagnostic pair](/home/coder/workspace/lkjscript-self-tail-locals-20261014/.artifacts/self-tail-final-first/native-verification-packing-checkpoint-20261015-first/metrics.json) measured:
+These are source capabilities. Source acceptance, distributed-byte acceptance and
+publication have separate proof and authority.
 
-| Measurement | Before | Candidate |
-| --- | ---: | ---: |
-| Complete checker wall time | 1,245.264 s | 986.747 s |
-| Successful-run preparation | 232.632 s | 31.162 s |
-| Successful-run invocation | 756.414 s | 711.578 s |
-| Successful-run encoding | 0.683 s | 0.813 s |
-| Batch executions | 765 | 83 |
-| Retained proof logical file bytes | 120,243,744 | 116,331,275 |
+## Next milestone
 
-This is one observed test-harness comparison, not a distribution speedup or completed source acceptance. Encoding increased; cumulative allocation counters in the metrics are not peak memory. Packing retains the 900,000-byte input soft target, independently bounds input and expected output under the unchanged JSON limits, validates both envelopes with the existing strict reader, and preserves every ordered case. The arbitrary 128-case cutoff is removed.
+Complete dependency-complete changed/full and release-source acceptance, integrate
+through normal mainline flow, then obtain exact finalized-candidate acceptance and
+successful hosted Verify/Release terminals. Retain all required cases, independent
+oracles, safety policies, exact bytes and joined cleanup throughout.
 
-**Resume only when requested:** use `/tmp/lkjscript-origin-reporting-20261014-odTYkJ/source`; retain both original proof roots, the preflight target, and cancelled full-run target `.artifacts/full29-target-5e4fa6f0-first`. Run dependency-complete fresh acceptance for the final candidate with a **new absent governed target** before mainline integration. The existing immutable Q verifier at `.artifacts/verifier-bootstrap.FYkEKF3P/lkjscript-dev` has unchanged compiler inputs; recheck its recorded source/context binding before reuse. The preflight target is not a governed acceptance target. No full run, hosted verification or release is left running by this checkpoint. The next VM argument-storage experiment was stopped before implementation; its ignored draft copies remain in W and are not part of this candidate.
+The retained full-suite baseline was 124.90 minutes. The requested local target
+below three minutes and hosted target below ten minutes remain unproven; focused
+improvements do not establish either complete-suite SLA.
 
-The accepted Cargo-origin implementation at commit `a3251c6f507f8febc907be269cffc2fdfdf2a45a`, tree `edc437c3f9f176d788135e6ffe08f5495537726d`, passed [clean-T full29](/tmp/lkjscript-origin-acceptance-20261014-j9t7N6/source/.artifacts/lkjscript-dev/check/1791983366845361371-3690303-0/receipt.json): **29 fresh gates, zero reuse**, in **124.90 minutes**, with stable recorded input `verification_ce124a59bb5d96bf9262312d8884fe9398295d3818e61f11893bbe87dc985f51`. The [original terminal](/home/coder/workspace/lkjscript-cargo-origin-20261014/.artifacts/cargo-origin-first/acceptance-original-terminal-first.json) is retained. The [complete independent CHECK8 authentication](/tmp/lkjscript-origin-acceptance-20261014-j9t7N6/source/.artifacts/original-check8-full29-authentication-first/authentication.json) passed **68,023 checks**; its [original terminal](/tmp/lkjscript-origin-acceptance-20261014-j9t7N6/source/.artifacts/original-check8-full29-authentication-first/original-tool-terminal.json) records exit zero. This run binds that implementation commit; later reporting descendants have their separate five changed gates and cannot be relabeled as another full29 run.
+The next language increment is checked atomic graph changes with symbolic selectors.
+Regions, compositional effects and native backend/self-hosting expansion follow the
+language roadmap.
 
-The root library passed **2,454 tests with eight ignored**, public CLI **275 with one ignored**, and developer library **316 with 20 ignored**. [Actual post-run inventories](/tmp/lkjscript-origin-acceptance-20261014-j9t7N6/source/.artifacts/original-check8-post-run-listings-first/inventory.json) list **2,462 root-library and 336 developer-library tests**; they establish post-run observed bytes/listings, not a reconstructed pre-execution hash. The [source-pinned IndexedData validator](/tmp/lkjscript-origin-acceptance-20261014-j9t7N6/source/.artifacts/original-check8-indexed-progress-successor01/summary.json) passed **310 runs and 646 records** with zero issues. The complete original-evidence authentication admits these retained originals.
-
-**CHECK8/CACHE4** admits compilation origin for direct Cargo build/test producers with declared outputs and their complete selected workspace library/bin/test inventory. It binds the whole input snapshot digest and physical target; existing declaration-granular incremental compilation remains unchanged. Clippy and `workspace_tests` are serialized, source/config/compiler-rechecked nonproducer writers without per-unit debug/test-origin admission. The new empty governed target supplied this run's operational cold start without extending that proof boundary. Compiled-test origin admission remains a separate queued follow-up. [Verification](spec/verification.md#declared-cargo-executable-origin) owns the contract.
-
-The earlier hosted **0.1.96/da1289** candidate **38533864131/1 failed** its cumulative `workspace_tests` deadline at **9,600 seconds**, with **22/23 gates freshly passed**; the [sealed R failure capsule](/home/coder/workspace/lkjscript-associated-read-views-20261012/.artifacts/associated-read-views/source316-gen12-candidate-failure-diagnosis-first/handoff.json) is unchanged. No release retry is planned before fresh acceptance of the packing candidate; this checkpoint creates no new release. The last authenticated public release remains **v0.1.94**. The prior VM [full29 authentication](/home/coder/workspace/lkjscript-self-tail-locals-20261014/.artifacts/self-tail-final-first/full29-authentication-first/authentication.json) and [031563/58132 delivery](/home/coder/workspace/lkjscript-self-tail-locals-20261014/.artifacts/self-tail-final-first/main-delivery-successor01/delivery.json) retain their own source/contracts. Preserve W, WB, R and stash `548f64f928eeff41e1af53695afbf09a8d7efc12`.
+[Verification](spec/verification.md) owns gates and proof;
+[release](release.md) owns exact candidate/publication acceptance;
+[roadmap](roadmap.md) owns subsequent language milestones. Original execution
+receipts retain actual outcomes outside this dashboard.

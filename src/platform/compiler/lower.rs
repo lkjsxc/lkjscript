@@ -145,15 +145,7 @@ pub fn compile_unit<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         test: bound_summary.summary.test,
         validation_dependencies: bound_summary.summary.validation_dependencies,
     };
-    let associated_tag = match &record {
-        OwnerRecord::Declaration(d) => match &d.payload {
-            DeclarationPayload::OwnedContract(c) if !c.associated_types.is_empty() => Some(1),
-            DeclarationPayload::OwnedImplementation(i) if !i.associated_types.is_empty() => Some(2),
-            _ => None,
-        },
-        _ => None,
-    };
-    let key = CompilationUnitKey::derive_for_tag(&source, optimization, associated_tag)?;
+    let key = CompilationUnitKey::derive(&source, optimization)?;
     let route_ids = target_route_ids(witness, owner, &mut builder.work)?;
     let payload = builder.compile_payload(owner, record, &route_ids)?;
     builder.complete_owned_record_type_closure()?;
@@ -5306,7 +5298,8 @@ mod read_view_lower_tests {
         assert_eq!(tables.finish().read_view_fields, vec![first, second]);
     }
 
-    fn borrowed_call_source(generation: u16) -> Source {
+    fn borrowed_call_source() -> Source {
+        let generation = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
         let mut source = source(0, &[]);
         let callee = DeclarationId::from_bytes([40; 16]).unwrap();
         let parameters = [
@@ -5443,7 +5436,7 @@ mod read_view_lower_tests {
 
     #[test]
     fn borrowed_call_keeps_selected_ordered_source_despite_equal_types_and_backing_local() {
-        let source = borrowed_call_source(34);
+        let source = borrowed_call_source();
         let (code, _) = source.lower().unwrap();
         assert_eq!(
             code.instructions
@@ -5480,30 +5473,24 @@ mod read_view_lower_tests {
     }
 
     #[test]
-    fn retained_graph33_borrowed_call_keeps_the_original_scope_free_protocol() {
-        let source = borrowed_call_source(33);
+    fn borrowed_call_keeps_complete_scoped_adoption_and_cleanup_order() {
+        let source = borrowed_call_source();
         let (code, _) = source.lower().unwrap();
-        assert_eq!(
-            code.instructions
-                .iter()
-                .filter(|instruction| matches!(
-                    instruction,
-                    CompiledInstruction::BeginReadViewScope { .. }
-                        | CompiledInstruction::EndReadViewScope { .. }
-                ))
-                .count(),
-            0
-        );
-        assert_eq!(code.instructions.len(), 8);
+        assert_eq!(code.instructions.len(), 10);
+        let Some(CompiledInstruction::BeginReadViewScope { read_scope }) =
+            code.instructions.first()
+        else {
+            panic!("borrowed call begins its lexical read scope")
+        };
         assert!(matches!(
-            code.instructions[2],
+            code.instructions[3],
             CompiledInstruction::BeginBorrowCall {
                 source_local: 0,
                 source_position: 1
             }
         ));
         assert!(matches!(
-            code.instructions[4],
+            code.instructions[5],
             CompiledInstruction::AdoptBorrowResult {
                 source_local: 0,
                 binding_local: 1,
@@ -5511,23 +5498,22 @@ mod read_view_lower_tests {
             }
         ));
         assert_eq!(
-            code.instructions[6],
+            code.instructions[7],
+            CompiledInstruction::EndReadViewScope {
+                read_scope: *read_scope
+            }
+        );
+        assert_eq!(
+            code.instructions[8],
             CompiledInstruction::EndOwnedBorrow { binding_local: 1 }
         );
-        assert_eq!(code.instructions[7], CompiledInstruction::ReturnBorrowed);
+        assert_eq!(code.instructions[9], CompiledInstruction::ReturnBorrowed);
     }
 
     #[test]
-    fn current_function_bounds_retained_ordinary_loan_syntax_without_relabelling_it() {
-        let mut source = borrowed_call_source(33);
-        let OwnerRecord::Declaration(record) = source
-            .owners
-            .get_mut(&OwnerKey::Declaration(source.function))
-            .unwrap()
-        else {
-            panic!("function")
-        };
-        record.header.contract_version = 34;
+    fn current_function_bounds_ordinary_loan_syntax_and_rejects_foreign_owners() {
+        let current = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+        let source = borrowed_call_source();
         let (code, _) = source.lower().unwrap();
         assert!(matches!(
             code.instructions.first(),
@@ -5537,17 +5523,18 @@ mod read_view_lower_tests {
             instruction,
             CompiledInstruction::EndReadViewScope { .. }
         )));
-        let OwnerRecord::Expression(record) = &source.owners[&OwnerKey::Expression(source.root)]
-        else {
-            panic!("loan expression")
-        };
-        assert_eq!(record.contract_version, 33);
-        let OwnerRecord::Binding(record) =
-            &source.owners[&OwnerKey::Binding(BindingId::from_bytes([47; 16]).unwrap())]
-        else {
-            panic!("loan binding")
-        };
-        assert_eq!(record.header.contract_version, 33);
+        for owner in [
+            OwnerKey::Expression(source.root),
+            OwnerKey::Binding(BindingId::from_bytes([47; 16]).unwrap()),
+            OwnerKey::Parameter(source.parameter),
+        ] {
+            let record = &source.owners[&owner];
+            assert_eq!(record.header().contract_version, current);
+            crate::platform::kernel::encode_owner(record).unwrap();
+            let mut foreign = record.clone();
+            foreign.set_encoding_for_edit(current ^ 1);
+            assert!(crate::platform::kernel::encode_owner(&foreign).is_err());
+        }
     }
 
     #[test]
@@ -5692,7 +5679,7 @@ mod read_view_lower_tests {
 
     #[test]
     fn forwarded_view_result_adopts_an_owning_descriptor_and_closes_only_its_own_scope() {
-        let mut source = borrowed_call_source(34);
+        let mut source = borrowed_call_source();
         let callee = DeclarationId::from_bytes([40; 16]).unwrap();
         let selected = ParameterId::from_bytes([42; 16]).unwrap();
         let callee_root = ExpressionId::from_bytes([43; 16]).unwrap();

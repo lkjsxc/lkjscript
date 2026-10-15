@@ -1,6 +1,5 @@
-use super::support::{Native, field, path};
 use serde_json::{Value, json};
-use std::{collections::BTreeMap, path::Path};
+use std::collections::BTreeMap;
 
 pub fn input(n: i64, shape: u8) -> Vec<Value> {
     let mut keys: Vec<_> = (0..n).collect();
@@ -64,33 +63,6 @@ pub fn valid_cost(control: &Value, projected: &Value, nodes: u64, n: u64, k: u64
             a != u64::MAX && b != u64::MAX && b.checked_sub(a).is_some_and(|delta| delta <= extra)
         })
 }
-pub fn refusal(
-    public: &Native,
-    descriptor: &Path,
-    name: &str,
-    arguments: &Path,
-    class: &str,
-    code: &str,
-) {
-    let absent = public.root.join(format!("refused-{name}.json"));
-    let output = public.cli(
-        &public.root,
-        &[
-            "run",
-            "--deployment",
-            path(descriptor),
-            "--arguments-file",
-            path(arguments),
-            "--result-file",
-            path(&absent),
-        ],
-        false,
-    );
-    assert_eq!(field(&output, "diagnostic", "class"), class);
-    assert_eq!(field(&output, "diagnostic", "code"), code);
-    assert!(!absent.exists());
-}
-
 #[test]
 fn map_entry_cost_oracle_rejects_skipped_ingress_repeated_search_and_raw_readmission() {
     let control = json!({"input_admission_nodes":8195,"raw_result_admission_nodes":0,

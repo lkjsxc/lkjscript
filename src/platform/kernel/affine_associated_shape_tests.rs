@@ -645,8 +645,8 @@ fn owning_read_view_let_binding_preserves_memory_and_resource_authority() {
                 "owning view initializer requires its exact positive binding category",
             ),
             6 => (
-                "kernel_read_view_generation",
-                "view bindings require Graph 34 and an exact declared view type",
+                "kernel_owner_header",
+                "owner header contract or kind does not match its record",
             ),
             7 => (
                 "kernel_buffer_ownership",

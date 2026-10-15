@@ -2,24 +2,25 @@ use super::*;
 use lkjscript::platform::control::{parse_records, render_record};
 
 /// Feedback for changed boundary authoring/reader logic, never new-candidate acceptance.
-/// The caller supplies owned, absent storage and the frozen public v0.1.38 triple.
+/// The caller supplies owned, absent storage and an exact current-format asset triple.
 #[test]
-#[ignore = "requires an explicitly supplied frozen v0.1.38 archive and owned absent evidence root"]
-fn live_small_lifecycle_with_frozen_v0138() {
+#[ignore = "requires current-format archive assets and an owned absent evidence root"]
+fn live_small_lifecycle_and_selector_continuity_with_current_container() {
     let source = PathBuf::from(
-        std::env::var_os("LKJSCRIPT_LIFECYCLE_FIXTURE_ASSETS").expect("frozen assets"),
+        std::env::var_os("LKJSCRIPT_LIFECYCLE_FIXTURE_ASSETS").expect("current assets"),
     );
     let root = PathBuf::from(
         std::env::var_os("LKJSCRIPT_LIFECYCLE_FIXTURE_ROOT").expect("owned absent root"),
     );
     assert!(source.is_absolute() && root.is_absolute() && !root.exists());
-    assert_eq!(
-        archive::sha256_file(&source.join(archive::ARCHIVE_NAME))
-            .expect("public archive digest")
-            .0
-            .as_str(),
-        "fa10e7afb09c06e4a243f421050a0497ca9acd331cdf34c046650c85aef377aa"
-    );
+    let bytes = process::read_bounded(
+        &source.join(archive::ARCHIVE_NAME),
+        lkjscript::release_container::MAXIMUM_COMPRESSED_BYTES,
+    )
+    .expect("bounded current container");
+    let content = lkjscript::release_container::admit_gzip(&bytes)
+        .expect("current-only asset format")
+        .verified;
     fs::create_dir(&root).expect("owned evidence");
     let root = root.canonicalize().expect("canonical evidence");
     fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).expect("private root");
@@ -36,8 +37,8 @@ fn live_small_lifecycle_with_frozen_v0138() {
         verify: false,
         exact_assets: assets,
         latest_assets: PathBuf::new(),
-        tag: "v0.1.38".to_owned(),
-        commit: "7083f9a6d56ed702017942e100c3696fc6f35308".to_owned(),
+        tag: content.manifest.source.expected_release_tag.clone(),
+        commit: content.manifest.source.tagged_commit_sha.clone(),
         tier: Tier::BoundaryExactSmoke,
         acquisition: Acquisition::Simulated,
         evidence_root: root.clone(),
@@ -57,7 +58,7 @@ fn live_small_lifecycle_with_frozen_v0138() {
         &route.extraction(&options),
         &control,
     )
-    .expect("genuine historical archive admission");
+    .expect("current container admission");
     assert_eq!(admitted.manifest.source.tagged_commit_sha, options.commit);
     let receipt = run(&options, route, &admitted, &control).expect("lifecycle result retained");
     assert_eq!(
@@ -67,6 +68,11 @@ fn live_small_lifecycle_with_frozen_v0138() {
         receipt.failure.as_deref().unwrap_or("no diagnostic")
     );
     validate(&options, route, &admitted, &receipt).expect("maintained original reader");
+    let continuity = super::super::continuity::run(&options, &admitted, &control)
+        .expect("same-format selector continuity");
+    super::super::continuity::validate(&options, &admitted, &continuity)
+        .expect("current selector continuity original reader");
+
     for fault in ["omitted-command", "cleanup-failed", "missing-installation"] {
         let mut changed = receipt.clone();
         match fault {
@@ -92,7 +98,7 @@ fn live_small_lifecycle_with_frozen_v0138() {
     validate(&options, route, &admitted, &receipt).expect("restored original recovers");
     println!(
         "{}",
-        serde_json::json!({"fixture": "frozen-public-v0.1.38-small-lifecycle", "root": root,
+        serde_json::json!({"fixture": "current-container-lifecycle-and-selector-continuity", "root": root,
         "source": options.commit, "commands": receipt.commands.len(), "broad_application_invocations": 0,
         "product_builds": 0, "elapsed_nanoseconds": receipt.elapsed_nanoseconds,
         "created": receipt.structural.as_ref().expect("structural").created_value,

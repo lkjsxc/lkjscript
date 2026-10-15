@@ -300,7 +300,7 @@ mod tests {
     }
 
     #[test]
-    fn task_encoding_is_disjoint_and_rehashed_noncanonical_rows_reject() {
+    fn task_encoding_retains_distinct_kind_and_rehashed_noncanonical_rows_reject() {
         let integer = encode_type_object(&TypeObject::new(TypeForm::I64).unwrap())
             .unwrap()
             .0;
@@ -310,7 +310,7 @@ mod tests {
         })
         .unwrap();
         let (pure_digest, pure_bytes) = encode_type_object(&pure).unwrap();
-        assert_eq!(&pure_bytes[..8], b"LKJTYP10");
+        assert_eq!(&pure_bytes[..8], &super::super::contract::TYPE_OBJECT_MAGIC);
         for mask in 0..32 {
             let task = TypeObject::new(TypeForm::TaskFunction {
                 parameters: vec![integer],
@@ -319,13 +319,18 @@ mod tests {
             })
             .unwrap();
             let (digest, bytes) = encode_type_object(&task).unwrap();
-            assert_eq!(&bytes[..8], b"LKJTFN01");
+            assert_eq!(&bytes[..8], &super::super::contract::TYPE_OBJECT_MAGIC);
             assert_ne!(digest, pure_digest);
             assert_eq!(decode_type_object(&bytes, digest).unwrap(), task);
-            let alternate = crate::platform::packed::encode(
+            let mut malformed = task.clone();
+            let TypeForm::TaskFunction { effect, .. } = &mut malformed.form else {
+                unreachable!()
+            };
+            effect.requirements = vec![row(1).requirements[0]; 2];
+            let alternate = crate::platform::packed::encode_canonical(
                 super::super::contract::TYPE_OBJECT_MAGIC,
                 super::super::contract::TYPE_OBJECT_ENVELOPE_DOMAIN,
-                &task,
+                &malformed,
                 super::super::contract::MAXIMUM_TYPE_OBJECT_BYTES,
             )
             .unwrap();

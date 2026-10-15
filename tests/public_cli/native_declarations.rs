@@ -1,6 +1,13 @@
 //! Public native authoring, canonical re-entry and publication failures.
 use super::*;
 
+use super::native_map_entries::support::batch::{self, BatchCase};
+use super::native_map_entries::support::source_batch;
+use crate::semantic_cli;
+
+#[path = "semantic_cli_controls.rs"]
+mod semantic_cli_controls;
+
 fn compact_field<'a>(record: &'a CompactRecord, name: &str) -> &'a str {
     super::compact_field(record, name).unwrap()
 }
@@ -9,6 +16,7 @@ struct Native {
     root: tempfile::TempDir,
     executable: PathBuf,
     project: PathBuf,
+    mode: semantic_cli::Mode,
 }
 
 impl Native {
@@ -17,19 +25,31 @@ impl Native {
     }
 
     fn template(template: &str) -> Self {
-        let mut root = tempfile::tempdir().unwrap();
+        Self::template_in(template, semantic_cli::Mode::selected())
+    }
+
+    fn process_template(template: &str) -> Self {
+        Self::template_in(template, semantic_cli::Mode::process())
+    }
+
+    fn at(mut root: tempfile::TempDir, project: PathBuf, mode: semantic_cli::Mode) -> Self {
         if std::env::var_os("LKJSCRIPT_RETAIN_PRODUCT_EVIDENCE").is_some() {
             root.disable_cleanup(true);
             println!("retained native public evidence: {}", root.path().display());
         }
-        let executable = root.path().join("lkjscript");
-        copy_executable(&binary(), &executable);
-        let project = root.path().join("project");
-        let this = Self {
+        let executable = semantic_cli::executable(root.path(), mode, &binary());
+        Self {
             root,
             executable,
             project,
-        };
+            mode,
+        }
+    }
+
+    fn template_in(template: &str, mode: semantic_cli::Mode) -> Self {
+        let root = tempfile::tempdir().unwrap();
+        let project = root.path().join("project");
+        let this = Self::at(root, project, mode);
         this.cli(
             &[
                 "new",
@@ -51,42 +71,68 @@ impl Native {
         {
             command.arg("--project").arg(&self.project);
         }
-        let output = support::output(
-            command
-                .args(arguments)
-                .current_dir(self.root.path())
-                .env_clear()
-                .env("PATH", ""),
-        )
-        .unwrap();
+        command.args(arguments);
+        let full_arguments = command
+            .get_args()
+            .map(|argument| {
+                argument
+                    .to_str()
+                    .expect("UTF-8 public test argument")
+                    .to_owned()
+            })
+            .collect::<Vec<_>>();
+        let semantic = (self.mode == semantic_cli::Mode::HostSemantic)
+            .then(|| semantic_cli::execute(arguments, full_arguments.clone()))
+            .flatten();
+        let (output, mode) = match semantic {
+            Some(output) => (output, semantic_cli::Mode::HostSemantic),
+            None => (
+                semantic_cli::Response::from(
+                    support::output(
+                        command
+                            .current_dir(self.root.path())
+                            .env_clear()
+                            .env("PATH", ""),
+                    )
+                    .unwrap(),
+                ),
+                if self.mode == semantic_cli::Mode::CandidateProcess {
+                    self.mode
+                } else {
+                    semantic_cli::Mode::BoundaryProcess
+                },
+            ),
+        };
         // Each Native owns this disposable directory. Retain the actual public
-        // command response before status assertions, including expected failures.
-        static COMMAND_SERIAL: std::sync::atomic::AtomicUsize =
-            std::sync::atomic::AtomicUsize::new(0);
-        let serial = COMMAND_SERIAL.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let evidence = self.root.path().join("cli-evidence");
-        std::fs::create_dir_all(&evidence).unwrap();
-        let stem = format!("{serial:08}");
-        std::fs::write(evidence.join(format!("{stem}.stdout")), &output.stdout).unwrap();
-        std::fs::write(evidence.join(format!("{stem}.stderr")), &output.stderr).unwrap();
-        std::fs::write(
+        // command response for process boundaries and explicitly retained host evidence.
+        // Host semantic observations are never described as executable acceptance.
+        if mode != semantic_cli::Mode::HostSemantic || self.retains_evidence() {
+            static COMMAND_SERIAL: std::sync::atomic::AtomicUsize =
+                std::sync::atomic::AtomicUsize::new(0);
+            let serial = COMMAND_SERIAL.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let evidence = self.root.path().join("cli-evidence");
+            std::fs::create_dir_all(&evidence).unwrap();
+            let stem = format!("{serial:08}");
+            std::fs::write(evidence.join(format!("{stem}.stdout")), &output.stdout).unwrap();
+            std::fs::write(evidence.join(format!("{stem}.stderr")), &output.stderr).unwrap();
+            std::fs::write(
             evidence.join(format!("{stem}.command.json")),
             serde_json::to_vec_pretty(&serde_json::json!({
-                "executable": self.executable,
+                "executable": (mode != semantic_cli::Mode::HostSemantic).then_some(&self.executable),
                 "directory": self.root.path(),
-                "arguments": command.get_args()
-                    .map(|argument| argument.to_str().expect("UTF-8 public test argument"))
-                    .collect::<Vec<_>>(),
-                "environment_cleared": true,
-                "environment": {"PATH": ""},
-                "status": output.status.code(),
+                "arguments": full_arguments,
+                "execution_mode": mode.label(),
+                "environment_cleared": mode != semantic_cli::Mode::HostSemantic,
+                "environment": if mode == semantic_cli::Mode::HostSemantic { serde_json::Value::Null } else { serde_json::json!({"PATH": ""}) },
+                "status": output.code,
                 "expected_success": success,
             }))
             .unwrap(),
         )
         .unwrap();
+        }
         assert_eq!(
-            output.status.success(),
+            output.success,
             success,
             "{arguments:?}\n{}\n{}",
             String::from_utf8_lossy(&output.stdout),
@@ -95,12 +141,50 @@ impl Native {
         parse_records("native public result", &output.stdout).unwrap()
     }
 
+    fn retains_evidence(&self) -> bool {
+        self.mode != semantic_cli::Mode::HostSemantic
+            || std::env::var_os("LKJSCRIPT_RETAIN_PRODUCT_EVIDENCE").is_some()
+    }
+
     fn revision(&self) -> String {
         compact_field(
             compact_record(&self.cli(&["status"], true), "revision"),
             "id",
         )
         .to_owned()
+    }
+
+    /// Detached matrices always execute the selected product, including source tests.
+    fn batch(
+        &self,
+        label: &str,
+        descriptor: &Path,
+        cases: &[BatchCase],
+    ) -> Vec<Vec<CompactRecord>> {
+        batch::execute(self.root.path(), &self.executable, label, descriptor, cases)
+            .iter()
+            .map(|stdout| parse_records("native batch row", stdout.as_bytes()).unwrap())
+            .collect()
+    }
+
+    /// Every source matrix runs inside this exact selected product process.
+    fn source_batch(
+        &self,
+        label: &str,
+        target: &str,
+        cases: &[BatchCase],
+    ) -> Vec<Vec<CompactRecord>> {
+        source_batch::execute(
+            self.root.path(),
+            &self.executable,
+            label,
+            &self.project,
+            target,
+            cases,
+        )
+        .iter()
+        .map(|stdout| parse_records("native source batch row", stdout.as_bytes()).unwrap())
+        .collect()
     }
 
     fn input(&self, name: &str, source: &str) -> PathBuf {
@@ -200,7 +284,7 @@ declarations.end
 
 #[test]
 fn native_command_argument_files_preserve_large_inputs_and_pre_effect_admission() {
-    let public = Native::template("command");
+    let public = Native::process_template("command");
     let input = public.input(
         "measure.lkjc",
         &format!(
@@ -342,7 +426,7 @@ declarations.end
 
 #[test]
 fn native_command_result_files_preserve_typed_bytes_limits_and_detached_execution() {
-    let public = Native::template("command");
+    let public = Native::process_template("command");
     let input = public.input("result.lkjc", &format!(r#"request base={}
 declarations.begin
 (units
@@ -561,7 +645,7 @@ declarations.end
 
 #[test]
 fn native_command_map_results_count_json_entry_arrays_before_publication() {
-    let public = Native::template("command");
+    let public = Native::process_template("command");
     let input = public.input(
         "counts.lkjc",
         &format!(
@@ -1219,15 +1303,9 @@ fn native_declarations_create_resume_edit_and_reject_authority_changes() {
 #[test]
 fn native_lkjournal_draft_preserves_independent_canonical_signatures() {
     let root = tempfile::tempdir().unwrap();
-    let executable = root.path().join("lkjscript");
-    copy_executable(&binary(), &executable);
     let project = root.path().join("lkjournal");
     copy_regular_tree(Path::new(APPLICATION), &project);
-    let public = Native {
-        root,
-        executable,
-        project,
-    };
+    let public = Native::at(root, project, semantic_cli::Mode::selected());
     let before = public.revision();
     let selections = [
         (

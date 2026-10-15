@@ -31,15 +31,15 @@ declarations.end
     let flat = decode(flat);
     let native = decode(native);
     let bytes = canonical_authored_intent_bytes(&native.semantic).unwrap();
-    assert_eq!(&bytes[..8], b"LKJACR39");
+    assert_eq!(&bytes[..8], b"LKJACHNG");
     assert_eq!(
         bytes,
         canonical_authored_intent_bytes(&flat.semantic).unwrap()
     );
     assert_eq!(native.request_commitment, flat.request_commitment);
     assert_eq!(
-        commitment_codec_identity(&bytes),
-        "lkjscript-authored-change-codec-39"
+        &bytes[8..40],
+        &crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH
     );
     assert!(
         native
@@ -258,7 +258,7 @@ fn nominal_owned_native_scopes_drafts_and_renames_preserve_exact_fields() {
 }
 
 #[test]
-fn legacy_parameter_migration_promotes_complete_signature_without_rewriting_body() {
+fn nominal_parameter_mutations_update_current_signatures_without_rewriting_body() {
     let temporary = tempfile::tempdir().unwrap();
     let created = GraphRepository::create(
         &temporary.path().join("origin"),
@@ -267,7 +267,7 @@ fn legacy_parameter_migration_promotes_complete_signature_without_rewriting_body
     )
     .unwrap();
     let source = r#"declarations.begin
-(units (module create legacy (as $module)
+(units (module create nominal-signatures (as $module)
   (function create discard (as $discard) (visibility private) (effect pure)
     (parameter create queue (as $consumed) (type (owned-product (field payload ByteBuffer))) (use consume))
     (returns Unit) (body (unit)))
@@ -277,7 +277,7 @@ fn legacy_parameter_migration_promotes_complete_signature_without_rewriting_body
 declarations.end
 "#;
     let source = decode_compact_change(
-        "legacy-origin.lkjc",
+        "parameter-origin.lkjc",
         format!("request base={}\n{source}", created.current.head.revision).as_bytes(),
     )
     .unwrap();
@@ -287,36 +287,24 @@ declarations.end
         .unwrap();
     let allocated = source.allocated.clone();
     created.repository.publish(&source.publication).unwrap();
-    let mut historical = created
-        .repository
-        .view_current()
-        .unwrap()
-        .reconstruct_full_oracle()
-        .unwrap()
-        .value;
-    for name in ["$discard", "$read", "$consumed", "$borrowed"] {
-        historical
-            .owners
-            .get_mut(&allocated[name])
-            .unwrap()
-            .set_encoding_for_edit(31);
-    }
-    let legacy =
-        GraphRepository::create(&temporary.path().join("legacy"), &historical, None).unwrap();
-    let before = legacy.repository.view_current().unwrap();
+    let before = created.repository.view_current().unwrap();
     let unchanged = format!(
         "request base={}\ntype.owned-product as=@Carrier\ntype.field parent=@Carrier index=0 name=payload type=byte-buffer\nset.parameter-type parameter={} type=@Carrier\nset.parameter-type parameter={} type=@Carrier\n",
         before.revision(),
         allocated["$consumed"],
         allocated["$borrowed"]
     );
-    let unchanged = decode_compact_change("legacy-noop.lkjc", unchanged.as_bytes()).unwrap();
-    let errors = legacy
+    let unchanged = decode_compact_change("parameter-noop.lkjc", unchanged.as_bytes()).unwrap();
+    let errors = created
         .repository
         .prepare_authored_change(&unchanged.semantic, unchanged.options)
         .unwrap_err();
     assert_eq!(errors.len(), 1, "{errors:#?}");
     assert_eq!(errors[0].code, "publication_semantic_no_change");
+    assert_eq!(
+        created.repository.view_current().unwrap().revision(),
+        before.revision()
+    );
 
     let changed = format!(
         "request base={}\ncreate.owned-record as=$queue module={} name=Queue visibility=private\nadd.field as=$storage record=$queue name=payload type=byte-buffer\ntype.named as=@Queue declaration=$queue\nset.parameter-type parameter={} type=@Queue\nset.parameter-type parameter={} type=@Queue\n",
@@ -325,13 +313,22 @@ declarations.end
         allocated["$consumed"],
         allocated["$borrowed"]
     );
-    let changed = decode_compact_change("legacy-nominal.lkjc", changed.as_bytes()).unwrap();
-    let changed = legacy
+    let changed = decode_compact_change("parameter-nominal.lkjc", changed.as_bytes()).unwrap();
+    let changed = created
         .repository
         .prepare_authored_change(&changed.semantic, changed.options)
         .unwrap_or_else(|errors| panic!("{errors:#?}"));
-    legacy.repository.publish(&changed.publication).unwrap();
-    let after = legacy.repository.view_current().unwrap();
+    assert_eq!(
+        changed
+            .allocated
+            .keys()
+            .map(String::as_str)
+            .collect::<std::collections::BTreeSet<_>>(),
+        std::collections::BTreeSet::from(["$queue", "$storage"])
+    );
+    let queue = changed.allocated["$queue"];
+    created.repository.publish(&changed.publication).unwrap();
+    let after = created.repository.view_current().unwrap();
     for name in ["$discard", "$read"] {
         let O::Declaration(previous) = before.read_owner(allocated[name]).unwrap().value.unwrap()
         else {
@@ -342,14 +339,68 @@ declarations.end
             panic!("current function")
         };
         assert_eq!(
-            previous.payload, current.payload,
-            "signature promotion preserves the result, body and parameter identities"
+            previous, current,
+            "parameter mutation preserves the complete function record"
         );
-        assert_eq!(previous.header.contract_version, 31);
         assert_eq!(
             current.header.contract_version,
             crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
         );
+        let D::Function(function) = &current.payload else {
+            panic!("function")
+        };
+        assert_eq!(
+            before
+                .read_owner(OwnerKey::Expression(function.body))
+                .unwrap()
+                .value,
+            after
+                .read_owner(OwnerKey::Expression(function.body))
+                .unwrap()
+                .value
+        );
+        assert_ne!(
+            before
+                .owner_summary(allocated[name])
+                .unwrap()
+                .value
+                .unwrap()
+                .semantic_interface,
+            after
+                .owner_summary(allocated[name])
+                .unwrap()
+                .value
+                .unwrap()
+                .semantic_interface,
+            "parent signature summary must bind its changed child parameter type"
+        );
+    }
+    for (name, use_mode) in [
+        ("$consumed", crate::platform::kernel::ParameterUse::Consume),
+        ("$borrowed", crate::platform::kernel::ParameterUse::Borrow),
+    ] {
+        let O::Parameter(previous) = before.read_owner(allocated[name]).unwrap().value.unwrap()
+        else {
+            panic!("previous parameter")
+        };
+        let O::Parameter(mut current) = after.read_owner(allocated[name]).unwrap().value.unwrap()
+        else {
+            panic!("current parameter")
+        };
+        assert_eq!(current.use_mode, use_mode);
+        assert_ne!(previous.ty, current.ty);
+        let crate::platform::kernel::TypeForm::Named { declaration } = after
+            .read_type_object(current.ty)
+            .unwrap()
+            .value
+            .unwrap()
+            .form
+        else {
+            panic!("nominal parameter type")
+        };
+        assert_eq!(OwnerKey::Declaration(declaration.declaration), queue);
+        current.ty = previous.ty;
+        assert_eq!(current, previous, "only the parameter type changes");
     }
 }
 

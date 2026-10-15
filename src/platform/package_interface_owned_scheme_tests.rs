@@ -3,88 +3,7 @@ use crate::platform::kernel::*;
 use crate::platform::semantic_id::*;
 
 #[test]
-fn interface15_implementation_is_literal_and_cannot_carry_new_scheme_fields() {
-    let seed = b"generic-implementation-interface";
-    let declaration = DeclarationId::migrate(seed, 0);
-    let owner = OwnerKey::Declaration(declaration);
-    let header = OwnerHeader {
-        contract_version: 27,
-        owner,
-        kind: OwnerKind::OwnedImplementation,
-    };
-    let reference = DeclarationReference {
-        package: PackageId::migrate(seed, 0),
-        declaration,
-    };
-    let ty = encode_type_object(&TypeObject::new(TypeForm::ByteBuffer).unwrap())
-        .unwrap()
-        .0;
-    let bytes = crate::platform::packed::encode(
-        *b"LKJPIF15",
-        "lkjscript.package-interface-owner-envelope.v15",
-        &(
-            15_u16,
-            0_u32,
-            header,
-            Name::new("Flat").unwrap(),
-            6_u32,
-            reference,
-            ty,
-            vec![ty],
-            vec![(MethodId::migrate(seed, 0), reference)],
-        ),
-        MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
-    )
-    .unwrap();
-    let digest = PackageInterfaceOwnerDigest::of(&bytes);
-    let mut value = PackageInterfaceOwner::decode(&bytes, owner, digest).unwrap();
-    assert_eq!(value.encode().unwrap(), (digest, bytes));
-    let PackageInterfaceRecord::Declaration(d) = &mut value.record else {
-        unreachable!()
-    };
-    let PackageInterfaceDeclarationPayload::OwnedImplementation(i) = &mut d.payload else {
-        unreachable!()
-    };
-    assert!(i.type_parameters.is_empty());
-    assert!(i.implementation_parameters.is_empty());
-    assert!(i.methods[0].type_arguments.is_empty());
-    assert!(i.methods[0].implementations.is_empty());
-    i.type_parameters.push(TypeParameterId::migrate(seed, 0));
-    assert!(value.encode().is_err());
-    value.contract_version = 16;
-    let PackageInterfaceRecord::Declaration(d) = &mut value.record else {
-        unreachable!()
-    };
-    d.header.contract_version = 28;
-    let PackageInterfaceDeclarationPayload::OwnedImplementation(i) = &mut d.payload else {
-        unreachable!()
-    };
-    i.methods[0].type_arguments.push(ty);
-    let (digest, bytes) = value.encode().unwrap();
-    assert_eq!(&bytes[..8], b"LKJPIF16");
-    assert_eq!(
-        PackageInterfaceOwner::decode(&bytes, owner, digest).unwrap(),
-        value
-    );
-    let disguised = crate::platform::packed::encode(
-        *b"LKJPIF15",
-        "lkjscript.package-interface-owner-envelope.v15",
-        &value,
-        MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
-    )
-    .unwrap();
-    assert!(
-        PackageInterfaceOwner::decode(
-            &disguised,
-            owner,
-            PackageInterfaceOwnerDigest::of(&disguised)
-        )
-        .is_err()
-    );
-}
-
-#[test]
-fn frozen_interface16_rejects_prerequisites_and_retains_original_bytes() {
+fn interface_flat_schema_preserves_prerequisites_and_recursive_witnesses() {
     let seed = b"prerequisite-interface-cut";
     let declaration = DeclarationId::migrate(seed, 0);
     let reference = DeclarationReference {
@@ -95,10 +14,10 @@ fn frozen_interface16_rejects_prerequisites_and_retains_original_bytes() {
         .unwrap()
         .0;
     let mut value = PackageInterfaceOwner {
-        contract_version: 16,
+        contract_version: PACKAGE_INTERFACE_CONTRACT_VERSION,
         record: PackageInterfaceRecord::Declaration(PackageInterfaceDeclaration {
             header: OwnerHeader {
-                contract_version: 28,
+                contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
                 owner: OwnerKey::Declaration(declaration),
                 kind: OwnerKind::OwnedImplementation,
             },
@@ -121,7 +40,7 @@ fn frozen_interface16_rejects_prerequisites_and_retains_original_bytes() {
         }),
     };
     let original = value.encode().unwrap();
-    assert_eq!(&original.1[..8], b"LKJPIF16");
+    assert_eq!(&original.1[..8], &PACKAGE_INTERFACE_MAGIC);
     assert_eq!(
         PackageInterfaceOwner::decode(&original.1, value.owner(), original.0)
             .unwrap()
@@ -148,14 +67,9 @@ fn frozen_interface16_rejects_prerequisites_and_retains_original_bytes() {
             scope: reference,
             parameter: i.implementation_parameters[0].id,
         });
-    assert!(value.encode().is_err());
-    value.contract_version = PACKAGE_INTERFACE_CONTRACT_VERSION;
-    let PackageInterfaceRecord::Declaration(d) = &mut value.record else {
-        unreachable!()
-    };
-    d.header.contract_version = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
     let (digest, bytes) = value.encode().unwrap();
-    assert_eq!(&bytes[..8], b"LKJPIF22");
+    assert_eq!(&bytes[..8], &PACKAGE_INTERFACE_MAGIC);
+    assert_ne!(digest, original.0);
     assert_eq!(
         PackageInterfaceOwner::decode(&bytes, value.owner(), digest).unwrap(),
         value
@@ -184,10 +98,8 @@ fn generic_interface_selects_and_admits_exact_owned_parameter_children_and_mappi
     let contract_item = TypeParameterId::migrate(seed, 2);
     let mapped_parameter = TypeParameterId::migrate(seed, 3);
     let method = MethodId::migrate(seed, 0);
-    // This control retains the genuine generic-scheme Graph28/interface16 profile.
-    // Contract, mapped function and every child owner use the same exact supported profile.
     let header = |owner, kind| OwnerHeader {
-        contract_version: 28,
+        contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
         owner,
         kind,
     };
@@ -242,7 +154,7 @@ fn generic_interface_selects_and_admits_exact_owned_parameter_children_and_mappi
     let mut owners = BTreeMap::from([(
         owner.owner(),
         PackageInterfaceOwner {
-            contract_version: 16,
+            contract_version: PACKAGE_INTERFACE_CONTRACT_VERSION,
             record: projected,
         },
     )]);
@@ -296,7 +208,7 @@ fn generic_interface_selects_and_admits_exact_owned_parameter_children_and_mappi
         owners.insert(
             key,
             PackageInterfaceOwner {
-                contract_version: 16,
+                contract_version: PACKAGE_INTERFACE_CONTRACT_VERSION,
                 record: PackageInterfaceRecord::Declaration(PackageInterfaceDeclaration {
                     header: header(key, kind),
                     name: Name::new(name).unwrap(),
@@ -313,7 +225,7 @@ fn generic_interface_selects_and_admits_exact_owned_parameter_children_and_mappi
         owners.insert(
             OwnerKey::TypeParameter(id),
             PackageInterfaceOwner {
-                contract_version: 16,
+                contract_version: PACKAGE_INTERFACE_CONTRACT_VERSION,
                 record: PackageInterfaceRecord::TypeParameter(TypeParameterRecord {
                     header: header(OwnerKey::TypeParameter(id), OwnerKind::TypeParameter),
                     declaration,
@@ -338,7 +250,7 @@ fn generic_interface_selects_and_admits_exact_owned_parameter_children_and_mappi
     owners.insert(
         OwnerKey::TypeParameter(parameter),
         PackageInterfaceOwner {
-            contract_version: 16,
+            contract_version: PACKAGE_INTERFACE_CONTRACT_VERSION,
             record: PackageInterfaceRecord::TypeParameter(TypeParameterRecord {
                 header: header(OwnerKey::TypeParameter(parameter), OwnerKind::TypeParameter),
                 declaration,

@@ -825,7 +825,6 @@ pub struct RepositoryView {
     validation_read_work: CanonicalReadWork,
     validation_steps: u64,
     idempotent_result: Option<super::HeadRecord>,
-    hidden_type_objects: BTreeSet<TypeObjectDigest>,
     link_transport_reuse: RefCell<Option<LinkTransportReuse>>,
 }
 
@@ -848,7 +847,6 @@ impl RepositoryView {
             },
             validation_steps: 0,
             idempotent_result: None,
-            hidden_type_objects: BTreeSet::new(),
             link_transport_reuse: RefCell::new(None),
         }
     }
@@ -856,7 +854,6 @@ impl RepositoryView {
     pub(super) fn new_idempotency_base(
         current: CurrentPublication,
         store: PackDirectoryStore,
-        hidden_type_objects: BTreeSet<TypeObjectDigest>,
         idempotent_result: super::HeadRecord,
     ) -> Self {
         Self {
@@ -876,7 +873,6 @@ impl RepositoryView {
             },
             validation_steps: 0,
             idempotent_result: Some(idempotent_result),
-            hidden_type_objects,
             link_transport_reuse: RefCell::new(None),
         }
     }
@@ -1556,14 +1552,6 @@ impl RepositoryView {
         admission: &mut RepositoryReadAdmission,
     ) -> Result<RevisionRead<Option<TypeObject>>, Diagnostic> {
         let mut work = RepositoryReadWork::default();
-        // Repreparing an accepted idempotent request must observe the same exact base that its
-        // reviewed plan observed. Immutable content added by that accepted child can now exist in
-        // the append-only physical store even though it was absent at the historical base. The
-        // idempotency view hides exactly those child additions so physical store growth cannot
-        // change normalized intent, transaction identity, or reviewed plan identity.
-        if self.hidden_type_objects.contains(&digest) {
-            return Ok(self.read(None, work));
-        }
         let Some(bytes) = self.read_optional_object_admitted(
             ObjectDomain::Type,
             digest.bytes(),
@@ -3899,10 +3887,6 @@ impl CanonicalBaseRead for RepositoryView {
         .map(canonical_read)
     }
 
-    fn accepted_retry_encoding(&self) -> Option<u16> {
-        self.idempotent_result
-            .map(|result| result.graph_contract_version)
-    }
     fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
         self.control
             .check()

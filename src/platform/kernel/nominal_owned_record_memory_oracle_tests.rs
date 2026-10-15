@@ -293,44 +293,57 @@ fn nominal_reference_rejects_recursive_sequence_layouts_and_old_generation() {
 }
 
 #[test]
-fn nominal_reference_admits_old_bound_envelopes_and_rejects_unused_phantom_actuals() {
+fn nominal_reference_requires_current_bound_owners_and_rejects_unused_phantom_actuals() {
     let baseline = source();
-    let mut changed = baseline.clone();
+    assert!(accepts(&baseline));
     let box_id = declaration(&baseline, "Box");
-    for owner in changed.owners.values_mut() {
-        if let OwnerRecord::TypeParameter(parameter) = owner
-            && parameter.declaration == box_id
-        {
-            parameter.header.contract_version = if parameter.constraints.requires_share() {
-                30
-            } else {
-                22
-            };
+    let bounded_parameters = baseline
+        .owners
+        .iter()
+        .filter_map(|(key, owner)| {
+            matches!(owner, OwnerRecord::TypeParameter(p) if p.declaration == box_id)
+                .then_some(*key)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(bounded_parameters.len(), 2);
+    for key in bounded_parameters {
+        for generation in [
+            0,
+            contract::GRAPH_CONTRACT_VERSION - 1,
+            contract::GRAPH_CONTRACT_VERSION + 1,
+        ] {
+            let mut changed = baseline.clone();
+            let owner = changed.owners.get_mut(&key).unwrap();
+            owner.set_encoding_for_edit(generation);
+            assert_eq!(encode_owner(owner).unwrap_err().code, "kernel_owner_header");
+            assert!(
+                !accepts(&changed),
+                "a bound parameter needs its own current owner contract"
+            );
         }
     }
-    assert!(
-        accepts(&changed),
-        "existing bounded parameter envelopes retain their meanings under the new nominal owner"
-    );
 
-    let mut changed = baseline.clone();
-    let scalar = baseline
-        .types
-        .iter()
-        .find_map(|(digest, object)| matches!(object.form, TypeForm::I64).then_some(*digest))
+    for (form, admitted) in [(TypeForm::ByteBuffer, true), (TypeForm::I64, false)] {
+        let mut changed = baseline.clone();
+        let actual = baseline
+            .types
+            .iter()
+            .find_map(|(digest, object)| (object.form == form).then_some(*digest))
+            .unwrap();
+        let object = TypeObject::new(TypeForm::Applied {
+            declaration: reference(&baseline, "Phantom"),
+            arguments: vec![actual],
+        })
         .unwrap();
-    let object = TypeObject::new(TypeForm::Applied {
-        declaration: reference(&baseline, "Phantom"),
-        arguments: vec![scalar],
-    })
-    .unwrap();
-    changed
-        .types
-        .insert(encode_type_object(&object).unwrap().0, object);
-    assert!(
-        !accepts(&changed),
-        "an unused phantom actual still has to prove its Owned bound"
-    );
+        changed
+            .types
+            .insert(encode_type_object(&object).unwrap().0, object);
+        assert_eq!(
+            accepts(&changed),
+            admitted,
+            "an unused phantom actual still has to prove its Owned bound: {form:?}"
+        );
+    }
 
     let mut changed = baseline;
     let phantom = declaration(&changed, "Phantom");
@@ -467,8 +480,7 @@ fn nominal_reference_reads_trusted_transitive_layout_without_granting_representa
         unreachable!()
     };
     let mut public_field = field.clone();
-    let mut hidden_field = field.clone();
-    hidden_field.header.contract_version = 31;
+    let hidden_field = field.clone();
     let object = TypeObject::new(TypeForm::Named {
         declaration: DeclarationReference {
             package: package_c,
@@ -509,7 +521,7 @@ fn nominal_reference_reads_trusted_transitive_layout_without_granting_representa
     snapshot.dependencies.insert(
         package_b,
         DependencyRecord {
-            graph_contract_version: 32,
+            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
             package: package_b,
             semantic_revision: crate::platform::semantic_id::RevisionId::from_digest([43; 32]),
             package_revision: revision_b,
@@ -518,7 +530,7 @@ fn nominal_reference_reads_trusted_transitive_layout_without_granting_representa
     snapshot.representation_dependencies.insert(
         package_c,
         DependencyRecord {
-            graph_contract_version: 31,
+            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
             package: package_c,
             semantic_revision: crate::platform::semantic_id::RevisionId::from_digest([44; 32]),
             package_revision: revision_c,

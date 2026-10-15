@@ -333,7 +333,7 @@ fn import_only(snapshot: &KernelSnapshot) -> (KernelSnapshot, PackageRevisionDig
     imported.dependencies.insert(
         package,
         DependencyRecord {
-            graph_contract_version: 26,
+            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
             package,
             semantic_revision: RevisionId::from_digest([167; 32]),
             package_revision: revision,

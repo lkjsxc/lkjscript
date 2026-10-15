@@ -26,6 +26,8 @@ pub(crate) struct Gate {
     pub(crate) maximum_stderr_bytes: u64,
     pub(crate) cacheable: bool,
     pub(crate) required_outputs: Vec<PathBuf>,
+    pub(crate) required_inputs: Vec<GateInput>,
+    pub(crate) environment: BTreeMap<String, String>,
     pub(crate) unavailable_exit_code: Option<i32>,
 }
 
@@ -41,6 +43,8 @@ impl Gate {
             maximum_stderr_bytes: DEFAULT_MAXIMUM_STREAM_BYTES,
             cacheable: true,
             required_outputs: Vec::new(),
+            required_inputs: Vec::new(),
+            environment: BTreeMap::new(),
             unavailable_exit_code: None,
         }
     }
@@ -48,6 +52,14 @@ impl Gate {
     pub(crate) fn identity_command(&self) -> &[String] {
         self.identity_command.as_deref().unwrap_or(&self.command)
     }
+}
+
+/// A consumer reads an admitted dependency output without claiming to produce it.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct GateInput {
+    pub(crate) path: PathBuf,
+    pub(crate) producer: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -151,6 +163,7 @@ pub(crate) struct GateReceipt {
     pub(crate) completed_unix_nanoseconds: u128,
     pub(crate) elapsed_nanoseconds: u64,
     pub(crate) process: Option<ProcessObservation>,
+    pub(crate) inputs: Vec<FileProof>,
     pub(crate) outputs: Vec<FileProof>,
     pub(crate) retained_outputs: Vec<FileProof>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -263,6 +276,8 @@ pub(crate) struct DagNode {
     pub(crate) name: String,
     pub(crate) dependencies: Vec<String>,
     pub(crate) command: Vec<String>,
+    pub(crate) required_inputs: Vec<GateInput>,
+    pub(crate) environment: BTreeMap<String, String>,
     pub(crate) cacheable: bool,
     pub(crate) unavailable_exit_code: Option<i32>,
 }

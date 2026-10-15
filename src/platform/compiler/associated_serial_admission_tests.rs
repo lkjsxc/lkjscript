@@ -113,23 +113,8 @@ fn encoded_source(
             test: summary.test,
             validation_dependencies: summary.validation_dependencies,
         };
-        let tag = match &unit.payload {
-            CompilationPayload::OwnedContract(contract)
-                if !contract.associated_types.is_empty() =>
-            {
-                Some(1)
-            }
-            CompilationPayload::OwnedImplementation(implementation)
-                if !implementation.associated_types.is_empty() =>
-            {
-                Some(2)
-            }
-            _ => None,
-        };
-        unit.key =
-            CompilationUnitKey::derive_for_tag(&unit.source, unit.optimization, tag).unwrap();
-        // The production encoder selects the proper associated envelope. Its
-        // structural validation does not confer semantic artifact admission.
+        unit.key = CompilationUnitKey::derive(&unit.source, unit.optimization).unwrap();
+        // Structural validation does not confer semantic artifact admission.
         let (key, bytes) = unit.encode().unwrap();
         assert_eq!(CompilationUnit::decode(&bytes, key).unwrap(), unit);
         loaded.objects.remove(&old_unit).unwrap();
@@ -223,32 +208,17 @@ fn associated_serial_unused_owned_binding_rejects_after_complete_reencoding() {
 }
 
 #[test]
-fn associated_serial_actual_parameter_generation_rejects_after_complete_reencoding() {
+fn associated_serial_parameter_owner_requires_current_contract() {
     let fixture = fixture();
     let mut source = fixture.source.clone();
     let owner = block_parameter(&source);
     let record = source.owners.get_mut(&owner).unwrap();
-    let OwnerRecord::Parameter(parameter) = record else {
-        unreachable!()
-    };
+    record.set_encoding_for_edit(crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION ^ 1);
     assert_eq!(
-        parameter.header.contract_version,
-        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-        "the fixture was freshly authored under the selected current source profile",
-    );
-    assert!(matches!(
-        source.types[&parameter.ty].form,
-        TypeForm::AssociatedWitnessProjection { .. }
-    ));
-    record.set_encoding_for_edit(32);
-    let bytes = encoded_source(&fixture.loaded, &source, owner);
-    let error = load_artifact(&bytes)
-        .expect_err("current enclosing unit cannot upgrade an old parameter occurrence");
-    assert_eq!(error.class, DiagnosticClass::Corrupt, "{error:?}");
-    assert_eq!(error.code, "artifact_nominal_meaning", "{error:?}");
-    assert!(
-        error.message.contains("kernel_owned_associated_generation"),
-        "{error:?}"
+        crate::platform::kernel::encode_owner(record)
+            .unwrap_err()
+            .code,
+        "kernel_owner_header"
     );
     fixture.loaded.require_current_admission(|| Ok(())).unwrap();
 }

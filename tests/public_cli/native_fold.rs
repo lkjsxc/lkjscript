@@ -13,44 +13,53 @@ use fixture::Folds;
 #[test]
 fn native_blocked_folds_import_exactly_and_preserve_complete_results_after_source_removal() {
     let folds = Folds::new();
-    for detached in [false, true] {
-        if detached {
-            folds.detach();
-        }
-        for items in cases::inputs() {
-            for mode in 0..3 {
-                let arguments = json!([items, {"count":3,"sum":11}, mode]);
-                let (records, result) = folds.run("imported", &arguments, detached, true);
-                assert_eq!(result.unwrap(), cases::expected(&items, 3, 11));
-                if !detached {
-                    assert_eq!(
-                        compact_field(compact_record(&records, "execution"), "differential"),
-                        "equal"
-                    );
-                }
-            }
-        }
-        for mode in 0..2 {
-            let (_, empty) = folds.run("trap-probe", &json!([[], mode]), detached, true);
-            assert_eq!(empty.unwrap(), json!(29));
-            // Failure after successful prefixes covers scalar, full-block and remainder paths.
-            for prefix in [0, 3, 7, 8, 16] {
-                let mut items = vec![1_i64; prefix];
-                items.push(-1);
-                let (failure, missing) =
-                    folds.run("trap-probe", &json!([items, mode]), detached, false);
-                assert!(missing.is_none());
-                let diagnostic = compact_record(&failure, "diagnostic");
-                assert_eq!(compact_field(diagnostic, "code"), "normalized_list_index");
-                if detached {
-                    cases::failed_join(diagnostic);
-                }
-                let (_, recovered) =
-                    folds.run("trap-probe", &json!([[1, 2, 3], mode]), detached, true);
-                assert_eq!(recovered.unwrap(), json!(35));
-            }
+    let mut batch = Vec::new();
+    for items in cases::inputs() {
+        for mode in 0..3 {
+            batch.push(BatchCase::success(
+                format!("imported-{}-{mode}", items.len()),
+                &json!([items, {"count":3,"sum":11}, mode]),
+                cases::expected(&items, 3, 11),
+            ));
         }
     }
+    for mode in 0..2 {
+        let mut empty =
+            BatchCase::success(format!("trap-empty-{mode}"), &json!([[], mode]), json!(29));
+        empty.target = Some("trap-probe".to_owned());
+        batch.push(empty);
+        // Failure after successful prefixes covers scalar, full-block and remainder paths.
+        for prefix in [0, 3, 7, 8, 16] {
+            let mut items = vec![1_i64; prefix];
+            items.push(-1);
+            let mut failure = BatchCase::failure(
+                format!("trap-{mode}-{prefix}"),
+                &json!([items, mode]),
+                "semantic",
+                "normalized_list_index",
+            );
+            failure.target = Some("trap-probe".to_owned());
+            batch.push(failure);
+            let mut recovered = BatchCase::success(
+                format!("recovery-{mode}-{prefix}"),
+                &json!([[1, 2, 3], mode]),
+                json!(35),
+            );
+            recovered.target = Some("trap-probe".to_owned());
+            batch.push(recovered);
+        }
+    }
+    assert_eq!(batch.len(), 76, "every original row in each fold lane");
+    folds.source_batch("attached-folds", "imported", &batch);
+    folds.detach();
+    folds.batch("detached-folds", "imported", &batch);
+    let (_, smoke) = folds.run(
+        "imported",
+        &json!([[7,8,9],{"count":3,"sum":11},1]),
+        true,
+        true,
+    );
+    assert_eq!(smoke.unwrap(), json!({"count":6,"sum":133}));
     folds.verify_identity();
 }
 
@@ -101,25 +110,30 @@ declarations.end
 #[test]
 fn native_blocked_folds_admit_the_complete_argument_before_invoking_a_callback() {
     let folds = Folds::new();
-    for detached in [false, true] {
-        if detached {
-            folds.detach();
-        }
-        for mode in 0..2 {
-            // The first item would trap, but complete raw admission must reject the last item first.
-            let (failure, absent) = folds.run(
-                "trap-probe",
-                &json!([[-1, "invalid"], mode]),
-                detached,
-                false,
-            );
-            assert!(absent.is_none());
-            let diagnostic = compact_record(&failure, "diagnostic");
-            assert_eq!(compact_field(diagnostic, "class"), "source");
-            assert_eq!(compact_field(diagnostic, "code"), "normalized_json_type");
-            let (_, recovered) = folds.run("trap-probe", &json!([[1, 2, 3], mode]), detached, true);
-            assert_eq!(recovered.unwrap(), json!(35));
-        }
+    let mut batch = Vec::new();
+    for mode in 0..2 {
+        // The first item would trap, but complete raw admission must reject the last item first.
+        batch.push(BatchCase::failure(
+            format!("invalid-tail-{mode}"),
+            &json!([[-1, "invalid"], mode]),
+            "source",
+            "normalized_json_type",
+        ));
+        batch.push(BatchCase::success(
+            format!("after-invalid-tail-{mode}"),
+            &json!([[1, 2, 3], mode]),
+            json!(35),
+        ));
     }
+    assert_eq!(
+        batch.len(),
+        4,
+        "every original admission/recovery row in each lane"
+    );
+    folds.source_batch("attached-admission", "trap-probe", &batch);
+    folds.detach();
+    folds.batch("detached-admission", "trap-probe", &batch);
+    let (_, smoke) = folds.run("trap-probe", &json!([[1, 2, 3], 1]), true, true);
+    assert_eq!(smoke.unwrap(), json!(35));
     folds.verify_identity();
 }

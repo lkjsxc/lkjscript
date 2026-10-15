@@ -29,7 +29,7 @@ launch the product, construct deployment configuration and observe bytes; the gr
 every cell update. Authoring project directories were moved before detached artifact execution.
 
 The literal inputs and compact authentic fixture live at
-[`tests/fixtures/cell-participation-predecessor`](../../../../tests/fixtures/cell-participation-predecessor/README.md).
+[`tests/fixtures/cell-participation-predecessor`](https://github.com/lkjsxc/lkjscript/blob/fa158b7e86a48af0dc6c6e28f548493723aef39b/tests/fixtures/cell-participation-predecessor/README.md).
 The artifact includes all three exact package closures and has identity
 `artifact_bundle_4659d83df8f33b7eacd596328fccfdf6ab1893ad399c2e82582d1aca37ed2ea2`;
 its SHA-256 is `ededb903b72c250405fccbc93db843d6a2217f11a2e35fc09b3b24c9a24b09e4`.

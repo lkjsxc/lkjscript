@@ -4848,9 +4848,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             | TypeForm::ReadViewApplied { .. }
             | TypeForm::AssociatedReadViewMember { .. }
             | TypeForm::AssociatedReadViewProjection { .. } => {
-                return Err(
-                    crate::platform::kernel::owned_associated_wire::unsupported_semantics(),
-                );
+                return Err(crate::platform::kernel::owned_associated::unsupported_semantics());
             }
             TypeForm::TypeParameter { parameter } => {
                 return substitutions.get(&parameter).copied().ok_or_else(|| {

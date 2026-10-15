@@ -121,153 +121,12 @@ fn supplied_type_commitments_and_counts_survive_storage_deduplication() {
 }
 
 #[test]
-fn immutable_predecessor_history_uses_its_original_envelope_and_bytes() {
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let initial =
-        prepare_initial_publication(&logical, &MemoryPackedStore::default(), None).unwrap();
-    let mut transaction = initial.publication.transaction;
-    transaction.contract_version = 5;
-    let transaction_bytes = crate::platform::packed::encode(
-        *b"LKJTXN05",
-        "lkjscript.transaction-envelope.v5",
-        &transaction,
-        super::contract::MAXIMUM_TRANSACTION_BYTES,
-    )
-    .unwrap();
-    let transaction_digest = TransactionDigest::of(&transaction_bytes);
-    let decoded = NormalizedTransaction::decode(&transaction_bytes, transaction_digest).unwrap();
-    assert_eq!(decoded, transaction);
-    assert_eq!(
-        decoded.encode().unwrap(),
-        (transaction_digest, transaction_bytes)
-    );
-
-    let mut diff = initial.publication.semantic_diff;
-    diff.contract_version = 3;
-    let diff_bytes = crate::platform::packed::encode(
-        *b"LKJDIFF3",
-        "lkjscript.semantic-diff-envelope.v3",
-        &diff,
-        super::contract::MAXIMUM_SEMANTIC_DIFF_BYTES,
-    )
-    .unwrap();
-    let diff_digest = SemanticDiffDigest::of(&diff_bytes);
-    let decoded = SemanticDiff::decode(&diff_bytes, diff_digest).unwrap();
-    assert_eq!(decoded, diff);
-    assert_eq!(decoded.encode().unwrap(), (diff_digest, diff_bytes));
-
-    let mut receipt = initial.publication.receipt;
-    receipt.contract_version = 5;
-    receipt.transaction = transaction_digest;
-    receipt.semantic_diff = diff_digest;
-    let receipt_bytes = crate::platform::packed::encode(
-        *b"LKJRCPT5",
-        "lkjscript.receipt-envelope.v5",
-        &receipt,
-        super::contract::MAXIMUM_RECEIPT_BYTES,
-    )
-    .unwrap();
-    let receipt_digest = ReceiptObjectDigest::of(&receipt_bytes);
-    let decoded = PublicationReceipt::decode(&receipt_bytes, receipt_digest).unwrap();
-    assert_eq!(decoded, receipt);
-    assert_eq!(decoded.encode().unwrap(), (receipt_digest, receipt_bytes));
-
-    // Rehashing a foreign envelope does not authorize a payload's different contract.
-    let forged = crate::platform::packed::encode(
-        super::contract::TRANSACTION_MAGIC,
-        super::contract::TRANSACTION_ENVELOPE_DOMAIN,
-        &transaction,
-        super::contract::MAXIMUM_TRANSACTION_BYTES,
-    )
-    .unwrap();
-    assert_eq!(
-        NormalizedTransaction::decode(&forged, TransactionDigest::of(&forged))
-            .unwrap_err()
-            .code,
-        "publication_transaction_canonical"
-    );
-    let mut current_diff = diff;
-    current_diff.contract_version = super::contract::SEMANTIC_DIFF_CONTRACT_VERSION;
-    assert_eq!(
-        super::prepare::validate_history_base(
-            None,
-            PublicationStatus::ProjectCreated,
-            &transaction,
-            &current_diff
-        )
-        .unwrap_err()
-        .code,
-        "publication_history_type_contract"
-    );
-}
-
-#[test]
-fn historical_acceptance_retains_identity_but_requires_rebuilt_current_proof() {
-    use crate::platform::witness::{
-        ValidationCertificateDigest, ValidatorContractDigest, decode_historical_witness_manifest,
-        decode_witness_manifest, encode_witness_manifest_content,
-    };
+fn current_acceptance_rebuilds_exact_proof_and_binds_the_next_publication() {
     let logical = crate::platform::kernel::tests::witness_snapshot();
     let mut store = MemoryPackedStore::default();
     let initial = prepare_initial_publication(&logical, &store, None).unwrap();
     install(&mut store, &initial.publication);
-    let mut old = initial.witness.manifest.clone();
-    old.validator_contract =
-        "validator_contract_c3c9a4a3504b3d2f6a54d6d0b352b4e9c2fc620c62fa6172c5b30f4219d48034"
-            .parse::<ValidatorContractDigest>()
-            .unwrap();
-    // Independent neutral rehash models historical acceptance, not current semantic proof.
-    old.certificate = ValidationCertificateDigest::of(
-        &bincode::encode_to_vec(
-            old.core(),
-            bincode::config::standard()
-                .with_little_endian()
-                .with_variable_int_encoding(),
-        )
-        .unwrap(),
-    );
-    let (digest, bytes) = encode_witness_manifest_content(&old).unwrap();
-    assert_eq!(
-        decode_historical_witness_manifest(&bytes, digest).unwrap(),
-        old
-    );
-    assert_eq!(
-        decode_witness_manifest(&bytes, digest).unwrap_err().code,
-        "witness_validator_contract"
-    );
-    let mut record = initial.publication.revision.clone();
-    record.publication.validation.witness = digest;
-    record.publication.validation.certificate = old.certificate;
-    record.publication.validation.validator_contract = old.validator_contract;
-    let (record_digest, record_bytes) = record.encode().unwrap();
-    let head = HeadRecord {
-        record: record_digest,
-        ..initial.publication.head
-    };
-    let accepted = AcceptedBinding::verify(head, &record, digest, &old).unwrap();
-    assert_eq!(accepted.head.revision, initial.publication.head.revision);
-    assert_eq!(
-        accepted.semantic_root,
-        initial.publication.accepted.semantic_root
-    );
-    assert_eq!(
-        accepted.semantic_state,
-        initial.publication.accepted.semantic_state
-    );
-    store
-        .stage(
-            ObjectKey::from_digest(ObjectDomain::ValidationWitness, digest.bytes()),
-            &bytes,
-            &mut StoreWork::default(),
-        )
-        .unwrap();
-    store
-        .stage(
-            ObjectKey::from_digest(ObjectDomain::Revision, record_digest.bytes()),
-            &record_bytes,
-            &mut StoreWork::default(),
-        )
-        .unwrap();
+    let accepted = initial.publication.accepted;
 
     let rebuilt =
         super::validation::RevalidatedBase::rebuild(initial.snapshot.clone(), &|| Ok(())).unwrap();
@@ -306,15 +165,6 @@ fn historical_acceptance_retains_identity_but_requires_rebuilt_current_proof() {
         vec![accepted.parent()]
     );
     assert!(prepared.authority.witness.manifest.contract_is_current());
-    assert_eq!(
-        decode_historical_witness_manifest(&bytes, digest).unwrap(),
-        old
-    );
-    let mut corrupt = bytes;
-    corrupt[16] ^= 1;
-    assert!(decode_historical_witness_manifest(&corrupt, digest).is_err());
-    old.contract_version = u16::MAX;
-    assert!(encode_witness_manifest_content(&old).is_err());
 }
 
 #[test]
@@ -527,39 +377,15 @@ fn incremental_publication_is_deterministic_parent_bound_and_isolated() {
 }
 
 #[test]
-fn history_codecs_reject_predecessor_magic_and_inconsistent_evidence() {
+fn history_codecs_reject_unknown_schema_and_inconsistent_evidence() {
     let logical = crate::platform::kernel::tests::witness_snapshot();
     let store = MemoryPackedStore::default();
     let initial = prepare_initial_publication(&logical, &store, None).expect("initial publication");
 
-    let mut predecessor_head = initial.publication.head_bytes.clone();
-    predecessor_head[..8].copy_from_slice(b"LKJHEAD6");
-    let error = HeadRecord::decode(&predecessor_head).expect_err("predecessor HEAD must reject");
-    assert_eq!(error.code, "packed_contract");
-
-    let mut predecessor_revision = initial.publication.revision_bytes.clone();
-    predecessor_revision[..8].copy_from_slice(b"LKJREV06");
-    assert_eq!(
-        RevisionRecord::decode(
-            &predecessor_revision,
-            RevisionObjectDigest::of(&predecessor_revision),
-        )
-        .expect_err("predecessor revision must reject")
-        .code,
-        "packed_contract"
-    );
-
-    let mut predecessor_receipt = initial.publication.receipt_bytes.clone();
-    predecessor_receipt[..8].copy_from_slice(b"LKJRCPT4");
-    assert_eq!(
-        PublicationReceipt::decode(
-            &predecessor_receipt,
-            ReceiptObjectDigest::of(&predecessor_receipt),
-        )
-        .expect_err("predecessor receipt must reject")
-        .code,
-        "packed_contract"
-    );
+    let mut unknown_schema = initial.publication.head_bytes.clone();
+    unknown_schema[8] ^= 1;
+    let error = HeadRecord::decode(&unknown_schema).expect_err("unknown schema must reject");
+    assert_eq!(error.code, "packed_schema");
 
     let mut foreign_head = initial.publication.head;
     foreign_head.contract_version -= 1;
@@ -570,7 +396,7 @@ fn history_codecs_reject_predecessor_magic_and_inconsistent_evidence() {
             initial.publication.authority.witness.digest,
             &initial.publication.authority.witness.manifest,
         )
-        .expect_err("programmatic predecessor HEAD must reject")
+        .expect_err("unknown programmatic HEAD contract must reject")
         .code,
         "publication_head_contract"
     );

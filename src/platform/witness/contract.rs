@@ -3,39 +3,33 @@
 use super::ValidatorContractDigest;
 use crate::platform::kernel::{NamespaceClass, OwnerKind, RelationKind};
 
-pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-10";
+pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness";
 pub const WITNESS_CONTRACT_VERSION: u16 = 10;
-pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-12";
+pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary";
 pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 12;
-pub const PREDECESSOR_OWNER_SUMMARY_CONTRACT_VERSION: u16 = 11;
-pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-41";
+pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator";
 pub const VALIDATOR_CONTRACT_VERSION: u16 = 41;
 
-pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT10";
-pub const PREDECESSOR_WITNESS_MAGIC: [u8; 8] = *b"LKJWIT09";
-pub const PREDECESSOR_WITNESS_CONTRACT_VERSION: u16 = 9;
-pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM17";
-pub const PREDECESSOR_OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM16";
-pub const WITNESS_ENVELOPE_DOMAIN: &str = "lkjscript.witness.envelope.v10";
-pub const PREDECESSOR_WITNESS_ENVELOPE_DOMAIN: &str = "lkjscript.witness.envelope.v9";
-pub const OWNER_SUMMARY_ENVELOPE_DOMAIN: &str = "lkjscript.owner-summary.envelope.v12";
-pub const PREDECESSOR_OWNER_SUMMARY_ENVELOPE_DOMAIN: &str = "lkjscript.owner-summary.envelope.v11";
+pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWITNS";
+pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUMRY";
+pub const WITNESS_ENVELOPE_DOMAIN: &str = "lkjscript.witness.envelope";
+pub const OWNER_SUMMARY_ENVELOPE_DOMAIN: &str = "lkjscript.owner-summary.envelope";
 
-pub const VALIDATION_WITNESS_DIGEST_DOMAIN: &str = "lkjscript.validation-witness.v8";
-pub const OWNER_SUMMARY_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.v8";
-pub const VALIDATION_CERTIFICATE_DIGEST_DOMAIN: &str = "lkjscript.validation-certificate.v8";
-pub const VALIDATOR_CONTRACT_DIGEST_DOMAIN: &str = "lkjscript.validator-contract.v13";
+pub const VALIDATION_WITNESS_DIGEST_DOMAIN: &str = "lkjscript.validation-witness";
+pub const OWNER_SUMMARY_DIGEST_DOMAIN: &str = "lkjscript.owner-summary";
+pub const VALIDATION_CERTIFICATE_DIGEST_DOMAIN: &str = "lkjscript.validation-certificate";
+pub const VALIDATOR_CONTRACT_DIGEST_DOMAIN: &str = "lkjscript.validator-contract";
 
-pub const INTERFACE_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.interface.v8";
-pub const IMPLEMENTATION_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.implementation.v7";
-pub const TYPE_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.type.v6";
-pub const EFFECT_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.effect.v6";
-pub const CAPABILITY_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.capability.v6";
-pub const RELATION_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.relation.v6";
-pub const PRESENTATION_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.presentation.v6";
-pub const TEST_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.test.v6";
+pub const INTERFACE_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.interface";
+pub const IMPLEMENTATION_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.implementation";
+pub const TYPE_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.type";
+pub const EFFECT_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.effect";
+pub const CAPABILITY_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.capability";
+pub const RELATION_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.relation";
+pub const PRESENTATION_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.presentation";
+pub const TEST_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.test";
 pub const VALIDATION_DEPENDENCY_DIGEST_DOMAIN: &str =
-    "lkjscript.owner-summary.validation-dependency.v6";
+    "lkjscript.owner-summary.validation-dependency";
 
 pub const MAXIMUM_OWNER_SUMMARY_BYTES: usize = 64 * 1024;
 pub const MAXIMUM_WITNESS_MANIFEST_BYTES: usize = 64 * 1024;
@@ -43,201 +37,59 @@ pub const MAXIMUM_OWNERSHIP_VALUE_BYTES: usize = 256;
 pub const MAXIMUM_RELATION_PREFIX_ITEMS: usize = 10_000;
 pub const MAXIMUM_TEST_DEPENDENCY_PREFIX_ITEMS: usize = 10_000;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ValidatorFeatureDescriptor {
-    pub name: &'static str,
-    pub version: u16,
-}
-
-/// This list is the executable owner for rules that affect acceptance or safe witness reuse.
-/// Changing one rule requires changing its feature version, which changes the validator digest.
-pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 44] = [
-    ValidatorFeatureDescriptor {
-        name: "opaque_nominal_owned_records",
-        version: 1,
-    },
-    ValidatorFeatureDescriptor {
-        name: "scoped_shareable_owned_inputs",
-        version: 1,
-    },
-    ValidatorFeatureDescriptor {
-        name: "source_tied_owned_read_results",
-        // ReadFrom(view) requires an accessible tagged referent path, never passive custody.
-        version: 2,
-    },
-    ValidatorFeatureDescriptor {
-        name: "parameterized_owned_contracts",
-        version: 2,
-    },
-    ValidatorFeatureDescriptor {
-        name: "structural_owned_sequences",
-        version: 2,
-    },
-    ValidatorFeatureDescriptor {
-        name: "lexical_owned_child_borrows",
-        version: 1,
-    },
-    ValidatorFeatureDescriptor {
-        name: "explicit_transferable_type_parameters",
-        version: 2,
-    },
-    ValidatorFeatureDescriptor {
-        name: "structured_parallel_owned_tasks",
-        version: 5,
-    },
-    ValidatorFeatureDescriptor {
-        name: "structural_owned_choices",
-        version: 2,
-    },
-    ValidatorFeatureDescriptor {
-        name: "structural_owned_products",
-        version: 3,
-    },
-    ValidatorFeatureDescriptor {
-        name: "symbolic_owned_parameters",
-        version: 6,
-    },
-    ValidatorFeatureDescriptor {
-        name: "explicit_owned_implementation_witnesses",
-        // Explicit application schemes preserve consumption, allowances and grants independently.
-        version: 9,
-    },
-    ValidatorFeatureDescriptor {
-        name: "sealed_owned_i64_cells",
-        version: 1,
-    },
-    ValidatorFeatureDescriptor {
-        name: "closed_external_signatures",
-        version: 4,
-    },
-    ValidatorFeatureDescriptor {
-        name: "canonical_binary64_computation",
-        version: 1,
-    },
-    ValidatorFeatureDescriptor {
-        name: "lexical_transaction_outcome",
-        version: 1,
-    },
-    ValidatorFeatureDescriptor {
-        name: "explicit_requirement_parameters",
-        version: 1,
-    },
-    ValidatorFeatureDescriptor {
-        name: "finite_generic_callable_instantiation",
-        version: 3,
-    },
-    ValidatorFeatureDescriptor {
-        name: "parametric_nominal_data",
-        version: 2,
-    },
-    ValidatorFeatureDescriptor {
-        name: "capture_safe_type_parameter_constraints",
-        version: 1,
-    },
-    ValidatorFeatureDescriptor {
-        name: "explicit_pure_function_binding",
-        version: 1,
-    },
-    ValidatorFeatureDescriptor {
-        name: "graph_5_full_validation",
-        version: 1,
-    },
-    ValidatorFeatureDescriptor {
-        name: "canonical_namespace",
-        version: 1,
-    },
-    ValidatorFeatureDescriptor {
-        name: "exact_ownership",
-        version: 1,
-    },
-    ValidatorFeatureDescriptor {
-        name: "single_relation_extractor",
-        version: 7,
-    },
-    ValidatorFeatureDescriptor {
-        name: "owner_summary_dimensions",
-        version: 5,
-    },
-    ValidatorFeatureDescriptor {
-        name: "declaration_local_aggregation",
-        version: 1,
-    },
-    ValidatorFeatureDescriptor {
-        name: "validation_dependency_projection",
-        version: 2,
-    },
-    ValidatorFeatureDescriptor {
-        name: "test_dependency_projection",
-        version: 1,
-    },
-    ValidatorFeatureDescriptor {
-        name: "canonical_persistent_map_v2",
-        version: 2,
-    },
-    ValidatorFeatureDescriptor {
-        name: "full_witness_rebuild",
-        version: 1,
-    },
-    ValidatorFeatureDescriptor {
-        name: "generic_owner_delta",
-        version: 1,
-    },
-    ValidatorFeatureDescriptor {
-        name: "reverse_impact_planner",
-        version: 2,
-    },
-    ValidatorFeatureDescriptor {
-        name: "incremental_owner_frontier",
-        version: 2,
-    },
-    ValidatorFeatureDescriptor {
-        name: "path_copy_witness_update",
-        version: 1,
-    },
-    ValidatorFeatureDescriptor {
-        name: "exact_dependency_interfaces",
-        version: 1,
-    },
-    ValidatorFeatureDescriptor {
-        name: "qualified_task_requirements",
-        version: 2,
-    },
-    ValidatorFeatureDescriptor {
-        name: "affine_capability_resources",
-        version: 10,
-    },
-    ValidatorFeatureDescriptor {
-        name: "owned_byte_buffers",
-        version: 2,
-    },
-    ValidatorFeatureDescriptor {
-        name: "same_task_owned_transfer",
-        version: 2,
-    },
-    ValidatorFeatureDescriptor {
-        name: "structured_session_relations",
-        version: 2,
-    },
-    ValidatorFeatureDescriptor {
-        name: "exact_http_route_topology",
-        version: 2,
-    },
-    ValidatorFeatureDescriptor {
-        name: "witness_selected_owned_associated_types",
-        // Complete associated semantic admission requires fresh proof after the
-        // earlier codec/preparation inventory; its old seals cannot be reused.
-        version: 2,
-    },
-    ValidatorFeatureDescriptor {
-        name: "associated_source_tied_read_view_families",
-        // Complete scopes, source/result relations, affine descriptors, declared paths and
-        // unused inventories require current independent admission, including every owner/root.
-        version: 1,
-    },
+/// Semantic obligations owned by the current validator implementation.
+/// Its generated implementation hash invalidates proof reuse when their code changes.
+pub const VALIDATOR_FEATURES: [&str; 44] = [
+    "opaque_nominal_owned_records",
+    "scoped_shareable_owned_inputs",
+    "source_tied_owned_read_results",
+    "parameterized_owned_contracts",
+    "structural_owned_sequences",
+    "lexical_owned_child_borrows",
+    "explicit_transferable_type_parameters",
+    "structured_parallel_owned_tasks",
+    "structural_owned_choices",
+    "structural_owned_products",
+    "symbolic_owned_parameters",
+    "explicit_owned_implementation_witnesses",
+    "sealed_owned_i64_cells",
+    "closed_external_signatures",
+    "canonical_binary64_computation",
+    "lexical_transaction_outcome",
+    "explicit_requirement_parameters",
+    "finite_generic_callable_instantiation",
+    "parametric_nominal_data",
+    "capture_safe_type_parameter_constraints",
+    "explicit_pure_function_binding",
+    "full_graph_validation",
+    "canonical_namespace",
+    "exact_ownership",
+    "single_relation_extractor",
+    "owner_summary_dimensions",
+    "declaration_local_aggregation",
+    "validation_dependency_projection",
+    "test_dependency_projection",
+    "canonical_persistent_map",
+    "full_witness_rebuild",
+    "generic_owner_delta",
+    "reverse_impact_planner",
+    "incremental_owner_frontier",
+    "path_copy_witness_update",
+    "exact_dependency_interfaces",
+    "qualified_task_requirements",
+    "affine_capability_resources",
+    "owned_byte_buffers",
+    "same_task_owned_transfer",
+    "structured_session_relations",
+    "exact_http_route_topology",
+    "witness_selected_owned_associated_types",
+    "associated_source_tied_read_view_families",
 ];
 
 pub fn validator_contract_digest() -> ValidatorContractDigest {
     let mut bytes = Vec::new();
+    bytes.extend_from_slice(&crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH);
+    bytes.extend_from_slice(&crate::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH);
     push_text(&mut bytes, VALIDATOR_CONTRACT_IDENTITY);
     push_text(
         &mut bytes,
@@ -257,8 +109,7 @@ pub fn validator_contract_digest() -> ValidatorContractDigest {
         bytes.push(relation.propagation().tag());
     }
     for feature in VALIDATOR_FEATURES {
-        push_text(&mut bytes, feature.name);
-        bytes.extend_from_slice(&feature.version.to_le_bytes());
+        push_text(&mut bytes, feature);
     }
     ValidatorContractDigest::of(&bytes)
 }

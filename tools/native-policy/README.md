@@ -1,7 +1,7 @@
-# Retained native repository-policy predecessor
+# Native repository-policy oracle
 
-Since the 2026-09-29 owner decision, the required `lkjscript-dev policy no-python`
-gate makes extension and bounded raw-byte shebang decisions directly in Rust.
+The required `lkjscript-dev policy no-python` gate makes extension and bounded
+raw-byte shebang decisions directly in Rust.
 Production policy classification no longer loads or executes this bundle, and does
 not serialize observations through JSON or Base64. Filesystem admission, ordering,
 final-symlink nonfollowing, extension precedence and the 512-byte prefix remain.
@@ -38,11 +38,6 @@ the contributor executable. Never edit storage or compiled bytes directly.
 The current check runs 11 policy tests plus 51 exact standard tests, differentially.
 The public CLI tests independently rebuild from copied accepted meaning and exercise
 fresh creation, canonical editing and old/new detached runs with no host tools.
-
-The Bytes program requires development source after public v0.1.44. That frozen
-runtime lacks `core.bytes.get` and must reject the new closure, including when the
-selected target does not itself use byte indexing. The earlier integer-list program
-and its exact dependency remain executable on newer compatible runtimes.
 
 ## Typed boundary
 
@@ -89,20 +84,11 @@ cases and adjacent 512-byte boundaries. Filesystem tests retain extension preced
 non-followed final links and multiple batches. The reusable embedding boundary retains
 strict loading, cancellation/recovery, typed values, output limits and task rejection.
 
-The complete exact standard closure and Base64 boundary have real costs. This is not
-zero-copy I/O. Matched complete-command measurements, failures and source acceptance
-belong to the [byte campaign](../../docs/campaigns/202609240603.md); the
-[predecessor campaign](../../docs/campaigns/202609240414.md) retains the original costs.
+The exact standard closure and Base64 boundary have real costs; this is not
+zero-copy I/O. Matched complete-command measurements retain failures, preparation
+cost and unfavorable samples separately from invocation and memory observations.
 
-Compiler or artifact contract changes require rebuilding this retained artifact
-through public check/build while preserving accepted HEAD and its exact standard
-supplier. Rebuild the contributor test executable after replacing the artifact.
-The [current release notes](../../docs/releases/v0.1.92.md) identify the selected
-compatibility boundary; [status](../../docs/status.md) owns actual acceptance.
-
-The preceding derived bundle used compiler 33, bytecode 27 and artifact 40:
-`artifact_bundle_6efb7a414dc41054c09602618b9b7d2754ce78d53590ddc0846fc0e9eef2b7cf`,
-758,094 bytes. Public check/build preserves the accepted native HEAD and its exact
-supplier; all 62 native and supplier tests agree between the two evaluators.
-
-The .96 compilation refresh selects artifact_bundle_80fc7c3a1aa35da4a96b3480dd55fc31e10ce70d1a93e472d072faa40ac1f958 (758,710 bytes, SHA-256 16b76270e8e38d8758e84e63adfb8c85a598f796f36b5850d83e0bd618e1bef3), using compiler 34, bytecode 28 and artifact 41. Its two public builds are byte-identical and all 62 source/supplier checks report zero failures and differential equality; the [separate rebuild receipt](../../.artifacts/associated-read-views/consumer-assets-installation-proposals/sourcef87c8b-four-families-first/receipt.json) binds their original source f87c8b7fa80e03bb8e3901746aa14a845fc509161916ca07eef92c55d32ed550. Accepted HEAD and exact suppliers remain unchanged. This compilation refresh supplies no final source, release or additional runtime acceptance.
+Schema changes require public check/build to regenerate `generated/policy.lkja`
+without changing accepted HEAD or exact suppliers. Rebuild the contributor test
+executable after replacing it. [Status](../../docs/status.md) owns source/final-byte/
+publication acceptance; artifact regeneration alone establishes none of them.

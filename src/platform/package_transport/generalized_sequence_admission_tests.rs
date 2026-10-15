@@ -1,7 +1,7 @@
 // Included by the hostile source-loader test owner, never an authoring path.
 
 #[test]
-fn ordinary_sequence_transport_rejects_rehashed_graph30_relay_and_unused_signatures() {
+fn ordinary_sequence_transport_rejects_rehashed_invalid_relay_and_unused_signatures() {
     for parameter in ["I64", "T"] {
         let type_parameter = if parameter == "T" {
             "(type-parameter create T (constraint transferable))"
@@ -36,14 +36,44 @@ declarations.end"#
             independent.snapshots[&package.snapshot.root.package_id].types,
             package.snapshot.types
         );
+        let (invalid, additions) = sequence_callable_element_type();
         for mut replacement in package.snapshot.owners.values().filter(|record|
             matches!(record, OwnerRecord::Declaration(record) if matches!(record.name.as_str(), "relay" | "unused"))
             || matches!(record, OwnerRecord::Parameter(_))
         ).cloned() {
-            replacement.set_encoding_for_edit(30);
-            let hostile = rehash_owner(&original, replacement);
-            assert_sequence_source_rejected(&hostile, "kernel_sequence_generation");
-            assert!(hostile.admit().unwrap_err().message.contains("Graph 31"));
+            // The element's complete data contract must be checked even when only an
+            // uncalled result signature or an unused parameter reaches the type.
+            match &mut replacement {
+                OwnerRecord::Declaration(record) => {
+                    let DeclarationPayload::Function(function) = &mut record.payload else {
+                        unreachable!()
+                    };
+                    function.result.ty = invalid;
+                }
+                OwnerRecord::Parameter(record) => record.ty = invalid,
+                _ => unreachable!(),
+            }
+            let mut hostile = rehash_owner(&original, replacement);
+            hostile.objects.extend(additions.clone());
+            assert_sequence_source_rejected(&hostile, "kernel_owned_sequence");
+        }
+        // Ordinary elements do not make the enclosing sequence unrestricted. Both
+        // monomorphic and exact transferable generic signatures retain custody.
+        for mut replacement in package
+            .snapshot
+            .owners
+            .values()
+            .filter(|record| matches!(record, OwnerRecord::Parameter(_)))
+            .cloned()
+        {
+            let OwnerRecord::Parameter(parameter) = &mut replacement else {
+                unreachable!()
+            };
+            parameter.use_mode = ParameterUse::Unrestricted;
+            assert_sequence_source_rejected(
+                &rehash_owner(&original, replacement),
+                "kernel_buffer_ownership",
+            );
         }
     }
 }

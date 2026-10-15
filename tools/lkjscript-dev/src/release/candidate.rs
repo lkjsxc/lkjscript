@@ -254,10 +254,9 @@ fn execute(
         "final bootstrap identity mismatch",
     )?;
     require(
-        admitted.manifest.is_publication_neutral()
-            && admitted.manifest.source.tagged_commit_sha == terminal.source_commit
+        admitted.manifest.source.tagged_commit_sha == terminal.source_commit
             && admitted.manifest.source.expected_release_tag == terminal.tag,
-        "final candidate content differs from accepted source or neutral encoding",
+        "final candidate content differs from accepted source",
     )?;
     terminal.manifest_sha256 = Some(admitted.manifest_sha256.clone());
     terminal.executable = Some(file(&extracted.join("lkjscript"), "lkjscript")?);

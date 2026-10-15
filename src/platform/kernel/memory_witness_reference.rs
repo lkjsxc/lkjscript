@@ -874,7 +874,7 @@ impl Oracle<'_> {
         if !c.associated_types.is_empty()
             && (self
                 .declaration_generation(d)
-                .is_none_or(|v| !matches!(v, 33 | 34))
+                .is_none_or(|v| v != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
                 || c.associated_types.len() > contract::MAXIMUM_CHILDREN
                 || {
                     let mut ids = BTreeSet::new();
@@ -983,7 +983,9 @@ impl Oracle<'_> {
         generation: u16,
         package: PackageId,
     ) -> bool {
-        if !matches!(generation, 33 | 34) && !c.associated_types.is_empty() {
+        if generation != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+            && !c.associated_types.is_empty()
+        {
             return false;
         }
         if generation != contract::GRAPH_CONTRACT_VERSION

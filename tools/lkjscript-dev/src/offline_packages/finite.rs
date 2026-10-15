@@ -1,12 +1,6 @@
-//! Designed finite-callable composition and authentic predecessor repair through public commands.
+//! Current finite-callable composition and complete public refusal controls.
 use super::*;
 use serde_json::{Value, json};
-
-mod predecessor;
-
-pub(super) fn upgrade(context: &mut Context) -> Result<(), DevError> {
-    predecessor::workflow(context)
-}
 
 fn selection(library: &Package) -> String {
     format!(
@@ -42,21 +36,25 @@ pub(super) fn focused(context: &mut Context) -> Result<(), DevError> {
     workflow(context, &standard)
 }
 
-fn reject(context: &mut Context, package: &Package, named: bool) -> Result<(), DevError> {
-    let before = crate::authority::observe_graph_authority(&package.path)?;
+fn rejected_request(revision: &str, named: bool) -> String {
     let body = if named {
         "expression.function-value as=$call function=$bad\ntype.argument parent=$call index=0 type=@grown\nexpression.i64 as=$seven value=7\nexpression.sequence as=$bad-body\nexpression.argument parent=$bad-body index=0 expression=$call\nexpression.argument parent=$bad-body index=1 expression=$seven\n"
     } else {
         "expression.call as=$call function=$bad\ntype.argument parent=$call index=0 type=@grown\nexpression.i64 as=$seven value=7\nexpression.bool as=$stop value=true\nexpression.if as=$bad-body condition=$stop when-true=$seven when-false=$call\n"
     };
-    let request = format!(
+    format!(
         "request base={} idempotency=finite-invalid-{named}\nreference.owner as=$module package=local class=module name=alternation\ntype.parameter as=@T parameter=$T\ntype.list as=@grown item=@T\n{body}create.function as=$bad module=$module name=expanding visibility=private result=i64 effect=pure body=$bad-body\nadd.type-parameter as=$T declaration=$bad name=T\n",
-        package.revision
-    );
+        revision
+    )
+}
+
+fn reject(context: &mut Context, package: &Package, named: bool) -> Result<(), DevError> {
+    let before = crate::authority::observe_graph_authority(&package.path)?;
     let path = context
         .evidence
         .join(format!("finite-invalid-{named}.lkjc"));
-    fs::write(&path, request)?;
+    fs::write(&path, rejected_request(&package.revision, named))?;
+    let index = context.receipt.commands.len();
     let result = context.cli(
         Some(&package.path),
         &[
@@ -74,6 +72,129 @@ fn reject(context: &mut Context, package: &Package, named: bool) -> Result<(), D
     require(
         crate::authority::observe_graph_authority(&package.path)? == before,
         "rejected expanding request changed accepted authority or idempotency",
+    )?;
+    context.receipt.observations.insert(
+        format!("finite_public_rejection_{named}"),
+        json!({"command":index,"revision":package.revision,"authority":before.inventory_sha256})
+            .to_string(),
+    );
+    Ok(())
+}
+
+fn validate_rejections(receipt: &Receipt, root: &Path) -> Result<(), DevError> {
+    let library: Value = serde_json::from_str(
+        receipt
+            .observations
+            .get("finite_library")
+            .ok_or_else(|| DevError::corrupt("current finite source binding absent"))?,
+    )?;
+    let inventory_index = library["inventory"]
+        .as_u64()
+        .and_then(|index| usize::try_from(index).ok())
+        .ok_or_else(|| DevError::corrupt("finite source inventory index"))?;
+    let file_index = inventory_index
+        .checked_add(1)
+        .ok_or_else(|| DevError::corrupt("finite source inventory overflow"))?;
+    let transport = library["transport"]
+        .as_str()
+        .ok_or_else(|| DevError::corrupt("finite source transport absent"))?;
+    let inventory = offline_package_inventory(
+        &process::read_bounded(
+            &root.join(format!("transport-{file_index}.lkjp")),
+            MAXIMUM_CONTAINER_BYTES,
+        )?,
+        transport,
+    )
+    .map_err(|error| DevError::corrupt(error.to_string()))?;
+    let producer = receipt
+        .producer_inventories
+        .get(inventory_index)
+        .ok_or_else(|| DevError::corrupt("finite source producer inventory absent"))?;
+    verify_producer_inventory(producer, &inventory)?;
+    require(
+        receipt.inventories.get(inventory_index) == Some(&inventory)
+            && receipt
+                .transport_digests
+                .get(inventory_index)
+                .is_some_and(|digest| digest == transport)
+            && library["package"] == producer.package
+            && library["revision"] == producer.semantic_revision,
+        "finite refusal source differs from its independently admitted current export",
+    )?;
+    let mut commands = Vec::new();
+    for named in [false, true] {
+        let value: Value = serde_json::from_str(
+            receipt
+                .observations
+                .get(&format!("finite_public_rejection_{named}"))
+                .ok_or_else(|| DevError::corrupt("current finite rejection evidence absent"))?,
+        )?;
+        let index = value["command"]
+            .as_u64()
+            .and_then(|index| usize::try_from(index).ok())
+            .ok_or_else(|| DevError::corrupt("finite rejection command index"))?;
+        commands.push(index);
+        let revision = value["revision"]
+            .as_str()
+            .ok_or_else(|| DevError::corrupt("finite rejected source revision"))?;
+        require(
+            revision == producer.semantic_revision,
+            "finite refusal changed its admitted source base",
+        )?;
+        let filename = format!("finite-invalid-{named}.lkjc");
+        require(
+            process::read_bounded(&root.join(&filename), MAXIMUM_OUTPUT_BYTES)?
+                == rejected_request(revision, named).as_bytes()
+                && value["authority"]
+                    .as_str()
+                    .is_some_and(|digest| digest.len() == 64),
+            "finite refusal lost its exact untaken or unused source and unchanged authority",
+        )?;
+        let command = receipt
+            .commands
+            .get(index)
+            .ok_or_else(|| DevError::corrupt("finite public rejection command missing"))?;
+        require(
+            !command.expects_success
+                && command.observation.exit_code == Some(2)
+                && command.command
+                    == [
+                        Path::new(&receipt.isolated_root)
+                            .join("lkjscript")
+                            .display()
+                            .to_string(),
+                        "--project".into(),
+                        Path::new(&receipt.isolated_root)
+                            .join("finite-library")
+                            .display()
+                            .to_string(),
+                        "change".into(),
+                        "plan".into(),
+                        "--input-file".into(),
+                        Path::new(&receipt.evidence_root)
+                            .join(filename)
+                            .display()
+                            .to_string(),
+                    ],
+            "finite refusal did not use the exact copied candidate and authored request",
+        )?;
+        let records = parse_records(
+            "finite-public-refusal",
+            &process::read_bounded(
+                &root.join(format!("command-{index:04}.stdout")),
+                MAXIMUM_OUTPUT_BYTES,
+            )?,
+        )
+        .map_err(|_| DevError::corrupt("finite public refusal output malformed"))?;
+        require(
+            field(&records, "diagnostic", "code")? == "kernel_callable_expansion"
+                && records.iter().all(|record| record.operation != "execution"),
+            "finite public refusal changed its semantic failure or executed the invalid candidate",
+        )?;
+    }
+    require(
+        commands[0] < commands[1],
+        "finite public refusal commands duplicated or reordered",
     )
 }
 
@@ -95,156 +216,6 @@ fn deployment(
     });
     fs::write(&descriptor, evidence::encode_json(&value)?)?;
     Ok(descriptor)
-}
-
-// Preserve the historical format-cut controls separately from current semantic attacks.
-// Current fixtures retain the original canonical source and instructions; their
-// exact derived-envelope conversion is checked by the compiler's fixture test.
-type RejectionFixture = (&'static str, &'static [u8], &'static str, &'static str);
-const HOSTILE: &[RejectionFixture] = &[
-    (
-        "direct-predecessor",
-        include_bytes!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../tests/fixtures/finite-callable-predecessor/expanding-direct.lkja"
-        )),
-        "source",
-        "compiler_unit_contract",
-    ),
-    (
-        "named-predecessor",
-        include_bytes!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../tests/fixtures/finite-callable-predecessor/expanding-named.lkja"
-        )),
-        "source",
-        "compiler_unit_contract",
-    ),
-    (
-        "direct",
-        include_bytes!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../tests/fixtures/finite-callable-compiler33/expanding-direct.lkja"
-        )),
-        "semantic",
-        "kernel_callable_expansion",
-    ),
-    (
-        "named",
-        include_bytes!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../tests/fixtures/finite-callable-compiler33/expanding-named.lkja"
-        )),
-        "semantic",
-        "kernel_callable_expansion",
-    ),
-];
-
-fn reject_artifacts(context: &mut Context, bundle: &Path) -> Result<(), DevError> {
-    let mut commands = Vec::new();
-    for (label, bytes, expected_class, expected_code) in HOSTILE {
-        let artifact = format!("expanding-{label}.lkja");
-        fs::write(bundle.join(&artifact), bytes)?;
-        fs::write(context.evidence.join(format!("finite-{artifact}")), bytes)?;
-        let descriptor = bundle.join(format!("expanding-{label}.deployment.json"));
-        fs::write(
-            &descriptor,
-            evidence::encode_json(&json!({
-                "artifact":artifact,"target":"main","listen":null,"http":null,"session":null,"worker":null,
-                "streams":lkjscript::platform::stream::StreamLimits::default(),"configuration":{},"secrets":[],"grants":[]
-            }))?,
-        )?;
-        fs::copy(
-            &descriptor,
-            context
-                .evidence
-                .join(format!("finite-expanding-{label}.deployment.json")),
-        )?;
-        commands.push(context.receipt.commands.len());
-        let output = context.cli(
-            None,
-            &[
-                "run",
-                "--deployment",
-                &descriptor.display().to_string(),
-                "--arguments",
-                "[]",
-            ],
-            false,
-        )?;
-        require(
-            field(&output, "diagnostic", "code")? == *expected_code
-                && field(&output, "diagnostic", "class")? == *expected_class
-                && output.iter().all(|record| record.operation != "execution"),
-            &format!(
-                "finite artifact {label} did not reject at {expected_class}/{expected_code} before execution"
-            ),
-        )?;
-    }
-    context.receipt.observations.insert(
-        "finite_artifact_rejections".into(),
-        serde_json::to_string(&commands)?,
-    );
-    Ok(())
-}
-
-fn validate_artifact_rejections(receipt: &Receipt, root: &Path) -> Result<(), DevError> {
-    let commands: Vec<usize> = serde_json::from_str(
-        receipt
-            .observations
-            .get("finite_artifact_rejections")
-            .ok_or_else(|| DevError::corrupt("finite artifact rejection inventory missing"))?,
-    )?;
-    require(
-        commands.len() == HOSTILE.len() && commands.windows(2).all(|pair| pair[0] < pair[1]),
-        "finite hostile applications omitted or duplicated",
-    )?;
-    for (index, (label, bytes, expected_class, expected_code)) in commands.iter().zip(HOSTILE) {
-        require(
-            process::read_bounded(
-                &root.join(format!("finite-expanding-{label}.lkja")),
-                MAXIMUM_OUTPUT_BYTES,
-            )? == *bytes,
-            "finite artifact negative does not bind the complete rehashed fixture",
-        )?;
-        let command = receipt
-            .commands
-            .get(*index)
-            .ok_or_else(|| DevError::corrupt("finite rejection command missing"))?;
-        let descriptor = Path::new(&receipt.isolated_root)
-            .join("finite-bundle")
-            .join(format!("expanding-{label}.deployment.json"));
-        require(
-            !command.expects_success
-                && command.command
-                    == [
-                        receipt.pinned_runtime_path.clone(),
-                        "run".into(),
-                        "--deployment".into(),
-                        descriptor.display().to_string(),
-                        "--arguments".into(),
-                        "[]".into(),
-                    ],
-            "finite artifact negative used different runtime or invocation",
-        )?;
-        let output = parse_records(
-            "finite-artifact",
-            &process::read_bounded(
-                &root.join(&command.observation.stdout.path),
-                MAXIMUM_OUTPUT_BYTES,
-            )?,
-        )
-        .map_err(|e| DevError::corrupt(format!("finite artifact output: {e:?}")))?;
-        require(
-            field(&output, "diagnostic", "class")? == *expected_class
-                && field(&output, "diagnostic", "code")? == *expected_code
-                && output.iter().all(|record| record.operation != "execution"),
-            &format!(
-                "finite artifact {label} failed outside its exact {expected_class}/{expected_code} admission stage"
-            ),
-        )?;
-    }
-    Ok(())
 }
 
 type FiniteCase = (
@@ -355,6 +326,21 @@ const CASES: &[FiniteCase] = &[
     ),
 ];
 
+fn artifact_identities(root: &Path) -> Result<BTreeMap<&'static str, String>, DevError> {
+    ["original.lkja", "replacement.lkja"]
+        .into_iter()
+        .map(|artifact| {
+            let bytes = process::read_bounded(
+                &root.join(format!("finite-{artifact}")),
+                MAXIMUM_CONTAINER_BYTES,
+            )?;
+            let identity = lkjscript::platform::contributor::strict_artifact_identity_probe(&bytes)
+                .map_err(|error| DevError::corrupt(error.to_string()))?;
+            Ok((artifact, identity))
+        })
+        .collect()
+}
+
 pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), DevError> {
     context.cli(None, &["capabilities", "--section", "change"], true)?;
     for name in ["i64-to-text", "text-concat", "i64-equal"] {
@@ -379,41 +365,12 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
     context.cli(Some(&library.path), &["check"], true)?;
     reject(context, &library, false)?;
     reject(context, &library, true)?;
+    let inventory_index = context.receipt.inventories.len();
     context.export(&mut library)?;
+    context.receipt.observations.insert("finite_library".into(), json!({"inventory":inventory_index,"package":library.id,"revision":library.revision,"transport":library.transport}).to_string());
     let mut consumer = context.new_package("finite-consumer")?;
     context.stage(&consumer, standard)?;
     context.stage(&consumer, &library)?;
-    let supplier = context.evidence.join("finite-expanding-supplier.lkjp");
-    fs::write(
-        &supplier,
-        include_bytes!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../tests/fixtures/finite-callable-predecessor/expanding.lkjp"
-        )),
-    )?;
-    let before = crate::authority::observe_graph_authority(&consumer.path)?;
-    let rejected = context.cli(
-        Some(&consumer.path),
-        &[
-            "package",
-            "dependency",
-            "stage",
-            "--transport",
-            "package_transport_eadf507fa02900fdc122d45b325cab3d123d329af444fd4542501e55d3a45421",
-            "--input-file",
-            &supplier.display().to_string(),
-        ],
-        false,
-    )?;
-    require(
-        field(&rejected, "diagnostic", "code")? == "kernel_callable_expansion"
-            || field(&rejected, "diagnostic", "message")?.contains("kernel_callable_expansion"),
-        "complete supplier body escaped current callable admission",
-    )?;
-    require(
-        crate::authority::observe_graph_authority(&consumer.path)? == before,
-        "invalid supplier changed readiness or accepted authority",
-    )?;
     context.apply(
         &mut consumer,
         &format!(
@@ -427,7 +384,6 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
     context.cli(Some(&consumer.path), &["check"], true)?;
     let bundle = context.root.join("finite-bundle");
     fs::create_dir(&bundle)?;
-    reject_artifacts(context, &bundle)?;
     context.cli(
         Some(&consumer.path),
         &[
@@ -468,6 +424,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
             context.evidence.join(format!("finite-{name}")),
         )?;
     }
+    let identities = artifact_identities(&context.evidence)?;
     fs::remove_dir_all(&consumer.path)?;
     context.cli(
         None,
@@ -501,6 +458,10 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
             expected.is_some(),
         )?;
         if let Some(expected) = expected {
+            require(
+                field(&output, "execution", "artifact")? == identities[*artifact],
+                "finite execution used another artifact than its strict current bundle",
+            )?;
             let value: Value = serde_json::from_str(&field(&output, "execution", "value")?)?;
             let expected = if *target == "reset" {
                 json!(
@@ -531,12 +492,12 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
         .receipt
         .observations
         .insert("finite_producers_removed".into(), "true".into());
-    predecessor::workflow(context)?;
     Ok(())
 }
 
 pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, DevError> {
-    validate_artifact_rejections(receipt, root)?;
+    validate_rejections(receipt, root)?;
+    let identities = artifact_identities(root)?;
     let commands: Vec<usize> = serde_json::from_str(
         receipt
             .observations
@@ -554,7 +515,8 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
             .is_some_and(|s| s == "true"),
         "finite supplier removal missing",
     )?;
-    for (index, (label, _, target, group, arguments, expected)) in commands.iter().zip(CASES) {
+    for (index, (label, artifact, target, group, arguments, expected)) in commands.iter().zip(CASES)
+    {
         let command = receipt
             .commands
             .get(*index)
@@ -581,6 +543,10 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
         let records = parse_records(label, &output)
             .map_err(|e| DevError::corrupt(format!("finite output: {e:?}")))?;
         if let Some(expected) = expected {
+            require(
+                field(&records, "execution", "artifact")? == identities[*artifact],
+                "finite receipt substituted the independently admitted current artifact",
+            )?;
             let value: Value = serde_json::from_str(&field(&records, "execution", "value")?)?;
             require(
                 value
@@ -631,7 +597,7 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
             )?;
         }
     }
-    predecessor::validate(receipt, root)
+    Ok(Vec::new())
 }
 
 fn neutral(context: &mut Context, consumer: &Package) -> Result<(), DevError> {
@@ -765,9 +731,8 @@ pub(super) fn read_focused(path: &Path, candidate: &Path, verifier: &Path) -> Re
     require(
         matches!(
             receipt.schema.as_str(),
-            "lkjscript-offline-finite-callable-1"
-                | "lkjscript-offline-validator-upgrade-1"
-                | "lkjscript-offline-requirement-parameters-4"
+            "lkjscript-offline-finite-callable-2"
+                | "lkjscript-offline-requirement-parameters-5"
                 | "lkjscript-offline-f64-1"
                 | "lkjscript-offline-parameter-type-1"
                 | "lkjscript-offline-persistent-maps-2"
@@ -797,9 +762,7 @@ pub(super) fn read_focused(path: &Path, candidate: &Path, verifier: &Path) -> Re
         receipt.schema.as_str(),
         "lkjscript-offline-parameter-type-1" | "lkjscript-offline-persistent-maps-2"
     );
-    let pinned = if receipt.schema == "lkjscript-offline-validator-upgrade-1" {
-        predecessor::validate(&receipt, root)?
-    } else if receipt.schema == "lkjscript-offline-requirement-parameters-4" {
+    let pinned = if receipt.schema == "lkjscript-offline-requirement-parameters-5" {
         super::requirements::validate(&receipt, root)?
     } else if receipt.schema == "lkjscript-offline-f64-1" {
         require(

@@ -76,9 +76,7 @@ impl<R: SessionShapeRead> Closure<'_, R> {
             }
             TypeForm::AssociatedContractMember { .. }
             | TypeForm::AssociatedWitnessProjection { .. } => {
-                return Err(
-                    crate::platform::kernel::owned_associated_wire::unsupported_semantics(),
-                );
+                return Err(crate::platform::kernel::owned_associated::unsupported_semantics());
             }
             TypeForm::TypeParameter { parameter } => {
                 return bindings.get(&parameter).copied().ok_or_else(|| {
@@ -207,9 +205,7 @@ pub(super) fn validate<R: SessionShapeRead>(
         match &object.form {
             TypeForm::AssociatedContractMember { .. }
             | TypeForm::AssociatedWitnessProjection { .. } => {
-                return Err(
-                    crate::platform::kernel::owned_associated_wire::unsupported_semantics(),
-                );
+                return Err(crate::platform::kernel::owned_associated::unsupported_semantics());
             }
             TypeForm::Unit
             | TypeForm::Bool

@@ -654,7 +654,7 @@ fn kernel_type<R: ExpressionRead + ?Sized>(
         }
         TypeForm::AssociatedContractMember { .. }
         | TypeForm::AssociatedWitnessProjection { .. } => {
-            return Err(crate::platform::kernel::owned_associated_wire::unsupported_semantics());
+            return Err(crate::platform::kernel::owned_associated::unsupported_semantics());
         }
         TypeForm::Unit => IntrinsicType::Unit,
         TypeForm::Bool => IntrinsicType::Bool,

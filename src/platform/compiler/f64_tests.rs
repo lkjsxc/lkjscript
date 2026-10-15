@@ -132,74 +132,6 @@ fn f64_literals_lower_and_round_trip_all_scalar_classes() {
 }
 
 #[test]
-fn f64_predecessor_instructions_reject_even_when_unreachable_and_rehashed() {
-    let (snapshot, owner) = literal_snapshot(Binary64::from_bits(0).unwrap());
-    let original = compile_memory(&snapshot, owner).unit;
-    for (compiler, bytecode, graph, magic, domain) in [
-        (
-            10,
-            6,
-            14,
-            *b"LKJCUN10",
-            "lkjscript.compiler-unit-envelope.v10",
-        ),
-        (
-            11,
-            7,
-            15,
-            *b"LKJCUN11",
-            "lkjscript.compiler-unit-envelope.v11",
-        ),
-        (
-            12,
-            8,
-            16,
-            *b"LKJCUN12",
-            "lkjscript.compiler-unit-envelope.v12",
-        ),
-    ] {
-        for unreachable in [false, true] {
-            let mut unit = original.clone();
-            unit.contract_version = compiler;
-            unit.bytecode_contract_version = bytecode;
-            unit.graph_contract_version = graph;
-            unit.key = CompilationUnitKey::derive_generation(
-                &unit.source,
-                unit.optimization,
-                compiler,
-                bytecode,
-                graph,
-            )
-            .unwrap();
-            if unreachable {
-                let CompilationPayload::Constant { code, .. } = &mut unit.payload else {
-                    panic!("constant");
-                };
-                code.instructions = vec![
-                    CompiledInstruction::Unit,
-                    CompiledInstruction::Jump(3),
-                    CompiledInstruction::F64(Binary64::from_bits(0).unwrap()),
-                    CompiledInstruction::Return,
-                ];
-            }
-            assert_eq!(unit.encode().unwrap_err().code, "compiler_unit_contract");
-            let bytes = crate::platform::packed::encode(
-                magic,
-                domain,
-                &unit,
-                super::super::unit::MAXIMUM_COMPILER_UNIT_BYTES,
-            )
-            .unwrap();
-            let key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &bytes);
-            assert_eq!(
-                CompilationUnit::decode(&bytes, key).unwrap_err().code,
-                "compiler_unit_contract"
-            );
-        }
-    }
-}
-
-#[test]
 fn f64_rehashed_unit_rejects_noncanonical_nan_payload() {
     let (snapshot, owner) = literal_snapshot(Binary64::from_bits(0x7ff8_0000_0000_0000).unwrap());
     let receipt = compile_memory(&snapshot, owner);
@@ -226,36 +158,6 @@ fn f64_rehashed_unit_rejects_noncanonical_nan_payload() {
 }
 
 #[test]
-fn owned_generation_requires_rebuilding_authentic_predecessor_artifacts() {
-    for (version, compiler, bytes) in [
-        (
-            18,
-            10,
-            include_bytes!("../../../tests/fixtures/graph14-before-task-iteration.lkja").as_slice(),
-        ),
-        (
-            19,
-            11,
-            include_bytes!(
-                "../../../tests/fixtures/transaction-outcome-predecessor/predecessor.lkja"
-            )
-            .as_slice(),
-        ),
-        (
-            20,
-            12,
-            include_bytes!("../../../tests/fixtures/graph16-standard.lkja").as_slice(),
-        ),
-    ] {
-        assert_eq!(
-            load_artifact(bytes).unwrap_err().code,
-            "compiler_unit_contract",
-            "artifact {version} / compiler {compiler} is a derived predecessor, not current permission"
-        );
-    }
-}
-
-#[test]
 fn f64_artifact_admission_preserves_literal_observation_bits() {
     let (loaded, owner) = literal_artifact(Binary64::from_bits(0).unwrap());
     assert_eq!(loaded.manifest.contract_version, ARTIFACT_CONTRACT_VERSION);
@@ -277,65 +179,6 @@ fn f64_artifact_admission_preserves_literal_observation_bits() {
             load_artifact(&bytes).unwrap_err().code,
             "artifact_compiled_control_meaning",
             "numerical zero equality cannot erase literal sign from accepted meaning"
-        );
-    }
-}
-
-#[test]
-fn f64_hidden_in_an_unused_predecessor_type_closure_rejects_under_old_or_new_outer_artifact() {
-    // Keep the old carrier case while constructing the attack from a current admitted fixture.
-    // The declared rebuild cut rejects every old unit, including an unused new scalar closure.
-    let (original, _) = literal_artifact(Binary64::from_bits(0).unwrap());
-    let (old, original_unit) = original
-        .objects
-        .iter()
-        .filter(|(key, _)| key.domain == ObjectDomain::CompilerUnit)
-        .map(|(key, bytes)| (*key, CompilationUnit::decode(bytes, *key).unwrap()))
-        .next()
-        .unwrap();
-    for current_outer in [false, true] {
-        let mut loaded = original.clone();
-        if !current_outer {
-            loaded.manifest.contract_version = 20;
-            loaded.manifest.graph_contract_version = 16;
-            loaded.manifest.compiler_contract_version = 12;
-            loaded.manifest.bytecode_contract_version = 8;
-        }
-        let (float, float_bytes) =
-            encode_type_object(&TypeObject::new(TypeForm::F64).unwrap()).unwrap();
-        let (list, list_bytes) =
-            encode_type_object(&TypeObject::new(TypeForm::List { item: float }).unwrap()).unwrap();
-        let mut unit = original_unit.clone();
-        unit.tables.types.push(list);
-        unit.contract_version = 11;
-        unit.graph_contract_version = 15;
-        unit.bytecode_contract_version = 7;
-        unit.key =
-            CompilationUnitKey::derive_generation(&unit.source, unit.optimization, 11, 7, 15)
-                .unwrap();
-        let bytes = effect_tests::replace_unit(
-            &loaded,
-            old,
-            &unit,
-            vec![
-                (
-                    ObjectKey::from_digest(ObjectDomain::Type, float.bytes()),
-                    float_bytes,
-                ),
-                (
-                    ObjectKey::from_digest(ObjectDomain::Type, list.bytes()),
-                    list_bytes,
-                ),
-            ],
-        );
-        assert_eq!(
-            load_artifact(&bytes).unwrap_err().code,
-            if current_outer {
-                "compiler_unit_contract"
-            } else {
-                "artifact_package_compilation_binding"
-            },
-            "neither an old outer envelope with current compilation nor a current envelope with an old unit grants execution"
         );
     }
 }

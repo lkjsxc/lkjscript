@@ -70,9 +70,11 @@ fn native(template: &str) -> Native {
             public.root.path().display()
         );
     }
-    // Required harness wiring retains every actual successful/failed command response,
+    // Candidate and explicitly retained host runs preserve every command response,
     // including commands run internally by the reused helpers.
-    assert!(public.root.path().join("cli-evidence").is_dir());
+    if public.retains_evidence() {
+        assert!(public.root.path().join("cli-evidence").is_dir());
+    }
     public
 }
 

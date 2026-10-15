@@ -1,4 +1,4 @@
-//! Deterministic segmented Graph 14 artifact contract and strict standalone loader.
+//! Canonical segmented artifacts and strict independent standalone admission.
 
 use super::manifest::{
     COMPILATION_MANIFEST_CONTRACT_VERSION, CompilationBinding, CompilationManifest,
@@ -56,14 +56,13 @@ mod flow_admission;
 pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-41";
 pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-41";
 pub const ARTIFACT_CONTRACT_VERSION: u16 = 41;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF41";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART41";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN41";
-pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v41";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v41";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v41";
-pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v18";
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMNFT";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJARTFC";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEND!";
+pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str = "lkjscript.artifact-manifest-envelope";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete";
+pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
 pub(crate) const MAXIMUM_ARTIFACT_RUNTIME_OWNERS: usize = 1_000_000;
@@ -72,124 +71,7 @@ pub(crate) const MAXIMUM_ARTIFACT_SEGMENTS: usize = 1_000_000;
 pub(crate) const MAXIMUM_ARTIFACT_BUNDLE_BYTES: u64 = 16 * 1024 * 1024 * 1024;
 pub(crate) const TARGET_ARTIFACT_SEGMENT_BYTES: usize = 4 * 1024 * 1024;
 
-// Historical envelopes retain their original domains and declared compiler profiles.
-// The exact retained .95 profile has an ordinary version-specific unit reader and still
-// traverses every current closure, authority, source, affine and canonical-code gate.
-struct ArtifactWire {
-    version: u16,
-    manifest_magic: [u8; 8],
-    bundle_magic: [u8; 8],
-    end_magic: [u8; 8],
-    manifest_domain: &'static str,
-    digest_domain: &'static str,
-    checksum_domain: &'static str,
-}
-fn artifact_wire(version: u16) -> Result<ArtifactWire, Diagnostic> {
-    match version {
-        30..=39 => Err(artifact_error(
-            DiagnosticClass::Source,
-            "artifact_bundle_contract",
-            "predecessor artifacts require rebuilding from canonical meaning",
-        )),
-        18 => Ok(ArtifactWire {
-            version,
-            manifest_magic: *b"LKJAMF18",
-            bundle_magic: *b"LKJART18",
-            end_magic: *b"LKJAEN18",
-            manifest_domain: "lkjscript.artifact-manifest-envelope.v18",
-            digest_domain: "lkjscript.artifact-bundle.v18",
-            checksum_domain: "lkjscript.artifact-bundle.complete.v18",
-        }),
-        19 => Ok(ArtifactWire {
-            version,
-            manifest_magic: *b"LKJAMF19",
-            bundle_magic: *b"LKJART19",
-            end_magic: *b"LKJAEN19",
-            manifest_domain: "lkjscript.artifact-manifest-envelope.v19",
-            digest_domain: "lkjscript.artifact-bundle.v19",
-            checksum_domain: "lkjscript.artifact-bundle.complete.v19",
-        }),
-        20 => Ok(ArtifactWire {
-            version,
-            manifest_magic: *b"LKJAMF20",
-            bundle_magic: *b"LKJART20",
-            end_magic: *b"LKJAEN20",
-            manifest_domain: "lkjscript.artifact-manifest-envelope.v20",
-            digest_domain: "lkjscript.artifact-bundle.v20",
-            checksum_domain: "lkjscript.artifact-bundle.complete.v20",
-        }),
-        25 => Ok(ArtifactWire {
-            version,
-            manifest_magic: *b"LKJAMF25",
-            bundle_magic: *b"LKJART25",
-            end_magic: *b"LKJAEN25",
-            manifest_domain: "lkjscript.artifact-manifest-envelope.v25",
-            digest_domain: "lkjscript.artifact-bundle.v25",
-            checksum_domain: "lkjscript.artifact-bundle.complete.v25",
-        }),
-        26 => Ok(ArtifactWire {
-            version,
-            manifest_magic: *b"LKJAMF26",
-            bundle_magic: *b"LKJART26",
-            end_magic: *b"LKJAEN26",
-            manifest_domain: "lkjscript.artifact-manifest-envelope.v26",
-            digest_domain: "lkjscript.artifact-bundle.v26",
-            checksum_domain: "lkjscript.artifact-bundle.complete.v26",
-        }),
-        27 => Ok(ArtifactWire {
-            version,
-            manifest_magic: *b"LKJAMF27",
-            bundle_magic: *b"LKJART27",
-            end_magic: *b"LKJAEN27",
-            manifest_domain: "lkjscript.artifact-manifest-envelope.v27",
-            digest_domain: "lkjscript.artifact-bundle.v27",
-            checksum_domain: "lkjscript.artifact-bundle.complete.v27",
-        }),
-        28 => Ok(ArtifactWire {
-            version,
-            manifest_magic: *b"LKJAMF28",
-            bundle_magic: *b"LKJART28",
-            end_magic: *b"LKJAEN28",
-            manifest_domain: "lkjscript.artifact-manifest-envelope.v28",
-            digest_domain: "lkjscript.artifact-bundle.v28",
-            checksum_domain: "lkjscript.artifact-bundle.complete.v28",
-        }),
-        29 => Ok(ArtifactWire {
-            version,
-            manifest_magic: *b"LKJAMF29",
-            bundle_magic: *b"LKJART29",
-            end_magic: *b"LKJAEN29",
-            manifest_domain: "lkjscript.artifact-manifest-envelope.v29",
-            digest_domain: "lkjscript.artifact-bundle.v29",
-            checksum_domain: "lkjscript.artifact-bundle.complete.v29",
-        }),
-        40 => Ok(ArtifactWire {
-            version,
-            manifest_magic: *b"LKJAMF40",
-            bundle_magic: *b"LKJART40",
-            end_magic: *b"LKJAEN40",
-            manifest_domain: "lkjscript.artifact-manifest-envelope.v40",
-            digest_domain: "lkjscript.artifact-bundle.v40",
-            checksum_domain: "lkjscript.artifact-bundle.complete.v40",
-        }),
-        ARTIFACT_CONTRACT_VERSION => Ok(ArtifactWire {
-            version,
-            manifest_magic: ARTIFACT_MANIFEST_MAGIC,
-            bundle_magic: ARTIFACT_BUNDLE_MAGIC,
-            end_magic: ARTIFACT_BUNDLE_END_MAGIC,
-            manifest_domain: ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
-            digest_domain: ARTIFACT_BUNDLE_DIGEST_DOMAIN,
-            checksum_domain: ARTIFACT_BUNDLE_CHECKSUM_DOMAIN,
-        }),
-        _ => Err(artifact_error(
-            DiagnosticClass::Source,
-            "artifact_bundle_contract",
-            "artifact encoding generation is unsupported",
-        )),
-    }
-}
-
-const BUNDLE_HEADER_BYTES: usize = 8 + 2 + 2 + 8 + 8 + 32;
+pub(crate) const BUNDLE_HEADER_BYTES: usize = 8 + 32 + 2 + 8 + 8 + 32;
 const SEGMENT_HEADER_BYTES: usize = 8 + 32;
 const BUNDLE_FOOTER_BYTES: usize = 32 + 8;
 
@@ -402,10 +284,9 @@ const fn reference_owner_kind(kind: OwnerKind) -> bool {
 impl ArtifactManifest {
     pub fn encode(&self) -> Result<(ArtifactManifestDigest, Vec<u8>), Diagnostic> {
         self.validate()?;
-        let wire = artifact_wire(self.contract_version)?;
-        let bytes = crate::platform::packed::encode(
-            wire.manifest_magic,
-            wire.manifest_domain,
+        let bytes = crate::platform::packed::encode_canonical(
+            ARTIFACT_MANIFEST_MAGIC,
+            ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
             self,
             MAXIMUM_ARTIFACT_MANIFEST_BYTES,
         )?;
@@ -417,64 +298,16 @@ impl ArtifactManifest {
     }
 
     pub fn decode(bytes: &[u8], expected: ArtifactManifestDigest) -> Result<Self, Diagnostic> {
-        let wire = artifact_wire(if bytes.starts_with(b"LKJAMF18") {
-            18
-        } else if bytes.starts_with(b"LKJAMF19") {
-            19
-        } else if bytes.starts_with(b"LKJAMF20") {
-            20
-        } else if bytes.starts_with(b"LKJAMF25") {
-            25
-        } else if bytes.starts_with(b"LKJAMF26") {
-            26
-        } else if bytes.starts_with(b"LKJAMF27") {
-            27
-        } else if bytes.starts_with(b"LKJAMF28") {
-            28
-        } else if bytes.starts_with(b"LKJAMF29") {
-            29
-        } else if bytes.starts_with(b"LKJAMF30") {
-            30
-        } else if bytes.starts_with(b"LKJAMF31") {
-            31
-        } else if bytes.starts_with(b"LKJAMF32") {
-            32
-        } else if bytes.starts_with(b"LKJAMF33") {
-            33
-        } else if bytes.starts_with(b"LKJAMF34") {
-            34
-        } else if bytes.starts_with(b"LKJAMF35") {
-            35
-        } else if bytes.starts_with(b"LKJAMF36") {
-            36
-        } else if bytes.starts_with(b"LKJAMF37") {
-            37
-        } else if bytes.starts_with(b"LKJAMF38") {
-            38
-        } else if bytes.starts_with(b"LKJAMF39") {
-            39
-        } else if bytes.starts_with(b"LKJAMF40") {
-            40
-        } else {
-            ARTIFACT_CONTRACT_VERSION
-        })?;
         expected
             .object_key()
             .verify(bytes)
             .map_err(store_diagnostic)?;
-        let manifest: Self = crate::platform::packed::decode(
+        let manifest: Self = crate::platform::packed::decode_canonical(
             bytes,
-            wire.manifest_magic,
-            wire.manifest_domain,
+            ARTIFACT_MANIFEST_MAGIC,
+            ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
             MAXIMUM_ARTIFACT_MANIFEST_BYTES,
         )?;
-        if manifest.contract_version != wire.version {
-            return Err(artifact_error(
-                DiagnosticClass::Source,
-                "artifact_bundle_contract",
-                "manifest generation differs from its envelope",
-            ));
-        }
         manifest.validate()?;
         let (digest, canonical) = manifest.encode()?;
         if digest != expected || canonical != bytes {
@@ -488,81 +321,15 @@ impl ArtifactManifest {
     }
 
     fn validate(&self) -> Result<(), Diagnostic> {
-        if !matches!(
-            self.contract_version,
-            18 | 19 | 20 | 25 | 26 | 27 | 28 | 29 | 40 | ARTIFACT_CONTRACT_VERSION
-        ) || (self.contract_version == 18
-            && (
+        if self.contract_version != ARTIFACT_CONTRACT_VERSION
+            || (
                 self.graph_contract_version,
                 self.compiler_contract_version,
                 self.bytecode_contract_version,
-            ) != (14, 10, 6))
-            || (self.contract_version == 19
-                && !matches!(
-                    (
-                        self.graph_contract_version,
-                        self.compiler_contract_version,
-                        self.bytecode_contract_version
-                    ),
-                    (14, 10, 6) | (15, 11, 7)
-                ))
-            || (self.contract_version == 20
-                && !matches!(
-                    (
-                        self.graph_contract_version,
-                        self.compiler_contract_version,
-                        self.bytecode_contract_version
-                    ),
-                    (14, 10, 6) | (15, 11, 7) | (16, 12, 8)
-                ))
-            || (self.contract_version == 25 && self.graph_contract_version > 20)
-            || (self.contract_version == 26 && self.compiler_contract_version > 19)
-            || (self.contract_version == 27 && self.compiler_contract_version > 20)
-            || (self.contract_version == 28
-                && (self.compiler_contract_version > 21 || self.graph_contract_version > 21))
-            || (self.contract_version == 29
-                && (self.compiler_contract_version > 22 || self.graph_contract_version > 22))
-            || (self.contract_version == 40
-                && (
-                    self.graph_contract_version,
-                    self.compiler_contract_version,
-                    self.bytecode_contract_version,
-                ) != (33, 33, 27))
-            || (self.contract_version == ARTIFACT_CONTRACT_VERSION
-                && (
-                    self.graph_contract_version,
-                    self.compiler_contract_version,
-                    self.bytecode_contract_version,
-                ) != (34, 34, 28))
-            || !matches!(
-                (
-                    self.graph_contract_version,
-                    self.compiler_contract_version,
-                    self.bytecode_contract_version
-                ),
-                (14, 10, 6)
-                    | (15, 11, 7)
-                    | (16, 12, 8)
-                    | (17, 13, 9)
-                    | (17, 14, 10)
-                    | (18, 15, 11)
-                    | (19, 16, 12)
-                    | (19, 17, 13)
-                    | (20, 18, 14)
-                    | (21, 19, 15)
-                    | (21, 20, 16)
-                    | (21, 21, 17)
-                    | (22, 22, 17)
-                    | (23, 23, 18)
-                    | (24, 24, 19)
-                    | (25, 25, 20)
-                    | (28, 28, 23)
-                    | (29, 29, 24)
-                    | (30, 30, 25)
-                    | (31, 31, 26)
-                    | (32, 32, 27)
-                    | (33, 33, 27)
-                    | (34, 34, 28)
+            ) != (
+                crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+                COMPILER_UNIT_CONTRACT_VERSION,
+                BYTECODE_CONTRACT_VERSION,
             )
             || self.compilation_manifest_contract_version != COMPILATION_MANIFEST_CONTRACT_VERSION
         {
@@ -657,6 +424,17 @@ pub struct LoadedArtifact {
 }
 
 impl LoadedArtifact {
+    /// Identifies actual currently admitted manifest/object content independently of the
+    /// externally reported manifest/bundle labels. Derived caches must bind this verified
+    /// identity as well: those public observation fields cannot certify mutable host input.
+    pub(crate) fn admitted_content_digest(
+        &self,
+        checkpoint: impl FnMut() -> Result<(), Diagnostic>,
+    ) -> Result<[u8; 32], Diagnostic> {
+        self.require_current_admission(checkpoint)?;
+        Ok(self.admission)
+    }
+
     pub(crate) fn require_current_admission(
         &self,
         checkpoint: impl FnMut() -> Result<(), Diagnostic>,
@@ -937,7 +715,6 @@ pub(crate) fn encode_artifact(
     manifest: ArtifactManifest,
     objects: &BTreeMap<ObjectKey, Vec<u8>>,
 ) -> Result<EncodedArtifact, Diagnostic> {
-    let wire = artifact_wire(manifest.contract_version)?;
     validate_declared_closure(&manifest, objects)?;
     let (manifest_digest, manifest_bytes) = manifest.encode()?;
     let mut builder = PackBuilder::default();
@@ -1001,8 +778,8 @@ pub(crate) fn encode_artifact(
         )
     })?;
     let mut bytes = Vec::with_capacity(capacity);
-    bytes.extend_from_slice(&wire.bundle_magic);
-    bytes.extend_from_slice(&wire.version.to_be_bytes());
+    bytes.extend_from_slice(&ARTIFACT_BUNDLE_MAGIC);
+    bytes.extend_from_slice(&crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH);
     bytes.extend_from_slice(&0_u16.to_be_bytes());
     bytes.extend_from_slice(&manifest_length.to_be_bytes());
     bytes.extend_from_slice(&segment_count.to_be_bytes());
@@ -1020,10 +797,11 @@ pub(crate) fn encode_artifact(
             "artifact bundle encoder produced an unexpected core length",
         ));
     }
-    let checksum = domain_digest(wire.checksum_domain, &bytes);
+    let checksum = domain_digest(ARTIFACT_BUNDLE_CHECKSUM_DOMAIN, &bytes);
     bytes.extend_from_slice(&checksum);
-    bytes.extend_from_slice(&wire.end_magic);
-    let bundle_digest = ArtifactBundleDigest::from_bytes(domain_digest(wire.digest_domain, &bytes));
+    bytes.extend_from_slice(&ARTIFACT_BUNDLE_END_MAGIC);
+    let bundle_digest =
+        ArtifactBundleDigest::from_bytes(domain_digest(ARTIFACT_BUNDLE_DIGEST_DOMAIN, &bytes));
     let loaded = load_artifact(&bytes)?;
     if loaded.manifest_digest != manifest_digest
         || loaded.bundle_digest != bundle_digest
@@ -1054,25 +832,32 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
             "artifact bundle byte length is outside its hostile decoder bound",
         ));
     }
-    let wire = artifact_wire(read_u16(bytes, 8, "artifact_bundle_contract")?)?;
-    if bytes.get(..8) != Some(wire.bundle_magic.as_slice()) {
+    if bytes.get(..8) != Some(ARTIFACT_BUNDLE_MAGIC.as_slice()) {
         return Err(artifact_error(
             DiagnosticClass::Source,
             "artifact_bundle_contract",
-            "artifact bundle uses a predecessor or foreign contract",
+            "artifact bundle uses a foreign kind",
         ));
     }
-    let version = read_u16(bytes, 8, "artifact_bundle_contract")?;
-    let flags = read_u16(bytes, 10, "artifact_bundle_flags")?;
-    if version != wire.version || flags != 0 {
+    if read_array::<32>(bytes, 8, "artifact_bundle_schema")?
+        != crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH
+    {
         return Err(artifact_error(
             DiagnosticClass::Source,
-            "artifact_bundle_contract",
-            "artifact bundle version or reserved flags are not current",
+            "artifact_bundle_schema",
+            "artifact bundle schema differs from the current canonical schema",
+        ));
+    }
+    let flags = read_u16(bytes, 40, "artifact_bundle_flags")?;
+    if flags != 0 {
+        return Err(artifact_error(
+            DiagnosticClass::Source,
+            "artifact_bundle_flags",
+            "artifact bundle reserved flags are not zero",
         ));
     }
     let manifest_length = usize_from_u64(
-        read_u64(bytes, 12, "artifact_bundle_manifest_length")?,
+        read_u64(bytes, 42, "artifact_bundle_manifest_length")?,
         "artifact_bundle_manifest_length",
     )?;
     if manifest_length == 0 || manifest_length > MAXIMUM_ARTIFACT_MANIFEST_BYTES {
@@ -1083,7 +868,7 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
         ));
     }
     let segment_count = usize_from_u64(
-        read_u64(bytes, 20, "artifact_bundle_segment_count")?,
+        read_u64(bytes, 50, "artifact_bundle_segment_count")?,
         "artifact_bundle_segment_count",
     )?;
     if segment_count == 0 || segment_count > MAXIMUM_ARTIFACT_SEGMENTS {
@@ -1095,7 +880,7 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
     }
     let manifest_digest = ArtifactManifestDigest::from_bytes(read_array::<32>(
         bytes,
-        28,
+        58,
         "artifact_bundle_manifest_digest",
     )?);
     let manifest_end = BUNDLE_HEADER_BYTES
@@ -1110,13 +895,6 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
     }
     let manifest =
         ArtifactManifest::decode(&bytes[BUNDLE_HEADER_BYTES..manifest_end], manifest_digest)?;
-    if manifest.contract_version != version {
-        return Err(artifact_error(
-            DiagnosticClass::Source,
-            "artifact_bundle_contract",
-            "bundle and manifest encoding generations differ",
-        ));
-    }
     let mut position = manifest_end;
     let mut objects = BTreeMap::new();
     let mut previous = None;
@@ -1189,7 +967,7 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
             "artifact bundle contains bytes outside its exact segment sequence",
         ));
     }
-    if bytes[footer_start + 32..] != wire.end_magic {
+    if bytes[footer_start + 32..] != ARTIFACT_BUNDLE_END_MAGIC {
         return Err(artifact_error(
             DiagnosticClass::Corrupt,
             "artifact_bundle_end_magic",
@@ -1197,7 +975,7 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
         ));
     }
     let expected_checksum = read_array::<32>(bytes, footer_start, "artifact_bundle_checksum")?;
-    if domain_digest(wire.checksum_domain, &bytes[..footer_start]) != expected_checksum {
+    if domain_digest(ARTIFACT_BUNDLE_CHECKSUM_DOMAIN, &bytes[..footer_start]) != expected_checksum {
         return Err(artifact_error(
             DiagnosticClass::Corrupt,
             "artifact_bundle_checksum",
@@ -1206,7 +984,8 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
     }
     validate_declared_closure(&manifest, &objects)?;
     validate_object_closure(&manifest, &objects, &mut work)?;
-    let bundle_digest = ArtifactBundleDigest::from_bytes(domain_digest(wire.digest_domain, bytes));
+    let bundle_digest =
+        ArtifactBundleDigest::from_bytes(domain_digest(ARTIFACT_BUNDLE_DIGEST_DOMAIN, bytes));
     work.objects = objects.len() as u64;
     work.object_bytes = objects.values().fold(0_u64, |total, value| {
         total.saturating_add(value.len() as u64)
@@ -1933,7 +1712,7 @@ pub(crate) fn runtime_owner_expectations(
             }
             CompilationPayload::Interface { operations } => {
                 let declaration = declaration_owner(*owner, "interface")?;
-                if unit.contract_version >= 11 {
+                {
                     insert_runtime_expectation(
                         &mut expected,
                         (*package, *owner),
@@ -2666,13 +2445,6 @@ fn trace_object_closure(
 
     let mut units = BTreeMap::<(PackageId, OwnerKey), CompilationUnit>::new();
     let mut type_roots = BTreeSet::new();
-    let mut predecessor_type_roots = BTreeSet::new();
-    let mut preproduct_type_roots = BTreeSet::new();
-    let mut prechoice_type_roots = BTreeSet::new();
-    let mut presequence_type_roots = BTreeSet::new();
-    let mut preview_type_roots = BTreeSet::new();
-    let mut predecessor_packages = BTreeSet::new();
-    let mut source_generations = BTreeMap::new();
     let mut blobs = BTreeMap::new();
     let mut interfaces = BTreeMap::new();
     for package in &manifest.packages {
@@ -2686,25 +2458,12 @@ fn trace_object_closure(
                     "artifact package manifest names a revision outside the logical closure",
                 )
             })?;
-        // A current package envelope/compiler may retain older accepted meaning.
-        // Only the embedded semantic revision owns that meaning's generation.
-        let source_generation = revision.revision.graph_contract_version;
         let interface = validate_package_interface(
             package.package,
             package.interface_owners,
             &store,
             &mut store_work,
         )?;
-        if source_generation < 17 {
-            predecessor_packages.insert(package.package);
-            if interface
-                .type_objects
-                .values()
-                .any(|object| matches!(object.form, TypeForm::F64))
-            {
-                return Err(f64_generation_error());
-            }
-        }
         if crate::platform::package_interface::package_interface_digest_for_graph(
             package.package,
             package.interface_owners.content_root(),
@@ -2726,10 +2485,11 @@ fn trace_object_closure(
             &mut store_work,
         )?;
         let compilation = CompilationManifest::decode(&compilation_bytes, package.compilation)?;
-        if compilation.graph_contract_version > manifest.graph_contract_version
-            || compilation.compiler_contract_version > manifest.compiler_contract_version
-            || compilation.bytecode_contract_version > manifest.bytecode_contract_version
-            || revision.graph_contract_version > manifest.graph_contract_version
+        if compilation.graph_contract_version != manifest.graph_contract_version
+            || compilation.compiler_contract_version != manifest.compiler_contract_version
+            || compilation.bytecode_contract_version != manifest.bytecode_contract_version
+            || revision.graph_contract_version != manifest.graph_contract_version
+            || revision.revision.graph_contract_version != manifest.graph_contract_version
             || package.repository_id != revision.revision.repository_id
             || package.package != revision.package
             || package.semantic_revision != revision.revision.revision_id()?
@@ -2748,10 +2508,6 @@ fn trace_object_closure(
                 "logical package revision, deterministic interface, and compilation do not bind one package meaning",
             ));
         }
-        source_generations.insert(
-            package.package,
-            (source_generation, compilation.graph_contract_version),
-        );
         let reader = ObjectPageReader::new(&store);
         let mut map_work = MapWork::default();
         let mut captured = None;
@@ -2784,21 +2540,6 @@ fn trace_object_closure(
                         ));
                     }
                     type_roots.extend(unit.tables.types.iter().copied());
-                    if unit.graph_contract_version < 34 || source_generation < 34 {
-                        preview_type_roots.extend(unit.tables.types.iter().copied());
-                    }
-                    if unit.graph_contract_version < 25 || source_generation < 25 {
-                        presequence_type_roots.extend(unit.tables.types.iter().copied());
-                    }
-                    if unit.graph_contract_version < 20 || source_generation < 20 {
-                        prechoice_type_roots.extend(unit.tables.types.iter().copied());
-                    }
-                    if unit.graph_contract_version < 19 || source_generation < 19 {
-                        preproduct_type_roots.extend(unit.tables.types.iter().copied());
-                    }
-                    if unit.graph_contract_version < 17 || source_generation < 17 {
-                        predecessor_type_roots.extend(unit.tables.types.iter().copied());
-                    }
                     for text in &unit.tables.texts {
                         if let super::unit::CompiledText::Blob { digest, bytes } = text
                             && let Some(previous) = blobs.insert(*digest, *bytes)
@@ -2858,23 +2599,13 @@ fn trace_object_closure(
         &mut store_work,
         &mut work.map,
     )?;
-    if reference_owners
-        .iter()
-        .chain(runtime_owners.iter())
-        .any(|((package, _), record)| {
-            predecessor_packages.contains(package)
-                && matches!(record, OwnerRecord::Expression(expression) if matches!(expression.operation, ExpressionOperation::F64 { .. }))
-        })
-    {
-        return Err(f64_generation_error());
-    }
     let relocations = validate_unit_relocations(&units)?;
 
     // These records have already been selected by exact source-owner commitments.
     // A binding annotation need not be an instruction relocation in a cached unit.
     // Share the already-spent method budget without changing its reported metric.
     let mut type_inventory_steps = work.implementation_inventory_steps;
-    for ((package, _), record) in &reference_owners {
+    for record in reference_owners.values() {
         type_inventory_steps = type_inventory_steps
             .checked_add(1)
             .filter(|steps| *steps <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK as u64)
@@ -2889,46 +2620,7 @@ fn trace_object_closure(
         let Some(ty) = binding.declared_type else {
             continue;
         };
-        // Precharge the generation lookup and all possible root-set insertions.
-        type_inventory_steps = type_inventory_steps
-            .checked_add(7)
-            .filter(|steps| {
-                *steps <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK as u64
-            })
-            .ok_or_else(|| {
-                artifact_error(
-                    DiagnosticClass::Resource,
-                    "artifact_reference_type_work",
-                    "canonical binding type roots exceed the existing artifact proof allowance",
-                )
-            })?;
-        let (source_generation, compilation_generation) =
-            source_generations.get(package).ok_or_else(|| {
-                artifact_error(
-                    DiagnosticClass::Corrupt,
-                    "artifact_package_revision_binding",
-                    "canonical artifact binding has no containing logical source",
-                )
-            })?;
-        let generation = (*source_generation)
-            .min(*compilation_generation)
-            .min(binding.header.contract_version);
         type_roots.insert(ty);
-        if generation < 34 {
-            preview_type_roots.insert(ty);
-        }
-        if generation < 25 {
-            presequence_type_roots.insert(ty);
-        }
-        if generation < 20 {
-            prechoice_type_roots.insert(ty);
-        }
-        if generation < 19 {
-            preproduct_type_roots.insert(ty);
-        }
-        if generation < 17 {
-            predecessor_type_roots.insert(ty);
-        }
     }
     let mut types = BTreeMap::new();
     while let Some(digest) = type_roots.pop_first() {
@@ -2943,39 +2635,6 @@ fn trace_object_closure(
             &mut store_work,
         )?;
         let object = decode_type_object(&bytes, digest)?;
-        if manifest.graph_contract_version < 34 && object.form.is_read_view() {
-            return Err(read_view_generation_error());
-        }
-        if manifest.graph_contract_version < 25
-            && matches!(object.form, TypeForm::OwnedSequence { .. })
-        {
-            return Err(artifact_error(
-                DiagnosticClass::Semantic,
-                "kernel_sequence_generation",
-                "owned sequence artifacts require Graph 25",
-            ));
-        }
-        if manifest.graph_contract_version < 20
-            && matches!(object.form, TypeForm::OwnedChoice { .. })
-        {
-            return Err(artifact_error(
-                DiagnosticClass::Semantic,
-                "kernel_choice_generation",
-                "owned choice artifacts require Graph 20",
-            ));
-        }
-        if manifest.graph_contract_version < 19
-            && matches!(object.form, TypeForm::OwnedProduct { .. })
-        {
-            return Err(artifact_error(
-                DiagnosticClass::Semantic,
-                "kernel_product_generation",
-                "owned product artifacts require Graph 19",
-            ));
-        }
-        if manifest.graph_contract_version < 17 && matches!(object.form, TypeForm::F64) {
-            return Err(f64_generation_error());
-        }
         match &object.form {
             TypeForm::Named { declaration }
             | TypeForm::Applied { declaration, .. }
@@ -3004,26 +2663,14 @@ fn trace_object_closure(
         type_roots.extend(object.child_types());
         types.insert(digest, object);
     }
-    validate_read_view_generation_closure(preview_type_roots, &types)?;
     validate_loaded_http_route_requirement_closure(&units, &runtime_owners, &types)?;
     validate_interface_source_coherence(manifest, &interfaces, &runtime_owners, &reference_owners)?;
-    validate_predecessor_type_closure(predecessor_type_roots, &types)?;
-    validate_product_generation_closure(preproduct_type_roots, &types, 18)?;
-    validate_product_generation_closure(prechoice_type_roots, &types, 19)?;
-    validate_sequence_generation_closure(presequence_type_roots, &types)?;
-    for ((package, _), record) in reference_owners.iter().chain(runtime_owners.iter()) {
-        let (source_generation, _) = source_generations.get(package).ok_or_else(|| {
-            artifact_error(
-                DiagnosticClass::Corrupt,
-                "artifact_package_revision_binding",
-                "canonical artifact owner has no containing logical source",
-            )
-        })?;
-        if record.header().contract_version > *source_generation {
+    for record in reference_owners.values().chain(runtime_owners.values()) {
+        if record.header().contract_version != manifest.graph_contract_version {
             return Err(artifact_error(
                 DiagnosticClass::Semantic,
-                "kernel_owner_graph_generation",
-                "canonical artifact owner uses a newer generation than its containing source graph",
+                "artifact_owner_contract",
+                "canonical artifact owner does not use the current graph contract",
             ));
         }
     }
@@ -3068,53 +2715,6 @@ fn trace_object_closure(
     }
     work.store.add(store_work);
     Ok(store.visited())
-}
-
-fn f64_generation_error() -> Diagnostic {
-    artifact_error(
-        DiagnosticClass::Corrupt,
-        "artifact_f64_graph_generation",
-        "F64 meaning requires Graph 17 in its package and compiler-unit contracts",
-    )
-}
-
-/// A current artifact may contain genuine older units. Its outer generation cannot authorize
-/// an F64 type hidden in an unused parameter, nested application or other older-unit table.
-fn validate_predecessor_type_closure(
-    mut pending: BTreeSet<TypeObjectDigest>,
-    types: &BTreeMap<TypeObjectDigest, TypeObject>,
-) -> Result<(), Diagnostic> {
-    let mut visited = BTreeSet::new();
-    let mut remaining = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
-    while let Some(digest) = pending.pop_first() {
-        if visited.contains(&digest) {
-            continue;
-        }
-        let object = types.get(&digest).ok_or_else(|| {
-            artifact_error(
-                DiagnosticClass::Corrupt,
-                "artifact_type_generation_missing",
-                "compiler-unit generation admission references a missing exact type",
-            )
-        })?;
-        remaining = object
-            .child_type_count()
-            .checked_add(1)
-            .and_then(|count| remaining.checked_sub(count))
-            .ok_or_else(|| {
-                artifact_error(
-                    DiagnosticClass::Resource,
-                    "artifact_type_generation_work",
-                    "compiler-unit generation admission exceeds the validation work bound",
-                )
-            })?;
-        if matches!(object.form, TypeForm::F64) {
-            return Err(f64_generation_error());
-        }
-        visited.insert(digest);
-        pending.extend(object.child_types());
-    }
-    Ok(())
 }
 
 enum ArtifactSessionRecord {
@@ -4715,41 +4315,6 @@ fn validate_runtime_owners(
             "artifact runtime metadata omitted one exact compiler-unit boundary owner",
         ));
     }
-    // The canonical owner headers are independently admitted here. New parameter
-    // categories cannot acquire mixed-storage meaning through rehashed old owners,
-    // including formals unused by every method and mapped application.
-    for ((package, owner), unit) in units {
-        let parameters = match &unit.payload {
-            CompilationPayload::OwnedContract(contract) => &contract.type_parameters,
-            CompilationPayload::OwnedImplementation(implementation) => {
-                &implementation.type_parameters
-            }
-            _ => continue,
-        };
-        for parameter in parameters {
-            let Some(OwnerRecord::TypeParameter(record)) =
-                records.get(&(*package, OwnerKey::TypeParameter(*parameter)))
-            else {
-                return Err(artifact_error(
-                    DiagnosticClass::Corrupt,
-                    "artifact_runtime_owner_incomplete",
-                    "mixed-storage declaration parameter owner is absent",
-                ));
-            };
-            if !record.constraints.has_owned()
-                && (record.header.contract_version < 33
-                    || records
-                        .get(&(*package, *owner))
-                        .is_none_or(|declaration| declaration.header().contract_version < 33))
-            {
-                return Err(artifact_error(
-                    DiagnosticClass::Corrupt,
-                    "kernel_mixed_storage_generation",
-                    "ordinary storage contract and scheme parameters require Graph 33 on the declaration and parameter owners",
-                ));
-            }
-        }
-    }
     Ok(records)
 }
 
@@ -5661,135 +5226,6 @@ fn memory_result_type(
         }
         _ => Ok(false),
     }
-}
-
-fn read_view_generation_error() -> Diagnostic {
-    artifact_error(
-        DiagnosticClass::Semantic,
-        "kernel_read_view_generation",
-        "read-view type closure requires Graph 34 source and compilation",
-    )
-}
-
-fn validate_read_view_generation_closure(
-    mut pending: BTreeSet<TypeObjectDigest>,
-    types: &BTreeMap<TypeObjectDigest, TypeObject>,
-) -> Result<(), Diagnostic> {
-    let mut seen = BTreeSet::new();
-    let mut work = 0usize;
-    while let Some(ty) = pending.pop_first() {
-        if !seen.insert(ty) {
-            continue;
-        }
-        let object = types.get(&ty).ok_or_else(|| {
-            artifact_error(
-                DiagnosticClass::Corrupt,
-                "artifact_read_view_type",
-                "read-view generation admission omits a graph-bound type",
-            )
-        })?;
-        work = work
-            .checked_add(object.child_type_count() + 1)
-            .filter(|next| *next <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-            .ok_or_else(|| {
-                artifact_error(
-                    DiagnosticClass::Resource,
-                    "artifact_read_view_work",
-                    "read-view generation closure exhausted its existing work budget",
-                )
-            })?;
-        if object.form.is_read_view() {
-            return Err(read_view_generation_error());
-        }
-        pending.extend(object.child_types());
-    }
-    Ok(())
-}
-
-fn validate_sequence_generation_closure(
-    mut pending: BTreeSet<TypeObjectDigest>,
-    types: &BTreeMap<TypeObjectDigest, TypeObject>,
-) -> Result<(), Diagnostic> {
-    let mut seen = BTreeSet::new();
-    let mut work = 0usize;
-    while let Some(ty) = pending.pop_first() {
-        if !seen.insert(ty) {
-            continue;
-        }
-        let object = types.get(&ty).ok_or_else(|| {
-            artifact_error(
-                DiagnosticClass::Corrupt,
-                "artifact_sequence_type",
-                "missing graph-bound type",
-            )
-        })?;
-        work = work
-            .checked_add(object.child_type_count() + 1)
-            .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-            .ok_or_else(|| {
-                artifact_error(
-                    DiagnosticClass::Resource,
-                    "artifact_sequence_work",
-                    "sequence generation closure exhausted admission work",
-                )
-            })?;
-        if matches!(object.form, TypeForm::OwnedSequence { .. }) {
-            return Err(artifact_error(
-                DiagnosticClass::Semantic,
-                "kernel_sequence_generation",
-                "sequence type closure requires Graph 25 source",
-            ));
-        }
-        pending.extend(object.child_types());
-    }
-    Ok(())
-}
-
-fn validate_product_generation_closure(
-    mut pending: BTreeSet<TypeObjectDigest>,
-    types: &BTreeMap<TypeObjectDigest, TypeObject>,
-    generation: u16,
-) -> Result<(), Diagnostic> {
-    let mut seen = BTreeSet::new();
-    let mut work = 0usize;
-    while let Some(ty) = pending.pop_first() {
-        if !seen.insert(ty) {
-            continue;
-        }
-        let object = types.get(&ty).ok_or_else(|| {
-            artifact_error(
-                DiagnosticClass::Corrupt,
-                "artifact_product_type",
-                "missing graph-bound type",
-            )
-        })?;
-        work = work
-            .checked_add(object.child_type_count() + 1)
-            .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-            .ok_or_else(|| {
-                artifact_error(
-                    DiagnosticClass::Resource,
-                    "artifact_product_work",
-                    "product generation closure exhausted admission work",
-                )
-            })?;
-        if matches!(object.form, TypeForm::OwnedChoice { .. }) {
-            return Err(artifact_error(
-                DiagnosticClass::Semantic,
-                "kernel_choice_generation",
-                "choice type closure requires Graph 20 source",
-            ));
-        }
-        if generation < 19 && matches!(object.form, TypeForm::OwnedProduct { .. }) {
-            return Err(artifact_error(
-                DiagnosticClass::Semantic,
-                "kernel_product_generation",
-                "product type closure requires Graph 19 source",
-            ));
-        }
-        pending.extend(object.child_types());
-    }
-    Ok(())
 }
 
 #[cfg(test)]

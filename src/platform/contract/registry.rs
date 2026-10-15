@@ -13,18 +13,18 @@ use super::super::compiler::{
 };
 use super::super::configuration::CONFIGURATION_ADAPTER_CONTRACT_VERSION;
 use super::super::control::{
-    AUTHORED_CHANGE_CODEC_IDENTITY, AUTHORED_CHANGE_CODEC_VERSION,
-    CHANGE_REQUEST_COMMITMENT_DOMAIN, COMPACT_CHANGE_CONTRACT_IDENTITY,
-    COMPACT_CHANGE_CONTRACT_VERSION, COMPACT_CHANGE_EDGE_DESCRIPTORS,
-    COMPACT_CHANGE_OPERATION_DESCRIPTORS, COMPACT_CHANGE_PRECONDITION_FIELDS,
-    COMPACT_CHANGE_PRECONDITIONS, COMPACT_DECLARATION_VISIBILITIES, COMPACT_DELETE_POLICIES,
-    COMPACT_EFFECT_FORM_FIELDS, COMPACT_EFFECT_FORMS, COMPACT_EXPRESSION_FORM_FIELDS,
-    COMPACT_EXPRESSION_FORMS, COMPACT_FUNCTION_EFFECTS, COMPACT_NAMESPACE_CLASSES,
-    COMPACT_READ_SCOPE_FORM_FIELDS, COMPACT_READ_SCOPE_FORMS, COMPACT_TYPE_FORM_FIELDS,
-    COMPACT_TYPE_FORMS, CompactChangeFieldForm, CompactChangeOperation,
-    LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY, LOGICAL_CHANGE_PLAN_CONTRACT_VERSION,
-    LOGICAL_PLAN_RECORD_DESCRIPTORS, MAXIMUM_COMPACT_INPUT_BYTES, MAXIMUM_LOGICAL_PLAN_BYTES,
-    MAXIMUM_LOGICAL_PLAN_RECORDS, MAXIMUM_STRUCTURAL_SYNTAX_NODES, MAXIMUM_STRUCTURAL_TOKENS,
+    AUTHORED_CHANGE_CODEC_IDENTITY, CHANGE_REQUEST_COMMITMENT_DOMAIN,
+    COMPACT_CHANGE_CONTRACT_IDENTITY, COMPACT_CHANGE_CONTRACT_VERSION,
+    COMPACT_CHANGE_EDGE_DESCRIPTORS, COMPACT_CHANGE_OPERATION_DESCRIPTORS,
+    COMPACT_CHANGE_PRECONDITION_FIELDS, COMPACT_CHANGE_PRECONDITIONS,
+    COMPACT_DECLARATION_VISIBILITIES, COMPACT_DELETE_POLICIES, COMPACT_EFFECT_FORM_FIELDS,
+    COMPACT_EFFECT_FORMS, COMPACT_EXPRESSION_FORM_FIELDS, COMPACT_EXPRESSION_FORMS,
+    COMPACT_FUNCTION_EFFECTS, COMPACT_NAMESPACE_CLASSES, COMPACT_READ_SCOPE_FORM_FIELDS,
+    COMPACT_READ_SCOPE_FORMS, COMPACT_TYPE_FORM_FIELDS, COMPACT_TYPE_FORMS, CompactChangeFieldForm,
+    CompactChangeOperation, LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY,
+    LOGICAL_CHANGE_PLAN_CONTRACT_VERSION, LOGICAL_PLAN_RECORD_DESCRIPTORS,
+    MAXIMUM_COMPACT_INPUT_BYTES, MAXIMUM_LOGICAL_PLAN_BYTES, MAXIMUM_LOGICAL_PLAN_RECORDS,
+    MAXIMUM_STRUCTURAL_SYNTAX_NODES, MAXIMUM_STRUCTURAL_TOKENS,
     PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN, render_record,
 };
 use super::super::data::{
@@ -780,7 +780,6 @@ impl ContractAuthority {
 #[serde(rename_all = "snake_case")]
 pub enum PredecessorPolicy {
     Reject,
-    ReadHistorical,
     NotApplicable,
 }
 
@@ -788,7 +787,6 @@ impl PredecessorPolicy {
     pub const fn name(self) -> &'static str {
         match self {
             Self::Reject => "reject",
-            Self::ReadHistorical => "read_historical",
             Self::NotApplicable => "not_applicable",
         }
     }
@@ -842,13 +840,8 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             version: GRAPH_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::CanonicalMeaning,
-            predecessor_policy: PredecessorPolicy::ReadHistorical,
-            magic_values: &[
-                "LKJOWN34", "LKJOWN33", "LKJOWN32", "LKJOWN31", "LKJOWN30", "LKJOWN29", "LKJOWN28",
-                "LKJOWN27", "LKJOWN26", "LKJOWN25", "LKJOWN24", "LKJOWN23", "LKJOWN22", "LKJOWN21",
-                "LKJOWN20", "LKJOWN19", "LKJOWN18", "LKJOWN17", "LKJOWN16", "LKJOWN15", "LKJOWN14",
-                "LKJSMR01", "LKJDEP14", "LKJRET14",
-            ],
+            predecessor_policy: REJECT,
+            magic_values: &["LKJOWNER", "LKJSMR01", "LKJDEP14", "LKJRET14"],
             digest_domains: &[
                 super::super::kernel::contract::OWNER_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::ROOT_ENVELOPE_DOMAIN,
@@ -873,16 +866,9 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: REJECT,
-            magic_values: &[
-                "LKJTYP10", "LKJF6401", "LKJBUF01", "LKJCEL01", "LKJPRD01", "LKJCHO01",
-            ],
+            magic_values: &["LKJTYPES"],
             digest_domains: &[
                 super::super::kernel::contract::TYPE_OBJECT_ENVELOPE_DOMAIN,
-                super::super::kernel::contract::F64_TYPE_ENVELOPE_DOMAIN,
-                super::super::kernel::contract::BYTE_BUFFER_TYPE_ENVELOPE_DOMAIN,
-                super::super::kernel::contract::OWNED_CELL_TYPE_ENVELOPE_DOMAIN,
-                super::super::kernel::contract::OWNED_PRODUCT_TYPE_ENVELOPE_DOMAIN,
-                super::super::kernel::contract::OWNED_CHOICE_TYPE_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::TYPE_OBJECT_DIGEST_DOMAIN,
             ],
         },
@@ -894,8 +880,8 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: REJECT,
-            magic_values: &["LKJTAP01"],
-            digest_domains: &[super::super::kernel::contract::NOMINAL_APPLICATION_ENVELOPE_DOMAIN],
+            magic_values: NONE,
+            digest_domains: NONE,
         },
         ContractDescriptor {
             key: ContractKey::OwnedAssociatedTypes,
@@ -905,14 +891,8 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: REJECT,
-            magic_values: &["LKJOAT01", "LKJTAT01", "LKJPAT01", "LKJCAU01"],
-            digest_domains: &[
-                super::super::kernel::contract::OWNED_ASSOCIATED_OWNER_ENVELOPE_DOMAIN,
-                super::super::kernel::contract::OWNED_ASSOCIATED_TYPE_ENVELOPE_DOMAIN,
-                super::super::package_interface::FROZEN_ASSOCIATED_INTERFACE_DOMAIN,
-                super::super::compiler::FROZEN_ASSOCIATED_UNIT_ENVELOPE_DOMAIN,
-                super::super::compiler::FROZEN_ASSOCIATED_UNIT_KEY_DOMAIN,
-            ],
+            magic_values: NONE,
+            digest_domains: NONE,
         },
         ContractDescriptor {
             key: ContractKey::AssociatedReadViews,
@@ -922,14 +902,8 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: REJECT,
-            magic_values: &["LKJOAV01", "LKJTAV01", "LKJPAV01", "LKJCAU02"],
-            digest_domains: &[
-                super::super::kernel::contract::ASSOCIATED_READ_VIEW_OWNER_ENVELOPE_DOMAIN,
-                super::super::kernel::contract::ASSOCIATED_READ_VIEW_TYPE_ENVELOPE_DOMAIN,
-                super::super::package_interface::ASSOCIATED_INTERFACE_ENVELOPE_DOMAIN,
-                super::super::compiler::ASSOCIATED_UNIT_ENVELOPE_DOMAIN,
-                super::super::compiler::ASSOCIATED_UNIT_KEY_DOMAIN,
-            ],
+            magic_values: NONE,
+            digest_domains: NONE,
         },
         simple_contract(
             ContractKey::ImmutableObjectStore,
@@ -980,7 +954,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::AcceptedHistory,
             predecessor_policy: REJECT,
-            magic_values: &["LKJREV07", "LKJHEAD7"],
+            magic_values: &["LKJREVIS", "LKJHEAD_"],
             digest_domains: &[
                 REVISION_ENVELOPE_DOMAIN,
                 super::super::publication::contract::HEAD_ENVELOPE_DOMAIN,
@@ -995,11 +969,10 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             version: RECEIPT_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::AcceptedHistory,
-            predecessor_policy: PredecessorPolicy::ReadHistorical,
-            magic_values: &["LKJRCPT6", "LKJRCPT5"],
+            predecessor_policy: REJECT,
+            magic_values: &["LKJRECPT"],
             digest_domains: &[
                 RECEIPT_ENVELOPE_DOMAIN,
-                "lkjscript.receipt-envelope.v5",
                 storage_contract::RECEIPT_OBJECT_DIGEST_DOMAIN,
             ],
         },
@@ -1010,11 +983,10 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             version: TRANSACTION_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::AcceptedHistory,
-            predecessor_policy: PredecessorPolicy::ReadHistorical,
-            magic_values: &["LKJTXN06", "LKJTXN05"],
+            predecessor_policy: REJECT,
+            magic_values: &["LKJTRANS"],
             digest_domains: &[
                 TRANSACTION_ENVELOPE_DOMAIN,
-                "lkjscript.transaction-envelope.v5",
                 storage_contract::TRANSACTION_OBJECT_DIGEST_DOMAIN,
             ],
         },
@@ -1025,11 +997,10 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             version: SEMANTIC_DIFF_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::AcceptedHistory,
-            predecessor_policy: PredecessorPolicy::ReadHistorical,
-            magic_values: &["LKJDIFF4", "LKJDIFF3"],
+            predecessor_policy: REJECT,
+            magic_values: &["LKJSDIFF"],
             digest_domains: &[
                 SEMANTIC_DIFF_ENVELOPE_DOMAIN,
-                "lkjscript.semantic-diff-envelope.v3",
                 storage_contract::SEMANTIC_DIFF_OBJECT_DIGEST_DOMAIN,
             ],
         },
@@ -1041,7 +1012,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
-            magic_values: &["LKJSUM17"],
+            magic_values: &["LKJSUMRY"],
             digest_domains: &[
                 witness_contract::OWNER_SUMMARY_ENVELOPE_DOMAIN,
                 witness_contract::OWNER_SUMMARY_DIGEST_DOMAIN,
@@ -1064,7 +1035,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
-            magic_values: &["LKJWIT10"],
+            magic_values: &["LKJWITNS"],
             digest_domains: &[
                 witness_contract::WITNESS_ENVELOPE_DOMAIN,
                 witness_contract::VALIDATION_WITNESS_DIGEST_DOMAIN,
@@ -1097,16 +1068,11 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             key: ContractKey::AuthoredChangeCodec,
             name: "normalized authored change codec",
             identity: AUTHORED_CHANGE_CODEC_IDENTITY,
-            version: AUTHORED_CHANGE_CODEC_VERSION,
+            version: 1,
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
             predecessor_policy: REJECT,
-            magic_values: &[
-                "LKJACR14", "LKJACR15", "LKJACR16", "LKJACR17", "LKJACR18", "LKJACR19", "LKJACR20",
-                "LKJACR21", "LKJACR22", "LKJACR23", "LKJACR24", "LKJACR25", "LKJACR26", "LKJACR27",
-                "LKJACR28", "LKJACR29", "LKJACR30", "LKJACR31", "LKJACR32", "LKJACR33", "LKJACR34",
-                "LKJACR35", "LKJACR36", "LKJACR37", "LKJACR38", "LKJACR39", "LKJABG01",
-            ],
+            magic_values: &["LKJACHNG", "LKJABUDG"],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
                 CHANGE_REQUEST_COMMITMENT_DOMAIN,
@@ -1184,11 +1150,8 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             version: PACKAGE_INTERFACE_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
-            predecessor_policy: PredecessorPolicy::ReadHistorical,
-            magic_values: &[
-                "LKJPIF22", "LKJPIF21", "LKJPIF20", "LKJPIF19", "LKJPIF18", "LKJPIF17", "LKJPIF16",
-                "LKJPIF15", "LKJPIF14", "LKJPIF13", "LKJPIF12", "LKJPIF11", "LKJPIF10",
-            ],
+            predecessor_policy: REJECT,
+            magic_values: &["LKJPIF22"],
             digest_domains: &[
                 PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::PACKAGE_INTERFACE_DIGEST_DOMAIN,
@@ -1239,7 +1202,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: REJECT,
-            magic_values: &["LKJCMF03"],
+            magic_values: &["LKJCMNFT"],
             digest_domains: &[
                 COMPILATION_MANIFEST_ENVELOPE_DOMAIN,
                 storage_contract::COMPILATION_MANIFEST_DIGEST_DOMAIN,
@@ -1252,13 +1215,11 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             version: COMPILER_UNIT_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
-            predecessor_policy: PredecessorPolicy::ReadHistorical,
-            magic_values: &["LKJCUN34", "LKJCUN33"],
+            predecessor_policy: REJECT,
+            magic_values: &["LKJCUNIT"],
             digest_domains: &[
                 COMPILER_UNIT_ENVELOPE_DOMAIN,
                 COMPILER_UNIT_KEY_DOMAIN,
-                super::super::compiler::FROZEN_COMPILER_UNIT_ENVELOPE_DOMAIN,
-                super::super::compiler::FROZEN_COMPILER_UNIT_KEY_DOMAIN,
                 storage_contract::COMPILER_UNIT_DIGEST_DOMAIN,
             ],
         },
@@ -1276,8 +1237,8 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             version: ARTIFACT_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
-            predecessor_policy: PredecessorPolicy::ReadHistorical,
-            magic_values: &["LKJAMF41", "LKJAMF40"],
+            predecessor_policy: REJECT,
+            magic_values: &["LKJAMNFT"],
             digest_domains: &[
                 ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
                 storage_contract::ARTIFACT_MANIFEST_DIGEST_DOMAIN,
@@ -1290,8 +1251,8 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             version: ARTIFACT_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
-            predecessor_policy: PredecessorPolicy::ReadHistorical,
-            magic_values: &["LKJART41", "LKJAEN41", "LKJART40", "LKJAEN40"],
+            predecessor_policy: REJECT,
+            magic_values: &["LKJARTFC", "LKJAEND!"],
             digest_domains: &[
                 ARTIFACT_BUNDLE_DIGEST_DOMAIN,
                 ARTIFACT_BUNDLE_CHECKSUM_DOMAIN,
@@ -1754,8 +1715,8 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         ),
         operation(
             PublicOperation::Run,
-            "Run a pure project target differentially, or run one exact pure/task Command artifact once through production with deployment grants and joined cleanup.",
-            "run TARGET [--arguments JSON | --arguments-file PATH] [--result-file PATH] | run --deployment PATH [--arguments JSON | --arguments-file PATH] [--result-file PATH]",
+            "Run a pure project target differentially, one deployed Command with joined cleanup, or finite pure source or artifact batches sharing immutable preparation with fresh execution lifetimes.",
+            "run TARGET [--arguments JSON | --arguments-file PATH] [--result-file PATH] | run --deployment PATH [--arguments JSON | --arguments-file PATH] [--result-file PATH] | run --deployment PATH --batch-input-file PATH --batch-result-file PATH | --project ABSOLUTE_PATH run TARGET --batch-input-file PATH --batch-result-file PATH",
             (ControlModel::RunRequest, ControlModel::RunResult),
             AuthorityEffect::ExternalRuntime,
             ProjectRequirement::ProjectOrDescriptor,
@@ -2675,6 +2636,54 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Infrastructure,
             "A completed foreground execution could not encode its bounded observations.",
             "Earlier effects may be visible; retain the failure and do not automatically retry.",
+        ),
+        diagnostic(
+            "run_batch_request",
+            DiagnosticClass::Source,
+            "A pure batch has an invalid JSONL row schema or no rows.",
+            "Use strict JSONL rows with id, arguments_json and optional target, execution and deadline_milliseconds.",
+        ),
+        diagnostic(
+            "run_batch_id",
+            DiagnosticClass::Source,
+            "A batch row ID is duplicate, empty, too long or contains NUL.",
+            "Give each ordered row a unique ID of 1 to 128 UTF-8 bytes without NUL.",
+        ),
+        diagnostic(
+            "run_batch_input_limit",
+            DiagnosticClass::Resource,
+            "A pure batch exceeds its input, row count or encoded row bound.",
+            "Use at most 4096 rows, 64 MiB total and 4 MiB per encoded JSONL row.",
+        ),
+        diagnostic(
+            "run_batch_output_limit",
+            DiagnosticClass::Resource,
+            "A pure batch cannot encode its results within the aggregate or row bound.",
+            "Split the finite pure workload; the aggregate result is not published on this failure.",
+        ),
+        diagnostic(
+            "run_batch_pure",
+            DiagnosticClass::Capability,
+            "A batch deployment requests grants, configuration, secrets or service adapters.",
+            "Select grant-free pure Command targets; task targets reject even with empty effect rows.",
+        ),
+        diagnostic(
+            "run_batch_deadline",
+            DiagnosticClass::Resource,
+            "A batch row deadline cannot be represented on the host clock.",
+            "Use a representable deadline; zero requests immediate expiry for that row.",
+        ),
+        diagnostic(
+            "run_batch_response",
+            DiagnosticClass::Infrastructure,
+            "A pure batch row result or diagnostic could not be projected.",
+            "Retain the diagnostic; no incomplete aggregate result is published.",
+        ),
+        diagnostic(
+            "run_batch_source_binding",
+            DiagnosticClass::Corrupt,
+            "An admitted source batch artifact has no exact root package binding.",
+            "Retain the diagnostic and rebuild from the exact current accepted source.",
         ),
         diagnostic(
             "package_source_owner_contract",
@@ -7275,6 +7284,20 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
     let mut records = Vec::new();
     match section {
         RegistrySection::Contracts => {
+            records.push(compact_record(
+                "canonical-schema",
+                &[
+                    (
+                        "identity",
+                        super::super::canonical_schema::CANONICAL_SCHEMA_IDENTITY.to_owned(),
+                    ),
+                    (
+                        "hash",
+                        super::super::canonical_schema::CANONICAL_SCHEMA_HASH_HEX.to_owned(),
+                    ),
+                    ("generation-policy", "current-only".to_owned()),
+                ],
+            )?);
             for descriptor in contract_descriptors() {
                 records.push(compact_record(
                     "contract",
@@ -8353,6 +8376,33 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ("cancellation", "SIGINT-SIGTERM-completion-first-on-ready-tie-then-joined-cancellation".to_owned()),
                 ("failure", "nonzero-no-automatic-retry-possibly-visible-effects-and-cleanup-notes".to_owned()),
                 ("project-route", "pure-differential-existing-bounded-defaults".to_owned()),
+            ])?);
+            records.push(compact_record("execution.pure-batch", &[
+                ("selector", "run --deployment PATH --batch-input-file PATH --batch-result-file PATH".to_owned()),
+                ("entry", "pure-grant-free-command-only-no-configuration-secrets-or-service-adapters".to_owned()),
+                ("input", "strict-jsonl-id-arguments_json-target?-execution?-deadline_milliseconds?".to_owned()),
+                ("output", "ordered-jsonl-id-exit_code-stdout-result_json-or-null".to_owned()),
+                ("bounds", "4096-rows-64MiB-input-and-output-4MiB-encoded-row-ordinary-1MiB-typed-json".to_owned()),
+                ("preparation", "one-exact-artifact-admission-and-immutable-program-preparation".to_owned()),
+                ("row-lifetime", "fresh-controls-vm-resident-adapters-and-joined-executor".to_owned()),
+                ("row-deadline", "absolute-includes-preparation-receipt-shows-remaining-invocation-budget".to_owned()),
+                ("failure", "row-diagnostics-preserve-cleanup-notes-and-next-row-continues".to_owned()),
+                ("cancellation", "process-signal-joins-current-row-and-refuses-aggregate-publication".to_owned()),
+                ("publication", "bounded-complete-create-new-aggregate-only".to_owned()),
+            ])?);
+            records.push(compact_record("execution.source-batch", &[
+                ("selector", "--project ABSOLUTE_PATH run TARGET --batch-input-file PATH --batch-result-file PATH".to_owned()),
+                ("entry", "pure-grant-free-command-only-task-kind-rejects-even-with-empty-row".to_owned()),
+                ("input", "same-strict-bounded-jsonl-as-artifact-batch".to_owned()),
+                ("preparation", "one-exact-source-closure-with-independent-canonical-reference-and-admitted-compiled-program".to_owned()),
+                ("authority", "exact-repository-package-semantic-and-package-revisions-artifact-schema-validator-checked-each-row-and-before-publication".to_owned()),
+                ("row-lifetime", "fresh-controls-vm-independent-reference-and-explicitly-joined-executor".to_owned()),
+                ("verification", "every-successful-row-compares-production-and-canonical-reference-values".to_owned()),
+                ("output", "complete-typed-result_json-with-value-location=batch-row-and-compact-actual-dual-execution-observations".to_owned()),
+                ("limits", "ordinary-source-bounded-defaults-or-exact-row-execution-policy-and-deadline".to_owned()),
+                ("failure", "original-row-diagnostic-and-actual-invoked-tier-cleanup-observations-next-row-continues-authority-change-aborts-aggregate".to_owned()),
+                ("cancellation", "process-signal-joins-preparation-or-current-row-and-refuses-aggregate-publication".to_owned()),
+                ("publication", "bounded-complete-create-new-aggregate-only-no-accepted-head-change".to_owned()),
             ])?);
             for (field, scalar) in [
                 ("target", "name"),
@@ -9934,6 +9984,13 @@ mod tests {
         assert_eq!(RegistrySection::ALL.len(), first.sections.len());
         assert!(first.bytes.starts_with(b"registry "));
         assert!(!first.bytes.starts_with(b"{"));
+        let contracts = first.section(RegistrySection::Contracts).unwrap();
+        let records = std::str::from_utf8(&contracts.bytes).unwrap();
+        assert!(records.contains(&format!(
+            "canonical-schema identity=lkjscript-canonical-schema hash={} generation-policy=current-only\n",
+            super::super::super::canonical_schema::CANONICAL_SCHEMA_HASH_HEX
+        )));
+        assert!(!records.contains("predecessor=read_historical"));
     }
 
     #[test]

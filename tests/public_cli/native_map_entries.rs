@@ -7,6 +7,7 @@ mod cases;
 pub(super) mod support;
 use serde_json::{Value, json};
 use std::fs;
+use support::batch::BatchCase;
 use support::{Native, digest, path, quoted};
 
 #[test]
@@ -43,35 +44,23 @@ fn native_map_entries_preserve_results_and_linear_projection_work_after_detachme
         &arguments,
         &cases::expected(&smoke, 3),
     );
-    fs::remove_dir_all(project).unwrap();
-    fs::remove_file(public.root.join("standard.lkjp")).unwrap();
-    let mut rows = Vec::new();
+    let mut batch = Vec::new();
+    let mut pairs = Vec::new();
     for n in [0, 1, 31, 32, 33, 256, 1024, 4096] {
         for shape in 0..4 {
             let input = cases::input(n, shape);
             for k in [0, 1, 8] {
                 let expected = cases::expected(&input, k);
-                let mut pair = Vec::new();
+                let first = batch.len();
                 for enumerate in [false, true] {
                     let name = format!("n{n}-s{shape}-k{k}-e{enumerate}");
-                    let arguments = public.input(
-                        &format!("{name}.json"),
-                        &json!([enumerate, input, k]).to_string(),
-                    );
-                    let output = public.compare(&name, &descriptor, &arguments, &expected);
-                    pair.push(quoted(&output, "production-observation"));
+                    batch.push(BatchCase::success(
+                        name,
+                        &json!([enumerate, input, k]),
+                        expected.clone(),
+                    ));
                 }
-                assert!(
-                    cases::valid_cost(
-                        &pair[0]["value_work"],
-                        &pair[1]["value_work"],
-                        cases::input_nodes(&input),
-                        n as u64,
-                        k as u64
-                    ),
-                    "n={n}/shape={shape}/k={k}: {pair:?}"
-                );
-                rows.push(json!({"n":n,"shape":shape,"repetitions":k,"observations":pair}));
+                pairs.push((n, shape, k, cases::input_nodes(&input), first));
             }
         }
     }
@@ -80,28 +69,17 @@ fn native_map_entries_preserve_results_and_linear_projection_work_after_detachme
             let mut input = cases::input(33, 0);
             input[32]["value"]["items"][2] = json!(false);
             let name = format!("wrong-{enumerate}-{k}");
-            let arguments = public.input(
-                &format!("{name}.json"),
-                &json!([enumerate, input, k]).to_string(),
-            );
-            cases::refusal(
-                &public,
-                &descriptor,
-                &name,
-                &arguments,
+            batch.push(BatchCase::failure(
+                name.clone(),
+                &json!([enumerate, input, k]),
                 "source",
                 "normalized_json_type",
-            );
-            let good = public.input(
-                &format!("recovery-{name}.json"),
-                &json!([enumerate, smoke, 3]).to_string(),
-            );
-            public.compare(
-                &format!("recovery-{name}"),
-                &descriptor,
-                &good,
-                &cases::expected(&smoke, 3),
-            );
+            ));
+            batch.push(BatchCase::success(
+                format!("recovery-{name}"),
+                &json!([enumerate, smoke, 3]),
+                cases::expected(&smoke, 3),
+            ));
         }
     }
     for (field, code) in [
@@ -109,20 +87,79 @@ fn native_map_entries_preserve_results_and_linear_projection_work_after_detachme
         ("maximum_allocated_bytes", "normalized_allocation"),
         ("maximum_collection_items", "normalized_collection_items"),
     ] {
-        let mut limited = deployment.clone();
-        limited["execution"] = json!({"instruction_fuel":null,"maximum_call_depth":4096,"maximum_value_stack":1000000});
-        limited["execution"][field] = json!(1);
-        let limit = public.input(&format!("limit-{field}.json"), &limited.to_string());
-        cases::refusal(&public, &limit, field, &arguments, "resource", code);
-        public.compare(
-            &format!("after-{field}"),
-            &descriptor,
-            &arguments,
-            &cases::expected(&smoke, 3),
-        );
+        let mut policy = json!({"instruction_fuel":null,"maximum_call_depth":4096,"maximum_value_stack":1000000});
+        policy[field] = json!(1);
+        let mut limited = BatchCase::failure(field, &json!([true, smoke, 3]), "resource", code);
+        limited.execution = Some(policy);
+        batch.push(limited);
+        batch.push(BatchCase::success(
+            format!("after-{field}"),
+            &json!([true, smoke, 3]),
+            cases::expected(&smoke, 3),
+        ));
     }
+    assert_eq!(
+        batch.len(),
+        206,
+        "every original detached matrix/refusal/recovery row"
+    );
+    // The same complete inventory also exercises the selected product's source differential.
+    // Expectations and modeled work remain in this independent harness.
+    let source_outputs =
+        public.source_batch("map-matrix", &project, "map-entry-projection", &batch);
+    let mut source_rows = Vec::new();
+    for &(n, shape, k, nodes, first) in &pairs {
+        let pair = [
+            quoted(&source_outputs[first], "production-observation"),
+            quoted(&source_outputs[first + 1], "production-observation"),
+        ];
+        assert!(
+            cases::valid_cost(
+                &pair[0]["value_work"],
+                &pair[1]["value_work"],
+                nodes,
+                n as u64,
+                k as u64
+            ),
+            "source n={n}/shape={shape}/k={k}: {pair:?}"
+        );
+        source_rows.push(json!({"n":n,"shape":shape,"repetitions":k,"observations":pair}));
+    }
+    fs::remove_dir_all(project).unwrap();
+    fs::remove_file(public.root.join("standard.lkjp")).unwrap();
+    let outputs = public.batch("map-matrix", &descriptor, &batch);
+    let mut rows = Vec::new();
+    for (n, shape, k, nodes, first) in pairs {
+        let pair = [
+            quoted(&outputs[first], "production-observation"),
+            quoted(&outputs[first + 1], "production-observation"),
+        ];
+        assert!(
+            cases::valid_cost(
+                &pair[0]["value_work"],
+                &pair[1]["value_work"],
+                nodes,
+                n as u64,
+                k as u64
+            ),
+            "n={n}/shape={shape}/k={k}: {pair:?}"
+        );
+        rows.push(json!({"n":n,"shape":shape,"repetitions":k,"observations":pair}));
+    }
+    public.compare(
+        "detached-smoke",
+        &descriptor,
+        &arguments,
+        &cases::expected(&smoke, 3),
+    );
+    public.batch_controls(
+        &descriptor,
+        &json!([true, smoke, 3]),
+        &cases::expected(&smoke, 3),
+    );
+    support::source_batch::controls(&candidate);
     assert_eq!(candidate_hash, digest(&candidate));
     assert_eq!(executable, digest(&public.root.join("lkjscript")));
     assert_eq!(artifact_hash, digest(&artifact));
-    public.input("map-entry-matrix.json",&json!({"purpose":"Complete public result and modeled-work evidence, not a timing or publication receipt","status":"passed","binary_sha256":executable,"artifact_sha256":artifact_hash,"sources_deleted":true,"pairs":rows}).to_string());
+    public.input("map-entry-matrix.json",&json!({"purpose":"Complete public result and modeled-work evidence, not a timing or publication receipt","status":"passed","binary_sha256":executable,"artifact_sha256":artifact_hash,"sources_deleted":true,"source_batch_rows":source_outputs.len(),"source_pairs":source_rows,"candidate_batch_rows":batch.len(),"pairs":rows}).to_string());
 }

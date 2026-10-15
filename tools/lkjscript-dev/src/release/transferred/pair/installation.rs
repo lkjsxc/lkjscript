@@ -285,7 +285,7 @@ pub(super) fn run(
     validate(options, route, admitted, &proof)?;
     Ok(proof)
 }
-fn payloads(
+pub(super) fn payloads(
     options: &PairOptions,
     route: Route,
     admitted: &archive::VerifiedArchive,

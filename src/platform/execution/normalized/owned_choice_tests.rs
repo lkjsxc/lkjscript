@@ -135,13 +135,22 @@ declarations.end"#;
     source.root.graph_contract_version = 19;
     for owner in source.owners.values_mut() {
         owner.set_encoding_for_edit(19);
-        crate::platform::kernel::encode_owner(owner).unwrap();
+        assert_eq!(
+            crate::platform::kernel::encode_owner(owner)
+                .unwrap_err()
+                .code,
+            if matches!(owner, crate::platform::kernel::OwnerRecord::Expression(_)) {
+                "kernel_expression_contract"
+            } else {
+                "kernel_owner_header"
+            }
+        );
     }
     let errors = crate::platform::kernel::validate_full(&source).unwrap_err();
     assert!(
         errors
             .iter()
-            .any(|error| error.code == "kernel_choice_generation"),
+            .any(|error| error.code == "kernel_root_contract"),
         "{errors:?}"
     );
     assert!(!crate::platform::kernel::memory_reference::accepts(&source));

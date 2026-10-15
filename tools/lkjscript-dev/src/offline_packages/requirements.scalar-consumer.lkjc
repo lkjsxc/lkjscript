@@ -1,0 +1,13 @@
+reference.owner as=$encode-integer package=$scalars class=declaration name=encode-integer
+reference.owner as=$encode-text package=$scalars class=declaration name=encode-text
+create.module as=$module name=imported-scalars
+create.component as=$component module=$module name=scalar-codecs visibility=public
+expression.call as=$integer function=$encode-integer
+expression.call as=$text function=$encode-text
+create.function as=$integer-function module=$module name=encode-integer visibility=public result=bytes effect=pure body=$integer
+create.function as=$text-function module=$module name=encode-text visibility=public result=bytes effect=pure body=$text
+type.function as=@Encoder result=bytes
+add.port as=$integer-port component=$component name=integer type=@Encoder function=$integer-function
+add.port as=$text-port component=$component name=text type=@Encoder function=$text-function
+create.target as=$integer-target name=encode-integer component=$component port=$integer-port runner=command
+create.target as=$text-target name=encode-text component=$component port=$text-port runner=command

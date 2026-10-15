@@ -222,96 +222,88 @@ fn healthy(
 
 #[test]
 fn reference_associated_invocations_execute_polymorphic_normal_and_tail_routes() {
-    for generation in [
-        crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
-        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-    ] {
-        for tail in [false, true] {
-            let case = fixture_at_generation(tail, generation);
-            let schema = schema(&case);
-            let proof = schema.associated_proof().unwrap();
-            let caller = proof
-                .applications
-                .keys()
-                .find(|application| application.function == case.caller)
-                .unwrap();
-            let target = proof
-                .call_target(caller, case.callee, &ExecutionControl::uncancelled())
-                .unwrap();
-            assert_eq!(target.types.len(), 2);
-            assert!(target.witnesses.is_empty());
-            assert_ne!(
-                proof.symbolic[&case.target].result.ty,
-                proof
-                    .application(target, &ExecutionControl::uncancelled())
-                    .unwrap()
-                    .result
-                    .ty
-            );
-            healthy(&case, &schema, tail);
-        }
+    let generation = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+    for tail in [false, true] {
+        let case = fixture_at_generation(tail, generation);
+        let schema = schema(&case);
+        let proof = schema.associated_proof().unwrap();
+        let caller = proof
+            .applications
+            .keys()
+            .find(|application| application.function == case.caller)
+            .unwrap();
+        let target = proof
+            .call_target(caller, case.callee, &ExecutionControl::uncancelled())
+            .unwrap();
+        assert_eq!(target.types.len(), 2);
+        assert!(target.witnesses.is_empty());
+        assert_ne!(
+            proof.symbolic[&case.target].result.ty,
+            proof
+                .application(target, &ExecutionControl::uncancelled())
+                .unwrap()
+                .result
+                .ty
+        );
+        healthy(&case, &schema, tail);
     }
 }
 
 #[test]
 fn reference_associated_invocations_reject_changed_ordered_children_and_generations() {
-    for generation in [
-        crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
-        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-    ] {
-        for tail in [false, true] {
-            let case = fixture_at_generation(tail, generation);
-            let schema = schema(&case);
-            healthy(&case, &schema, tail);
-            for mutation in 0..8 {
-                let mut changed = case.fixture.source.clone();
-                let other_admitted_generation = if generation
-                    == crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
-                {
-                    crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
-                } else {
-                    crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
-                };
-                assert_ne!(other_admitted_generation, generation);
-                let invocation = expression(&mut changed, case.invocation);
-                let ExpressionOperation::Invoke { callee, arguments } = &mut invocation.operation
-                else {
-                    unreachable!()
-                };
-                match mutation {
-                    0 => *callee = case.argument, // Another present canonical child.
-                    1 => {
-                        assert_eq!(arguments, &[case.argument, case.second_argument]);
-                        arguments.swap(0, 1); // Both arguments remain well-typed I64.
-                    }
-                    2 => invocation.contract_version = 32,
-                    3 => invocation.contract_version = other_admitted_generation,
-                    4 | 5 | 7 => {
-                        let OwnerRecord::Declaration(target) = changed
-                            .owners
-                            .get_mut(&OwnerKey::Declaration(case.target.declaration))
-                            .unwrap()
-                        else {
-                            unreachable!()
-                        };
-                        target.header.contract_version = match mutation {
-                            4 => 32,
-                            5 => other_admitted_generation,
-                            7 => crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION + 1,
-                            _ => unreachable!(),
-                        };
-                    }
-                    6 => {
-                        invocation.contract_version =
-                            crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION + 1
-                    }
-                    _ => unreachable!(),
+    let generation = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+    for tail in [false, true] {
+        let case = fixture_at_generation(tail, generation);
+        let schema = schema(&case);
+        healthy(&case, &schema, tail);
+        for mutation in 0..8 {
+            let mut changed = case.fixture.source.clone();
+            let other_admitted_generation = if generation
+                == crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+            {
+                crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+            } else {
+                crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+            };
+            assert_ne!(other_admitted_generation, generation);
+            let invocation = expression(&mut changed, case.invocation);
+            let ExpressionOperation::Invoke { callee, arguments } = &mut invocation.operation
+            else {
+                unreachable!()
+            };
+            match mutation {
+                0 => *callee = case.argument, // Another present canonical child.
+                1 => {
+                    assert_eq!(arguments, &[case.argument, case.second_argument]);
+                    arguments.swap(0, 1); // Both arguments remain well-typed I64.
                 }
-                let error = run(&case, &changed, Arc::clone(&schema)).unwrap_err();
-                assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
-                assert_eq!(error.code, "normalized_reference_type");
-                healthy(&case, &schema, tail);
+                2 => invocation.contract_version = 32,
+                3 => invocation.contract_version = other_admitted_generation,
+                4 | 5 | 7 => {
+                    let OwnerRecord::Declaration(target) = changed
+                        .owners
+                        .get_mut(&OwnerKey::Declaration(case.target.declaration))
+                        .unwrap()
+                    else {
+                        unreachable!()
+                    };
+                    target.header.contract_version = match mutation {
+                        4 => 32,
+                        5 => other_admitted_generation,
+                        7 => crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION + 1,
+                        _ => unreachable!(),
+                    };
+                }
+                6 => {
+                    invocation.contract_version =
+                        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION + 1
+                }
+                _ => unreachable!(),
             }
+            let error = run(&case, &changed, Arc::clone(&schema)).unwrap_err();
+            assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
+            assert_eq!(error.code, "normalized_reference_type");
+            healthy(&case, &schema, tail);
         }
     }
 }
@@ -893,416 +885,406 @@ fn reference_scope_frames_reuse_one_admitted_parameter_inventory_without_weakeni
         }
     }
 
-    for generation in [
-        crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
-        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-    ] {
-        let mut case = fixture_at_generation(false, generation);
-        let external = add_external_target(&mut case);
-        for owner in case.fixture.source.owners.values_mut() {
-            owner.set_encoding_for_edit(generation);
-        }
-        let schema = schema(&case);
-        let reader = CountingRead {
-            inner: FaultedReferenceRead {
-                source: &case.fixture.source,
-                schema: Arc::clone(&schema),
-            },
-            parameters: Cell::new(0),
-        };
-        let program = program();
-        let interpreter = NormalizedReferenceInterpreter::from_reader(
-            &reader,
-            &program,
-            NormalizedRunPolicy::foreground(),
-        );
-        let (value, _) = interpreter
-            .execute(None, &ExecutionControl::uncancelled(), |state| {
-                let record = state.declaration(case.target)?;
-                let DeclarationPayload::Function(function_template) = record.payload else {
-                    unreachable!()
-                };
-                let count = function_template.parameters.len();
-                assert!(count > 0);
-                assert!(function_template.read_scope_parameters.is_empty());
-                assert!(function_template.read_scope_sources.is_empty());
-                // Full external signatures retain fresh canonical names.
-                let signature = state.function_signature(external)?;
-                let OwnerRecord::Declaration(external_owner) =
-                    &case.fixture.source.owners[&OwnerKey::Declaration(external.declaration)]
+    let generation = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+    let mut case = fixture_at_generation(false, generation);
+    let external = add_external_target(&mut case);
+    for owner in case.fixture.source.owners.values_mut() {
+        owner.set_encoding_for_edit(generation);
+    }
+    let schema = schema(&case);
+    let reader = CountingRead {
+        inner: FaultedReferenceRead {
+            source: &case.fixture.source,
+            schema: Arc::clone(&schema),
+        },
+        parameters: Cell::new(0),
+    };
+    let program = program();
+    let interpreter = NormalizedReferenceInterpreter::from_reader(
+        &reader,
+        &program,
+        NormalizedRunPolicy::foreground(),
+    );
+    let (value, _) = interpreter
+        .execute(None, &ExecutionControl::uncancelled(), |state| {
+            let record = state.declaration(case.target)?;
+            let DeclarationPayload::Function(function_template) = record.payload else {
+                unreachable!()
+            };
+            let count = function_template.parameters.len();
+            assert!(count > 0);
+            assert!(function_template.read_scope_parameters.is_empty());
+            assert!(function_template.read_scope_sources.is_empty());
+            // Full external signatures retain fresh canonical names.
+            let signature = state.function_signature(external)?;
+            let OwnerRecord::Declaration(external_owner) =
+                &case.fixture.source.owners[&OwnerKey::Declaration(external.declaration)]
+            else {
+                unreachable!()
+            };
+            let DeclarationPayload::External(external_record) = &external_owner.payload else {
+                unreachable!()
+            };
+            assert_eq!(signature.parameters.len(), external_record.parameters.len());
+            for (record, id) in signature.parameters.iter().zip(&external_record.parameters) {
+                let OwnerRecord::Parameter(canonical) =
+                    &case.fixture.source.owners[&OwnerKey::Parameter(*id)]
                 else {
                     unreachable!()
                 };
-                let DeclarationPayload::External(external_record) = &external_owner.payload else {
+                assert_eq!(record, canonical);
+                assert!(!record.name.as_str().is_empty());
+            }
+            reader.parameters.set(0);
+            let before = state.observation.allocated_bytes;
+            let before_items = state.observation.collection_items;
+            let original_limit = state.policy.maximum_allocated_bytes;
+            let cost = (count * compact) as u64;
+            state.policy.maximum_allocated_bytes = Some(before + cost);
+            let mut parameters =
+                state.graph_call_parameters(case.target.package, &function_template.parameters)?;
+            assert_eq!(parameters.capacity(), count);
+            assert_eq!(state.observation.allocated_bytes - before, cost);
+            assert_eq!(
+                state.observation.collection_items - before_items,
+                count as u64
+            );
+            state.policy.maximum_allocated_bytes = original_limit;
+            assert_eq!(reader.parameters.get(), count);
+            for (parameter, id) in parameters.iter().zip(&function_template.parameters) {
+                let OwnerRecord::Parameter(canonical) =
+                    &case.fixture.source.owners[&OwnerKey::Parameter(*id)]
+                else {
                     unreachable!()
                 };
-                assert_eq!(signature.parameters.len(), external_record.parameters.len());
-                for (record, id) in signature.parameters.iter().zip(&external_record.parameters) {
-                    let OwnerRecord::Parameter(canonical) =
-                        &case.fixture.source.owners[&OwnerKey::Parameter(*id)]
-                    else {
-                        unreachable!()
-                    };
-                    assert_eq!(record, canonical);
-                    assert!(!record.name.as_str().is_empty());
-                }
-                reader.parameters.set(0);
-                let before = state.observation.allocated_bytes;
-                let before_items = state.observation.collection_items;
-                let original_limit = state.policy.maximum_allocated_bytes;
-                let cost = (count * compact) as u64;
-                state.policy.maximum_allocated_bytes = Some(before + cost);
-                let mut parameters = state
-                    .graph_call_parameters(case.target.package, &function_template.parameters)?;
-                assert_eq!(parameters.capacity(), count);
-                assert_eq!(state.observation.allocated_bytes - before, cost);
+                assert_eq!(parameter.header, canonical.header);
+                assert_eq!(parameter.parent, canonical.parent);
+                assert_eq!(parameter.ty, canonical.ty);
+                assert_eq!(parameter.use_mode, canonical.use_mode);
                 assert_eq!(
-                    state.observation.collection_items - before_items,
-                    count as u64
+                    parameter.resource_requirement,
+                    canonical.resource_requirement
                 );
-                state.policy.maximum_allocated_bytes = original_limit;
-                assert_eq!(reader.parameters.get(), count);
-                for (parameter, id) in parameters.iter().zip(&function_template.parameters) {
-                    let OwnerRecord::Parameter(canonical) =
-                        &case.fixture.source.owners[&OwnerKey::Parameter(*id)]
-                    else {
-                        unreachable!()
-                    };
-                    assert_eq!(parameter.header, canonical.header);
-                    assert_eq!(parameter.parent, canonical.parent);
-                    assert_eq!(parameter.ty, canonical.ty);
-                    assert_eq!(parameter.use_mode, canonical.use_mode);
-                    assert_eq!(
-                        parameter.resource_requirement,
-                        canonical.resource_requirement
-                    );
-                }
-                // Canonical application closes .ty before frame admission. The
-                // frame uses the exact raw header/parent/use/source fields only.
-                let i64_type = state
-                    .schema
-                    .types
-                    .iter()
-                    .find_map(|(ty, object)| matches!(object.form, TypeForm::I64).then_some(*ty))
-                    .unwrap();
-                for parameter in &mut parameters {
-                    parameter.ty = i64_type;
-                }
-                let mut arguments = (0..count)
-                    .map(|_| CheckedValue::primitive(&state.schema, NormalizedValue::I64(17)))
-                    .collect::<Result<Vec<_>, _>>()?;
-                let mut function = function_template.clone();
-                let parameter_storage = function.parameters.as_ptr();
-                let before_bytes = state.observation.allocated_bytes;
-                let before_items = state.observation.collection_items;
-                let mut frame = state.admit_read_scope_frame(
-                    case.target,
-                    &mut function,
-                    &parameters,
-                    &[],
-                    &mut arguments,
-                )?;
-                assert_eq!(frame.declaration(), Some(case.target));
-                assert_eq!(
-                    frame.parameter_ids(),
-                    function_template.parameters.as_slice()
-                );
-                assert_eq!(frame.parameter_ids().as_ptr(), parameter_storage);
-                assert!(function.parameters.is_empty());
-                assert_eq!(reader.parameters.get(), count);
-                assert_eq!(state.observation.allocated_bytes, before_bytes);
-                assert_eq!(state.observation.collection_items, before_items);
-                if generation == crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION {
-                    // Exercise only private metadata storage here: a prospective
-                    // key has no lease and cannot confer a raw lexical loan.
-                    let binding = BindingId::migrate(SEED, 2001);
-                    let scope = ReadScopeArgument::Lexical {
-                        callable: case.target,
-                        binding,
-                    };
-                    let foreign = ReadScopeArgument::Lexical {
-                        callable: case.caller,
-                        binding,
-                    };
-                    assert!(frame.resolve(scope).is_err());
-                    let mut reserves = Vec::new();
-                    let error = frame
-                        .begin_prospective_scope(foreign, state.control, &mut |bytes| {
-                            reserves.push(bytes);
-                            Ok(())
-                        })
-                        .unwrap_err();
-                    assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
-                    assert_eq!(error.code, "normalized_reference_type");
-                    assert_eq!(
-                        error.message,
-                        "prospective loan aliases another exact live binding"
-                    );
-                    assert!(reserves.is_empty());
-
-                    let cost = read_views::ScopeFrame::scope_storage_bytes() as u64;
-                    let original_limit = state.policy.maximum_allocated_bytes;
-                    let before = state.observation.allocated_bytes;
-                    state.policy.maximum_allocated_bytes = Some(before + cost - 1);
-                    let error = frame
-                        .begin_prospective_scope(scope, state.control, &mut |bytes| {
-                            reserves.push(bytes);
-                            state.charge_allocation(bytes)
-                        })
-                        .unwrap_err();
-                    assert_eq!(error.class, ExecutionFailureClass::Resource);
-                    assert_eq!(error.code, "normalized_reference_allocation");
-                    assert_eq!(reserves, [cost]);
-                    assert_eq!(state.observation.allocated_bytes, before);
-                    assert!(frame.resolve(scope).is_err());
-                    assert!(!frame.is_prospective(scope));
-                    assert_eq!(frame.parameter_ids().as_ptr(), parameter_storage);
-                    state.policy.maximum_allocated_bytes = original_limit;
-                    reserves.clear();
-
-                    // The caller still reserves the actual BTree entries; the
-                    // backing charge is distinct and paid exactly once.
-                    state.charge_items(
-                        2,
-                        std::mem::size_of::<ReadScopeArgument>() + 3 * std::mem::size_of::<usize>(),
-                    )?;
-                    let before = state.observation.allocated_bytes;
-                    frame.begin_prospective_scope(scope, state.control, &mut |bytes| {
+            }
+            // Canonical application closes .ty before frame admission. The
+            // frame uses the exact raw header/parent/use/source fields only.
+            let i64_type = state
+                .schema
+                .types
+                .iter()
+                .find_map(|(ty, object)| matches!(object.form, TypeForm::I64).then_some(*ty))
+                .unwrap();
+            for parameter in &mut parameters {
+                parameter.ty = i64_type;
+            }
+            let mut arguments = (0..count)
+                .map(|_| CheckedValue::primitive(&state.schema, NormalizedValue::I64(17)))
+                .collect::<Result<Vec<_>, _>>()?;
+            let mut function = function_template.clone();
+            let parameter_storage = function.parameters.as_ptr();
+            let before_bytes = state.observation.allocated_bytes;
+            let before_items = state.observation.collection_items;
+            let mut frame = state.admit_read_scope_frame(
+                case.target,
+                &mut function,
+                &parameters,
+                &[],
+                &mut arguments,
+            )?;
+            assert_eq!(frame.declaration(), Some(case.target));
+            assert_eq!(
+                frame.parameter_ids(),
+                function_template.parameters.as_slice()
+            );
+            assert_eq!(frame.parameter_ids().as_ptr(), parameter_storage);
+            assert!(function.parameters.is_empty());
+            assert_eq!(reader.parameters.get(), count);
+            assert_eq!(state.observation.allocated_bytes, before_bytes);
+            assert_eq!(state.observation.collection_items, before_items);
+            if generation == crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION {
+                // Exercise only private metadata storage here: a prospective
+                // key has no lease and cannot confer a raw lexical loan.
+                let binding = BindingId::migrate(SEED, 2001);
+                let scope = ReadScopeArgument::Lexical {
+                    callable: case.target,
+                    binding,
+                };
+                let foreign = ReadScopeArgument::Lexical {
+                    callable: case.caller,
+                    binding,
+                };
+                assert!(frame.resolve(scope).is_err());
+                let mut reserves = Vec::new();
+                let error = frame
+                    .begin_prospective_scope(foreign, state.control, &mut |bytes| {
                         reserves.push(bytes);
-                        state.charge_allocation(bytes)
-                    })?;
-                    assert_eq!(reserves, [cost]);
-                    assert_eq!(state.observation.allocated_bytes - before, cost);
-                    assert_eq!(frame.resolve(scope)?, scope);
-                    assert!(frame.is_prospective(scope));
-                    assert_eq!(
-                        frame.scope(scope).err().unwrap().message,
-                        "symbolic read scope has no admitted live source lease"
-                    );
-                    frame.remove_scope(scope);
-                    assert!(frame.resolve(scope).is_err());
-                    let later = ReadScopeArgument::Lexical {
-                        callable: case.target,
-                        binding: BindingId::migrate(SEED, 2002),
-                    };
-                    state.charge_items(
-                        2,
-                        std::mem::size_of::<ReadScopeArgument>() + 3 * std::mem::size_of::<usize>(),
-                    )?;
-                    let before = state.observation.allocated_bytes;
-                    frame.begin_prospective_scope(later, state.control, &mut |bytes| {
-                        reserves.push(bytes);
-                        state.charge_allocation(bytes)
-                    })?;
-                    assert_eq!(reserves, [cost]);
-                    assert_eq!(state.observation.allocated_bytes, before);
-                    let error = frame
-                        .begin_prospective_scope(later, state.control, &mut |_| {
-                            panic!("duplicate scope cannot reserve storage")
-                        })
-                        .unwrap_err();
-                    assert_eq!(
-                        error.message,
-                        "prospective loan aliases another exact live binding"
-                    );
-                    let cancelled = ExecutionControl::uncancelled();
-                    cancelled.cancel();
-                    let error = frame
-                        .begin_prospective_scope(scope, &cancelled, &mut |_| {
-                            panic!("cancelled scope cannot reserve storage")
-                        })
-                        .unwrap_err();
-                    assert_eq!(error.class, ExecutionFailureClass::Cancelled);
-                    assert_eq!(error.code, "execution_cancelled");
-                    assert!(frame.resolve(scope).is_err());
-
-                    // A receiving capture ledger independently refuses the
-                    // backing before minting it, preserving the caller's state.
-                    state.read_scope_frames.push(frame);
-                    let budget = super::super::shared_budget::SharedBudget::new(
-                        NormalizedRunPolicy {
-                            maximum_allocated_bytes: Some(cost - 1),
-                            ..NormalizedRunPolicy::foreground()
-                        },
-                        None,
-                        0,
-                        0,
-                    );
-                    let error = state
-                        .capture_read_scope_frame(&[later], &mut |bytes| budget.reserve(bytes, 0))
-                        .err()
-                        .unwrap();
-                    assert_eq!(error.class, ExecutionFailureClass::Resource);
-                    assert_eq!(error.code, "normalized_allocation");
-                    budget.reserve(cost - 1, 0)?;
-                    assert_eq!(
-                        state.read_scope_frames.last().unwrap().resolve(later)?,
-                        later
-                    );
-                    let budget = super::super::shared_budget::SharedBudget::new(
-                        NormalizedRunPolicy {
-                            maximum_allocated_bytes: Some(cost),
-                            ..NormalizedRunPolicy::foreground()
-                        },
-                        None,
-                        0,
-                        0,
-                    );
-                    let mut committed = 0;
-                    let error = state
-                        .capture_read_scope_frame(&[later, foreign], &mut |bytes| {
-                            budget.reserve(bytes, 0)?;
-                            committed += bytes;
-                            Ok(())
-                        })
-                        .err()
-                        .unwrap();
-                    assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
-                    assert_eq!(error.code, "normalized_reference_type");
-                    assert_eq!(
-                        error.message,
-                        "read scope is outside the exact active invocation"
-                    );
-                    assert_eq!(committed, cost);
-                    assert_eq!(
-                        budget.reserve(1, 0).unwrap_err().code,
-                        "normalized_allocation"
-                    );
-                    let budget = super::super::shared_budget::SharedBudget::new(
-                        NormalizedRunPolicy {
-                            maximum_allocated_bytes: Some(cost),
-                            ..NormalizedRunPolicy::foreground()
-                        },
-                        None,
-                        0,
-                        0,
-                    );
-                    let mut committed = 0;
-                    let captured = state.capture_read_scope_frame(&[later], &mut |bytes| {
-                        budget.reserve(bytes, 0)?;
-                        committed += bytes;
                         Ok(())
-                    })?;
-                    assert_eq!(committed, cost);
-                    assert_eq!(captured.resolve(later)?, later);
-                    assert_eq!(
-                        captured.scope(later).err().unwrap().message,
-                        "symbolic read scope has no admitted live source lease"
-                    );
-                    drop(captured);
-                    frame = state.read_scope_frames.pop().unwrap();
-                    frame.remove_scope(later);
-                    assert_eq!(reader.parameters.get(), count);
-                }
-                drop(frame);
+                    })
+                    .unwrap_err();
+                assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
+                assert_eq!(error.code, "normalized_reference_type");
+                assert_eq!(
+                    error.message,
+                    "prospective loan aliases another exact live binding"
+                );
+                assert!(reserves.is_empty());
 
-                for mutation in 0..3 {
-                    let mut wrong = parameters.clone();
-                    match mutation {
-                        0 => wrong[0].header.kind = OwnerKind::Binding,
-                        1 => wrong[0].parent = ParameterParent::Function(case.caller.declaration),
-                        2 => {
-                            wrong.pop();
-                        }
-                        _ => unreachable!(),
-                    }
-                    let mut function = function_template.clone();
-                    let error = state
-                        .admit_read_scope_frame(
-                            case.target,
-                            &mut function,
-                            &wrong,
-                            &[],
-                            &mut arguments,
-                        )
-                        .err()
-                        .expect("wrong exact parameter metadata must refuse");
-                    assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
-                    assert_eq!(error.code, "normalized_reference_type");
-                    assert_eq!(
-                        error.message,
-                        if mutation == 2 {
-                            "complete callable scope or argument arity differs"
-                        } else {
-                            "scope frame parameter has another canonical owner"
-                        },
-                    );
-                    assert_eq!(reader.parameters.get(), count);
-                    assert_eq!(function.parameters, function_template.parameters);
-                }
-
-                // The one real vector remains reserved before owner reads. A
-                // refusal cannot hide a first vector allocation or second read.
-                let old_policy = state.policy.maximum_allocated_bytes;
-                let before_bytes = state.observation.allocated_bytes;
-                let cost = (count * compact) as u64;
-                state.policy.maximum_allocated_bytes = Some(before_bytes + cost - 1);
-                let error = state
-                    .graph_call_parameters(case.target.package, &function_template.parameters)
+                let cost = read_views::ScopeFrame::scope_storage_bytes() as u64;
+                let original_limit = state.policy.maximum_allocated_bytes;
+                let before = state.observation.allocated_bytes;
+                state.policy.maximum_allocated_bytes = Some(before + cost - 1);
+                let error = frame
+                    .begin_prospective_scope(scope, state.control, &mut |bytes| {
+                        reserves.push(bytes);
+                        state.charge_allocation(bytes)
+                    })
                     .unwrap_err();
                 assert_eq!(error.class, ExecutionFailureClass::Resource);
                 assert_eq!(error.code, "normalized_reference_allocation");
+                assert_eq!(reserves, [cost]);
+                assert_eq!(state.observation.allocated_bytes, before);
+                assert!(frame.resolve(scope).is_err());
+                assert!(!frame.is_prospective(scope));
+                assert_eq!(frame.parameter_ids().as_ptr(), parameter_storage);
+                state.policy.maximum_allocated_bytes = original_limit;
+                reserves.clear();
+
+                // The caller still reserves the actual BTree entries; the
+                // backing charge is distinct and paid exactly once.
+                state.charge_items(
+                    2,
+                    std::mem::size_of::<ReadScopeArgument>() + 3 * std::mem::size_of::<usize>(),
+                )?;
+                let before = state.observation.allocated_bytes;
+                frame.begin_prospective_scope(scope, state.control, &mut |bytes| {
+                    reserves.push(bytes);
+                    state.charge_allocation(bytes)
+                })?;
+                assert_eq!(reserves, [cost]);
+                assert_eq!(state.observation.allocated_bytes - before, cost);
+                assert_eq!(frame.resolve(scope)?, scope);
+                assert!(frame.is_prospective(scope));
+                assert_eq!(
+                    frame.scope(scope).err().unwrap().message,
+                    "symbolic read scope has no admitted live source lease"
+                );
+                frame.remove_scope(scope);
+                assert!(frame.resolve(scope).is_err());
+                let later = ReadScopeArgument::Lexical {
+                    callable: case.target,
+                    binding: BindingId::migrate(SEED, 2002),
+                };
+                state.charge_items(
+                    2,
+                    std::mem::size_of::<ReadScopeArgument>() + 3 * std::mem::size_of::<usize>(),
+                )?;
+                let before = state.observation.allocated_bytes;
+                frame.begin_prospective_scope(later, state.control, &mut |bytes| {
+                    reserves.push(bytes);
+                    state.charge_allocation(bytes)
+                })?;
+                assert_eq!(reserves, [cost]);
+                assert_eq!(state.observation.allocated_bytes, before);
+                let error = frame
+                    .begin_prospective_scope(later, state.control, &mut |_| {
+                        panic!("duplicate scope cannot reserve storage")
+                    })
+                    .unwrap_err();
+                assert_eq!(
+                    error.message,
+                    "prospective loan aliases another exact live binding"
+                );
+                let cancelled = ExecutionControl::uncancelled();
+                cancelled.cancel();
+                let error = frame
+                    .begin_prospective_scope(scope, &cancelled, &mut |_| {
+                        panic!("cancelled scope cannot reserve storage")
+                    })
+                    .unwrap_err();
+                assert_eq!(error.class, ExecutionFailureClass::Cancelled);
+                assert_eq!(error.code, "execution_cancelled");
+                assert!(frame.resolve(scope).is_err());
+
+                // A receiving capture ledger independently refuses the
+                // backing before minting it, preserving the caller's state.
+                state.read_scope_frames.push(frame);
+                let budget = super::super::shared_budget::SharedBudget::new(
+                    NormalizedRunPolicy {
+                        maximum_allocated_bytes: Some(cost - 1),
+                        ..NormalizedRunPolicy::foreground()
+                    },
+                    None,
+                    0,
+                    0,
+                );
+                let error = state
+                    .capture_read_scope_frame(&[later], &mut |bytes| budget.reserve(bytes, 0))
+                    .err()
+                    .unwrap();
+                assert_eq!(error.class, ExecutionFailureClass::Resource);
+                assert_eq!(error.code, "normalized_allocation");
+                budget.reserve(cost - 1, 0)?;
+                assert_eq!(
+                    state.read_scope_frames.last().unwrap().resolve(later)?,
+                    later
+                );
+                let budget = super::super::shared_budget::SharedBudget::new(
+                    NormalizedRunPolicy {
+                        maximum_allocated_bytes: Some(cost),
+                        ..NormalizedRunPolicy::foreground()
+                    },
+                    None,
+                    0,
+                    0,
+                );
+                let mut committed = 0;
+                let error = state
+                    .capture_read_scope_frame(&[later, foreign], &mut |bytes| {
+                        budget.reserve(bytes, 0)?;
+                        committed += bytes;
+                        Ok(())
+                    })
+                    .err()
+                    .unwrap();
+                assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
+                assert_eq!(error.code, "normalized_reference_type");
+                assert_eq!(
+                    error.message,
+                    "read scope is outside the exact active invocation"
+                );
+                assert_eq!(committed, cost);
+                assert_eq!(
+                    budget.reserve(1, 0).unwrap_err().code,
+                    "normalized_allocation"
+                );
+                let budget = super::super::shared_budget::SharedBudget::new(
+                    NormalizedRunPolicy {
+                        maximum_allocated_bytes: Some(cost),
+                        ..NormalizedRunPolicy::foreground()
+                    },
+                    None,
+                    0,
+                    0,
+                );
+                let mut committed = 0;
+                let captured = state.capture_read_scope_frame(&[later], &mut |bytes| {
+                    budget.reserve(bytes, 0)?;
+                    committed += bytes;
+                    Ok(())
+                })?;
+                assert_eq!(committed, cost);
+                assert_eq!(captured.resolve(later)?, later);
+                assert_eq!(
+                    captured.scope(later).err().unwrap().message,
+                    "symbolic read scope has no admitted live source lease"
+                );
+                drop(captured);
+                frame = state.read_scope_frames.pop().unwrap();
+                frame.remove_scope(later);
                 assert_eq!(reader.parameters.get(), count);
-                assert_eq!(state.observation.allocated_bytes, before_bytes);
-                state.policy.maximum_allocated_bytes = old_policy;
+            }
+            drop(frame);
+
+            for mutation in 0..3 {
+                let mut wrong = parameters.clone();
+                match mutation {
+                    0 => wrong[0].header.kind = OwnerKind::Binding,
+                    1 => wrong[0].parent = ParameterParent::Function(case.caller.declaration),
+                    2 => {
+                        wrong.pop();
+                    }
+                    _ => unreachable!(),
+                }
                 let mut function = function_template.clone();
-                let frame = state.admit_read_scope_frame(
+                let error = state
+                    .admit_read_scope_frame(case.target, &mut function, &wrong, &[], &mut arguments)
+                    .err()
+                    .expect("wrong exact parameter metadata must refuse");
+                assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
+                assert_eq!(error.code, "normalized_reference_type");
+                assert_eq!(
+                    error.message,
+                    if mutation == 2 {
+                        "complete callable scope or argument arity differs"
+                    } else {
+                        "scope frame parameter has another canonical owner"
+                    },
+                );
+                assert_eq!(reader.parameters.get(), count);
+                assert_eq!(function.parameters, function_template.parameters);
+            }
+
+            // The one real vector remains reserved before owner reads. A
+            // refusal cannot hide a first vector allocation or second read.
+            let old_policy = state.policy.maximum_allocated_bytes;
+            let before_bytes = state.observation.allocated_bytes;
+            let cost = (count * compact) as u64;
+            state.policy.maximum_allocated_bytes = Some(before_bytes + cost - 1);
+            let error = state
+                .graph_call_parameters(case.target.package, &function_template.parameters)
+                .unwrap_err();
+            assert_eq!(error.class, ExecutionFailureClass::Resource);
+            assert_eq!(error.code, "normalized_reference_allocation");
+            assert_eq!(reader.parameters.get(), count);
+            assert_eq!(state.observation.allocated_bytes, before_bytes);
+            state.policy.maximum_allocated_bytes = old_policy;
+            let mut function = function_template.clone();
+            let frame = state.admit_read_scope_frame(
+                case.target,
+                &mut function,
+                &parameters,
+                &[],
+                &mut arguments,
+            )?;
+            drop(frame);
+            assert_eq!(reader.parameters.get(), count);
+            // A complete canonical indirect call still supplies the final
+            // value; this private helper test grants no artifact admission.
+            state.call_declaration(case.caller, &[], &[], &[], vec![])
+        })
+        .unwrap();
+    assert_eq!(value, NormalizedValue::I64(17));
+
+    let control = ExecutionControl::uncancelled();
+    let error = interpreter
+        .execute(None, &control, |state| {
+            let record = state.declaration(case.target)?;
+            let DeclarationPayload::Function(function_template) = record.payload else {
+                unreachable!()
+            };
+            let parameters =
+                state.graph_call_parameters(case.target.package, &function_template.parameters)?;
+            let mut arguments = parameters
+                .iter()
+                .map(|_| CheckedValue::primitive(&state.schema, NormalizedValue::I64(17)))
+                .collect::<Result<Vec<_>, _>>()?;
+            let reads = reader.parameters.get();
+            let bytes = state.observation.allocated_bytes;
+            let mut function = function_template.clone();
+            control.cancel();
+            let error = state
+                .graph_call_parameters(case.target.package, &function_template.parameters)
+                .unwrap_err();
+            assert_eq!(error.class, ExecutionFailureClass::Cancelled);
+            assert_eq!(error.code, "execution_cancelled");
+            assert_eq!(reader.parameters.get(), reads);
+            assert_eq!(state.observation.allocated_bytes, bytes);
+            let error = state
+                .admit_read_scope_frame(
                     case.target,
                     &mut function,
                     &parameters,
                     &[],
                     &mut arguments,
-                )?;
-                drop(frame);
-                assert_eq!(reader.parameters.get(), count);
-                // A complete canonical indirect call still supplies the final
-                // value; this private helper test grants no artifact admission.
-                state.call_declaration(case.caller, &[], &[], &[], vec![])
-            })
-            .unwrap();
-        assert_eq!(value, NormalizedValue::I64(17));
-
-        let control = ExecutionControl::uncancelled();
-        let error = interpreter
-            .execute(None, &control, |state| {
-                let record = state.declaration(case.target)?;
-                let DeclarationPayload::Function(function_template) = record.payload else {
-                    unreachable!()
-                };
-                let parameters = state
-                    .graph_call_parameters(case.target.package, &function_template.parameters)?;
-                let mut arguments = parameters
-                    .iter()
-                    .map(|_| CheckedValue::primitive(&state.schema, NormalizedValue::I64(17)))
-                    .collect::<Result<Vec<_>, _>>()?;
-                let reads = reader.parameters.get();
-                let bytes = state.observation.allocated_bytes;
-                let mut function = function_template.clone();
-                control.cancel();
-                let error = state
-                    .graph_call_parameters(case.target.package, &function_template.parameters)
-                    .unwrap_err();
-                assert_eq!(error.class, ExecutionFailureClass::Cancelled);
-                assert_eq!(error.code, "execution_cancelled");
-                assert_eq!(reader.parameters.get(), reads);
-                assert_eq!(state.observation.allocated_bytes, bytes);
-                let error = state
-                    .admit_read_scope_frame(
-                        case.target,
-                        &mut function,
-                        &parameters,
-                        &[],
-                        &mut arguments,
-                    )
-                    .err()
-                    .expect("cancelled scope admission must refuse before storage");
-                assert_eq!(reader.parameters.get(), reads);
-                assert_eq!(state.observation.allocated_bytes, bytes);
-                assert_eq!(function.parameters, function_template.parameters);
-                Err(error)
-            })
-            .unwrap_err();
-        assert_eq!(error.class, ExecutionFailureClass::Cancelled);
-        assert_eq!(error.code, "execution_cancelled");
-    }
+                )
+                .err()
+                .expect("cancelled scope admission must refuse before storage");
+            assert_eq!(reader.parameters.get(), reads);
+            assert_eq!(state.observation.allocated_bytes, bytes);
+            assert_eq!(function.parameters, function_template.parameters);
+            Err(error)
+        })
+        .unwrap_err();
+    assert_eq!(error.class, ExecutionFailureClass::Cancelled);
+    assert_eq!(error.code, "execution_cancelled");
 }

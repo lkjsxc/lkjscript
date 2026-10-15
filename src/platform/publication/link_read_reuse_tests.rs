@@ -290,9 +290,8 @@ fn scoped_link_reads_reuse_complete_exact_closure_without_changing_records() {
     .unwrap();
     f.directory.close().unwrap();
 
-    // A complete publicly authored nonempty associated contract and implementation
-    // require the explicit canonical envelope. Generic logical DTO encoding is
-    // intentionally forbidden; neither unused inventory may break copy accounting.
+    // Associated declarations use the same canonical frame as every other owner.
+    // Their complete payload and unused bindings remain part of copy accounting.
     let a = associated_fixture();
     let view = a.repository.view_current().unwrap();
     let cold = view
@@ -330,9 +329,19 @@ fn scoped_link_reads_reuse_complete_exact_closure_without_changing_records() {
                 _ => false,
             };
             if associated {
-                assert!(bincode::encode_to_vec(record, bincode::config::standard()).is_err());
-                let (_, encoded) = record.encode()?;
-                assert_eq!(&encoded[..8], &crate::platform::package_interface::ASSOCIATED_INTERFACE_MAGIC);
+                let payload = bincode::encode_to_vec(record, bincode::config::standard()).unwrap();
+                let (digest, encoded) = record.encode()?;
+                assert_eq!(&encoded[..8], &crate::platform::package_interface::PACKAGE_INTERFACE_MAGIC);
+                assert_eq!(
+                    &encoded[crate::platform::packed::CANONICAL_HEADER_BYTES..encoded.len() - 32],
+                    payload,
+                );
+                assert_eq!(
+                    crate::platform::package_interface::PackageInterfaceOwner::decode(
+                        &encoded, *owner, digest,
+                    )?,
+                    *record,
+                );
                 assert_eq!(entry.owner_copy_work[owner], encoded.len() as u64);
             }
         }

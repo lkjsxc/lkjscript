@@ -39,9 +39,31 @@ pub(super) struct Value {
     raw: NormalizedValue,
     origin: ValueOrigin,
     class: Class,
+    // Exact ordinary type evidence belongs to this immutable value and preparation.
+    // Only complete admission or a sealed parent's actual child can mint it.
+    ordinary_type: Option<TypeObjectDigest>,
     // Ordinary immutable operands carry no loan metadata. Allocate provenance
     // only for memory placements and custody-bearing borrowed results.
     borrow: Option<Box<BorrowMetadata>>,
+}
+
+#[cfg(test)]
+thread_local! {
+    static STRICT_ORDINARY_CHILDREN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(super) fn force_strict_ordinary_children<T>(run: impl FnOnce() -> T) -> T {
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            STRICT_ORDINARY_CHILDREN.set(self.0);
+        }
+    }
+    let restore = Restore(STRICT_ORDINARY_CHILDREN.replace(true));
+    let result = run();
+    drop(restore);
+    result
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -172,6 +194,7 @@ impl Value {
             raw,
             origin: program.value_origin,
             class: Class::ReadView,
+            ordinary_type: None,
             borrow: None,
         })
     }
@@ -322,6 +345,7 @@ impl Value {
             raw,
             origin: program.value_origin,
             class: Class::Memory,
+            ordinary_type: None,
             borrow: None,
         })
     }
@@ -361,6 +385,22 @@ impl Value {
             "borrowed result crossed a raw boundary"
         );
         self.raw
+    }
+
+    /// Consuming structural construction cannot discard a borrowed result's
+    /// real custody. Placement hints alone grant no read and may be discarded.
+    pub(super) fn validate_raw_consumption(&self) -> Result<(), ExecutionError> {
+        if self.borrow.as_ref().is_some_and(|borrow| {
+            borrow.packet.is_some()
+                || !borrow.guards.is_empty()
+                || borrow.projected.is_some()
+                || borrow.view_borrowed
+        }) {
+            return Err(admission_error(
+                "structural consumption cannot discard borrowed result custody",
+            ));
+        }
+        Ok(())
     }
 
     pub(super) fn borrow_source(&self) -> Option<BorrowSource> {
@@ -470,6 +510,25 @@ impl Value {
         Ok(self.class)
     }
 
+    /// A class alone cannot prove an exact ordinary type. Preserve this proof
+    /// only for the very same immutable value, never caller-supplied raw data.
+    pub(super) fn has_exact_ordinary_type(
+        &self,
+        program: &NormalizedProgram,
+        ty: TypeObjectDigest,
+        work: &mut ValueWork,
+    ) -> Result<bool, ExecutionError> {
+        let class = self.class(program, work)?;
+        #[cfg(test)]
+        if STRICT_ORDINARY_CHILDREN.get() {
+            return Ok(false);
+        }
+        Ok(class == Class::Free
+            && self.borrow.is_none()
+            && self.ordinary_type == Some(ty)
+            && program.ordinary_types.contains(&ty))
+    }
+
     /// Reusing an empty slot buffer must not retain a borrowed leaf's custody.
     /// The counted root query uses the sealed admission class, not a descendant walk.
     pub(super) fn permits_plain_slot_reuse(
@@ -481,11 +540,18 @@ impl Value {
     }
 
     pub(super) fn duplicate(&self, use_mode: ParameterUse) -> Result<Self, ExecutionError> {
+        if self.class == Class::Free {
+            // The ordinary clone has independent immutable backing and no
+            // custody carrier. Never erase a retained packet while copying its
+            // exact type evidence, even from a corrupted ordinary placement.
+            self.validate_raw_consumption()?;
+        }
         if self.class == Class::Memory && use_mode == ParameterUse::Borrow {
             let mut value = Self {
                 raw: self.raw.memory_borrow()?,
                 origin: self.origin,
                 class: Class::Memory,
+                ordinary_type: None,
                 borrow: None,
             };
             value.copy_read_provenance_from(self);
@@ -510,6 +576,7 @@ impl Value {
             },
             origin: self.origin,
             class: self.class,
+            ordinary_type: self.ordinary_type,
             borrow: None,
         })
     }
@@ -536,6 +603,7 @@ impl Value {
             raw,
             origin: program.value_origin,
             class: Class::Free,
+            ordinary_type: None,
             borrow: None,
         })
     }
@@ -620,6 +688,7 @@ impl Value {
             },
             origin: program.value_origin,
             class: Class::Free,
+            ordinary_type: None,
             borrow: None,
         })
     }
@@ -652,6 +721,7 @@ impl Value {
                 raw: raw.clone(),
                 origin: self.origin,
                 class: Class::Free,
+                ordinary_type: None,
                 borrow: None,
             })
             .collect();
@@ -702,6 +772,7 @@ impl Value {
             )?),
             origin: program.value_origin,
             class: Class::Free,
+            ordinary_type: None,
             borrow: None,
         })
     }
@@ -749,6 +820,7 @@ impl Value {
             raw: NormalizedValue::Record(record),
             origin: program.value_origin,
             class: Class::Free,
+            ordinary_type: None,
             borrow: None,
         })
     }
@@ -802,6 +874,7 @@ impl Value {
             },
             origin: program.value_origin,
             class,
+            ordinary_type: None,
             borrow: None,
         })
     }
@@ -818,6 +891,7 @@ impl Value {
             raw: NormalizedValue::Option(child.map(|child| Box::new(child.raw))),
             origin: program.value_origin,
             class: Class::Free,
+            ordinary_type: None,
             borrow: None,
         })
     }
@@ -827,6 +901,7 @@ impl Value {
             raw: NormalizedValue::Map(super::super::map::Map::default()),
             origin: program.value_origin,
             class: Class::Free,
+            ordinary_type: None,
             borrow: None,
         }
     }
@@ -865,6 +940,7 @@ impl Value {
             raw,
             origin: program.value_origin,
             class: Class::Free,
+            ordinary_type: None,
             borrow: None,
         })
     }
@@ -881,6 +957,7 @@ impl Value {
             raw,
             origin: self.origin,
             class: Class::Free,
+            ordinary_type: None,
             borrow: None,
         })
     }
@@ -921,6 +998,7 @@ impl Value {
                 raw: *payload,
                 origin: self.origin,
                 class: if direct { Class::Direct } else { Class::Free },
+                ordinary_type: None,
                 borrow: None,
             }),
         ))
@@ -939,6 +1017,9 @@ impl Value {
         let NormalizedValue::List(values) = &mut self.raw else {
             return Err(type_error("list append received a foreign value"));
         };
+        // These constructors prove ordinary containment, not the added item's
+        // exact type. A tampered call must not retain the old list certificate.
+        self.ordinary_type = None;
         *values = values.append(child.raw, maximum_length, reserve)?;
         Ok(self)
     }
@@ -958,6 +1039,7 @@ impl Value {
         let NormalizedValue::Map(values) = &mut self.raw else {
             return Err(type_error("map update received a foreign value"));
         };
+        self.ordinary_type = None;
         let output = if let Some(child) = child {
             values.insert(
                 key,
@@ -983,6 +1065,7 @@ impl Value {
             raw,
             origin: self.origin,
             class: Class::Free,
+            ordinary_type: None,
             borrow: None,
         })
     }
@@ -995,6 +1078,7 @@ impl Value {
             raw: value.clone(),
             origin: self.origin,
             class: Class::Free,
+            ordinary_type: None,
             borrow: None,
         }))
     }
@@ -1020,6 +1104,7 @@ impl Value {
             raw,
             origin: self.origin,
             class: Class::Free,
+            ordinary_type: None,
             borrow: None,
         }))
     }
@@ -1039,6 +1124,11 @@ pub(super) struct Admission<'a> {
     pub items: &'a mut u64,
     pub admission_bytes: u64,
     pub admission_items: u64,
+}
+
+struct Inspection {
+    class: Class,
+    ordinary_type: Option<TypeObjectDigest>,
 }
 
 type Bindings = BTreeMap<crate::platform::semantic_id::TypeParameterId, TypeObjectDigest>;
@@ -1117,6 +1207,7 @@ impl Admission<'_> {
             )?;
         }
         callee.class = Class::Binding(arguments);
+        callee.ordinary_type = None;
         Ok(callee)
     }
 
@@ -1171,6 +1262,7 @@ impl Admission<'_> {
         )?;
         self.control.check()?;
         argument.class = Class::Retained(index);
+        argument.ordinary_type = None;
         Ok(argument)
     }
 
@@ -1228,6 +1320,7 @@ impl Admission<'_> {
             },
             origin: self.program.value_origin,
             class: Class::Free,
+            ordinary_type: None,
             borrow: None,
         })
     }
@@ -1362,11 +1455,12 @@ impl Admission<'_> {
         authority: Option<RequirementReference>,
         input: bool,
     ) -> Result<Value, ExecutionError> {
-        match self.inspect(&raw, ty, authority, input) {
-            Ok(class) => Ok(Value {
+        match self.inspect_evidence(&raw, ty, authority, input) {
+            Ok(inspection) => Ok(Value {
                 raw,
                 origin: self.program.value_origin,
-                class,
+                class: inspection.class,
+                ordinary_type: inspection.ordinary_type,
                 borrow: None,
             }),
             Err(mut error) => {
@@ -1392,6 +1486,17 @@ impl Admission<'_> {
         authority: Option<RequirementReference>,
         input: bool,
     ) -> Result<Class, ExecutionError> {
+        self.inspect_evidence(raw, ty, authority, input)
+            .map(|inspection| inspection.class)
+    }
+
+    fn inspect_evidence(
+        &mut self,
+        raw: &NormalizedValue,
+        ty: TypeObjectDigest,
+        authority: Option<RequirementReference>,
+        input: bool,
+    ) -> Result<Inspection, ExecutionError> {
         self.control.check()?;
         raw.reject_read_view_escape(self.control)?;
         super::super::value_schema::NormalizedValueSchema::reject_read_view_escape(
@@ -1410,8 +1515,9 @@ impl Admission<'_> {
         mut pending: Vec<Visit<'_>>,
         authority: Option<RequirementReference>,
         input: bool,
-    ) -> Result<Class, ExecutionError> {
+    ) -> Result<Inspection, ExecutionError> {
         let mut root_class = None;
+        let mut root_identity = None;
         let mut capture_types = std::collections::BTreeSet::new();
         while let Some((value, ty, depth, affine_allowed, bindings, capture)) = pending.pop() {
             self.control.check()?;
@@ -1447,6 +1553,9 @@ impl Admission<'_> {
             let identity = self
                 .type_identity(ty, &bindings)?
                 .ok_or_else(|| admission_error("raw nominal type substitution is unresolved"))?;
+            if root_identity.is_none() {
+                root_identity = Some(identity);
+            }
             let application_free = self.program.application_free_types.contains(&ty)
                 && bindings
                     .values()
@@ -1813,7 +1922,12 @@ impl Admission<'_> {
         self.allocate(
             (std::mem::size_of::<Value>() - std::mem::size_of::<NormalizedValue>()) as u64,
         )?;
-        Ok(root_class)
+        Ok(Inspection {
+            class: root_class,
+            ordinary_type: root_identity.filter(|identity| {
+                root_class == Class::Free && self.program.ordinary_types.contains(identity)
+            }),
+        })
     }
 
     fn parameter(
@@ -2055,6 +2169,10 @@ fn admission_error(message: &'static str) -> ExecutionError {
 #[cfg(test)]
 #[path = "vm_checked_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "vm_checked_ordinary_tests.rs"]
+mod ordinary_tests;
 
 #[cfg(test)]
 #[path = "vm_owned_metadata_reservation_tests.rs"]

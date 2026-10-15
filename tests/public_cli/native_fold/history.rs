@@ -32,27 +32,34 @@ fn expected(items: &[Value], initial: &Value) -> Value {
 #[test]
 fn native_blocked_folds_retain_every_nested_prefix_across_blocks_and_source_removal() {
     let folds = Folds::history();
-    for detached in [false, true] {
-        if detached {
-            folds.detach();
-        }
-        for n in [0, 1, 3, 4, 5, 7, 8, 9, 15, 16, 17, 31, 32, 33, 65] {
-            let items = (0..n).map(item).collect::<Vec<_>>();
-            for initial in initial_states() {
-                for mode in 0..3 {
-                    let (records, result) =
-                        folds.run("history", &json!([items, initial, mode]), detached, true);
-                    assert_eq!(result.unwrap(), expected(&items, &initial));
-                    if !detached {
-                        assert_eq!(
-                            compact_field(compact_record(&records, "execution"), "differential"),
-                            "equal"
-                        );
-                    }
-                }
+    let mut batch = Vec::new();
+    for n in [0, 1, 3, 4, 5, 7, 8, 9, 15, 16, 17, 31, 32, 33, 65] {
+        let items = (0..n).map(item).collect::<Vec<_>>();
+        for initial in initial_states() {
+            for mode in 0..3 {
+                batch.push(BatchCase::success(
+                    format!(
+                        "history-{n}-{}-{mode}",
+                        initial["current"].as_array().unwrap().len()
+                    ),
+                    &json!([items, initial, mode]),
+                    expected(&items, &initial),
+                ));
             }
         }
     }
+    assert_eq!(
+        batch.len(),
+        90,
+        "every original nested-prefix row in each lane"
+    );
+    folds.source_batch("attached-history", "history", &batch);
+    folds.detach();
+    folds.batch("detached-history", "history", &batch);
+    let items = vec![item(1), item(2)];
+    let initial = initial_states()[1].clone();
+    let (_, smoke) = folds.run("history", &json!([items, initial, 2]), true, true);
+    assert_eq!(smoke.unwrap(), expected(&items, &initial));
     folds.verify_identity();
 }
 
@@ -65,26 +72,38 @@ fn native_blocked_folds_admit_nested_input_and_unused_initial_history_completely
     malformed_items[8]["values"] = json!([1, "not-an-integer"]);
     let mut malformed_initial = initial.clone();
     malformed_initial["prefixes"][1][0]["values"] = json!(["invalid-unused-prefix"]);
-    for detached in [false, true] {
-        if detached {
-            folds.detach();
-        }
-        for mode in 0..3 {
-            for input in [
-                json!([malformed_items, initial, mode]),
-                json!([[], malformed_initial, mode]),
-            ] {
-                let (records, result) = folds.run("history", &input, detached, false);
-                assert!(result.is_none());
-                let diagnostic = compact_record(&records, "diagnostic");
-                assert_eq!(compact_field(diagnostic, "class"), "source");
-                assert_eq!(compact_field(diagnostic, "code"), "normalized_json_type");
-                let (_, recovered) =
-                    folds.run("history", &json!([valid, initial, mode]), detached, true);
-                assert_eq!(recovered.unwrap(), expected(&valid, &initial));
-            }
+    let mut batch = Vec::new();
+    for mode in 0..3 {
+        for (kind, input) in [
+            json!([malformed_items, initial, mode]),
+            json!([[], malformed_initial, mode]),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            batch.push(BatchCase::failure(
+                format!("invalid-history-{mode}-{kind}"),
+                &input,
+                "source",
+                "normalized_json_type",
+            ));
+            batch.push(BatchCase::success(
+                format!("after-invalid-history-{mode}-{kind}"),
+                &json!([valid, initial, mode]),
+                expected(&valid, &initial),
+            ));
         }
     }
+    assert_eq!(
+        batch.len(),
+        12,
+        "every original nested admission/recovery row in each lane"
+    );
+    folds.source_batch("attached-history-admission", "history", &batch);
+    folds.detach();
+    folds.batch("detached-history-admission", "history", &batch);
+    let (_, smoke) = folds.run("history", &json!([valid, initial, 2]), true, true);
+    assert_eq!(smoke.unwrap(), expected(&valid, &initial));
     folds.verify_identity();
 }
 

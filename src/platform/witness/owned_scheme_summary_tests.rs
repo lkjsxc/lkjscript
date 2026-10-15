@@ -3,130 +3,24 @@ use crate::platform::kernel::*;
 use crate::platform::semantic_id::*;
 
 #[test]
-fn read_generation_dependencies_preserve_pre30_bytes_and_bind_graph30() {
+fn validation_dependencies_bind_the_current_graph_contract() {
     let package = PackageId::migrate(b"read-generation-summary", 0);
     let kind = OwnerKind::Parameter;
-    let predecessor = SemanticDigest::of(VALIDATION_DEPENDENCY_DIGEST_DOMAIN, &[kind.tag()]);
-    for generation in 14..30 {
-        let actual = validation_dependency_digest(
-            package,
-            kind,
-            generation,
-            &[],
-            |_| Ok(None),
-            |_| Ok(None),
-        )
-        .unwrap();
-        assert_eq!(
-            actual, predecessor,
-            "Graph {generation} retains its original dimensions"
-        );
-    }
-    // The new tag is separate from relation tag 1 and dependency tag 2. Its
-    // literal payload is the canonical varint encoding of Graph 30.
     let mut material = vec![kind.tag(), 3];
     material.extend_from_slice(&1_u64.to_le_bytes());
-    material.push(30);
-    let current =
-        validation_dependency_digest(package, kind, 30, &[], |_| Ok(None), |_| Ok(None)).unwrap();
+    material.push(crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION as u8);
+    let current = validation_dependency_digest(
+        package,
+        kind,
+        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+        &[],
+        |_| Ok(None),
+        |_| Ok(None),
+    )
+    .unwrap();
     assert_eq!(
         current,
         SemanticDigest::of(VALIDATION_DEPENDENCY_DIGEST_DOMAIN, &material)
-    );
-    assert_ne!(current, predecessor);
-}
-
-#[test]
-fn original_graph27_implementation_and_operand_summary_material_remains_exact() {
-    let seed = b"frozen-generic-implementation-summary";
-    let reference = DeclarationReference {
-        package: PackageId::migrate(seed, 0),
-        declaration: DeclarationId::migrate(seed, 0),
-    };
-    let ty = encode_type_object(&TypeObject::new(TypeForm::ByteBuffer).unwrap())
-        .unwrap()
-        .0;
-    let method = MethodId::migrate(seed, 0);
-    let mapping = vec![(method, reference)];
-    let owner = OwnerKey::Declaration(reference.declaration);
-    let record = OwnerRecord::Declaration(DeclarationRecord {
-        header: OwnerHeader {
-            contract_version: 27,
-            owner,
-            kind: OwnerKind::OwnedImplementation,
-        },
-        module: ModuleId::migrate(seed, 0),
-        name: Name::new("Flat").unwrap(),
-        visibility: DeclarationVisibility::Public,
-        payload: DeclarationPayload::OwnedImplementation(OwnedImplementation {
-            implementation_parameters: Vec::new(),
-            type_parameters: Vec::new(),
-            contract: reference,
-            self_type: ty,
-            type_arguments: vec![ty],
-            methods: vec![OwnedMethodImplementation {
-                read_scope_arguments: Vec::new(),
-                implementations: Vec::new(),
-                method,
-                function: reference,
-                type_arguments: Vec::new(),
-            }],
-            associated_types: Vec::new(),
-        }),
-    });
-    let summary = local_summary(owner, &record, None).unwrap();
-    let mut interface = Material::new(OwnerKind::OwnedImplementation);
-    interface.piece(1, &DeclarationVisibility::Public).unwrap();
-    interface.raw_piece(2, &[10]);
-    interface
-        .piece(10, &(reference, ty, vec![ty], &mapping))
-        .unwrap();
-    assert_eq!(
-        summary.semantic_interface,
-        interface.finish(INTERFACE_DIGEST_DOMAIN)
-    );
-    let mut implementation = Material::new(OwnerKind::OwnedImplementation);
-    implementation.piece(5, &mapping).unwrap();
-    assert_eq!(
-        summary.implementation,
-        implementation.finish(IMPLEMENTATION_DIGEST_DOMAIN)
-    );
-
-    let id = ExpressionId::migrate(seed, 0);
-    let owner = OwnerKey::Expression(id);
-    let expression = OwnerRecord::Expression(ExpressionRecord {
-        contract_version: 27,
-        id,
-        operation: ExpressionOperation::MethodCall {
-            read_scope_arguments: Vec::new(),
-            witness: ImplementationOperand::Concrete {
-                implementations: Vec::new(),
-                implementation: reference,
-                type_arguments: Vec::new(),
-            },
-            contract: reference,
-            method,
-            arguments: Vec::new(),
-        },
-    });
-    let summary = local_summary(owner, &expression, None).unwrap();
-    let mut implementation = Material::new(OwnerKind::Expression);
-    implementation.piece(1, &id).unwrap();
-    implementation
-        .piece(
-            2,
-            &(
-                25_u32,
-                (0_u32, reference),
-                reference,
-                method,
-                Vec::<ExpressionId>::new(),
-            ),
-        )
-        .unwrap();
-    assert_eq!(
-        summary.implementation,
-        implementation.finish(IMPLEMENTATION_DIGEST_DOMAIN)
     );
 }
 

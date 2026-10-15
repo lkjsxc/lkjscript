@@ -3,7 +3,7 @@ use super::native_byte_buffer::{Export, dependency, export, stage};
 use super::native_owned_worklists::{deployment, rejected, standard, unchanged};
 use super::*;
 use serde_json::json;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::io::Write;
 use std::time::{Duration, Instant};
 
@@ -79,15 +79,19 @@ impl MatrixProgress {
         }
     }
 
-    fn run(&self, serial: usize, target: &str, input: &Value, detached: bool) -> RunProgress<'_> {
+    fn identity(serial: usize, target: &str, input: &Value, detached: bool) -> Value {
         let bytes = input.to_string();
-        let identity = json!({
+        json!({
             "serial":serial,
             "target":target,
             "lane":if detached {"detached"} else {"attached"},
             "input_bytes":bytes.len(),
             "input_blake3":blake3::hash(bytes.as_bytes()).to_hex().to_string(),
-        });
+        })
+    }
+
+    fn run(&self, serial: usize, target: &str, input: &Value, detached: bool) -> RunProgress<'_> {
+        let identity = Self::identity(serial, target, input, detached);
         let mut record = identity.clone();
         record["event"] = json!("run-start");
         self.emit(record);
@@ -204,6 +208,12 @@ struct Packages {
     identities: Vec<(PathBuf, blake3::Hash)>,
     serial: Cell<usize>,
     progress: Option<MatrixProgress>,
+    matrix_batch: RefCell<Option<MatrixBatch>>,
+}
+
+struct MatrixBatch {
+    detached: bool,
+    cases: Vec<(Value, BatchCase)>,
 }
 
 impl Packages {
@@ -283,6 +293,7 @@ impl Packages {
             identities: vec![],
             serial: Cell::new(0),
             progress,
+            matrix_batch: RefCell::new(None),
         };
         let phase = start_stage(this.progress.as_ref(), "consumer-author-and-check");
         accept(
@@ -465,6 +476,27 @@ impl Packages {
             &format!("expected-{}.json", self.serial.get()),
             &expected.to_string(),
         );
+        {
+            let mut pending = self.matrix_batch.borrow_mut();
+            if let Some(batch) = pending.as_mut() {
+                assert_eq!(batch.detached, detached, "one exact matrix lane");
+                let serial = self.serial.get();
+                self.serial.set(serial + 1);
+                let mut identity = MatrixProgress::identity(serial, target, input, detached);
+                identity["event"] = json!("batch-row-queued");
+                if let Some(progress) = &self.progress {
+                    progress.emit(identity.clone());
+                }
+                let mut request = BatchCase::success(
+                    format!("indexed-{serial}-{target}"),
+                    input,
+                    expected.clone(),
+                );
+                request.target = Some(target.to_owned());
+                batch.cases.push((identity, request));
+                return;
+            }
+        }
         let progress = self
             .progress
             .as_ref()
@@ -479,6 +511,73 @@ impl Packages {
         if let Some(progress) = progress {
             progress.complete();
         }
+    }
+
+    fn begin_matrix_batch(&self, detached: bool) {
+        assert!(
+            self.matrix_batch
+                .borrow_mut()
+                .replace(MatrixBatch {
+                    detached,
+                    cases: Vec::new(),
+                })
+                .is_none()
+        );
+    }
+
+    fn complete_matrix_batch(&self, detached: bool) {
+        let batch = self
+            .matrix_batch
+            .borrow_mut()
+            .take()
+            .expect("explicit immutable success matrix");
+        assert_eq!(batch.detached, detached);
+        let (identities, requests): (Vec<_>, Vec<_>) = batch.cases.into_iter().unzip();
+        assert_eq!(requests.len(), if detached { 152 } else { 158 });
+        let phase = start_stage(
+            self.progress.as_ref(),
+            if detached {
+                "detached-batch-execution"
+            } else {
+                "attached-batch-execution"
+            },
+        );
+        // Both public batches share immutable preparation, while every row owns
+        // fresh execution and the full independent expected JSON. Source rows
+        // also check current authority and run both implementation-disjoint tiers.
+        let rows = if detached {
+            let descriptor = self
+                .consumer
+                .root
+                .path()
+                .join("indexed-integers.deployment.json");
+            self.consumer
+                .batch("indexed-success", &descriptor, &requests)
+        } else {
+            self.consumer
+                .source_batch("indexed-success", "indexed-integers", &requests)
+        };
+        assert_eq!(rows.len(), identities.len());
+        for (records, mut identity) in rows.iter().zip(identities) {
+            let execution = compact_record(records, "execution");
+            assert_eq!(
+                compact_field(execution, "target"),
+                identity["target"].as_str().unwrap(),
+                "batch target preserves each named witness path"
+            );
+            if detached {
+                joined(execution);
+            } else {
+                // The shared source reader also checks real VM/reference and
+                // executor cleanup without inventing a resident taskgroup receipt.
+                assert_eq!(compact_field(execution, "differential"), "equal");
+            }
+            identity["event"] = json!("batch-row-validated");
+            if let Some(progress) = &self.progress {
+                progress.emit(identity);
+            }
+        }
+        complete_stage(phase);
     }
 }
 
@@ -578,6 +677,7 @@ fn native_indexed_data_separate_packages_snapshots_forwarded_witnesses_and_detac
             packages.detach();
             complete_stage(phase);
         }
+        packages.begin_matrix_batch(detached);
         for length in [0, 1, 31, 32, 33, 64, 65] {
             let values: Vec<i64> = (0..length).map(|n| n as i64 - 17).collect();
             let mut positions = if length == 0 {
@@ -730,6 +830,7 @@ fn native_indexed_data_separate_packages_snapshots_forwarded_witnesses_and_detac
                 }
             }
         }
+        packages.complete_matrix_batch(detached);
         packages.verify_identity();
         complete_stage(lane);
     }
@@ -737,14 +838,31 @@ fn native_indexed_data_separate_packages_snapshots_forwarded_witnesses_and_detac
     let progress = packages.progress.as_ref().unwrap();
     assert_eq!(
         progress.records.get(),
-        645,
+        649,
         "paired stages and runs before completion"
     );
     progress.emit(json!({"event":"matrix-complete","runs":packages.serial.get()}));
     assert_eq!(
         progress.records.get(),
-        646,
+        650,
         "complete expanded progress transcript"
+    );
+    // One ordinary detached invocation also proves the source-free process
+    // boundary independently of the batch request and aggregate result files.
+    assert_eq!(
+        packages.run(
+            "indexed-captured",
+            &json!([[i64::MIN, 0, i64::MAX], 2]),
+            true,
+            true
+        ),
+        Some(json!(i64::MAX))
+    );
+    packages.verify_identity();
+    assert_eq!(
+        packages.serial.get(),
+        311,
+        "310 matrix rows and one command boundary"
     );
 }
 

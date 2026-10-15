@@ -1439,7 +1439,7 @@ fn canonical_view_type_profiles_remain_distinct_from_owner_generations() {
     for digest in [view_type, signature_type] {
         assert_eq!(
             source.types[&digest].contract_version,
-            contract::ASSOCIATED_READ_VIEW_CONTRACT_VERSION,
+            contract::TYPE_OBJECT_CONTRACT_VERSION,
         );
     }
     let canonical = CanonicalProgram::read(&[&source], &[]).unwrap();

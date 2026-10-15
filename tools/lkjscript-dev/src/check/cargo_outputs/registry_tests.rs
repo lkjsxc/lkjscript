@@ -25,10 +25,52 @@ fn all_declared_cargo_executables_require_machine_records_before_test_arguments(
                     .count(),
                 1
             );
-            assert_eq!(gate.required_outputs, [target.join("release/lkjscript")]);
+            let profile = if gate.name == "release_build" {
+                "release"
+            } else {
+                "debug"
+            };
+            assert_eq!(
+                gate.required_outputs,
+                [target.join(profile).join("lkjscript")]
+            );
         }
     }
     assert_eq!(producers, ["release_build", "release_command_lifecycle"]);
+    let product = registry.gate("release_build")?;
+    assert_eq!(
+        &product.command[..9],
+        [
+            "cargo",
+            "build",
+            "--package",
+            "lkjscript",
+            "--bin",
+            "lkjscript",
+            "--release",
+            "--locked",
+            "--message-format=json"
+        ]
+    );
+    let lifecycle = registry.gate("release_command_lifecycle")?;
+    assert!(
+        lifecycle
+            .command
+            .iter()
+            .any(|argument| argument == "--workspace")
+    );
+    assert!(
+        lifecycle
+            .command
+            .iter()
+            .any(|argument| argument == "--all-features")
+    );
+    assert!(
+        !lifecycle
+            .command
+            .iter()
+            .any(|argument| argument == "--release")
+    );
     let requested = profile("full").expect("full profile");
     let identity = registry
         .profile_digest("full", &requested)

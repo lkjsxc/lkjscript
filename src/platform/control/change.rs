@@ -74,8 +74,7 @@ use std::str::FromStr;
 
 pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-42";
 pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 42;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-39";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 39;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change";
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -7748,78 +7747,19 @@ fn change_request_commitment(
     change_request_commitment_from_bytes(&intent, &budget, options)
 }
 
-// The byte hasher is shared with literal historical protocol controls; public normalization
-// still derives intent and budget exclusively from the current typed request above.
+// Intent and budget come exclusively from the current bounded typed encoder.
 fn change_request_commitment_from_bytes(
     intent: &[u8],
     budget: &[u8],
     options: &PublicationOptions,
 ) -> Result<ChangeRequestCommitment, Diagnostic> {
     let mut hasher = blake3::Hasher::new_derive_key(CHANGE_REQUEST_COMMITMENT_DOMAIN);
-    hash_digest_field(&mut hasher, commitment_codec_identity(intent).as_bytes())?;
+    hash_digest_field(&mut hasher, AUTHORED_CHANGE_CODEC_IDENTITY.as_bytes())?;
     hash_digest_field(&mut hasher, intent)?;
     hash_digest_field(&mut hasher, budget)?;
     hash_optional_digest_field(&mut hasher, options.idempotency_key.as_deref())?;
     hash_optional_digest_field(&mut hasher, options.intent.as_deref())?;
     Ok(ChangeRequestCommitment(*hasher.finalize().as_bytes()))
-}
-
-fn commitment_codec_identity(intent: &[u8]) -> &'static str {
-    // Codec 15 committed both compatible intent generations under this exact identity.
-    // Adding an expression must not change reviewed request identities for unchanged bytes.
-    // Freeze each originally introduced identity, not a later erroneous fallback commitment.
-    if intent.starts_with(b"LKJACR14") || intent.starts_with(b"LKJACR15") {
-        "lkjscript-authored-change-codec-15"
-    } else if intent.starts_with(b"LKJACR16") {
-        "lkjscript-authored-change-codec-16"
-    } else if intent.starts_with(b"LKJACR17") {
-        "lkjscript-authored-change-codec-17"
-    } else if intent.starts_with(b"LKJACR18") {
-        "lkjscript-authored-change-codec-18"
-    } else if intent.starts_with(b"LKJACR19") {
-        "lkjscript-authored-change-codec-19"
-    } else if intent.starts_with(b"LKJACR20") {
-        "lkjscript-authored-change-codec-20"
-    } else if intent.starts_with(b"LKJACR21") {
-        "lkjscript-authored-change-codec-21"
-    } else if intent.starts_with(b"LKJACR22") {
-        "lkjscript-authored-change-codec-22"
-    } else if intent.starts_with(b"LKJACR23") {
-        "lkjscript-authored-change-codec-23"
-    } else if intent.starts_with(b"LKJACR24") {
-        "lkjscript-authored-change-codec-24"
-    } else if intent.starts_with(b"LKJACR25") {
-        "lkjscript-authored-change-codec-25"
-    } else if intent.starts_with(b"LKJACR26") {
-        "lkjscript-authored-change-codec-26"
-    } else if intent.starts_with(b"LKJACR27") {
-        "lkjscript-authored-change-codec-27"
-    } else if intent.starts_with(b"LKJACR28") {
-        "lkjscript-authored-change-codec-28"
-    } else if intent.starts_with(b"LKJACR29") {
-        "lkjscript-authored-change-codec-29"
-    } else if intent.starts_with(b"LKJACR30") {
-        "lkjscript-authored-change-codec-30"
-    } else if intent.starts_with(b"LKJACR31") {
-        "lkjscript-authored-change-codec-31"
-    } else if intent.starts_with(b"LKJACR32")
-        || intent.starts_with(b"LKJACR33")
-        || intent.starts_with(b"LKJACR34")
-    {
-        // Freeze the actual codec34 fallback used by these existing generations.
-        "lkjscript-authored-change-codec-34"
-    } else if intent.starts_with(b"LKJACR35") {
-        "lkjscript-authored-change-codec-35"
-    } else if intent.starts_with(b"LKJACR36") {
-        "lkjscript-authored-change-codec-36"
-    } else if intent.starts_with(b"LKJACR37") {
-        "lkjscript-authored-change-codec-37"
-    } else if intent.starts_with(b"LKJACR38") {
-        "lkjscript-authored-change-codec-38"
-    } else {
-        // Retain the existing fallback; do not infer identities from unknown/future magics.
-        AUTHORED_CHANGE_CODEC_IDENTITY
-    }
 }
 
 fn hash_optional_digest_field(
@@ -8629,168 +8569,6 @@ fn field_error(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn legacy_named_reference_baseline_goldens() {
-        fn original_budget_request(path: &str, input: &[u8]) -> NormalizedChangeRequest {
-            let decoded = decode_compact_change(path, input).unwrap();
-            assert_eq!(
-                decoded.semantic.budget.impact.maximum_ownership_steps,
-                2_000_000
-            );
-            let mut semantic = decoded.semantic;
-            // Preserve the frozen predecessor's declared budget as well as its byte/identity
-            // goldens. The public default now admits the existing 1,024-depth boundary.
-            semantic.budget.impact.maximum_ownership_steps = 1_000_000;
-            normalize_change_request(semantic, decoded.options).unwrap()
-        }
-        let mut logical = crate::platform::kernel::tests::historical_witness_snapshot();
-        // This golden binds authentic predecessor request/base bytes, not a successor root.
-        logical.root.graph_contract_version = 14;
-        for owner in logical.owners.values_mut() {
-            owner.set_encoding_for_edit(14);
-        }
-        // The old external fixture is no longer semantically valid. Preserve its original
-        // accepted base and codec/allocation bytes without presenting it as a fresh acceptance.
-        let historical_base = RevisionId::from_str(
-            "rev_57e6ec8691b2e78b6e6f5bbf721e1c637601ec2bd67bd88b0cf74c4044b1a5b2",
-        )
-        .unwrap();
-        let module = logical
-            .owners
-            .values()
-            .find_map(|record| match record {
-                crate::platform::kernel::OwnerRecord::Module(module) => Some(module),
-                _ => None,
-            })
-            .unwrap();
-        // The predecessor vectors stay literal history. Current requests commit39 and
-        // must not masquerade as the old wire/allocation profile.
-        fn frozen_prefix(base: RevisionId) -> Vec<u8> {
-            let mut bytes = b"LKJACR14".to_vec();
-            bytes.extend_from_slice(&base.bytes());
-            bytes.extend_from_slice(&0_u64.to_be_bytes());
-            bytes.extend_from_slice(&1_u64.to_be_bytes());
-            bytes
-        }
-        fn frozen_string(bytes: &mut Vec<u8>, value: &str) {
-            bytes.extend_from_slice(&(value.len() as u64).to_be_bytes());
-            bytes.extend_from_slice(value.as_bytes());
-        }
-        let expected = [
-            (
-                "330a169923709b56f66b37bf676c253ae44eb24845bab551cd29e6a4e9ae3bdc",
-                "request_31f2a6dd4de9dfa852781fa0ac358e5ae1e11400b94f93c34e83d3c3eb83672c",
-                "expr_43c455ea1455aee0e14675c714411863",
-                "decl_d64858b4298268a5373bc74b48056657",
-            ),
-            (
-                "9c5ce495613cb66644ba866a9bda4e97bb3df1d152adf96e1a59c3553ce8c478",
-                "request_aa58e1e64566470c7eee5db4dfb7a1a634e0151503e480c63d60cd73b72885c0",
-                "expr_7cd37aba479f619f0fd05c7a6e914478",
-                "decl_2cb205dcfb5e5a5afa190789e038c3e6",
-            ),
-        ];
-        for (selector, expected) in [
-            module.header.owner.to_string(),
-            module.name.as_str().to_owned(),
-        ]
-        .into_iter()
-        .zip(expected)
-        {
-            let input = format!(
-                "request base={} idempotency=legacy-reference-baseline\nexpression.i64 as=$body value=42\ncreate.function as=$new module={selector} name=legacy_reference_golden visibility=private result=i64 effect=pure body=$body\n",
-                historical_base,
-            );
-            let request = original_budget_request("legacy.lkjc", input.as_bytes());
-            let mut bytes = frozen_prefix(historical_base);
-            bytes.extend_from_slice(&[2, 2]); // Create function; declaration symbol domain.
-            bytes.extend_from_slice(&1_u64.to_be_bytes());
-            if selector == module.header.owner.to_string() {
-                bytes.push(1); // Exact module selector.
-                let OwnerKey::Module(id) = module.header.owner else {
-                    unreachable!()
-                };
-                bytes.extend_from_slice(&id.bytes());
-            } else {
-                bytes.push(2); // Named module selector.
-                frozen_string(&mut bytes, module.name.as_str());
-            }
-            frozen_string(&mut bytes, "legacy_reference_golden");
-            bytes.push(1); // Private.
-            bytes.extend_from_slice(&0_u64.to_be_bytes()); // Type parameters.
-            bytes.extend_from_slice(&0_u64.to_be_bytes()); // Value parameters.
-            bytes.extend_from_slice(&[3, 1, 1, 12]); // I64, Pure, body symbol, expression domain.
-            bytes.extend_from_slice(&1_u64.to_be_bytes());
-            bytes.push(3); // I64 expression.
-            bytes.extend_from_slice(&42_i64.to_be_bytes());
-            let allocated = crate::platform::change::authored_source_owners_from_frozen_intent(
-                &logical,
-                &request.semantic,
-                &bytes,
-            )
-            .unwrap();
-            assert_eq!(blake3::hash(&bytes).to_hex().as_str(), expected.0);
-            let budget =
-                crate::platform::change::canonical_authored_budget_bytes(request.semantic.budget)
-                    .unwrap();
-            assert_eq!(
-                change_request_commitment_from_bytes(&bytes, &budget, &request.options)
-                    .unwrap()
-                    .to_string(),
-                expected.1
-            );
-            assert_eq!(allocated["$body"].to_string(), expected.2);
-            assert_eq!(allocated["$new"].to_string(), expected.3);
-            let current =
-                crate::platform::change::canonical_authored_intent_bytes(&request.semantic)
-                    .unwrap();
-            assert_eq!(&current[..8], b"LKJACR39");
-            assert_ne!(current, bytes);
-            let current_allocated =
-                crate::platform::change::authored_source_owners(&logical, &request.semantic)
-                    .unwrap();
-            assert_ne!(current_allocated["$body"], allocated["$body"]);
-            assert_ne!(current_allocated["$new"], allocated["$new"]);
-        }
-        let input = format!(
-            "request base={} idempotency=legacy-qualified-baseline\nexpression.unit as=$body\nreplace.body function=first/callee body=$body\n",
-            historical_base
-        );
-        let request = original_budget_request("qualified.lkjc", input.as_bytes());
-        let mut bytes = frozen_prefix(historical_base);
-        bytes.extend_from_slice(&[35, 2, 2]); // Replace body; qualified declaration; named module.
-        frozen_string(&mut bytes, "first");
-        frozen_string(&mut bytes, "callee");
-        bytes.extend_from_slice(&[1, 12]); // Body symbol present, expression domain.
-        bytes.extend_from_slice(&1_u64.to_be_bytes());
-        bytes.push(1); // Unit expression.
-        let allocated = crate::platform::change::authored_source_owners_from_frozen_intent(
-            &logical,
-            &request.semantic,
-            &bytes,
-        )
-        .unwrap();
-        assert_eq!(
-            blake3::hash(&bytes).to_hex().as_str(),
-            "b481f04b0bb63a68f42b5b06f97ff773f411a8dc8479f611e7137fef24596b3c"
-        );
-        assert_eq!(
-            change_request_commitment_from_bytes(
-                &bytes,
-                &crate::platform::change::canonical_authored_budget_bytes(request.semantic.budget)
-                    .unwrap(),
-                &request.options
-            )
-            .unwrap()
-            .to_string(),
-            "request_82b03a0b580889d3b5a92372b903ced62853e7ef5e7d8008bcaa99d2f848a74a"
-        );
-        assert_eq!(
-            allocated["$body"].to_string(),
-            "expr_d1bf12cf47316157f6bf4a4fa6b3707a"
-        );
-    }
 
     fn revision() -> RevisionId {
         RevisionId::from_digest([7; 32])

@@ -295,14 +295,7 @@ fn rehashed_conflicting_runtime_body_cannot_hide_untaken_double_consumption() {
         test: summary.test,
         validation_dependencies: summary.validation_dependencies,
     };
-    changed.key = CompilationUnitKey::derive_generation(
-        &changed.source,
-        changed.optimization,
-        changed.contract_version,
-        changed.bytecode_contract_version,
-        changed.graph_contract_version,
-    )
-    .unwrap();
+    changed.key = CompilationUnitKey::derive(&changed.source, changed.optimization).unwrap();
 
     let mut forged = loaded.clone();
     replace_reference_owner(&mut forged, local, &invalid.owners[&local]);
@@ -320,6 +313,146 @@ fn rehashed_conflicting_runtime_body_cannot_hide_untaken_double_consumption() {
         .expect_err("a safe runtime body cannot hide the canonical untaken affine violation");
     assert_eq!(error.code, "artifact_runtime_owner_semantics", "{error:?}");
     assert_eq!(error.class, DiagnosticClass::Corrupt);
+}
+
+#[test]
+fn rehashed_expanding_calls_and_unused_function_values_require_finite_meaning() {
+    for named in [false, true] {
+        let body = if named {
+            "(sequence (function-value growing (types T)) (i64 7))"
+        } else {
+            "(if (bool true) (i64 7) (call growing (types T)))"
+        };
+        let input = format!(
+            r#"declarations.begin
+(units (module create correspondence
+  (function create growing (visibility private) (effect pure)
+    (type-parameter create T) (returns I64) (body {body}))
+  (test create unchanged (visibility private)
+    (actual (call growing (types I64))) (expected (i64 7)))))
+declarations.end
+"#
+        );
+        let (mut source, loaded) = fixture(&input);
+        assert_unchanged_behavior(&source, &bundle(loaded.clone()));
+        let declaration = declaration_named(&source, "growing");
+        let owner = OwnerKey::Declaration(declaration);
+        let (old, mut unit) = unit_for(&loaded, owner);
+        let application = source
+            .owners
+            .iter()
+            .find_map(|(owner, record)| {
+                let OwnerRecord::Expression(expression) = record else {
+                    return None;
+                };
+                match &expression.operation {
+                    ExpressionOperation::Call {
+                        function,
+                        type_arguments,
+                        ..
+                    }
+                    | ExpressionOperation::FunctionValue {
+                        function,
+                        type_arguments,
+                        ..
+                    } if function.declaration == declaration
+                        && type_arguments.iter().any(|ty| {
+                            matches!(source.types[ty].form, TypeForm::TypeParameter { .. })
+                        }) =>
+                    {
+                        Some(*owner)
+                    }
+                    _ => None,
+                }
+            })
+            .unwrap();
+        let OwnerRecord::Expression(expression) = source.owners.get_mut(&application).unwrap()
+        else {
+            unreachable!()
+        };
+        let arguments = match &mut expression.operation {
+            ExpressionOperation::Call { type_arguments, .. }
+            | ExpressionOperation::FunctionValue { type_arguments, .. } => type_arguments,
+            _ => unreachable!(),
+        };
+        let object = TypeObject::new(TypeForm::List { item: arguments[0] }).unwrap();
+        let (digest, encoded) = encode_type_object(&object).unwrap();
+        source.types.insert(digest, object);
+        arguments[0] = digest;
+        let type_index = unit.tables.types.len() as u32;
+        unit.tables.types.push(digest);
+        let CompilationPayload::Function { signature, code } = &mut unit.payload else {
+            unreachable!()
+        };
+        let parameters = signature
+            .parameters
+            .iter()
+            .map(|parameter| parameter.parameter)
+            .collect::<Vec<_>>();
+        let instruction = code
+            .instructions
+            .iter_mut()
+            .find(|instruction| {
+                matches!(
+                    instruction,
+                    CompiledInstruction::Call { .. } | CompiledInstruction::FunctionValue { .. }
+                )
+            })
+            .unwrap();
+        match instruction {
+            CompiledInstruction::Call { type_arguments, .. }
+            | CompiledInstruction::FunctionValue { type_arguments, .. } => {
+                type_arguments[0] = type_index
+            }
+            _ => unreachable!(),
+        }
+        let OwnerRecord::Declaration(record) = &source.owners[&owner] else {
+            unreachable!()
+        };
+        let DeclarationPayload::Function(function) = &record.payload else {
+            unreachable!()
+        };
+        assert_eq!(
+            *code,
+            super::lower::canonical_code(
+                &source,
+                source.root.package_id,
+                Some(declaration),
+                &unit.tables,
+                function.body,
+                &parameters
+            )
+            .unwrap()
+        );
+        let facts = crate::platform::witness::rebuild_canonical_facts(&source).unwrap();
+        let summary = &facts.summaries[&owner];
+        unit.source = CompilationSource {
+            package: source.root.package_id,
+            owner,
+            kind: summary.kind,
+            semantic_interface: summary.semantic_interface,
+            implementation: summary.implementation,
+            type_digest: summary.type_digest,
+            effect: summary.effect,
+            capability: summary.capability,
+            test: summary.test,
+            validation_dependencies: summary.validation_dependencies,
+        };
+        unit.key = CompilationUnitKey::derive(&unit.source, unit.optimization).unwrap();
+        let mut forged = loaded;
+        forged.objects.insert(
+            ObjectKey::from_digest(ObjectDomain::Type, digest.bytes()),
+            encoded,
+        );
+        replace_reference_owner(&mut forged, application, &source.owners[&application]);
+        replace_unit(&mut forged, old, &unit);
+        let error = load_artifact(&bundle(forged)).unwrap_err();
+        assert_eq!(
+            error.code, "kernel_callable_expansion",
+            "named={named}: {error:?}"
+        );
+        assert_eq!(error.class, DiagnosticClass::Semantic);
+    }
 }
 
 fn map_entries(loaded: &LoadedArtifact, root: MapRoot) -> Vec<(Vec<u8>, Vec<u8>)> {
@@ -396,7 +529,7 @@ fn replace_unit(loaded: &mut LoadedArtifact, old: ObjectKey, unit: &CompilationU
     // Packed encoding, map reconstruction and pack sealing do not perform semantic admission.
     // Structural decoding is a control; the strict artifact loader is the adversarial boundary.
     assert_eq!(unit.contract_version, COMPILER_UNIT_CONTRACT_VERSION);
-    let bytes = crate::platform::packed::encode(
+    let bytes = crate::platform::packed::encode_canonical(
         COMPILER_UNIT_MAGIC,
         COMPILER_UNIT_ENVELOPE_DOMAIN,
         unit,
@@ -474,7 +607,7 @@ fn bundle(mut loaded: LoadedArtifact) -> Vec<u8> {
     let segments = pack.seal_targeted(4 * 1024 * 1024).unwrap();
     let mut bytes = Vec::new();
     bytes.extend_from_slice(&ARTIFACT_BUNDLE_MAGIC);
-    bytes.extend_from_slice(&loaded.manifest.contract_version.to_be_bytes());
+    bytes.extend_from_slice(&crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH);
     bytes.extend_from_slice(&0_u16.to_be_bytes());
     bytes.extend_from_slice(&(manifest_bytes.len() as u64).to_be_bytes());
     bytes.extend_from_slice(&(segments.len() as u64).to_be_bytes());

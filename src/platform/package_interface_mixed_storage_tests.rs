@@ -159,39 +159,6 @@ fn mixed_storage_interface_admits_exact_supported_phantom_bounds() {
 }
 
 #[test]
-fn rehashed_predecessor_declarations_cannot_gain_unused_ordinary_storage_formals() {
-    for implementation in [false, true] {
-        for bound in [
-            TypeParameterConstraints::Transferable,
-            TypeParameterConstraints::CaptureSafeTransferable,
-        ] {
-            let (package, owners, types) = fixture(implementation, bound);
-            for declaration_old in [false, true] {
-                let mut forged = owners.clone();
-                for value in forged.values_mut() {
-                    match &mut value.record {
-                        PackageInterfaceRecord::Declaration(record) if declaration_old => {
-                            record.header.contract_version = 32;
-                            value.contract_version = 20;
-                        }
-                        PackageInterfaceRecord::TypeParameter(record)
-                            if !declaration_old && record.constraints == bound =>
-                        {
-                            record.header.contract_version = 32;
-                            value.contract_version = 20;
-                        }
-                        _ => {}
-                    }
-                }
-                rehash(&mut forged);
-                let error = validate_owner_closure(package, &forged, &types).unwrap_err();
-                assert_eq!(error.code, "kernel_mixed_storage_generation", "{error:?}");
-            }
-        }
-    }
-}
-
-#[test]
 fn contract_self_retains_exact_owned_bound_even_with_ordinary_extras() {
     use TypeParameterConstraints as C;
     let (package, owners, types) = fixture(false, C::Transferable);

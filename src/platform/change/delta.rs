@@ -66,7 +66,6 @@ pub struct ExactEdit<D, V> {
 
 #[derive(Clone, Debug, Default)]
 pub struct CanonicalDelta {
-    pub(crate) accepted_retry_encoding: Option<u16>,
     pub owners: BTreeMap<OwnerKey, ExactEdit<OwnerObjectDigest, OwnerRecord>>,
     /// Every type object supplied by this proposal, including objects already in storage.
     /// Physical deduplication belongs to staging and cannot change normalized meaning.
@@ -85,12 +84,8 @@ impl CanonicalDelta {
         edits: Vec<PrimitiveEdit>,
     ) -> Result<CanonicalNormalization, Diagnostic> {
         let base_revision = base.exact_revision();
-        let accepted_retry_encoding = base.accepted_retry_encoding();
         let mut base = NormalizationBase::new(base);
-        let mut delta = Self {
-            accepted_retry_encoding,
-            ..Self::default()
-        };
+        let mut delta = Self::default();
         let mut seen_owners = BTreeSet::new();
         let mut seen_types = BTreeSet::new();
         let mut seen_dependencies = BTreeSet::new();

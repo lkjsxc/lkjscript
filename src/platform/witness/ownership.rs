@@ -350,22 +350,9 @@ pub(super) fn read_binding_container_role(
         crate::platform::semantic_id::BindingId,
     ) -> Result<Option<BindingRecord>, Diagnostic>,
 ) -> Result<BindingContainerRole, Diagnostic> {
-    if matches!(expression.operation, ExpressionOperation::BorrowCall { .. })
-        && expression.contract_version
-            < crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
-    {
-        return Ok(BindingContainerRole::OwnedBorrow);
-    }
     // BorrowReadView has one unambiguous declared binding kind. Record-only
     // traversal may derive its shape, while full admission checks its exact binding.
     let record = binding_record(binding)?;
-    if record.is_none()
-        && matches!(expression.operation, ExpressionOperation::Let { .. })
-        && expression.contract_version
-            < crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
-    {
-        return Ok(BindingContainerRole::Let);
-    }
     if record.is_none()
         && matches!(
             expression.operation,
@@ -389,11 +376,7 @@ pub(super) fn read_binding_container_role(
     }
     match (&expression.operation, record.kind) {
         (ExpressionOperation::Let { .. }, BindingKind::Let) => Ok(BindingContainerRole::Let),
-        (ExpressionOperation::Let { .. }, BindingKind::ReadView)
-            if expression.contract_version
-                >= crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
-                && record.value.is_some() =>
-        {
+        (ExpressionOperation::Let { .. }, BindingKind::ReadView) if record.value.is_some() => {
             Ok(BindingContainerRole::ReadView)
         }
         (ExpressionOperation::BorrowCall { .. }, BindingKind::ReadView)

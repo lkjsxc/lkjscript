@@ -6,17 +6,39 @@ use super::super::vm::NormalizedRunObservation;
 use super::*;
 use crate::platform::compiler::{CompilationPayload, CompilationUnit};
 use crate::platform::control::decode_compact_change;
-use crate::platform::normalized_lifecycle::PreparedApplication;
+use crate::platform::normalized_lifecycle::PackageReference;
 use crate::platform::publication::ExportedPackageTransport;
 use crate::platform::runtime::structured::{StructuredExecutor, StructuredExecutorHandle};
 use std::collections::BTreeSet;
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 const CONSUMER: &str = include_str!("associated_parallel_fixture/consumer.lkjc");
 const SUPPLIER: &str = include_str!("associated_parallel_fixture/supplier.lkjc");
 const APPLICATION: &str = include_str!("associated_parallel_fixture/application.lkjc");
 const NEGATIVE: &str = include_str!("associated_parallel_fixture/negative-unresolved-borrow.lkjc");
+
+static FIXTURE_BUILDS: AtomicU64 = AtomicU64::new(0);
+
+fn fixture_key(sources: [&str; 4]) -> [u8; 32] {
+    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.associated-parallel-test-fixture");
+    hasher.update(&crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH);
+    hasher.update(&crate::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH);
+    for part in [
+        "DeterministicBaseline",
+        "associated-parallel-consumer",
+        "associated-parallel-supplier",
+        "associated-parallel-application",
+    ]
+    .into_iter()
+    .chain(sources)
+    {
+        hasher.update(&(part.len() as u64).to_be_bytes());
+        hasher.update(part.as_bytes());
+    }
+    *hasher.finalize().as_bytes()
+}
 
 fn publish_native(repository: &GraphRepository, selections: &str, literal: &str) {
     let before = repository.view_current().unwrap().revision();
@@ -59,14 +81,35 @@ fn selection(alias: &str, exported: &ExportedPackageTransport) -> String {
     )
 }
 
+#[derive(Clone)]
 struct Fixture {
-    _temporary: tempfile::TempDir,
-    prepared: PreparedApplication,
+    reference: Arc<PackageReference>,
     program: Arc<NormalizedProgram>,
-    copy: std::path::PathBuf,
+    artifact: Arc<[u8]>,
+    artifact_digest: blake3::Hash,
+    binding: super::super::reference::NormalizedReferenceBinding,
 }
 impl Fixture {
     fn new() -> Self {
+        static SHARED: OnceLock<([u8; 32], Fixture)> = OnceLock::new();
+        let key = fixture_key([CONSUMER, SUPPLIER, APPLICATION, NEGATIVE]);
+        let (bound, fixture) = SHARED.get_or_init(|| (key, Self::build()));
+        assert_eq!(*bound, key);
+        fixture.clone()
+    }
+
+    fn isolated_preparation() -> Self {
+        let mut fixture = Self::new();
+        // ChildProbe is keyed by preparation origin. The entered-child cancel
+        // matrix must not observe or block concurrent users of the shared Arc.
+        let loaded = load_artifact(&fixture.artifact).unwrap();
+        loaded.require_current_admission(|| Ok(())).unwrap();
+        fixture.program = Arc::new(NormalizedProgram::prepare(loaded).unwrap());
+        fixture
+    }
+
+    fn build() -> Self {
+        FIXTURE_BUILDS.fetch_add(1, Ordering::Relaxed);
         let temporary = tempfile::tempdir().unwrap();
         let create = |directory: &str, seed: &[u8]| {
             GraphRepository::create(
@@ -122,11 +165,7 @@ impl Fixture {
         let prepared =
             crate::platform::normalized_lifecycle::prepare_repository(application).unwrap();
         assert_eq!(prepared.revision, accepted);
-        let copy = temporary.path().join("parallel-copy.lkja");
-        std::fs::write(&copy, &prepared.artifact_bytes).unwrap();
-        let bytes = std::fs::read(&copy).unwrap();
-        assert_eq!(bytes, prepared.artifact_bytes);
-        let loaded = load_artifact(&bytes).unwrap();
+        let loaded = load_artifact(&prepared.artifact_bytes).unwrap();
         loaded.require_current_admission(|| Ok(())).unwrap();
         assert_eq!(loaded.bundle_digest, prepared.artifact_bundle);
         assert_eq!(
@@ -186,23 +225,106 @@ impl Fixture {
             "associated meaning must retain selected witness identity"
         );
         let program = Arc::new(NormalizedProgram::prepare(loaded).unwrap());
-        Self {
-            _temporary: temporary,
-            prepared,
+        let binding = prepared.reference.binding().unwrap();
+        assert_eq!(binding.revision, Some(accepted));
+        let artifact_digest = blake3::hash(&prepared.artifact_bytes);
+        let fixture = Self {
+            reference: Arc::new(prepared.reference),
             program,
-            copy,
-        }
+            artifact: Arc::from(prepared.artifact_bytes),
+            artifact_digest,
+            binding,
+        };
+        // Both evaluators now own independent immutable in-memory inputs. The
+        // matrix cannot accidentally keep using the source repository as a cache.
+        temporary.close().unwrap();
+        fixture
     }
+
     fn unchanged(&self) {
-        assert_eq!(
-            std::fs::read(&self.copy).unwrap(),
-            self.prepared.artifact_bytes
-        );
-        assert_eq!(
-            self.prepared.repository.view_current().unwrap().revision(),
-            self.prepared.revision
-        );
+        assert_eq!(blake3::hash(&self.artifact), self.artifact_digest);
+        assert_eq!(self.reference.binding().unwrap(), self.binding);
     }
+}
+
+#[test]
+fn associated_parallel_public_imported_detached_artifact_smoke() {
+    let mut fixture = Fixture::new();
+    let temporary = tempfile::tempdir().unwrap();
+    let copy = temporary.path().join("parallel-copy.lkja");
+    std::fs::write(&copy, &fixture.artifact).unwrap();
+    let bytes = std::fs::read(&copy).unwrap();
+    assert_eq!(bytes.as_slice(), fixture.artifact.as_ref());
+    let loaded = load_artifact(&bytes).unwrap();
+    loaded.require_current_admission(|| Ok(())).unwrap();
+    assert_eq!(
+        loaded.bundle_digest,
+        fixture.program.artifact().bundle_digest
+    );
+    fixture.program = Arc::new(NormalizedProgram::prepare(loaded).unwrap());
+    temporary.close().unwrap();
+    assert!(!copy.exists());
+    let mut executor = StructuredExecutor::for_test(1);
+    let handle = executor.handle();
+    healthy(
+        &fixture,
+        Engine::Vm,
+        &handle,
+        false,
+        NormalizedRunPolicy::foreground(),
+    );
+    drop(handle);
+    shutdown(&mut executor);
+}
+
+#[test]
+fn associated_parallel_fixture_shares_exact_content_and_keeps_invocations_fresh() {
+    let sources = [CONSUMER, SUPPLIER, APPLICATION, NEGATIVE];
+    let expected_key = fixture_key(sources);
+    for index in 0..sources.len() {
+        let changed = format!("{}\n", sources[index]);
+        let mut altered = sources;
+        altered[index] = &changed;
+        assert_ne!(fixture_key(altered), expected_key);
+    }
+    let fixture = Fixture::new();
+    let same = Fixture::new();
+    assert_eq!(FIXTURE_BUILDS.load(Ordering::Relaxed), 1);
+    assert!(Arc::ptr_eq(&fixture.program, &same.program));
+    assert!(Arc::ptr_eq(&fixture.reference, &same.reference));
+    assert!(Arc::ptr_eq(&fixture.artifact, &same.artifact));
+    let isolated = Fixture::isolated_preparation();
+    assert_ne!(isolated.program.value_origin, fixture.program.value_origin);
+    assert!(Arc::ptr_eq(&isolated.reference, &fixture.reference));
+    assert!(Arc::ptr_eq(&isolated.artifact, &fixture.artifact));
+    let storage = Storage::start();
+    let mut executor = StructuredExecutor::for_test(1);
+    let handle = executor.handle();
+    let cancelled = ExecutionControl::uncancelled();
+    cancelled.cancel();
+    let (result, observation) = run(
+        &fixture,
+        Engine::Vm,
+        &handle,
+        Request::healthy(false),
+        NormalizedRunPolicy::foreground(),
+        &cancelled,
+    );
+    assert_eq!(result.unwrap_err().class, ExecutionFailureClass::Cancelled);
+    if let Some(observation) = observation {
+        observation.clean();
+    }
+    storage.clean();
+    drop(storage);
+    healthy(
+        &same,
+        Engine::Vm,
+        &handle,
+        false,
+        NormalizedRunPolicy::foreground(),
+    );
+    drop(handle);
+    shutdown(&mut executor);
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -345,7 +467,7 @@ fn run(
         Engine::Reference => {
             let observer = Mutex::new(None);
             let result = NormalizedReferenceInterpreter::from_reader(
-                &fixture.prepared.reference,
+                fixture.reference.as_ref(),
                 &fixture.program,
                 policy,
             )
@@ -560,7 +682,7 @@ fn associated_parallel_public_imported_traps_join_and_release_each_lane() {
 
 #[test]
 fn associated_parallel_public_imported_vm_entered_cancel_joins_and_reuses_executor() {
-    let fixture = Fixture::new();
+    let fixture = Fixture::isolated_preparation();
     let mut executor = StructuredExecutor::for_test(1);
     let handle = executor.handle();
     for mirrored in [false, true] {

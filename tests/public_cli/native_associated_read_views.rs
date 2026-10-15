@@ -1,6 +1,5 @@
-//! Public consumer-first associated read views. Source-only until the execution
-//! owner runs these selectors against one terminal-successful copied candidate.
-//! Every meaning change enters through literal native public CLI requests.
+//! Consumer-first associated read views through host adapters and explicit copied candidates.
+//! Every meaning change enters through literal public requests.
 use super::native_byte_buffer::{Export, dependency};
 use super::*;
 use serde_json::json;
@@ -30,14 +29,12 @@ fn archive(public: &Native, name: &str, bytes: &[u8]) {
     std::fs::write(evidence.join(name), bytes).unwrap();
 }
 
-// Keep the existing Native/Export data and public command patterns. This local
-// command adapter adds owned HOME/TMPDIR, LANG and complete retained terminals;
-// the shared Native::cli cannot accept these environment settings.
+// Finite host semantics use the same public adapters as the other Native fixtures.
+// Actual process routes retain owned HOME/TMPDIR, LANG and their original terminals.
 fn cli(public: &Native, arguments: &[&str], success: bool) -> Vec<CompactRecord> {
     static SERIAL: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let serial = SERIAL.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let evidence = public.root.path().join("cli-evidence");
-    std::fs::create_dir_all(&evidence).unwrap();
     let mut command = Command::new(&public.executable);
     if !arguments.starts_with(&["package", "builtin"])
         && !arguments.starts_with(&["run", "--deployment"])
@@ -53,37 +50,56 @@ fn cli(public: &Native, arguments: &[&str], success: bool) -> Vec<CompactRecord>
         .env("HOME", public.root.path().join("home"))
         .env("TMPDIR", public.root.path().join("tmp"));
     let retained = std::env::var_os("LKJSCRIPT_RETAIN_PRODUCT_EVIDENCE").is_some();
+    let full_arguments = command
+        .get_args()
+        .map(|v| v.to_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    let semantic = (public.mode == semantic_cli::Mode::HostSemantic)
+        .then(|| semantic_cli::execute(arguments, full_arguments.clone()))
+        .flatten();
+    let mode = if semantic.is_some() {
+        semantic_cli::Mode::HostSemantic
+    } else if public.mode == semantic_cli::Mode::CandidateProcess {
+        public.mode
+    } else {
+        semantic_cli::Mode::BoundaryProcess
+    };
+    let retain_terminal = mode != semantic_cli::Mode::HostSemantic || retained;
     let stem = format!("{serial:08}");
-    // Retain the invocation before starting it; a launch failure has an original.
-    std::fs::write(
+    // Retain process invocations before starting them; a launch failure has an original.
+    if retain_terminal {
+        std::fs::create_dir_all(&evidence).unwrap();
+        std::fs::write(
         evidence.join(format!("{stem}.command.json")),
         serde_json::to_vec_pretty(&json!({
-            "executable": public.executable,
+            "executable": (mode != semantic_cli::Mode::HostSemantic).then_some(&public.executable),
             "directory": public.root.path(),
-            "arguments": command.get_args().map(|v| v.to_str().unwrap()).collect::<Vec<_>>(),
-            "environment_cleared": true,
-            "environment": {"PATH":"","LANG":"C",
-                "HOME":public.root.path().join("home"),"TMPDIR":public.root.path().join("tmp")},
-            "candidate_selection": "copied binary() bytes",
+            "arguments": full_arguments,
+            "execution_mode": mode.label(),
+            "environment_cleared": mode != semantic_cli::Mode::HostSemantic,
+            "environment": if mode == semantic_cli::Mode::HostSemantic { Value::Null } else { json!({"PATH":"","LANG":"C",
+                "HOME":public.root.path().join("home"),"TMPDIR":public.root.path().join("tmp")}) },
+            "candidate_selection": (mode == semantic_cli::Mode::CandidateProcess).then_some("copied binary() bytes"),
             "retain_product_evidence": retained,
             "expected_success": success,
         }))
         .unwrap(),
     )
     .unwrap();
-    let output = support::output(&mut command).unwrap();
-    std::fs::write(evidence.join(format!("{stem}.stdout")), &output.stdout).unwrap();
-    std::fs::write(evidence.join(format!("{stem}.stderr")), &output.stderr).unwrap();
-    std::fs::write(
-        evidence.join(format!("{stem}.terminal.json")),
-        serde_json::to_vec_pretty(
-            &json!({"status":output.status.code(),"success":output.status.success()}),
+    }
+    let output = semantic.unwrap_or_else(|| support::output(&mut command).unwrap().into());
+    if retain_terminal {
+        std::fs::write(evidence.join(format!("{stem}.stdout")), &output.stdout).unwrap();
+        std::fs::write(evidence.join(format!("{stem}.stderr")), &output.stderr).unwrap();
+        std::fs::write(
+            evidence.join(format!("{stem}.terminal.json")),
+            serde_json::to_vec_pretty(&json!({"status":output.code,"success":output.success}))
+                .unwrap(),
         )
-        .unwrap(),
-    )
-    .unwrap();
+        .unwrap();
+    }
     assert_eq!(
-        output.status.success(),
+        output.success,
         success,
         "{arguments:?}\n{}\n{}",
         String::from_utf8_lossy(&output.stdout),
@@ -104,9 +120,9 @@ fn native(template: &str) -> Native {
     for directory in ["home", "tmp"] {
         std::fs::create_dir_all(root.path().join(directory)).unwrap();
     }
-    let executable = root.path().join("lkjscript");
     let selected = binary();
-    copy_executable(&selected, &executable);
+    let mode = semantic_cli::Mode::selected();
+    let executable = semantic_cli::executable(root.path(), mode, &selected);
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -120,9 +136,10 @@ fn native(template: &str) -> Native {
         project: root.path().join("project"),
         root,
         executable,
+        mode,
     };
     archive(&public, "candidate-selection.json", &serde_json::to_vec_pretty(&json!({
-        "selected":selected,"copy":public.executable,
+        "selected":selected,"copy":public.executable,"execution_mode":mode.label(),
         "blake3":blake3::hash(&std::fs::read(&public.executable).unwrap()).to_hex().to_string(),
         "source_tree":env!("CARGO_MANIFEST_DIR"),
         "regular_file":std::fs::symlink_metadata(&public.executable).unwrap().file_type().is_file(),
@@ -947,6 +964,104 @@ fn run(
     records
 }
 
+struct PureCase {
+    label: String,
+    target: &'static str,
+    arguments: Value,
+    expected: Option<Value>,
+}
+
+fn run_pure_batch(public: &Native, descriptor: &Path, lane: &str, label: &str, cases: &[PureCase]) {
+    let requests = cases
+        .iter()
+        .map(|case| {
+            let id = format!("{}-{}", case.label, case.target);
+            let mut request = if let Some(expected) = &case.expected {
+                archive(
+                    public,
+                    &format!("{}-{lane}-{}.expected.json", case.target, case.label),
+                    &serde_json::to_vec(expected).unwrap(),
+                );
+                BatchCase::success(id, &case.arguments, expected.clone())
+            } else {
+                BatchCase::failure(
+                    id,
+                    &case.arguments,
+                    "semantic",
+                    "normalized_integer_division",
+                )
+            };
+            request.target = Some(case.target.to_owned());
+            request
+        })
+        .collect::<Vec<_>>();
+    // The source reader retains an ordinary differential run and source witness;
+    // both readers independently check full results, authority and actual cleanup.
+    let records = if lane == "project" {
+        public.source_batch(label, "readview", &requests)
+    } else {
+        public.batch(label, descriptor, &requests)
+    };
+    let result_path = public.root.path().join(if lane == "project" {
+        format!("source-batch-{label}.result.jsonl")
+    } else {
+        format!("batch-{label}.result.jsonl")
+    });
+    let rows = std::fs::read_to_string(result_path).unwrap();
+    let rows = rows
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(records.len(), cases.len());
+    assert_eq!(rows.len(), cases.len());
+    for ((records, row), case) in records.iter().zip(&rows).zip(cases) {
+        if let Some(expected) = &case.expected {
+            // Preserve the original stronger canonical-byte check, in addition
+            // to the shared reader's independent structural result comparison.
+            assert_eq!(
+                row["result_json"].as_str().unwrap().as_bytes(),
+                serde_json::to_vec(expected).unwrap(),
+                "{}/{lane}/{}",
+                case.target,
+                case.label
+            );
+            let execution = compact_record(records, "execution");
+            assert_eq!(compact_field(execution, "target"), case.target);
+            if lane == "project" {
+                assert_eq!(compact_field(execution, "differential"), "equal");
+                for field in ["production-instructions", "reference-expressions"] {
+                    assert!(compact_field(execution, field).parse::<u64>().unwrap() > 0);
+                }
+            } else {
+                super::native_indexed_data::joined(execution);
+            }
+        } else {
+            assert!(
+                row["result_json"].is_null(),
+                "failed row published a result"
+            );
+            let diagnostic = compact_record(records, "diagnostic");
+            assert_eq!(compact_field(diagnostic, "class"), "semantic");
+            assert_eq!(
+                compact_field(diagnostic, "code"),
+                "normalized_integer_division"
+            );
+            let notes: Vec<String> =
+                serde_json::from_str(compact_field(diagnostic, "notes")).unwrap();
+            if lane == "project" {
+                for observation in ["production-observation: ", "executor-observation: "] {
+                    assert!(notes.iter().any(|note| note.starts_with(observation)));
+                }
+            } else {
+                assert!(notes.iter().any(|note| note == "foreground cleanup: admission-stopped=true remaining-owned-tasks=0 failures=0"));
+                notes.iter().find_map(|note| note.strip_prefix(
+                    "structured worker cleanup: dispatch-stopped=true active=0 remaining-workers=0 joined-workers="))
+                    .expect("failure retained its complete joined worker cleanup").parse::<u64>().unwrap();
+            }
+        }
+    }
+}
+
 fn literal_cases() -> Vec<Value> {
     serde_json::from_str(CASES).unwrap()
 }
@@ -977,32 +1092,49 @@ fn native_associated_read_views_consumer_first_five_literals_parent_drop_and_det
         if lane == "detached-artifact" {
             packages.detach();
         }
+        let mut requests = Vec::new();
         for case in &cases {
-            for (target, descriptor) in TARGETS.iter().zip(&descriptors) {
-                run(
-                    &packages.application,
+            for target in TARGETS {
+                requests.push(PureCase {
+                    label: case["name"].as_str().unwrap().to_owned(),
                     target,
-                    descriptor,
-                    lane,
-                    case["name"].as_str().unwrap(),
-                    &case["arguments"],
-                    Some(&expected_for(target, case)),
-                );
+                    arguments: case["arguments"].clone(),
+                    expected: Some(expected_for(target, case)),
+                });
             }
-            for (target, descriptor) in metadata_targets.iter().zip(&metadata_descriptors) {
-                run(
-                    &packages.application,
+            for target in metadata_targets {
+                requests.push(PureCase {
+                    label: case["name"].as_str().unwrap().to_owned(),
                     target,
-                    descriptor,
-                    lane,
-                    case["name"].as_str().unwrap(),
-                    &case["arguments"],
-                    Some(&case["expected"]["source_length"]),
-                );
+                    arguments: case["arguments"].clone(),
+                    expected: Some(case["expected"]["source_length"].clone()),
+                });
             }
         }
+        assert_eq!(
+            requests.len(),
+            25,
+            "all five literals and five exact targets"
+        );
+        run_pure_batch(
+            &packages.application,
+            &descriptors[0],
+            lane,
+            &format!("readview-values-{lane}"),
+            &requests,
+        );
         packages.verify_identity();
     }
+    run(
+        &packages.application,
+        "readview",
+        &descriptors[0],
+        "detached-artifact",
+        "ordinary-boundary",
+        &cases[0]["arguments"],
+        Some(&expected_for("readview", &cases[0])),
+    );
+    packages.verify_identity();
 }
 
 #[test]
@@ -1418,6 +1550,7 @@ fn native_associated_read_views_checked_traps_fuel_cleanup_and_subsequent_invoca
         if lane == "detached-artifact" {
             packages.detach();
         }
+        let mut requests = Vec::new();
         for (label, start, end, sub_start, sub_end) in [
             ("negative-start", -1, 2, 0, 1),
             ("past-source", 2, 7, 0, 1),
@@ -1426,33 +1559,33 @@ fn native_associated_read_views_checked_traps_fuel_cleanup_and_subsequent_invoca
         ] {
             let arguments = json!([{"values":[11,7,23,5,19,13],"chunks":[[11,7],[23,5,19],[13]],
                 "start":start,"end":end,"sub_start":sub_start,"sub_end":sub_end}]);
-            for (target, descriptor) in TARGETS.iter().zip(&descriptors) {
-                let failed = run(
-                    &packages.application,
+            for target in TARGETS {
+                requests.push(PureCase {
+                    label: label.to_owned(),
                     target,
-                    descriptor,
-                    lane,
-                    label,
-                    &arguments,
-                    None,
-                );
-                let diagnostic = compact_record(&failed, "diagnostic");
-                // Both suppliers' explicit checked-range boundary invokes this trap.
-                assert!(
-                    compact_field(diagnostic, "code").contains("division"),
-                    "checked trap route {failed:?}"
-                );
-                run(
-                    &packages.application,
+                    arguments: arguments.clone(),
+                    expected: None,
+                });
+                requests.push(PureCase {
+                    label: format!("healthy-after-{label}"),
                     target,
-                    descriptor,
-                    lane,
-                    &format!("healthy-after-{label}"),
-                    &healthy["arguments"],
-                    Some(&expected_for(target, healthy)),
-                );
+                    arguments: healthy["arguments"].clone(),
+                    expected: Some(expected_for(target, healthy)),
+                });
             }
         }
+        assert_eq!(
+            requests.len(),
+            24,
+            "all checked traps and immediate recoveries"
+        );
+        run_pure_batch(
+            &packages.application,
+            &descriptors[0],
+            lane,
+            &format!("readview-traps-{lane}"),
+            &requests,
+        );
         packages.verify_identity();
     }
     let mut limited: Value =

@@ -68,12 +68,14 @@ pub(crate) use http::NormalizedHttpApplication;
 pub(crate) use prepare::NormalizedProgram;
 pub(crate) use resident::NormalizedResidentDeployment;
 pub(crate) use runner::{
-    NormalizedCommandPolicy, NormalizedCommandReceipt, NormalizedTestReceipt,
-    PreparedCommandInvocation, execution_diagnostic, prepare_command_invocation,
-    run_foreground_command, run_graph_tests, run_pure_artifact_command, run_pure_command,
+    NormalizedCommandPolicy, NormalizedCommandReceipt, NormalizedObservedCommandReceipt,
+    NormalizedTestReceipt, PreparedCommandInvocation, execution_diagnostic,
+    prepare_command_invocation, require_pure_artifact_target, require_pure_invocation,
+    run_foreground_command, run_graph_tests, run_pure_artifact_command,
+    run_pure_artifact_command_observed, run_pure_command, run_pure_command_observed,
 };
 pub(crate) use session::NormalizedSessionApplication;
-pub(crate) use vm::NormalizedRunObservation;
+pub use vm::NormalizedRunObservation;
 pub(crate) use vm::NormalizedRunPolicy;
 pub(crate) use worker::NormalizedWorkerApplication;
 #[cfg(test)]

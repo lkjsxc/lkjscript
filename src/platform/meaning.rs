@@ -369,7 +369,7 @@ impl MeaningModule {
     }
 
     pub fn decode(bytes: &[u8]) -> Result<Self, Diagnostic> {
-        if bytes.len() > MAXIMUM_MODULE_SEGMENT_BYTES + 50 {
+        if bytes.len() > MAXIMUM_MODULE_SEGMENT_BYTES + packed::CANONICAL_ENVELOPE_BYTES {
             return Err(meaning_error(
                 DiagnosticClass::Resource,
                 "meaning_module_size",

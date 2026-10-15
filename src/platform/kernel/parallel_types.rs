@@ -852,7 +852,7 @@ fn map_children(
         | TypeForm::AssociatedWitnessProjection { .. }
         | TypeForm::AssociatedReadViewMember { .. }
         | TypeForm::AssociatedReadViewProjection { .. } => {
-            return Err(super::owned_associated_wire::unsupported_semantics());
+            return Err(super::owned_associated::unsupported_semantics());
         }
         TypeForm::TypeParameter { .. } => {
             return Err(super::parallel::reject("unsubstituted signature parameter"));

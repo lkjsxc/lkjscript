@@ -34,215 +34,30 @@ fn witness_contract_domains_are_closed_and_unique() {
         RelationKind::ALL.len()
     );
     assert_ne!(contract::validator_contract_digest().bytes(), [0_u8; 32]);
-    // Affine feature 10 keeps capability authority separate. Scoped sharing and
-    // synchronous task loans have their own independently versioned obligations.
-    assert_eq!(
-        contract::VALIDATOR_FEATURES
-            .iter()
-            .find(|feature| feature.name == "affine_capability_resources")
-            .map(|feature| feature.version),
-        Some(10)
-    );
-    assert_eq!(
-        contract::VALIDATOR_FEATURES
-            .iter()
-            .find(|feature| feature.name == "owned_byte_buffers")
-            .map(|feature| feature.version),
-        Some(2)
-    );
-    // Byte range/copy signatures extend the closed contract independently of
-    // affine resource rules. Neither predecessor certificate is reusable.
-    assert_eq!(
-        contract::VALIDATOR_FEATURES
-            .iter()
-            .find(|feature| feature.name == "closed_external_signatures")
-            .map(|feature| feature.version),
-        Some(4)
-    );
-    let digest = contract::validator_contract_digest().to_string();
-    assert_ne!(
-        digest,
-        "validator_contract_acb29f7085474c4d7be4f9b74b21c13a52da78973379612f79f56552064938c7"
-    );
-    assert_ne!(
-        digest,
-        "validator_contract_a8f4f286f668895a3c2f2d712352fe1a382e6d602ad6d4e93f0a74c1c9f13d78"
-    );
-    assert_ne!(
-        digest,
-        "validator_contract_a4865032b8c53d9472988c166a7bce1d72eba3158026cb4a803482a08c2fc576"
-    );
-    for (name, version) in [
-        ("opaque_nominal_owned_records", 1),
-        ("scoped_shareable_owned_inputs", 1),
-        ("source_tied_owned_read_results", 2),
-        ("parameterized_owned_contracts", 2),
-        ("structural_owned_sequences", 2),
-        ("lexical_owned_child_borrows", 1),
-        ("explicit_transferable_type_parameters", 2),
-        ("structured_parallel_owned_tasks", 5),
-        ("structural_owned_choices", 2),
-        ("structural_owned_products", 3),
-        ("symbolic_owned_parameters", 6),
-        ("explicit_owned_implementation_witnesses", 9),
-        ("finite_generic_callable_instantiation", 3),
-        ("single_relation_extractor", 7),
-        ("owner_summary_dimensions", 5),
-        ("same_task_owned_transfer", 2),
-        ("sealed_owned_i64_cells", 1),
-        ("witness_selected_owned_associated_types", 2),
-        ("associated_source_tied_read_view_families", 1),
+    let features = contract::VALIDATOR_FEATURES
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    assert_eq!(features.len(), contract::VALIDATOR_FEATURES.len());
+    for obligation in [
+        "exact_ownership",
+        "full_witness_rebuild",
+        "exact_dependency_interfaces",
+        "affine_capability_resources",
+        "witness_selected_owned_associated_types",
+        "associated_source_tied_read_view_families",
     ] {
-        assert_eq!(
-            contract::VALIDATOR_FEATURES
-                .iter()
-                .find(|feature| feature.name == name)
-                .map(|feature| feature.version),
-            Some(version),
-            "{name} must invalidate predecessor proof reuse"
+        assert!(
+            features.contains(obligation),
+            "missing obligation {obligation}"
         );
     }
     assert_ne!(
-        digest,
-        "validator_contract_fa8eb111bceca8cfc83868f71c4f4c81e1a6ecbc3f7f3ffa16ffa8385761d61f"
+        crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH,
+        [0; 32]
     );
     assert_ne!(
-        digest,
-        "validator_contract_26a290101546baf52360dbf538521ed222b2c46f90ff6efb37c338276dfa8270"
-    );
-    assert_ne!(
-        digest,
-        "validator_contract_5feac3ec9b83c140c8a18c7808f0d8eeaa8604bbb8fd40bd898f8979770f94bd"
-    );
-    // The published 0.1.64 inventory cannot certify the new task boundary.
-    assert_ne!(
-        digest,
-        "validator_contract_589efdddc2378a9ff40b8d316b16a4fc37b8991ce629f17e01dc54ea3f43c050"
-    );
-    assert_ne!(
-        digest,
-        "validator_contract_8b4ed8dacac7c8ce269a2a46b097e0fc4b41dc33983e05bd8b0c619d92ff7c3f"
-    );
-    assert_ne!(
-        digest,
-        "validator_contract_d1516493a8999830f868d87baf8265f9cc30dd911c8275dfad67a84a9895d98f"
-    );
-    assert_ne!(
-        digest,
-        "validator_contract_75edd39f91c2c55b02f3259574560abd8d4d7c75853c2e9776dea87120df3a08"
-    );
-    // Closed generic child applications cannot reuse the published 0.1.69 proof.
-    assert_ne!(
-        digest,
-        "validator_contract_25babcb5c19defefc06991c9e84ee626c93360a95a8a21c7a945fb5a5e67967b"
-    );
-    // Transfer-bound templates cannot reuse closed-application acceptance.
-    assert_ne!(
-        digest,
-        "validator_contract_97d3f19b3b0d7a4791b2927d1611208833da0a62174cbd38dd71c14eb0a2c7f8"
-    );
-    // Owned effect applications cannot reuse the predecessor scheme inventory.
-    assert_ne!(
-        digest,
-        "validator_contract_1983ed920a5c849b7c404f5a56a4b002b880a86703bab17c872505fad6b4dfbc"
-    );
-    assert_ne!(
-        digest,
-        "validator_contract_f642ef28cabfd3aef567c665eee1ba8971d7492aa4a47c61cb3c02e11f0dcbe0"
-    );
-    assert_ne!(
-        digest,
-        "validator_contract_86b6b88294a790c15006d5413aa8d8227d274e3998d24ad0f71b45b010b7eecb"
-    );
-    assert_ne!(
-        digest,
-        "validator_contract_54e026b266f50320397eae65398d5a884a773095f380562f98b8cfa3f16be1cc"
-    );
-    // Source-tied read results invalidate predecessor ownership acceptance.
-    assert_ne!(
-        digest,
-        "validator_contract_1fd533a37a52f3de4ff1e6836082a4fe4b8796b2c920eb182962f54ca6e521fc"
-    );
-    // Generic implementation schemes invalidate the previous monomorphic proof.
-    assert_ne!(
-        digest,
-        "validator_contract_0bc1eb13d89dbdaf164c85d1b14c0e1d63318c42467d23ce425560a7ca10a043"
-    );
-    // Prerequisite composition and complete nested relations invalidate scheme-only proof.
-    assert_ne!(
-        digest,
-        "validator_contract_42bb6265ce61f4c67aeff0f1e49a607539c7eae48c34bf85244f0177a17e1344"
-    );
-    // Synchronous borrowed tasks and scoped Shareable reads need fresh admission.
-    assert_ne!(
-        digest,
-        "validator_contract_c3b83a1024698983f525fcc4206fc263a9668c1beab1e81b688888f8a0269b62"
-    );
-    // Ordinary sequence elements and indexed operations require fresh admission.
-    assert_ne!(
-        digest,
-        "validator_contract_a495df56bb7989cc1d2f9299466007668eaa0c75f17d070e3c05c1485941f720"
-    );
-    // Exact nominal identity and private representations require fresh admission.
-    assert_ne!(
-        digest,
-        "validator_contract_1f129f2c5bc9303a54e548ac1fddfc5763ca5418944165cb17e46dfad1eff00e"
-    );
-    // Mixed owned/ordinary declarations and complete category admission need fresh proof.
-    assert_ne!(
-        digest,
-        "validator_contract_36232afacf81a91ea3830ef2c7a0442254440e0978662beb4c682b291e6e7fe8"
-    );
-    // The additive codec capability still requires fresh semantic admission.
-    assert_ne!(
-        digest,
-        "validator_contract_e62113a5ebb94b6911c2cbef5e97c37bacd2fc102c72fcdb281f3bce3ad2f9a1"
-    );
-    // Complete associated admission cannot reuse the earlier inventory seal.
-    assert_ne!(
-        digest,
-        "validator_contract_c3c9a4a3504b3d2f6a54d6d0b352b4e9c2fc620c62fa6172c5b30f4219d48034"
-    );
-    assert_ne!(
-        digest,
-        "validator_contract_ea8c20af48782006db98956f90c3a19916b130571f6837f4f8c8414ba3bb3ea4"
-    );
-    assert_eq!(contract::VALIDATOR_CONTRACT_VERSION, 41);
-    assert_eq!(contract::VALIDATOR_FEATURES.len(), 44);
-    assert_eq!(contract::WITNESS_CONTRACT_VERSION, 10);
-    assert_eq!(contract::OWNER_SUMMARY_CONTRACT_VERSION, 12);
-}
-
-#[test]
-fn validator_39_contract_digest_matches_frozen_identity() {
-    // Historical material independently reconstructed from Graph 33, Witness 9 and
-    // Summary 11 identities, 28 owner tags, 12 namespace tags, 38 ordered
-    // relation/propagation pairs and 43 ordered feature names/versions.
-    // The 1,858-byte material has SHA-256
-    // 2d0b71c9bce30883aae3374da27d30dd867c5a64882172f56da820765c7c76f8.
-    // Text lengths are u64 little-endian and versions are u16 little-endian;
-    // the derived-key BLAKE3 input prefixes its material length as u64 big-endian.
-    // Preserve this historical golden when current semantic admission advances.
-    assert_eq!(
-        ValidatorContractDigest::of(include_bytes!("fixtures/validator_39_material.bin"))
-            .to_string(),
-        "validator_contract_c3c9a4a3504b3d2f6a54d6d0b352b4e9c2fc620c62fa6172c5b30f4219d48034"
-    );
-}
-
-#[test]
-fn validator_40_contract_digest_matches_frozen_identity() {
-    // Independently reconstructed from literal Graph 33, Witness 9 and Summary
-    // 11 identities, 28 owner tags, 12 namespace tags, 38 ordered relation pairs
-    // and 43 ordered features, with associated semantic admission at version 2.
-    // The 1,858-byte material has SHA-256
-    // e3072ee9d652e1b2b9f55e3fa85827910fb3b0d34862ef953261256a1954840a.
-    // The independent reconstruction also reproduces the frozen Validator 38
-    // and 39 predecessors. This expected identity is not a producer output.
-    assert_eq!(
-        ValidatorContractDigest::of(include_bytes!("fixtures/validator_40_material.bin"))
-            .to_string(),
-        "validator_contract_ea8c20af48782006db98956f90c3a19916b130571f6837f4f8c8414ba3bb3ea4"
+        crate::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH,
+        [0; 32]
     );
 }
 

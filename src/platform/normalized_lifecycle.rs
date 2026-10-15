@@ -1,5 +1,7 @@
 //! Shared Graph 10 compiler, linker, artifact-loader, and dense-runtime preparation.
 
+mod supplier_cache;
+
 #[cfg(test)]
 use super::compiler::link_artifact;
 use super::compiler::{
@@ -142,6 +144,29 @@ impl PreparedApplication {
         )
     }
 
+    pub(crate) fn check_authority(&self) -> Result<(), Diagnostic> {
+        let view = self.repository.view_current()?;
+        require_unchanged_authority(self, &view)
+    }
+
+    pub(crate) fn run_observed(
+        &self,
+        target: &Name,
+        arguments_json: &[u8],
+        policy: NormalizedCommandPolicy,
+        control: &ExecutionControl,
+    ) -> Result<super::execution::normalized::NormalizedObservedCommandReceipt, Diagnostic> {
+        self.check_authority()?;
+        super::execution::normalized::run_pure_command_observed(
+            &self.reference,
+            &self.program,
+            target,
+            arguments_json,
+            policy,
+            control,
+        )
+    }
+
     pub fn run(
         &self,
         target: &Name,
@@ -258,6 +283,7 @@ pub(crate) fn prepare_repository_with_control(
     }
     let mut compiled = std::collections::BTreeMap::new();
     let mut dependency_units = 0_u64;
+    let mut dependency_units_reused = 0_u64;
     for revision in &closure.dependency_order {
         if *revision == closure.container.root.package_revision {
             continue;
@@ -280,30 +306,32 @@ pub(crate) fn prepare_repository_with_control(
                     })
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let linked =
-            super::compiler::compile_immutable(package, &closure.container.objects, &dependencies)
-                .map_err(|mut error| {
-                    error
-                        .notes
-                        .push(format!("while compiling exact dependency {revision}"));
-                    error
-                })?;
+        let supplier = supplier_cache::prepare(&closure, *revision, &dependencies, control)
+            .map_err(|mut error| {
+                error
+                    .notes
+                    .push(format!("while compiling exact dependency {revision}"));
+                error
+            })?;
         let compiled_units = package
             .snapshot
             .owners
             .values()
             .filter(|owner| owner.kind().has_compilation_unit())
             .count() as u64;
-        dependency_units = dependency_units
-            .checked_add(compiled_units)
-            .ok_or_else(|| {
-                lifecycle_error(
-                    DiagnosticClass::Resource,
-                    "lifecycle_dependency_units",
-                    "dependency compilation unit count overflowed",
-                )
-            })?;
-        compiled.insert(*revision, load_artifact(&linked.artifact.bytes)?);
+        let units = if supplier.reused {
+            &mut dependency_units_reused
+        } else {
+            &mut dependency_units
+        };
+        *units = units.checked_add(compiled_units).ok_or_else(|| {
+            lifecycle_error(
+                DiagnosticClass::Resource,
+                "lifecycle_dependency_units",
+                "dependency compilation unit count overflowed",
+            )
+        })?;
+        compiled.insert(*revision, (*supplier.artifact).clone());
     }
     let root = &closure.packages[&closure.container.root.package_revision];
     let dependencies = root
@@ -476,7 +504,15 @@ pub(crate) fn prepare_repository_with_control(
                     "total compilation unit count overflowed",
                 )
             })?,
-        units_reused,
+        units_reused: units_reused
+            .checked_add(dependency_units_reused)
+            .ok_or_else(|| {
+                lifecycle_error(
+                    DiagnosticClass::Resource,
+                    "lifecycle_dependency_units",
+                    "total reused compilation unit count overflowed",
+                )
+            })?,
         units_removed,
         cache_recovery,
         artifact_manifest,

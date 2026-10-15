@@ -89,15 +89,17 @@ fn parallel_native_meaning_has_two_owned_call_sites_and_closed_results() {
                 encode_owner(&OwnerRecord::Expression(disguised))
                     .unwrap_err()
                     .code,
-                "kernel_parallel_generation"
+                "kernel_expression_contract"
             );
         }
     }
 }
 
 #[test]
-fn parallel_rehashed_predecessor_envelopes_and_mutated_graph_generations_reject() {
+fn parallel_current_framing_rejects_mutated_graph_contracts() {
     let source = author(SOURCE).unwrap();
+    validate_full(&source).unwrap();
+    assert!(memory_reference::accepts(&source));
     let (key, original) = source.owners.iter().find_map(|(key, owner)| {
         matches!(owner, OwnerRecord::Expression(e) if matches!(e.operation, ExpressionOperation::Parallel { .. }))
             .then_some((*key, owner.clone()))
@@ -107,19 +109,19 @@ fn parallel_rehashed_predecessor_envelopes_and_mutated_graph_generations_reject(
         decode_owner(&bytes, key, original.kind(), digest).unwrap(),
         original
     );
-    for (generation, magic, domain) in [
-        (18, *b"LKJOWN18", "lkjscript.kernel.owner-envelope.v18"),
-        (19, *b"LKJOWN19", "lkjscript.kernel.owner-envelope.v19"),
-        (20, *b"LKJOWN20", "lkjscript.kernel.owner-envelope.v20"),
+    for generation in [
+        0,
+        contract::GRAPH_CONTRACT_VERSION - 1,
+        contract::GRAPH_CONTRACT_VERSION + 1,
     ] {
         let OwnerRecord::Expression(mut expression) = original.clone() else {
             panic!("parallel owner")
         };
         expression.contract_version = generation;
         let disguised = OwnerRecord::Expression(expression);
-        let bytes = crate::platform::packed::encode(
-            magic,
-            domain,
+        let bytes = crate::platform::packed::encode_canonical(
+            contract::OWNER_MAGIC,
+            contract::OWNER_ENVELOPE_DOMAIN,
             &disguised,
             contract::MAXIMUM_OWNER_OBJECT_BYTES,
         )
@@ -129,7 +131,7 @@ fn parallel_rehashed_predecessor_envelopes_and_mutated_graph_generations_reject(
             decode_owner(&bytes, key, disguised.kind(), digest)
                 .unwrap_err()
                 .code,
-            "kernel_parallel_generation"
+            "kernel_expression_contract"
         );
         let mut forged = source.clone();
         forged.owners.insert(key, disguised);
@@ -137,19 +139,29 @@ fn parallel_rehashed_predecessor_envelopes_and_mutated_graph_generations_reject(
             validate_full(&forged)
                 .unwrap_err()
                 .iter()
-                .any(|d| d.code == "kernel_parallel_generation")
+                .any(|d| d.code == "kernel_expression_contract")
         );
         assert!(!memory_reference::accepts(&forged));
     }
-    let mut older_root = source;
-    older_root.root.graph_contract_version = 20;
-    assert!(
-        validate_full(&older_root)
-            .unwrap_err()
-            .iter()
-            .any(|d| d.code == "kernel_owner_graph_generation")
-    );
-    assert!(!memory_reference::accepts(&older_root));
+    for generation in [
+        0,
+        contract::GRAPH_CONTRACT_VERSION - 1,
+        contract::GRAPH_CONTRACT_VERSION + 1,
+    ] {
+        let mut foreign_root = source.clone();
+        foreign_root.root.graph_contract_version = generation;
+        assert_eq!(
+            encode_root(&foreign_root.root).unwrap_err().code,
+            "kernel_root_contract"
+        );
+        assert!(
+            validate_full(&foreign_root)
+                .unwrap_err()
+                .iter()
+                .any(|d| d.code == "kernel_root_contract")
+        );
+        assert!(!memory_reference::accepts(&foreign_root));
+    }
 }
 
 #[test]

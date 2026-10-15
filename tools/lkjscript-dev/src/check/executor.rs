@@ -233,6 +233,8 @@ fn execute_gate(
     } else {
         None
     };
+    let inputs = expected_input_proofs(repository, gate, dependencies)?;
+    verify_live_inputs(repository, gate, &inputs)?;
     let selected = snapshot::observe_executable(repository, &gate.command[0])?;
     let fingerprint = fingerprint_with_executable(
         repository,
@@ -263,6 +265,7 @@ fn execute_gate(
                 completed_unix_nanoseconds: unix_nanoseconds()?,
                 elapsed_nanoseconds: duration_nanoseconds(started.elapsed()),
                 process: Some(cached.process),
+                inputs,
                 outputs: cached.outputs,
                 retained_outputs,
                 cargo_origin: cached.cargo_origin,
@@ -287,6 +290,7 @@ fn execute_gate(
             FreshInput {
                 repository,
                 gate,
+                inputs,
                 program: selected.path.as_deref(),
                 fingerprint,
                 stdout_path,
@@ -308,6 +312,7 @@ fn execute_gate(
         FreshInput {
             repository,
             gate,
+            inputs,
             program: selected.path.as_deref(),
             fingerprint,
             stdout_path,
@@ -333,6 +338,7 @@ fn execute_gate(
 pub(super) struct FreshInput<'a> {
     pub(super) repository: &'a Path,
     pub(super) gate: &'a Gate,
+    pub(super) inputs: Vec<FileProof>,
     pub(super) program: Option<&'a Path>,
     pub(super) fingerprint: VerificationDigest,
     pub(super) stdout_path: PathBuf,
@@ -340,6 +346,59 @@ pub(super) struct FreshInput<'a> {
     pub(super) started_wall: u128,
     pub(super) started: Instant,
     pub(super) cache_observation: CacheObservation,
+}
+
+pub(super) fn expected_input_proofs(
+    repository: &Path,
+    gate: &Gate,
+    dependencies: &BTreeMap<String, GateReceipt>,
+) -> Result<Vec<FileProof>, DevError> {
+    gate.required_inputs
+        .iter()
+        .map(|input| {
+            let producer = dependencies.get(&input.producer).ok_or_else(|| {
+                DevError::corrupt("declared input has no admitted dependency producer")
+            })?;
+            let path = evidence::relative(repository, &input.path);
+            let matches: Vec<_> = producer
+                .outputs
+                .iter()
+                .filter(|proof| proof.path == path)
+                .collect();
+            if !producer.passed() || matches.len() != 1 {
+                return Err(DevError::corrupt(
+                    "declared input producer output is absent or ambiguous",
+                ));
+            }
+            let proof = matches[0];
+            if proof.kind != FileKind::File || proof.digest.is_none() || proof.link_target.is_some()
+            {
+                return Err(DevError::corrupt(
+                    "declared input is not a regular admitted artifact",
+                ));
+            }
+            Ok(proof.clone())
+        })
+        .collect()
+}
+
+fn verify_live_inputs(
+    repository: &Path,
+    gate: &Gate,
+    inputs: &[FileProof],
+) -> Result<(), DevError> {
+    if inputs.len() != gate.required_inputs.len() {
+        return Err(DevError::corrupt("declared input evidence is incomplete"));
+    }
+    for (input, expected) in gate.required_inputs.iter().zip(inputs) {
+        let observed = evidence::proof(&input.path, evidence::relative(repository, &input.path))?;
+        if observed != *expected {
+            return Err(DevError::corrupt(
+                "declared input differs from its admitted producer output",
+            ));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -362,6 +421,7 @@ fn execute_fresh_inner(
     let FreshInput {
         repository,
         gate,
+        inputs,
         program,
         fingerprint,
         stdout_path,
@@ -370,11 +430,14 @@ fn execute_fresh_inner(
         started,
         cache_observation,
     } = input;
+    verify_live_inputs(repository, gate, &inputs)?;
+    let mut environment = process::environment();
+    environment.extend(gate.environment.clone());
     let process = process::run_selected(
         &ProcessSpec {
             command: gate.command.clone(),
             cwd: repository.to_path_buf(),
-            environment: process::environment(),
+            environment,
             timeout: gate.timeout,
             maximum_stdout_bytes: gate.maximum_stdout_bytes,
             maximum_stderr_bytes: gate.maximum_stderr_bytes,
@@ -392,6 +455,12 @@ fn execute_fresh_inner(
     let retained_outputs = retain_outputs(repository, run_directory, gate, &outputs)?;
     let mut status = map_status(process.status);
     let mut reason = process.reason.clone();
+    if status == GateStatus::Passed
+        && let Err(error) = verify_live_inputs(repository, gate, &inputs)
+    {
+        status = GateStatus::Failed;
+        reason = Some(format!("declared_input_binding:{}", error.message()));
+    }
     if status == GateStatus::Passed && outputs.iter().any(|proof| proof.kind != FileKind::File) {
         status = GateStatus::Failed;
         reason = Some("missing_declared_output".to_owned());
@@ -419,6 +488,7 @@ fn execute_fresh_inner(
         &gate.name,
         &fingerprint,
         &process,
+        &inputs,
         &outputs,
         cargo_origin.as_ref(),
     )?;
@@ -441,6 +511,7 @@ fn execute_fresh_inner(
         completed_unix_nanoseconds: unix_nanoseconds()?,
         elapsed_nanoseconds: duration_nanoseconds(started.elapsed()),
         process: Some(process),
+        inputs,
         outputs,
         retained_outputs,
         cargo_origin,
@@ -490,6 +561,7 @@ fn skipped_receipt(
         completed_unix_nanoseconds: now,
         elapsed_nanoseconds: 0,
         process: None,
+        inputs: Vec::new(),
         outputs: Vec::new(),
         retained_outputs: Vec::new(),
         cargo_origin: None,
@@ -522,6 +594,7 @@ fn infrastructure_receipt(gate: &Gate, error: DevError) -> GateReceipt {
         completed_unix_nanoseconds: now,
         elapsed_nanoseconds: 0,
         process: None,
+        inputs: Vec::new(),
         outputs: Vec::new(),
         retained_outputs: Vec::new(),
         cargo_origin: None,
@@ -621,6 +694,8 @@ fn fingerprint_with_executable(
         maximum_stdout_bytes: u64,
         maximum_stderr_bytes: u64,
         required_outputs: Vec<String>,
+        required_inputs: &'a [super::model::GateInput],
+        environment: &'a BTreeMap<String, String>,
         worktree_input_digest: &'a VerificationDigest,
         cargo_lock_digest: &'a VerificationDigest,
         runtime_input_digest: &'a VerificationDigest,
@@ -652,6 +727,8 @@ fn fingerprint_with_executable(
         timeout_nanoseconds: gate.timeout.as_nanos(),
         maximum_stdout_bytes: gate.maximum_stdout_bytes,
         maximum_stderr_bytes: gate.maximum_stderr_bytes,
+        required_inputs: &gate.required_inputs,
+        environment: &gate.environment,
         required_outputs: gate
             .required_outputs
             .iter()
@@ -718,6 +795,10 @@ mod worker_cleanup_tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "declared_inputs_tests.rs"]
+mod declared_inputs_tests;
 
 #[cfg(test)]
 #[path = "cargo_outputs/production_gate_tests.rs"]

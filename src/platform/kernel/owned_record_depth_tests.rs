@@ -835,12 +835,12 @@ fn shared_nominal_dag_cycle_proof_fits_linear_metadata_and_rejects_back_edges() 
 }
 
 #[test]
-fn nominal_parameters_keep_existing_owned_bound_envelope_generations() {
-    for (constraints, generation) in [
-        (TypeParameterConstraints::Owned, 18),
-        (TypeParameterConstraints::OwnedTransferable, 22),
-        (TypeParameterConstraints::OwnedShareable, 30),
-        (TypeParameterConstraints::OwnedTransferableShareable, 30),
+fn nominal_parameters_admit_every_owned_constraint_under_current_contract() {
+    for constraints in [
+        TypeParameterConstraints::Owned,
+        TypeParameterConstraints::OwnedTransferable,
+        TypeParameterConstraints::OwnedShareable,
+        TypeParameterConstraints::OwnedTransferableShareable,
     ] {
         let mut read = Read::default();
         let declaration = DeclarationId::migrate(SEED, 2000);
@@ -859,9 +859,7 @@ fn nominal_parameters_keep_existing_owned_bound_envelope_generations() {
             unreachable!()
         };
         type_parameters.push(parameter);
-        let mut header =
-            OwnerHeader::new(OwnerKey::TypeParameter(parameter), OwnerKind::TypeParameter);
-        header.contract_version = generation;
+        let header = OwnerHeader::new(OwnerKey::TypeParameter(parameter), OwnerKind::TypeParameter);
         let record = OwnerRecord::TypeParameter(TypeParameterRecord {
             header,
             declaration,

@@ -52,7 +52,7 @@ fn scheme() -> OwnerRecord {
 fn current_scheme_binds_ordered_parameters_and_every_mapping_argument() {
     let original = scheme();
     let (digest, bytes) = encode_owner(&original).unwrap();
-    assert_eq!(&bytes[..8], b"LKJOWN34");
+    assert_eq!(&bytes[..8], &OWNER_MAGIC);
     assert_eq!(
         decode_owner(&bytes, original.owner(), original.kind(), digest).unwrap(),
         original
@@ -168,90 +168,12 @@ fn applied_witness_identity_retains_unused_ordered_arguments() {
         };
         type_arguments.reverse();
         assert_ne!(encode_owner(&owner).unwrap().0, digest);
-        for generation in 18..=27 {
-            owner.set_encoding_for_edit(generation);
-            assert_eq!(
-                encode_owner(&owner).unwrap_err().code,
-                "kernel_implementation_scheme_generation"
-            );
-        }
     }
 }
 
 #[test]
-fn predecessor_implementation_bytes_remain_literal_in_graph26_and27() {
-    let seed = b"generic-implementation-codec";
-    let self_type = owned_type(TypeForm::OwnedI64Cell);
-    let type_arguments = vec![owned_type(TypeForm::ByteBuffer)];
-    let mappings = vec![(MethodId::migrate(seed, 0), reference())];
-    for generation in [26, 27] {
-        let header = OwnerHeader {
-            contract_version: generation,
-            owner: OwnerKey::Declaration(reference().declaration),
-            kind: OwnerKind::OwnedImplementation,
-        };
-        let magic = format!("LKJOWN{generation}").as_bytes().try_into().unwrap();
-        let domain = format!("lkjscript.kernel.owner-envelope.v{generation}");
-        let bytes = packed::encode(
-            magic,
-            &domain,
-            &(
-                1_u32,
-                header,
-                ModuleId::migrate(seed, 0),
-                Name::new("Flat").unwrap(),
-                DeclarationVisibility::Public,
-                9_u32,
-                reference(),
-                self_type,
-                &type_arguments,
-                &mappings,
-            ),
-            MAXIMUM_OWNER_OBJECT_BYTES,
-        )
-        .unwrap();
-        let digest = OwnerObjectDigest::of(&bytes);
-        let mut owner = decode_owner(&bytes, header.owner, header.kind, digest).unwrap();
-        assert_eq!(encode_owner(&owner).unwrap(), (digest, bytes));
-        let OwnerRecord::Declaration(d) = &mut owner else {
-            unreachable!()
-        };
-        let DeclarationPayload::OwnedImplementation(i) = &mut d.payload else {
-            unreachable!()
-        };
-        assert!(i.type_parameters.is_empty());
-        assert!(i.methods[0].type_arguments.is_empty());
-        i.methods[0].type_arguments.push(self_type);
-        assert_eq!(
-            encode_owner(&owner).unwrap_err().code,
-            "kernel_implementation_scheme_generation"
-        );
-    }
-}
-
-#[test]
-fn schemes_cannot_downcast_or_exceed_structural_mapping_limits() {
+fn schemes_enforce_structural_mapping_limits() {
     let mut owner = scheme();
-    for generation in 18..=27 {
-        owner.set_encoding_for_edit(generation);
-        assert_eq!(
-            encode_owner(&owner).unwrap_err().code,
-            "kernel_implementation_scheme_generation"
-        );
-        let magic = format!("LKJOWN{generation}").as_bytes().try_into().unwrap();
-        let domain = format!("lkjscript.kernel.owner-envelope.v{generation}");
-        let disguised = packed::encode(magic, &domain, &owner, MAXIMUM_OWNER_OBJECT_BYTES).unwrap();
-        assert!(
-            decode_owner(
-                &disguised,
-                owner.owner(),
-                owner.kind(),
-                OwnerObjectDigest::of(&disguised)
-            )
-            .is_err()
-        );
-    }
-    owner.set_encoding_for_edit(28);
     let OwnerRecord::Declaration(d) = &mut owner else {
         unreachable!()
     };
@@ -260,48 +182,6 @@ fn schemes_cannot_downcast_or_exceed_structural_mapping_limits() {
     };
     i.methods[0].type_arguments = vec![i.self_type; contract::MAXIMUM_CHILDREN + 1];
     assert!(encode_owner(&owner).is_err());
-}
-
-#[test]
-fn graph28_scheme_literal_remains_exact_after_prerequisite_extension() {
-    let mut original = scheme();
-    original.set_encoding_for_edit(28);
-    let OwnerRecord::Declaration(d) = &original else {
-        unreachable!()
-    };
-    let DeclarationPayload::OwnedImplementation(i) = &d.payload else {
-        unreachable!()
-    };
-    let mappings = i
-        .methods
-        .iter()
-        .map(|m| (m.method, m.function, &m.type_arguments))
-        .collect::<Vec<_>>();
-    let literal = packed::encode(
-        *b"LKJOWN28",
-        "lkjscript.kernel.owner-envelope.v28",
-        &(
-            1_u32,
-            d.header,
-            d.module,
-            &d.name,
-            d.visibility,
-            9_u32,
-            &i.type_parameters,
-            i.contract,
-            i.self_type,
-            &i.type_arguments,
-            mappings,
-        ),
-        MAXIMUM_OWNER_OBJECT_BYTES,
-    )
-    .unwrap();
-    let digest = OwnerObjectDigest::of(&literal);
-    assert_eq!(encode_owner(&original).unwrap(), (digest, literal.clone()));
-    assert_eq!(
-        decode_owner(&literal, original.owner(), original.kind(), digest).unwrap(),
-        original
-    );
 }
 
 #[test]
@@ -328,19 +208,11 @@ fn prerequisite_declarations_maps_and_nested_arguments_bind_canonical_identity()
             parameter,
         });
     let (digest, bytes) = encode_owner(&original).unwrap();
-    assert_eq!(&bytes[..8], b"LKJOWN34");
+    assert_eq!(&bytes[..8], &OWNER_MAGIC);
     assert_eq!(
         decode_owner(&bytes, original.owner(), original.kind(), digest).unwrap(),
         original
     );
-    for generation in [27, 28] {
-        let mut old = original.clone();
-        old.set_encoding_for_edit(generation);
-        assert_eq!(
-            encode_owner(&old).unwrap_err().code,
-            "kernel_implementation_prerequisite_generation"
-        );
-    }
     let OwnerRecord::Declaration(d) = &mut original else {
         unreachable!()
     };
@@ -398,11 +270,6 @@ fn prerequisite_declarations_maps_and_nested_arguments_bind_canonical_identity()
             .unwrap()
             .0,
         before
-    );
-    expression.contract_version = 28;
-    assert_eq!(
-        expression.validate_local().unwrap_err().code,
-        "kernel_implementation_prerequisite_generation"
     );
 }
 

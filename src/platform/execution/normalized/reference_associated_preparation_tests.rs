@@ -391,338 +391,326 @@ fn normalized(fixture: &Fixture, selected: NormalizedImplementationArgument) -> 
 
 #[test]
 fn canonical_associated_preparation_distinguishes_witnesses_and_exact_mapped_targets() {
-    // Synthetic Graph 33/34 controls; retained planner acceptance remains unrun.
-    for generation in [
-        crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
-        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-    ] {
-        let fixture = synthetic_owned_generations(make_fixture(), generation, generation);
-        let proof = prove(
-            &fixture,
-            &[0, 1, 2],
-            Limits::default(),
-            &ExecutionControl::uncancelled(),
-        )
-        .unwrap();
-        assert_eq!(proof.selections.len(), 3);
-        let consumers = proof
-            .applications
+    // Current canonical-reader controls are independent of artifact admission.
+    let generation = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+    let fixture = synthetic_owned_generations(make_fixture(), generation, generation);
+    let proof = prove(
+        &fixture,
+        &[0, 1, 2],
+        Limits::default(),
+        &ExecutionControl::uncancelled(),
+    )
+    .unwrap();
+    assert_eq!(proof.selections.len(), 3);
+    let consumers = proof
+        .applications
+        .iter()
+        .filter(|(application, _)| application.function == fixture.consumer)
+        .collect::<Vec<_>>();
+    assert_eq!(consumers.len(), 3);
+    for (application, function) in consumers {
+        let selected = &proof.selections[application.witnesses[0]];
+        let output = if selected.implementation == fixture.implementations[1] {
+            fixture.block
+        } else {
+            fixture.cell
+        };
+        assert_eq!(function.parameters, vec![(output, ParameterUse::Borrow)]);
+        assert_eq!(function.result.ty, output);
+        assert_eq!(function.result.relation.source().copied(), Some(0));
+        assert!(!function.requires_read_view_generation);
+        assert!(!selected.requires_read_view_generation);
+        let target = proof
+            .methods
             .iter()
-            .filter(|(application, _)| application.function == fixture.consumer)
-            .collect::<Vec<_>>();
-        assert_eq!(consumers.len(), 3);
-        for (application, function) in consumers {
-            let selected = &proof.selections[application.witnesses[0]];
-            let output = if selected.implementation == fixture.implementations[1] {
-                fixture.block
-            } else {
-                fixture.cell
-            };
-            assert_eq!(function.parameters, vec![(output, ParameterUse::Borrow)]);
-            assert_eq!(function.result.ty, output);
-            assert_eq!(function.result.relation.source().copied(), Some(0));
-            assert!(!function.requires_read_view_generation);
-            assert!(!selected.requires_read_view_generation);
-            let target = proof
-                .methods
-                .iter()
-                .find(|((identity, _, scopes), _)| {
-                    *identity == selected.identity && scopes.is_empty()
-                })
-                .unwrap()
-                .1;
-            assert_eq!(target.function, fixture.reader);
-            assert_eq!(target.types, vec![output]);
-            assert_eq!(selected.members.len(), 2);
-            assert_eq!(selected.members[0].member, fixture.spare);
-        }
-        assert_eq!(
-            proof
-                .applications
-                .keys()
-                .filter(|application| application.function == fixture.reader)
-                .count(),
-            2
-        );
+            .find(|((identity, _, scopes), _)| *identity == selected.identity && scopes.is_empty())
+            .unwrap()
+            .1;
+        assert_eq!(target.function, fixture.reader);
+        assert_eq!(target.types, vec![output]);
+        assert_eq!(selected.members.len(), 2);
+        assert_eq!(selected.members[0].member, fixture.spare);
     }
+    assert_eq!(
+        proof
+            .applications
+            .keys()
+            .filter(|application| application.function == fixture.reader)
+            .count(),
+        2
+    );
 }
 
 #[test]
 fn canonical_associated_preparation_compares_real_materialization_and_rejects_corrupt_catalogues() {
-    // Synthetic Graph 33/34 controls; retained planner acceptance remains unrun.
-    for generation in [
-        crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
-        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-    ] {
-        let fixture = synthetic_owned_generations(make_fixture(), generation, generation);
-        let control = ExecutionControl::uncancelled();
-        let proof = prove(&fixture, &[0, 1, 2], Limits::default(), &control).unwrap();
-        let catalog = (0..3)
-            .map(|index| selected(&fixture, index))
-            .collect::<Vec<_>>();
-        for index in 0..3 {
-            let expected = proof
-                .selections
-                .iter()
-                .find(|selection| selection.implementation == fixture.implementations[index])
-                .unwrap();
-            proof
-                .compare_selection(expected, &catalog[index], &catalog, &proof.types, &control)
-                .unwrap();
-            let function = normalized(&fixture, Arc::clone(&catalog[index]));
-            let ordinary = BTreeMap::from([(function.type_parameters[0], fixture.cell)]);
-            let mut types = fixture.source.types.clone();
-            let actual =
-                crate::platform::execution::normalized::prepared_types::materialize_associated_roots(
-                    &function,
-                    &ordinary,
-                    &[fixture.projection],
-                    &mut types,
-                    &control,
-                )
-                .unwrap();
-            let application = proof
-                .applications
-                .iter()
-                .find(|(application, _)| {
-                    application.function == fixture.consumer
-                        && proof.selections[application.witnesses[0]].implementation
-                            == fixture.implementations[index]
-                })
-                .unwrap()
-                .1;
-            assert_eq!(actual, vec![application.result.ty]);
-        }
-        for change in 0..7 {
-            let mut changed = (*catalog[0]).clone();
-            match change {
-                0 => Arc::make_mut(&mut changed.associated_types)[1].ty = fixture.block,
-                1 => Arc::make_mut(&mut changed.associated_types)[1].member = fixture.spare,
-                2 => changed.contract = fixture.implementations[1],
-                3 => changed.implementation = fixture.implementations[2],
-                4 => changed.implementation_type_arguments = Arc::from([fixture.block]),
-                5 => {
-                    changed.implementation_type_parameter_constraints =
-                        Arc::from([TypeParameterConstraints::OwnedTransferable])
-                }
-                _ => changed.implementation_generation = 32,
+    // Current canonical-reader controls are independent of artifact admission.
+    let generation = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+    let fixture = synthetic_owned_generations(make_fixture(), generation, generation);
+    let control = ExecutionControl::uncancelled();
+    let proof = prove(&fixture, &[0, 1, 2], Limits::default(), &control).unwrap();
+    let catalog = (0..3)
+        .map(|index| selected(&fixture, index))
+        .collect::<Vec<_>>();
+    for index in 0..3 {
+        let expected = proof
+            .selections
+            .iter()
+            .find(|selection| selection.implementation == fixture.implementations[index])
+            .unwrap();
+        proof
+            .compare_selection(expected, &catalog[index], &catalog, &proof.types, &control)
+            .unwrap();
+        let function = normalized(&fixture, Arc::clone(&catalog[index]));
+        let ordinary = BTreeMap::from([(function.type_parameters[0], fixture.cell)]);
+        let mut types = fixture.source.types.clone();
+        let actual =
+            crate::platform::execution::normalized::prepared_types::materialize_associated_roots(
+                &function,
+                &ordinary,
+                &[fixture.projection],
+                &mut types,
+                &control,
+            )
+            .unwrap();
+        let application = proof
+            .applications
+            .iter()
+            .find(|(application, _)| {
+                application.function == fixture.consumer
+                    && proof.selections[application.witnesses[0]].implementation
+                        == fixture.implementations[index]
+            })
+            .unwrap()
+            .1;
+        assert_eq!(actual, vec![application.result.ty]);
+    }
+    for change in 0..7 {
+        let mut changed = (*catalog[0]).clone();
+        match change {
+            0 => Arc::make_mut(&mut changed.associated_types)[1].ty = fixture.block,
+            1 => Arc::make_mut(&mut changed.associated_types)[1].member = fixture.spare,
+            2 => changed.contract = fixture.implementations[1],
+            3 => changed.implementation = fixture.implementations[2],
+            4 => changed.implementation_type_arguments = Arc::from([fixture.block]),
+            5 => {
+                changed.implementation_type_parameter_constraints =
+                    Arc::from([TypeParameterConstraints::OwnedTransferable])
             }
-            let mut changed_catalog = catalog.clone();
-            changed_catalog[0] = Arc::new(changed);
-            assert!(
-                proof
-                    .compare_selection(
-                        &proof.selections[0],
-                        &changed_catalog[0],
-                        &changed_catalog,
-                        &proof.types,
-                        &control
-                    )
-                    .is_err()
-            );
+            _ => changed.implementation_generation = 32,
         }
-        let detached = Arc::new((*catalog[0]).clone());
+        let mut changed_catalog = catalog.clone();
+        changed_catalog[0] = Arc::new(changed);
         assert!(
             proof
                 .compare_selection(
                     &proof.selections[0],
-                    &detached,
-                    &catalog,
+                    &changed_catalog[0],
+                    &changed_catalog,
                     &proof.types,
                     &control
                 )
                 .is_err()
-        );
-        let mut wrong_types = proof.types.clone();
-        wrong_types.insert(fixture.cell, TypeObject::new(TypeForm::ByteBuffer).unwrap());
-        assert!(
-            proof
-                .compare_selection(
-                    &proof.selections[0],
-                    &catalog[0],
-                    &catalog,
-                    &wrong_types,
-                    &control
-                )
-                .is_err()
-        );
-        for source in [fixture.reader, fixture.implementations[0]] {
-            let mut changed = normalized(&fixture, Arc::clone(&catalog[0]));
-            changed.declaration = source;
-            let ordinary = BTreeMap::from([(changed.type_parameters[0], fixture.cell)]);
-            assert!(
-                crate::platform::execution::normalized::prepared_types::materialize_associated_roots(
-                    &changed,
-                    &ordinary,
-                    &[fixture.projection],
-                    &mut proof.types.clone(),
-                    &control
-                )
-                .is_err()
-            );
-        }
-        let cancelled = ExecutionControl::cancel_after_checks(0);
-        assert_eq!(
-            proof
-                .compare_selection(
-                    &proof.selections[0],
-                    &catalog[0],
-                    &catalog,
-                    &proof.types,
-                    &cancelled
-                )
-                .unwrap_err()
-                .class,
-            ExecutionFailureClass::Cancelled
         );
     }
+    let detached = Arc::new((*catalog[0]).clone());
+    assert!(
+        proof
+            .compare_selection(
+                &proof.selections[0],
+                &detached,
+                &catalog,
+                &proof.types,
+                &control
+            )
+            .is_err()
+    );
+    let mut wrong_types = proof.types.clone();
+    wrong_types.insert(fixture.cell, TypeObject::new(TypeForm::ByteBuffer).unwrap());
+    assert!(
+        proof
+            .compare_selection(
+                &proof.selections[0],
+                &catalog[0],
+                &catalog,
+                &wrong_types,
+                &control
+            )
+            .is_err()
+    );
+    for source in [fixture.reader, fixture.implementations[0]] {
+        let mut changed = normalized(&fixture, Arc::clone(&catalog[0]));
+        changed.declaration = source;
+        let ordinary = BTreeMap::from([(changed.type_parameters[0], fixture.cell)]);
+        assert!(
+            crate::platform::execution::normalized::prepared_types::materialize_associated_roots(
+                &changed,
+                &ordinary,
+                &[fixture.projection],
+                &mut proof.types.clone(),
+                &control
+            )
+            .is_err()
+        );
+    }
+    let cancelled = ExecutionControl::cancel_after_checks(0);
+    assert_eq!(
+        proof
+            .compare_selection(
+                &proof.selections[0],
+                &catalog[0],
+                &catalog,
+                &proof.types,
+                &cancelled
+            )
+            .unwrap_err()
+            .class,
+        ExecutionFailureClass::Cancelled
+    );
 }
 
 #[test]
 fn canonical_associated_preparation_rechecks_unused_members_and_exact_owner_occurrences() {
-    // Synthetic Graph 33/34 controls; retained planner acceptance remains unrun.
-    for generation in [
-        crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
-        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-    ] {
-        let fixture = synthetic_owned_generations(make_fixture(), generation, generation);
-        for change in 0..7 {
-            let mut changed = synthetic_owned_generations(make_fixture(), generation, generation);
-            match change {
-                0 => {
-                    let unit = add(&mut changed.source, TypeForm::Unit);
-                    let DeclarationPayload::OwnedImplementation(scheme) =
-                        payload(&mut changed.source, changed.implementations[0])
-                    else {
-                        unreachable!()
-                    };
-                    scheme
-                        .associated_types
-                        .iter_mut()
-                        .find(|binding| binding.member == changed.spare)
-                        .unwrap()
-                        .value =
-                        crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty: unit };
-                }
-                1 => {
-                    let DeclarationPayload::OwnedImplementation(scheme) =
-                        payload(&mut changed.source, changed.implementations[0])
-                    else {
-                        unreachable!()
-                    };
-                    scheme
-                        .associated_types
-                        .iter_mut()
-                        .find(|binding| binding.member == changed.spare)
-                        .unwrap()
-                        .value = crate::platform::kernel::AssociatedTypeBindingValue::Owned {
-                        ty: changed.projection,
-                    };
-                }
-                2 => {
-                    let DeclarationPayload::Function(function) =
-                        payload(&mut changed.source, changed.consumer)
-                    else {
-                        unreachable!()
-                    };
-                    let parameter = function.parameters[0];
-                    changed
-                        .source
-                        .owners
-                        .get_mut(&OwnerKey::Parameter(parameter))
-                        .unwrap()
-                        .set_encoding_for_edit(32);
-                }
-                3 => {
-                    let DeclarationPayload::Function(function) =
-                        payload(&mut changed.source, changed.consumer)
-                    else {
-                        unreachable!()
-                    };
-                    let body = function.body;
-                    changed
-                        .source
-                        .owners
-                        .get_mut(&OwnerKey::Expression(body))
-                        .unwrap()
-                        .set_encoding_for_edit(32);
-                }
-                4 => {
-                    let owner = changed
-                        .source
-                        .owners
-                        .get_mut(&OwnerKey::Declaration(changed.consumer.declaration))
-                        .unwrap();
-                    owner.set_encoding_for_edit(32);
-                }
-                _ => {
-                    let DeclarationPayload::Function(function) =
-                        payload(&mut changed.source, changed.consumer)
-                    else {
-                        unreachable!()
-                    };
-                    let body = function.body;
-                    let original = function.parameters[0];
-                    let OwnerRecord::Parameter(mut foreign) =
-                        changed.source.owners[&OwnerKey::Parameter(original)].clone()
-                    else {
-                        unreachable!()
-                    };
-                    let parameter = ParameterId::migrate(SEED, 90);
-                    foreign.header =
-                        OwnerHeader::new(OwnerKey::Parameter(parameter), OwnerKind::Parameter);
-                    foreign.header.contract_version = generation;
-                    foreign.ty = changed.cell;
-                    foreign.parent = ParameterParent::Function(if change == 5 {
-                        changed.reader.declaration
-                    } else {
-                        changed.consumer.declaration
-                    });
-                    changed.source.owners.insert(
-                        OwnerKey::Parameter(parameter),
-                        OwnerRecord::Parameter(foreign),
-                    );
-                    let OwnerRecord::Expression(expression) = changed
-                        .source
-                        .owners
-                        .get_mut(&OwnerKey::Expression(body))
-                        .unwrap()
-                    else {
-                        unreachable!()
-                    };
-                    expression.operation = ExpressionOperation::Local {
-                        value: LocalValueReference::FunctionParameter(parameter),
-                    };
-                }
+    // Current canonical-reader controls are independent of artifact admission.
+    let generation = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+    let fixture = synthetic_owned_generations(make_fixture(), generation, generation);
+    for change in 0..7 {
+        let mut changed = synthetic_owned_generations(make_fixture(), generation, generation);
+        match change {
+            0 => {
+                let unit = add(&mut changed.source, TypeForm::Unit);
+                let DeclarationPayload::OwnedImplementation(scheme) =
+                    payload(&mut changed.source, changed.implementations[0])
+                else {
+                    unreachable!()
+                };
+                scheme
+                    .associated_types
+                    .iter_mut()
+                    .find(|binding| binding.member == changed.spare)
+                    .unwrap()
+                    .value =
+                    crate::platform::kernel::AssociatedTypeBindingValue::Owned { ty: unit };
             }
-            assert_eq!(
-                prove(
-                    &changed,
-                    &[0],
-                    Limits::default(),
-                    &ExecutionControl::uncancelled()
-                )
-                .unwrap_err()
-                .class,
-                ExecutionFailureClass::Infrastructure,
-                "corruption {change}"
-            );
+            1 => {
+                let DeclarationPayload::OwnedImplementation(scheme) =
+                    payload(&mut changed.source, changed.implementations[0])
+                else {
+                    unreachable!()
+                };
+                scheme
+                    .associated_types
+                    .iter_mut()
+                    .find(|binding| binding.member == changed.spare)
+                    .unwrap()
+                    .value = crate::platform::kernel::AssociatedTypeBindingValue::Owned {
+                    ty: changed.projection,
+                };
+            }
+            2 => {
+                let DeclarationPayload::Function(function) =
+                    payload(&mut changed.source, changed.consumer)
+                else {
+                    unreachable!()
+                };
+                let parameter = function.parameters[0];
+                changed
+                    .source
+                    .owners
+                    .get_mut(&OwnerKey::Parameter(parameter))
+                    .unwrap()
+                    .set_encoding_for_edit(32);
+            }
+            3 => {
+                let DeclarationPayload::Function(function) =
+                    payload(&mut changed.source, changed.consumer)
+                else {
+                    unreachable!()
+                };
+                let body = function.body;
+                changed
+                    .source
+                    .owners
+                    .get_mut(&OwnerKey::Expression(body))
+                    .unwrap()
+                    .set_encoding_for_edit(32);
+            }
+            4 => {
+                let owner = changed
+                    .source
+                    .owners
+                    .get_mut(&OwnerKey::Declaration(changed.consumer.declaration))
+                    .unwrap();
+                owner.set_encoding_for_edit(32);
+            }
+            _ => {
+                let DeclarationPayload::Function(function) =
+                    payload(&mut changed.source, changed.consumer)
+                else {
+                    unreachable!()
+                };
+                let body = function.body;
+                let original = function.parameters[0];
+                let OwnerRecord::Parameter(mut foreign) =
+                    changed.source.owners[&OwnerKey::Parameter(original)].clone()
+                else {
+                    unreachable!()
+                };
+                let parameter = ParameterId::migrate(SEED, 90);
+                foreign.header =
+                    OwnerHeader::new(OwnerKey::Parameter(parameter), OwnerKind::Parameter);
+                foreign.header.contract_version = generation;
+                foreign.ty = changed.cell;
+                foreign.parent = ParameterParent::Function(if change == 5 {
+                    changed.reader.declaration
+                } else {
+                    changed.consumer.declaration
+                });
+                changed.source.owners.insert(
+                    OwnerKey::Parameter(parameter),
+                    OwnerRecord::Parameter(foreign),
+                );
+                let OwnerRecord::Expression(expression) = changed
+                    .source
+                    .owners
+                    .get_mut(&OwnerKey::Expression(body))
+                    .unwrap()
+                else {
+                    unreachable!()
+                };
+                expression.operation = ExpressionOperation::Local {
+                    value: LocalValueReference::FunctionParameter(parameter),
+                };
+            }
         }
-        assert!(
+        assert_eq!(
             prove(
-                &fixture,
+                &changed,
                 &[0],
                 Limits::default(),
                 &ExecutionControl::uncancelled()
             )
-            .is_ok()
+            .unwrap_err()
+            .class,
+            ExecutionFailureClass::Infrastructure,
+            "corruption {change}"
         );
     }
+    assert!(
+        prove(
+            &fixture,
+            &[0],
+            Limits::default(),
+            &ExecutionControl::uncancelled()
+        )
+        .is_ok()
+    );
+
     // Independent finite reader support and source-root coverage, not a planner proof.
     for root in [32, 33, 34, 35] {
         for owners in [32, 33, 34, 35] {
             let fixture = synthetic_owned_generations(make_fixture(), root, owners);
-            let supported = matches!(root, 33 | 34) && matches!(owners, 33 | 34) && owners <= root;
+            let supported = root == crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+                && owners == crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
             assert_eq!(
                 prove(
                     &fixture,
@@ -753,6 +741,23 @@ fn canonical_associated_preparation_rechecks_unused_members_and_exact_owner_occu
                 .get_mut(&OwnerKey::Declaration(mixed.contract.declaration))
                 .unwrap()
                 .set_encoding_for_edit(contract_generation);
+            if implementation_generation
+                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+                || contract_generation != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+            {
+                assert_eq!(
+                    prove(
+                        &mixed,
+                        &[0],
+                        Limits::default(),
+                        &ExecutionControl::uncancelled()
+                    )
+                    .unwrap_err()
+                    .code,
+                    "reference_associated_preparation"
+                );
+                continue;
+            }
             let proof = prove(
                 &mixed,
                 &[0],
@@ -802,170 +807,166 @@ fn canonical_associated_preparation_rechecks_unused_members_and_exact_owner_occu
 
 #[test]
 fn canonical_associated_preparation_has_exact_capacity_and_cancelled_retry_boundaries() {
-    // Synthetic Graph 33/34 controls; retained planner acceptance remains unrun.
-    for generation in [
-        crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
-        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+    // Current canonical-reader controls are independent of artifact admission.
+    let generation = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+    let fixture = synthetic_owned_generations(make_fixture(), generation, generation);
+    let healthy = prove(
+        &fixture,
+        &[0, 1, 2],
+        Limits::default(),
+        &ExecutionControl::uncancelled(),
+    )
+    .unwrap();
+    for limits in [
+        Limits {
+            steps: healthy.steps - 1,
+            bytes: healthy.bytes,
+        },
+        Limits {
+            steps: healthy.steps,
+            bytes: healthy.bytes - 1,
+        },
     ] {
-        let fixture = synthetic_owned_generations(make_fixture(), generation, generation);
-        let healthy = prove(
-            &fixture,
-            &[0, 1, 2],
-            Limits::default(),
-            &ExecutionControl::uncancelled(),
-        )
-        .unwrap();
-        for limits in [
-            Limits {
-                steps: healthy.steps - 1,
-                bytes: healthy.bytes,
-            },
-            Limits {
-                steps: healthy.steps,
-                bytes: healthy.bytes - 1,
-            },
-        ] {
-            assert_eq!(
-                prove(
-                    &fixture,
-                    &[0, 1, 2],
-                    limits,
-                    &ExecutionControl::uncancelled()
-                )
-                .unwrap_err()
-                .class,
-                ExecutionFailureClass::Resource
-            );
-        }
-        let exact = prove(
-            &fixture,
-            &[0, 1, 2],
-            Limits {
-                steps: healthy.steps,
-                bytes: healthy.bytes,
-            },
-            &ExecutionControl::uncancelled(),
-        )
-        .unwrap();
-        assert_eq!((exact.steps, exact.bytes), (healthy.steps, healthy.bytes));
-        for checks in [0, 10, healthy.steps as u64 / 2] {
-            assert_eq!(
-                prove(
-                    &fixture,
-                    &[0, 1, 2],
-                    Limits::default(),
-                    &ExecutionControl::cancel_after_checks(checks)
-                )
-                .unwrap_err()
-                .class,
-                ExecutionFailureClass::Cancelled
-            );
-        }
-        let retry = prove(
-            &fixture,
-            &[0, 1, 2],
-            Limits::default(),
-            &ExecutionControl::uncancelled(),
-        )
-        .unwrap();
-        assert_eq!((retry.steps, retry.bytes), (healthy.steps, healthy.bytes));
-        // This fixture entry bypasses production source admission. Successful completion
-        // must retain the independent symbolic proof; it grants no source or artifact seal.
-        let completed = super::super::super::reference_schema::NormalizedReferenceSchema::independently_admit_witness_source(&fixture.source).unwrap();
-        assert_eq!(completed.source_admission_steps, 0);
-        let proof = completed.associated_proof().unwrap();
-        assert!(proof.types.is_empty());
-        assert!(proof.applications.is_empty());
-        assert!(proof.selections.is_empty());
-        assert!(proof.methods.is_empty());
-        assert!(proof.executables.is_empty());
         assert_eq!(
-            proof.symbolic.keys().copied().collect::<BTreeSet<_>>(),
-            BTreeSet::from([fixture.consumer, fixture.reader])
+            prove(
+                &fixture,
+                &[0, 1, 2],
+                limits,
+                &ExecutionControl::uncancelled()
+            )
+            .unwrap_err()
+            .class,
+            ExecutionFailureClass::Resource
         );
-        let consumer = &proof.symbolic[&fixture.consumer];
+    }
+    let exact = prove(
+        &fixture,
+        &[0, 1, 2],
+        Limits {
+            steps: healthy.steps,
+            bytes: healthy.bytes,
+        },
+        &ExecutionControl::uncancelled(),
+    )
+    .unwrap();
+    assert_eq!((exact.steps, exact.bytes), (healthy.steps, healthy.bytes));
+    for checks in [0, 10, healthy.steps as u64 / 2] {
         assert_eq!(
-            consumer.parameters,
-            [(fixture.projection, ParameterUse::Borrow)]
+            prove(
+                &fixture,
+                &[0, 1, 2],
+                Limits::default(),
+                &ExecutionControl::cancel_after_checks(checks)
+            )
+            .unwrap_err()
+            .class,
+            ExecutionFailureClass::Cancelled
         );
-        assert_eq!(consumer.result.ty, fixture.projection);
-        assert_eq!(consumer.result.relation.source().copied(), Some(0));
-        assert!(!consumer.is_task);
-        assert!(consumer.requires_associated_generation);
-        assert_eq!(consumer.effect, EffectRow::default());
-        let control = ExecutionControl::uncancelled();
-        let contract = proof.contract_template(fixture.contract, &control).unwrap();
-        let method = contract.methods[0].id;
-        let contract_result = contract.methods[0].result.ty;
-        assert!(matches!(
-            completed.types[&contract_result].form,
-            TypeForm::AssociatedContractMember { contract, member }
-                if contract == fixture.contract && member == fixture.member
-        ));
-        assert_eq!(proof.contract_methods.len(), 1);
-        let signature = &proof.contract_methods[&(fixture.contract, method)];
+    }
+    let retry = prove(
+        &fixture,
+        &[0, 1, 2],
+        Limits::default(),
+        &ExecutionControl::uncancelled(),
+    )
+    .unwrap();
+    assert_eq!((retry.steps, retry.bytes), (healthy.steps, healthy.bytes));
+    // This fixture entry bypasses production source admission. Successful completion
+    // must retain the independent symbolic proof; it grants no source or artifact seal.
+    let completed = super::super::super::reference_schema::NormalizedReferenceSchema::independently_admit_witness_source(&fixture.source).unwrap();
+    assert_eq!(completed.source_admission_steps, 0);
+    let proof = completed.associated_proof().unwrap();
+    assert!(proof.types.is_empty());
+    assert!(proof.applications.is_empty());
+    assert!(proof.selections.is_empty());
+    assert!(proof.methods.is_empty());
+    assert!(proof.executables.is_empty());
+    assert_eq!(
+        proof.symbolic.keys().copied().collect::<BTreeSet<_>>(),
+        BTreeSet::from([fixture.consumer, fixture.reader])
+    );
+    let consumer = &proof.symbolic[&fixture.consumer];
+    assert_eq!(
+        consumer.parameters,
+        [(fixture.projection, ParameterUse::Borrow)]
+    );
+    assert_eq!(consumer.result.ty, fixture.projection);
+    assert_eq!(consumer.result.relation.source().copied(), Some(0));
+    assert!(!consumer.is_task);
+    assert!(consumer.requires_associated_generation);
+    assert_eq!(consumer.effect, EffectRow::default());
+    let control = ExecutionControl::uncancelled();
+    let contract = proof.contract_template(fixture.contract, &control).unwrap();
+    let method = contract.methods[0].id;
+    let contract_result = contract.methods[0].result.ty;
+    assert!(matches!(
+        completed.types[&contract_result].form,
+        TypeForm::AssociatedContractMember { contract, member }
+            if contract == fixture.contract && member == fixture.member
+    ));
+    assert_eq!(proof.contract_methods.len(), 1);
+    let signature = &proof.contract_methods[&(fixture.contract, method)];
+    assert_eq!(
+        signature.parameters,
+        [(contract_result, ParameterUse::Borrow)]
+    );
+    assert_eq!(signature.result.ty, contract_result);
+    assert_eq!(signature.result.relation.source().copied(), Some(0));
+    assert!(!signature.is_task);
+    assert!(signature.requires_associated_generation);
+    assert_eq!(proof.symbolic_mappings.len(), 3);
+    for (index, expected) in [fixture.cell, fixture.block, fixture.cell]
+        .into_iter()
+        .enumerate()
+    {
+        let target = proof
+            .symbolic_mapping(fixture.implementations[index], method, &[], &control)
+            .unwrap();
+        assert_eq!(target.function, Some(fixture.reader));
+        assert_eq!(target.types, [expected]);
+        assert!(target.witnesses.is_empty());
         assert_eq!(
-            signature.parameters,
-            [(contract_result, ParameterUse::Borrow)]
+            target.signature.parameters,
+            [(expected, ParameterUse::Borrow)]
         );
-        assert_eq!(signature.result.ty, contract_result);
-        assert_eq!(signature.result.relation.source().copied(), Some(0));
-        assert!(!signature.is_task);
-        assert!(signature.requires_associated_generation);
-        assert_eq!(proof.symbolic_mappings.len(), 3);
-        for (index, expected) in [fixture.cell, fixture.block, fixture.cell]
-            .into_iter()
-            .enumerate()
-        {
-            let target = proof
-                .symbolic_mapping(fixture.implementations[index], method, &[], &control)
-                .unwrap();
-            assert_eq!(target.function, Some(fixture.reader));
-            assert_eq!(target.types, [expected]);
-            assert!(target.witnesses.is_empty());
-            assert_eq!(
-                target.signature.parameters,
-                [(expected, ParameterUse::Borrow)]
-            );
-            assert_eq!(target.signature.result.ty, expected);
-            assert_eq!(target.signature.result.relation.source().copied(), Some(0));
-            assert!(!target.signature.is_task);
-            assert_eq!(target.signature.effect, EffectRow::default());
-            let extra_scope = ReadScopeArgument::Parameter(ReadScopeReference {
-                binder: ReadScopeBinder::ContractMethod {
-                    contract: fixture.contract,
+        assert_eq!(target.signature.result.ty, expected);
+        assert_eq!(target.signature.result.relation.source().copied(), Some(0));
+        assert!(!target.signature.is_task);
+        assert_eq!(target.signature.effect, EffectRow::default());
+        let extra_scope = ReadScopeArgument::Parameter(ReadScopeReference {
+            binder: ReadScopeBinder::ContractMethod {
+                contract: fixture.contract,
+                method,
+            },
+            parameter: crate::platform::semantic_id::ReadScopeParameterId::migrate(SEED, 91),
+        });
+        assert!(
+            proof
+                .symbolic_mapping(
+                    fixture.implementations[index],
                     method,
-                },
-                parameter: crate::platform::semantic_id::ReadScopeParameterId::migrate(SEED, 91),
-            });
-            assert!(
-                proof
-                    .symbolic_mapping(
-                        fixture.implementations[index],
-                        method,
-                        &[extra_scope],
-                        &control
-                    )
-                    .is_err()
-            );
-        }
-        assert!(completed.types.contains_key(&fixture.cell));
-        assert!(completed.types.contains_key(&fixture.block));
-        assert!(completed.transferable_types.contains(&fixture.block));
-        assert!(completed.shareable_types.contains(&fixture.block));
-        for raw in [fixture.projection, contract_result] {
-            assert!(proof.raw_templates.contains(&raw));
-            for property in [
-                &completed.buffer_free_types,
-                &completed.capture_safe_types,
-                &completed.transferable_types,
-                &completed.shareable_types,
-                &completed.ordinary_types,
-                &completed.comparable_types,
-                &completed.application_free_types,
-            ] {
-                assert!(!property.contains(&raw));
-            }
+                    &[extra_scope],
+                    &control
+                )
+                .is_err()
+        );
+    }
+    assert!(completed.types.contains_key(&fixture.cell));
+    assert!(completed.types.contains_key(&fixture.block));
+    assert!(completed.transferable_types.contains(&fixture.block));
+    assert!(completed.shareable_types.contains(&fixture.block));
+    for raw in [fixture.projection, contract_result] {
+        assert!(proof.raw_templates.contains(&raw));
+        for property in [
+            &completed.buffer_free_types,
+            &completed.capture_safe_types,
+            &completed.transferable_types,
+            &completed.shareable_types,
+            &completed.ordinary_types,
+            &completed.comparable_types,
+            &completed.application_free_types,
+        ] {
+            assert!(!property.contains(&raw));
         }
     }
 }

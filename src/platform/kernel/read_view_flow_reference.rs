@@ -340,7 +340,7 @@ impl Engine<'_, '_> {
             _ => return Err(Failure::Missing),
         };
         if record.id != id
-            || !matches!(record.contract_version, 33 | 34)
+            || record.contract_version != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
             || (record.contract_version < 34
                 && (record.operation.is_read_view_operation()
                     || !record.operation.read_scope_arguments().is_empty()))
@@ -405,7 +405,8 @@ impl Engine<'_, '_> {
         };
         if b.header.owner != OwnerKey::Binding(id)
             || b.header.kind != OwnerKind::Binding
-            || !matches!(b.header.contract_version, 33 | 34)
+            || b.header.contract_version
+                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
             || (b.header.contract_version < 34
                 && matches!(kind, BindingKind::ReadView | BindingKind::ReadViewBorrow))
             || b.kind != kind

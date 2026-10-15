@@ -24,7 +24,7 @@ use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, StoreError, StoreErrorClass, StoreWork,
 };
 use crate::platform::witness::{
-    ValidationWitnessDigest, ValidationWitnessManifest, encode_witness_manifest_content,
+    ValidationWitnessDigest, ValidationWitnessManifest, encode_witness_manifest,
 };
 use bincode::de::Decoder;
 use bincode::error::DecodeError;
@@ -237,9 +237,9 @@ impl PackageTransport {
                 "package transport uses a predecessor or foreign contract",
             ));
         }
-        // Transport binds historical content. Only full source admission can turn canonical
-        // owners into a current proof; an embedded producer witness never supplies admission.
-        let (witness_digest, _) = encode_witness_manifest_content(&self.witness)?;
+        // Exact current witness metadata binds the transport. Independent full source
+        // admission remains mandatory before the package can supply code or proof.
+        let (witness_digest, _) = encode_witness_manifest(&self.witness)?;
         if witness_digest != self.validation_witness {
             return Err(package_error(
                 DiagnosticClass::Corrupt,
@@ -1328,9 +1328,7 @@ impl<'a> PackageInterfaceClosure<'a> {
         reference: crate::platform::kernel::DeclarationReference,
     ) -> Result<&'a crate::platform::package_interface::PackageInterfaceOwner, Diagnostic> {
         let version = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
-        if !matches!(source.revision.graph_contract_version, 33)
-            && source.revision.graph_contract_version != version
-        {
+        if source.revision.graph_contract_version != version {
             return Err(associated_transport_error(
                 "associated consuming semantic revision requires the exact current graph",
             ));
@@ -1357,9 +1355,7 @@ impl<'a> PackageInterfaceClosure<'a> {
             .revisions
             .get(&target_digest)
             .ok_or_else(|| associated_transport_error("associated selected revision is absent"))?;
-        if target.package != reference.package
-            || (target.revision.graph_contract_version != 33
-                && target.revision.graph_contract_version != version)
+        if target.package != reference.package || target.revision.graph_contract_version != version
         {
             return Err(associated_transport_error(
                 "associated selected declaration semantic revision requires the exact current graph",
@@ -1440,7 +1436,6 @@ impl<'a> PackageInterfaceClosure<'a> {
                             )?;
                         }
                         if !contract.associated_types.is_empty()
-                            && revision.revision.graph_contract_version != 33
                             && revision.revision.graph_contract_version
                                 != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
                         {

@@ -7,6 +7,7 @@
 pub(crate) mod binary64;
 pub(crate) mod builtin_discovery;
 pub(crate) mod builtin_standard;
+pub mod canonical_schema;
 #[allow(
     dead_code,
     reason = "the typed engine includes tested forms not yet exposed by the closed CLI registry"

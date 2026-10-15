@@ -37,6 +37,44 @@ pub(super) fn source_validation_reuse_plan(
     .unwrap()
 }
 
+fn source_validation_reuse_alternate_transport(source: &AdmittedClosure) -> PackageContainer {
+    let package = &source.packages[&source.container.root.package_revision];
+    assert!(package.revision.dependencies.is_empty());
+    let alternate = crate::platform::package_interface::build_package_interface_with_leaf_target(
+        &package.interface_owners,
+        &package.interface_types,
+        1,
+    )
+    .unwrap();
+    assert_eq!(
+        alternate.root.content_root(),
+        package.transport.interface_owners.content_root()
+    );
+    assert_ne!(
+        alternate.root.page(),
+        package.transport.interface_owners.page()
+    );
+    let mut transport = package.transport.clone();
+    transport.interface_owners = alternate.root;
+    let (digest, bytes) = transport.encode().unwrap();
+    let binding = PackageTransportBinding {
+        package_revision: source.container.root.package_revision,
+        transport: digest,
+    };
+    let mut objects = source.container.objects.clone();
+    objects.extend(alternate.objects);
+    objects.insert(
+        ObjectKey::from_digest(ObjectDomain::PackageTransport, digest.bytes()),
+        bytes,
+    );
+    // Repartition actual current pages, then reconstruct the complete closure. No
+    // foreign validator certificate or missing/unused object creates the difference.
+    let alternate = collect(&objects, binding, &[binding]).unwrap().container;
+    alternate.admit().unwrap();
+    super::super::oracle::reconstruct(&alternate).unwrap();
+    alternate
+}
+
 fn source_validation_reuse_collect<S: ImmutableObjectStore + ?Sized>(
     session: &mut SourceAdmissionSession<'_, S>,
     container: &PackageContainer,
@@ -285,7 +323,7 @@ fn source_validation_reuse_rereads_private_and_imported_objects_before_every_hit
 #[test]
 fn source_validation_reuse_exact_raw_transport_and_invalid_private_source_require_fresh_proof() {
     let source = source_validation_reuse_fixture();
-    let other_transport = replace_validator_metadata(source.container.clone());
+    let other_transport = source_validation_reuse_alternate_transport(&source);
     assert_eq!(
         other_transport.root.package_revision,
         source.container.root.package_revision
@@ -323,6 +361,7 @@ fn source_validation_reuse_exact_raw_transport_and_invalid_private_source_requir
         MAXIMUM_VALIDATION_READ_BYTES,
     )
     .unwrap();
+    let before_warm = crate::platform::witness::checked_full_validation_invocations();
     let warm = source_validation_reuse_collect(
         &mut session,
         &source.container,
@@ -330,6 +369,12 @@ fn source_validation_reuse_exact_raw_transport_and_invalid_private_source_requir
         MAXIMUM_VALIDATION_READ_BYTES,
     )
     .unwrap();
+    assert_eq!(
+        crate::platform::witness::checked_full_validation_invocations() - before_warm,
+        0,
+        "the exact already validated transport reuses its complete proof"
+    );
+    let before_changed = crate::platform::witness::checked_full_validation_invocations();
     let changed = source_validation_reuse_collect(
         &mut session,
         &other_transport,
@@ -337,6 +382,11 @@ fn source_validation_reuse_exact_raw_transport_and_invalid_private_source_requir
         MAXIMUM_VALIDATION_READ_BYTES,
     )
     .unwrap();
+    assert_eq!(
+        crate::platform::witness::checked_full_validation_invocations() - before_changed,
+        1,
+        "a different current physical transport requires a fresh complete local proof"
+    );
     assert!(changed.validation_visits > warm.validation_visits);
     assert_eq!(session.completed_count(), 1);
     assert_eq!(
@@ -363,7 +413,7 @@ fn source_validation_reuse_binds_each_own_transitive_transport_selection() {
     let supplier = source_validation_reuse_fixture();
     let middle = dependency_copy_importer(b"source-validation-middle-transport", &[&supplier]);
     let source = dependency_copy_importer(b"source-validation-own-transport", &[&middle]);
-    let alternate_supplier = replace_validator_metadata(supplier.container.clone());
+    let alternate_supplier = source_validation_reuse_alternate_transport(&supplier);
     let mut alternate = source.container.clone();
     let selected = alternate
         .selections
@@ -392,6 +442,7 @@ fn source_validation_reuse_binds_each_own_transitive_transport_selection() {
         MAXIMUM_VALIDATION_READ_BYTES,
     )
     .unwrap();
+    let before_warm = crate::platform::witness::checked_full_validation_invocations();
     let warm = source_validation_reuse_collect(
         &mut session,
         &source.container,
@@ -399,6 +450,12 @@ fn source_validation_reuse_binds_each_own_transitive_transport_selection() {
         MAXIMUM_VALIDATION_READ_BYTES,
     )
     .unwrap();
+    assert_eq!(
+        crate::platform::witness::checked_full_validation_invocations() - before_warm,
+        0,
+        "the unchanged complete transport selection reuses all three proofs"
+    );
+    let before_changed = crate::platform::witness::checked_full_validation_invocations();
     let changed = source_validation_reuse_collect(
         &mut session,
         &alternate,
@@ -406,6 +463,11 @@ fn source_validation_reuse_binds_each_own_transitive_transport_selection() {
         MAXIMUM_VALIDATION_READ_BYTES,
     )
     .unwrap();
+    assert_eq!(
+        crate::platform::witness::checked_full_validation_invocations() - before_changed,
+        3,
+        "the supplier's changed transport invalidates its own and both containing proofs"
+    );
     assert!(changed.validation_visits > warm.validation_visits);
     assert_eq!(session.completed_count(), 3);
     for (revision, package) in &changed.packages {

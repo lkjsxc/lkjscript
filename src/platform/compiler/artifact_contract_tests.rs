@@ -32,7 +32,7 @@ fn manifest() -> ArtifactManifest {
 }
 
 #[test]
-fn artifact_manifest_generations_admit_current_and_preserve_historical_boundaries() {
+fn artifact_manifest_admits_only_current_profile() {
     let current = manifest();
     assert_eq!(
         (
@@ -53,46 +53,17 @@ fn artifact_manifest_generations_admit_current_and_preserve_historical_boundarie
     });
     let (digest, bytes) = owned.encode().unwrap();
     assert_eq!(ArtifactManifest::decode(&bytes, digest).unwrap(), owned);
-    for (artifact, graph, compiler, bytecode) in [
-        (18, 14, 10, 6),
-        (19, 15, 11, 7),
-        (20, 16, 12, 8),
-        (25, 20, 18, 14),
-        (26, 21, 19, 15),
-        (27, 21, 20, 16),
-        (28, 21, 21, 17),
-        (29, 22, 22, 17),
-    ] {
-        let mut supported = current.clone();
-        supported.contract_version = artifact;
-        supported.graph_contract_version = graph;
-        supported.compiler_contract_version = compiler;
-        supported.bytecode_contract_version = bytecode;
-        let (digest, bytes) = supported.encode().unwrap();
-        assert_eq!(ArtifactManifest::decode(&bytes, digest).unwrap(), supported);
-    }
-    for (artifact, graph, compiler, bytecode) in [
-        (40, 32, 33, 27),
-        (40, 33, 32, 27),
-        (40, 33, 33, 26),
-        (39, 32, 32, 27),
-        (29, 33, 33, 27),
-        (18, 15, 11, 7),
-        (19, 16, 12, 8),
-        (20, 17, 13, 9),
-        (25, 21, 19, 15),
-        (26, 21, 20, 16),
-        (27, 21, 21, 17),
-        (28, 22, 22, 17),
-        (29, 23, 23, 18),
-    ] {
-        let mut mixed = current.clone();
-        mixed.contract_version = artifact;
-        mixed.graph_contract_version = graph;
-        mixed.compiler_contract_version = compiler;
-        mixed.bytecode_contract_version = bytecode;
+    for dimension in 0..5 {
+        let mut foreign = current.clone();
+        match dimension {
+            0 => foreign.contract_version ^= 1,
+            1 => foreign.graph_contract_version ^= 1,
+            2 => foreign.compiler_contract_version ^= 1,
+            3 => foreign.bytecode_contract_version ^= 1,
+            _ => foreign.compilation_manifest_contract_version ^= 1,
+        }
         assert_eq!(
-            mixed.encode().unwrap_err().code,
+            foreign.encode().unwrap_err().code,
             "artifact_manifest_contract"
         );
     }

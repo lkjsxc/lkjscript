@@ -307,7 +307,7 @@ fn sequence_oracle_admits_generations_of_complete_unused_imported_signatures() {
     snapshot.dependencies.insert(
         package,
         DependencyRecord {
-            graph_contract_version: 25,
+            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
             package,
             semantic_revision: RevisionId::from_digest([82; 32]),
             package_revision: revision,

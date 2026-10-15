@@ -37,10 +37,6 @@ mod owned_effect_admission_tests;
 mod owned_sequence_admission_tests;
 #[path = "parallel_admission_tests.rs"]
 mod parallel_admission_tests;
-#[path = "predecessor_attack_tests.rs"]
-pub(crate) mod predecessor_attack_tests;
-#[path = "predecessor_units.rs"]
-mod predecessor_units;
 #[path = "prerequisite_implementation_admission_tests.rs"]
 pub(crate) mod prerequisite_implementation_admission_tests;
 
@@ -1081,7 +1077,7 @@ fn body_reorder_changes_unit_key_but_repository_point_lowering_matches_memory() 
 }
 
 #[test]
-fn compiler_unit_decoder_rejects_foreign_identity_predecessor_and_bad_dense_index() {
+fn compiler_unit_decoder_rejects_foreign_identity_schema_and_bad_dense_index() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let caller = declaration_named(&snapshot, "caller");
     let receipt = compile_memory(&snapshot, OwnerKey::Declaration(caller));
@@ -1094,41 +1090,24 @@ fn compiler_unit_decoder_rejects_foreign_identity_predecessor_and_bad_dense_inde
         "compiler_unit_digest"
     );
 
-    for magic in [b"LKJCUN05", b"LKJCUN03"] {
-        let mut predecessor = receipt.bytes.clone();
-        predecessor[..8].copy_from_slice(magic);
-        let predecessor_key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &predecessor);
-        assert_eq!(
-            CompilationUnit::decode(&predecessor, predecessor_key)
-                .expect_err("predecessor compiler-unit magic must reject")
-                .code,
-            "packed_contract"
-        );
-    }
-
-    for generation in 10..33 {
-        let magic = format!("LKJCUN{generation}");
-        let mut previous = receipt.bytes.clone();
-        previous[..8].copy_from_slice(magic.as_bytes());
-        let previous_key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &previous);
-        assert_eq!(
-            CompilationUnit::decode(&previous, previous_key)
-                .expect_err("the current compiler cut requires rebuilding prior units")
-                .code,
-            "compiler_unit_contract"
-        );
-    }
-
-    // Genuine33 has a strict frozen reader. Relabeling current34 bytes as33
-    // still fails its exact envelope checksum before gaining predecessor meaning.
-    let mut mislabeled = receipt.bytes.clone();
-    mislabeled[..8].copy_from_slice(&super::unit::FROZEN_COMPILER_UNIT_MAGIC);
-    let mislabeled_key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &mislabeled);
-    let error = CompilationUnit::decode(&mislabeled, mislabeled_key).unwrap_err();
-    assert_eq!(error.code, "packed_checksum");
+    let mut foreign_kind = receipt.bytes.clone();
+    foreign_kind[..8].copy_from_slice(b"LKJOTHER");
+    let foreign_key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &foreign_kind);
     assert_eq!(
-        error.class,
-        crate::platform::diagnostic::DiagnosticClass::Corrupt
+        CompilationUnit::decode(&foreign_kind, foreign_key)
+            .unwrap_err()
+            .code,
+        "packed_contract"
+    );
+
+    let mut foreign_schema = receipt.bytes.clone();
+    foreign_schema[8] ^= 1;
+    let foreign_key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &foreign_schema);
+    assert_eq!(
+        CompilationUnit::decode(&foreign_schema, foreign_key)
+            .unwrap_err()
+            .code,
+        "packed_schema"
     );
 
     let mut invalid = receipt.unit;
@@ -1712,7 +1691,7 @@ fn missing_and_corrupt_cache_heads_rebuild_without_changing_authority() {
 }
 
 #[test]
-fn compilation_manifest_rejects_predecessor_magic_and_wrong_object_digest() {
+fn compilation_manifest_rejects_foreign_kind_and_wrong_object_digest() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let temporary = tempfile::tempdir().expect("manifest decoder parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
@@ -1724,7 +1703,7 @@ fn compilation_manifest_rejects_predecessor_magic_and_wrong_object_digest() {
     .expect("clean compilation");
 
     let mut predecessor = built.manifest_bytes.clone();
-    predecessor[..8].copy_from_slice(b"LKJCMF00");
+    predecessor[..8].copy_from_slice(b"LKJOTHER");
     let predecessor_key = ObjectKey::for_bytes(ObjectDomain::CompilationManifest, &predecessor);
     assert_eq!(
         CompilationManifest::decode(
@@ -1856,14 +1835,6 @@ fn graph9_artifact_links_deterministically_and_reopens_without_graph4_modules() 
 }
 
 #[test]
-fn exact_artifact16_producer_bundle_rejects_at_the_format_boundary() {
-    let bytes = include_bytes!("../../../tests/fixtures/artifact16-standard.lkja");
-    let error = load_artifact(bytes).unwrap_err();
-    assert_eq!(error.class, crate::platform::DiagnosticClass::Source);
-    assert_eq!(error.code, "artifact_bundle_contract");
-}
-
-#[test]
 fn artifact_manifest_rejects_vector_lengths_before_allocation() {
     struct ExcessPackages;
     impl bincode::Encode for ExcessPackages {
@@ -1936,7 +1907,7 @@ fn artifact_manifest_rejects_vector_lengths_before_allocation() {
     }
 
     fn decode_hostile_manifest(value: &impl bincode::Encode) -> crate::platform::Diagnostic {
-        let bytes = crate::platform::packed::encode(
+        let bytes = crate::platform::packed::encode_canonical(
             super::artifact::ARTIFACT_MANIFEST_MAGIC,
             super::artifact::ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
             value,
@@ -2245,7 +2216,7 @@ fn graph9_artifact_links_exact_compiled_dependency_closure() {
 }
 
 #[test]
-fn graph11_artifact_rejects_predecessor_corruption_and_inexact_closures() {
+fn artifact_rejects_foreign_kind_schema_corruption_and_inexact_closures() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let temporary = tempfile::tempdir().expect("artifact rejection parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
@@ -2259,31 +2230,22 @@ fn graph11_artifact_rejects_predecessor_corruption_and_inexact_closures() {
         .expect("link current artifact");
     let loaded = load_artifact(&linked.artifact.bytes).expect("load current artifact");
 
-    for magic in [b"LKJART15", b"LKJART13"] {
-        let mut predecessor = linked.artifact.bytes.clone();
-        predecessor[..8].copy_from_slice(magic);
-        assert_eq!(
-            load_artifact(&predecessor)
-                .expect_err("predecessor bundle must reject")
-                .code,
-            "artifact_bundle_contract"
-        );
-    }
+    let mut foreign_kind = linked.artifact.bytes.clone();
+    foreign_kind[..8].copy_from_slice(b"LKJOTHER");
+    assert_eq!(
+        load_artifact(&foreign_kind).unwrap_err().code,
+        "artifact_bundle_contract"
+    );
 
-    for (magic, generation) in [(b"LKJART30", 30_u16), (b"LKJART31", 31_u16)] {
-        let mut previous = linked.artifact.bytes.clone();
-        previous[..8].copy_from_slice(magic);
-        previous[8..10].copy_from_slice(&generation.to_be_bytes());
-        assert_eq!(
-            load_artifact(&previous)
-                .expect_err("the sequence artifact cut requires rebuilding prior artifacts")
-                .code,
-            "artifact_bundle_contract"
-        );
-    }
+    let mut wrong_schema = linked.artifact.bytes.clone();
+    wrong_schema[8] ^= 1;
+    assert_eq!(
+        load_artifact(&wrong_schema).unwrap_err().code,
+        "artifact_bundle_schema"
+    );
 
     let mut wrong_manifest = linked.artifact.bytes.clone();
-    wrong_manifest[28] ^= 0x80;
+    wrong_manifest[58] ^= 0x80;
     assert_eq!(
         load_artifact(&wrong_manifest)
             .expect_err("wrong manifest digest must reject")
@@ -2788,7 +2750,7 @@ fn artifact_rejects_independently_encoded_unchecked_binding_prefixes() {
             }
         }
         // Deliberately bypass the normal compiler encoder: all enclosing digests are valid.
-        let bytes = crate::platform::packed::encode(
+        let bytes = crate::platform::packed::encode_canonical(
             super::unit::COMPILER_UNIT_MAGIC,
             super::unit::COMPILER_UNIT_ENVELOPE_DOMAIN,
             &unit,
@@ -2861,7 +2823,7 @@ fn artifact_rejects_erased_or_forged_compiled_parameter_constraints() {
             "erased" => signature.type_parameter_constraints[0] = TypeParameterConstraints::None,
             _ => signature.type_parameter_constraints[1] = TypeParameterConstraints::CaptureSafe,
         }
-        let bytes = crate::platform::packed::encode(
+        let bytes = crate::platform::packed::encode_canonical(
             super::unit::COMPILER_UNIT_MAGIC,
             super::unit::COMPILER_UNIT_ENVELOPE_DOMAIN,
             &unit,
@@ -3009,7 +2971,7 @@ fn artifact_rejects_nominal_parameter_bound_member_and_application_forgery() {
             _ => panic!("nominal fixture payload"),
         }
         // Bypass the compiler encoder and rebind the complete content-addressed container.
-        let bytes = crate::platform::packed::encode(
+        let bytes = crate::platform::packed::encode_canonical(
             super::unit::COMPILER_UNIT_MAGIC,
             super::unit::COMPILER_UNIT_ENVELOPE_DOMAIN,
             &unit,
@@ -3211,124 +3173,6 @@ add.parameter as=$snapshot-input function=$snapshot name=input type=@snapshot-tr
     .expect_err("a missing exact annotation object cannot become ordinary data");
     assert_eq!(error.class, crate::platform::DiagnosticClass::Corrupt);
     assert_eq!(error.code, "artifact_object_missing");
-    // Metadata-only roots obey historical generation fences even under a current
-    // package/compiler envelope. The neutral rehash grants no semantic admission.
-    let (captured_id, captured) = source
-        .owners
-        .iter()
-        .find_map(|(key, record)| match (key, record) {
-            (OwnerKey::Binding(id), OwnerRecord::Binding(binding))
-                if binding.name.as_str() == "captured" =>
-            {
-                Some((*id, binding.clone()))
-            }
-            _ => None,
-        })
-        .unwrap();
-    let i64_type = source
-        .types
-        .iter()
-        .find_map(|(digest, object)| matches!(object.form, TypeForm::I64).then_some(*digest))
-        .unwrap();
-    let member = crate::platform::kernel::StructuralTypeField {
-        name: Name::new("value").unwrap(),
-        ty: i64_type,
-    };
-    for (generation, form, class, expected) in [
-        (
-            16,
-            TypeForm::F64,
-            crate::platform::DiagnosticClass::Corrupt,
-            "artifact_f64_graph_generation",
-        ),
-        (
-            18,
-            TypeForm::OwnedProduct {
-                fields: vec![member.clone()],
-            },
-            crate::platform::DiagnosticClass::Semantic,
-            "kernel_product_generation",
-        ),
-        (
-            19,
-            TypeForm::OwnedChoice {
-                cases: vec![member.clone()],
-            },
-            crate::platform::DiagnosticClass::Semantic,
-            "kernel_choice_generation",
-        ),
-        (
-            24,
-            TypeForm::OwnedSequence { item: i64_type },
-            crate::platform::DiagnosticClass::Semantic,
-            "kernel_sequence_generation",
-        ),
-        (
-            33,
-            TypeForm::ReadViewApplied {
-                declaration: crate::platform::kernel::DeclarationReference {
-                    package: source.root.package_id,
-                    declaration: tree,
-                },
-                arguments: vec![i64_type],
-                read_scope: crate::platform::kernel::ReadScopeArgument::Lexical {
-                    callable: crate::platform::kernel::DeclarationReference {
-                        package: source.root.package_id,
-                        declaration: snapshot,
-                    },
-                    binding: captured_id,
-                },
-            },
-            crate::platform::DiagnosticClass::Semantic,
-            "kernel_read_view_generation",
-        ),
-    ] {
-        let mut objects = loaded.objects.clone();
-        let (ty, bytes) = encode_type_object(&TypeObject::new(form).unwrap()).unwrap();
-        objects.insert(
-            ObjectKey::from_digest(ObjectDomain::Type, ty.bytes()),
-            bytes,
-        );
-        let mut changed = captured.clone();
-        changed.header.contract_version = generation;
-        changed.declared_type = Some(ty);
-        let (digest, bytes) = encode_owner(&OwnerRecord::Binding(changed)).unwrap();
-        objects.insert(
-            ObjectKey::from_digest(ObjectDomain::Owner, digest.bytes()),
-            bytes,
-        );
-        let mut manifest = loaded.manifest.clone();
-        let package = manifest
-            .packages
-            .iter_mut()
-            .find(|p| p.package == source.root.package_id)
-            .unwrap();
-        let mut entries = artifact_map_entries(&loaded, package.reference_owners);
-        let mut replaced = 0;
-        for (owner, value) in &mut entries {
-            if crate::platform::kernel::EncodedOwnerKey::decode(owner).unwrap()
-                == OwnerKey::Binding(captured_id)
-            {
-                *value = crate::platform::kernel::encode_owner_binding(
-                    &crate::platform::kernel::OwnerBinding {
-                        kind: OwnerKind::Binding,
-                        object: digest,
-                    },
-                );
-                replaced += 1;
-            }
-        }
-        assert_eq!(replaced, 1);
-        package.reference_owners = replace_artifact_map(&mut objects, entries);
-        let (closure, count, bytes) = super::artifact::closure_facts(&objects).unwrap();
-        manifest.closure = closure;
-        manifest.object_count = count;
-        manifest.object_bytes = bytes;
-        let error = load_artifact(&nominal_session_tests::hostile_bundle(&manifest, &objects))
-            .expect_err("an older owner cannot hide a newer metadata type");
-        assert_eq!(error.class, class, "generation={generation}: {error:?}");
-        assert_eq!(error.code, expected, "generation={generation}: {error:?}");
-    }
     let exported = supplier.export_package_transport().unwrap();
     let consumer = make("captured-consumer");
     consumer

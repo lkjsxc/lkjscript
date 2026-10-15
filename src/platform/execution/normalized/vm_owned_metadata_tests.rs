@@ -23,6 +23,7 @@ fn borrowed_metadata_shares_large_immutable_payload_without_walking_it() {
                 .unwrap();
             assert_eq!(before.since().node_visits, 0);
             assert_eq!(selected.class, Class::Free);
+            assert_eq!(selected.ordinary_type, Some(f.payload));
             assert!(selected.borrow.is_none());
             let NormalizedValue::List(list) = selected.raw() else {
                 panic!("list")
@@ -64,6 +65,7 @@ fn borrowed_metadata_raw_storage_and_late_invalid_input_confer_no_certificate() 
             raw: NormalizedValue::OwnedProduct(token.borrow().unwrap()),
             origin: f.program.value_origin,
             class: Class::Memory,
+            ordinary_type: None,
             borrow: None,
         };
         assert!(f.project(&read).is_err());

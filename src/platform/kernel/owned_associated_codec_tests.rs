@@ -1,72 +1,152 @@
-//! Literal predecessor objects and independent witnesses for frozen and current codecs.
+//! Flat current codecs and independent associated-inventory semantic witnesses.
 use super::*;
-use crate::platform::compiler::{CompilationPayload, CompilationUnit, CompilationUnitKey};
-use crate::platform::diagnostic::DiagnosticClass;
-use crate::platform::package_interface::{PackageInterfaceOwner, PackageInterfaceOwnerDigest};
-use crate::platform::semantic_id::{
-    AssociatedTypeMemberId, DeclarationId, ExpressionId, ImplementationParameterId, ParameterId,
-    ReadScopeParameterId, TypeParameterId,
+use crate::platform::compiler::unit::CompilationTables;
+use crate::platform::compiler::{
+    BYTECODE_CONTRACT_VERSION, COMPILER_UNIT_CONTRACT_VERSION, CompilationPayload,
+    CompilationSource, CompilationUnit, CompilationUnitKey, OptimizationPolicy,
 };
-use crate::platform::storage::object::{ObjectDomain, ObjectKey};
-
-fn hex(value: &str) -> Vec<u8> {
-    let (pairs, remainder) = value.as_bytes().as_chunks::<2>();
-    assert!(
-        remainder.is_empty(),
-        "literal hex must contain complete bytes"
-    );
-    pairs
-        .iter()
-        .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap())
-        .collect()
-}
-
-fn literal(name: &str) -> &'static [u8] {
-    match name {
-        "owner-contract-base.bin" => {
-            include_bytes!("../../../tests/fixtures/associated-codec-base/owner-contract-base.bin")
-        }
-        "owner-implementation-base.bin" => include_bytes!(
-            "../../../tests/fixtures/associated-codec-base/owner-implementation-base.bin"
-        ),
-        "interface-contract-base.bin" => include_bytes!(
-            "../../../tests/fixtures/associated-codec-base/interface-contract-base.bin"
-        ),
-        "interface-implementation-base.bin" => include_bytes!(
-            "../../../tests/fixtures/associated-codec-base/interface-implementation-base.bin"
-        ),
-        "unit-contract-base.bin" => {
-            include_bytes!("../../../tests/fixtures/associated-codec-base/unit-contract-base.bin")
-        }
-        "unit-implementation-base.bin" => include_bytes!(
-            "../../../tests/fixtures/associated-codec-base/unit-implementation-base.bin"
-        ),
-        _ => panic!("unknown literal predecessor fixture"),
-    }
-}
+use crate::platform::diagnostic::DiagnosticClass;
+use crate::platform::package_interface::{
+    PACKAGE_INTERFACE_CONTRACT_VERSION, PACKAGE_INTERFACE_MAGIC, PackageInterfaceOwner,
+};
+use crate::platform::semantic_id::{
+    AssociatedTypeMemberId, DeclarationId, ExpressionId, ImplementationParameterId, MethodId,
+    ModuleId, ParameterId, ReadScopeParameterId, TypeParameterId,
+};
+use crate::platform::witness::SemanticDigest;
 
 fn base_owner(implementation: bool) -> OwnerRecord {
-    let (name, id, kind) = if implementation {
-        (
-            "owner-implementation-base.bin",
-            "80b1ddeb01a0e7dea83aead81adef232",
-            OwnerKind::OwnedImplementation,
-        )
-    } else {
-        (
-            "owner-contract-base.bin",
-            "e4fb2deab61c6b0fe468a060497aebbc",
-            OwnerKind::OwnedContract,
-        )
+    let seed = b"flat-associated-codec";
+    let declaration = DeclarationId::migrate(seed, u64::from(implementation));
+    let reference = DeclarationReference {
+        package: PackageId::migrate(seed, 0),
+        declaration,
     };
-    let bytes = literal(name);
-    decode_owner(
-        bytes,
-        OwnerKey::Declaration(DeclarationId::parse(&format!("decl_{id}")).unwrap()),
-        kind,
-        OwnerObjectDigest::of(bytes),
-    )
-    .unwrap()
+    let ty = encode_type_object(&TypeObject::new(TypeForm::ByteBuffer).unwrap())
+        .unwrap()
+        .0;
+    let method = MethodId::migrate(seed, 0);
+    let payload = if implementation {
+        DeclarationPayload::OwnedImplementation(OwnedImplementation {
+            type_parameters: vec![],
+            implementation_parameters: vec![],
+            contract: reference,
+            self_type: ty,
+            type_arguments: vec![],
+            methods: vec![OwnedMethodImplementation {
+                method,
+                function: reference,
+                type_arguments: vec![],
+                implementations: vec![],
+                read_scope_arguments: vec![],
+            }],
+            associated_types: vec![],
+        })
+    } else {
+        DeclarationPayload::OwnedContract(OwnedContract {
+            self_parameter: TypeParameterId::migrate(seed, 0),
+            type_parameters: vec![],
+            methods: vec![OwnedMethod {
+                id: method,
+                name: Name::new("consume").unwrap(),
+                parameters: vec![OwnedMethodParameter {
+                    ty,
+                    use_mode: ParameterUse::Consume,
+                }],
+                result: CallableResult {
+                    ty,
+                    relation: ResultRelation::Value,
+                },
+                read_scope_parameters: vec![],
+                read_scope_sources: vec![],
+                effect: FunctionEffect::Pure,
+            }],
+            associated_types: vec![],
+        })
+    };
+    OwnerRecord::Declaration(DeclarationRecord {
+        header: OwnerHeader::new(
+            OwnerKey::Declaration(declaration),
+            if implementation {
+                OwnerKind::OwnedImplementation
+            } else {
+                OwnerKind::OwnedContract
+            },
+        ),
+        module: ModuleId::migrate(seed, 0),
+        name: Name::new(if implementation {
+            "FlatImplementation"
+        } else {
+            "FlatContract"
+        })
+        .unwrap(),
+        visibility: DeclarationVisibility::Public,
+        payload,
+    })
+}
+
+fn base_unit(owner: &OwnerRecord) -> CompilationUnit {
+    let OwnerRecord::Declaration(record) = owner else {
+        unreachable!()
+    };
+    let package = PackageId::migrate(b"flat-associated-codec", 0);
+    let digest = SemanticDigest::from_bytes([7; 32]);
+    let source = CompilationSource {
+        package,
+        owner: owner.owner(),
+        kind: owner.kind(),
+        semantic_interface: digest,
+        implementation: digest,
+        type_digest: digest,
+        effect: digest,
+        capability: digest,
+        test: None,
+        validation_dependencies: digest,
+    };
+    let optimization = OptimizationPolicy::DeterministicBaseline;
+    let (payload, declarations) = match &record.payload {
+        DeclarationPayload::OwnedContract(c) => {
+            (CompilationPayload::OwnedContract(c.clone()), vec![])
+        }
+        DeclarationPayload::OwnedImplementation(i) => {
+            let declarations = std::iter::once(i.contract)
+                .chain(i.methods.iter().map(|m| m.function))
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect();
+            (
+                CompilationPayload::OwnedImplementation(i.clone()),
+                declarations,
+            )
+        }
+        _ => unreachable!(),
+    };
+    CompilationUnit {
+        contract_version: COMPILER_UNIT_CONTRACT_VERSION,
+        graph_contract_version: contract::GRAPH_CONTRACT_VERSION,
+        bytecode_contract_version: BYTECODE_CONTRACT_VERSION,
+        key: CompilationUnitKey::derive(&source, optimization).unwrap(),
+        source,
+        optimization,
+        tables: CompilationTables {
+            declarations,
+            fields: vec![],
+            cases: vec![],
+            requirements: vec![],
+            operations: vec![],
+            ports: vec![],
+            types: owner
+                .type_roots()
+                .into_iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect(),
+            structural_names: vec![],
+            read_view_fields: vec![],
+            texts: vec![],
+        },
+        payload,
+    }
 }
 
 fn member() -> AssociatedTypeMember {
@@ -82,250 +162,66 @@ fn extend(owner: &mut OwnerRecord) {
         unreachable!()
     };
     match &mut record.payload {
-        DeclarationPayload::OwnedContract(contract) => contract.associated_types.push(member()),
-        DeclarationPayload::OwnedImplementation(implementation) => {
-            implementation.associated_types.push(AssociatedTypeBinding {
+        DeclarationPayload::OwnedContract(c) => c.associated_types.push(member()),
+        DeclarationPayload::OwnedImplementation(i) => {
+            i.associated_types.push(AssociatedTypeBinding {
                 member: member().id,
-                value: AssociatedTypeBindingValue::Owned {
-                    ty: implementation.self_type,
-                },
+                value: AssociatedTypeBindingValue::Owned { ty: i.self_type },
             })
         }
         _ => unreachable!(),
     }
 }
 
-fn assert_legacy_contract_scopes(contract: &OwnedContract) {
-    for method in &contract.methods {
-        assert!(method.read_scope_parameters.is_empty());
-        assert!(method.read_scope_sources.is_empty());
-        assert!(matches!(
-            &method.result.relation,
-            ResultRelation::Value | ResultRelation::ReadFrom { .. }
-        ));
-    }
-}
-
-fn assert_legacy_implementation_scopes(implementation: &OwnedImplementation) {
-    assert!(
-        implementation
-            .methods
-            .iter()
-            .all(|method| method.read_scope_arguments.is_empty())
-    );
-}
-
 #[test]
-fn literal_predecessor_parent_objects_preserve_exact_bytes_and_keys() {
-    let provenance: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../tests/fixtures/associated-codec-base/provenance.json"
-    ))
-    .unwrap();
-    assert_eq!(
-        provenance["source_sha256"],
-        "0115358c9dc9c9a91d0bac7755b619a12f36ca9b5e90b69d649639c8ccdb3a54"
-    );
-    let fixtures = provenance["fixtures"].as_array().unwrap();
-    assert_eq!(fixtures.len(), 6);
-    for fixture in fixtures {
-        let bytes = literal(fixture["name"].as_str().unwrap());
-        let owner = OwnerKey::Declaration(
-            DeclarationId::parse(&format!("decl_{}", fixture["id"].as_str().unwrap())).unwrap(),
-        );
-        let expected: [u8; 32] = hex(fixture["digest"].as_str().unwrap()).try_into().unwrap();
-        match fixture["category"].as_str().unwrap() {
-            "owner" => {
-                let kind = if fixture["kind"] == "contract" {
-                    OwnerKind::OwnedContract
-                } else {
-                    OwnerKind::OwnedImplementation
-                };
-                let record =
-                    decode_owner(bytes, owner, kind, OwnerObjectDigest::from_bytes(expected))
-                        .unwrap();
-                let OwnerRecord::Declaration(declaration) = &record else {
-                    unreachable!()
-                };
-                assert_eq!(declaration.header.contract_version, 33);
-                assert!(!declaration.payload.has_associated_types());
-                match &declaration.payload {
-                    DeclarationPayload::OwnedContract(value) => {
-                        assert_legacy_contract_scopes(value)
-                    }
-                    DeclarationPayload::OwnedImplementation(value) => {
-                        assert_legacy_implementation_scopes(value)
-                    }
-                    _ => unreachable!(),
-                }
-                assert_eq!(
-                    encode_owner(&record).unwrap(),
-                    (OwnerObjectDigest::from_bytes(expected), bytes.to_vec())
-                );
-            }
-            "interface" => {
-                let record = PackageInterfaceOwner::decode(
-                    bytes,
-                    owner,
-                    PackageInterfaceOwnerDigest::from_bytes(expected),
-                )
-                .unwrap();
-                assert_eq!(record.contract_version, 21);
-                assert_eq!(record.record.header().contract_version, 33);
-                let PackageInterfaceRecord::Declaration(declaration) = &record.record else {
-                    unreachable!()
-                };
-                match &declaration.payload {
-                    PackageInterfaceDeclarationPayload::OwnedContract(value) => {
-                        assert_legacy_contract_scopes(value)
-                    }
-                    PackageInterfaceDeclarationPayload::OwnedImplementation(value) => {
-                        assert_legacy_implementation_scopes(value)
-                    }
-                    _ => unreachable!(),
-                }
-                assert_eq!(
-                    record.encode().unwrap(),
-                    (
-                        PackageInterfaceOwnerDigest::from_bytes(expected),
-                        bytes.to_vec()
-                    )
-                );
-            }
-            "unit" => {
-                let key = ObjectKey::from_digest(ObjectDomain::CompilerUnit, expected);
-                let record = CompilationUnit::decode(bytes, key).unwrap();
-                assert_eq!(record.source.owner, owner);
-                assert_eq!(
-                    (
-                        record.contract_version,
-                        record.graph_contract_version,
-                        record.bytecode_contract_version
-                    ),
-                    (33, 33, 27)
-                );
-                match &record.payload {
-                    CompilationPayload::OwnedContract(value) => {
-                        assert_legacy_contract_scopes(value)
-                    }
-                    CompilationPayload::OwnedImplementation(value) => {
-                        assert_legacy_implementation_scopes(value)
-                    }
-                    _ => unreachable!(),
-                }
-                assert_eq!(record.encode().unwrap(), (key, bytes.to_vec()));
-            }
-            _ => unreachable!(),
-        }
-    }
-}
-
-#[test]
-fn nonempty_parent_inventories_have_disjoint_complete_envelopes() {
-    for graph in [33, 34] {
-        for implementation in [false, true] {
+fn flat_parent_codecs_preserve_empty_and_nonempty_associated_inventories() {
+    for implementation in [false, true] {
+        let mut previous = None;
+        for populated in [false, true] {
             let mut owner = base_owner(implementation);
-            owner.set_encoding_for_edit(graph);
-            extend(&mut owner);
+            if populated {
+                extend(&mut owner);
+            }
+            let direct = bincode::encode_to_vec(&owner, bincode::config::standard()).unwrap();
+            let (decoded, consumed): (OwnerRecord, _) =
+                bincode::decode_from_slice(&direct, bincode::config::standard()).unwrap();
+            assert_eq!(consumed, direct.len());
+            assert_eq!(decoded, owner);
             let (digest, bytes) = encode_owner(&owner).unwrap();
-            assert_eq!(
-                &bytes[..8],
-                if graph == 33 {
-                    b"LKJOAT01"
-                } else {
-                    b"LKJOAV01"
-                }
-            );
+            assert_eq!(&bytes[..8], &contract::OWNER_MAGIC);
             assert_eq!(
                 decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
                 owner
             );
-            assert!(
-                bincode::encode_to_vec(&owner, bincode::config::standard()).is_err(),
-                "base owner encoding cannot lose an associated inventory"
-            );
             let interface = PackageInterfaceOwner {
-                contract_version: if graph == 33 { 21 } else { 22 },
+                contract_version: PACKAGE_INTERFACE_CONTRACT_VERSION,
                 record: PackageInterfaceRecord::project_public(&owner)
                     .unwrap()
                     .unwrap(),
             };
             let (interface_digest, interface_bytes) = interface.encode().unwrap();
-            assert_eq!(
-                &interface_bytes[..8],
-                if graph == 33 {
-                    b"LKJPAT01"
-                } else {
-                    b"LKJPAV01"
-                }
-            );
+            assert_eq!(&interface_bytes[..8], &PACKAGE_INTERFACE_MAGIC);
             assert_eq!(
                 PackageInterfaceOwner::decode(&interface_bytes, owner.owner(), interface_digest)
                     .unwrap(),
                 interface
             );
-            assert!(
-                bincode::encode_to_vec(&interface, bincode::config::standard()).is_err(),
-                "base interface encoding cannot lose a nested inventory"
-            );
-            let unit_bytes = literal(if implementation {
-                "unit-implementation-base.bin"
-            } else {
-                "unit-contract-base.bin"
-            });
-            let mut unit = CompilationUnit::decode(
-                unit_bytes,
-                ObjectKey::for_bytes(ObjectDomain::CompilerUnit, unit_bytes),
-            )
-            .unwrap();
-            let old_key = unit.key;
-            // A retained unit keeps its exact old profile; current units select the
-            // new profile before their key and extension bytes are derived.
-            unit.contract_version = if graph == 33 { 33 } else { 34 };
-            unit.graph_contract_version = graph;
-            unit.bytecode_contract_version = if graph == 33 { 27 } else { 28 };
-            let tag = match &mut unit.payload {
-                CompilationPayload::OwnedContract(contract) => {
-                    contract.associated_types.push(member());
-                    1
-                }
-                CompilationPayload::OwnedImplementation(implementation) => {
-                    implementation.associated_types.push(AssociatedTypeBinding {
-                        member: member().id,
-                        value: AssociatedTypeBindingValue::Owned {
-                            ty: implementation.self_type,
-                        },
-                    });
-                    2
-                }
-                _ => unreachable!(),
-            };
-            unit.key = CompilationUnitKey::derive_for_profile(
-                &unit.source,
-                unit.optimization,
-                unit.contract_version,
-                unit.bytecode_contract_version,
-                unit.graph_contract_version,
-                Some(tag),
-            )
-            .unwrap();
-            assert_ne!(unit.key, old_key);
-            let (unit_key, extended_bytes) = unit.encode().unwrap();
+            let unit = base_unit(&owner);
+            let (unit_key, unit_bytes) = unit.encode().unwrap();
             assert_eq!(
-                &extended_bytes[..8],
-                if graph == 33 {
-                    b"LKJCAU01"
-                } else {
-                    b"LKJCAU02"
-                }
+                &unit_bytes[..8],
+                &crate::platform::compiler::COMPILER_UNIT_MAGIC
             );
             assert_eq!(
-                CompilationUnit::decode(&extended_bytes, unit_key).unwrap(),
+                CompilationUnit::decode(&unit_bytes, unit_key).unwrap(),
                 unit
             );
-            assert!(
-                bincode::encode_to_vec(&unit, bincode::config::standard()).is_err(),
-                "base unit encoding cannot lose a nested inventory"
-            );
+            if let Some((old_owner, old_interface, old_unit)) = previous {
+                assert_ne!(digest, old_owner);
+                assert_ne!(interface_digest, old_interface);
+                assert_ne!(unit_bytes, old_unit);
+            }
+            previous = Some((digest, interface_digest, unit_bytes));
         }
     }
 }
@@ -356,19 +252,16 @@ fn associated_types_bind_exact_contract_member_and_lexical_witness_identity() {
     for form in forms {
         let object = TypeObject::new(form).unwrap();
         let (digest, bytes) = encode_type_object(&object).unwrap();
-        assert_eq!(&bytes[..8], b"LKJTAT01");
+        assert_eq!(&bytes[..8], &contract::TYPE_OBJECT_MAGIC);
         assert_eq!(decode_type_object(&bytes, digest).unwrap(), object);
-        let base_bytes = crate::platform::packed::encode(
+        let canonical = crate::platform::packed::encode_canonical(
             contract::TYPE_OBJECT_MAGIC,
             contract::TYPE_OBJECT_ENVELOPE_DOMAIN,
             &object,
             contract::MAXIMUM_TYPE_OBJECT_BYTES,
         )
         .unwrap();
-        assert!(
-            decode_type_object(&base_bytes, TypeObjectDigest::of(&base_bytes)).is_err(),
-            "a base type envelope cannot alias the associated form"
-        );
+        assert_eq!(canonical, bytes);
     }
     let projection = |scope, parameter, contract, member| {
         encode_type_object(
@@ -410,125 +303,27 @@ fn associated_types_bind_exact_contract_member_and_lexical_witness_identity() {
 }
 
 #[test]
-fn explicit_empty_extension_and_predecessor_inventory_loss_are_refused() {
-    use super::owned_associated_wire::{AssociatedOwnedBody, FrozenAssociatedOwnedBody33};
+fn flat_codec_does_not_replace_associated_inventory_semantic_admission() {
     for implementation in [false, true] {
         let mut owner = base_owner(implementation);
-        owner.set_encoding_for_edit(34);
         extend(&mut owner);
-        let OwnerRecord::Declaration(record) = owner.clone() else {
-            unreachable!()
+        extend(&mut owner);
+        assert!(encode_owner(&owner).is_err());
+        let interface = PackageInterfaceOwner {
+            contract_version: PACKAGE_INTERFACE_CONTRACT_VERSION,
+            record: PackageInterfaceRecord::project_public(&owner)
+                .unwrap()
+                .unwrap(),
         };
-        let mut body = AssociatedOwnedBody::from_payload(&record.payload)
-            .unwrap()
-            .unwrap();
-        match &mut body {
-            AssociatedOwnedBody::Contract(_, members) => members.clear(),
-            AssociatedOwnedBody::Implementation(_, bindings) => bindings.clear(),
-        }
-        let bytes = bincode::encode_to_vec(body, bincode::config::standard()).unwrap();
-        assert!(
-            bincode::decode_from_slice::<AssociatedOwnedBody, _>(
-                &bytes,
-                bincode::config::standard()
-            )
-            .is_err()
-        );
-        assert!(super::wire25::OwnerRecord25::try_from(owner.clone()).is_err());
-        assert!(super::wire26::OwnerRecord26::try_from(owner.clone()).is_err());
-        assert!(super::wire27::OwnerRecord27::try_from(owner.clone()).is_err());
-        assert!(super::wire28::OwnerRecord28::try_from(owner.clone()).is_err());
-        let interface = PackageInterfaceRecord::project_public(&owner)
-            .unwrap()
-            .unwrap();
-        assert!(super::wire25::PackageInterfaceRecord25::try_from(interface.clone()).is_err());
-        assert!(super::wire26::PackageInterfaceRecord26::try_from(interface.clone()).is_err());
-        assert!(super::wire27::PackageInterfaceRecord27::try_from(interface.clone()).is_err());
-        assert!(super::wire28::PackageInterfaceRecord28::try_from(interface).is_err());
-        let mut frozen_body = FrozenAssociatedOwnedBody33::from_payload(&record.payload)
-            .unwrap()
-            .unwrap();
-        match &mut frozen_body {
-            FrozenAssociatedOwnedBody33::Contract(_, members) => members.clear(),
-            FrozenAssociatedOwnedBody33::Implementation(_, bindings) => bindings.clear(),
-        }
-        let frozen_bytes =
-            bincode::encode_to_vec(frozen_body, bincode::config::standard()).unwrap();
-        assert!(
-            bincode::decode_from_slice::<FrozenAssociatedOwnedBody33, _>(
-                &frozen_bytes,
-                bincode::config::standard()
-            )
-            .is_err()
-        );
-        let mut historical = record;
-        historical.header.contract_version = 28;
-        let historical_owner = OwnerRecord::Declaration(historical.clone());
-        assert_eq!(
-            encode_owner(&historical_owner).unwrap_err().code,
-            "kernel_associated_encoding_generation"
-        );
-        // Independently flatten the current extension layout with a false old
-        // header. A recomputed checksum cannot grant that header the capability.
-        let raw = match &historical.payload {
-            DeclarationPayload::OwnedContract(value) => crate::platform::packed::encode(
-                contract::ASSOCIATED_READ_VIEW_OWNER_MAGIC,
-                contract::ASSOCIATED_READ_VIEW_OWNER_ENVELOPE_DOMAIN,
-                &(
-                    1_u16,
-                    1_u8,
-                    historical.header,
-                    historical.module,
-                    &historical.name,
-                    historical.visibility,
-                    value.self_parameter,
-                    &value.type_parameters,
-                    &value.methods,
-                    &value.associated_types,
-                ),
-                contract::MAXIMUM_OWNER_OBJECT_BYTES,
-            ),
-            DeclarationPayload::OwnedImplementation(value) => crate::platform::packed::encode(
-                contract::ASSOCIATED_READ_VIEW_OWNER_MAGIC,
-                contract::ASSOCIATED_READ_VIEW_OWNER_ENVELOPE_DOMAIN,
-                &(
-                    1_u16,
-                    2_u8,
-                    historical.header,
-                    historical.module,
-                    &historical.name,
-                    historical.visibility,
-                    &value.type_parameters,
-                    &value.implementation_parameters,
-                    value.contract,
-                    value.self_type,
-                    &value.type_arguments,
-                    &value.methods,
-                    &value.associated_types,
-                ),
-                contract::MAXIMUM_OWNER_OBJECT_BYTES,
-            ),
-            _ => unreachable!(),
-        }
-        .unwrap();
-        assert!(
-            decode_owner(
-                &raw,
-                owner.owner(),
-                owner.kind(),
-                OwnerObjectDigest::of(&raw)
-            )
-            .is_err()
-        );
+        assert!(interface.encode().is_err());
+        assert!(base_unit(&owner).encode().is_err());
     }
 }
 
 #[test]
-fn read_view_family_inventory_codecs_preserve_scope_identity_and_refuse_old_profiles() {
-    use super::owned_associated_wire::FrozenAssociatedOwnedBody33;
+fn read_view_family_inventory_codecs_preserve_scope_identity() {
     for implementation in [false, true] {
         let mut owner = base_owner(implementation);
-        owner.set_encoding_for_edit(34);
         let scope_parameter = ReadScopeParameter {
             id: ReadScopeParameterId::from_bytes([72; 16]).unwrap(),
             name: Name::new("window").unwrap(),
@@ -555,23 +350,26 @@ fn read_view_family_inventory_codecs_preserve_scope_identity_and_refuse_old_prof
             }
             _ => unreachable!(),
         }
-        assert_eq!(
-            FrozenAssociatedOwnedBody33::from_payload(&record.payload)
-                .unwrap_err()
-                .code,
-            "kernel_read_view_encoding_generation",
-        );
         let (digest, bytes) = encode_owner(&owner).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOAV01");
+        assert_eq!(&bytes[..8], &contract::OWNER_MAGIC);
         assert_eq!(
             decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
             owner
         );
-        owner.set_encoding_for_edit(33);
+        let interface = PackageInterfaceOwner {
+            contract_version: PACKAGE_INTERFACE_CONTRACT_VERSION,
+            record: PackageInterfaceRecord::project_public(&owner)
+                .unwrap()
+                .unwrap(),
+        };
+        let (digest, bytes) = interface.encode().unwrap();
         assert_eq!(
-            encode_owner(&owner).unwrap_err().code,
-            "kernel_read_view_generation"
+            PackageInterfaceOwner::decode(&bytes, owner.owner(), digest).unwrap(),
+            interface
         );
+        let unit = base_unit(&owner);
+        let (key, bytes) = unit.encode().unwrap();
+        assert_eq!(CompilationUnit::decode(&bytes, key).unwrap(), unit);
     }
 }
 
@@ -595,12 +393,7 @@ fn binding_roots_and_compiler_tables_include_every_associated_rhs() {
             .type_roots()
             .contains(&rhs)
     );
-    let bytes = literal("unit-implementation-base.bin");
-    let mut unit = CompilationUnit::decode(
-        bytes,
-        ObjectKey::for_bytes(ObjectDomain::CompilerUnit, bytes),
-    )
-    .unwrap();
+    let mut unit = base_unit(&base_owner(true));
     let CompilationPayload::OwnedImplementation(implementation) = &mut unit.payload else {
         unreachable!()
     };
@@ -608,15 +401,6 @@ fn binding_roots_and_compiler_tables_include_every_associated_rhs() {
         member: member().id,
         value: AssociatedTypeBindingValue::Owned { ty: rhs },
     });
-    unit.key = CompilationUnitKey::derive_for_profile(
-        &unit.source,
-        unit.optimization,
-        unit.contract_version,
-        unit.bytecode_contract_version,
-        unit.graph_contract_version,
-        Some(2),
-    )
-    .unwrap();
     assert_eq!(
         unit.encode().unwrap_err().code,
         "compiler_unit_owned_implementation_type"
@@ -625,51 +409,7 @@ fn binding_roots_and_compiler_tables_include_every_associated_rhs() {
     assert!(unit.encode().is_ok());
 }
 
-#[test]
-fn independent_literal_historical_nested_payloads_preserve_empty_inventories() {
-    // Literal Graph25 positional payloads, deliberately specified independently of the
-    // successor wire structs: declaration owner/header, public name, and empty methods.
-    let cases = [
-        "011901031111111111111111111111111111111119022222222222222222222222222222222201430208113333333333333333333333333333333300",
-        "01190103111111111111111111111111111111111a0222222222222222222222222222222222014902091244444444444444444444444444444444035555555555555555555555555555555502666666666666666666666666666666666666666666666666666666666666666600",
-    ];
-    for encoded in cases {
-        let bytes = hex(encoded);
-        let (old, consumed): (super::wire25::OwnerRecord25, _) =
-            bincode::decode_from_slice(&bytes, bincode::config::standard()).unwrap();
-        assert_eq!(consumed, bytes.len());
-        let mut owner: OwnerRecord = old.into();
-        assert_eq!(
-            bincode::encode_to_vec(
-                super::wire25::OwnerRecord25::try_from(owner.clone()).unwrap(),
-                bincode::config::standard()
-            )
-            .unwrap(),
-            bytes
-        );
-        let interface = PackageInterfaceRecord::project_public(&owner)
-            .unwrap()
-            .unwrap();
-        let old = super::wire25::PackageInterfaceRecord25::try_from(interface.clone()).unwrap();
-        let wire_bytes = bincode::encode_to_vec(old, bincode::config::standard()).unwrap();
-        // Remove only the canonical owner discriminator and module/visibility fields;
-        // the expected interface discriminator and contract/implementation payload tag
-        // are literal frozen ordinals, not derived with a successor encoder.
-        let mut expected_interface = vec![0];
-        expected_interface.extend_from_slice(&bytes[1..21]);
-        expected_interface.extend_from_slice(&bytes[38..40]);
-        expected_interface.push(if bytes[41] == 8 { 5 } else { 6 });
-        expected_interface.extend_from_slice(&bytes[42..]);
-        assert_eq!(wire_bytes, expected_interface);
-        extend(&mut owner);
-        let error = super::wire25::OwnerRecord25::try_from(owner).unwrap_err();
-        assert_eq!(error.class, DiagnosticClass::Semantic);
-        assert_eq!(error.code, "kernel_associated_encoding_generation");
-    }
-}
-
-/// Complete raw logical input for semantic occurrence controls. This is a
-/// FullValidator fixture; literal transport/owner/unit bytes above are untouched.
+/// Complete logical input for independent FullValidator occurrence controls.
 fn codec_occurrence_snapshot() -> (
     KernelSnapshot,
     DeclarationReference,
@@ -828,7 +568,7 @@ fn codec_occurrence_snapshot() -> (
 }
 
 #[test]
-fn codec_associated_envelopes_require_exact_occurrence_scope_and_owner_generation() {
+fn codec_associated_schema_requires_exact_occurrence_scope_and_current_owner_header() {
     let (base, scope, contract, parameter) = codec_occurrence_snapshot();
     validate_full(&base).expect("healthy exact current occurrence is complete");
     for mutation in 0..5 {
@@ -839,7 +579,7 @@ fn codec_associated_envelopes_require_exact_occurrence_scope_and_owner_generatio
             else {
                 panic!("parameter");
             };
-            record.header.contract_version = 32;
+            record.header.contract_version = u16::MAX;
         } else if mutation == 1 {
             let OwnerRecord::Declaration(record) = snapshot
                 .owners
@@ -848,7 +588,7 @@ fn codec_associated_envelopes_require_exact_occurrence_scope_and_owner_generatio
             else {
                 panic!("function");
             };
-            record.header.contract_version = 32;
+            record.header.contract_version = u16::MAX;
         } else {
             let original_result = match snapshot
                 .owners
@@ -963,7 +703,7 @@ fn codec_associated_envelopes_require_exact_occurrence_scope_and_owner_generatio
         let errors =
             validate_full(&snapshot).expect_err("encoding cannot grant occurrence authority");
         let code = if mutation < 2 {
-            "kernel_owned_associated_generation"
+            "kernel_owner_header"
         } else if mutation == 4 {
             // Exact authored closure authority is checked before member lookup.
             "kernel_owned_contract"

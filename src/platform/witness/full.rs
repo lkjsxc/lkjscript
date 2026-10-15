@@ -233,8 +233,8 @@ fn build_validated_witness(
     })
 }
 
-/// Canonical projections without a semantic certificate. They support inspection and repair of
-/// authentic historical programs which the current validator may reject.
+/// Canonical projections without a semantic certificate. Independent semantic admission is
+/// required before these derived facts can authorize a published witness.
 #[derive(Debug)]
 pub(crate) struct CanonicalWitnessFacts {
     pub summaries: BTreeMap<OwnerKey, OwnerSummary>,

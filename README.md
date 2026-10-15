@@ -119,238 +119,34 @@ Use the pinned Rust toolchain and locked dependencies. Read
 [repository guidance](AGENTS.md), [architecture](docs/architecture.md) and
 [verification](docs/spec/verification.md) before changing the language.
 
-Build the verifier in a new owned bootstrap-only target, retain its exact source
-snapshots and original Cargo output, select the executable from that output, and
-copy it immutably before running checks. For example, from the selected checkout:
+From the canonical checkout root, bootstrap a clean committed source with the
+[shared bootstrap command](tools/bootstrap-verifier.sh):
 
 ```bash
-set -euo pipefail
-capture_bootstrap_source() {
-  source_head=$(git rev-parse HEAD) || return "$?"
-  source_tree=$(git rev-parse 'HEAD^{tree}') || return "$?"
-  source_status=$(git status --porcelain=v1 --untracked-files=all) || return "$?"
-  jq -n --arg source "$source_head" --arg tree "$source_tree" --arg status "$source_status" \
-    '{source:$source,tree:$tree,status:$status}' > "$1"
-}
-bootstrap_value_hash() {
-  local line
-  line=$(printf '%s' "$1" | sha256sum) || return "$?"
-  printf '%s' "${line%% *}"
-}
-bootstrap_file_proof() {
-  local path=$1 maximum=$2 parent next before after mode bytes hash rest
-  if [[ ! -e "$path" && ! -L "$path" ]]; then
-    parent=$(dirname -- "$path") || return "$?"
-    while [[ ! -e "$parent" && ! -L "$parent" ]]; do
-      next=$(dirname -- "$parent") || return "$?"
-      [[ "$next" != "$parent" ]] || return 1
-      parent=$next
-    done
-    [[ -d "$parent" && -x "$parent" ]] || return 1
-    jq -cn --arg path "$path" '{path:$path,kind:"absent"}'
-    return "$?"
-  fi
-  if [[ ! -f "$path" || -L "$path" ]]; then
-    jq -cn --arg path "$path" '{path:$path,kind:"unsupported"}'
-    return "$?"
-  fi
-  before=$(stat -c '%a|%s|%d|%i|%y|%z' -- "$path") || return "$?"
-  IFS='|' read -r mode bytes rest <<< "$before"
-  [[ "$mode" =~ ^[0-7]+$ && "$bytes" =~ ^[0-9]+$ ]] || return 1
-  printf -v mode '%04o' "$((8#$mode))"
-  if (( bytes > maximum )); then
-    jq -cn --arg path "$path" --arg mode "$mode" --argjson bytes "$bytes" \
-      '{path:$path,mode:$mode,kind:"oversized",bytes:$bytes}'
-    return "$?"
-  fi
-  hash=$(head -c "$((maximum + 1))" -- "$path" | sha256sum) || return "$?"
-  after=$(stat -c '%a|%s|%d|%i|%y|%z' -- "$path") || return "$?"
-  [[ "$before" == "$after" ]] || return 1
-  jq -cn --arg path "$path" --arg mode "$mode" --argjson bytes "$bytes" \
-    --arg sha256 "${hash%% *}" '{path:$path,mode:$mode,kind:"file",bytes:$bytes,sha256:$sha256}'
-}
-bootstrap_context() {
-  local output=$1 repo name value digest item kind current next paths sorted exported bytes
-  local parent_environment='{}' override_states='{}' configs='[]' errors='[]'
-  local cargo_proof rustc_proof child_environment count=0 total=0
-  local -A candidates=() overrides=()
-  repo=$(readlink -e "$PWD") || return "$?"
-  if [[ "$repo" != "$PWD" ]]; then errors=$(jq -c '.+=["checkout is not canonical"]' <<< "$errors") || return "$?"; fi
-  for name in HOME bootstrap_cargo_home bootstrap_rustup_home bootstrap_target; do
-    value=${!name}
-    current=$(readlink -m -- "$value") || return "$?"
-    if [[ "$value" != /* || "$current" != "$value" ]]; then
-      errors=$(jq -c --arg name "$name" '.+=["path absent or not canonical: "+$name]' <<< "$errors") || return "$?"
-    fi
-  done
-  [[ -n "$PATH" ]] || return 1
-  for name in HOME PATH CARGO_HOME RUSTUP_HOME LANG LC_ALL TMPDIR TZ CARGO_TERM_COLOR CARGO_NET_OFFLINE \
-    CARGO_BUILD_JOBS CARGO_ABOUT_VERSION CARGO_ABOUT_ARCHIVE_SHA256; do
-    if [[ -v "$name" ]]; then
-      value=${!name}
-      digest=$(bootstrap_value_hash "$value") || return "$?"
-      parent_environment=$(jq -c --arg name "$name" --arg sha256 "$digest" \
-        '.[$name]={state:"set",value_sha256:$sha256}' <<< "$parent_environment") || return "$?"
-      if [[ ( "$name" == CARGO_HOME || "$name" == RUSTUP_HOME ) && -z "$value" ]]; then
-        errors=$(jq -c --arg name "$name" '.+=["empty home override: "+$name]' <<< "$errors") || return "$?"
-      fi
-    else
-      parent_environment=$(jq -c --arg name "$name" '.[$name]={state:"unset"}' <<< "$parent_environment") || return "$?"
-    fi
-  done
-  for name in AR CC CFLAGS CXX CXXFLAGS PKG_CONFIG_PATH RANLIB RUSTC RUSTC_WRAPPER RUSTC_WORKSPACE_WRAPPER \
-    RUSTFLAGS RUSTDOC RUSTDOCFLAGS RUSTC_BOOTSTRAP RUSTUP_TOOLCHAIN SOURCE_DATE_EPOCH CARGO_BUILD_TARGET \
-    CARGO_ENCODED_RUSTFLAGS CARGO_ENCODED_RUSTDOCFLAGS CARGO_TARGET_DIR; do overrides[$name]=1; done
-  exported=$(compgen -e) || return "$?"
-  while IFS= read -r name; do
-    case "$name" in
-      CARGO_HOME|CARGO_NET_OFFLINE|CARGO_TERM_COLOR|CARGO_BUILD_JOBS|CARGO_ABOUT_VERSION|CARGO_ABOUT_ARCHIVE_SHA256) ;;
-      CARGO_*) overrides[$name]=1 ;;
-    esac
-  done <<< "$exported"
-  sorted=$(printf '%s\n' "${!overrides[@]}" | LC_ALL=C sort) || return "$?"
-  while IFS= read -r name; do
-    if [[ -v "$name" ]]; then
-      digest=$(bootstrap_value_hash "${!name}") || return "$?"
-      override_states=$(jq -c --arg name "$name" --arg sha256 "$digest" \
-        '.[$name]={state:"set",value_sha256:$sha256}' <<< "$override_states") || return "$?"
-      errors=$(jq -c --arg name "$name" '.+=["unsupported build override: "+$name]' <<< "$errors") || return "$?"
-    else
-      override_states=$(jq -c --arg name "$name" '.[$name]={state:"unset"}' <<< "$override_states") || return "$?"
-    fi
-  done <<< "$sorted"
-  current=$repo
-  while :; do
-    (( count += 1 )); (( count <= 64 )) || return 1
-    candidates["${current%/}/.cargo/config"]=1; candidates["${current%/}/.cargo/config.toml"]=1
-    [[ "$current" != / ]] || break
-    next=$(dirname -- "$current") || return "$?"
-    current=$next
-  done
-  candidates["${bootstrap_cargo_home%/}/config"]=1; candidates["${bootstrap_cargo_home%/}/config.toml"]=1
-  (( ${#candidates[@]} <= 130 )) || return 1
-  paths=$(printf '%s\n' "${!candidates[@]}" | LC_ALL=C sort) || return "$?"
-  while IFS= read -r current; do
-    item=$(bootstrap_file_proof "$current" 1048576) || return "$?"
-    kind=$(jq -er '.kind' <<< "$item") || return "$?"
-    configs=$(jq -c --argjson item "$item" '.+=[$item]' <<< "$configs") || return "$?"
-    bytes=$(jq -er '.bytes // 0' <<< "$item") || return "$?"
-    total=$((total + bytes)); (( total <= 8388608 )) || return 1
-    if [[ "$kind" != absent ]]; then
-      errors=$(jq -c '.+=["bootstrap requires absent effective Cargo configs"]' <<< "$errors") || return "$?"
-    fi
-  done <<< "$paths"
-  cargo_proof=$(bootstrap_file_proof "$bootstrap_cargo" 536870912) || return "$?"
-  rustc_proof=$(bootstrap_file_proof "$bootstrap_rustc" 536870912) || return "$?"
-  if ! jq -e --argjson cargo "$cargo_proof" --argjson rustc "$rustc_proof" \
-    '$cargo.kind=="file" and $rustc.kind=="file" and ($cargo.path|startswith("/")) and ($rustc.path|startswith("/"))' \
-    <<< null > /dev/null; then errors=$(jq -c '.+=["compiler/Cargo is not a regular absolute file"]' <<< "$errors") || return "$?"; fi
-  child_environment=$(jq -cn --args '$ARGS.positional|map(split("=")|{key:.[0],value:(.[1:]|join("="))})|from_entries' \
-    "${bootstrap_env[@]}") || return "$?"
-  if [[ -v CARGO_BUILD_JOBS && ! "$CARGO_BUILD_JOBS" =~ ^[1-9][0-9]*$ ]]; then
-    errors=$(jq -c '.+=["CARGO_BUILD_JOBS must be a positive integer"]' <<< "$errors") || return "$?"
-  fi
-  jq -nS --arg repo "$repo" --arg target "$bootstrap_target" --argjson errors "$errors" \
-    --argjson parent "$parent_environment" --argjson overrides "$override_states" --argjson configs "$configs" \
-    --argjson cargo "$cargo_proof" --argjson rustc "$rustc_proof" --argjson child "$child_environment" \
-    '{schema:"lkjscript.bootstrap_context.no_config_no_override.v1",repository:$repo,target:$target,
-      supported:($errors|length==0),errors:$errors,parent_environment:$parent,override_states:$overrides,
-      configs:$configs,executables:{cargo:$cargo,rustc:$rustc},child_environment:$child}' > "$output"
-}
-mkdir -p .artifacts
-bootstrap_root=$(mktemp -d "$PWD/.artifacts/verifier-bootstrap.XXXXXXXX")
-bootstrap_target="$bootstrap_root/target"
-test -d "$bootstrap_root" && test ! -L "$bootstrap_root"
-test ! -e "$bootstrap_target" && test ! -L "$bootstrap_target"
-bootstrap_cargo=$(rustup which --toolchain 1.98.0 cargo)
-bootstrap_cargo=$(readlink -e "$bootstrap_cargo")
-bootstrap_rustc=$(rustup which --toolchain 1.98.0 rustc)
-bootstrap_rustc=$(readlink -e "$bootstrap_rustc")
-bootstrap_sysroot=$("$bootstrap_rustc" --print sysroot)
-bootstrap_sysroot_rustc=$(readlink -e "$bootstrap_sysroot/bin/rustc")
-test "$bootstrap_sysroot_rustc" = "$bootstrap_rustc"
-bootstrap_cargo_home=${CARGO_HOME-$HOME/.cargo}
-bootstrap_rustup_home=${RUSTUP_HOME-$HOME/.rustup}
-bootstrap_env=(
-  "HOME=$HOME" "PATH=$PATH" "CARGO_HOME=$bootstrap_cargo_home" "RUSTUP_HOME=$bootstrap_rustup_home"
-  "CARGO_TARGET_DIR=$bootstrap_target" "RUSTC=$bootstrap_rustc" "CARGO_NET_OFFLINE=true"
-  "CARGO_TERM_COLOR=never" "LANG=C"
-)
-if [[ -v CARGO_BUILD_JOBS ]]; then bootstrap_env+=("CARGO_BUILD_JOBS=$CARGO_BUILD_JOBS"); fi
-capture_bootstrap_source "$bootstrap_root/source-before.json"
-bootstrap_context "$bootstrap_root/context-before.json"
-jq -e '.supported == true' "$bootstrap_root/context-before.json" > /dev/null
-# This example pins a clean committed source. Dirty inputs need complete source snapshots.
-jq -e '.status == ""' "$bootstrap_root/source-before.json" > /dev/null
-{ "$bootstrap_cargo" --version; "$bootstrap_rustc" --version --verbose; } > "$bootstrap_root/toolchain.txt"
-jq -n --arg cwd "$PWD" --arg target "$bootstrap_target" --arg cargo "$bootstrap_cargo" \
-  --slurpfile context "$bootstrap_root/context-before.json" \
-  --arg started_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  '{cwd:$cwd,started_at:$started_at,launcher:["env","-i"],environment:$context[0].child_environment,argv:[$cargo,"build","--release","--locked",
-    "-p","lkjscript-dev","--bin","lkjscript-dev","--target-dir",$target,"--message-format=json"]}' \
-  > "$bootstrap_root/command.json"
-set +e
-env -i "${bootstrap_env[@]}" "$bootstrap_cargo" build --release --locked -p lkjscript-dev --bin lkjscript-dev \
-  --target-dir "$bootstrap_target" --message-format=json \
-  > "$bootstrap_root/cargo.jsonl" 2> "$bootstrap_root/cargo.stderr"
-bootstrap_status=$?
-set -e
-jq -n --argjson exit_code "$bootstrap_status" \
-  --arg completed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  '{completed_at:$completed_at,exit_code:$exit_code}' > "$bootstrap_root/process.json"
-capture_bootstrap_source "$bootstrap_root/source-after.json"
-bootstrap_context "$bootstrap_root/context-after.json"
-test "$bootstrap_status" -eq 0
-cmp "$bootstrap_root/source-before.json" "$bootstrap_root/source-after.json"
-cmp "$bootstrap_root/context-before.json" "$bootstrap_root/context-after.json"
-jq -e '.supported == true' "$bootstrap_root/context-after.json" > /dev/null
-jq -e -s --arg manifest "$PWD/tools/lkjscript-dev/Cargo.toml" \
-  --arg entry "$PWD/tools/lkjscript-dev/src/main.rs" --arg workspace "$PWD/" \
-  --arg executable "$bootstrap_target/release/lkjscript-dev" \
-  --slurpfile source "$bootstrap_root/source-before.json" '
-  [.[] | select(.reason == "compiler-artifact"
-    and (.manifest_path | startswith($workspace)))] as $workspace_artifacts
-  | if ($workspace_artifacts | length) == 0 or any($workspace_artifacts[]; .fresh != false)
-    then error("bootstrap workspace artifact was not freshly built") else . end
-  | [.[] | select(.reason == "compiler-artifact" and .manifest_path == $manifest
-    and .target.name == "lkjscript-dev" and .target.kind == ["bin"]
-    and .target.src_path == $entry and .profile.test == false and .profile.opt_level == "3"
-    and .fresh == false and .executable == $executable)] as $tools
-  | [.[] | select(.reason == "build-finished")] as $finished
-  | if ($tools | length) == 1 and ($finished | length) == 1 and $finished[0].success == true
-    then {source:$source[0],checker:$tools[0],build_finished:$finished[0],workspace_artifacts:$workspace_artifacts}
-    else error("bootstrap artifact/completion mismatch") end
-  ' "$bootstrap_root/cargo.jsonl" > "$bootstrap_root/selection.json"
-checker=$(jq -er '.checker.executable' "$bootstrap_root/selection.json")
-test -f "$checker" && test ! -L "$checker"
-test ! -e "$bootstrap_root/lkjscript-dev" && test ! -L "$bootstrap_root/lkjscript-dev"
-cp "$checker" "$bootstrap_root/lkjscript-dev"
-chmod 0555 "$bootstrap_root/lkjscript-dev"
-cmp "$checker" "$bootstrap_root/lkjscript-dev"
-sha256sum "$checker" "$bootstrap_root/lkjscript-dev" > "$bootstrap_root/checker.sha256"
-CARGO_TARGET_DIR="$PWD/target" "$bootstrap_root/lkjscript-dev" check changed --jobs 1 --machine
-CARGO_TARGET_DIR="$PWD/target" "$bootstrap_root/lkjscript-dev" check full --fresh --jobs 1 --machine
+verifier_root=$(bash tools/bootstrap-verifier.sh)
+CARGO_TARGET_DIR="$PWD/target" "$verifier_root/lkjscript-dev" check changed --jobs 1 --machine
+CARGO_TARGET_DIR="$PWD/target" "$verifier_root/lkjscript-dev" check full --fresh --jobs 1 --machine
 ```
 
-This bootstrap example supports only absent effective Cargo config files and no
-inherited compiler/flags/profile/target overrides. A declared positive
-`CARGO_BUILD_JOBS` is recorded and passed to the same child; `CARGO_ABOUT_VERSION` and `CARGO_ABOUT_ARCHIVE_SHA256` are recorded and
-excluded from child build controls. It records every ancestor/Cargo-home config candidate,
-actual Cargo/compiler byte identities and approved environment/unset states before
-and after building; existing config files are hashed without retaining their contents
-and refused. Cargo receives only the declared closed environment. Keep these context
-records with the complete source, command and process originals; the Cargo excerpt
-and a matching checksum do not replace those bindings. The verifier remains bound to its compile-time checkout. The normal check
-target must independently be cold at its first CHECK8 run or have authenticated
-matching unit origins. This recipe does not clear it or certify pre-existing,
-restored or relocated workspace outputs. Later warm checks retain the same origin
-requirements. Use a real canonical checkout path for the example's exact selectors.
-`cargo run --release` before checking would seed the same release target again;
-ordinary debug-only development runs are not release-producer evidence.
+The command creates an owned cold target, builds the pinned verifier offline with
+locked dependencies in the optimized `bootstrap` profile, admits its exact fresh Cargo artifact and retains a byte-identical
+read-only executable. Original source, compiler/configuration context, command, process
+and Cargo records remain in `"$verifier_root/evidence"`. Fetch locked dependencies
+first if they are unavailable locally. `--output ABSENT_ABSOLUTE_ROOT` selects an
+explicit root; `--expected-source COMMIT` binds an expected commit;
+`--with-controller` also retains the release controller.
 
-`changed` selects current Git-status paths; a clean-tree run does not prove a
-committed change. Set `CARGO_BUILD_JOBS` and checker `--jobs` independently.
-[Release acceptance](docs/release.md#coverage-and-admission) checks source and final bytes
-separately. Retain evidence in `.artifacts/`.
+Bootstrap refuses effective Cargo config files and inherited compiler, flags,
+profile or target overrides. Inherited settings are recorded as set/unset states
+and value hashes. Positive `CARGO_BUILD_JOBS` reaches the build child;
+`CARGO_ABOUT_VERSION` and `CARGO_ABOUT_ARCHIVE_SHA256` are recorded separately.
+Set build concurrency and checker `--jobs` independently.
+
+The verifier stays bound to its compile-time checkout. The normal check target
+independently needs a cold first CHECK8 run or authenticated matching unit origins;
+bootstrap neither clears nor certifies existing outputs. `changed` selects current
+Git-status paths, so a clean-tree run does not prove a committed change. See
+[verification](docs/spec/verification.md) for admission and
+[release acceptance](docs/release.md#coverage-and-admission) for source and final bytes.
 
 lkjscript is licensed under [Apache-2.0](LICENSE).

@@ -50,12 +50,14 @@ impl Entries<'_> {
             raw: value.clone(),
             origin: self.parent.origin,
             class: Class::Free,
+            ordinary_type: None,
             borrow: None,
         };
         let key = Value {
             raw: key.to_value(),
             origin: self.parent.origin,
             class: Class::Free,
+            ordinary_type: None,
             borrow: None,
         };
         reserve(Charge::default())?;

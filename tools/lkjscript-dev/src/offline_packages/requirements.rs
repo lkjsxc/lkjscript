@@ -4,12 +4,10 @@ use super::*;
 mod composition;
 #[path = "requirements_conflict.rs"]
 mod conflict;
-#[path = "requirements_participation_predecessor.rs"]
-mod participation_predecessor;
+#[path = "requirements_scalar.rs"]
+mod scalar;
 #[path = "requirements_structural.rs"]
 mod structural;
-#[path = "requirements_transaction_predecessor.rs"]
-mod transaction_predecessor;
 use lkjscript::platform::data::{DataKey, DataKeyPart, DataLimits, DataStore};
 use serde_json::{Value, json};
 
@@ -166,8 +164,8 @@ fn preflight(context: &mut Context, bundle: &Path) -> Result<(), DevError> {
     Ok(())
 }
 
-// Independently implement only the two specified scalar wire examples, without evaluator,
-// compiler, graph types, or production typed-data codec. The retained full bytes are the oracle.
+// Share only canonical type identity. The two scalar layouts, payloads and envelope bytes
+// are specified independently of the evaluators and production typed-data codecs.
 fn typed_bytes(value: &Value) -> Result<Vec<u8>, DevError> {
     fn hash(domain: &'static str, bytes: &[u8]) -> [u8; 32] {
         let mut h = blake3::Hasher::new_derive_key(domain);
@@ -175,37 +173,27 @@ fn typed_bytes(value: &Value) -> Result<Vec<u8>, DevError> {
         h.update(bytes);
         *h.finalize().as_bytes()
     }
-    let (layout, type_identity, payload) = if let Some(number) = value.as_i64() {
-        (
-            2,
-            "4872f33f8c53c3dbf43ad114824e6c18f4537f45cb609d7d2a82c1d479e23062",
-            number.to_be_bytes().to_vec(),
-        )
+    let (layout, form, payload) = if let Some(number) = value.as_i64() {
+        (2, json!({"kind":"i64"}), number.to_be_bytes().to_vec())
     } else if let Some(text) = value.as_str() {
         let mut payload = u32::try_from(text.len())
             .map_err(|_| DevError::corrupt("cell oracle text length"))?
             .to_be_bytes()
             .to_vec();
         payload.extend_from_slice(text.as_bytes());
-        (
-            4,
-            "d8907b140f33643f5e02a15377e67645703815b56e0440c1ccd68f838e2829e3",
-            payload,
-        )
+        (4, json!({"kind":"text"}), payload)
     } else {
         return Err(DevError::corrupt(
             "independent cell oracle accepts I64 or Text only",
         ));
     };
+    let (type_identity, _) = lkjscript::platform::contributor::canonical_type_object_identity(
+        &serde_json::to_vec(&form)?,
+    )
+    .map_err(|error| DevError::corrupt(error.to_string()))?;
     let mut bytes = b"LKJDVAL1".to_vec();
     bytes.extend_from_slice(&1u16.to_be_bytes());
-    // Frozen TypeObject 10 scalar identities are independently retained predecessor inputs.
-    let mut description = (0..32)
-        .map(|index| {
-            u8::from_str_radix(&type_identity[index * 2..index * 2 + 2], 16)
-                .map_err(|_| DevError::corrupt("fixed scalar identity"))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let mut description = type_identity.to_vec();
     description.push(layout);
     bytes.extend_from_slice(&hash("lkjscript.data.typed-layout.v1", &description));
     bytes.extend_from_slice(&payload);
@@ -742,11 +730,9 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
         .receipt
         .observations
         .insert("requirement_sources_removed".into(), "true".into());
-    super::requirements_predecessor::workflow(context)?;
-    transaction_predecessor::workflow(context)?;
+    scalar::workflow(context, standard)?;
     conflict::workflow(context, &bundle)?;
     super::requirements_queue::workflow(context, &bundle)?;
-    participation_predecessor::workflow(context)?;
     composition::workflow(context, standard)?;
     Ok(())
 }
@@ -1220,11 +1206,9 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
     }
     let mut commands = commands;
     commands.push(preflight_index);
-    commands.extend(super::requirements_predecessor::validate(receipt, root)?);
-    commands.extend(transaction_predecessor::validate(receipt, root)?);
+    commands.extend(scalar::validate(receipt, root)?);
     commands.extend(conflict::validate(receipt, root)?);
     commands.extend(super::requirements_queue::validate(receipt, root)?);
-    commands.extend(participation_predecessor::validate(receipt, root)?);
     commands.extend(composition::validate(receipt, root)?);
     Ok(commands)
 }

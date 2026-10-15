@@ -91,6 +91,10 @@ impl Runner<'_> {
             [
                 "cargo",
                 "test",
+                // Match source acceptance's workspace feature unification, so
+                // Cargo can reuse its admitted test-profile dependencies/harness.
+                "--workspace",
+                "--all-features",
                 "--locked",
                 "--test",
                 "public_cli",

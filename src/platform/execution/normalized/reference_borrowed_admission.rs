@@ -2387,7 +2387,8 @@ declarations.end
             else {
                 unreachable!()
             };
-            owner.header.contract_version = 31;
+            owner.header.contract_version =
+                crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
             for id in function.type_parameters {
                 let OwnerRecord::TypeParameter(parameter) = snapshot
                     .owners
@@ -2396,7 +2397,8 @@ declarations.end
                 else {
                     unreachable!()
                 };
-                parameter.header.contract_version = 31;
+                parameter.header.contract_version =
+                    crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
             }
         }
         admit(&snapshot).unwrap();
@@ -2426,10 +2428,8 @@ declarations.end
     #[test]
     fn independent_mixed_contract_accepts_existing_function_owner_with_new_application_expression()
     {
-        for generation in [
-            crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
-            crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-        ] {
+        let generation = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+        {
             let mut snapshot = mixed_source();
             let scope = reference(&snapshot, "apply");
             let function = function(&snapshot, "apply");
@@ -2446,7 +2446,7 @@ declarations.end
                 expression.contract_version,
                 crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
             );
-            // Explicit synthetic retained-generation and current-expression controls.
+            // The declaration and application use the current canonical contract.
             expression.contract_version = generation;
             let OwnerRecord::Declaration(owner) = snapshot
                 .owners
@@ -2455,7 +2455,8 @@ declarations.end
             else {
                 unreachable!()
             };
-            owner.header.contract_version = 32;
+            owner.header.contract_version =
+                crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
             crate::platform::kernel::validate_full(&snapshot).unwrap();
             assert!(crate::platform::kernel::memory_reference::accepts(
                 &snapshot

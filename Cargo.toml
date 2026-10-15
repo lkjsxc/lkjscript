@@ -38,6 +38,11 @@ webpki-roots = "1.0.9"
 [dev-dependencies]
 tempfile = "3.23.0"
 
+[build-dependencies]
+blake3 = "1.8.2"
+quote = "=1.0.47"
+syn = { version = "=2.0.119", features = ["full", "visit-mut"] }
+
 [lints.clippy]
 expect_used = "deny"
 panic = "deny"
@@ -66,6 +71,15 @@ debug = 2
 incremental = true
 
 [profile.release]
-codegen-units = 1
-lto = true
+codegen-units = 16
+lto = "thin"
 strip = "symbols"
+
+# Verification tools need optimized execution, without distribution link costs.
+[profile.bootstrap]
+inherits = "dev"
+opt-level = 2
+debug = 0
+incremental = false
+lto = false
+codegen-units = 256

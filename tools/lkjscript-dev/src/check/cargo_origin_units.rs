@@ -10,6 +10,10 @@ use std::fs::{self, File, OpenOptions};
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
+#[cfg(test)]
+#[path = "cargo_origin_units_tests.rs"]
+mod tests;
+
 const MAXIMUM_UNITS: usize = 256;
 const MAXIMUM_FILES_PER_UNIT: usize = 64;
 const MAXIMUM_FILES: usize = 4_096;
@@ -39,6 +43,7 @@ pub(super) struct Unit {
     pub(super) features: Vec<String>,
     pub(super) filenames: Vec<FileProof>,
     pub(super) retained: Vec<FileProof>,
+    pub(super) build_script: Option<Value>,
     pub(super) fresh: bool,
 }
 
@@ -68,6 +73,9 @@ pub(super) fn read_units(
             charge_artifact_bytes(&mut artifact_bytes, length)?;
             let proof = evidence::proof(path, path_string(path)?)?;
             regular_proof(&proof)?;
+            if schema_source_file(&proof) {
+                charge_artifact_bytes(&mut artifact_bytes, length)?;
+            }
             if proof.bytes != Some(length) {
                 return Err(refusal(
                     "workspace artifact length changed during observation",
@@ -109,6 +117,21 @@ pub(super) fn verify_records(
     }
     for unit in units {
         verify_retained(repository, unit)?;
+        if unit.build_script.is_some() {
+            let expected = lkjscript::platform::canonical_schema::generated_source().as_bytes();
+            for (original, retained) in unit.filenames.iter().zip(&unit.retained) {
+                if schema_source_file(original) {
+                    let path = retained_path(repository, &retained.path)?;
+                    if super::cache::read_bounded(&path, expected.len() as u64)?.as_slice()
+                        != expected
+                    {
+                        return Err(refusal(
+                            "retained generated schema differs from exact source-derived bytes",
+                        ));
+                    }
+                }
+            }
+        }
         file_count = checked_total(
             file_count,
             unit.filenames.len(),
@@ -208,7 +231,7 @@ fn parse_units(
     let mut package_manifests = BTreeMap::new();
     let mut manifest_packages = BTreeMap::new();
     let mut listed_files = BTreeMap::new();
-    let mut build_scripts = BTreeSet::new();
+    let mut build_scripts = BTreeMap::new();
     let mut records = 0_usize;
     let mut file_count = 0_usize;
     let mut metadata_bytes = 0_usize;
@@ -277,7 +300,11 @@ fn parse_units(
                 units.push(unit);
             }
             Some("build-script-executed") => {
-                build_scripts.insert(string_field(&message, "package_id")?.to_owned());
+                let package = string_field(&message, "package_id")?.to_owned();
+                build_scripts
+                    .entry(package)
+                    .or_insert_with(Vec::new)
+                    .push(message);
             }
             Some("build-finished") => {
                 if message.get("success").and_then(Value::as_bool) != Some(true) || units.is_empty()
@@ -286,11 +313,17 @@ fn parse_units(
                         "Cargo did not complete a workspace artifact inventory",
                     ));
                 }
-                if units
-                    .iter()
-                    .any(|unit| build_scripts.contains(&unit.package_id))
-                {
-                    return Err(refusal("workspace build-script outputs are unsupported"));
+                bind_schema_outputs(
+                    repository,
+                    target,
+                    &mut units,
+                    &build_scripts,
+                    live,
+                    file_proof,
+                )?;
+                validate_inventory_bytes(&units)?;
+                if serde_json::to_vec(&units)?.len() > MAXIMUM_METADATA_BYTES {
+                    return Err(refusal("workspace derived metadata exceeds its limit"));
                 }
                 for output in &gate.required_outputs {
                     lexical_within(output, target)?;
@@ -308,6 +341,170 @@ fn parse_units(
         }
     }
     Err(refusal("missing Cargo build-finished record"))
+}
+
+fn custom_build(unit: &Unit) -> bool {
+    unit.target.get("kind") == Some(&serde_json::json!(["custom-build"]))
+}
+
+// Cargo can replay a cached build-script execution record even when it did not
+// rerun the script. Its executable is an observed artifact, not an invented cold
+// compilation origin. The generated semantic input has a stronger independent
+// binding: exact equality with the source compiled into this immutable checker.
+pub(super) fn schema_generator(unit: &Unit) -> bool {
+    custom_build(unit) && unit.build_script.is_some()
+}
+
+pub(super) fn schema_source_file(proof: &FileProof) -> bool {
+    proof.path.ends_with("/out/canonical_schema.rs")
+}
+
+fn bind_schema_outputs(
+    repository: &Path,
+    target: &Path,
+    units: &mut [Unit],
+    scripts: &BTreeMap<String, Vec<Value>>,
+    live: bool,
+    file_proof: &mut dyn FnMut(&Path) -> Result<FileProof, DevError>,
+) -> Result<(), DevError> {
+    let manifest = path_string(&repository.join("Cargo.toml"))?;
+    let root_script = repository.join("build.rs");
+    let has_generator = match fs::symlink_metadata(&root_script) {
+        Ok(_) => {
+            canonical_regular(&root_script, Some(repository))?;
+            true
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+        Err(error) => return Err(error.into()),
+    };
+    for unit in units.iter() {
+        if scripts.contains_key(&unit.package_id)
+            && (unit.manifest_path != manifest || !has_generator)
+        {
+            return Err(refusal("unsupported workspace build-script execution"));
+        }
+    }
+    let root_units: Vec<_> = units
+        .iter()
+        .filter(|unit| unit.manifest_path == manifest)
+        .collect();
+    if root_units.is_empty() || !has_generator {
+        if units.iter().any(custom_build) {
+            return Err(refusal("schema generator has no bound root source"));
+        }
+        return Ok(());
+    }
+    let generators: Vec<_> = root_units
+        .iter()
+        .filter(|unit| custom_build(unit))
+        .collect();
+    if generators.len() != 1
+        || generators[0].target.get("name").and_then(Value::as_str) != Some("build-script-build")
+    {
+        return Err(refusal(
+            "missing or ambiguous root schema generator artifact",
+        ));
+    }
+    let package = &generators[0].package_id;
+    let executions = scripts
+        .get(package)
+        .ok_or_else(|| refusal("missing root schema build-script execution record"))?;
+    if executions.len() != 1 {
+        return Err(refusal(
+            "ambiguous root schema build-script execution record",
+        ));
+    }
+    let record = &executions[0];
+    let fields = [
+        "reason",
+        "package_id",
+        "linked_libs",
+        "linked_paths",
+        "cfgs",
+        "env",
+        "out_dir",
+    ];
+    if record.as_object().is_none_or(|object| {
+        object.len() != fields.len() || fields.iter().any(|field| !object.contains_key(*field))
+    }) || record.get("reason").and_then(Value::as_str) != Some("build-script-executed")
+        || string_field(record, "package_id")? != package
+        || ["linked_libs", "linked_paths", "cfgs", "env"]
+            .iter()
+            .any(|field| record.get(*field) != Some(&serde_json::json!([])))
+    {
+        return Err(refusal(
+            "schema generator has unsupported linker, configuration or environment output",
+        ));
+    }
+    let out_dir = Path::new(string_field(record, "out_dir")?);
+    lexical_within(out_dir, target)?;
+    let directory = out_dir
+        .parent()
+        .ok_or_else(|| refusal("schema output has no build directory"))?;
+    let name = directory
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| refusal("unsafe schema build directory"))?;
+    if out_dir.file_name() != Some(std::ffi::OsStr::new("out"))
+        || directory.parent().and_then(Path::file_name) != Some(std::ffi::OsStr::new("build"))
+        || name.strip_prefix("lkjscript-").is_none_or(|hash| {
+            hash.len() != 16
+                || !hash
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        })
+    {
+        return Err(refusal(
+            "schema output is outside its exact Cargo build directory",
+        ));
+    }
+    if live {
+        canonical_directory(out_dir, Some(target))?;
+        let names = fs::read_dir(out_dir)?
+            .map(|entry| entry.map(|entry| entry.file_name()))
+            .collect::<Result<Vec<_>, _>>()?;
+        if names != [std::ffi::OsString::from("canonical_schema.rs")] {
+            return Err(refusal(
+                "schema generator output inventory differs from its source contract",
+            ));
+        }
+    }
+    let generated = out_dir.join("canonical_schema.rs");
+    let output = directory.join("output");
+    let mut files = Vec::new();
+    for path in [&generated, &output] {
+        let proof = file_proof(path)?;
+        regular_proof(&proof)?;
+        if proof.path != path_string(path)?
+            || proof
+                .bytes
+                .is_none_or(|bytes| bytes > MAXIMUM_UNIT_METADATA_BYTES as u64)
+        {
+            return Err(refusal("unsafe or oversized schema generation original"));
+        }
+        files.push(proof);
+    }
+    let expected = lkjscript::platform::canonical_schema::generated_source().as_bytes();
+    if files[0].bytes != Some(expected.len() as u64)
+        || files[0].digest.as_ref() != Some(&VerificationDigest::of(expected))
+        || (live
+            && super::cache::read_bounded(&generated, expected.len() as u64)?.as_slice()
+                != expected)
+    {
+        return Err(refusal(
+            "generated schema bytes differ from the immutable checker's source-derived schema",
+        ));
+    }
+    let record = canonical_value(record)?;
+    for unit in units
+        .iter_mut()
+        .filter(|unit| unit.manifest_path == manifest)
+    {
+        unit.build_script = Some(record.clone());
+        unit.filenames.extend(files.iter().cloned());
+        validate_identity(unit)?;
+    }
+    Ok(())
 }
 
 pub(super) fn retain_units(
@@ -415,14 +612,16 @@ pub(super) fn unit_key(unit: &Unit) -> Result<VerificationDigest, DevError> {
         profile: Value,
         features: &'a [String],
         filenames: Vec<&'a str>,
+        build_script: &'a Option<Value>,
     }
     let bytes = serde_json::to_vec(&Identity {
-        domain: "lkjscript.dev.cargo-origin-unit.v1",
+        domain: "lkjscript.dev.cargo-origin-unit.v2",
         package_id: &unit.package_id,
         manifest_path: &unit.manifest_path,
         target: canonical_value(&unit.target)?,
         profile: canonical_value(&unit.profile)?,
         features: &unit.features,
+        build_script: &unit.build_script,
         filenames: unit
             .filenames
             .iter()
@@ -514,6 +713,7 @@ fn artifact_unit(
         features,
         filenames,
         retained: Vec::new(),
+        build_script: None,
         fresh: message
             .get("fresh")
             .and_then(Value::as_bool)
@@ -527,6 +727,13 @@ fn artifact_unit(
     if live {
         canonical_regular(manifest, Some(repository))?;
         canonical_regular(source, Some(repository))?;
+    }
+    if custom_build(&unit)
+        && (manifest != repository.join("Cargo.toml") || source != repository.join("build.rs"))
+    {
+        return Err(refusal(
+            "only the root schema generator is a supported workspace build script",
+        ));
     }
     match message.get("executable") {
         Some(Value::Null) => {}
@@ -559,9 +766,6 @@ fn validate_identity(unit: &Unit) -> Result<(), DevError> {
     string_field(&unit.target, "edition")?;
     safe_absolute(Path::new(string_field(&unit.target, "src_path")?))?;
     let kinds = string_array(unit.target.get("kind"), 16, false)?;
-    if kinds.iter().any(|kind| kind == "custom-build") {
-        return Err(refusal("workspace build-script outputs are unsupported"));
-    }
     let crate_types = string_array(unit.target.get("crate_types"), 16, false)?;
     if kinds
         .iter()
@@ -575,7 +779,9 @@ fn validate_identity(unit: &Unit) -> Result<(), DevError> {
     let supported = match (kinds.as_slice(), crate_types.as_slice()) {
         ([kind], [crate_type]) => matches!(
             (kind.as_str(), crate_type.as_str()),
-            ("lib", "lib") | ("rlib", "rlib") | ("bin" | "test" | "example" | "bench", "bin")
+            ("lib", "lib")
+                | ("rlib", "rlib")
+                | ("bin" | "test" | "example" | "bench" | "custom-build", "bin")
         ),
         _ => false,
     };
@@ -620,6 +826,9 @@ fn validate_identity(unit: &Unit) -> Result<(), DevError> {
     }
     canonical_value(&unit.target)?;
     canonical_value(&unit.profile)?;
+    if let Some(record) = &unit.build_script {
+        canonical_value(record)?;
+    }
     Ok(())
 }
 

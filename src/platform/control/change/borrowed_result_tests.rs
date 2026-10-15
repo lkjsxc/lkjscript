@@ -30,19 +30,15 @@ declarations.end
     let flat = decode_compact_change("borrowed-flat.lkjc", flat.as_bytes()).unwrap();
     let native = decode_compact_change("borrowed-native.lkjc", native.as_bytes()).unwrap();
     let bytes = canonical_authored_intent_bytes(&native.semantic).unwrap();
-    assert_eq!(&bytes[..8], b"LKJACR39");
+    assert_eq!(&bytes[..8], b"LKJACHNG");
     assert_eq!(
         bytes,
         canonical_authored_intent_bytes(&flat.semantic).unwrap()
     );
     assert_eq!(native.request_commitment, flat.request_commitment);
     assert_eq!(
-        commitment_codec_identity(&bytes),
-        "lkjscript-authored-change-codec-39"
-    );
-    assert_eq!(
-        commitment_codec_identity(b"LKJACR30"),
-        "lkjscript-authored-change-codec-30"
+        &bytes[8..40],
+        &crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH
     );
 }
 

@@ -456,15 +456,6 @@ impl FullValidator<'_> {
                 return;
             }
             self.capture(record.validate_local());
-            if record.header().contract_version
-                == super::contract::PREDECESSOR_GRAPH_CONTRACT_VERSION
-                && super::wire14::OwnerRecord14::try_from(record.clone()).is_err()
-            {
-                self.error(
-                    "kernel_owner_graph_generation",
-                    "predecessor owner contains unsupported successor meaning",
-                );
-            }
             if record.header().contract_version > self.snapshot.root.graph_contract_version {
                 self.error(
                     "kernel_owner_graph_generation",
@@ -484,77 +475,6 @@ impl FullValidator<'_> {
         for (digest, object) in &self.snapshot.types {
             if !self.consume_work() {
                 return;
-            }
-            if self.snapshot.root.graph_contract_version < 25
-                && matches!(object.form, TypeForm::OwnedSequence { .. })
-            {
-                self.error(
-                    "kernel_sequence_generation",
-                    "owned sequence types require Graph Contract 25",
-                );
-            }
-            if self.snapshot.root.graph_contract_version
-                < super::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
-                && super::owned_associated::read_view_admission::direct(&object.form)
-            {
-                self.error(
-                    "kernel_read_view_generation",
-                    "read-view type closure requires Graph Contract 34",
-                );
-            }
-            if self.snapshot.root.graph_contract_version < 31
-                && let TypeForm::OwnedSequence { item } = object.form
-            {
-                // Foreign symbolic ownership is checked under the exact imported
-                // owner below; local and closed unused types still require the cut.
-                let foreign_parameter = matches!(
-                    self.snapshot.types.get(&item).or_else(|| self.snapshot.dependency_types.get(&item)).map(|t| &t.form),
-                    Some(TypeForm::TypeParameter { parameter })
-                        if !self.snapshot.owners.contains_key(&OwnerKey::TypeParameter(*parameter))
-                );
-                if !foreign_parameter {
-                    match super::memory::direct(self.snapshot, item) {
-                        Ok(false) => self.error(
-                            "kernel_sequence_generation",
-                            "ordinary-element owned sequence types require Graph Contract 31",
-                        ),
-                        Ok(true) => {}
-                        Err(diagnostic) => self.diagnostics.push(diagnostic),
-                    }
-                }
-            }
-            if self.snapshot.root.graph_contract_version < 20
-                && matches!(object.form, TypeForm::OwnedChoice { .. })
-            {
-                self.error(
-                    "kernel_choice_generation",
-                    "owned choice types require Graph Contract 20",
-                );
-            }
-            if self.snapshot.root.graph_contract_version < 19
-                && matches!(object.form, TypeForm::OwnedProduct { .. })
-            {
-                self.error(
-                    "kernel_product_generation",
-                    "owned product types require Graph Contract 19",
-                );
-            }
-            if self.snapshot.root.graph_contract_version < 17
-                && matches!(object.form, TypeForm::F64)
-            {
-                self.error(
-                    "kernel_type_graph_generation",
-                    "F64 type requires Graph Contract 17",
-                );
-            }
-            if self.snapshot.root.graph_contract_version
-                == super::contract::PREDECESSOR_GRAPH_CONTRACT_VERSION
-                && matches!(&object.form, TypeForm::TaskFunction { effect, .. } if effect.requirements.iter().any(|requirement| requirement.concrete().is_none()))
-            {
-                self.error(
-                    "kernel_type_graph_generation",
-                    "predecessor graph contains a requirement-parametric task type",
-                );
             }
             match encode_type_object(object) {
                 Ok((encoded_digest, _)) if encoded_digest == *digest => {}

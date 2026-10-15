@@ -41,7 +41,7 @@ fn assert_sequence_source_rejected(hostile: &PackageContainer, expected: &str) {
 }
 
 #[test]
-fn owned_sequence_transport_rejects_rehashed_predecessor_signatures_and_syntax() {
+fn owned_sequence_transport_rejects_rehashed_invalid_signatures_and_unused_syntax() {
     let original = sequence_signature_transport();
     let independent =
         crate::platform::package_transport::oracle::reconstruct(&original.container).unwrap();
@@ -54,26 +54,51 @@ fn owned_sequence_transport_rejects_rehashed_predecessor_signatures_and_syntax()
         independent.snapshots[&package.snapshot.root.package_id].types,
         package.snapshot.types
     );
-    // Neither an uncalled signature nor unused construction can conceal Graph 25 meaning.
+    let (invalid, additions) = sequence_callable_element_type();
+    // Neither an uncalled signature nor unused construction can hide an element
+    // contract that permits callable values to acquire ordinary data custody.
     for mut replacement in package.snapshot.owners.values().filter(|record| {
         matches!(record, OwnerRecord::Declaration(record) if matches!(record.name.as_str(), "relay" | "unused"))
             || matches!(record, OwnerRecord::Expression(record) if matches!(record.operation, ExpressionOperation::SequenceEmpty { .. }))
     }).cloned() {
-        replacement.set_encoding_for_edit(24);
-        let hostile = if matches!(replacement, OwnerRecord::Expression(_)) {
-            assert_eq!(encode_owner(&replacement).unwrap_err().code, "kernel_sequence_generation");
-            let bytes = crate::platform::packed::encode(
-                *b"LKJOWN24",
-                "lkjscript.kernel.owner-envelope.v24",
-                &replacement,
-                crate::platform::kernel::contract::MAXIMUM_OWNER_OBJECT_BYTES,
-            ).unwrap();
-            rehash_encoded_owner(&original, replacement, OwnerObjectDigest::of(&bytes), bytes)
-        } else {
-            rehash_owner(&original, replacement)
-        };
-        assert_sequence_source_rejected(&hostile, "kernel_sequence_generation");
+        match &mut replacement {
+            OwnerRecord::Declaration(record) => {
+                let DeclarationPayload::Function(function) = &mut record.payload else {
+                    unreachable!()
+                };
+                function.result.ty = invalid;
+            }
+            OwnerRecord::Expression(record) => {
+                let ExpressionOperation::SequenceEmpty { sequence_type } = &mut record.operation else {
+                    unreachable!()
+                };
+                *sequence_type = invalid;
+            }
+            _ => unreachable!(),
+        }
+        let mut hostile = rehash_owner(&original, replacement);
+        hostile.objects.extend(additions.clone());
+        assert_sequence_source_rejected(&hostile, "kernel_owned_sequence");
     }
+}
+
+fn sequence_callable_element_type() -> (TypeObjectDigest, BTreeMap<ObjectKey, Vec<u8>>) {
+    let mut additions = BTreeMap::new();
+    let mut intern = |form| {
+        let (digest, bytes) = encode_type_object(&TypeObject::new(form).unwrap()).unwrap();
+        additions.insert(
+            ObjectKey::from_digest(ObjectDomain::Type, digest.bytes()),
+            bytes,
+        );
+        digest
+    };
+    let i64_type = intern(TypeForm::I64);
+    let callable = intern(TypeForm::Function {
+        parameters: Vec::new(),
+        result: i64_type,
+    });
+    let invalid = intern(TypeForm::OwnedSequence { item: callable });
+    (invalid, additions)
 }
 
 #[test]

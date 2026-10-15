@@ -1996,12 +1996,6 @@ fn pending_call() -> PendingCall {
             body: loan_body,
         },
     );
-    let OwnerRecord::Expression(record) =
-        source.owners.get_mut(&OwnerKey::Expression(body)).unwrap()
-    else {
-        unreachable!()
-    };
-    record.contract_version = 27;
     declaration(
         &mut source,
         caller,
@@ -2118,33 +2112,29 @@ fn borrow_call_pending_scope_is_direct_metadata_authority_and_is_hidden_from_arg
 }
 
 #[test]
-fn unit34_does_not_supply_function33_scope_authority_or_new_binding_generation() {
+fn raw_scope_formals_callable_owners_and_loan_binding_kinds_are_independent() {
     for mutation in 0..3 {
         let mut fixture = pending_call();
-        assert_eq!(fixture.source.root.graph_contract_version, 34);
+        call_assert_local(&fixture.source);
+        admit(&fixture.source).unwrap();
         if mutation == 0 {
-            // This helper's scope formal is unused by all current call syntax.
-            let OwnerRecord::Declaration(record) = fixture
-                .source
-                .owners
-                .get_mut(&OwnerKey::Declaration(fixture.helper.declaration))
-                .unwrap()
-            else {
-                unreachable!()
-            };
-            record.header.contract_version = 33;
+            // An unused scope relationship still requires its exact formal.
+            call_function_mut(&mut fixture.source, fixture.helper)
+                .read_scope_parameters
+                .clear();
         } else if mutation == 1 {
-            // The caller has no formal scope inventory; its only authority is
-            // the proposed lexical result scope at a direct invocation.
-            let OwnerRecord::Declaration(record) = fixture
-                .source
-                .owners
-                .get_mut(&OwnerKey::Declaration(fixture.caller.declaration))
-                .unwrap()
+            // A named helper cannot acquire the caller's prospective binding.
+            let ExpressionOperation::Call {
+                read_scope_arguments,
+                ..
+            } = call_operation_mut(&mut fixture.source, fixture.call)
             else {
                 unreachable!()
             };
-            record.header.contract_version = 33;
+            read_scope_arguments[0] = ReadScopeArgument::Lexical {
+                callable: fixture.helper,
+                binding: fixture.binding,
+            };
         } else {
             let OwnerRecord::Binding(record) = fixture
                 .source
@@ -2154,14 +2144,14 @@ fn unit34_does_not_supply_function33_scope_authority_or_new_binding_generation()
             else {
                 unreachable!()
             };
-            record.header.contract_version = 33;
+            record.kind = BindingKind::Let;
         }
         assert!(admit(&fixture.source).is_err(), "mutation {mutation}");
     }
 }
 
 #[test]
-fn function34_admits_view_scope_on_unchanged_ordinary_predecessor_loan_records() {
+fn raw_owned_read_loan_establishes_exact_lexical_scope_without_view_operations() {
     let mut fixture = pending_call();
     let OwnerRecord::Declaration(helper) = fixture
         .source
@@ -2171,7 +2161,6 @@ fn function34_admits_view_scope_on_unchanged_ordinary_predecessor_loan_records()
     else {
         unreachable!()
     };
-    helper.header.contract_version = 33;
     let DeclarationPayload::Function(helper) = &mut helper.payload else {
         unreachable!()
     };
@@ -2185,7 +2174,6 @@ fn function34_admits_view_scope_on_unchanged_ordinary_predecessor_loan_records()
     else {
         unreachable!()
     };
-    record.contract_version = 33;
     let ExpressionOperation::Call {
         function,
         read_scope_arguments,
@@ -2210,7 +2198,6 @@ fn function34_admits_view_scope_on_unchanged_ordinary_predecessor_loan_records()
     else {
         unreachable!()
     };
-    record.header.contract_version = 24;
     record.kind = BindingKind::OwnedBorrow;
     record.declared_type = Some(fixture.owned);
     let OwnerRecord::Expression(record) = fixture
@@ -2221,8 +2208,8 @@ fn function34_admits_view_scope_on_unchanged_ordinary_predecessor_loan_records()
     else {
         unreachable!()
     };
-    record.contract_version = 14;
     record.operation = ExpressionOperation::Unit {};
+    call_assert_local(&fixture.source);
     let proof = admit(&fixture.source).unwrap();
     assert!(proof.prepared_layout(fixture.view_ty).is_ok());
     assert_eq!(
@@ -2230,26 +2217,31 @@ fn function34_admits_view_scope_on_unchanged_ordinary_predecessor_loan_records()
         Some(fixture.caller)
     );
     let unused_view = fixture.source.types.remove(&fixture.view_ty).unwrap();
-    let OwnerRecord::Declaration(caller) = fixture
-        .source
-        .owners
-        .get_mut(&OwnerKey::Declaration(fixture.caller.declaration))
-        .unwrap()
+    assert!(
+        admit(&fixture.source).is_ok(),
+        "the ordinary loan does not depend on an unused view type"
+    );
+    let TypeForm::ReadViewApplied {
+        declaration,
+        arguments,
+        ..
+    } = unused_view.form
     else {
         unreachable!()
     };
-    caller.header.contract_version = 33;
-    assert!(
-        admit(&fixture.source).is_ok(),
-        "ordinary predecessor behavior remains available"
+    let wrong_owner = intern(
+        &mut fixture.source,
+        TypeForm::ReadViewApplied {
+            declaration,
+            arguments,
+            read_scope: ReadScopeArgument::Lexical {
+                callable: fixture.helper,
+                binding: fixture.binding,
+            },
+        },
     );
-    fixture.source.types.insert(fixture.view_ty, unused_view);
-    assert!(
-        admit(&fixture.source)
-            .unwrap_err()
-            .message
-            .contains("Function34")
-    );
+    assert_ne!(wrong_owner, fixture.view_ty);
+    assert!(admit(&fixture.source).is_err());
 }
 
 // The controls below are synthetic raw canonical records. They do not claim
@@ -4573,14 +4565,15 @@ fn raw_borrowed_owned_match_arm_keeps_function_scope_and_view_source_protection(
         let mut changed = fixture.source.clone();
         match mutant {
             0 => {
-                let OwnerRecord::Declaration(record) = changed
-                    .owners
-                    .get_mut(&OwnerKey::Declaration(fixture.function.declaration))
-                    .unwrap()
+                let ExpressionOperation::CreateReadView { read_scope, .. } =
+                    call_operation_mut(&mut changed, create)
                 else {
                     unreachable!()
                 };
-                record.header.contract_version = 33;
+                *read_scope = ReadScopeArgument::Lexical {
+                    callable: fixture.function,
+                    binding: second_arm,
+                };
             }
             1 => {
                 let ExpressionOperation::CreateReadView { source, .. } =
@@ -5871,9 +5864,7 @@ fn transitive_metadata_import(
     marker: u8,
 ) {
     let selection = kernel::DependencyRecord {
-        // Encoding generation is not a supplier feature grant. These raw test
-        // selections use the predecessor encoding just like consumer_of.
-        graph_contract_version: 32,
+        graph_contract_version: kernel::contract::GRAPH_CONTRACT_VERSION,
         package: supplier.root.package_id,
         semantic_revision: crate::platform::semantic_id::RevisionId::from_digest([marker; 32]),
         package_revision: kernel::PackageRevisionDigest::from_bytes([marker; 32]),
@@ -7183,25 +7174,7 @@ struct MixedBorrowedChoiceFixture {
     cell: TypeObjectDigest,
 }
 
-fn mixed_borrowed_choice_generation(source: &mut KernelSnapshot, generation: u16) {
-    source.root.graph_contract_version = generation;
-    for record in source.owners.values_mut() {
-        match record {
-            OwnerRecord::Declaration(record) => record.header.contract_version = generation,
-            OwnerRecord::Parameter(record) => record.header.contract_version = generation,
-            OwnerRecord::Binding(record) => record.header.contract_version = generation,
-            OwnerRecord::Expression(record) => record.contract_version = generation,
-            _ => unreachable!(
-                "this loan fixture has only declarations, parameters, bindings and expressions"
-            ),
-        }
-    }
-}
-
-fn mixed_borrowed_choice_fixture(
-    generation: u16,
-    source_use: ParameterUse,
-) -> MixedBorrowedChoiceFixture {
+fn mixed_borrowed_choice_fixture(source_use: ParameterUse) -> MixedBorrowedChoiceFixture {
     let mut source = empty();
     let scalar = intern(&mut source, TypeForm::I64);
     let cell = intern(&mut source, TypeForm::OwnedI64Cell);
@@ -7287,7 +7260,6 @@ fn mixed_borrowed_choice_fixture(
         FunctionEffect::Pure,
         matching,
     );
-    mixed_borrowed_choice_generation(&mut source, generation);
     MixedBorrowedChoiceFixture {
         source,
         function,
@@ -7305,189 +7277,175 @@ fn mixed_borrowed_choice_fixture(
 
 #[test]
 fn raw_borrowed_choice_copies_ordinary_payloads_and_keeps_source_frozen_in_every_arm() {
-    // Native predecessor loans and current loans both admit the same mixed
-    // payloads. These raw controls do not execute the VM's custody/fuel fixture.
-    for generation in [33, 34] {
-        for source_use in [ParameterUse::Borrow, ParameterUse::Consume] {
-            let fixture = mixed_borrowed_choice_fixture(generation, source_use);
-            call_assert_local(&fixture.source);
-            let proof = admit(&fixture.source).unwrap();
-            assert!(!proof.admits_function_flow(fixture.function));
-            for binding in [fixture.ordinary_binding, fixture.owned_binding] {
-                assert_eq!(
-                    proof.lexical_function_for_binding(fixture.function.package, binding),
-                    Some(fixture.function),
-                );
-            }
+    // Both parameter modes retain the complete source guard in every arm.
+    // These raw controls do not execute the VM's custody/fuel fixture.
+    for source_use in [ParameterUse::Borrow, ParameterUse::Consume] {
+        let fixture = mixed_borrowed_choice_fixture(source_use);
+        call_assert_local(&fixture.source);
+        let proof = admit(&fixture.source).unwrap();
+        assert!(!proof.admits_function_flow(fixture.function));
+        for binding in [fixture.ordinary_binding, fixture.owned_binding] {
             assert_eq!(
-                proof.prepared_category(fixture.choice).unwrap(),
-                ValueCategory::Owned
-            );
-            assert_eq!(
-                proof.prepared_category(fixture.scalar).unwrap(),
-                ValueCategory::OrdinaryData
-            );
-
-            for fault in 0..4 {
-                let mut changed = fixture.source.clone();
-                let OwnerRecord::Binding(binding) = changed
-                    .owners
-                    .get_mut(&OwnerKey::Binding(fixture.ordinary_binding))
-                    .unwrap()
-                else {
-                    unreachable!()
-                };
-                let expected = match fault {
-                    0 => {
-                        binding.value = Some(fixture.ordinary_body);
-                        "choice payload binding has an initializer"
-                    }
-                    1 => {
-                        binding.declared_type = Some(fixture.cell);
-                        "choice payload annotation counterfeits an OwnedChild path"
-                    }
-                    2 => {
-                        binding.kind = BindingKind::OwnedChoicePayload;
-                        "binding kind does not match its lexical operation"
-                    }
-                    _ => {
-                        let ExpressionOperation::MatchBorrowedOwned { arms, .. } =
-                            call_operation_mut(&mut changed, fixture.matching)
-                        else {
-                            unreachable!()
-                        };
-                        arms.swap(0, 1);
-                        "choice path omits or duplicates inactive cases"
-                    }
-                };
-                let error = admit(&changed).unwrap_err();
-                assert!(
-                    error.message.starts_with(expected),
-                    "generation={generation}, fault={fault}: {}",
-                    error.message
-                );
-            }
-
-            // The ordinary result is a copied I64, but the read of the complete
-            // choice still spans this arm and rejects consumption of its source.
-            let mut changed = fixture.source.clone();
-            let body = expression(&mut changed, 5110, ExpressionOperation::I64 { value: 0 });
-            let consume_choice = call_function(
-                &mut changed,
-                5110,
-                &[(fixture.choice, ParameterUse::Consume)],
-                fixture.scalar,
-                FunctionEffect::Pure,
-                body,
-            );
-            *call_operation_mut(&mut changed, fixture.ordinary_body) = ExpressionOperation::Call {
-                function: consume_choice,
-                type_arguments: Vec::new(),
-                read_scope_arguments: Vec::new(),
-                effect_arguments: Vec::new(),
-                requirement_arguments: Vec::new(),
-                arguments: vec![fixture.source_expression],
-            };
-            let expected = if source_use == ParameterUse::Consume {
-                "source consume/mutation occurs under a retained read/view guard"
-            } else {
-                "borrowed parameter/read handle is consumed"
-            };
-            mixed_borrowed_choice_generation(&mut changed, generation);
-            assert!(admit(&changed).unwrap_err().message.starts_with(expected));
-
-            let mut changed = fixture.source.clone();
-            let body = expression(&mut changed, 5111, ExpressionOperation::I64 { value: 0 });
-            let consume_cell = call_function(
-                &mut changed,
-                5111,
-                &[(fixture.cell, ParameterUse::Consume)],
-                fixture.scalar,
-                FunctionEffect::Pure,
-                body,
-            );
-            let ExpressionOperation::Call { function, .. } =
-                call_operation_mut(&mut changed, fixture.owned_body)
-            else {
-                unreachable!()
-            };
-            *function = consume_cell;
-            mixed_borrowed_choice_generation(&mut changed, generation);
-            assert!(
-                admit(&changed)
-                    .unwrap_err()
-                    .message
-                    .starts_with("borrowed parameter/read handle is consumed",)
-            );
-
-            // ReadFrom of the complete choice remains tied to its declared
-            // parameter; an ordinary arm does not erase a different lineage.
-            let mut retained = fixture.source.clone();
-            let target = call_function_mut(&mut retained, fixture.function);
-            target.result = CallableResult {
-                ty: fixture.choice,
-                relation: ResultRelation::ReadFrom {
-                    source: call_parameter(5100, 0),
-                },
-            };
-            let OwnerRecord::Parameter(parameter) = retained
-                .owners
-                .get_mut(&OwnerKey::Parameter(call_parameter(5100, 0)))
-                .unwrap()
-            else {
-                unreachable!()
-            };
-            parameter.use_mode = ParameterUse::Borrow;
-            *call_operation_mut(&mut retained, fixture.ordinary_body) =
-                ExpressionOperation::Local {
-                    value: LocalValueReference::FunctionParameter(call_parameter(5100, 0)),
-                };
-            let ExpressionOperation::Call { arguments, .. } =
-                call_operation_mut(&mut retained, fixture.owned_body)
-            else {
-                unreachable!()
-            };
-            let child = arguments[0];
-            retained.owners.remove(&OwnerKey::Expression(child));
-            *call_operation_mut(&mut retained, fixture.owned_body) = ExpressionOperation::Local {
-                value: LocalValueReference::FunctionParameter(call_parameter(5100, 0)),
-            };
-            call_assert_local(&retained);
-            admit(&retained).unwrap();
-            let other = call_parameter(5100, 1);
-            retained.owners.insert(
-                OwnerKey::Parameter(other),
-                OwnerRecord::Parameter(kernel::ParameterRecord {
-                    header: OwnerHeader::new(OwnerKey::Parameter(other), OwnerKind::Parameter),
-                    parent: ParameterParent::Function(fixture.function.declaration),
-                    name: name("other"),
-                    ty: fixture.choice,
-                    use_mode: ParameterUse::Borrow,
-                    resource_requirement: None,
-                }),
-            );
-            let OwnerRecord::Parameter(parameter) = retained
-                .owners
-                .get_mut(&OwnerKey::Parameter(other))
-                .unwrap()
-            else {
-                unreachable!()
-            };
-            parameter.header.contract_version = generation;
-            call_function_mut(&mut retained, fixture.function)
-                .parameters
-                .push(other);
-            *call_operation_mut(&mut retained, fixture.ordinary_body) =
-                ExpressionOperation::Local {
-                    value: LocalValueReference::FunctionParameter(other),
-                };
-            assert!(
-                admit(&retained)
-                    .unwrap_err()
-                    .message
-                    .starts_with("inactive match arm changes borrowed source lineage",)
+                proof.lexical_function_for_binding(fixture.function.package, binding),
+                Some(fixture.function),
             );
         }
+        assert_eq!(
+            proof.prepared_category(fixture.choice).unwrap(),
+            ValueCategory::Owned
+        );
+        assert_eq!(
+            proof.prepared_category(fixture.scalar).unwrap(),
+            ValueCategory::OrdinaryData
+        );
+
+        for fault in 0..4 {
+            let mut changed = fixture.source.clone();
+            let OwnerRecord::Binding(binding) = changed
+                .owners
+                .get_mut(&OwnerKey::Binding(fixture.ordinary_binding))
+                .unwrap()
+            else {
+                unreachable!()
+            };
+            let expected = match fault {
+                0 => {
+                    binding.value = Some(fixture.ordinary_body);
+                    "choice payload binding has an initializer"
+                }
+                1 => {
+                    binding.declared_type = Some(fixture.cell);
+                    "choice payload annotation counterfeits an OwnedChild path"
+                }
+                2 => {
+                    binding.kind = BindingKind::OwnedChoicePayload;
+                    "binding kind does not match its lexical operation"
+                }
+                _ => {
+                    let ExpressionOperation::MatchBorrowedOwned { arms, .. } =
+                        call_operation_mut(&mut changed, fixture.matching)
+                    else {
+                        unreachable!()
+                    };
+                    arms.swap(0, 1);
+                    "choice path omits or duplicates inactive cases"
+                }
+            };
+            let error = admit(&changed).unwrap_err();
+            assert!(
+                error.message.starts_with(expected),
+                "source-use={source_use:?}, fault={fault}: {}",
+                error.message
+            );
+        }
+
+        // The ordinary result is a copied I64, but the read of the complete
+        // choice still spans this arm and rejects consumption of its source.
+        let mut changed = fixture.source.clone();
+        let body = expression(&mut changed, 5110, ExpressionOperation::I64 { value: 0 });
+        let consume_choice = call_function(
+            &mut changed,
+            5110,
+            &[(fixture.choice, ParameterUse::Consume)],
+            fixture.scalar,
+            FunctionEffect::Pure,
+            body,
+        );
+        *call_operation_mut(&mut changed, fixture.ordinary_body) = ExpressionOperation::Call {
+            function: consume_choice,
+            type_arguments: Vec::new(),
+            read_scope_arguments: Vec::new(),
+            effect_arguments: Vec::new(),
+            requirement_arguments: Vec::new(),
+            arguments: vec![fixture.source_expression],
+        };
+        let expected = if source_use == ParameterUse::Consume {
+            "source consume/mutation occurs under a retained read/view guard"
+        } else {
+            "borrowed parameter/read handle is consumed"
+        };
+        assert!(admit(&changed).unwrap_err().message.starts_with(expected));
+
+        let mut changed = fixture.source.clone();
+        let body = expression(&mut changed, 5111, ExpressionOperation::I64 { value: 0 });
+        let consume_cell = call_function(
+            &mut changed,
+            5111,
+            &[(fixture.cell, ParameterUse::Consume)],
+            fixture.scalar,
+            FunctionEffect::Pure,
+            body,
+        );
+        let ExpressionOperation::Call { function, .. } =
+            call_operation_mut(&mut changed, fixture.owned_body)
+        else {
+            unreachable!()
+        };
+        *function = consume_cell;
+        assert!(
+            admit(&changed)
+                .unwrap_err()
+                .message
+                .starts_with("borrowed parameter/read handle is consumed",)
+        );
+
+        // ReadFrom of the complete choice remains tied to its declared
+        // parameter; an ordinary arm does not erase a different lineage.
+        let mut retained = fixture.source.clone();
+        let target = call_function_mut(&mut retained, fixture.function);
+        target.result = CallableResult {
+            ty: fixture.choice,
+            relation: ResultRelation::ReadFrom {
+                source: call_parameter(5100, 0),
+            },
+        };
+        let OwnerRecord::Parameter(parameter) = retained
+            .owners
+            .get_mut(&OwnerKey::Parameter(call_parameter(5100, 0)))
+            .unwrap()
+        else {
+            unreachable!()
+        };
+        parameter.use_mode = ParameterUse::Borrow;
+        *call_operation_mut(&mut retained, fixture.ordinary_body) = ExpressionOperation::Local {
+            value: LocalValueReference::FunctionParameter(call_parameter(5100, 0)),
+        };
+        let ExpressionOperation::Call { arguments, .. } =
+            call_operation_mut(&mut retained, fixture.owned_body)
+        else {
+            unreachable!()
+        };
+        let child = arguments[0];
+        retained.owners.remove(&OwnerKey::Expression(child));
+        *call_operation_mut(&mut retained, fixture.owned_body) = ExpressionOperation::Local {
+            value: LocalValueReference::FunctionParameter(call_parameter(5100, 0)),
+        };
+        call_assert_local(&retained);
+        admit(&retained).unwrap();
+        let other = call_parameter(5100, 1);
+        retained.owners.insert(
+            OwnerKey::Parameter(other),
+            OwnerRecord::Parameter(kernel::ParameterRecord {
+                header: OwnerHeader::new(OwnerKey::Parameter(other), OwnerKind::Parameter),
+                parent: ParameterParent::Function(fixture.function.declaration),
+                name: name("other"),
+                ty: fixture.choice,
+                use_mode: ParameterUse::Borrow,
+                resource_requirement: None,
+            }),
+        );
+        call_function_mut(&mut retained, fixture.function)
+            .parameters
+            .push(other);
+        *call_operation_mut(&mut retained, fixture.ordinary_body) = ExpressionOperation::Local {
+            value: LocalValueReference::FunctionParameter(other),
+        };
+        assert!(
+            admit(&retained)
+                .unwrap_err()
+                .message
+                .starts_with("inactive match arm changes borrowed source lineage",)
+        );
     }
 }
 
@@ -7634,6 +7592,136 @@ fn raw_conditional_joins_intersect_owned_liveness_without_changing_loan_lineage(
         "{}",
         error.message
     );
+}
+
+#[test]
+fn raw_owned_child_results_join_only_common_source_scope_permissions() {
+    for choice in [false, true] {
+        let mut source = empty();
+        let cell = intern(&mut source, TypeForm::OwnedI64Cell);
+        let fields = ["left", "right"]
+            .into_iter()
+            .map(|label| StructuralTypeField {
+                name: name(label),
+                ty: cell,
+            })
+            .collect();
+        let input = intern(
+            &mut source,
+            if choice {
+                TypeForm::OwnedChoice { cases: fields }
+            } else {
+                TypeForm::OwnedProduct { fields }
+            },
+        );
+        let owner = call_parameter(6200, 0);
+        let other = call_parameter(6200, 1);
+        let mut children = Vec::new();
+        let mut paths = Vec::new();
+        for (ordinal, label) in [(6201, "left"), (6202, "right")] {
+            let binding = call_binding(
+                &mut source,
+                ordinal,
+                BindingKind::OwnedBorrow,
+                Some(cell),
+                None,
+            );
+            let body = expression(
+                &mut source,
+                ordinal,
+                ExpressionOperation::Local {
+                    value: LocalValueReference::LexicalBinding(binding),
+                },
+            );
+            children.push(body);
+            if choice {
+                paths.push(kernel::OwnedChoiceArm {
+                    name: name(label),
+                    binding,
+                    body,
+                });
+            } else {
+                let value = call_local(&mut source, ordinal + 10, owner);
+                let path = expression(
+                    &mut source,
+                    ordinal + 20,
+                    ExpressionOperation::BorrowOwnedField {
+                        product_type: input,
+                        source: value,
+                        field: name(label),
+                        binding,
+                        body,
+                    },
+                );
+                paths.push(kernel::OwnedChoiceArm {
+                    name: name(label),
+                    binding,
+                    body: path,
+                });
+            }
+        }
+        let root = if choice {
+            let value = call_local(&mut source, 6203, owner);
+            expression(
+                &mut source,
+                6204,
+                ExpressionOperation::MatchBorrowedOwned {
+                    choice_type: input,
+                    source: value,
+                    arms: paths,
+                },
+            )
+        } else {
+            let condition =
+                expression(&mut source, 6203, ExpressionOperation::Bool { value: true });
+            let joined = expression(
+                &mut source,
+                6204,
+                ExpressionOperation::If {
+                    condition,
+                    when_true: children[0],
+                    when_false: paths[1].body,
+                },
+            );
+            let ExpressionOperation::BorrowOwnedField { body, .. } =
+                call_operation_mut(&mut source, paths[0].body)
+            else {
+                unreachable!()
+            };
+            // Like fifo-front: one result is reached through an enclosing
+            // child loan, the other through its sibling from the same owner.
+            *body = joined;
+            paths[0].body
+        };
+        let function = call_function(
+            &mut source,
+            6200,
+            &[(input, ParameterUse::Borrow), (cell, ParameterUse::Borrow)],
+            cell,
+            FunctionEffect::Pure,
+            root,
+        );
+        call_function_mut(&mut source, function).result.relation =
+            ResultRelation::ReadFrom { source: owner };
+        transitive_metadata_assert_local_graph(&source);
+        admit(&source).unwrap();
+
+        // Discharging a lexical permission never merges different source roots,
+        // including the inactive conditional path or inactive choice arm.
+        *call_operation_mut(&mut source, children[1]) = ExpressionOperation::Local {
+            value: LocalValueReference::FunctionParameter(other),
+        };
+        let error = admit(&source).unwrap_err();
+        assert!(
+            error.message.starts_with(if choice {
+                "inactive match arm changes borrowed source lineage"
+            } else {
+                "untaken branch changes selected source lineage/scope"
+            }),
+            "choice={choice}: {}",
+            error.message,
+        );
+    }
 }
 
 #[test]
@@ -8400,7 +8488,7 @@ fn raw_nominal_field_metadata_keeps_defining_and_actual_import_edges_separate() 
 
 #[test]
 fn raw_lexical_associated_projection_preparation_keeps_witness_and_loan_authority_exact() {
-    // A real raw Function34 body establishes this BorrowCall loan. Derived type
+    // A real raw named function establishes this BorrowCall loan. Derived type
     // preparation may use that exact ownership proof, never an invented seal.
     let mut fixture = pending_call();
     let contract = decl(&fixture.source, 1400);

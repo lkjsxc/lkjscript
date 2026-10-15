@@ -2,6 +2,7 @@
 
 pub(crate) mod build;
 mod grant_selection;
+pub(crate) mod pure_batch;
 pub mod shared;
 
 use super::compiler::{MAXIMUM_ARTIFACT_BUNDLE_BYTES, load_artifact};
@@ -1555,6 +1556,15 @@ impl AdmittedDeployment {
         control: &ExecutionControl,
         programs: &mut BTreeMap<String, Arc<NormalizedProgram>>,
     ) -> Result<Self, Diagnostic> {
+        Self::load_shared_digest(path, control, programs, None)
+    }
+
+    fn load_shared_digest(
+        path: &Path,
+        control: &ExecutionControl,
+        programs: &mut BTreeMap<String, Arc<NormalizedProgram>>,
+        artifact_sha256: Option<&mut String>,
+    ) -> Result<Self, Diagnostic> {
         let checkpoint = || {
             control
                 .check()
@@ -1575,6 +1585,11 @@ impl AdmittedDeployment {
             MAXIMUM_ARTIFACT_BUNDLE_BYTES,
             "component artifact",
         )?;
+        if let Some(digest) = artifact_sha256 {
+            use sha2::Digest;
+            *digest =
+                crate::platform::semantic_id::encode_hex(&sha2::Sha256::digest(&artifact_bytes));
+        }
         let artifact = load_artifact(&artifact_bytes)?;
         checkpoint()?;
         let artifact_digest = artifact.bundle_digest.to_string();

@@ -39,13 +39,15 @@ pub fn author(public: &Native) {
     }
     public.author(
         &verifier,
-        include_str!("../../examples/owned-worklists/reachability.lkjc"),
+        &crate::plan::literal_sources::grouped(
+            std::iter::once(include_str!(
+                "../../examples/owned-worklists/reachability.lkjc"
+            ))
+            .chain(VERIFIER.map(|(_, source)| source)),
+        ),
         &dependencies,
         true,
     );
-    for (_, source) in VERIFIER {
-        public.author(&verifier, source, &dependencies, false);
-    }
     public.check(&verifier);
     for (module, _) in VERIFIER {
         public.unchanged(&verifier, module);
@@ -93,16 +95,31 @@ pub fn author(public: &Native) {
     }
     public.author(
         &application,
-        include_str!("../../examples/owned-worklists/reachability.lkjc"),
+        &crate::plan::literal_sources::grouped(
+            std::iter::once(include_str!(
+                "../../examples/owned-worklists/reachability.lkjc"
+            ))
+            .chain(crate::plan::SOURCES[..5].iter().map(|(_, source)| *source)),
+        ),
         &dependencies,
         true,
     );
-    for (_, source) in crate::plan::SOURCES {
-        public.author(&application, source, &dependencies, false);
-    }
-    for (_, source) in CONSUMER {
-        public.author(&application, source, &dependencies, false);
-    }
+    // Separate source families retain the ordinary per-request affine-work
+    // admission; the independent verifier remains an already exported supplier.
+    public.author(
+        &application,
+        &crate::plan::literal_sources::grouped(
+            crate::plan::SOURCES[5..].iter().map(|(_, source)| *source),
+        ),
+        &dependencies,
+        false,
+    );
+    public.author(
+        &application,
+        &crate::plan::literal_sources::grouped(CONSUMER.map(|(_, source)| source)),
+        &dependencies,
+        false,
+    );
     public.check(&application);
     for (module, _) in CONSUMER {
         public.unchanged(&application, module);

@@ -1,0 +1,28 @@
+request base=BASE
+
+declarations.begin
+(units
+  (use std builtin)
+  (type-alias Entry (function () Text))
+  (module create application (as $module-application)
+    (test create main-returns-hello (as $test-main-returns-hello)
+      (visibility private)
+      (actual (call $function-greet (scopes)))
+      (expected (text "hello")))
+    (function create greet (as $function-greet)
+      (visibility private)
+      (returns Text (value))
+      (effect pure)
+      (body (call std::text-from-static (scopes) (static-text "hello"))))
+    (component create application (as $component-application)
+      (visibility package)
+      (port create main (as $port-main)
+        (type Entry)
+        (function $function-greet)))
+  )
+  (target create main (as $target-main)
+    (component $component-application)
+    (runner command)
+    (port $port-main))
+)
+declarations.end

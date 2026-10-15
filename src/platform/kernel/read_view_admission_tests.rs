@@ -115,8 +115,7 @@ fn parameter(
     use_mode: ParameterUse,
 ) -> ParameterId {
     let id = ParameterId::migrate(SEED, n);
-    let mut header = OwnerHeader::new(OwnerKey::Parameter(id), OwnerKind::Parameter);
-    header.contract_version = 33;
+    let header = OwnerHeader::new(OwnerKey::Parameter(id), OwnerKind::Parameter);
     source.owners.insert(
         OwnerKey::Parameter(id),
         OwnerRecord::Parameter(ParameterRecord {
@@ -138,10 +137,7 @@ fn binding(
     value: Option<ExpressionId>,
 ) -> BindingId {
     let id = BindingId::migrate(SEED, n);
-    let mut header = OwnerHeader::new(OwnerKey::Binding(id), OwnerKind::Binding);
-    if kind == BindingKind::OwnedBorrow {
-        header.contract_version = 24;
-    }
+    let header = OwnerHeader::new(OwnerKey::Binding(id), OwnerKind::Binding);
     source.owners.insert(
         OwnerKey::Binding(id),
         OwnerRecord::Binding(BindingRecord {
@@ -334,11 +330,6 @@ fn arm_fixture() -> (
             arms,
         },
     );
-    let OwnerRecord::Expression(e) = source.owners.get_mut(&OwnerKey::Expression(root)).unwrap()
-    else {
-        panic!()
-    };
-    e.contract_version = 24;
     function_mut(&mut source, caller).body = root;
     (source, caller, creation, left, right)
 }

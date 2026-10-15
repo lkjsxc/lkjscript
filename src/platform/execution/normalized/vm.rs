@@ -429,6 +429,9 @@ impl<'a> NormalizedVm<'a> {
             control,
             remaining_steps: self.policy.instruction_steps,
             stack: Vec::new(),
+            call_arguments: Vec::new(),
+            call_type_facts: [None; 32],
+            next_call_type_fact: 0,
             frames: Vec::new(),
             incoming_view_scopes: Vec::new(),
             next_frame: 0,
@@ -665,6 +668,12 @@ struct Machine<'a> {
     control: &'a ExecutionControl,
     remaining_steps: Option<u64>,
     stack: Vec<CheckedValue>,
+    // Empty reusable operand transport; it never retains a value between calls.
+    call_arguments: Vec<CheckedValue>,
+    // Successful complete template guards are valid for this immutable program borrow.
+    // The fixed cache never grants a value, substitution, layout or custody certificate.
+    call_type_facts: [Option<(TypeObjectDigest, bool)>; 32],
+    next_call_type_fact: usize,
     frames: Vec<Frame>,
     incoming_view_scopes: Vec<read_views::Scope>,
     next_frame: u64,
@@ -1115,8 +1124,8 @@ impl Machine<'_> {
                 } => {
                     let ty = self.resolve_type_arguments(&[sequence_type])?[0];
                     let item_type = self.sequence_item_type(ty)?;
-                    let raw = self.pop()?.into_raw();
-                    let value = self.product_child(raw, item_type)?.into_raw();
+                    let value = self.pop()?;
+                    let value = self.checked_product_child(value, item_type)?.into_raw();
                     self.load_local(source_local, ParameterUse::Consume, false)?;
                     let NormalizedValue::OwnedSequence(token) = self.pop()?.into_raw() else {
                         return Err(type_error("sequence push requires a sequence token"));
@@ -1177,8 +1186,8 @@ impl Machine<'_> {
                     let result_type = self.resolve_type_arguments(&[result_type])?[0];
                     let item_type = self.sequence_item_type(ty)?;
                     self.sequence_replace_product_type(ty, item_type, result_type)?;
-                    let raw = self.pop()?.into_raw();
-                    let value = self.product_child(raw, item_type)?.into_raw();
+                    let value = self.pop()?;
+                    let value = self.checked_product_child(value, item_type)?.into_raw();
                     let NormalizedValue::I64(index) = self.pop()?.into_raw() else {
                         return Err(type_error("owned sequence index must be I64"));
                     };
@@ -1287,8 +1296,8 @@ impl Machine<'_> {
                 NormalizedInstruction::ChooseOwned { choice_type, case } => {
                     let ty = self.resolve_type_arguments(&[choice_type])?[0];
                     let payload_type = self.choice_payload_type(ty, case, None)?;
-                    let raw = self.pop()?.into_raw();
-                    let raw = self.product_child(raw, payload_type)?.into_raw();
+                    let value = self.pop()?;
+                    let raw = self.checked_product_child(value, payload_type)?.into_raw();
                     let control = self.control;
                     let token = super::owned_choice::OwnedChoice::create(
                         self.memory_domain,
@@ -1425,7 +1434,7 @@ impl Machine<'_> {
                         let field_type = *field_types
                             .get(index as usize)
                             .ok_or_else(|| type_error("unknown product field"))?;
-                        let value = self.product_child(value.into_raw(), field_type)?;
+                        let value = self.checked_product_child(value, field_type)?;
                         ordered.push((index, value.into_raw()));
                     }
                     ordered.sort_unstable_by_key(|(index, _)| *index);
@@ -1501,7 +1510,7 @@ impl Machine<'_> {
                     arguments,
                 } => {
                     self.validate_call_scope_arguments(function, &read_scope_arguments)?;
-                    let arguments = self.pop_many(arguments as usize)?;
+                    let arguments = self.pop_call_arguments(arguments as usize)?;
                     if !effect_arguments.is_empty() || !requirement_arguments.is_empty() {
                         return Err(type_error("effect application requires prepared closure"));
                     }
@@ -1524,7 +1533,7 @@ impl Machine<'_> {
                     if !effect_arguments.is_empty() || !requirement_arguments.is_empty() {
                         return Err(type_error("effect application requires prepared closure"));
                     }
-                    let arguments = self.pop_many(arguments as usize)?;
+                    let arguments = self.pop_call_arguments(arguments as usize)?;
                     let type_arguments = if closed_callsite {
                         type_arguments
                     } else {
@@ -1556,7 +1565,7 @@ impl Machine<'_> {
                     )?)?;
                 }
                 NormalizedInstruction::Invoke { arguments } => {
-                    let arguments = self.pop_many(arguments as usize)?;
+                    let arguments = self.pop_call_arguments(arguments as usize)?;
                     let callee = self.pop()?;
                     let (function, type_arguments, arguments) =
                         self.prepare_invocation(callee, arguments)?;
@@ -1632,7 +1641,7 @@ impl Machine<'_> {
                     self.push(value)?;
                 }
                 NormalizedInstruction::TailInvoke { arguments } => {
-                    let arguments = self.pop_many(arguments as usize)?;
+                    let arguments = self.pop_call_arguments(arguments as usize)?;
                     let callee = self.pop()?;
                     let (function, type_arguments, arguments) =
                         self.prepare_invocation(callee, arguments)?;
@@ -2400,6 +2409,42 @@ impl Machine<'_> {
             Err(type_error(
                 "sequence item lacks an exact ordinary data proof",
             ))
+        }
+    }
+
+    fn checked_product_child(
+        &mut self,
+        value: CheckedValue,
+        ty: TypeObjectDigest,
+    ) -> Result<CheckedValue, ExecutionError> {
+        self.control.check()?;
+        let expected = direct_memory_type(self.program, ty, &BTreeMap::new(), self.control)?;
+        if let Some(expected) = expected {
+            // Ordinary proof reuse confers no owned representation or custody.
+            // Keep the original complete token checks before moving a raw child.
+            value.validate_raw_consumption()?;
+            let raw = value.into_raw();
+            if raw.memory_form() != Some(expected) {
+                return Err(type_error("owned product child type mismatch"));
+            }
+            raw.memory_validate(self.memory_domain, true)?;
+            CheckedValue::memory(self.program, raw)
+        } else if value.has_exact_ordinary_type(
+            self.program,
+            ty,
+            &mut self.observation.value_work,
+        )? {
+            self.observation.value_work.constructor_child_visits = self
+                .observation
+                .value_work
+                .constructor_child_visits
+                .saturating_add(1);
+            Ok(value)
+        } else {
+            // Only a sealed exact ordinary proof avoids raw subtree admission.
+            // Retained read custody must never disappear at the fallback boundary.
+            value.validate_raw_consumption()?;
+            self.admit(value.into_raw(), ty, None, false)
         }
     }
 
@@ -3208,7 +3253,7 @@ impl Machine<'_> {
         &mut self,
         function_index: FunctionIndex,
         type_arguments: Arc<[TypeObjectDigest]>,
-        arguments: Vec<CheckedValue>,
+        mut arguments: Vec<CheckedValue>,
         tail: bool,
     ) -> Result<(), ExecutionError> {
         self.control.check()?;
@@ -3451,40 +3496,47 @@ impl Machine<'_> {
             ),
             NormalizedFunctionBody::External(implementation) => {
                 self.observation.external_calls = self.observation.external_calls.saturating_add(1);
-                let value = if implementation.as_str().starts_with("core.buffer.")
-                    || implementation.as_str().starts_with("core.cell.")
-                {
-                    self.call_checked_intrinsic(
-                        function,
-                        implementation.as_str(),
-                        &type_arguments,
-                        arguments,
-                    )?
-                } else if let Some(host) = self.host {
-                    let raw = host.call(
-                        self.program,
-                        function,
-                        implementation,
-                        &type_arguments,
-                        arguments.into_iter().map(CheckedValue::into_raw).collect(),
-                        self.control,
-                    )?;
-                    self.admit_instantiated(
-                        raw,
-                        function.result.ty,
-                        None,
-                        false,
-                        &type_arguments_by_parameter,
-                    )?
-                } else {
-                    self.call_checked_intrinsic(
-                        function,
-                        implementation.as_str(),
-                        &type_arguments,
-                        arguments,
-                    )?
-                };
-                self.push(value)
+                let value = (|| {
+                    Ok::<_, ExecutionError>(
+                        if implementation.as_str().starts_with("core.buffer.")
+                            || implementation.as_str().starts_with("core.cell.")
+                        {
+                            self.call_checked_intrinsic(
+                                function,
+                                implementation.as_str(),
+                                &type_arguments,
+                                &mut arguments,
+                            )?
+                        } else if let Some(host) = self.host {
+                            let raw = host.call(
+                                self.program,
+                                function,
+                                implementation,
+                                &type_arguments,
+                                arguments.drain(..).map(CheckedValue::into_raw).collect(),
+                                self.control,
+                            )?;
+                            self.admit_instantiated(
+                                raw,
+                                function.result.ty,
+                                None,
+                                false,
+                                &type_arguments_by_parameter,
+                            )?
+                        } else {
+                            self.call_checked_intrinsic(
+                                function,
+                                implementation.as_str(),
+                                &type_arguments,
+                                &mut arguments,
+                            )?
+                        },
+                    )
+                })();
+                // Release unused arguments in their original order before exposing the result.
+                arguments.clear();
+                self.retain_call_arguments(arguments);
+                self.push(value?)
             }
         }
     }
@@ -3547,39 +3599,18 @@ impl Machine<'_> {
                 view.validate(self.control)?;
                 continue;
             }
-            // This negative guard visits the full retained template/layout,
-            // including inactive cases and phantom actuals. Abstract leaves are
-            // still closed by the complete actual and selected-witness checks.
-            super::value_schema::NormalizedValueSchema::reject_read_view_escape(
-                self.program,
-                parameter.ty,
-                self.control,
-            )?;
-            let memory_form =
-                if transfer::contains_associated_type(self.program, parameter.ty, self.control)
-                    .map_err(|error| {
-                        runtime_type_error(
-                            error,
-                            "call parameter escaped its exact function application",
-                        )
-                    })?
-                {
-                    let ty = resolve_runtime_application_type(
-                        self.program,
-                        parameter.ty,
-                        context,
-                        self.control,
-                        "call parameter escaped its exact function application",
-                    )?;
-                    direct_memory_type(self.program, ty, &BTreeMap::new(), self.control)?
-                } else {
-                    direct_memory_type(
-                        self.program,
-                        parameter.ty,
-                        context.ordinary(),
-                        self.control,
-                    )?
-                };
+            let memory_form = if self.call_type_has_associated(parameter.ty)? {
+                let ty = resolve_runtime_application_type(
+                    self.program,
+                    parameter.ty,
+                    context,
+                    self.control,
+                    "call parameter escaped its exact function application",
+                )?;
+                direct_memory_type(self.program, ty, &BTreeMap::new(), self.control)?
+            } else {
+                direct_memory_type(self.program, parameter.ty, context.ordinary(), self.control)?
+            };
             if memory_form.is_some() {
                 if parameter.resource_requirement.is_some()
                     || parameter.use_mode == ParameterUse::Unrestricted
@@ -3677,6 +3708,43 @@ impl Machine<'_> {
         Ok(())
     }
 
+    fn call_type_has_associated(&mut self, ty: TypeObjectDigest) -> Result<bool, ExecutionError> {
+        #[cfg(test)]
+        let reuse = !self_tail_locals_tests::force_fresh_call_arguments();
+        #[cfg(not(test))]
+        let reuse = true;
+        if reuse
+            && let Some((_, associated)) = self
+                .call_type_facts
+                .iter()
+                .flatten()
+                .find(|(key, _)| *key == ty)
+        {
+            self.control.check()?;
+            return Ok(*associated);
+        }
+        // Inspect every inactive case, phantom actual and retained layout before
+        // retaining a fact. Program tables cannot mutate during this Machine's
+        // immutable borrow; raw-value and selected-application checks remain separate.
+        super::value_schema::NormalizedValueSchema::reject_read_view_escape(
+            self.program,
+            ty,
+            self.control,
+        )?;
+        let associated = transfer::contains_associated_type(self.program, ty, self.control)
+            .map_err(|error| {
+                runtime_type_error(
+                    error,
+                    "call parameter escaped its exact function application",
+                )
+            })?;
+        if reuse {
+            self.call_type_facts[self.next_call_type_fact] = Some((ty, associated));
+            self.next_call_type_fact = (self.next_call_type_fact + 1) % self.call_type_facts.len();
+        }
+        Ok(associated)
+    }
+
     fn can_reuse_self_tail_locals(
         &mut self,
         code: &NormalizedCode,
@@ -3741,7 +3809,7 @@ impl Machine<'_> {
     fn call_code(
         &mut self,
         code: NormalizedCode,
-        arguments: Vec<CheckedValue>,
+        mut arguments: Vec<CheckedValue>,
         type_arguments: BTreeMap<TypeParameterId, TypeObjectDigest>,
         function: Option<FunctionIndex>,
         tail: bool,
@@ -3813,7 +3881,7 @@ impl Machine<'_> {
         let deferred_arguments = if reuse_locals {
             Some(arguments)
         } else {
-            for (index, mut argument) in arguments.into_iter().enumerate() {
+            for (index, mut argument) in arguments.drain(..).enumerate() {
                 if let NormalizedValue::ReadView(view) = argument.raw() {
                     let ty = view.identity().ty;
                     self.charge_allocation((2 * std::mem::size_of::<usize>()) as u64)?;
@@ -3846,6 +3914,7 @@ impl Machine<'_> {
                 }
                 locals[index] = Some(argument);
             }
+            self.retain_call_arguments(arguments);
             None
         };
         let borrow_result_target = if function.is_some_and(|index| {
@@ -3882,13 +3951,14 @@ impl Machine<'_> {
             }
             self.frames.pop();
         }
-        if let Some(arguments) = deferred_arguments {
-            for (index, argument) in arguments.into_iter().enumerate() {
+        if let Some(mut arguments) = deferred_arguments {
+            for (index, argument) in arguments.drain(..).enumerate() {
                 *locals
                     .get_mut(index)
                     .ok_or_else(|| type_error("admitted local shape omitted a parameter slot"))? =
                     Some(argument);
             }
+            self.retain_call_arguments(arguments);
         }
         self.frames.push(Frame {
             id,
@@ -4397,6 +4467,38 @@ impl Machine<'_> {
         })
     }
 
+    fn retain_call_arguments(&mut self, arguments: Vec<CheckedValue>) {
+        debug_assert!(arguments.is_empty());
+        #[cfg(test)]
+        if self_tail_locals_tests::force_fresh_call_arguments() {
+            return;
+        }
+        if arguments.capacity() > self.call_arguments.capacity() {
+            self.call_arguments = arguments;
+        }
+    }
+
+    fn pop_call_arguments(&mut self, count: usize) -> Result<Vec<CheckedValue>, ExecutionError> {
+        let base = self.frames.last().map_or(0, |frame| frame.stack_base);
+        if self.stack.len().saturating_sub(base) < count {
+            return Err(runtime_error(
+                "normalized_stack_underflow",
+                "normalized instruction consumed too many values",
+            ));
+        }
+        let start = self.stack.len() - count;
+        #[cfg(test)]
+        if self_tail_locals_tests::force_fresh_call_arguments() {
+            self_tail_locals_tests::observe_call_arguments(false, count);
+            return self.pop_many(count);
+        }
+        let mut arguments = std::mem::take(&mut self.call_arguments);
+        #[cfg(test)]
+        self_tail_locals_tests::observe_call_arguments(arguments.capacity() >= count, count);
+        arguments.extend(self.stack.drain(start..));
+        Ok(arguments)
+    }
+
     fn pop_many(&mut self, count: usize) -> Result<Vec<CheckedValue>, ExecutionError> {
         let base = self.frames.last().map_or(0, |frame| frame.stack_base);
         if self.stack.len().saturating_sub(base) < count {
@@ -4618,8 +4720,37 @@ fn call_core_intrinsic(
     arguments: Vec<NormalizedValue>,
     control: &ExecutionControl,
 ) -> Result<NormalizedValue, ExecutionError> {
+    if matches!(
+        implementation,
+        "core.map.get"
+            | "core.map.contains"
+            | "core.map.get-or"
+            | "core.map.insert"
+            | "core.map.remove"
+            | "core.map.entries"
+    ) {
+        return normalized_map_intrinsic(implementation, arguments, control);
+    }
+    call_core_intrinsic_borrowed(
+        program,
+        function,
+        implementation,
+        type_arguments,
+        &arguments,
+        control,
+    )
+}
+
+fn call_core_intrinsic_borrowed(
+    program: &NormalizedProgram,
+    function: &super::prepare::NormalizedFunction,
+    implementation: &str,
+    type_arguments: &[TypeObjectDigest],
+    arguments: &[NormalizedValue],
+    control: &ExecutionControl,
+) -> Result<NormalizedValue, ExecutionError> {
     match implementation {
-        "identity_host" => match arguments.as_slice() {
+        "identity_host" => match arguments {
             [] => Ok(NormalizedValue::Unit),
             [value] => Ok(value.clone()),
             _ => Err(type_error("identity host received a foreign arity")),
@@ -4629,7 +4760,7 @@ fn call_core_intrinsic(
         "core.f64.multiply" => binary_f64(arguments, |left, right| left * right),
         "core.f64.divide" => binary_f64(arguments, |left, right| left / right),
         "core.f64.negate" | "core.f64.abs" | "core.f64.sqrt" => {
-            let value = f64_argument(&arguments)?;
+            let value = f64_argument(arguments)?;
             let result = match implementation {
                 "core.f64.negate" => -value,
                 "core.f64.abs" => value.abs(),
@@ -4638,7 +4769,7 @@ fn call_core_intrinsic(
             Ok(NormalizedValue::F64(Binary64::from_float(result)))
         }
         "core.f64.less" | "core.f64.less-equal" => {
-            let (left, right) = f64_pair(&arguments)?;
+            let (left, right) = f64_pair(arguments)?;
             Ok(NormalizedValue::Bool(
                 if implementation == "core.f64.less" {
                     left < right
@@ -4648,7 +4779,7 @@ fn call_core_intrinsic(
             ))
         }
         "core.f64.is-finite" | "core.f64.is-nan" => {
-            let value = f64_argument(&arguments)?;
+            let value = f64_argument(arguments)?;
             Ok(NormalizedValue::Bool(
                 if implementation == "core.f64.is-finite" {
                     value.is_finite()
@@ -4658,20 +4789,20 @@ fn call_core_intrinsic(
             ))
         }
         "core.f64.from-i64" => {
-            let [NormalizedValue::I64(value)] = arguments.as_slice() else {
+            let [NormalizedValue::I64(value)] = arguments else {
                 return Err(type_error("F64 conversion received a foreign value"));
             };
             Ok(NormalizedValue::F64(Binary64::from_float(*value as f64)))
         }
         "core.f64.to-i64-result" => {
-            let converted = f64_to_i64(f64_argument(&arguments)?);
+            let converted = f64_to_i64(f64_argument(arguments)?);
             normalized_structural_record([
                 ("valid", NormalizedValue::Bool(converted.is_some())),
                 ("value", NormalizedValue::I64(converted.unwrap_or_default())),
             ])
         }
         "core.f64.parse-result" => {
-            let [NormalizedValue::Text(value)] = arguments.as_slice() else {
+            let [NormalizedValue::Text(value)] = arguments else {
                 return Err(type_error("F64 parser received a foreign value"));
             };
             let parsed = Binary64::parse(value);
@@ -4684,7 +4815,7 @@ fn call_core_intrinsic(
             ])
         }
         "core.f64.to-text" => {
-            let [NormalizedValue::F64(value)] = arguments.as_slice() else {
+            let [NormalizedValue::F64(value)] = arguments else {
                 return Err(type_error("F64 formatter received a foreign value"));
             };
             Ok(NormalizedValue::text(value.to_text()))
@@ -4724,13 +4855,13 @@ fn call_core_intrinsic(
             ))
         }
         "core.i64.to-text" => {
-            let [NormalizedValue::I64(value)] = arguments.as_slice() else {
+            let [NormalizedValue::I64(value)] = arguments else {
                 return Err(type_error("integer formatter received a foreign value"));
             };
             Ok(NormalizedValue::text(value.to_string()))
         }
         "core.i64.parse" => {
-            let [NormalizedValue::Text(value)] = arguments.as_slice() else {
+            let [NormalizedValue::Text(value)] = arguments else {
                 return Err(type_error("integer parser received a foreign value"));
             };
             parse_normalized_i64(value)
@@ -4743,7 +4874,7 @@ fn call_core_intrinsic(
                 })
         }
         "core.i64.parse-result" => {
-            let [NormalizedValue::Text(value)] = arguments.as_slice() else {
+            let [NormalizedValue::Text(value)] = arguments else {
                 return Err(type_error("integer parser received a foreign value"));
             };
             let parsed = parse_normalized_i64(value);
@@ -4753,14 +4884,13 @@ fn call_core_intrinsic(
             ])
         }
         "core.bool.not" => {
-            let [NormalizedValue::Bool(value)] = arguments.as_slice() else {
+            let [NormalizedValue::Bool(value)] = arguments else {
                 return Err(type_error("boolean intrinsic received a foreign value"));
             };
             Ok(NormalizedValue::Bool(!value))
         }
         "core.bool.and" | "core.bool.or" => {
-            let [NormalizedValue::Bool(left), NormalizedValue::Bool(right)] = arguments.as_slice()
-            else {
+            let [NormalizedValue::Bool(left), NormalizedValue::Bool(right)] = arguments else {
                 return Err(type_error("boolean intrinsic received a foreign value"));
             };
             Ok(NormalizedValue::Bool(
@@ -4772,8 +4902,7 @@ fn call_core_intrinsic(
             ))
         }
         "core.text.concat" => {
-            let [NormalizedValue::Text(left), NormalizedValue::Text(right)] = arguments.as_slice()
-            else {
+            let [NormalizedValue::Text(left), NormalizedValue::Text(right)] = arguments else {
                 return Err(type_error("text intrinsic received a foreign value"));
             };
             let length = left.len().checked_add(right.len()).ok_or_else(|| {
@@ -4788,15 +4917,13 @@ fn call_core_intrinsic(
             Ok(NormalizedValue::Text(Arc::from(result)))
         }
         "core.text.equal" => {
-            let [NormalizedValue::Text(left), NormalizedValue::Text(right)] = arguments.as_slice()
-            else {
+            let [NormalizedValue::Text(left), NormalizedValue::Text(right)] = arguments else {
                 return Err(type_error("text intrinsic received a foreign value"));
             };
             Ok(NormalizedValue::Bool(left == right))
         }
         "core.text.contains" | "core.text.starts-with" => {
-            let [NormalizedValue::Text(value), NormalizedValue::Text(part)] = arguments.as_slice()
-            else {
+            let [NormalizedValue::Text(value), NormalizedValue::Text(part)] = arguments else {
                 return Err(type_error("text predicate received a foreign value"));
             };
             Ok(NormalizedValue::Bool(
@@ -4808,19 +4935,19 @@ fn call_core_intrinsic(
             ))
         }
         "core.text.length" => {
-            let [NormalizedValue::Text(value)] = arguments.as_slice() else {
+            let [NormalizedValue::Text(value)] = arguments else {
                 return Err(type_error("text length received a foreign value"));
             };
             Ok(NormalizedValue::I64(normalized_length(value.len())?))
         }
         "core.text.empty" => {
-            let [NormalizedValue::Text(value)] = arguments.as_slice() else {
+            let [NormalizedValue::Text(value)] = arguments else {
                 return Err(type_error("text emptiness received a foreign value"));
             };
             Ok(NormalizedValue::Bool(value.is_empty()))
         }
         "core.text.from-static" => {
-            let [NormalizedValue::StaticText(value)] = arguments.as_slice() else {
+            let [NormalizedValue::StaticText(value)] = arguments else {
                 return Err(type_error(
                     "static-text conversion received a foreign value",
                 ));
@@ -4828,7 +4955,7 @@ fn call_core_intrinsic(
             Ok(NormalizedValue::text(value.clone()))
         }
         "core.html.escape-text" => {
-            let [NormalizedValue::Text(value)] = arguments.as_slice() else {
+            let [NormalizedValue::Text(value)] = arguments else {
                 return Err(type_error("HTML escaping received a foreign value"));
             };
             let mut escaped = String::with_capacity(value.len());
@@ -4845,7 +4972,7 @@ fn call_core_intrinsic(
             Ok(NormalizedValue::text(escaped))
         }
         "core.json.string" => {
-            let [NormalizedValue::Text(value)] = arguments.as_slice() else {
+            let [NormalizedValue::Text(value)] = arguments else {
                 return Err(type_error("JSON string encoding received a foreign value"));
             };
             serde_json::to_string(value.as_ref())
@@ -4858,7 +4985,7 @@ fn call_core_intrinsic(
                 })
         }
         "core.json.encode" => {
-            let [value] = arguments.as_slice() else {
+            let [value] = arguments else {
                 return Err(type_error("typed JSON encoding received a foreign arity"));
             };
             let parameter = function.parameters.first().ok_or_else(|| {
@@ -4887,7 +5014,7 @@ fn call_core_intrinsic(
             .map_err(normalized_json_error)
         }
         "core.json.decode-or" => {
-            let [NormalizedValue::Bytes(bytes), fallback] = arguments.as_slice() else {
+            let [NormalizedValue::Bytes(bytes), fallback] = arguments else {
                 return Err(type_error("typed JSON decoding received foreign values"));
             };
             let fallback_type = function.parameters.get(1).ok_or_else(|| {
@@ -4932,7 +5059,7 @@ fn call_core_intrinsic(
             ])
         }
         "core.data.encode" => {
-            let [value] = arguments.as_slice() else {
+            let [value] = arguments else {
                 return Err(type_error("typed data encoding received a foreign arity"));
             };
             let parameter = function.parameters.first().ok_or_else(|| {
@@ -4955,7 +5082,7 @@ fn call_core_intrinsic(
                 .map_err(normalized_json_error)
         }
         "core.data.decode-or" => {
-            let [NormalizedValue::Bytes(bytes), fallback] = arguments.as_slice() else {
+            let [NormalizedValue::Bytes(bytes), fallback] = arguments else {
                 return Err(type_error("typed data decoding received foreign values"));
             };
             let fallback_type = function.parameters.get(1).ok_or_else(|| {
@@ -4986,12 +5113,12 @@ fn call_core_intrinsic(
                 Err(_) => Ok(fallback.clone()),
             }
         }
-        "core.http.bearer-token" => normalized_bearer_token(program, &arguments),
+        "core.http.bearer-token" => normalized_bearer_token(program, arguments),
         "core.http.media-type-is" => {
             let [
                 NormalizedValue::Bytes(value),
                 NormalizedValue::Text(expected),
-            ] = arguments.as_slice()
+            ] = arguments
             else {
                 return Err(type_error("media-type predicate received foreign values"));
             };
@@ -5000,7 +5127,7 @@ fn call_core_intrinsic(
             ))
         }
         "core.bytes.from-list" => {
-            let [NormalizedValue::List(items)] = arguments.as_slice() else {
+            let [NormalizedValue::List(items)] = arguments else {
                 return Err(type_error("byte construction requires one integer list"));
             };
             if items.len() as u64 > super::value::MAXIMUM_VALUE_ALLOCATION_BYTES {
@@ -5026,7 +5153,7 @@ fn call_core_intrinsic(
             Ok(NormalizedValue::Bytes(bytes.into()))
         }
         "core.bytes.to-text-result" => {
-            let [NormalizedValue::Bytes(bytes)] = arguments.as_slice() else {
+            let [NormalizedValue::Bytes(bytes)] = arguments else {
                 return Err(type_error("UTF-8 decoding requires bytes"));
             };
             if bytes.len() as u64 > super::value::MAXIMUM_VALUE_ALLOCATION_BYTES {
@@ -5043,13 +5170,13 @@ fn call_core_intrinsic(
             ])
         }
         "core.bytes.from-text" => {
-            let [NormalizedValue::Text(value)] = arguments.as_slice() else {
+            let [NormalizedValue::Text(value)] = arguments else {
                 return Err(type_error("text-to-bytes received a foreign value"));
             };
             Ok(NormalizedValue::bytes(value.as_bytes()))
         }
         "core.bytes.to-text" => {
-            let [NormalizedValue::Bytes(value)] = arguments.as_slice() else {
+            let [NormalizedValue::Bytes(value)] = arguments else {
                 return Err(type_error("bytes-to-text received a foreign value"));
             };
             let value = std::str::from_utf8(value).map_err(|_| {
@@ -5061,9 +5188,7 @@ fn call_core_intrinsic(
             Ok(NormalizedValue::text(value))
         }
         "core.bytes.concat" => {
-            let [NormalizedValue::Bytes(left), NormalizedValue::Bytes(right)] =
-                arguments.as_slice()
-            else {
+            let [NormalizedValue::Bytes(left), NormalizedValue::Bytes(right)] = arguments else {
                 return Err(type_error("byte concatenation received foreign values"));
             };
             let length = left.len().checked_add(right.len()).ok_or_else(|| {
@@ -5078,7 +5203,7 @@ fn call_core_intrinsic(
             Ok(NormalizedValue::bytes(value))
         }
         "core.bytes.length" => {
-            let [NormalizedValue::Bytes(value)] = arguments.as_slice() else {
+            let [NormalizedValue::Bytes(value)] = arguments else {
                 return Err(type_error("byte length received a foreign value"));
             };
             Ok(NormalizedValue::I64(normalized_length(value.len())?))
@@ -5088,7 +5213,7 @@ fn call_core_intrinsic(
                 NormalizedValue::Bytes(value),
                 NormalizedValue::I64(start),
                 NormalizedValue::I64(end),
-            ] = arguments.as_slice()
+            ] = arguments
             else {
                 return Err(type_error("byte slicing received foreign values"));
             };
@@ -5103,15 +5228,14 @@ fn call_core_intrinsic(
             Ok(NormalizedValue::bytes(selected))
         }
         "core.bytes.copy" => {
-            let [NormalizedValue::Bytes(value)] = arguments.as_slice() else {
+            let [NormalizedValue::Bytes(value)] = arguments else {
                 return Err(type_error("byte copying received foreign values"));
             };
             control.check()?;
             Ok(NormalizedValue::bytes(value.as_ref()))
         }
         "core.bytes.get" => {
-            let [NormalizedValue::Bytes(value), NormalizedValue::I64(index)] = arguments.as_slice()
-            else {
+            let [NormalizedValue::Bytes(value), NormalizedValue::I64(index)] = arguments else {
                 return Err(type_error("byte lookup received foreign values"));
             };
             usize::try_from(*index)
@@ -5121,7 +5245,7 @@ fn call_core_intrinsic(
                 .ok_or_else(|| trap_error("normalized_bytes_index", "byte index is out of bounds"))
         }
         "core.bytes.to-hex" => {
-            let [NormalizedValue::Bytes(value)] = arguments.as_slice() else {
+            let [NormalizedValue::Bytes(value)] = arguments else {
                 return Err(type_error("hex encoding received a foreign value"));
             };
             let capacity = value.len().checked_mul(2).ok_or_else(|| {
@@ -5136,15 +5260,13 @@ fn call_core_intrinsic(
             Ok(NormalizedValue::text(output))
         }
         "core.bytes.equal" => {
-            let [NormalizedValue::Bytes(left), NormalizedValue::Bytes(right)] =
-                arguments.as_slice()
-            else {
+            let [NormalizedValue::Bytes(left), NormalizedValue::Bytes(right)] = arguments else {
                 return Err(type_error("byte equality received foreign values"));
             };
             Ok(NormalizedValue::Bool(left == right))
         }
         "core.bytes.blake3" => {
-            let [NormalizedValue::Bytes(value)] = arguments.as_slice() else {
+            let [NormalizedValue::Bytes(value)] = arguments else {
                 return Err(type_error("BLAKE3 hashing received a foreign value"));
             };
             Ok(NormalizedValue::bytes(
@@ -5161,13 +5283,13 @@ fn call_core_intrinsic(
                     "nominal application's complete type does not support equality",
                 ));
             }
-            let [left, right] = arguments.as_slice() else {
+            let [left, right] = arguments else {
                 return Err(type_error("value equality received a foreign arity"));
             };
             Ok(NormalizedValue::Bool(normalized_equal(left, right)?))
         }
         "core.list.length" => {
-            let [NormalizedValue::List(values)] = arguments.as_slice() else {
+            let [NormalizedValue::List(values)] = arguments else {
                 return Err(type_error("list length received a foreign value"));
             };
             let length = i64::try_from(values.len()).map_err(|_| {
@@ -5176,8 +5298,7 @@ fn call_core_intrinsic(
             Ok(NormalizedValue::I64(length))
         }
         "core.list.get" => {
-            let [NormalizedValue::List(values), NormalizedValue::I64(index)] = arguments.as_slice()
-            else {
+            let [NormalizedValue::List(values), NormalizedValue::I64(index)] = arguments else {
                 return Err(type_error("list lookup received foreign values"));
             };
             let index = usize::try_from(*index).map_err(|_| {
@@ -5192,7 +5313,7 @@ fn call_core_intrinsic(
                 .ok_or_else(|| trap_error("normalized_list_index", "list index is out of bounds"))
         }
         "core.option.some" => {
-            let [value] = arguments.as_slice() else {
+            let [value] = arguments else {
                 return Err(type_error("option constructor received a foreign arity"));
             };
             Ok(NormalizedValue::Option(Some(Box::new(value.clone()))))
@@ -5204,7 +5325,7 @@ fn call_core_intrinsic(
             Ok(NormalizedValue::Option(None))
         }
         "core.option.get-or" => {
-            let [NormalizedValue::Option(value), fallback] = arguments.as_slice() else {
+            let [NormalizedValue::Option(value), fallback] = arguments else {
                 return Err(type_error("option fallback received foreign values"));
             };
             Ok(value
@@ -5213,20 +5334,16 @@ fn call_core_intrinsic(
                 .unwrap_or_else(|| fallback.clone()))
         }
         "core.option.present" => {
-            let [NormalizedValue::Option(value)] = arguments.as_slice() else {
+            let [NormalizedValue::Option(value)] = arguments else {
                 return Err(type_error("option predicate received a foreign value"));
             };
             Ok(NormalizedValue::Bool(value.is_some()))
         }
         "core.map.length" => {
-            let [NormalizedValue::Map(values)] = arguments.as_slice() else {
+            let [NormalizedValue::Map(values)] = arguments else {
                 return Err(type_error("map length received a foreign value"));
             };
             Ok(NormalizedValue::I64(normalized_length(values.len())?))
-        }
-        "core.map.get" | "core.map.contains" | "core.map.get-or" | "core.map.insert"
-        | "core.map.remove" | "core.map.entries" => {
-            normalized_map_intrinsic(implementation, arguments, control)
         }
         _ => Err(runtime_error(
             "normalized_intrinsic_missing",
@@ -5660,10 +5777,10 @@ fn equal_sequences(
 }
 
 fn binary_f64(
-    arguments: Vec<NormalizedValue>,
+    arguments: &[NormalizedValue],
     operation: fn(f64, f64) -> f64,
 ) -> Result<NormalizedValue, ExecutionError> {
-    let (left, right) = f64_pair(&arguments)?;
+    let (left, right) = f64_pair(arguments)?;
     Ok(NormalizedValue::F64(Binary64::from_float(operation(
         left, right,
     ))))
@@ -5699,7 +5816,7 @@ fn f64_to_i64(value: f64) -> Option<i64> {
 }
 
 fn binary_i64(
-    arguments: Vec<NormalizedValue>,
+    arguments: &[NormalizedValue],
     operation: fn(i64, i64) -> Option<i64>,
     message: &'static str,
 ) -> Result<NormalizedValue, ExecutionError> {
@@ -5709,8 +5826,8 @@ fn binary_i64(
         .ok_or_else(|| trap_error("normalized_integer_overflow", message))
 }
 
-fn i64_pair(arguments: Vec<NormalizedValue>) -> Result<(i64, i64), ExecutionError> {
-    let [NormalizedValue::I64(left), NormalizedValue::I64(right)] = arguments.as_slice() else {
+fn i64_pair(arguments: &[NormalizedValue]) -> Result<(i64, i64), ExecutionError> {
+    let [NormalizedValue::I64(left), NormalizedValue::I64(right)] = arguments else {
         return Err(type_error("integer intrinsic received a foreign value"));
     };
     Ok((*left, *right))

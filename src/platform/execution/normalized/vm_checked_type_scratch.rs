@@ -120,11 +120,15 @@ fn visit(
     // Each child/reference occupies at most 96 canonical bytes including tags,
     // lengths and declaration identity. Fixed metadata is below 128 bytes.
     let payload = add(add(128, mul(count, 96)?)?, add(names, mul(atoms, 96)?)?)?;
+    // The serialized payload and its framed copy coexist during canonical encoding.
     add(
         nested,
         add(
             add(storage, names)?,
-            add(payload.checked_mul(2).ok_or_else(exhausted)?, 50)?,
+            add(
+                payload.checked_mul(2).ok_or_else(exhausted)?,
+                crate::platform::packed::CANONICAL_ENVELOPE_BYTES as u64,
+            )?,
         )?,
     )
 }
