@@ -153,6 +153,18 @@ pub fn detach(public: &Native) {
         std::fs::remove_file(public.root.join(format!("{name}.lkjp"))).unwrap();
     }
     public.detach();
+    for name in [
+        "storage-library",
+        "storage-flat",
+        "storage-chunked",
+        "library",
+        "carriers",
+        "application",
+    ] {
+        assert!(!public.root.join(name).exists());
+        assert!(!public.root.join(format!("{name}.lkjp")).exists());
+    }
+    assert!(!public.root.join("standard.lkjp").exists());
 }
 
 pub fn author(public: &Native) {

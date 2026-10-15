@@ -3,7 +3,7 @@
 use lkjscript::platform::{Diagnostic, ExecutionControl, native_tool::PureTool};
 use sha2::{Digest, Sha256};
 use std::cell::{Cell, RefCell};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -24,6 +24,7 @@ pub struct ArtifactPool {
     content_hits: Cell<u64>,
     binding_hits: Cell<u64>,
     fresh_preparations: Cell<u64>,
+    fresh_paths: RefCell<BTreeSet<PathBuf>>,
 }
 
 impl ArtifactPool {
@@ -45,18 +46,31 @@ impl ArtifactPool {
         Ok(binding)
     }
 
-    /// A successful public build is the only host operation that replaces an artifact binding.
+    /// A successful public build invalidates the existing artifact binding.
     pub fn built(&self, path: &Path) -> FixtureResult<()> {
         self.paths.borrow_mut().remove(path);
+        self.fresh_paths.borrow_mut().remove(path);
         self.bind(path).map(|_| ())
     }
 
     /// Source removal is checked against current artifact bytes, with a new strict admission.
-    pub fn fresh_after_detachment(&self, path: &Path) -> FixtureResult<PureTool> {
+    pub fn fresh_after_detachment(&self, path: &Path) -> FixtureResult<Arc<PureTool>> {
         let binding = self.bind(path)?;
+        if self.fresh_paths.borrow().contains(path) {
+            return Ok(binding.tool);
+        }
         let bytes = fs::read(path).unwrap();
         assert_eq!(binding.digest, fingerprint(&bytes));
-        let tool = PureTool::load(&bytes, &ExecutionControl::uncancelled())?;
+        let tool = Arc::new(PureTool::load(&bytes, &ExecutionControl::uncancelled())?);
+        assert!(!Arc::ptr_eq(&tool, &binding.tool));
+        self.paths.borrow_mut().insert(
+            path.to_path_buf(),
+            Binding {
+                digest: binding.digest,
+                tool: Arc::clone(&tool),
+            },
+        );
+        self.fresh_paths.borrow_mut().insert(path.to_path_buf());
         self.fresh_preparations
             .set(self.fresh_preparations.get() + 1);
         Ok(tool)

@@ -22,6 +22,11 @@ use std::{
 pub mod batch;
 pub mod cases;
 mod fixture_pool;
+#[allow(
+    dead_code,
+    reason = "bounded matrix scheduling is used by native planner suites"
+)]
+pub mod matrix;
 pub mod oracle;
 #[allow(
     dead_code,
@@ -74,6 +79,7 @@ pub struct Native {
     artifacts: fixture_pool::ArtifactPool,
     detached: Cell<bool>,
     detached_smokes: RefCell<BTreeSet<[u8; 32]>>,
+    matrix_evidence: RefCell<Vec<Value>>,
 }
 impl Native {
     pub fn new() -> Self {
@@ -113,6 +119,7 @@ impl Native {
             artifacts: fixture_pool::ArtifactPool::default(),
             detached: Cell::new(false),
             detached_smokes: RefCell::new(BTreeSet::new()),
+            matrix_evidence: RefCell::new(Vec::new()),
         }
     }
     fn next(&self) -> usize {
@@ -125,6 +132,7 @@ impl Native {
             "mode": self.mode.label(),
             "artifact_pool": self.artifacts.observation(),
             "detached_binary_smokes": self.detached_smokes.borrow().len(),
+            "matrix_scheduling": &*self.matrix_evidence.borrow(),
         })
     }
     pub fn input(&self, name: &str, content: &str) -> PathBuf {

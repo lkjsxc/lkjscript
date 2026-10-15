@@ -12,6 +12,7 @@ mod semantic_cli;
 use components::copy_executable;
 #[path = "native_plan_support/mod.rs"]
 mod plan;
+use components::matrix::Case;
 use components::{Native, digest, quoted};
 use serde_json::{Value, json};
 
@@ -68,26 +69,62 @@ fn native_plan_condenses_complete_graphs_and_emits_dependency_first_stages() {
         })
         .collect();
     assert_eq!(batches.len(), 19);
+    let example = components::cases::example();
+    let sample_expected = plan::oracle::expected(&example);
+    let sample_arguments = public.input(
+        "attached-batch-sample.json",
+        &json!([[example]]).to_string(),
+    );
+    let batch_sample_expected = json!([sample_expected]);
+    let mut attached_observations = Vec::new();
+    for &(mode, descriptor) in &batch_modes {
+        let output = public.compare(
+            &format!("attached-sample-{mode}"),
+            descriptor,
+            &sample_arguments,
+            &batch_sample_expected,
+        );
+        attached_observations.push(json!({"phase":"attached-sample","mode":mode,"graphs":1,
+            "observation":quoted(&output,"production-observation")}));
+    }
+    plan::detach(&public);
+    public.matrix_boundary(
+        "detached-ordinary-boundary",
+        &Case {
+            name: "detached-ordinary-boundary".to_owned(),
+            descriptor: batch_modes[0].1.clone(),
+            arguments: sample_arguments,
+            expected: batch_sample_expected,
+        },
+    );
+    let mut matrix = Vec::new();
     let mut observations = Vec::new();
-    for phase in ["attached", "source-deleted"] {
-        if phase == "source-deleted" {
-            plan::detach(&public);
-        }
-        for &(mode, descriptor) in &batch_modes {
-            for (index, (arguments, expected)) in batches.iter().enumerate() {
-                let output = public.compare(
-                    &format!("{phase}-{mode}-{index:02}"),
-                    descriptor,
-                    arguments,
-                    expected,
-                );
-                observations.push(json!({"phase":phase,"mode":mode,"batch":index,
-                    "graphs":expected.as_array().unwrap().len(),
-                    "observation":quoted(&output,"production-observation")}));
-            }
+    for &(mode, descriptor) in &batch_modes {
+        for (index, (arguments, expected)) in batches.iter().enumerate() {
+            matrix.push(Case {
+                name: format!("source-deleted-{mode}-{index:02}"),
+                descriptor: descriptor.clone(),
+                arguments: arguments.clone(),
+                expected: expected.clone(),
+            });
+            observations.push(json!({"phase":"source-deleted","mode":mode,"batch":index,
+                "graphs":expected.as_array().unwrap().len()}));
         }
     }
-    let example = components::cases::example();
+    assert_eq!(matrix.len(), 114);
+    assert_eq!(
+        observations
+            .iter()
+            .map(|row| row["graphs"].as_u64().unwrap())
+            .sum::<u64>(),
+        27_810
+    );
+    for (observation, output) in observations
+        .iter_mut()
+        .zip(public.matrix("dependency-plan", &matrix))
+    {
+        observation["observation"] = quoted(&output, "production-observation");
+    }
     let example_arguments = public.input("example.json", &json!([example]).to_string());
     let empty_arguments = public.input("empty-batch.json", "[[]]");
     for &(mode, descriptor) in &single_modes {
@@ -115,8 +152,11 @@ fn native_plan_condenses_complete_graphs_and_emits_dependency_first_stages() {
             "purpose":"Native dependency-plan evidence, not source or release acceptance",
             "graphs":proposals.len(), "exhaustive_three_vertex_graphs":512,
             "exhaustive_loop_free_four_vertex_graphs":4096,
-            "matched_batch_executions":batches.len()*batch_modes.len()*2,
-            "proposal_comparisons":proposals.len()*batch_modes.len()*2,
+            "matched_batch_executions":batches.len()*batch_modes.len(),
+            "proposal_comparisons":proposals.len()*batch_modes.len(),
+            "full_matrix_phase":"source-deleted", "attached_sample_executions":batch_modes.len(),
+            "detached_matrix_boundary_executions":1,
+            "attached_observations":attached_observations,
             "storage_combinations":plan::STORAGE_MODES,
             "maximum_argument_bytes":maximum_argument_bytes,
             "single_executions":single_modes.len(),"empty_batch_executions":batch_modes.len(),

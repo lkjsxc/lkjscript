@@ -219,6 +219,22 @@ pub fn execute(
     descriptor: &Path,
     cases: &[BatchCase],
 ) -> Vec<String> {
+    execute_refs(
+        root,
+        executable,
+        label,
+        descriptor,
+        &cases.iter().collect::<Vec<_>>(),
+    )
+}
+
+pub(super) fn execute_refs(
+    root: &Path,
+    executable: &Path,
+    label: &str,
+    descriptor: &Path,
+    cases: &[&BatchCase],
+) -> Vec<String> {
     assert!(!cases.is_empty());
     let descriptor_bytes = fs::read(descriptor).unwrap();
     let descriptor_value: Value = serde_json::from_slice(&descriptor_bytes).unwrap();

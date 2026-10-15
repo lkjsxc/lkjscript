@@ -1,4 +1,5 @@
 use super::{Batch, batches, cases, outcome_cases, outcome_refusals};
+use crate::components::matrix::Case;
 use crate::components::{Native, quoted};
 use serde_json::{Value, json};
 use std::path::PathBuf;
@@ -19,6 +20,7 @@ pub struct Suite {
     count: usize,
     verified: usize,
     true_negatives: usize,
+    attached_sample: (Value, Value),
 }
 impl Suite {
     pub fn new(public: &Native) -> Result<Self, Box<dyn std::error::Error>> {
@@ -35,6 +37,7 @@ impl Suite {
             })
             .count();
         Ok(Self {
+            attached_sample: samples[0].clone(),
             descriptors: DESCRIPTORS
                 .map(|(name, text)| public.input(&format!("{name}.deployment.json"), text)),
             batches: batches(public, "outcome", &samples)?,
@@ -43,19 +46,29 @@ impl Suite {
             true_negatives,
         })
     }
-    pub fn compare(&self, public: &Native, phase: &str) -> Vec<Value> {
+    pub fn attached_sample(&self, public: &Native) -> Value {
+        let arguments = public.input(
+            "attached-outcome-sample.json",
+            &json!([[self.attached_sample.0]]).to_string(),
+        );
+        let output = public.compare(
+            "attached-outcome-sample",
+            &self.descriptors[1],
+            &arguments,
+            &json!([self.attached_sample.1]),
+        );
+        json!({"phase":"attached-sample","mode":"outcome","conditions":1,
+            "observation":quoted(&output,"production-observation")})
+    }
+    pub fn matrix_cases(&self) -> Vec<(Case, Value)> {
         self.batches
             .iter()
             .enumerate()
             .map(|(index, batch)| {
-                let output = public.compare(
-                    &format!("{phase}-outcome-{index:03}"),
-                    &self.descriptors[1],
-                    &batch.arguments,
-                    &batch.expected,
-                );
-                json!({"phase":phase,"mode":"outcome","batch":index,"conditions":batch.count,
-                "observation":quoted(&output,"production-observation")})
+                (Case { name:format!("source-deleted-outcome-{index:03}"),
+                    descriptor:self.descriptors[1].clone(), arguments:batch.arguments.clone(),
+                    expected:batch.expected.clone() },
+                json!({"phase":"source-deleted","mode":"outcome","batch":index,"conditions":batch.count}))
             })
             .collect()
     }
@@ -74,7 +87,8 @@ impl Suite {
         self.batches.iter().map(|batch| batch.bytes).max().unwrap()
     }
     pub fn summary(&self) -> Value {
-        json!({"claims_per_phase":self.count,"phases":2,"verified_per_phase":self.verified,
+        json!({"claims_per_phase":self.count,"phases":1,"full_matrix_phase":"source-deleted",
+            "attached_sample_executions":1,"verified_per_phase":self.verified,
             "rejected_per_phase":self.count-self.verified,"true_negatives_per_phase":self.true_negatives,
             "maximum_argument_items":self.maximum_items(),"batches_per_phase":self.batches.len(),"single_executions":2,"empty_batches":1,
             "raw_and_resource_refusals":4,"subsequent_recoveries":4})
