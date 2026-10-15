@@ -10698,7 +10698,7 @@ mod tests {
     }
 
     #[test]
-    fn definition_continuation_codec_rejects_mutation_and_predecessors() {
+    fn definition_continuation_codec_rejects_current_counterfeits_and_mutation() {
         let record = definition_record(
             DefinitionSection::Body,
             "definition.literal",
@@ -10749,39 +10749,54 @@ mod tests {
         assert_eq!(decoded.index, 7);
         assert_eq!(decoded.section, DefinitionSection::Body);
         assert_eq!(decoded.resume_key, record.key);
-        for (magic, version, projection, domain) in [
+        // Mutate one current field at a time and independently reseal the exact
+        // bytes. A valid checksum cannot authorize an unknown contract or schema.
+        for (label, offset, replacement, expected) in [
+            ("kind", 0, vec![0; 8], "definition_continuation_contract"),
             (
-                *b"LKJICT02",
-                2_u16,
-                20_u16,
-                "lkjscript.function-definition.continuation-integrity.v2",
+                "envelope",
+                8,
+                u16::MAX.to_le_bytes().to_vec(),
+                "definition_continuation_contract",
             ),
             (
-                *b"LKJICT03",
-                3_u16,
-                21_u16,
-                "lkjscript.function-definition.continuation-integrity.v3",
+                "continuation",
+                payload_start,
+                u16::MAX.to_be_bytes().to_vec(),
+                "definition_continuation_contract",
+            ),
+            (
+                "projection",
+                payload_start + 2,
+                u16::MAX.to_be_bytes().to_vec(),
+                "definition_continuation_contract",
+            ),
+            (
+                "repository",
+                payload_start + 4,
+                vec![0; 16],
+                "definition_continuation_reserved_identity",
             ),
         ] {
-            let mut predecessor = bytes.clone();
-            predecessor[..8].copy_from_slice(&magic);
-            predecessor[8..10].copy_from_slice(&version.to_le_bytes());
-            predecessor[payload_start..payload_start + 2].copy_from_slice(&version.to_be_bytes());
-            predecessor[payload_start + 2..payload_start + 4]
-                .copy_from_slice(&projection.to_be_bytes());
+            let mut counterfeit = bytes.clone();
+            counterfeit[offset..offset + replacement.len()].copy_from_slice(&replacement);
             let checksum_start =
-                predecessor.len() - FUNCTION_DEFINITION_CONTINUATION_CHECKSUM_BYTES;
-            let checksum = definition_domain_digest(domain, &predecessor[..checksum_start]);
-            predecessor[checksum_start..].copy_from_slice(&checksum);
-            let predecessor_token = format!(
+                counterfeit.len() - FUNCTION_DEFINITION_CONTINUATION_CHECKSUM_BYTES;
+            let mut hasher =
+                blake3::Hasher::new_derive_key(FUNCTION_DEFINITION_CONTINUATION_INTEGRITY_DOMAIN);
+            hasher.update(&(checksum_start as u64).to_be_bytes());
+            hasher.update(&counterfeit[..checksum_start]);
+            counterfeit[checksum_start..].copy_from_slice(hasher.finalize().as_bytes());
+            let counterfeit_token = format!(
                 "{FUNCTION_DEFINITION_CONTINUATION_PREFIX}{}",
-                base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(predecessor)
+                base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(counterfeit)
             );
             assert_eq!(
-                decode_definition_continuation(&predecessor_token)
-                    .expect_err("predecessor definition continuation")
+                decode_definition_continuation(&counterfeit_token)
+                    .expect_err("counterfeit current definition continuation")
                     .code,
-                "definition_continuation_contract"
+                expected,
+                "{label}"
             );
         }
         let mut mutated = token.into_bytes();

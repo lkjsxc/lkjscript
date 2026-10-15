@@ -2012,7 +2012,7 @@ mod tests {
     }
 
     #[test]
-    fn package_revision_and_transport_round_trip_and_reject_predecessor_bytes() {
+    fn package_revision_and_transport_round_trip_and_reject_current_counterfeits() {
         let fixture = fixture(1, &[]);
         assert_eq!(
             PackageRevision::decode(&fixture.revision_bytes, fixture.revision_digest).unwrap(),
@@ -2022,15 +2022,58 @@ mod tests {
             PackageTransport::decode(&fixture.transport_bytes, fixture.transport_digest).unwrap(),
             fixture.transport
         );
-        let mut predecessor = fixture.revision_bytes;
-        predecessor[..8].copy_from_slice(b"LKJPKG08");
-        assert!(
-            PackageRevision::decode(&predecessor, PackageRevisionDigest::of(&predecessor)).is_err()
+        let seal = |mut content: Vec<u8>| {
+            let mut hasher = blake3::Hasher::new_derive_key(PACKAGE_REVISION_ENVELOPE_DOMAIN);
+            hasher.update(&(content.len() as u64).to_be_bytes());
+            hasher.update(&content);
+            content.extend_from_slice(hasher.finalize().as_bytes());
+            content
+        };
+        for (offset, replacement, expected) in [
+            (0, vec![0; 8], "packed_contract"),
+            (8, vec![0; 32], "packed_schema"),
+        ] {
+            let mut content = fixture.revision_bytes[..fixture.revision_bytes.len() - 32].to_vec();
+            content[offset..offset + replacement.len()].copy_from_slice(&replacement);
+            let counterfeit = seal(content);
+            assert_eq!(
+                PackageRevision::decode(&counterfeit, PackageRevisionDigest::of(&counterfeit))
+                    .expect_err("a matching digest cannot authorize a counterfeit current frame")
+                    .code,
+                expected
+            );
+        }
+        let mut invalid = fixture.revision;
+        invalid.contract_version = 0;
+        assert_eq!(
+            invalid.encode().unwrap_err().code,
+            "package_revision_contract"
+        );
+        let payload = bincode::encode_to_vec(
+            &invalid,
+            bincode::config::standard()
+                .with_little_endian()
+                .with_variable_int_encoding(),
+        )
+        .unwrap();
+        let mut content =
+            fixture.revision_bytes[..crate::platform::packed::CANONICAL_HEADER_BYTES].to_vec();
+        content[40..48].copy_from_slice(&(payload.len() as u64).to_le_bytes());
+        content.extend_from_slice(&payload);
+        let counterfeit = seal(content);
+        assert_eq!(
+            PackageRevision::decode(&counterfeit, PackageRevisionDigest::of(&counterfeit))
+                .expect_err("a current frame cannot authorize an invalid revision payload")
+                .code,
+            "package_revision_contract"
         );
         let mut trailing = fixture.transport_bytes;
         trailing.push(0);
-        assert!(
-            PackageTransport::decode(&trailing, PackageTransportDigest::of(&trailing)).is_err()
+        assert_eq!(
+            PackageTransport::decode(&trailing, PackageTransportDigest::of(&trailing))
+                .expect_err("a matching object digest cannot authorize trailing transport bytes")
+                .code,
+            "packed_length_mismatch"
         );
     }
 

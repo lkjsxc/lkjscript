@@ -50,8 +50,8 @@ fn terminal() -> Terminal {
         source_commit: "1".repeat(40),
         controller_source_commit: "1".repeat(40),
         tag: "v0.1.39".to_owned(),
-        acceptance_contract: "lkjscript-final-candidate-acceptance-12".to_owned(),
-        workload: "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-12"
+        acceptance_contract: "lkjscript-final-candidate-acceptance-13".to_owned(),
+        workload: "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-13"
             .to_owned(),
         target_triple: "x86_64-unknown-linux-musl".to_owned(),
         target_policy_sha256: target::policy_sha256().expect("current target policy"),
@@ -80,6 +80,7 @@ fn terminal() -> Terminal {
         manifest_sha256: Some(Sha256Digest::new("3".repeat(64)).expect("manifest digest")),
         executable: Some(identity("lkjscript")),
         source_gates: 23,
+        native_public_workers: Some(16),
         target_owners: 6,
         userlands: 2,
         proofs: ["release-source", "native-public-harness", "final-target", "installation"]
@@ -110,6 +111,29 @@ fn write_terminal(path: &Path, terminal: &Terminal) {
         evidence::encode_json(terminal).expect("canonical fixture"),
     )
     .expect("write owned terminal fixture");
+}
+
+#[test]
+fn candidate_terminal_admits_portable_recorded_workers_and_refuses_missing_or_invalid_counts() {
+    let temporary = tempfile::tempdir().expect("portable worker fixtures");
+    let path = temporary.path().join("terminal.json");
+    for workers in [Some(1), Some(16), None, Some(0), Some(17)] {
+        let mut recorded = terminal();
+        recorded.native_public_workers = workers;
+        write_terminal(&path, &recorded);
+        let admitted = matches!(workers, Some(1 | 16));
+        assert_eq!(read_terminal(&path).is_ok(), admitted, "{workers:?}");
+        assert_eq!(
+            controller_content(&path, &"1".repeat(40), &"2".repeat(64), 101, 2).is_ok(),
+            admitted,
+            "transferred workers {workers:?}"
+        );
+    }
+    let canonical = String::from_utf8(evidence::encode_json(&terminal()).unwrap()).unwrap();
+    let field = "  \"native_public_workers\": 16,\n";
+    assert_eq!(canonical.matches(field).count(), 1);
+    fs::write(&path, canonical.replace(field, "")).unwrap();
+    assert!(read_terminal(&path).is_err());
 }
 
 #[test]
@@ -314,13 +338,9 @@ fn candidate_real_stage_retains_failure_timeout_and_cancellation_without_accepta
 }
 
 #[test]
-fn candidate_requires_native_public_proof_without_relabelling_the_old_contract() {
+fn candidate_requires_current_native_public_proof_without_relabelling_foreign_evidence() {
     let original = terminal();
     assert!(validate_terminal(&original).is_ok());
-    let mut before_refresh = original.clone();
-    before_refresh.acceptance_contract = "lkjscript-final-candidate-acceptance-2".to_owned();
-    before_refresh.workload = "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-2".to_owned();
-    assert!(validate_terminal(&before_refresh).is_err());
     let mut missing = original.clone();
     missing
         .proofs
@@ -332,83 +352,49 @@ fn candidate_requires_native_public_proof_without_relabelling_the_old_contract()
     let mut empty = original.clone();
     empty.proofs[1].receipt.byte_length = 0;
     assert!(validate_terminal(&empty).is_err());
-    let mut old = missing;
-    old.acceptance_contract = "lkjscript-final-candidate-acceptance-1".to_owned();
-    old.workload =
-        "release-source+six-target-owners+two-pinned-userlands+installed-recovery-1".to_owned();
-    // The old producer retains its historical meaning but is not proof of this successor.
-    assert!(validate_terminal(&old).is_err());
-    let mut relabelled = old;
+    let mut foreign = missing;
+    foreign.acceptance_contract = "lkjscript-final-candidate-acceptance-13-foreign".to_owned();
+    foreign.workload = "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-13-foreign".to_owned();
+    assert!(validate_terminal(&foreign).is_err());
+    let mut relabelled = foreign;
     relabelled.acceptance_contract = original.acceptance_contract;
     relabelled.workload = original.workload;
     assert!(validate_terminal(&relabelled).is_err());
 }
 
 #[test]
-fn candidate_terminal_rejects_pre_native_planner_and_mixed_acceptance_generations_then_recovers() {
+fn candidate_terminal_rejects_foreign_and_mismatched_current_contract_then_recovers() {
     let temporary = tempfile::tempdir().expect("contract fixtures");
     let path = temporary.path().join("terminal.json");
     let current = terminal();
     assert_eq!(
         current.acceptance_contract,
-        "lkjscript-final-candidate-acceptance-12"
+        "lkjscript-final-candidate-acceptance-13"
     );
     assert_eq!(
         current.workload,
-        "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-12"
+        "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-13"
     );
     write_terminal(&path, &current);
     assert!(read_terminal(&path).is_ok());
     for (contract, workload) in [
-        (3, 3),
-        (3, 4),
-        (4, 3),
-        (4, 4),
-        (3, 5),
-        (5, 3),
-        (4, 5),
-        (5, 4),
-        (5, 5),
-        (5, 6),
-        (6, 5),
-        (4, 6),
-        (6, 4),
-        (3, 6),
-        (6, 3),
-        (6, 6),
-        (6, 7),
-        (7, 6),
-        (5, 7),
-        (7, 5),
-        (4, 7),
-        (7, 4),
-        (3, 7),
-        (7, 3),
-        (7, 7),
-        (7, 8),
-        (8, 7),
-        (6, 8),
-        (8, 6),
-        (8, 8),
-        (8, 9),
-        (9, 8),
-        (9, 9),
-        (9, 10),
-        (10, 9),
-        (10, 10),
-        (10, 11),
-        (11, 10),
-        (11, 11),
-        (11, 12),
-        (12, 11),
+        (
+            "lkjscript-final-candidate-acceptance-13-foreign",
+            current.workload.as_str(),
+        ),
+        (
+            current.acceptance_contract.as_str(),
+            "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-13-foreign",
+        ),
+        (
+            "lkjscript-final-candidate-acceptance-13-foreign",
+            "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-13-foreign",
+        ),
     ] {
-        let mut predecessor = current.clone();
-        predecessor.acceptance_contract =
-            format!("lkjscript-final-candidate-acceptance-{contract}");
-        predecessor.workload = format!(
-            "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-{workload}"
-        );
-        write_terminal(&path, &predecessor);
+        let mut mismatched = current.clone();
+        mismatched.acceptance_contract = contract.to_owned();
+        mismatched.workload = workload.to_owned();
+        write_terminal(&path, &mismatched);
         assert!(
             read_terminal(&path).is_err(),
             "accepted contract {contract} with workload {workload}"

@@ -4033,11 +4033,19 @@ mod tests {
             "query_continuation_oversized"
         );
         let raw = raw_continuation(&token);
-        let mut query_three = raw[..raw.len() - CONTINUATION_CHECKSUM_BYTES].to_vec();
-        query_three[..8].copy_from_slice(b"LKJQCT03");
+        let mut counterfeit_kind = raw[..raw.len() - CONTINUATION_CHECKSUM_BYTES].to_vec();
+        counterfeit_kind[..8].fill(0);
+        let mut hasher = blake3::Hasher::new_derive_key(QUERY_CONTINUATION_INTEGRITY_DOMAIN);
+        hasher.update(&(counterfeit_kind.len() as u64).to_be_bytes());
+        hasher.update(&counterfeit_kind);
+        counterfeit_kind.extend_from_slice(hasher.finalize().as_bytes());
+        let counterfeit_token = format!(
+            "{QUERY_CONTINUATION_PREFIX}{}",
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(counterfeit_kind)
+        );
         assert_eq!(
-            decode_continuation(&sealed_continuation(query_three))
-                .expect_err("query-3 continuation")
+            decode_continuation(&counterfeit_token)
+                .expect_err("a valid current checksum cannot authorize an unknown kind")
                 .code,
             "query_continuation_contract"
         );
@@ -4058,13 +4066,19 @@ mod tests {
             sealed_continuation(candidate)
         };
         assert_eq!(
-            decode_continuation(&mutate_and_seal(18, &2_u16.to_be_bytes()))
+            decode_continuation(&mutate_and_seal(8, &u16::MAX.to_le_bytes()))
+                .expect_err("foreign continuation envelope version")
+                .code,
+            "query_continuation_contract"
+        );
+        assert_eq!(
+            decode_continuation(&mutate_and_seal(18, &u16::MAX.to_be_bytes()))
                 .expect_err("foreign continuation payload version")
                 .code,
             "query_continuation_contract"
         );
         assert_eq!(
-            decode_continuation(&mutate_and_seal(20, &2_u16.to_be_bytes()))
+            decode_continuation(&mutate_and_seal(20, &u16::MAX.to_be_bytes()))
                 .expect_err("foreign query version")
                 .code,
             "query_continuation_contract"

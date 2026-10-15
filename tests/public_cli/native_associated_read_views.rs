@@ -4,6 +4,9 @@ use super::native_byte_buffer::{Export, dependency};
 use super::*;
 use serde_json::json;
 
+#[path = "native_associated_read_views/seed.rs"]
+mod seed;
+
 const CONSUMER: &str = include_str!("read_view_fixtures/01-consumer.lkjc");
 const TRANSFORMER: &str = include_str!("read_view_fixtures/02-transformer.lkjc");
 const FLAT: &str = include_str!("read_view_fixtures/03-flat.lkjc");
@@ -108,7 +111,7 @@ fn cli(public: &Native, arguments: &[&str], success: bool) -> Vec<CompactRecord>
     parse_records("associated read views public result", &output.stdout).unwrap()
 }
 
-fn native(template: &str) -> Native {
+fn native_shell() -> Native {
     let mut root = tempfile::tempdir().unwrap();
     if std::env::var_os("LKJSCRIPT_RETAIN_PRODUCT_EVIDENCE").is_some() {
         root.disable_cleanup(true);
@@ -144,6 +147,11 @@ fn native(template: &str) -> Native {
         "source_tree":env!("CARGO_MANIFEST_DIR"),
         "regular_file":std::fs::symlink_metadata(&public.executable).unwrap().file_type().is_file(),
     })).unwrap());
+    public
+}
+
+fn native(template: &str) -> Native {
+    let public = native_shell();
     cli(
         &public,
         &[
@@ -449,6 +457,12 @@ struct Packages {
 
 impl Packages {
     fn stage() -> Self {
+        seed::stage()
+    }
+
+    // Preserve the entire ordered public authoring/export/readback boundary on
+    // the first preparation for these exact product, harness and fixture bytes.
+    fn author() -> Self {
         let consumer = native("minimal");
         let standard = exported(&consumer, "standard", true);
         stage(&consumer, &standard);

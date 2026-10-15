@@ -1772,7 +1772,7 @@ fn owner_kind_and_owner_key_tags_are_unique_and_frozen() {
 }
 
 #[test]
-fn owner_codec_rejects_wrong_key_and_predecessor_magic() {
+fn owner_codec_rejects_wrong_key_and_current_counterfeit_frames() {
     let (snapshot, _) = prototype_snapshot();
     let module = snapshot
         .owners
@@ -1788,20 +1788,73 @@ fn owner_codec_rejects_wrong_key_and_predecessor_magic() {
         .expect_err("wrong owner key must reject");
     assert_eq!(diagnostic.code, "kernel_owner_key_mismatch");
 
-    for magic in [b"LKJOWN10", b"LKJOWN08"] {
-        let mut predecessor = bytes.clone();
-        predecessor[..8].copy_from_slice(magic);
-        let predecessor_digest = OwnerObjectDigest::of(&predecessor);
-        assert!(
+    let seal = |mut content: Vec<u8>| {
+        let mut hasher = blake3::Hasher::new_derive_key(contract::OWNER_ENVELOPE_DOMAIN);
+        hasher.update(&(content.len() as u64).to_be_bytes());
+        hasher.update(&content);
+        content.extend_from_slice(hasher.finalize().as_bytes());
+        content
+    };
+    for (offset, replacement, expected) in [
+        (0, vec![0; 8], "packed_contract"),
+        (8, vec![0; 32], "packed_schema"),
+    ] {
+        let mut content = bytes[..bytes.len() - 32].to_vec();
+        content[offset..offset + replacement.len()].copy_from_slice(&replacement);
+        let counterfeit = seal(content);
+        assert_eq!(
             decode_owner(
-                &predecessor,
+                &counterfeit,
                 OwnerKey::Module(module),
                 OwnerKind::Module,
-                predecessor_digest,
+                OwnerObjectDigest::of(&counterfeit),
             )
-            .is_err()
+            .expect_err("a valid content digest cannot authorize a foreign frame")
+            .code,
+            expected
         );
     }
+    let mut invalid = snapshot.owners[&OwnerKey::Module(module)].clone();
+    invalid.set_encoding_for_edit(0);
+    assert_eq!(
+        encode_owner(&invalid).unwrap_err().code,
+        "kernel_owner_header"
+    );
+    let payload = bincode::encode_to_vec(
+        &invalid,
+        bincode::config::standard()
+            .with_little_endian()
+            .with_variable_int_encoding(),
+    )
+    .unwrap();
+    let mut content = bytes[..crate::platform::packed::CANONICAL_HEADER_BYTES].to_vec();
+    content[40..48].copy_from_slice(&(payload.len() as u64).to_le_bytes());
+    content.extend_from_slice(&payload);
+    let counterfeit = seal(content);
+    assert_eq!(
+        decode_owner(
+            &counterfeit,
+            OwnerKey::Module(module),
+            OwnerKind::Module,
+            OwnerObjectDigest::of(&counterfeit),
+        )
+        .expect_err("a current checksum cannot authorize an invalid owner payload")
+        .code,
+        "kernel_owner_header"
+    );
+    let mut corrupt = bytes;
+    *corrupt.last_mut().unwrap() ^= 1;
+    assert_eq!(
+        decode_owner(
+            &corrupt,
+            OwnerKey::Module(module),
+            OwnerKind::Module,
+            OwnerObjectDigest::of(&corrupt),
+        )
+        .expect_err("matching object digest cannot replace envelope integrity")
+        .code,
+        "packed_checksum"
+    );
 }
 
 #[test]

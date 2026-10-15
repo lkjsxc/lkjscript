@@ -11,6 +11,16 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 const OUTPUT_LIMIT: u64 = 16 * 1024 * 1024;
+const MAXIMUM_WORKERS: usize = 16;
+
+pub(super) fn valid_workers(workers: usize) -> bool {
+    (1..=MAXIMUM_WORKERS).contains(&workers)
+}
+
+pub(super) struct Accepted {
+    pub(super) receipt: PathBuf,
+    pub(super) workers: usize,
+}
 
 #[derive(Serialize)]
 struct Phase {
@@ -25,6 +35,7 @@ struct Receipt {
     status: &'static str,
     phase: String,
     harness_source_commit: String,
+    workers: usize,
     candidate: super::ArtifactIdentity,
     harness: Option<super::ArtifactIdentity>,
     inventory: Option<public_inventory::Inventory>,
@@ -147,6 +158,10 @@ impl Runner<'_> {
             self.receipt.candidate == file(candidate, "lkjscript")?,
             "native public candidate differs from the admitted executable",
         )?;
+        require(
+            valid_workers(self.receipt.workers),
+            "native public harness worker count is outside 1..=16",
+        )?;
         let home = work.join("home");
         let temporary = work.join("tmp");
         fs::create_dir(&home)?;
@@ -178,13 +193,13 @@ impl Runner<'_> {
         let mut command = vec![
             harness.display().to_string(),
             "--exact".into(),
-            "--test-threads=2".into(),
+            format!("--test-threads={}", self.receipt.workers),
             "--color=never".into(),
         ];
         command.extend(inventory.selected.iter().cloned());
         self.receipt.inventory = Some(inventory);
-        // Fixed two-worker execution preserves every selected case and the same
-        // aggregate bound. Completion cost and contention remain empirical.
+        // The producer selects once; the receipt binds that count to this argv.
+        // Every selected case and the aggregate bound remain unchanged.
         let observed = self.run(
             "execute",
             command,
@@ -217,23 +232,26 @@ pub(super) fn accept(
     commit: &str,
     root: &Path,
     control: &process::ProcessControl,
-) -> Result<PathBuf, DevError> {
+) -> Result<Accepted, DevError> {
     source(repository, commit)?;
     super::super::require_absolute_regular_executable(candidate, "native public candidate")?;
     super::super::require_absolute_extraction_output(root)?;
     fs::create_dir(root)?;
     fs::set_permissions(root, fs::Permissions::from_mode(0o700))?;
+    let workers = std::thread::available_parallelism()
+        .map_or(1, |available| available.get().min(MAXIMUM_WORKERS));
     let mut runner = Runner {
         root,
         control,
         receipt: Receipt {
             schema: super::SchemaIdentity {
                 identity: "lkjscript-native-public-harness".to_owned(),
-                version: 1,
+                version: 2,
             },
             status: "incomplete",
             phase: "created".to_owned(),
             harness_source_commit: commit.to_owned(),
+            workers,
             candidate: file(candidate, "lkjscript")?,
             harness: None,
             inventory: None,
@@ -256,7 +274,10 @@ pub(super) fn accept(
         runner.receipt.phase = "complete".to_owned();
     }
     runner.save()?;
-    result.map(|()| root.join("receipt.json"))
+    result.map(|()| Accepted {
+        receipt: root.join("receipt.json"),
+        workers: runner.receipt.workers,
+    })
 }
 
 // This non-publishing source witness accepts ordinary and linked worktrees.
@@ -291,8 +312,8 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
     );
     let joined = cancellation.finish();
     // Joining the control observer is part of command completion even on failure.
-    let receipt = match (result, joined) {
-        (Ok(receipt), Ok(())) => receipt,
+    let accepted = match (result, joined) {
+        (Ok(accepted), Ok(())) => accepted,
         (Err(primary), Err(cleanup)) => {
             return Err(DevError::infrastructure(format!(
                 "{primary}; observer cleanup: {cleanup}"
@@ -302,7 +323,7 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
     };
     println!(
         "{}",
-        serde_json::json!({"status":"passed", "receipt":receipt})
+        serde_json::json!({"status":"passed", "receipt":accepted.receipt, "workers":accepted.workers})
     );
     Ok(0)
 }

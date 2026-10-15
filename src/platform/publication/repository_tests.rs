@@ -831,8 +831,19 @@ fn staged_package_transports_bind_authored_dependency_lifecycle_without_advancin
         .stage_package_transport(exported.transport_digest, &exported.container)
         .unwrap();
     assert_eq!(std::fs::read(&transport_selection).unwrap(), ready);
-    std::fs::write(&transport_selection, b"LKJPTS01predecessor").unwrap();
-    assert!(target.repository.export_package_transport().is_err());
+    assert!(ready.starts_with(&crate::platform::package_transport::source::READINESS_MAGIC));
+    let mut malformed = ready.clone();
+    let count = u32::from_be_bytes(malformed[8..12].try_into().unwrap());
+    malformed[8..12].copy_from_slice(&(count + 1).to_be_bytes());
+    std::fs::write(&transport_selection, malformed).unwrap();
+    assert_eq!(
+        target
+            .repository
+            .export_package_transport()
+            .unwrap_err()
+            .code,
+        "package_readiness_length"
+    );
     assert_eq!(target.repository.current().unwrap().head, guarded.head);
     std::fs::write(&transport_selection, &ready).unwrap();
     let outside = target.repository.root().join("outside-transport-selection");

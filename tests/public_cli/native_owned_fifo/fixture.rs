@@ -1,6 +1,13 @@
 use super::*;
 use std::cell::Cell;
 
+#[path = "../../native_plan_support/literal_sources.rs"]
+#[allow(
+    clippy::panic,
+    reason = "immutable test fixtures must match the shared grouping envelope"
+)]
+mod literal_sources;
+
 const SOURCES: [(&str, &str); 3] = [
     (
         "library",
@@ -68,9 +75,11 @@ fn checked(public: &Native, expected: &str) {
 impl Fifo {
     pub fn new() -> Self {
         let supplier = native();
-        for (label, source) in SOURCES {
-            accept(&supplier, label, source);
-        }
+        accept(
+            &supplier,
+            "library-steps-trace",
+            &literal_sources::grouped(SOURCES.iter().map(|(_, source)| *source)),
+        );
         checked(&supplier, "117"); // 116 exact standard tests and the command starter.
         for module in ["fifo-support", "fifo-steps", "fifo-trace"] {
             let draft = unchanged(&supplier, module);
@@ -89,10 +98,13 @@ impl Fifo {
         );
         accept(
             &consumer,
-            "elements",
-            &format!("{}{imports}{ELEMENTS}", dependency(&generic)),
+            "elements-application",
+            &format!(
+                "{}{imports}{}",
+                dependency(&generic),
+                literal_sources::grouped([ELEMENTS, APPLICATION]),
+            ),
         );
-        accept(&consumer, "application", &format!("{imports}{APPLICATION}"));
         checked(&consumer, "118"); // One additional consumer-owned starter test.
         let draft = unchanged(&consumer, "fifo-app");
         assert!(draft.contains("(read-from queue)") && draft.contains("(borrow-call "));

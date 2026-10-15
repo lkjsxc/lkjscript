@@ -12,14 +12,14 @@ use std::time::{Duration, Instant};
 pub(super) mod public_harness;
 mod public_inventory;
 
-pub(super) const CONTRACT: &str = "lkjscript-final-candidate-acceptance-12";
+pub(super) const CONTRACT: &str = "lkjscript-final-candidate-acceptance-13";
 #[cfg(test)]
 pub(super) fn canonical_terminal_fixture(value: serde_json::Value) -> Result<Vec<u8>, DevError> {
     evidence::encode_json(&serde_json::from_value::<Terminal>(value)?)
 }
 #[cfg(test)]
 mod tests;
-const WORKLOAD: &str = "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-12";
+const WORKLOAD: &str = "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-13";
 const MAXIMUM_RECEIPT_BYTES: u64 = 4 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -65,6 +65,7 @@ struct Terminal {
     manifest_sha256: Option<Sha256Digest>,
     executable: Option<ArtifactIdentity>,
     source_gates: usize,
+    native_public_workers: Option<usize>,
     target_owners: usize,
     userlands: usize,
     proofs: Vec<Proof>,
@@ -146,6 +147,7 @@ fn accept(options: &Options) -> Result<u8, DevError> {
         manifest_sha256: None,
         executable: None,
         source_gates: 0,
+        native_public_workers: None,
         target_owners: 0,
         userlands: 0,
         proofs: Vec::new(),
@@ -322,9 +324,10 @@ fn execute(
         &options.evidence_root.join("native-public-harness"),
         control,
     )?;
+    terminal.native_public_workers = Some(native_receipt.workers);
     terminal
         .proofs
-        .push(proof("native-public-harness", &native_receipt)?);
+        .push(proof("native-public-harness", &native_receipt.receipt)?);
     let target_root = options.evidence_root.join("target");
     let target_result = stage(
         options,
@@ -609,6 +612,9 @@ fn validate_terminal(t: &Terminal) -> Result<(), DevError> {
             && t.target_triple == target::TARGET_TRIPLE
             && t.target_policy_sha256 == target::policy_sha256()?
             && t.source_gates == crate::check::RELEASE_SOURCE_GATE_COUNT
+            // Portable evidence binds its producer's recorded count, not this
+            // consuming host's current capacity.
+            && t.native_public_workers.is_some_and(public_harness::valid_workers)
             && t.target_owners == 6
             && t.userlands == 2
             && t.cleanup_complete

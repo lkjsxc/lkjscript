@@ -65,11 +65,12 @@ fn runner<'a>(root: &'a Path, control: &'a process::ProcessControl) -> Runner<'a
         receipt: Receipt {
             schema: super::super::SchemaIdentity {
                 identity: "lkjscript-native-public-harness".to_owned(),
-                version: 1,
+                version: 2,
             },
             status: "incomplete",
             phase: "created".to_owned(),
             harness_source_commit: "1".repeat(40),
+            workers: 2,
             candidate: file(&candidate, "lkjscript").unwrap(),
             harness: None,
             inventory: None,
@@ -81,10 +82,14 @@ fn runner<'a>(root: &'a Path, control: &'a process::ProcessControl) -> Runner<'a
 }
 
 fn harness(root: &Path, output: &str, exit: i32) -> PathBuf {
+    harness_with_workers(root, output, exit, 2)
+}
+
+fn harness_with_workers(root: &Path, output: &str, exit: i32, workers: usize) -> PathBuf {
     let path = root.join("fixture-harness");
     let listing = listing();
     let script = format!(
-        "#!/bin/sh\nset -eu\n[ \"$PATH\" = '' ]\n[ \"$HOME\" = \"$PWD/home\" ]\n[ \"$TMPDIR\" = \"$PWD/tmp\" ]\n[ -z \"${{CARGO_HOME+x}}\" ]\n[ -z \"${{GH_TOKEN+x}}\" ]\n[ -z \"${{GITHUB_TOKEN+x}}\" ]\n[ -f \"$LKJSCRIPT_RELEASE_CANDIDATE\" ]\nif [ \"$1\" = '--list' ]; then\nprintf '%s' '{listing}'\nelse\n[ \"$1\" = '--exact' ]\n[ \"$2\" = '--test-threads=2' ]\n[ \"$3\" = '--color=never' ]\n[ \"$#\" = 45 ]\nprintf '%s' '{output}'\nexit {exit}\nfi\n"
+        "#!/bin/sh\nset -eu\n[ \"$PATH\" = '' ]\n[ \"$HOME\" = \"$PWD/home\" ]\n[ \"$TMPDIR\" = \"$PWD/tmp\" ]\n[ -z \"${{CARGO_HOME+x}}\" ]\n[ -z \"${{GH_TOKEN+x}}\" ]\n[ -z \"${{GITHUB_TOKEN+x}}\" ]\n[ -f \"$LKJSCRIPT_RELEASE_CANDIDATE\" ]\nif [ \"$1\" = '--list' ]; then\nprintf '%s' '{listing}'\nelse\n[ \"$1\" = '--exact' ]\n[ \"$2\" = '--test-threads={workers}' ]\n[ \"$3\" = '--color=never' ]\n[ \"$#\" = 45 ]\nprintf '%s' '{output}'\nexit {exit}\nfi\n"
     );
     fs::write(&path, script).unwrap();
     fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
@@ -127,8 +132,59 @@ fn native_runner_uses_closed_environment_exact_inventory_and_retained_processes(
         record["inventory"]["selected"].as_array().unwrap().len(),
         42
     );
+    assert_eq!(record["schema"]["version"], 2);
+    assert_eq!(record["workers"], 2);
     assert!(root.path().join("inventory.stdout.log").is_file());
     assert!(root.path().join("execute.stderr.log").is_file());
+}
+
+#[test]
+fn native_runner_binds_recorded_workers_to_exact_argv_without_changing_inventory() {
+    for workers in [1, 16] {
+        let root = tempfile::tempdir().unwrap();
+        let work = tempfile::tempdir().unwrap();
+        let executable = harness_with_workers(root.path(), &success(), 0, workers);
+        let control = process::ProcessControl::default();
+        let mut runner = runner(root.path(), &control);
+        runner.receipt.workers = workers;
+        runner
+            .evaluate(&executable, &root.path().join("candidate"), work.path())
+            .unwrap();
+        let inventory = runner.receipt.inventory.as_ref().unwrap();
+        let command = &runner.receipt.phases[1].command;
+        assert_eq!(command[2], format!("--test-threads={workers}"));
+        assert!(command[4..].iter().eq(inventory.selected.iter()));
+        assert_eq!(inventory.selected.len(), 42);
+        let receipt: serde_json::Value =
+            serde_json::from_slice(&fs::read(root.path().join("receipt.json")).unwrap()).unwrap();
+        assert_eq!(receipt["workers"], workers);
+        assert_eq!(receipt["phases"][1]["command"][2], command[2]);
+        assert!(runner.receipt.phases.iter().all(|phase| {
+            super::super::passed(&phase.process)
+                && phase.process.stdout_limit_bytes == OUTPUT_LIMIT
+                && phase.process.stderr_limit_bytes == OUTPUT_LIMIT
+        }));
+    }
+}
+
+#[test]
+fn native_runner_refuses_invalid_recorded_workers_before_starting_processes() {
+    for workers in [0, 17] {
+        let root = tempfile::tempdir().unwrap();
+        let work = tempfile::tempdir().unwrap();
+        let executable = harness(root.path(), &success(), 0);
+        let control = process::ProcessControl::default();
+        let mut runner = runner(root.path(), &control);
+        runner.receipt.workers = workers;
+        assert!(
+            runner
+                .evaluate(&executable, &root.path().join("candidate"), work.path())
+                .is_err()
+        );
+        assert!(runner.receipt.phases.is_empty());
+        assert!(runner.receipt.inventory.is_none());
+        assert!(!runner.receipt.cleanup_complete);
+    }
 }
 
 #[test]

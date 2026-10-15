@@ -718,25 +718,6 @@ fn copied_binary_block_scope_and_private_root_rejections_leave_the_complete_requ
 }
 
 #[test]
-#[ignore = "requires an authenticated predecessor executable in LKJSCRIPT_PREDECESSOR_CANDIDATE"]
-fn authentic_predecessor_rejects_structural_input_before_writing() {
-    let predecessor = std::env::var_os("LKJSCRIPT_PREDECESSOR_CANDIDATE")
-        .expect("exact authenticated predecessor executable path");
-    let public = Public::with_executable(Path::new(&predecessor), "minimal");
-    let request = public.write("new-syntax.lkjc", &depth_request(&public.revision(), 0, 1));
-    let head = std::fs::read(public.project.join("HEAD")).unwrap();
-    public.failure(&[
-        "--project",
-        path(&public.project),
-        "change",
-        "plan",
-        "--input-file",
-        path(&request),
-    ]);
-    assert_eq!(head, std::fs::read(public.project.join("HEAD")).unwrap());
-}
-
-#[test]
 fn copied_binary_f64_review_parity_decimal_ingress_and_canonical_observation() {
     let public = Public::new("minimal");
     let discovery = public.success(&["capabilities", "--section", "change"]);
