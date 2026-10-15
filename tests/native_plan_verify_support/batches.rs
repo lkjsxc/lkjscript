@@ -317,7 +317,10 @@ fn batching_retains_byte_case_and_empty_bounds_independently() -> PackingResult<
     let samples: Vec<_> = (0..257)
         .map(|index| (json!(index), json!(3 * index + 5)))
         .collect();
-    assert_eq!(ranges(&samples)?, [0..257]);
+    assert_eq!(
+        ranges(&samples)?.as_slice(),
+        std::slice::from_ref(&(0..257))
+    );
     let batch = materialize(&samples, 0)?;
     let arguments = decode_strict(batch.arguments.as_bytes(), JsonLimits::default())?;
     assert_eq!(arguments[0], json!((0..257).collect::<Vec<_>>()));
@@ -372,7 +375,7 @@ fn batching_checks_output_items_and_indexed_single_pair_refusals() -> PackingRes
         100_000
     );
     let exact = [(json!(vec![0; 99998]), json!(vec![1; 99999]))];
-    assert_eq!(ranges(&exact)?, [0..1]);
+    assert_eq!(ranges(&exact)?.as_slice(), std::slice::from_ref(&(0..1)));
     materialize(&exact, 0)?;
     for (side, pair) in [
         ("input", (json!(vec![0; 99999]), json!(null))),
@@ -396,7 +399,7 @@ fn batching_uses_exact_escaped_bytes_and_inclusive_single_pair_byte_bounds() -> 
         (json!(i64::MIN), json!(i64::MAX)),
         (json!(i64::MAX), json!(i64::MIN)),
     ];
-    assert_eq!(ranges(&samples)?, [0..3]);
+    assert_eq!(ranges(&samples)?.as_slice(), std::slice::from_ref(&(0..3)));
     let batch = materialize(&samples, 0)?;
     assert_eq!(
         batch.arguments,
@@ -411,7 +414,7 @@ fn batching_uses_exact_escaped_bytes_and_inclusive_single_pair_byte_bounds() -> 
         json!("x".repeat(maximum - 6)),
         json!("y".repeat(maximum - 4)),
     )];
-    assert_eq!(ranges(&exact)?, [0..1]);
+    assert_eq!(ranges(&exact)?.as_slice(), std::slice::from_ref(&(0..1)));
     let batch = materialize(&exact, 0)?;
     assert_eq!(batch.input.bytes, maximum);
     assert_eq!(
@@ -440,7 +443,7 @@ fn batching_preserves_asymmetric_reader_container_depth_limits() -> PackingResul
         (0..count).fold(Value::Null, |value, _| Value::Array(vec![value]))
     }
     let exact = [(nested(125), nested(126))];
-    assert_eq!(ranges(&exact)?, [0..1]);
+    assert_eq!(ranges(&exact)?.as_slice(), std::slice::from_ref(&(0..1)));
     materialize(&exact, 0)?;
     for (side, pair) in [
         ("input", (nested(126), Value::Null)),
