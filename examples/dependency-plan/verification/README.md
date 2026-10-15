@@ -124,12 +124,16 @@ Source invalidity and malformed claims are distinct from runtime resource refusa
 
 ## Independent acceptance evidence
 
-The maintained regression first builds and runs the standalone checker before
-creating any producer project, then imports its exact transport into both original
-carrier commands and all four independent stage-storage combinations.
+The maintained regression first builds the standalone checker and runs three
+cases before any producer project or artifact exists, then imports its exact
+transport into both original carrier commands and all four independent
+stage-storage combinations.
 It compares complete checked plans and standalone reports for 4,635 source cases,
 including all three-vertex directed graphs and all loop-free four-vertex graphs,
-before and after deleting authoring projects and transports.
+once after deleting authoring projects and transports. Eight representative
+nonempty attached samples retain coverage of the six checked-plan targets,
+standalone reports and complete-outcome reports before deletion. The combined
+detached matrix has 53,006 conditions in 46 batch rows.
 
 A separate adversarial family enumerates all 512 three-vertex directed graphs and,
 for each, every canonical set partition and every gap-free assignment of its
@@ -144,12 +148,13 @@ It does not run the native finish-order SCC algorithm, producer readiness queue 
 checker traversal. Seventeen fixed native tests exercise both evaluators, including both one-way
 false merges, consumer propagation of checker failure and exact negative outcomes.
 The [complete-outcome extension](outcomes/README.md) retains its additional
-8,744 claims per source-present/deleted phase and refusal/recovery checks. Three
-public node/root capacity sources fit the ordinary CLI JSON envelope; full native
-edge-limit and simultaneous-overflow coverage runs separately through the host
-oracle and compiler embedding.
+8,744 detached claims, one nonempty attached sample and refusal/recovery checks.
+Three public node/root capacity sources fit the ordinary CLI JSON envelope; full
+native edge-limit and simultaneous-overflow coverage runs separately through the
+host oracle and compiler embedding.
 The public matrix uses production execution, not differential evaluator pairs.
 
+Two ordinary detached executable boundaries remain separate from the matrix.
 Every successful public run checks joined cleanup and no remaining owned handles,
 locals, operands, frames, transactions or type bindings. Test batches fit the
 unchanged 1 MiB argument and 100,000 aggregate JSON-entry limits; large inputs

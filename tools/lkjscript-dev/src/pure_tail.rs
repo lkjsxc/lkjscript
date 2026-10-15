@@ -1,6 +1,7 @@
 //! Bounded copied-public-executable acceptance for pure tail execution.
 
 mod nominal_data;
+mod source_batch;
 
 use crate::{authority, error::DevError, evidence, process, pure_tail_program};
 use lkjscript::platform::contributor::offline_producer_inventory;
@@ -317,6 +318,7 @@ pub(crate) struct Receipt {
     pub(crate) elapsed_nanoseconds: u64,
     peak_owned_file_bytes: u64,
     commands: Vec<CommandEvidence>,
+    source_batch: Option<source_batch::Evidence>,
     outcomes: BTreeMap<String, serde_json::Value>,
     files: Vec<evidence::FileProof>,
     pub(crate) cleanup_complete: bool,
@@ -411,7 +413,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         binary: copied,
         started: Instant::now(),
         receipt: Receipt {
-            schema: "lkjscript-pure-tail-acceptance-6".to_owned(),
+            schema: "lkjscript-pure-tail-acceptance-7".to_owned(),
             status: "failed".to_owned(),
             candidate_sha256,
             copied_candidate_sha256,
@@ -421,6 +423,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
             elapsed_nanoseconds: 0,
             peak_owned_file_bytes: 0,
             commands: Vec::new(),
+            source_batch: None,
             outcomes: BTreeMap::new(),
             files: Vec::new(),
             cleanup_complete: false,
@@ -685,17 +688,13 @@ impl Context {
             before == authority::observe_graph_authority(&package.path)?,
             "pure run changed complete accepted inventory",
         )?;
+        let outcome = execution_outcome(&records, expected, &before)?;
         let production = integer_field(&records, "production-peak-call-frames")?;
         let reference = integer_field(&records, "reference-peak-call-frames")?;
-        require(
-            production <= 8 && reference <= 8,
-            "tail chain retained more than eight live call frames",
-        )?;
-        let transfers = (
-            integer_field(&records, "production-tail-transfers")?,
-            integer_field(&records, "reference-tail-transfers")?,
+        self.receipt.outcomes.insert(
+            format!("run-{}-{target}", self.receipt.commands.len()),
+            outcome,
         );
-        self.receipt.outcomes.insert(format!("run-{}-{target}",self.receipt.commands.len()), serde_json::json!({"expected":expected,"preparation":preparation_work(&records)?,"production_peak_call_frames":production,"reference_peak_call_frames":reference,"production_tail_transfers":transfers.0,"reference_tail_transfers":transfers.1,"production_instructions":integer_field(&records,"production-instructions")?,"reference_expressions":integer_field(&records,"reference-expressions")?,"production_value_work":value_work(&records,"production")?,"reference_value_work":value_work(&records,"reference")?,"production_allocated_bytes":integer_field(&records,"production-allocated-bytes")?,"production_allocation_charges":integer_field(&records,"production-allocation-charges")?,"reference_allocated_bytes":integer_field(&records,"reference-allocated-bytes")?,"reference_allocation_charges":integer_field(&records,"reference-allocation-charges")?,"production_collection_items":integer_field(&records,"production-collection-items")?,"reference_collection_items":integer_field(&records,"reference-collection-items")?,"authority":before}));
         Ok((production, reference))
     }
 
@@ -774,6 +773,26 @@ impl Context {
             .insert("bounded_stack".to_owned(), receipt);
         Ok(())
     }
+}
+
+fn execution_outcome(
+    records: &[CompactRecord],
+    expected: &str,
+    before: &authority::AuthorityObservation,
+) -> Result<serde_json::Value, DevError> {
+    let production = integer_field(records, "production-peak-call-frames")?;
+    let reference = integer_field(records, "reference-peak-call-frames")?;
+    require(
+        production <= 8 && reference <= 8,
+        "tail chain retained more than eight live call frames",
+    )?;
+    let transfers = (
+        integer_field(records, "production-tail-transfers")?,
+        integer_field(records, "reference-tail-transfers")?,
+    );
+    Ok(
+        serde_json::json!({"expected":expected,"preparation":preparation_work(records)?,"production_peak_call_frames":production,"reference_peak_call_frames":reference,"production_tail_transfers":transfers.0,"reference_tail_transfers":transfers.1,"production_instructions":integer_field(records,"production-instructions")?,"reference_expressions":integer_field(records,"reference-expressions")?,"production_value_work":value_work(records,"production")?,"reference_value_work":value_work(records,"reference")?,"production_allocated_bytes":integer_field(records,"production-allocated-bytes")?,"production_allocation_charges":integer_field(records,"production-allocation-charges")?,"reference_allocated_bytes":integer_field(records,"reference-allocated-bytes")?,"reference_allocation_charges":integer_field(records,"reference-allocation-charges")?,"production_collection_items":integer_field(records,"production-collection-items")?,"reference_collection_items":integer_field(records,"reference-collection-items")?,"authority":before}),
+    )
 }
 
 fn workflow(context: &mut Context) -> Result<(), DevError> {
@@ -1074,206 +1093,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
     fs::remove_dir_all(&library.path)?;
     fs::remove_file(&library.container)?;
     fs::remove_file(&standard.container)?;
-    for (target, arguments, expected) in [
-        ("map", "[[],3,5]", "[]"),
-        ("map", "[[1],3,5]", "[8]"),
-        ("map", "[[1,2,4],3,5]", "[8,11,17]"),
-        ("map", "[[1,2,4],1,0]", "[1,2,4]"),
-        (
-            "map-aliases",
-            "[[1,2,4]]",
-            r#"{"left":[8,11,17,99],"mapped":[8,11,17],"original":[1,2,4],"right":[8,11,17,-7]}"#,
-        ),
-        ("map-types", "[[42,1,42]]", r#"["true","false","true"]"#),
-        ("map-composed", "[[42,1,42]]", r#"["true","false","true"]"#),
-    ] {
-        context.run(&consumer, target, arguments, expected)?;
-    }
-    for n in [256_i64, 1024, 4096, 8192] {
-        for sample in 0..4 {
-            let input = (0..n).collect::<Vec<_>>();
-            let expected = (0..n).map(|x| 3 * x + 5).collect::<Vec<_>>();
-            if n == 8192 {
-                require(
-                    expected.iter().sum::<i64>() == 100691968,
-                    "independent map sum",
-                )?;
-            }
-            context.run(
-                &consumer,
-                "map",
-                &serde_json::to_string(&serde_json::json!([input, 3, 5]))?,
-                &serde_json::to_string(&expected)?,
-            )?;
-            let key = format!("run-{}-map", context.receipt.commands.len());
-            let outcome = context
-                .receipt
-                .outcomes
-                .get_mut(&key)
-                .ok_or_else(|| DevError::corrupt("mapping sample absent"))?;
-            outcome["items"] = serde_json::json!(n);
-            outcome["sample"] = serde_json::json!(sample);
-            outcome["warmup"] = serde_json::json!(sample == 0);
-            for tier in ["production", "reference"] {
-                let work: ValueWork =
-                    serde_json::from_value(outcome[format!("{tier}_value_work")].clone())?;
-                verify_mapping_collection_items(outcome, tier, n as u64)?;
-                require(
-                    work.internal_guard_descendant_visits == 0
-                        && work.lists.full_materializations == 0
-                        && work.lists.materialized_elements == 0
-                        && work.lists.element_handle_allocations == n as u64
-                        && work.lists.element_handle_copies <= 31 * n as u64
-                        && work.lists.element_slots_reserved == 32 * n as u64
-                        && work.lists.branch_slots_reserved <= 128 * (n as u64 / 32)
-                        && work.lists.node_visits <= 12 * n as u64,
-                    "persistent mapping exceeded derived physical work bounds",
-                )?;
-            }
-        }
-    }
-    let before = authority::observe_graph_authority(&consumer.path)?;
-    let failed = context.cli(
-        Some(&consumer.path),
-        &[
-            "run",
-            "map",
-            "--arguments",
-            "[[1,9223372036854775807,4],3,5]",
-        ],
-        false,
-    )?;
-    require(
-        field(&failed, "diagnostic", "code")? == "normalized_integer_overflow"
-            && !failed.iter().any(|record| record.operation == "execution")
-            && authority::observe_graph_authority(&consumer.path)? == before,
-        "mapping trap installed a result or changed meaning",
-    )?;
-    context.receipt.outcomes.insert(
-        "persistent-map".to_owned(),
-        serde_json::json!({
-            "classification":"fresh passed", "large_length":8192, "large_sum":100691968,
-            "configured":[8,11,17], "aliases_unchanged":true, "producer_removed":true,
-            "generic_heterogeneous_composition":true, "overflow_no_partial_result":true,
-            "samples_per_size":4, "sizes":[256,1024,4096,8192]
-        }),
-    );
-    context.run(
-        &consumer,
-        "configured",
-        "[3,5,-2,1,[1,2,4]]",
-        r#"{"first":36,"second":-11}"#,
-    )?;
-    for (target, arguments, expected) in [
-        (
-            "constant-text",
-            "[\"runtime text\",[1,2,4]]",
-            "[\"runtime text\",\"runtime text\",\"runtime text\"]",
-        ),
-        ("constant-text", "[\"runtime text\",[]]", "[]"),
-        (
-            "constant-lists",
-            "[[\"first\",\"second\"],[1,2]]",
-            "[[\"first\",\"second\"],[\"first\",\"second\"]]",
-        ),
-        (
-            "generic-pair",
-            "[{\"scale\":3,\"bias\":5},{\"scale\":-2,\"bias\":4},[1,2,4]]",
-            "{\"again\":[8,11,17],\"first\":[8,11,17],\"second\":[2,0,-4]}",
-        ),
-        ("binding-empty", "[]", "9"),
-        ("binding-partial", "[]", "9"),
-        ("binding-repeated", "[]", "9"),
-        ("binding-complete", "[]", "9"),
-        ("binding-factory", "[]", "12"),
-        ("compose-forward", "[4,3,5]", "17"),
-        ("compose-reverse", "[4,3,5]", "27"),
-        ("compose-types", "[42]", "\"true\""),
-        ("compose-types", "[1]", "\"false\""),
-        ("binding-thunk-created", "[]", "42"),
-        ("binding-capture-once", "[]", "9"),
-        ("binding-constant", "[]", "9"),
-    ] {
-        context.run(&consumer, target, arguments, expected)?;
-    }
-    for target in [
-        "forward",
-        "forward-generic",
-        "bound-forward",
-        "nominal-forward",
-        "nominal-bound",
-    ] {
-        let mut matrix = Vec::new();
-        for n in [1_i64, 256, 4096] {
-            for k in [1_i64, 64, 1024] {
-                let items = serde_json::json!((1..=n).collect::<Vec<_>>());
-                let input = if target.starts_with("nominal-") {
-                    serde_json::json!({"revision":7,"items":items})
-                } else {
-                    items
-                };
-                let arguments = serde_json::to_string(&serde_json::json!([k, input]))?;
-                context.run(&consumer, target, &arguments, &n.to_string())?;
-                let key = format!("run-{}-{target}", context.receipt.commands.len());
-                let outcome = &context.receipt.outcomes[&key];
-                matrix.push(MatrixCell {
-                    n,
-                    k,
-                    production: serde_json::from_value(outcome["production_value_work"].clone())?,
-                    reference: serde_json::from_value(outcome["reference_value_work"].clone())?,
-                    preparation: serde_json::from_value(outcome["preparation"].clone())?,
-                });
-            }
-        }
-        verify_matrix(&matrix)?;
-        context.receipt.outcomes.insert(
-            format!("checked-value-{target}-matrix"),
-            serde_json::to_value(matrix)?,
-        );
-    }
-    for n in [256_i64, 1024, 4096] {
-        for sample in 0..4 {
-            let arguments = serde_json::to_string(&vec![(1..=n).collect::<Vec<_>>()])?;
-            context.run(&consumer, "sum", &arguments, &(n * (n + 1) / 2).to_string())?;
-            let key = format!("run-{}-sum", context.receipt.commands.len());
-            let outcome = context
-                .receipt
-                .outcomes
-                .get_mut(&key)
-                .ok_or_else(|| DevError::corrupt("measurement outcome is absent"))?;
-            outcome["sample"] = serde_json::json!(sample);
-            outcome["warmup"] = serde_json::json!(sample == 0);
-            outcome["items"] = serde_json::json!(n);
-        }
-    }
-    let mut peak = None;
-    for count in [0_i64, 1, 256, 1024, 4096, 8192] {
-        let arguments = serde_json::to_string(&vec![(1..=count).collect::<Vec<_>>()])?;
-        let observed = context.run(
-            &consumer,
-            "sum",
-            &arguments,
-            &(count * (count + 1) / 2).to_string(),
-        )?;
-        if count >= 256 {
-            require(
-                peak.is_none_or(|previous| previous == observed),
-                "live frame peak grows with tail-chain length",
-            )?;
-            peak = Some(observed);
-        }
-    }
-    for (target, args, expected) in [
-        ("count", "[8192]", "0"),
-        ("even", "[8192]", "true"),
-        ("even", "[8191]", "false"),
-        ("generic-i64", "[8192,-17,true]", "-17"),
-        ("generic-bool", "[8192,true,-17]", "true"),
-        ("ordered", "[[1,2,4,8]]", "5"),
-        ("ordered", "[[8,4,2,1]]", "-5"),
-    ] {
-        context.run(&consumer, target, args, expected)?;
-    }
+    source_batch::execute(context, &consumer)?;
     context.probe(&consumer)?;
     let current = consumer.path.join("derived/compiler/CURRENT");
     fs::remove_file(&current)?;
@@ -2071,7 +1891,7 @@ pub(crate) fn read_transferred_receipt(
         .ok_or_else(|| DevError::corrupt("receipt parent missing"))?
         .canonicalize()?;
     require(
-        receipt.schema == "lkjscript-pure-tail-acceptance-6"
+        receipt.schema == "lkjscript-pure-tail-acceptance-7"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -2141,6 +1961,7 @@ pub(crate) fn read_transferred_receipt(
         probes.len() == 2,
         "pure-tail source-bound probe evidence omitted",
     )?;
+    source_batch::read(&receipt, &root)?;
     require(
         receipt
             .outcomes

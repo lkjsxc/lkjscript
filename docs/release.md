@@ -10,8 +10,10 @@ inputs/source drift cannot pass through exclusions or raised limits.
 ## Coverage and admission
 
 [Verification](spec/verification.md) owns all gates, inventories and original-reader
-requirements: standalone full is 29 gates; release is fresh 23-gate release-source
+requirements: standalone full is 29 gates; release requires 23 fresh source gates
 plus exact-final-byte six owners/public harness/static ELF/two userlands/installation.
+A fresh full original supplies those 23 under identical context: re-admit all 29,
+preserving its bytes/profile. Final-byte owners remain mandatory.
 Transfer and anonymous exact/latest require small installed lifecycles without broad
 replay or rebuild. Every mandatory case passes once; uploads/skipped stages prove no
 terminal. [Bootstrap](../tools/bootstrap-verifier.sh) retains immutable tools;
@@ -36,7 +38,11 @@ Bootstrap in that clone: a check command remains bound to its compiled checkout.
 Retain the exact 0755 verifier handoff before changed/full/source checks, preserving
 the original 0555 bootstrap executable and evidence. Source admission later compares
 verifier bytes/mode and the approved environment, including `CARGO_TARGET_DIR`.
-Use absent owned outputs and keep source, environment and tools stable:
+Use absent owned outputs and keep source, environment and tools stable.
+
+After fresh full with identical source/verifier/environment, pass its original
+receipt; skip release-source. Otherwise run release-source below, as hosted Release
+does. Host results never replace mandatory final-byte proof.
 
 ```sh
 BOOTSTRAP_VERIFIER=/absolute/immutable/lkjscript-dev

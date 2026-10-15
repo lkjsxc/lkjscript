@@ -54,8 +54,12 @@ remain separate. Checker/site retain workspace Clippy/tests.
 Receipts bind complete source/input/DAG/command/toolchain/environment/dependency/
 verifier originals, bounded logs and immutable outputs. Honor producers: later Cargo
 features may replace shared paths. Reuse needs identical complete context and a
-permitting profile; final full/source evidence is fresh. Drift, absent originals,
-skipped/unrun/failed/cancelled/unavailable work or unjoined cleanup cannot pass.
+permitting profile; final full/source evidence is fresh. Source admission accepts
+only maintained full or release-source originals: re-admit every producer gate
+under identical input/DAG/runtime bindings, then count the required 23-gate closure.
+Never rerun source after full or rewrite its receipt; final-byte proof stays mandatory.
+Drift, absent originals, skipped/unrun/failed/cancelled/unavailable work or unjoined
+cleanup cannot pass.
 Reporting descendants get actual scoped checks without relabelling product proof.
 Keep logs/binaries in .artifacts, not tracked diaries.
 

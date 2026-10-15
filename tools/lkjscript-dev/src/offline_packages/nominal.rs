@@ -330,6 +330,136 @@ fn output(
     Ok(value)
 }
 
+fn source_cases() -> Vec<source_batch::Case> {
+    let mut cases = Vec::new();
+    for (name, original_items, changed_items) in [
+        ("i64", json!([1, 2, 4]), json!([-2, 0, 9])),
+        ("text", json!(["a", "bc"]), json!(["changed"])),
+        ("nested", json!([[1, 2], [], [4]]), json!([[9], []])),
+        (
+            "owned",
+            json!([{"text":"one"},{"text":"two"}]),
+            json!([{"text":"changed"}]),
+        ),
+    ] {
+        let original = json!({"revision":7,"items":original_items});
+        let changed = json!({"revision":8,"items":changed_items});
+        let expected = json!({"changed":changed,"snapshot":original});
+        let label = format!("{name}-retention");
+        cases.push(source_batch::Case::success(
+            &label,
+            &label,
+            json!([original,{"case":"replace","value":changed}]),
+            expected,
+        ));
+    }
+    for (name, items) in [
+        ("i64", json!([1, 2, 4])),
+        ("text", json!(["a", "bc"])),
+        ("nested", json!([[1, 2], [], [4]])),
+        ("owned", json!([{"text":"one"},{"text":"two"}])),
+    ] {
+        let original = json!({"revision":7,"items":items});
+        for (suffix, arguments) in [
+            ("keep", json!([original,{"case":"keep"}])),
+            ("snapshot", json!([original])),
+            ("identity", json!([original])),
+        ] {
+            let label = format!("{name}-{suffix}");
+            cases.push(source_batch::Case::success(
+                &label,
+                &label,
+                arguments,
+                original.clone(),
+            ));
+        }
+    }
+    let replacement = json!({"revision":8,"items":[-2,0,9]});
+    cases.push(source_batch::Case::success(
+        "i64-replace",
+        "i64-keep",
+        json!([{"revision":7,"items":[1,2,4]},{"case":"replace","value":replacement}]),
+        replacement,
+    ));
+    for (name, scale, bias, items, expected) in [
+        ("map-first", 3, 5, json!([1, 2, 4]), json!([8, 11, 17])),
+        ("map-second", -2, 4, json!([1, 2, 4]), json!([2, 0, -4])),
+        ("map-empty", 3, 5, json!([]), json!([])),
+    ] {
+        let expected = json!({"revision":7,"items":expected});
+        cases.push(source_batch::Case::success(
+            name,
+            "map",
+            json!([{"revision":7,"items":items},scale,bias]),
+            expected,
+        ));
+    }
+    for (name, expected) in [("pair-first", json!(1)), ("pair-second", json!("a"))] {
+        cases.push(source_batch::Case::success(
+            name,
+            name,
+            json!([1, "a"]),
+            expected,
+        ));
+    }
+    let heterogeneous = json!({"revision":7,"items":[{"text":"1"},{"text":"2"},{"text":"4"}]});
+    cases.push(source_batch::Case::success(
+        "heterogeneous",
+        "heterogeneous",
+        json!([{"revision":7,"items":[1,2,4]}]),
+        heterogeneous,
+    ));
+    for n in [256, 1024, 4096, 8192] {
+        let input = (0..n).collect::<Vec<i64>>();
+        let expected = input.iter().map(|i| 3 * i + 5).collect::<Vec<_>>();
+        cases.push(source_batch::Case::success(
+            &format!("map-{n}"),
+            "map",
+            json!([{"revision":7,"items":input},3,5]),
+            json!({"revision":7,"items":expected}),
+        ));
+    }
+    cases
+}
+
+pub(super) fn validate_batch(receipt: &Receipt, root: &Path) -> Result<(), DevError> {
+    let cases = source_cases();
+    require(
+        cases.len() == 27,
+        "nominal complete source batch inventory differs",
+    )?;
+    let observed = source_batch::read(
+        receipt,
+        root,
+        "nominal",
+        &Path::new(&receipt.isolated_root).join("nominal-consumer"),
+        "nominal-after-producer-removal.lkja",
+        &cases,
+        &cases[0],
+    )?;
+    for (case, row) in cases.iter().zip(observed.rows).take(23) {
+        require(
+            receipt.nominal.results.get(&case.id) == row.result.as_ref(),
+            "nominal result receipt differs from actual batch row",
+        )?;
+    }
+    let library = receipt
+        .inventories
+        .iter()
+        .flat_map(|inventory| &inventory.packages)
+        .find(|package| {
+            package.package == receipt.nominal.library_package
+                && package.semantic_revision == receipt.nominal.library_revision
+        })
+        .ok_or_else(|| DevError::corrupt("nominal original library source missing"))?;
+    require(
+        receipt.producer_inventories[observed.inventory]
+            .dependencies
+            .contains(&(library.package.clone(), library.package_revision.clone())),
+        "nominal batch changed its exact original library selection",
+    )
+}
+
 pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<(), DevError> {
     // The preceding offline HTTP witness removes all of its own inputs. Obtain the exact
     // built-in dependency for this independently authored workload through public export.
@@ -512,104 +642,24 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
     context.build(&consumer, "nominal-after-producer-removal")?;
     // This closure contributes the 116 current standard tests and no new graph test.
     context.check(&consumer, 116, 3)?;
-    for (name, original_items, changed_items) in [
-        ("i64", json!([1, 2, 4]), json!([-2, 0, 9])),
-        ("text", json!(["a", "bc"]), json!(["changed"])),
-        ("nested", json!([[1, 2], [], [4]]), json!([[9], []])),
-        (
-            "owned",
-            json!([{"text":"one"},{"text":"two"}]),
-            json!([{"text":"changed"}]),
-        ),
-    ] {
-        let original = json!({"revision":7,"items":original_items});
-        let changed = json!({"revision":8,"items":changed_items});
-        let expected = json!({"changed":changed,"snapshot":original});
-        let label = format!("{name}-retention");
-        let value = output(
-            context,
-            &consumer,
-            &label,
-            json!([original,{"case":"replace","value":changed}]),
-            &expected,
-        )?;
-        context.receipt.nominal.results.insert(label, value);
-    }
-    for (name, items) in [
-        ("i64", json!([1, 2, 4])),
-        ("text", json!(["a", "bc"])),
-        ("nested", json!([[1, 2], [], [4]])),
-        ("owned", json!([{"text":"one"},{"text":"two"}])),
-    ] {
-        let original = json!({"revision":7,"items":items});
-        for (suffix, arguments) in [
-            ("keep", json!([original,{"case":"keep"}])),
-            ("snapshot", json!([original])),
-            ("identity", json!([original])),
-        ] {
-            let label = format!("{name}-{suffix}");
-            let value = output(context, &consumer, &label, arguments, &original)?;
-            context.receipt.nominal.results.insert(label, value);
-        }
-    }
-    let replacement = json!({"revision":8,"items":[-2,0,9]});
-    let value = output(
+    let cases = source_cases();
+    let observed = source_batch::execute(
         context,
         &consumer,
-        "i64-keep",
-        json!([{"revision":7,"items":[1,2,4]},{"case":"replace","value":replacement}]),
-        &replacement,
+        "nominal",
+        "nominal-after-producer-removal.lkja",
+        &cases,
+        &cases[0],
     )?;
-    context
-        .receipt
-        .nominal
-        .results
-        .insert("i64-replace".into(), value);
-    for (name, scale, bias, items, expected) in [
-        ("map-first", 3, 5, json!([1, 2, 4]), json!([8, 11, 17])),
-        ("map-second", -2, 4, json!([1, 2, 4]), json!([2, 0, -4])),
-        ("map-empty", 3, 5, json!([]), json!([])),
-    ] {
-        let expected = json!({"revision":7,"items":expected});
-        let value = output(
-            context,
-            &consumer,
-            "map",
-            json!([{"revision":7,"items":items},scale,bias]),
-            &expected,
-        )?;
-        context.receipt.nominal.results.insert(name.into(), value);
+    for (case, row) in cases.iter().zip(observed.rows).take(23) {
+        context.receipt.nominal.results.insert(
+            case.id.clone(),
+            row.result
+                .ok_or_else(|| DevError::corrupt("nominal successful batch result missing"))?,
+        );
     }
-    for (name, expected) in [("pair-first", json!(1)), ("pair-second", json!("a"))] {
-        let value = output(context, &consumer, name, json!([1, "a"]), &expected)?;
-        context.receipt.nominal.results.insert(name.into(), value);
-    }
-    let heterogeneous = json!({"revision":7,"items":[{"text":"1"},{"text":"2"},{"text":"4"}]});
-    let value = output(
-        context,
-        &consumer,
-        "heterogeneous",
-        json!([{"revision":7,"items":[1,2,4]}]),
-        &heterogeneous,
-    )?;
-    context
-        .receipt
-        .nominal
-        .results
-        .insert("heterogeneous".into(), value);
-    for n in [256, 1024, 4096, 8192] {
-        let input = (0..n).collect::<Vec<i64>>();
-        let expected = input.iter().map(|i| 3 * i + 5).collect::<Vec<_>>();
-        output(
-            context,
-            &consumer,
-            "map",
-            json!([{"revision":7,"items":input},3,5]),
-            &json!({"revision":7,"items":expected}),
-        )?;
-        context.receipt.nominal.maximum_map_items = n as usize;
-        context.receipt.nominal.maximum_map_sum = expected.iter().sum();
-    }
+    context.receipt.nominal.maximum_map_items = 8192;
+    context.receipt.nominal.maximum_map_sum = (0..8192_i64).map(|i| 3 * i + 5).sum();
     let changed = format!(
         "expression.local as=$value value={}\nexpression.local as=$scale value={}\nexpression.local as=$bias value={}\n{}{}replace.body function={} body=$changed\n",
         consumer.symbols["$step-value"],

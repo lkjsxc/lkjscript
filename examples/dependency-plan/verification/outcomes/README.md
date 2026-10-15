@@ -70,13 +70,16 @@ secrets, runtime intrinsics, encodings or product identifiers are changed.
 ## Evidence and remaining trust
 
 The extended public suite retains all original correct-plan and malformed-plan
-coverage, then checks 8,744 complete-outcome claims with sources present and deleted.
+coverage, then checks 8,744 complete-outcome claims in 14 batches once after
+deleting authoring projects and transports. One nonempty attached outcome batch
+remains before deletion.
 These include all 4,635 existing canonical outcomes, 3,072 false negative claims on
 all 512 directed three-vertex graphs, signed diagnostic matrices, three public
 capacity sources and the existing 41 claim mutations/recovery cases. The public
 capacity sources exceed 10,000 nodes, exceed 10,000 roots, or exceed both and
-require node precedence; each fits the unchanged CLI JSON envelope. In each phase,
-27 verified claims are true negative outcomes, not valid graphs.
+require node precedence; each fits the unchanged CLI JSON envelope. Among the
+8,744 detached claims, 27 verified claims are true negative outcomes, not valid
+graphs.
 
 Six separate host oracle cases retain all native one-over and precedence
 obligations, including 100,001 successor entries and simultaneous edge overflows.

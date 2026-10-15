@@ -31,17 +31,45 @@ pub(crate) fn read_release_source_receipt(
     )?;
     let receipt: CheckReceipt = read_original(&path)?;
     let registry = registry::base_registry(&repository, root, &root.join("lkjscript-dev"))?;
-    let requested = registry::profile("release-source")
+    require(
+        matches!(receipt.profile.as_str(), "release-source" | "full"),
+        "source receipt requires the maintained release-source or full profile",
+    )?;
+    let requested = registry::profile(&receipt.profile)
+        .ok_or_else(|| DevError::infrastructure("source producer profile is absent"))?;
+    let required = registry::profile("release-source")
         .ok_or_else(|| DevError::infrastructure("release-source profile is absent"))?;
-    admit(
+    admit_required_source(
         &path,
         &repository,
         commit_sha,
         &receipt,
         &registry,
         &requested,
+        &required,
+    )
+}
+
+fn admit_required_source(
+    path: &Path,
+    repository: &Path,
+    commit_sha: &str,
+    receipt: &CheckReceipt,
+    registry: &registry::GateRegistry,
+    requested: &[String],
+    required: &[String],
+) -> Result<usize, DevError> {
+    // Admit the complete producer unchanged, including full-only owners and its
+    // actual runtime/DAG. A source projection cannot replace original evidence.
+    admit(path, repository, commit_sha, receipt, registry, requested)?;
+    let required = registry.closure(required)?;
+    require(
+        required
+            .iter()
+            .all(|name| receipt.selected_gates.contains(name)),
+        "source producer omits a required release-source gate",
     )?;
-    Ok(receipt.selected_gates.len())
+    Ok(required.len())
 }
 
 fn admit(
@@ -58,7 +86,7 @@ fn admit(
     let selected = registry.closure(requested)?;
     require(
         receipt.contract_version == CHECK_CONTRACT_VERSION
-            && receipt.profile == "release-source"
+            && matches!(receipt.profile.as_str(), "release-source" | "full")
             && receipt.status == AggregateStatus::Passed
             && receipt.failure.is_none()
             && receipt.git_head.as_deref() == Some(commit_sha)
@@ -74,7 +102,7 @@ fn admit(
             && (1..=MAXIMUM_WORKERS).contains(&receipt.maximum_workers)
             && receipt.completed_unix_nanoseconds >= receipt.started_unix_nanoseconds
             && receipt.profile_definition_digest
-                == registry.profile_digest("release-source", requested)?,
+                == registry.profile_digest(&receipt.profile, requested)?,
         "source receipt is not the complete fresh maintained profile",
     )?;
     let inputs_path = root.join("inputs.json");
@@ -618,3 +646,7 @@ mod tests {
 #[cfg(test)]
 #[path = "cargo_outputs/reader_tests.rs"]
 mod cargo_tests;
+
+#[cfg(test)]
+#[path = "reader_superset_tests.rs"]
+mod superset_tests;

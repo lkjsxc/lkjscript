@@ -25,6 +25,7 @@ mod recursive_program;
 mod recursive_schemas;
 mod requirements;
 mod requirements_queue;
+mod source_batch;
 
 use crate::{error::DevError, evidence, process};
 use lkjscript::platform::contributor::{
@@ -2049,6 +2050,7 @@ pub(crate) fn read_transferred_receipt(
     f64::validate(&receipt, &root, 39)?;
     let parameter_type_commands = parameter_type::validate(&receipt, &root, 39..43)?;
     let map_commands = maps::validate(&receipt, &root, 43..47)?;
+    nominal::validate_batch(&receipt, &root)?;
     let named_cwd = Path::new(&receipt.isolated_root)
         .join("named-unrelated")
         .display()

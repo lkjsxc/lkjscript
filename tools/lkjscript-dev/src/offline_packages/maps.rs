@@ -542,14 +542,23 @@ fn run_case(
             case.expected.is_ok(),
         )?
     };
-    validate_result(&output, case)
+    validate_result(&output, case, None)
 }
 
-fn validate_result(output: &[CompactRecord], case: &Case) -> Result<(), DevError> {
+fn validate_result(
+    output: &[CompactRecord],
+    case: &Case,
+    result: Option<&str>,
+) -> Result<(), DevError> {
     match &case.expected {
         Ok(expected) => {
             require(
-                field(output, "execution", "value")? == serde_json::to_string(expected)?,
+                match result {
+                    Some(value) => value == serde_json::to_string(expected)?,
+                    None => {
+                        field(output, "execution", "value")? == serde_json::to_string(expected)?
+                    }
+                },
                 &format!(
                     "{} differs from independently specified ordered map contents",
                     case.name
@@ -620,6 +629,110 @@ fn validate_result(output: &[CompactRecord], case: &Case) -> Result<(), DevError
             field(output, "diagnostic", "code")? == *code,
             "map failure changed its existing trap contract",
         )?,
+    }
+    Ok(())
+}
+
+fn source_case(case: &Case) -> source_batch::Case {
+    source_batch::Case {
+        id: case.name.to_owned(),
+        target: case.target.to_owned(),
+        arguments: case.arguments.clone(),
+        expected: case.expected.clone().map_err(str::to_owned),
+    }
+}
+
+fn phase_cases(cases: &[Case], phase: &str) -> Result<Vec<source_batch::Case>, DevError> {
+    let mut rows: Vec<_> = cases
+        .iter()
+        .filter(|case| case.phase == phase && !case.artifact && case.name != "count-4096")
+        .map(source_case)
+        .collect();
+    require(
+        rows.len() == 16,
+        "map complete source phase inventory differs",
+    )?;
+    // Both original traps remain in order. This final healthy row proves recovery in the
+    // same prepared process after the last refusal, with fresh invocation controls.
+    let recovery = cases
+        .iter()
+        .find(|case| {
+            case.phase == phase
+                && case.target == "aggregate"
+                && case.arguments == SMALL
+                && !case.artifact
+                && case.expected.is_ok()
+        })
+        .ok_or_else(|| DevError::corrupt("map recovery oracle missing"))?;
+    let mut recovery = source_case(recovery);
+    recovery.id = format!("{phase}-batch-recovery");
+    rows.push(recovery);
+    Ok(rows)
+}
+
+fn phase_smoke<'a>(cases: &'a [Case], phase: &str) -> Result<&'a Case, DevError> {
+    cases
+        .iter()
+        .find(|case| {
+            case.name
+                == if phase == "before" {
+                    "before-empty"
+                } else {
+                    "after-empty"
+                }
+        })
+        .ok_or_else(|| DevError::corrupt("map ordinary phase smoke missing"))
+}
+
+fn run_phase(
+    witness: &mut Witness,
+    context: &mut Context,
+    consumer: &Package,
+    cases: &[Case],
+    phase: &str,
+) -> Result<(), DevError> {
+    let rows = phase_cases(cases, phase)?;
+    let smoke = phase_smoke(cases, phase)?;
+    for case in cases
+        .iter()
+        .filter(|case| case.phase == phase && !case.artifact)
+    {
+        fs::write(
+            context
+                .evidence
+                .join(format!("maps-input-{}.json", case.name)),
+            &case.arguments,
+        )?;
+    }
+    let observed = source_batch::execute(
+        context,
+        consumer,
+        &format!("maps-{phase}"),
+        &format!("maps-{phase}.lkja"),
+        &rows,
+        &source_case(smoke),
+    )?;
+    validate_result(&observed.smoke_records, smoke, None)?;
+    require(
+        witness
+            .commands
+            .insert(smoke.name.to_owned(), observed.smoke)
+            .is_none(),
+        "duplicate map ordinary phase boundary",
+    )?;
+    for (row, case) in observed.rows.iter().zip(
+        cases
+            .iter()
+            .filter(|case| case.phase == phase && !case.artifact && case.name != "count-4096"),
+    ) {
+        validate_result(&row.records, case, row.result_json.as_deref())?;
+    }
+    if phase == "before" {
+        let count = cases
+            .iter()
+            .find(|case| case.name == "count-4096")
+            .ok_or_else(|| DevError::corrupt("map storage boundary case missing"))?;
+        run_case(witness, context, consumer, count)?;
     }
     Ok(())
 }
@@ -702,12 +815,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
     )?;
     build(&mut witness, context, &consumer, "before")?;
     let cases = cases()?;
-    for case in cases
-        .iter()
-        .filter(|case| case.phase == "before" && !case.artifact)
-    {
-        run_case(&mut witness, context, &consumer, case)?;
-    }
+    run_phase(&mut witness, context, &consumer, &cases, "before")?;
     context.stage(&consumer, &producer)?;
     for case in cases.iter().filter(|case| case.phase == "staged") {
         run_case(&mut witness, context, &consumer, case)?;
@@ -727,12 +835,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
         true,
     )?;
     build(&mut witness, context, &consumer, "after")?;
-    for case in cases
-        .iter()
-        .filter(|case| case.phase == "after" && !case.artifact)
-    {
-        run_case(&mut witness, context, &consumer, case)?;
-    }
+    run_phase(&mut witness, context, &consumer, &cases, "after")?;
     fs::remove_dir_all(&consumer.path)?;
     witness.consumer_removed_before_bundle_runs = !consumer.path.exists();
     witness.cli(
@@ -1117,8 +1220,45 @@ pub(super) fn validate(
         )?;
         validate_project_source(&checked, &source.package, &source.revision, &bundle)?;
     }
+    let cases = cases()?;
+    let mut source_rows = BTreeMap::new();
+    for (phase, source) in [("before", old_consumer), ("after", new_consumer)] {
+        let rows = phase_cases(&cases, phase)?;
+        let smoke = phase_smoke(&cases, phase)?;
+        let observed = source_batch::read(
+            receipt,
+            root,
+            &format!("maps-{phase}"),
+            &isolated.join("maps-consumer"),
+            &format!("maps-{phase}.lkja"),
+            &rows,
+            &source_case(smoke),
+        )?;
+        require(
+            observed.package == source.package
+                && observed.revision == source.revision
+                && bundles.get(phase) == Some(&observed.bundle)
+                && witness.commands.get(smoke.name) == Some(&observed.smoke)
+                && witness.commands[&format!("{phase}-build")] < observed.smoke
+                && observed.command < witness.commands["consumer-absent"],
+            "map source batch phase or ordinary boundary changed",
+        )?;
+        if phase == "before" {
+            require(
+                observed.command < witness.commands["old-pin-after-stage"],
+                "map pre-stage batch crossed the staging boundary",
+            )?;
+        }
+        validate_result(&observed.smoke_records, smoke, None)?;
+        for (case, row) in rows.into_iter().zip(observed.rows) {
+            require(
+                source_rows.insert(case.id, row).is_none(),
+                "duplicate map source batch row",
+            )?;
+        }
+    }
     let mut copied = Vec::new();
-    for case in cases()? {
+    for case in cases {
         require(
             process::read_bounded(
                 &root.join(format!("maps-input-{}.json", case.name)),
@@ -1148,9 +1288,18 @@ pub(super) fn validate(
             ]);
         }
         command.extend(["--arguments".into(), case.arguments.clone()]);
-        verify_command(receipt, &witness, case.name, command, case.expected.is_ok())?;
-        let records = output(receipt, root, &witness, case.name)?;
-        validate_result(&records, &case)?;
+        let row = source_rows.get(case.name);
+        let records = if let Some(row) = row {
+            row.records.clone()
+        } else {
+            verify_command(receipt, &witness, case.name, command, case.expected.is_ok())?;
+            output(receipt, root, &witness, case.name)?
+        };
+        validate_result(
+            &records,
+            &case,
+            row.and_then(|row| row.result_json.as_deref()),
+        )?;
         if case.artifact {
             require(
                 witness.commands["consumer-absent"] < witness.commands[case.name],
@@ -1183,18 +1332,89 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore = "requires retained focused persistent-map receipt and its original verifier"]
+    #[ignore = "requires retained current offline or focused persistent-map receipt and its original verifier"]
     fn window_originals_reject_omission_and_rehashed_substitution() {
         let source = PathBuf::from(
-            std::env::var_os("LKJSCRIPT_MAP_WINDOW_RECEIPT").expect("focused map receipt"),
+            std::env::var_os("LKJSCRIPT_MAP_WINDOW_RECEIPT").expect("current map receipt"),
         );
         let verifier = PathBuf::from(
             std::env::var_os("LKJSCRIPT_MAP_WINDOW_VERIFIER").expect("original verifier"),
         );
         let mut receipt: Receipt = serde_json::from_slice(&fs::read(&source).unwrap()).unwrap();
         let candidate = PathBuf::from(&receipt.pinned_runtime_path);
-        let admit = |path: &Path| super::super::finite::read_focused(path, &candidate, &verifier);
-        admit(&source).expect("authentic originals pass");
+        let full = match receipt.schema.as_str() {
+            "lkjscript-offline-packages-acceptance-20" => true,
+            "lkjscript-offline-persistent-maps-2" => false,
+            other => panic!("unsupported current map fixture workload: {other}"),
+        };
+        if full {
+            super::super::read_transferred_receipt(&source, &candidate, &verifier)
+                .expect("authentic complete offline original passes");
+        } else {
+            super::super::finite::read_focused(&source, &candidate, &verifier)
+                .expect("authentic complete focused original passes");
+        }
+        let original_schema = receipt.schema.clone();
+        let original_isolated = receipt.isolated_root.clone();
+        let original_runtime = receipt.pinned_runtime_path.clone();
+        let original_processes = serde_json::to_value(
+            receipt
+                .commands
+                .iter()
+                .map(|command| &command.observation)
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+        // The complete original was admitted above. Relocated full-workflow copies
+        // exercise this map owner only: other owners retain their actual original
+        // evidence paths in argv. Never retarget those commands or their observations.
+        let admit = |path: &Path| {
+            if full {
+                let bytes = process::read_bounded(path, 64 * 1024 * 1024)?;
+                let copy: Receipt = serde_json::from_slice(&bytes)?;
+                let root = path
+                    .parent()
+                    .ok_or_else(|| DevError::corrupt("owned map fixture root"))?
+                    .canonicalize()?;
+                require(
+                    evidence::encode_json(&copy)? == bytes
+                        && path.canonicalize()? == root.join("receipt.json")
+                        && copy.schema == original_schema
+                        && copy.status == "fresh passed"
+                        && copy.failure.is_none()
+                        && copy.cleanup_complete
+                        && copy.isolated_root == original_isolated
+                        && !Path::new(&copy.isolated_root).exists()
+                        && copy.pinned_runtime_path == original_runtime
+                        && Path::new(&copy.pinned_runtime_path) == candidate.canonicalize()?
+                        && copy.evidence_root == root.display().to_string()
+                        && copy.environment_names == ["LANG"]
+                        && copy.candidate_sha256
+                            == digest_file(&candidate, MAXIMUM_EXECUTABLE_BYTES)?
+                        && copy.copied_candidate_sha256 == copy.candidate_sha256
+                        && copy.verifier_sha256
+                            == digest_file(&verifier, MAXIMUM_EXECUTABLE_BYTES)?
+                        && serde_json::to_value(
+                            copy.commands
+                                .iter()
+                                .map(|command| &command.observation)
+                                .collect::<Vec<_>>(),
+                        )? == original_processes,
+                    "owned map fixture changed its authenticated workload or actual process bindings",
+                )?;
+                verify_file_inventory(&copy, &root)?;
+                for (index, command) in copy.commands.iter().enumerate() {
+                    verify_observation_files(
+                        &command.observation,
+                        &copy.files,
+                        &format!("command-{index:04}"),
+                    )?;
+                }
+                validate(&copy, &root, 43..47).map(|_| ())
+            } else {
+                super::super::finite::read_focused(path, &candidate, &verifier)
+            }
+        };
         let owned = tempfile::tempdir().unwrap();
         for file in &receipt.files {
             assert_eq!(Path::new(&file.path).components().count(), 1);
@@ -1209,32 +1429,54 @@ mod tests {
         fs::write(&path, evidence::encode_json(&receipt).unwrap()).unwrap();
         admit(&path).expect("owned relocated fixture passes");
 
-        let mut witness: Witness =
-            serde_json::from_str(&receipt.observations["persistent_maps"]).unwrap();
-        let middle = witness.commands["before-page-middle"];
-        witness.commands.remove("before-page-middle").unwrap();
+        let witness_key = "source-batch-maps-before.witness";
         let mut fault = receipt.clone();
-        fault.observations.insert(
-            "persistent_maps".to_owned(),
-            serde_json::to_string(&witness).unwrap(),
-        );
+        fault.observations.remove(witness_key).unwrap();
         fs::write(&path, evidence::encode_json(&fault).unwrap()).unwrap();
         assert!(
             admit(&path)
-                .expect_err("omitted page must reject")
+                .expect_err("omitted source phase must reject")
                 .to_string()
-                .contains("map command missing")
+                .contains("source batch witness missing")
         );
 
         let mut fault = receipt.clone();
-        *fault.commands[middle].command.last_mut().unwrap() = "[[],0,0]".to_owned();
+        let mut batch: Value = serde_json::from_str(&fault.observations[witness_key]).unwrap();
+        let command = usize::try_from(batch["command"].as_u64().unwrap()).unwrap();
+        *fault.commands[command].command.last_mut().unwrap() = "foreign-output.jsonl".into();
         fs::write(&path, evidence::encode_json(&fault).unwrap()).unwrap();
         assert!(
             admit(&path)
-                .expect_err("substituted page invocation must reject")
+                .expect_err("substituted actual batch command must reject")
                 .to_string()
-                .contains("map command did not use exact copied-product inputs")
+                .contains("source batch actual candidate command differs")
         );
+
+        let input_name = "source-batch-maps-before.input.jsonl";
+        let file = owned.path().join(input_name);
+        let original = fs::read_to_string(&file).unwrap();
+        let changed = original.replace(r#"\"group-15\""#, r#"\"group-16\""#);
+        assert_ne!(changed, original);
+        fs::write(&file, changed).unwrap();
+        let mut fault = receipt.clone();
+        let proof = evidence::proof(&file, input_name.to_owned()).unwrap();
+        *fault
+            .files
+            .iter_mut()
+            .find(|file| file.path == input_name)
+            .unwrap() = proof.clone();
+        batch["input"] = serde_json::to_value(proof).unwrap();
+        fault
+            .observations
+            .insert(witness_key.into(), batch.to_string());
+        fs::write(&path, evidence::encode_json(&fault).unwrap()).unwrap();
+        assert!(
+            admit(&path)
+                .expect_err("rehashed literal batch substitution must reject")
+                .to_string()
+                .contains("source batch literal requests omitted, reordered or substituted")
+        );
+        fs::write(file, original).unwrap();
 
         for (name, from, to, expected) in [
             (
@@ -1272,9 +1514,9 @@ mod tests {
         }
 
         let mut fault = receipt.clone();
-        fault.schema = "lkjscript-offline-persistent-maps-1".to_owned();
+        fault.schema = "foreign-workload-cannot-prove-current-maps".to_owned();
         fs::write(&path, evidence::encode_json(&fault).unwrap()).unwrap();
-        admit(&path).expect_err("predecessor schema cannot prove the new workload");
+        admit(&path).expect_err("foreign workload cannot prove the current map matrix");
         fs::write(&path, evidence::encode_json(&receipt).unwrap()).unwrap();
         admit(&path).expect("restored fixture passes");
         admit(&source).expect("originals remain untouched");

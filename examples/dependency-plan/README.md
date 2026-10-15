@@ -179,22 +179,30 @@ precedence are checked through the compiler's separate JSON embedding envelope.
 
 The oracle uses pairwise reachability for components and synchronous longest-path
 relaxation for stages. The product uses two-pass component discovery followed by
-remaining-dependency counts and a readiness queue. Complete results are compared
-for both original component carriers and all four storage combinations before and
-after source deletion: 55,620 proposal comparisons. The suite uses 19 batches of
-at most 256 proposals, making 228 batch executions.
+remaining-dependency counts and a readiness queue. The full matrix compares
+complete results for both original component carriers and all four storage
+combinations once after deleting authoring projects and transports: 27,810
+proposal comparisons in 114 batch rows. Each of the six targets uses the same
+19 batches of at most 256 proposals. Six representative nonempty attached runs
+cover those targets before deletion.
 Each argument file stays within the ordinary 1 MiB input-byte limit; that limit
 is independent of graph capacities and is not increased for this workload.
 Separate native fixed-result tests use both evaluators; the public matrix executes
 production only. These are complete-result comparisons, not differential
 evaluator executions.
 
+After deletion, the host harness strictly reloads and rebinds the artifact, sharing
+only immutable prepared code across fresh invocations. Each matrix uses at most
+four workers. When a candidate executable is selected, it runs these batch rows
+in that executable, in groups of at most 16 rows per process.
+
 Public checks additionally cover single commands, empty batches, malformed final
-unreachable data, resource refusals and recovery. They require unchanged copied
-executable/artifact bytes, zero remaining local handles and joined cleanup. Exact
-passing results and receipts must be read from status, not inferred from this test
-inventory. Retained literal proposals and expected files are evidence only and
-are not read by the detached program.
+unreachable data, resource refusals and recovery. An ordinary detached executable
+boundary remains separate from the matrix rows. These checks require unchanged
+copied executable/artifact bytes, zero remaining local handles and joined cleanup.
+Exact passing results and receipts must be read from status, not inferred from
+this test inventory. Retained literal proposals and expected files are evidence
+only and are not read by the detached program.
 
 The native planner performs bounded node/edge/component visits. Sequence capacity
 can retain spare storage, and the append-only queue retains consumed positions
