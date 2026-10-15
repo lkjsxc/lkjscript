@@ -13,7 +13,8 @@ use serde_json::json;
 use std::fs;
 
 #[test]
-fn native_checker_rejects_false_plans_and_guards_an_independent_producer() {
+fn native_checker_rejects_false_plans_and_guards_an_independent_producer()
+-> Result<(), Box<dyn std::error::Error>> {
     let public = Native::new();
     let executable_hash = digest(&public.root.join("lkjscript"));
     verification::author(&public);
@@ -50,10 +51,10 @@ fn native_checker_rejects_false_plans_and_guards_an_independent_producer() {
         .map(|p| (p.clone(), plan::oracle::expected(p)))
         .collect();
     let normal = verification::cases::normal(&proposals);
-    let plans = verification::batches(&public, "plans", &expected);
-    let claims = verification::batches(&public, "claims", &normal);
+    let plans = verification::batches(&public, "plans", &expected)?;
+    let claims = verification::batches(&public, "claims", &normal)?;
     let exhaustive = verification::cases::exhaustive();
-    let candidates = verification::batches(&public, "candidates", &exhaustive);
+    let candidates = verification::batches(&public, "candidates", &exhaustive)?;
     let mutations = verification::mutations::suite();
     public.input(
         "mutation-index.json",
@@ -69,8 +70,8 @@ fn native_checker_rejects_false_plans_and_guards_an_independent_producer() {
         .iter()
         .map(|(_, input, expected)| (input.clone(), expected.clone()))
         .collect();
-    let adversaries = verification::batches(&public, "mutations", &mutation_samples);
-    let outcome_suite = verification::outcomes::Suite::new(&public);
+    let adversaries = verification::batches(&public, "mutations", &mutation_samples)?;
+    let outcome_suite = verification::outcomes::Suite::new(&public)?;
     let mut observations = Vec::new();
     for phase in ["attached", "source-deleted"] {
         if phase == "source-deleted" {
@@ -190,4 +191,5 @@ fn native_checker_rejects_false_plans_and_guards_an_independent_producer() {
         "verifier_artifact_sha256":verifier_hash,"producer_artifact_sha256":producer_hash,
         "verifier_transport_sha256":verifier_transport_hash,"observations":observations,
     }).to_string());
+    Ok(())
 }

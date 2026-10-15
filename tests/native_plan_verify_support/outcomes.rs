@@ -21,7 +21,7 @@ pub struct Suite {
     true_negatives: usize,
 }
 impl Suite {
-    pub fn new(public: &Native) -> Self {
+    pub fn new(public: &Native) -> Result<Self, Box<dyn std::error::Error>> {
         let samples = outcome_cases::suite();
         let count = samples.len();
         let verified = samples
@@ -34,14 +34,14 @@ impl Suite {
                 input["claim"]["case"] != "valid" && report["case"] == "verified"
             })
             .count();
-        Self {
+        Ok(Self {
             descriptors: DESCRIPTORS
                 .map(|(name, text)| public.input(&format!("{name}.deployment.json"), text)),
-            batches: batches(public, "outcome", &samples),
+            batches: batches(public, "outcome", &samples)?,
             count,
             verified,
             true_negatives,
-        }
+        })
     }
     pub fn compare(&self, public: &Native, phase: &str) -> Vec<Value> {
         self.batches

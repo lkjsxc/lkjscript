@@ -202,13 +202,15 @@ unchanged. Nonproducer workspace tests are serialized and context-rechecked with
 per-unit debug/test-origin admission; this run used a new empty governed target.
 Compiled-test origin admission remains a separate queued follow-up.
 
-The selected next measured slice is native verification batching on current T
-before optimization. The actual cold checker bootstrap build reported 8m 59s,
-a measured preparation cost rather than a saving. Retain complete ordered cases,
-independent oracles, existing quotas/refusals/recovery and joined cleanup. Fuller
-bounded packing needs matched preparation/invocation/encoding and wall/storage
-observations before any improvement claim. Status owns the exact implementation
-run and separate reporting-scope validation.
+The native-verification packing candidate now bounds both input and expected
+output while retaining complete ordered cases, independent oracles, existing
+quotas/refusals/recovery and joined cleanup. Its six packing controls and exact
+native checker case pass; one same-CLI comparison preserves all 18 ordered groups
+and reduces batch executions from 765 to 83. Preparation and total wall time fell
+in that diagnostic pair, while encoding time increased. Fresh full acceptance and
+mainline integration remain pending at the requested pause. Resume that acceptance
+boundary before extending this work or changing performance thresholds. Status
+owns the original measurements, retained resources and exact next action.
 
 Use [admission-local shared interface record maps](decisions/shared-dependency-interfaces.md)
 across importing snapshots. Each exact record map is materialized once per source
