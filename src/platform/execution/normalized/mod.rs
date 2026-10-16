@@ -26,7 +26,7 @@ mod owned_sequence;
 mod owned_storage;
 mod parallel;
 mod password;
-mod prepare;
+pub(crate) mod prepare;
 mod prepared_types;
 pub(crate) mod pure_tail_probe;
 mod queue;

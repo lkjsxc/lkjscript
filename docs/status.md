@@ -39,8 +39,10 @@ includes changed, fresh full, complete workspace harnesses, maintained projects,
 independent expectations, real process/network lifecycles and release target policy.
 Generated discovery comes from the supported capabilities operation.
 
-Next: bounded trap-preserving algebraic optimization and standalone Linux x86_64
-ELF emission, then independent execution checks and normal main integration.
+Phase 4 adds bounded trap-preserving native algebraic optimization and standalone
+Linux x86_64 ELF emission with direct three-way execution checks. Native lowering
+leaves metered bytecode unchanged. The [native backend contract](spec/native-elf.md)
+states its supported instructions, I64 argument boundary and quota distinction.
 Effect/resource analysis and self-hosting remain subsequent work.
 Git records integration; local acceptance does not establish hosted release or
 public promotion. [Verification](spec/verification.md) owns proof and gates;

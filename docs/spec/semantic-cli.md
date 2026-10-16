@@ -957,16 +957,23 @@ reported through `cache=clean-recovery`, rebuilt, and cannot cause wrong semanti
 ## Build
 
 ```text
-build (--output PATH | --deployment PATH)
+build (--output PATH | --deployment PATH | --native-elf PATH [--target NAME])
 ```
 
 Exactly one selector is required, once only. `--output` retains the existing artifact-only
 create-new behavior. `--deployment` derives an immutable deployment snapshot from one observed
 operator descriptor and does not select or run it.
 
-Both selectors use the same artifact preparation and exact dependency closure as check and run.
+All selectors use the same artifact preparation and exact dependency closure as check and run.
 Equal authority, dependencies, compiler compatibility, and options yield identical artifact bytes.
 The deployment selector additionally emits the descriptor described below.
+
+`--native-elf` selects a capability-free command and emits a standalone static Linux
+x86_64 executable with mode `0755`. `--target` selects one command when needed and
+is valid only with this selector. The [native backend contract](native-elf.md)
+defines supported signatures/instructions, direct execution, checked traps, bounded
+optimization and the distinction between native execution and metered VM budgets.
+Unsupported closures fail before create-new output publication.
 
 With `--output`, publication is create-new: validate a bounded absent path and ordinary parent, write and
 synchronize an owned sibling stage, create the visible file without overwrite, synchronize the

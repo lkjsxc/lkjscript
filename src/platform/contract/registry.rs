@@ -1780,8 +1780,8 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         ),
         operation(
             PublicOperation::Build,
-            "Build a deterministic artifact or an unselected immutable deployment snapshot.",
-            "build (--output PATH | --deployment PATH)",
+            "Build a deterministic artifact, an unselected immutable deployment snapshot, or a standalone Linux x86_64 ELF command.",
+            "build (--output PATH | --deployment PATH | --native-elf PATH [--target NAME])",
             (ControlModel::BuildRequest, ControlModel::BuildResult),
             AuthorityEffect::ExternalOutput,
             ProjectRequirement::Required,
@@ -2662,6 +2662,24 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Source,
             "A resident or private runner descriptor omitted execution or runtime policy.",
             "Supply complete live-limit policies and explicit numeric or null cumulative quotas; policy-object omission is reserved for foreground Command execution.",
+        ),
+        diagnostic(
+            "native_elf_unsupported",
+            DiagnosticClass::Source,
+            "The selected native command has an unsupported signature, instruction, capability or closure size.",
+            "Use a closed command with I64 arguments and supported pure operations; no executable was published.",
+        ),
+        diagnostic(
+            "native_elf_capacity",
+            DiagnosticClass::Source,
+            "Native image construction exceeded a bounded image or relocation inventory.",
+            "Reduce the reachable command closure; no executable was published.",
+        ),
+        diagnostic(
+            "native_elf_label",
+            DiagnosticClass::Source,
+            "Native lowering could not resolve an internal code or data label.",
+            "Retain the accepted source and report the emitter failure; no executable was published.",
         ),
         diagnostic(
             "deployment_command_runner",

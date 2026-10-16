@@ -39,6 +39,9 @@ use native_map_entries::support as components;
 
 #[path = "public_cli/native_declarations.rs"]
 mod native_declarations;
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[path = "public_cli/native_elf.rs"]
+mod native_elf;
 #[path = "public_cli/native_guides.rs"]
 mod native_guides;
 #[path = "public_cli/native_policy.rs"]

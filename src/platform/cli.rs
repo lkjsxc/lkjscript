@@ -691,13 +691,31 @@ pub fn execute_build(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
     if arguments.first().map(String::as_str) != Some("build") {
         return Err(usage_error("build requires the build operation name"));
     }
-    ensure_options(&arguments[1..], &["--output", "--deployment"], &[])?;
+    ensure_options(
+        &arguments[1..],
+        &["--output", "--deployment", "--native-elf", "--target"],
+        &[],
+    )?;
     let output_path = option_value(&arguments[1..], "--output")?;
     let deployment_path = option_value(&arguments[1..], "--deployment")?;
-    if output_path.is_some() == deployment_path.is_some() {
+    let native_path = option_value(&arguments[1..], "--native-elf")?;
+    let target = option_value(&arguments[1..], "--target")?;
+    if [
+        output_path.is_some(),
+        deployment_path.is_some(),
+        native_path.is_some(),
+    ]
+    .into_iter()
+    .filter(|present| *present)
+    .count()
+        != 1
+    {
         return Err(usage_error(
-            "build requires exactly one of --output or --deployment",
+            "build requires exactly one of --output, --deployment or --native-elf",
         ));
+    }
+    if target.is_some() && native_path.is_none() {
+        return Err(usage_error("build --target requires --native-elf"));
     }
     let template = deployment_path
         .as_deref()
@@ -705,7 +723,21 @@ pub fn execute_build(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
         .transpose()?;
     let repository = open_normalized_repository(project)?;
     let prepared = prepare_repository(repository)?;
-    let (publication, snapshot) = if let Some(template) = template {
+    let native = native_path
+        .as_ref()
+        .map(|_| super::compiler::elf_x86_64::build(&prepared.program, target.as_deref()))
+        .transpose()?;
+    let (publication, snapshot) = if let (Some(path), Some(image)) = (&native_path, &native) {
+        (
+            super::owned_output::publish_executable_create_new(
+                Path::new(path),
+                &image.bytes,
+                maximum_artifact_output_bytes()?,
+                "native Linux x86_64 ELF",
+            )?,
+            None,
+        )
+    } else if let Some(template) = template {
         let snapshot = template.publish(&prepared, maximum_artifact_output_bytes()?)?;
         (snapshot.artifact.clone(), Some(snapshot))
     } else {
@@ -741,6 +773,19 @@ pub fn execute_build(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
             ("stage-cleanup", publication.stage_cleanup.to_owned()),
         ],
     )?;
+    if let Some(image) = native {
+        append_compact_record(
+            &mut output,
+            "native",
+            &[
+                ("target", image.target.to_string()),
+                ("architecture", "linux-x86_64".to_owned()),
+                ("linkage", "static-syscalls".to_owned()),
+                ("functions", image.functions.to_string()),
+                ("rewrites", image.rewrites.to_string()),
+            ],
+        )?;
+    }
     if let Some(snapshot) = snapshot {
         append_compact_record(
             &mut output,

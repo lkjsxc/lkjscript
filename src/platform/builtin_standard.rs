@@ -37,10 +37,10 @@ const STANDARD_TRANSPORT_COMPRESSED: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/standard.lkjp.deflate"));
 const STANDARD_ARTIFACT_COMPRESSED: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/standard.lkja.deflate"));
-const STANDARD_PACKAGE: &str = "pkg_10000000000000000000000000000001";
+pub(crate) const STANDARD_PACKAGE: &str = "pkg_10000000000000000000000000000001";
 const STANDARD_SEMANTIC_REVISION: &str =
     "rev_2c307fbdefe23a178a2762148447fdac853f8e9b198b53294da8302f28270ced";
-const STANDARD_PACKAGE_REVISION: &str =
+pub(crate) const STANDARD_PACKAGE_REVISION: &str =
     "package_revision_438773e160af5a00bdd72e4c576286d9add6bf5e9948e7b013f37b3228f9b591";
 const STANDARD_PACKAGE_TRANSPORT: &str =
     "package_transport_a0646e9a61973a84b9b29bebf2d3f520a5cb981921b5637e3a38f3956b93bbc7";

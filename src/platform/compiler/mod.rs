@@ -12,6 +12,8 @@
 
 mod artifact;
 mod cache;
+pub(crate) mod egraph_opt;
+pub(crate) mod elf_x86_64;
 mod immutable;
 mod link;
 mod lower;

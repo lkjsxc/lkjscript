@@ -21,7 +21,7 @@ pub fn publish_create_new(
     maximum_bytes: usize,
     label: &str,
 ) -> Result<OwnedOutputReceipt, Diagnostic> {
-    publish_with_access(path, bytes, maximum_bytes, label, false)
+    publish_with_access(path, bytes, maximum_bytes, label, None)
 }
 
 /// Create the private stage with owner-only access before writing any bytes.
@@ -32,7 +32,17 @@ pub(crate) fn publish_private_create_new(
     maximum_bytes: usize,
     label: &str,
 ) -> Result<OwnedOutputReceipt, Diagnostic> {
-    publish_with_access(path, bytes, maximum_bytes, label, true)
+    publish_with_access(path, bytes, maximum_bytes, label, Some(0o600))
+}
+
+/// Publish a complete native executable; only the owned stage receives its mode.
+pub(crate) fn publish_executable_create_new(
+    path: &Path,
+    bytes: &[u8],
+    maximum_bytes: usize,
+    label: &str,
+) -> Result<OwnedOutputReceipt, Diagnostic> {
+    publish_with_access(path, bytes, maximum_bytes, label, Some(0o755))
 }
 
 fn publish_with_access(
@@ -40,7 +50,7 @@ fn publish_with_access(
     bytes: &[u8],
     maximum_bytes: usize,
     label: &str,
-    owner_only: bool,
+    mode: Option<u32>,
 ) -> Result<OwnedOutputReceipt, Diagnostic> {
     if bytes.len() > maximum_bytes {
         return Err(output_error(
@@ -67,18 +77,18 @@ fn publish_with_access(
     let staged = (|| {
         let mut options = OpenOptions::new();
         options.create_new(true).write(true);
-        if owner_only {
+        if let Some(mode) = mode {
             #[cfg(unix)]
             {
                 use std::os::unix::fs::OpenOptionsExt;
-                options.mode(0o600);
+                options.mode(mode & 0o600);
             }
             #[cfg(not(unix))]
             {
                 return Err(output_error(
                     DiagnosticClass::Source,
                     "output_private_access",
-                    "owner-only output publication requires POSIX file permissions",
+                    "explicit output permissions require POSIX file permissions",
                 ));
             }
         }
@@ -88,6 +98,12 @@ fn publish_with_access(
         stage_created = true;
         file.write_all(bytes)
             .map_err(|error| io_error("output_stage_write", &stage, error))?;
+        #[cfg(unix)]
+        if let Some(mode) = mode.filter(|mode| mode & 0o111 != 0) {
+            use std::os::unix::fs::PermissionsExt;
+            file.set_permissions(fs::Permissions::from_mode(mode))
+                .map_err(|error| io_error("output_stage_permissions", &stage, error))?;
+        }
         file.sync_all()
             .map_err(|error| io_error("output_stage_sync", &stage, error))?;
         fs::hard_link(&stage, &output).map_err(|error| output_link_error(&output, error))?;

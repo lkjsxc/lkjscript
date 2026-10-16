@@ -1,5 +1,9 @@
 //! Focused normalized artifact-preparation and dense-execution tests.
 
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[path = "native_elf_tests.rs"]
+mod native_elf_tests;
+
 #[path = "region_persistence_tests.rs"]
 mod region_persistence_tests;
 #[path = "region_types_tests.rs"]
