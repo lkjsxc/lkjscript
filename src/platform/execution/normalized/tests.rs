@@ -5094,6 +5094,18 @@ fn canonical_reference_layout_target_and_test_inventory_ignore_compiler_selectio
             .code,
         "normalized_test_inventory_differential"
     );
+    assert_eq!(
+        super::run_selected_graph_tests(
+            &snapshot,
+            &Arc::new(program),
+            &Default::default(),
+            policy,
+            &control
+        )
+        .expect_err("empty impact selection still admits the complete inventory")
+        .code,
+        "normalized_test_inventory_differential"
+    );
 }
 
 #[test]

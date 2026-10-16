@@ -132,6 +132,27 @@ impl<K: Ord + Clone> MemoryMap<K> {
         self.index.values.iter()
     }
 
+    pub(crate) fn retain(&mut self, keep: impl Fn(&K) -> bool) -> Result<(), StoreError> {
+        let count = self.index.values.keys().filter(|key| keep(key)).count();
+        let bytes = count
+            .checked_mul(std::mem::size_of::<K>().saturating_mul(2) + 192)
+            .and_then(|bytes| bytes.checked_add(256))
+            .ok_or_else(capacity_overflow)?;
+        let reservation = self.index.reservation.arena.reserve(bytes)?;
+        let values = self
+            .index
+            .values
+            .iter()
+            .filter(|(key, _)| keep(key))
+            .map(|(key, bytes)| (key.clone(), bytes.clone()))
+            .collect();
+        self.index = Arc::new(MemoryIndex {
+            values,
+            reservation,
+        });
+        Ok(())
+    }
+
     pub(crate) fn insert(&mut self, key: K, bytes: &[u8]) -> Result<(), StoreError> {
         if self.get(&key).is_some_and(|old| old.as_slice() == bytes) {
             return Ok(());

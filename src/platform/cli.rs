@@ -1,10 +1,15 @@
 //! Strict, bounded public graph-native command projection.
 
+mod gc;
 mod history;
 mod memory;
 mod pure_batch;
 mod refresh;
 mod source_batch;
+mod tx;
+
+pub use gc::execute_gc;
+pub use tx::execute_tx;
 
 pub use memory::execute_in_memory;
 pub use pure_batch::{PureRunBatchOptions, execute_pure_run_batch, parse_pure_run_batch};
@@ -9193,6 +9198,13 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
         )?;
         let record = operation_record(descriptor).map_err(capabilities_projection_error)?;
         output.append_serialized_records(record.as_bytes())?;
+        if operation == PublicOperation::Tx {
+            for record in
+                super::contract::transaction_records().map_err(capabilities_projection_error)?
+            {
+                output.append_serialized_records(record.as_bytes())?;
+            }
+        }
         let focused_section = match operation {
             PublicOperation::New => Some(RegistrySection::Templates),
             PublicOperation::Inspect => Some(RegistrySection::Inspection),

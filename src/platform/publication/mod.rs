@@ -52,6 +52,7 @@ pub use receipt::{
     ChangeCounts, FullOracleStatus, PublicationReceipt, PublicationStatus, ValidationEvidence,
     ValidationProfile, WorkObservation,
 };
+pub(crate) use repository::GarbageCollectionReceipt;
 pub use repository::{
     CreatedRepository, CurrentPublication, GraphRepository, InitialPackageTransport,
     MAXIMUM_REFRESH_ANCESTOR_REVISIONS, PackageTransportStageReceipt, PublicationOutcome,

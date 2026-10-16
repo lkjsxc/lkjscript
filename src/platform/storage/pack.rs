@@ -1,5 +1,11 @@
 //! Immutable deterministic multi-domain pack with a strict footer index.
 
+mod compression;
+pub(crate) use compression::PackEncoding;
+
+#[cfg(test)]
+mod compression_tests;
+
 use super::contract;
 use super::object::{ObjectDomain, ObjectKey, StoreError, StoreErrorClass};
 use std::collections::BTreeMap;
@@ -88,6 +94,7 @@ pub struct PackIndexEntry {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PackMetadata {
+    pub encoding: PackEncoding,
     pub byte_length: u64,
     pub nonce: [u8; 16],
     pub payload_bytes: u64,
@@ -218,12 +225,13 @@ impl PackMetadata {
         if bytes[..8] != contract::PACK_MAGIC {
             return Err(corrupt("pack_magic", "pack header magic is not current"));
         }
-        if read_u16(bytes, 8)? != contract::PACK_CONTRACT_VERSION || read_u16(bytes, 10)? != 0 {
+        if read_u16(bytes, 8)? != contract::PACK_CONTRACT_VERSION {
             return Err(corrupt(
                 "pack_contract",
                 "pack contract version or reserved flags are invalid",
             ));
         }
+        let encoding = PackEncoding::from_flags(read_u16(bytes, 10)?)?;
         let nonce = read_array::<16>(bytes, 12)?;
         let trailer_start = bytes
             .len()
@@ -252,7 +260,7 @@ impl PackMetadata {
             ));
         }
         if read_u16(bytes, footer_offset + 8)? != contract::PACK_CONTRACT_VERSION
-            || read_u16(bytes, footer_offset + 10)? != 0
+            || read_u16(bytes, footer_offset + 10)? != encoding.flags()
         {
             return Err(corrupt(
                 "pack_index_contract",
@@ -312,21 +320,7 @@ impl PackMetadata {
             let offset = read_u64(bytes, start + 33)?;
             let encoded_length = read_u64(bytes, start + 41)?;
             let uncompressed_length = read_u64(bytes, start + 49)?;
-            if encoded_length != uncompressed_length {
-                return Err(corrupt(
-                    "pack_compression_unsupported",
-                    "pack entry declares unsupported physical compression",
-                ));
-            }
-            if encoded_length > domain.maximum_bytes() as u64
-                || encoded_length > contract::MAXIMUM_PACK_ENTRY_BYTES as u64
-            {
-                return Err(pack_error(
-                    StoreErrorClass::Resource,
-                    "pack_entry_size",
-                    "pack entry exceeds its object-domain decoder bound",
-                ));
-            }
+            encoding.validate_lengths(domain, encoded_length, uncompressed_length)?;
             if offset != expected_offset {
                 return Err(corrupt(
                     "pack_entry_layout",
@@ -372,6 +366,7 @@ impl PackMetadata {
             ));
         }
         Ok(Self {
+            encoding,
             byte_length: bytes.len() as u64,
             nonce,
             payload_bytes,
@@ -399,7 +394,12 @@ impl PackMetadata {
         let Some(entry) = self.find(key) else {
             return Ok(None);
         };
-        let length = usize_from_u64(entry.encoded_length, "pack_read_length")?;
+        self.encoding.validate_lengths(
+            key.domain,
+            entry.encoded_length,
+            entry.uncompressed_length,
+        )?;
+        let length = usize_from_u64(entry.uncompressed_length, "pack_read_length")?;
         if length > maximum_bytes || length > key.domain.maximum_bytes() {
             return Err(pack_error(
                 StoreErrorClass::Resource,
@@ -407,7 +407,10 @@ impl PackMetadata {
                 format!("object has {length} bytes; caller allowed {maximum_bytes}"),
             ));
         }
-        Ok(Some((entry, length)))
+        Ok(Some((
+            entry,
+            usize_from_u64(entry.encoded_length, "pack_read_length")?,
+        )))
     }
 
     pub fn verify_all(&self, bytes: &[u8]) -> Result<(), StoreError> {
@@ -452,8 +455,9 @@ impl PackMetadata {
                 "pack entry checksum does not match",
             ));
         }
-        key.verify(value)?;
-        Ok(Some(value.to_vec()))
+        let value = self.encoding.decode(value, entry.uncompressed_length)?;
+        key.verify(&value)?;
+        Ok(Some(value))
     }
 
     pub fn read_from<R: Read + Seek>(
@@ -473,6 +477,13 @@ impl PackMetadata {
                 "pack entry checksum does not match",
             ));
         }
+        let value = if self.encoding == PackEncoding::Raw
+            || entry.encoded_length == entry.uncompressed_length
+        {
+            value
+        } else {
+            self.encoding.decode(&value, entry.uncompressed_length)?
+        };
         key.verify(&value)?;
         Ok(Some(value))
     }
@@ -536,11 +547,11 @@ impl PackMetadata {
         }
         let mut bytes_read = self.byte_length;
         for entry in &self.entries {
-            let value = self
+            let _value = self
                 .read_from(reader, entry.key, entry.key.domain.maximum_bytes())?
                 .ok_or_else(|| corrupt("pack_entry_missing", "indexed pack entry disappeared"))?;
             bytes_read = bytes_read
-                .checked_add(value.len() as u64)
+                .checked_add(entry.encoded_length)
                 .ok_or_else(|| corrupt("pack_verify_work", "pack verification work overflows"))?;
         }
         Ok(PackVerification { bytes_read })
@@ -560,17 +571,17 @@ fn decode_footer_parts(
                 .try_into()
                 .map_err(|_| corrupt("pack_contract", "pack header version is truncated"))?,
         ) != contract::PACK_CONTRACT_VERSION
-        || u16::from_be_bytes(
-            header[10..12]
-                .try_into()
-                .map_err(|_| corrupt("pack_contract", "pack header flags are truncated"))?,
-        ) != 0
     {
         return Err(corrupt(
             "pack_contract",
             "pack magic, version, or reserved flags are invalid",
         ));
     }
+    let encoding = PackEncoding::from_flags(u16::from_be_bytes(
+        header[10..12]
+            .try_into()
+            .map_err(|_| corrupt("pack_contract", "pack header flags are truncated"))?,
+    ))?;
     if footer[..8] != contract::PACK_INDEX_MAGIC
         || u16::from_be_bytes(
             footer[8..10]
@@ -581,7 +592,7 @@ fn decode_footer_parts(
             footer[10..12]
                 .try_into()
                 .map_err(|_| corrupt("pack_index_contract", "pack footer flags are truncated"))?,
-        ) != 0
+        ) != encoding.flags()
     {
         return Err(corrupt(
             "pack_index_contract",
@@ -697,10 +708,8 @@ fn decode_footer_parts(
                 .try_into()
                 .map_err(|_| corrupt("pack_entry_length", "pack entry length is truncated"))?,
         );
-        if offset != expected_offset
-            || encoded_length != uncompressed_length
-            || encoded_length > domain.maximum_bytes() as u64
-        {
+        encoding.validate_lengths(domain, encoded_length, uncompressed_length)?;
+        if offset != expected_offset {
             return Err(corrupt(
                 "pack_entry_layout",
                 "pack entry coordinates, compression, or size are invalid",
@@ -735,6 +744,7 @@ fn decode_footer_parts(
         ));
     }
     Ok(PackMetadata {
+        encoding,
         byte_length,
         nonce,
         payload_bytes,
@@ -779,7 +789,11 @@ impl PackBuilder {
     }
 
     pub fn seal(self) -> Result<SealedPack, StoreError> {
-        seal_entries(self.objects.into_iter().collect())
+        seal_entries(self.objects.into_iter().collect(), PackEncoding::Raw)
+    }
+
+    pub fn seal_compressed(self) -> Result<SealedPack, StoreError> {
+        seal_entries(self.objects.into_iter().collect(), PackEncoding::Deflate)
     }
 
     pub fn seal_targeted(self, target_bytes: usize) -> Result<Vec<SealedPack>, StoreError> {
@@ -807,7 +821,7 @@ impl PackBuilder {
                 .ok_or_else(|| corrupt("pack_size_overflow", "pack payload size overflows"))?;
             let next_size = encoded_pack_size(next_count, next_payload)?;
             if !current.is_empty() && next_size > target_bytes {
-                packs.push(seal_entries(current)?);
+                packs.push(seal_entries(current, PackEncoding::Raw)?);
                 current = Vec::new();
                 payload_bytes = 0;
             }
@@ -817,13 +831,16 @@ impl PackBuilder {
             current.push((key, bytes));
         }
         if !current.is_empty() {
-            packs.push(seal_entries(current)?);
+            packs.push(seal_entries(current, PackEncoding::Raw)?);
         }
         Ok(packs)
     }
 }
 
-fn seal_entries(entries: Vec<(ObjectKey, Vec<u8>)>) -> Result<SealedPack, StoreError> {
+fn seal_entries(
+    entries: Vec<(ObjectKey, Vec<u8>)>,
+    encoding: PackEncoding,
+) -> Result<SealedPack, StoreError> {
     if entries.is_empty() {
         return Err(pack_error(
             StoreErrorClass::Input,
@@ -838,7 +855,17 @@ fn seal_entries(entries: Vec<(ObjectKey, Vec<u8>)>) -> Result<SealedPack, StoreE
             "pack entry count exceeds the hostile decoder bound",
         ));
     }
-    let payload_bytes = entries.iter().try_fold(0_usize, |total, (_, bytes)| {
+    let entries = entries
+        .into_iter()
+        .map(|(key, bytes)| {
+            key.verify(&bytes)?;
+            let uncompressed_length = bytes.len() as u64;
+            let bytes = encoding.encode(bytes)?;
+            encoding.validate_lengths(key.domain, bytes.len() as u64, uncompressed_length)?;
+            Ok((key, bytes, uncompressed_length))
+        })
+        .collect::<Result<Vec<_>, StoreError>>()?;
+    let payload_bytes = entries.iter().try_fold(0_usize, |total, (_, bytes, _)| {
         total
             .checked_add(bytes.len())
             .ok_or_else(|| corrupt("pack_size_overflow", "pack payload size overflows"))
@@ -853,14 +880,13 @@ fn seal_entries(entries: Vec<(ObjectKey, Vec<u8>)>) -> Result<SealedPack, StoreE
     }
     let mut index_entries = Vec::with_capacity(entries.len());
     let mut offset = HEADER_BYTES as u64;
-    for (key, bytes) in &entries {
-        key.verify(bytes)?;
+    for (key, bytes, uncompressed_length) in &entries {
         let length = bytes.len() as u64;
         index_entries.push(PackIndexEntry {
             key: *key,
             offset,
             encoded_length: length,
-            uncompressed_length: length,
+            uncompressed_length: *uncompressed_length,
             checksum: digest(contract::PACK_ENTRY_CHECKSUM_DOMAIN, bytes),
         });
         offset = offset
@@ -871,9 +897,9 @@ fn seal_entries(entries: Vec<(ObjectKey, Vec<u8>)>) -> Result<SealedPack, StoreE
     let mut bytes = Vec::with_capacity(capacity);
     bytes.extend_from_slice(&contract::PACK_MAGIC);
     bytes.extend_from_slice(&contract::PACK_CONTRACT_VERSION.to_be_bytes());
-    bytes.extend_from_slice(&0_u16.to_be_bytes());
+    bytes.extend_from_slice(&encoding.flags().to_be_bytes());
     bytes.extend_from_slice(&nonce);
-    for (_, value) in &entries {
+    for (_, value, _) in &entries {
         bytes.extend_from_slice(value);
     }
     let mut index = Vec::with_capacity(entries.len() * INDEX_ENTRY_BYTES);
@@ -890,7 +916,7 @@ fn seal_entries(entries: Vec<(ObjectKey, Vec<u8>)>) -> Result<SealedPack, StoreE
     let footer_offset = bytes.len() as u64;
     bytes.extend_from_slice(&contract::PACK_INDEX_MAGIC);
     bytes.extend_from_slice(&contract::PACK_CONTRACT_VERSION.to_be_bytes());
-    bytes.extend_from_slice(&0_u16.to_be_bytes());
+    bytes.extend_from_slice(&encoding.flags().to_be_bytes());
     bytes.extend_from_slice(&(entries.len() as u64).to_be_bytes());
     bytes.extend_from_slice(&(payload_bytes as u64).to_be_bytes());
     bytes.extend_from_slice(&(index.len() as u64).to_be_bytes());

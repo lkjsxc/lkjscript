@@ -52,13 +52,15 @@ pub fn execute_in_memory(
         "inspect" => execute_inspect(arguments).map_err(single_diagnostic),
         "query" => execute_query(arguments).map_err(single_diagnostic),
         "change" => execute_change(arguments),
+        "tx" => execute_tx(arguments),
+        "gc" => execute_gc(arguments).map_err(single_diagnostic),
         "check" => execute_check(arguments).map_err(single_diagnostic),
         "build" => execute_build(arguments).map_err(single_diagnostic),
         "run" => execute_run(arguments).map_err(single_diagnostic),
         "package" => execute_package_builtin(arguments).map_err(single_diagnostic),
         "capabilities" => execute_capabilities(&arguments[1..]).map_err(single_diagnostic),
         _ => Err(single_diagnostic(usage_error(
-            "memory project commands are status, inspect, query, change, check, build, run, package and capabilities",
+            "memory project commands are status, inspect, query, change, tx, gc, check, build, run, package and capabilities",
         ))),
     })
 }

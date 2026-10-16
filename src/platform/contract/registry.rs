@@ -1434,6 +1434,8 @@ pub enum PublicOperation {
     Inspect,
     Query,
     Change,
+    Tx,
+    Gc,
     Package,
     Check,
     Build,
@@ -1443,7 +1445,7 @@ pub enum PublicOperation {
 }
 
 impl PublicOperation {
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 16] = [
         Self::Capabilities,
         Self::Data,
         Self::Runtime,
@@ -1452,6 +1454,8 @@ impl PublicOperation {
         Self::Inspect,
         Self::Query,
         Self::Change,
+        Self::Tx,
+        Self::Gc,
         Self::Package,
         Self::Check,
         Self::Build,
@@ -1470,6 +1474,8 @@ impl PublicOperation {
             Self::Inspect => "inspect",
             Self::Query => "query",
             Self::Change => "change",
+            Self::Tx => "tx",
+            Self::Gc => "gc",
             Self::Package => "package",
             Self::Check => "check",
             Self::Build => "build",
@@ -1495,6 +1501,7 @@ pub enum AuthorityEffect {
     ExternalOutput,
     ExternalRuntime,
     OptionalExternalOutput,
+    PhysicalStorage,
 }
 
 impl AuthorityEffect {
@@ -1506,6 +1513,7 @@ impl AuthorityEffect {
             Self::ExternalOutput => "external_output",
             Self::ExternalRuntime => "external_runtime",
             Self::OptionalExternalOutput => "optional_external_output",
+            Self::PhysicalStorage => "physical_storage",
         }
     }
 }
@@ -1574,6 +1582,10 @@ pub enum ControlModel {
     QueryRequest,
     QueryResult,
     ChangeRequest,
+    TransactionRequest,
+    TransactionResult,
+    GarbageCollectionRequest,
+    GarbageCollectionResult,
     PackageRequest,
     PackageResult,
     CheckRequest,
@@ -1606,6 +1618,10 @@ impl ControlModel {
             Self::QueryRequest => "query_request",
             Self::QueryResult => "query_result",
             Self::ChangeRequest => "change_request",
+            Self::TransactionRequest => "transaction_request",
+            Self::TransactionResult => "transaction_result",
+            Self::GarbageCollectionRequest => "garbage_collection_request",
+            Self::GarbageCollectionResult => "garbage_collection_result",
             Self::PackageRequest => "package_request",
             Self::PackageResult => "package_result",
             Self::CheckRequest => "check_request",
@@ -1686,6 +1702,30 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
             AuthorityEffect::AcceptedOnCommit,
             ProjectRequirement::Required,
             BudgetProfile::SemanticChange,
+        ),
+        operation(
+            PublicOperation::Tx,
+            "Resolve symbolic upserts at one HEAD, verify affected tests independently, and publish atomically.",
+            "tx (--input FORM | --input-file PATH) [--run TARGET] [--compact]",
+            (
+                ControlModel::TransactionRequest,
+                ControlModel::TransactionResult,
+            ),
+            AuthorityEffect::AcceptedOnCommit,
+            ProjectRequirement::Required,
+            BudgetProfile::SemanticChange,
+        ),
+        operation(
+            PublicOperation::Gc,
+            "Retain accepted history and selected package/compiler roots, compact canonical objects into one compressed pack, and reclaim unreferenced storage under an exclusive reader lease.",
+            "gc",
+            (
+                ControlModel::GarbageCollectionRequest,
+                ControlModel::GarbageCollectionResult,
+            ),
+            AuthorityEffect::PhysicalStorage,
+            ProjectRequirement::Required,
+            BudgetProfile::Maintenance,
         ),
         operation(
             PublicOperation::Package,
@@ -7192,6 +7232,97 @@ pub fn capabilities_snapshot() -> Result<CapabilitiesSnapshot, String> {
     })
 }
 
+pub(crate) fn transaction_records() -> Result<Vec<String>, String> {
+    [
+        (
+            "tx.request",
+            vec![
+                ("form", "(tx (base @head|REVISION) UNIT...)".to_owned()),
+                (
+                    "maximum-input-bytes",
+                    crate::platform::control::MAXIMUM_COMPACT_INPUT_BYTES.to_string(),
+                ),
+                (
+                    "maximum-syntax-nodes",
+                    crate::platform::control::MAXIMUM_STRUCTURAL_SYNTAX_NODES.to_string(),
+                ),
+            ],
+        ),
+        (
+            "tx.unit",
+            vec![
+                ("form", "(upsert-KIND NAME CLAUSE...)".to_owned()),
+                ("kinds", "named-native-declaration-families".to_owned()),
+                ("scope", "native-nesting".to_owned()),
+                ("identity", "preserve-matching-name-and-kind".to_owned()),
+                ("children", "complete-native-ordered-signatures".to_owned()),
+            ],
+        ),
+        (
+            "tx.selector",
+            vec![
+                (
+                    "forms",
+                    "@head|module::declaration|@module(\"NAME\")|@fn(\"MODULE::NAME\")".to_owned(),
+                ),
+                (
+                    "explicit-owner",
+                    "must-exist-with-exact-kind-and-scope".to_owned(),
+                ),
+                ("param", "(param NAME TYPE)".to_owned()),
+                (
+                    "visibility",
+                    "preserve-existing-or-default-private".to_owned(),
+                ),
+                (
+                    "implicit-std",
+                    "already-selected-builtin-unless-local-module".to_owned(),
+                ),
+            ],
+        ),
+        (
+            "tx.validation",
+            vec![
+                (
+                    "candidate",
+                    "complete-static-closure-and-independent-test-inventory".to_owned(),
+                ),
+                (
+                    "tests",
+                    "transitive-reverse-dependency-selection".to_owned(),
+                ),
+                (
+                    "execution",
+                    "production-and-canonical-reference-before-publication".to_owned(),
+                ),
+                (
+                    "run",
+                    "pure-target-with-empty-arguments-before-publication".to_owned(),
+                ),
+                (
+                    "publication",
+                    "exact-base-compare-and-swap-no-automatic-retry".to_owned(),
+                ),
+            ],
+        ),
+        (
+            "tx.result",
+            vec![
+                ("encoding", "single-line-json".to_owned()),
+                ("status", "accepted|unchanged".to_owned()),
+                (
+                    "maximum-bytes",
+                    crate::platform::control::MAXIMUM_TRANSACTION_RESULT_BYTES.to_string(),
+                ),
+                ("failure", "ordinary-bounded-diagnostics".to_owned()),
+            ],
+        ),
+    ]
+    .into_iter()
+    .map(|(name, fields)| compact_record(name, &fields))
+    .collect()
+}
+
 fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
     let mut records = Vec::new();
     match section {
@@ -7254,6 +7385,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             }
         }
         RegistrySection::Change => {
+            records.extend(transaction_records()?);
             records.push(compact_record(
                 "change",
                 &[

@@ -13,6 +13,8 @@ mod data_scan_cli;
 mod general_service;
 mod memory_cli;
 mod native_collection_costs;
+#[path = "public_cli/transaction.rs"]
+mod transaction;
 // Start the longest complete graph matrices before the many short CLI cases.
 #[path = "native_dependency_components.rs"]
 mod analysis_components;
@@ -1089,6 +1091,8 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "inspect",
             "query",
             "change",
+            "tx",
+            "gc",
             "package",
             "check",
             "build",

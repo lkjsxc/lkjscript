@@ -1,6 +1,9 @@
 //! Shared Graph 10 compiler, linker, artifact-loader, and dense-runtime preparation.
 
+mod preview;
 mod supplier_cache;
+
+pub(crate) use preview::{PreparedPreview, VerifiedTransactionTests};
 
 use super::compiler::{
     ArtifactBundleDigest, ArtifactLinkWork, ArtifactManifestDigest, CompilationBuildProfile,
@@ -132,6 +135,67 @@ impl super::execution::normalized::NormalizedReferenceRead for PackageReference 
     }
 }
 
+fn reference_for_source(
+    closure: &super::package_transport::source::AdmittedClosure,
+    accepted: super::publication::AcceptedBinding,
+    package: PackageId,
+    control: &ExecutionControl,
+) -> Result<PackageReference, Diagnostic> {
+    let oracle = super::package_transport::oracle::reconstruct(&closure.container)?;
+    let mut schema =
+        super::execution::normalized::NormalizedReferenceSchema::reconstruct_with_control(
+            oracle.snapshots.values(),
+            control,
+        )
+        .map_err(|error| {
+            Diagnostic::new(
+                match error.class {
+                    super::execution::ExecutionFailureClass::Resource => DiagnosticClass::Resource,
+                    super::execution::ExecutionFailureClass::Cancelled => {
+                        DiagnosticClass::Cancelled
+                    }
+                    _ => DiagnosticClass::Corrupt,
+                },
+                error.code,
+                error.message,
+            )
+        })?;
+    // Execution charges actual owner/blob reads after this complete independent admission.
+    schema.work = Default::default();
+    if oracle.snapshots.get(&package).is_none_or(|snapshot| {
+        super::kernel::semantic_state_digest(snapshot).ok() != Some(accepted.semantic_state)
+    }) {
+        return Err(lifecycle_error(
+            DiagnosticClass::Corrupt,
+            "lifecycle_reference_binding",
+            "independent package source inventory differs from its bound candidate",
+        ));
+    }
+    let blobs = closure
+        .container
+        .objects
+        .iter()
+        .filter(|(key, _)| key.domain == super::storage::object::ObjectDomain::Blob)
+        .map(|(key, bytes)| {
+            (
+                super::kernel::BlobObjectDigest::from_bytes(key.digest.bytes()),
+                bytes.clone(),
+            )
+        })
+        .collect();
+    Ok(PackageReference {
+        binding: super::execution::normalized::NormalizedReferenceBinding {
+            repository: accepted.head.repository_id,
+            package,
+            revision: Some(accepted.head.revision),
+            semantic_state: Some(accepted.semantic_state),
+        },
+        oracle,
+        schema: std::sync::Arc::new(schema),
+        blobs,
+    })
+}
+
 impl PreparedApplication {
     pub fn check(&self, control: &ExecutionControl) -> Result<NormalizedTestReceipt, Diagnostic> {
         self.check_authority_with_control(control)?;
@@ -233,72 +297,7 @@ pub(crate) fn prepare_repository_with_control(
         })?;
     let accepted = view.current().accepted;
     let package_id = view.package();
-    let oracle = super::package_transport::oracle::reconstruct(&closure.container).map_err(
-        |mut error| {
-            error
-                .notes
-                .push("while independently reconstructing the accepted package closure".into());
-            error
-        },
-    )?;
-    let mut schema =
-        super::execution::normalized::NormalizedReferenceSchema::reconstruct_with_control(
-            oracle.snapshots.values(),
-            control,
-        )
-        .map_err(|error| {
-            Diagnostic::new(
-                match error.class {
-                    super::execution::ExecutionFailureClass::Resource => DiagnosticClass::Resource,
-                    super::execution::ExecutionFailureClass::Cancelled => {
-                        DiagnosticClass::Cancelled
-                    }
-                    _ => DiagnosticClass::Corrupt,
-                },
-                error.code,
-                error.message,
-            )
-        })?;
-    // This inventory is prepared once with canonical admission, then shared immutably. Execution
-    // observations charge their actual owner/blob reads, not a fictitious reconstruction per call.
-    schema.work = Default::default();
-    let blobs = closure
-        .container
-        .objects
-        .iter()
-        .filter(|(key, _)| key.domain == super::storage::object::ObjectDomain::Blob)
-        .map(|(key, bytes)| {
-            (
-                super::kernel::BlobObjectDigest::from_bytes(key.digest.bytes()),
-                bytes.clone(),
-            )
-        })
-        .collect();
-    let reference = PackageReference {
-        binding: super::execution::normalized::NormalizedReferenceBinding {
-            repository: accepted.head.repository_id,
-            package: package_id,
-            revision: Some(accepted.head.revision),
-            semantic_state: Some(accepted.semantic_state),
-        },
-        oracle,
-        schema: std::sync::Arc::new(schema),
-        blobs,
-    };
-    if reference
-        .oracle
-        .snapshots
-        .get(&package_id)
-        .is_none_or(|snapshot| {
-            super::kernel::semantic_state_digest(snapshot).ok() != Some(accepted.semantic_state)
-        })
-    {
-        return Err(lifecycle_error(
-            DiagnosticClass::Corrupt,
-            "lifecycle_reference_binding",
-            "independent package source inventory differs from accepted authority",
-        ));
-    }
+    let reference = reference_for_source(&closure, accepted, package_id, control)?;
     let mut compiled = std::collections::BTreeMap::new();
     let mut dependency_units = 0_u64;
     let mut dependency_units_reused = 0_u64;

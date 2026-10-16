@@ -11,6 +11,7 @@ use super::object::{
     StoreWork, stage_into_map,
 };
 use super::pack::{PackBuilder, PackId, PackMetadata, SealedPack};
+use fs2::FileExt;
 use rustix::fs::{AtFlags, Dir, Mode, OFlags};
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
@@ -30,6 +31,9 @@ const PACK_STAGE_PREFIX: &str = ".pack-stage-";
 const INJECTED_INTERRUPTION_CODE: &str = "pack_store_injected_interruption";
 // Optional retention per open store, not an object-admission or catalog-format limit.
 const MAXIMUM_CACHED_CATALOG_BLOCKS: usize = 64;
+
+mod gc;
+pub(crate) use gc::PackCompactionReceipt;
 
 #[cfg(test)]
 #[path = "footer_admission_tests.rs"]
@@ -226,6 +230,7 @@ pub struct PackDirectoryStore {
     staging_leftovers: Vec<String>,
     catalog_leftovers: Vec<String>,
     catalog_work: Cell<CatalogWork>,
+    gc_exclusive: bool,
 }
 
 impl PackDirectoryStore {
@@ -242,6 +247,7 @@ impl PackDirectoryStore {
             }
         }
         let root_directory = open_directory(root, "pack_store_root")?;
+        hold_reader_lease(&root_directory)?;
         let packs_directory = ensure_child_directory(&root_directory, PACKS_DIRECTORY)?;
         let catalog_directory = ensure_child_directory(&root_directory, CATALOG_DIRECTORY)?;
         let segments_directory = ensure_child_directory(&catalog_directory, SEGMENTS_DIRECTORY)?;
@@ -279,6 +285,11 @@ impl PackDirectoryStore {
 
     pub fn open(root: &Path) -> Result<Self, StoreError> {
         let root_directory = open_directory(root, "pack_store_root")?;
+        hold_reader_lease(&root_directory)?;
+        Self::open_with_root(root, root_directory)
+    }
+
+    fn open_with_root(root: &Path, root_directory: File) -> Result<Self, StoreError> {
         let packs_directory = open_child_directory(&root_directory, PACKS_DIRECTORY)?;
         let catalog_directory = open_child_directory(&root_directory, CATALOG_DIRECTORY)?;
         let segments_directory = ensure_child_directory(&catalog_directory, SEGMENTS_DIRECTORY)?;
@@ -334,6 +345,7 @@ impl PackDirectoryStore {
         checkpoint: &mut dyn FnMut(SealCheckpoint) -> Result<(), StoreError>,
     ) -> Result<Self, StoreError> {
         let root_directory = open_directory(root, "pack_store_root")?;
+        hold_reader_lease(&root_directory)?;
         let packs_directory = open_child_directory(&root_directory, PACKS_DIRECTORY)?;
         let catalog_directory = ensure_child_directory(&root_directory, CATALOG_DIRECTORY)?;
         let segments_directory = ensure_child_directory(&catalog_directory, SEGMENTS_DIRECTORY)?;
@@ -458,6 +470,7 @@ impl PackDirectoryStore {
             staging_leftovers,
             catalog_leftovers,
             catalog_work: Cell::new(catalog_work),
+            gc_exclusive: false,
         })
     }
 
@@ -873,20 +886,11 @@ impl ImmutableObjectStore for PackDirectoryStore {
         let Some(location) = self.lookup_location(key)? else {
             return Ok(None);
         };
-        let object_bytes = usize::try_from(location.length).map_err(|_| {
-            resource(
-                "pack_read_length",
-                "catalog object length does not fit this platform",
-            )
-        })?;
-        if object_bytes > maximum_bytes || object_bytes > key.domain.maximum_bytes() {
-            return Err(resource(
-                "pack_read_limit",
-                format!("object has {object_bytes} bytes; caller allowed {maximum_bytes}"),
-            ));
-        }
-        admission.admit_object_bytes(location.length)?;
         let metadata = self.validated_pack_entry(key, location, maximum_bytes)?;
+        let (entry, _) = metadata
+            .bounded_read_entry(key, maximum_bytes)?
+            .ok_or_else(|| corrupt("catalog_pack_entry", "admitted pack entry disappeared"))?;
+        admission.admit_object_bytes(entry.uncompressed_length)?;
         let mut file = open_regular_file_at(
             &self.packs_directory,
             &location.pack.file_name(),
@@ -1964,6 +1968,19 @@ fn verify_existing_pack(directory: &File, pack: PackId) -> Result<(), StoreError
     let metadata = PackMetadata::read_footer(&mut file, length)?.metadata;
     metadata.verify_file(&mut file, pack)?;
     Ok(())
+}
+
+// A catalog snapshot may reopen payload files long after publication unlocks. Keep a
+// separate shared lease on this directory's open file description until the store drops.
+// GC takes publication ownership first and tries exclusive ownership without waiting.
+fn hold_reader_lease(root: &File) -> Result<(), StoreError> {
+    FileExt::lock_shared(root).map_err(|error| {
+        io_error(
+            "pack_reader_lease",
+            "failed to retain pack reader lease",
+            error,
+        )
+    })
 }
 
 fn open_directory(path: &Path, code: &'static str) -> Result<File, StoreError> {

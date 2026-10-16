@@ -544,6 +544,29 @@ pub fn run_graph_tests(
     policy: NormalizedRunPolicy,
     control: &ExecutionControl,
 ) -> Result<NormalizedTestReceipt, Diagnostic> {
+    run_graph_tests_inner(authority, program, capabilities, None, policy, control)
+}
+
+/// Admit the complete canonical inventory, then evaluate the exact impact selection.
+/// Transaction previews never receive live deployment capabilities.
+pub(crate) fn run_selected_graph_tests(
+    authority: &dyn NormalizedReferenceRead,
+    program: &Arc<NormalizedProgram>,
+    selected: &std::collections::BTreeSet<crate::platform::kernel::DeclarationReference>,
+    policy: NormalizedRunPolicy,
+    control: &ExecutionControl,
+) -> Result<NormalizedTestReceipt, Diagnostic> {
+    run_graph_tests_inner(authority, program, None, Some(selected), policy, control)
+}
+
+fn run_graph_tests_inner(
+    authority: &dyn NormalizedReferenceRead,
+    program: &Arc<NormalizedProgram>,
+    capabilities: Option<&NormalizedCapabilities>,
+    selected: Option<&std::collections::BTreeSet<crate::platform::kernel::DeclarationReference>>,
+    policy: NormalizedRunPolicy,
+    control: &ExecutionControl,
+) -> Result<NormalizedTestReceipt, Diagnostic> {
     let authority_binding = authority.binding().map_err(execution_diagnostic)?;
     validate_authority_binding(program, authority_binding)?;
     let mut executor = StructuredExecutor::new();
@@ -561,6 +584,13 @@ pub fn run_graph_tests(
             "compiled tests differ from the independent complete canonical test inventory",
         ));
     }
+    if selected.is_some_and(|selected| selected.iter().any(|key| !schema.tests.contains_key(key))) {
+        return Err(runner_error(
+            DiagnosticClass::Corrupt,
+            "normalized_test_selection",
+            "impact selection contains a declaration outside the complete canonical test inventory",
+        ));
+    }
     let mut receipt = NormalizedTestReceipt {
         revision: authority_binding.revision,
         passed: 0,
@@ -570,6 +600,9 @@ pub fn run_graph_tests(
         differential: "equal",
     };
     for (declaration, comparison) in &schema.tests {
+        if selected.is_some_and(|selected| !selected.contains(declaration)) {
+            continue;
+        }
         let production = vm
             .invoke_test(*declaration, capabilities, control)
             .map_err(execution_diagnostic)?;

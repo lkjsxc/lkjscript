@@ -762,15 +762,34 @@ fn validate_incremental_base(
 fn read_cache_head(
     repository: &GraphRepository,
 ) -> Result<Option<CompilationCacheHead>, Diagnostic> {
+    Ok(read_cache_head_unfiltered(repository)?.filter(|head| {
+        head.implementation == crate::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH
+    }))
+}
+
+// Retain the selected physical manifest even when it cannot authorize current execution.
+pub(crate) fn gc_manifest(
+    repository: &GraphRepository,
+) -> Result<Option<CompilationManifestDigest>, Diagnostic> {
+    Ok(read_cache_head_unfiltered(repository)?.map(|head| head.manifest))
+}
+
+pub(crate) fn gc_manifest_from_bytes(
+    bytes: &[u8],
+) -> Result<CompilationManifestDigest, Diagnostic> {
+    Ok(CompilationCacheHead::decode(bytes)?.manifest)
+}
+
+fn read_cache_head_unfiltered(
+    repository: &GraphRepository,
+) -> Result<Option<CompilationCacheHead>, Diagnostic> {
     if repository.is_memory() {
         let head = repository
             .memory_compilation_head()?
             .as_deref()
             .map(CompilationCacheHead::decode)
             .transpose()?;
-        return Ok(head.filter(|head| {
-            head.implementation == crate::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH
-        }));
+        return Ok(head);
     }
     let Some(directory) = open_existing_cache_directory(repository)? else {
         return Ok(None);
@@ -800,10 +819,7 @@ fn read_cache_head(
     file.read_exact(&mut bytes)
         .map_err(|error| io_diagnostic("compilation_cache_head_read", error))?;
     let head = CompilationCacheHead::decode(&bytes)?;
-    Ok(
-        (head.implementation == crate::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH)
-            .then_some(head),
-    )
+    Ok(Some(head))
 }
 
 fn write_cache_head(

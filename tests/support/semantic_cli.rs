@@ -152,6 +152,8 @@ pub fn execute(arguments: &[&str], full_arguments: Vec<String>) -> Option<Respon
         "inspect" => single(platform::execute_inspect(full_arguments)),
         "query" => single(platform::execute_query(full_arguments)),
         "change" => platform::execute_change(full_arguments),
+        "tx" => platform::execute_tx(full_arguments),
+        "gc" => platform::execute_gc(full_arguments).map_err(|error| vec![error]),
         "check" => single(platform::execute_check(full_arguments)),
         "build" => single(platform::execute_build(full_arguments)),
         "run" => single(run(full_arguments)),

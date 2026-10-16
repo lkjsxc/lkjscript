@@ -30,6 +30,8 @@ mod read_view_edit_inventory_tests;
 mod read_view_parser_tests;
 mod references;
 mod structural;
+mod tx;
+pub(crate) use tx::{MAXIMUM_TRANSACTION_RESULT_BYTES, decode as decode_transaction};
 #[cfg(test)]
 mod structural_tests;
 pub(crate) use input::{MAXIMUM_STRUCTURAL_SYNTAX_NODES, MAXIMUM_STRUCTURAL_TOKENS};

@@ -94,9 +94,9 @@ pub use storage::project::MemProjectStore;
 
 pub use cli::{
     ForegroundRunOptions, execute_build, execute_capabilities, execute_change, execute_check,
-    execute_data, execute_foreground_run, execute_in_memory, execute_inspect,
+    execute_data, execute_foreground_run, execute_gc, execute_in_memory, execute_inspect,
     execute_inspect_owner, execute_new, execute_package_builtin, execute_query, execute_run,
-    execute_status, parse_foreground_run,
+    execute_status, execute_tx, parse_foreground_run,
 };
 pub use configuration::{
     CONFIGURATION_ADAPTER_CONTRACT_VERSION, ConfigurationObservation, ConfigurationValue,

@@ -73,6 +73,7 @@ pub(crate) use runner::{
     prepare_command_invocation, require_pure_artifact_target, require_pure_invocation,
     run_foreground_command, run_graph_tests, run_pure_artifact_command,
     run_pure_artifact_command_observed, run_pure_command, run_pure_command_observed,
+    run_selected_graph_tests,
 };
 pub(crate) use session::NormalizedSessionApplication;
 pub use vm::NormalizedRunObservation;

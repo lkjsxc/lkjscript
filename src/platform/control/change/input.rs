@@ -279,7 +279,7 @@ pub(super) fn parse(path: &str, input: &[u8]) -> Result<ChangeInput, Vec<Diagnos
     }
 }
 
-fn reserve_labels(value: &str, labels: &mut BTreeSet<String>) {
+pub(super) fn reserve_labels(value: &str, labels: &mut BTreeSet<String>) {
     // Reserve every user-spelled symbol, including parameter:$R. These are *only* source
     // spellings; generated node/binder identities are never added to the public inventory.
     for suffix in value.split('$').skip(1) {
@@ -316,6 +316,22 @@ fn line_error(
     clippy::too_many_arguments,
     reason = "one cumulative request admission and original source span"
 )]
+pub(super) fn parse_expression(path: &str, input: &[u8]) -> Result<Block, Diagnostic> {
+    let location = SourceLocation {
+        path: path.to_owned(),
+        byte_offset: 0,
+        line: 1,
+        column: 1,
+    };
+    if input.len() > MAXIMUM_COMPACT_INPUT_BYTES {
+        return Err(resource(&location, "complete input exceeds its byte bound"));
+    }
+    let text = std::str::from_utf8(input).map_err(|_| {
+        Diagnostic::source("transaction_utf8", "transaction must be UTF-8", location)
+    })?;
+    tokenize(path, text, 0, 1, &mut 0, &mut 0, &mut BTreeSet::new())
+}
+
 fn tokenize(
     path: &str,
     body: &str,

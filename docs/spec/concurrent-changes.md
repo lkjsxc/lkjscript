@@ -34,6 +34,48 @@ onto revision and renewed prepared commitment. Tokens are deterministic review
 bindings, not secret credentials. Logical plan files are derived review evidence;
 they cannot be imported as accepted meaning or substitute for token validation.
 
+## Symbolic transactions
+
+`tx --input-file delta.lkjx [--run TARGET] [--compact]` resolves and executes one
+proposal against a captured HEAD. `--input FORM` is the inline equivalent. Success
+is one JSON line, at most 64 KiB; failures use ordinary bounded diagnostics.
+
+```text
+(tx (base @head)
+  (upsert-module math
+    (upsert-function square (visibility public)
+      (param value I64) (returns I64) (effect pure)
+      (body (call std::multiply (local value) (local value))))
+    (upsert-test twelve-squared
+      (actual (call math::square (i64 12))) (expected (i64 144)))))
+```
+
+Upserts preserve matching module, declaration and member identities. A name occupied
+by a different kind rejects. Native nesting, complete ordered signatures, type/body
+rules and explicit supplier aliases remain authoritative. `param NAME TYPE` is a
+parameter upsert. Omitted visibility preserves the existing value or defaults to
+private. Qualified names select declarations outside the edited unit; forward names
+within the proposal are collected before bodies. Quoted text is never rewritten.
+`@module("math")` and `@fn("math::square")` require existing owners of that kind
+and scope. An explicit revision may replace `@head`; stale bases never auto-refresh.
+
+The implicit `std` alias requires the already-selected exact builtin dependency,
+included by the command starter. A local module named `std` takes precedence.
+Transactions do not stage or select dependencies implicitly. The 4 MiB input and
+structural limits are shared with native changes; candidate preview additionally
+admits at most 64 MiB of staged object bytes and modeled object metadata.
+
+The ordinary change engine validates the complete candidate and computes its
+transitive reverse-dependency test cone. A read-only overlay admits the complete
+source closure and canonical test inventory, compiles it, and runs only selected
+tests in both production and independent reference evaluators. Optional `--run`
+uses an empty argument list and requires a pure target. Execution, cleanup and
+bounded result encoding finish before the ordinary locked publisher compares the
+exact base and advances HEAD. Failed tests, invalid selectors, capacity failures
+and stale candidates publish nothing. Verified counts bind the accepted receipt.
+An empty semantic delta returns `unchanged`; no historical acceptance or cached
+compilation substitutes for current validation.
+
 ## Authenticate intent and its dependency footprint
 
 Capture one immutable current target and authenticate the original revision

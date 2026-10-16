@@ -99,6 +99,18 @@ impl<'a> Reader<'a> {
         Ok(owner)
     }
 
+    pub fn namespace(
+        &mut self,
+        key: &crate::platform::witness::NamespaceKey,
+    ) -> Result<Option<OwnerKey>, Diagnostic> {
+        self.check()?;
+        let owner = self.reader.namespace(key)?;
+        if let Some(reads) = &mut self.intent_reads {
+            reads.record_namespace(key, owner)?;
+        }
+        Ok(owner)
+    }
+
     pub fn incoming(
         &mut self,
         owner: OwnerKey,

@@ -13,8 +13,8 @@ use lkjscript::platform::runtime::structured::{StructuredExecutor, StructuredExe
 use lkjscript::platform::{
     Diagnostic, PreparedDeployment, PublicOperation, ShutdownReceipt, execute_build,
     execute_capabilities, execute_change, execute_check, execute_data, execute_foreground_run,
-    execute_inspect, execute_new, execute_package_builtin, execute_query, execute_run,
-    execute_status, parse_foreground_run,
+    execute_gc, execute_inspect, execute_new, execute_package_builtin, execute_query, execute_run,
+    execute_status, execute_tx, parse_foreground_run,
 };
 #[path = "lkjscript/shared_serve.rs"]
 mod shared_serve;
@@ -71,8 +71,30 @@ fn main() -> ExitCode {
     if compact_change_arguments(&arguments) {
         return compact_change(arguments);
     }
+    if compact_project_command(&arguments, "tx") {
+        return match execute_tx(arguments) {
+            Ok(bytes) => match write_bytes(&bytes) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(_) => ExitCode::from(exit_status_for(
+                    lkjscript::platform::DiagnosticClass::Infrastructure,
+                )),
+            },
+            Err(diagnostics) => write_compact_failures("tx", &diagnostics),
+        };
+    }
     if compact_project_command(&arguments, "check") {
         return compact_check(arguments);
+    }
+    if compact_project_command(&arguments, "gc") {
+        return match execute_gc(arguments) {
+            Ok(bytes) => match write_bytes(&bytes) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(_) => ExitCode::from(exit_status_for(
+                    lkjscript::platform::DiagnosticClass::Infrastructure,
+                )),
+            },
+            Err(diagnostic) => write_compact_failures("gc", &[diagnostic]),
+        };
     }
     if compact_project_command(&arguments, "build") {
         return compact_build(arguments);

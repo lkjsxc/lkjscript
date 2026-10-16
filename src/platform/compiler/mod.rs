@@ -35,7 +35,7 @@ pub use cache::{
     validate_current_compilation,
 };
 pub(crate) use cache::{
-    build_clean_with_view, load_current_compilation_with_view,
+    build_clean_with_view, gc_manifest, gc_manifest_from_bytes, load_current_compilation_with_view,
     validate_current_compilation_with_view,
 };
 pub(crate) use immutable::compile_immutable;

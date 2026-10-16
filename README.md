@@ -63,6 +63,11 @@ for standalone use; the bundle depends on its runtime. Follow
 [your first native command](docs/guides/native-command.md) to author a function,
 add an expected-value test and publish a reviewed change.
 
+Run `lkjscript gc --project hello` to compact reachable repository objects into one
+compressed pack while preserving accepted history and selected dependencies. See
+[storage compaction](docs/spec/semantic-storage.md#reachability-compaction) for reader
+leases, capacity and interruption behavior.
+
 ## Build with the language
 
 | Capability | Explore |
@@ -95,8 +100,13 @@ lkjscript --project hello query find module application
 lkjscript --project hello query owners --limit 20
 ```
 
-Author a native proposal, inspect it with `change plan --input-file ...`, apply
-the same request with its exact token, then run `check`. Rejected proposals cannot
+Use `lkjscript --project hello tx --input-file delta.lkjx` for
+[symbolic upserts](docs/spec/concurrent-changes.md#symbolic-transactions): names select
+existing identities, both evaluators check affected tests, and one atomic publication
+returns a JSON summary. `capabilities tx` describes the bounded grammar.
+
+For a separately reviewed proposal, use `change plan --input-file ...`, apply the
+same request with its exact token, then run `check`. Rejected proposals cannot
 partially publish meaning.
 
 When another candidate publishes first, [refresh your reviewed proposal](docs/spec/concurrent-changes.md)

@@ -72,6 +72,87 @@ pub struct PreparedInitialPublication {
     pub witness: FullWitness,
 }
 
+impl super::PreparedAuthoredPublication {
+    pub(crate) fn record_verified_tests(
+        &mut self,
+        proof: &crate::platform::normalized_lifecycle::VerifiedTransactionTests,
+        budget: crate::platform::change::ChangeBudget,
+    ) -> Result<(), Diagnostic> {
+        let prepared = &mut self.publication;
+        let passed = proof.verify_binding(prepared.accepted, &self.logical_plan.tests)?;
+        if prepared.receipt.idempotency_key.is_some()
+            || prepared.receipt.validation.tests_selected != passed
+        {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Corrupt,
+                "transaction_test_receipt",
+                "transaction receipt has different test selection or keyed history",
+            ));
+        }
+        // The two zero counts can each grow by at most eight canonical integer bytes.
+        // Reserve replacement staging before encoding or growing the candidate overlay.
+        let mut work = prepared.budget_work;
+        work.staging.objects = work.staging.objects.saturating_add(2);
+        work.staging.bytes = work
+            .staging
+            .bytes
+            .saturating_add(prepared.receipt_bytes.len() as u64)
+            .saturating_add(16)
+            .saturating_add(prepared.revision_bytes.len() as u64);
+        budget.check_observed(work, "transaction test receipt")?;
+        let mut receipt = prepared.receipt.clone();
+        receipt.validation.tests_executed = passed;
+        receipt.validation.tests_passed = passed;
+        let (receipt_digest, receipt_bytes) = receipt.encode()?;
+        let mut revision = prepared.revision.clone();
+        revision.publication.receipt = receipt_digest;
+        let (revision_digest, revision_bytes) = revision.encode()?;
+        let mut head = prepared.head;
+        head.record = revision_digest;
+        let head_bytes = head.encode()?;
+        let accepted = AcceptedBinding::verify(
+            head,
+            &revision,
+            prepared.authority.witness.digest,
+            &prepared.authority.witness.manifest,
+        )?;
+        work.staging.bytes = prepared
+            .budget_work
+            .staging
+            .bytes
+            .saturating_add(receipt_bytes.len() as u64)
+            .saturating_add(revision_bytes.len() as u64);
+        budget.check_observed(work, "transaction test receipt")?;
+        prepared.objects.remove(&ObjectKey::from_digest(
+            ObjectDomain::Receipt,
+            prepared.receipt_digest.bytes(),
+        ));
+        prepared.objects.remove(&ObjectKey::from_digest(
+            ObjectDomain::Revision,
+            prepared.revision_digest.bytes(),
+        ));
+        prepared.objects.insert(
+            ObjectKey::from_digest(ObjectDomain::Receipt, receipt_digest.bytes()),
+            receipt_bytes.clone(),
+        );
+        prepared.objects.insert(
+            ObjectKey::from_digest(ObjectDomain::Revision, revision_digest.bytes()),
+            revision_bytes.clone(),
+        );
+        prepared.receipt = receipt;
+        prepared.receipt_digest = receipt_digest;
+        prepared.receipt_bytes = receipt_bytes;
+        prepared.revision = revision;
+        prepared.revision_digest = revision_digest;
+        prepared.revision_bytes = revision_bytes;
+        prepared.head = head;
+        prepared.head_bytes = head_bytes;
+        prepared.accepted = accepted;
+        prepared.budget_work = work;
+        Ok(())
+    }
+}
+
 pub fn prepare_initial_publication<S: ImmutableObjectStore + ?Sized>(
     logical: &KernelSnapshot,
     store: &S,

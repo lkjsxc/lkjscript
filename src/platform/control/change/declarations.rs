@@ -3123,7 +3123,7 @@ fn scopes(mut scope: &str) -> Vec<&str> {
     result
 }
 
-fn namespace(kind: &str) -> Option<&'static str> {
+pub(super) fn namespace(kind: &str) -> Option<&'static str> {
     Some(match kind {
         "module" => "module",
         "owned-contract"

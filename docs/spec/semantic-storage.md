@@ -100,6 +100,17 @@ footers, order, offsets, lengths, checksums, and closure. Duplicate physical def
 noncanonical order, truncation, trailing input, foreign domains, overflow, and digest mismatch
 reject. Pack filenames are locators and never semantic identity.
 
+Current physical codecs are raw (header/footer flags 0) and deflate with raw fallback
+(flags 1). In the latter, equal encoded/canonical lengths mean raw bytes; shorter
+entries contain one zlib-deflate stream. Compression never expands a payload.
+Their flags must agree; all other flags reject. Entries separately bind encoded and
+canonical lengths. Checksums cover physical payloads; typed identities cover exact
+decoded canonical bytes. The domain, caller and aggregate read limits apply to the
+decoded length before payload I/O or allocation. Compressed entries
+require exactly one complete stream and reject trailing streams,
+truncation, expansion beyond the declared size and unknown codecs. Both codecs belong
+to the current epoch; neither supplies a predecessor reader.
+
 The current-epoch catalog is the sole healthy physical locator. `catalog/current.lkjc` is an atomically
 replaced manifest selecting at most 32 immutable, content-addressed, sorted segments under
 `catalog/segments/`, with at most one segment at each level. The manifest binds the ordered segment
@@ -162,6 +173,43 @@ the original page/byte/entry admission, and rechecks parent summaries. Only actu
 decodes increment `pages_decoded`; independent full traversal bypasses this cache.
 Private immutable memory payloads retain their verified object key; replacements
 start unverified and every caller still pays its object and byte admission.
+
+## Reachability compaction
+
+`lkjscript gc --project PATH` retains the complete immutable HEAD ancestry, acceptance
+receipts, transactions, diffs, supplied types, idempotency maps, semantic objects and
+witness maps. Exact operational package selections, their complete source/interface
+closures, and the selected compiler manifest/units are additional roots. Embedded
+package witness commitments are rebuilt during ordinary package admission; they do
+not imply that imported containers store the originating repository's witness maps.
+Compiler type tables also contain inferred identities reconstructed by the linker;
+their canonical storage roots come from the retained source closure.
+Historical binding checks preserve recorded acceptance without claiming current
+semantic permission. Application data and unrelated files are outside collection.
+
+Each disk store holds a shared advisory lease on its root directory's open file
+description for its lifetime. GC takes the publication lock, then tries an exclusive
+directory lease. Existing readers cause `gc_readers_active` without waiting or
+changing storage; retry after they finish. These leases require no new lock file.
+The in-memory backend instead installs a filtered copy-on-write index atomically;
+existing readers/forks keep their original immutable allocations alive.
+
+GC rereads canonical objects and walks complete maps without using semantic proof
+caches. Preparation admits at most 1,000,000 distinct objects, 512 MiB of retained
+payloads plus modeled per-object overhead, 16,000,000 object reads and 4 GiB of read
+bytes. The reference queue is separately limited to 1,000,000 entries. Exhaustion,
+missing/corrupt references and cancellation reject before compaction. This finite
+preparation capacity does not limit semantic validity or truncate history.
+
+Disk GC seals one deduplicated compressed pack, synchronizes it, then durably selects
+one complete catalog segment before unlinking old owned packs/segments. It preserves
+HEAD, publication identities, operational selections and canonical object bytes.
+Interruption before the catalog switch leaves the old selection valid; interruption
+after it leaves a complete new selection and possibly extra files for the next GC.
+Cleanup errors report failure even if the catalog switch already happened. A compact
+single-line JSON receipt reports retained/reclaimed object counts and physical pack
+bytes; memory receipts omit physical pack statistics. New publications can append
+ordinary raw packs until the next explicit collection.
 
 ## Accepted revision and publication
 
@@ -247,7 +295,7 @@ reads require ordinary filesystem objects.
 
 The local operator, executable, OS, and filesystem durability implementation are trusted. This
 contract does not provide encrypted storage, signatures/provenance, hostile-code sandboxing,
-multi-tenant isolation, distributed consensus, leases, garbage collection, live packing, memory
+multi-tenant isolation, distributed consensus, distributed leases, automatic packing, memory
 mapping, or cross-filesystem atomic visibility.
 
 ## Scalar and transaction encoding

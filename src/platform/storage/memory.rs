@@ -180,7 +180,7 @@ impl ImmutableObjectStore for MemoryPackedStore {
                 "catalog coordinates disagree with the immutable pack footer",
             ));
         }
-        admission.admit_object_bytes(entry.encoded_length)?;
+        admission.admit_object_bytes(entry.uncompressed_length)?;
         let bytes = self.packs.get(&location.pack).ok_or_else(|| {
             store_error(
                 StoreErrorClass::Corrupt,

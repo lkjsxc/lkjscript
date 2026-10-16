@@ -3,6 +3,10 @@
 #[path = "memory_repository.rs"]
 mod memory_repository;
 
+#[path = "gc.rs"]
+mod gc;
+pub(crate) use gc::GarbageCollectionReceipt;
+
 #[cfg(test)]
 #[path = "recovery_lock_tests.rs"]
 mod recovery_lock_tests;
@@ -1425,7 +1429,7 @@ fn read_current_optional<S: ImmutableObjectStore + ?Sized>(
     read_publication(store, head).map(Some)
 }
 
-fn read_publication<S: ImmutableObjectStore + ?Sized>(
+pub(super) fn read_publication<S: ImmutableObjectStore + ?Sized>(
     store: &S,
     head: HeadRecord,
 ) -> Result<CurrentPublication, Diagnostic> {

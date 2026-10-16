@@ -847,6 +847,53 @@ pub struct RepositoryView {
 }
 
 impl RepositoryView {
+    /// Derive an admitted candidate source without changing any graph, readiness
+    /// or compiler head. Only the ordinary locked publisher can accept it.
+    pub(crate) fn preview_source(
+        mut self,
+        prepared: &super::PreparedPublication,
+    ) -> Result<crate::platform::package_transport::source::AdmittedClosure, Diagnostic> {
+        if prepared.expected_base != Some(self.current.head) {
+            return Err(read_error(
+                DiagnosticClass::Semantic,
+                "transaction_preview_base",
+                "candidate preview does not bind this exact base",
+            ));
+        }
+        self.store.install_candidate(&prepared.objects)?;
+        self.current = super::repository::read_publication(&self.store, prepared.head)?;
+        self.revalidated = None;
+        self.validation_reused = false;
+        self.export_read_set = None;
+        self.idempotent_result = None;
+        *self.link_transport_reuse.borrow_mut() = None;
+        // This local overlay never produces a reusable accepted-source proof.
+        self.store.bound_current_rebuild(true);
+        let validation = (|| {
+            let snapshot = self.reconstruct_full_oracle()?;
+            super::repository::validate_dependency_sources_controlled(
+                &self.store,
+                &self.store,
+                &self.current.semantic_root,
+                &|| self.validation_checkpoint(),
+                &self.control,
+            )?;
+            RevalidatedBase::rebuild(snapshot.value, &|| self.validation_checkpoint())
+        })();
+        self.store.bound_current_rebuild(false);
+        self.store.take_rebuild_objects();
+        let validation = std::sync::Arc::new(validation?);
+        self.store.install(&validation)?;
+        self.revalidated = Some(validation);
+        Ok(self.build_package_transport()?.into_source())
+    }
+
+    pub(crate) fn preview_current_source(
+        self,
+    ) -> Result<crate::platform::package_transport::source::AdmittedClosure, Diagnostic> {
+        Ok(self.build_package_transport()?.into_source())
+    }
+
     pub(super) fn new(current: CurrentPublication, store: StorageBackend) -> Self {
         Self {
             control: crate::platform::execution::ExecutionControl::uncancelled(),

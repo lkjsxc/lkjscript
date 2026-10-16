@@ -565,6 +565,26 @@ impl ViewStore {
         self.derived.insert(key, bytes.to_vec());
         Ok(())
     }
+
+    pub(super) fn install_candidate(
+        &mut self,
+        objects: &BTreeMap<ObjectKey, Vec<u8>>,
+    ) -> Result<(), Diagnostic> {
+        let bytes = objects.values().try_fold(0_usize, |total, bytes| {
+            total.checked_add(bytes.len())?.checked_add(192)
+        });
+        if bytes.is_none_or(|bytes| bytes > 64 * 1_048_576) {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Resource,
+                "transaction_preview_capacity",
+                "candidate preview exceeds its 64 MiB staged-object admission",
+            ));
+        }
+        for (key, bytes) in objects {
+            self.insert(*key, bytes)?;
+        }
+        Ok(())
+    }
 }
 
 impl std::ops::Deref for ViewStore {
