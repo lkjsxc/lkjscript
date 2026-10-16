@@ -191,6 +191,12 @@ impl<'a> Reader<'a> {
                 }
                 use AuthoredType as T;
                 match ty {
+                    T::Region { region } | T::RegionCap { region, .. } => {
+                        pending.push((region, depth + 1))
+                    }
+                    T::RelPtr { region, item } | T::RegionSlice { region, item } => {
+                        pending.extend([(region.as_ref(), depth + 1), (item.as_ref(), depth + 1)]);
+                    }
                     T::Applied { arguments, .. } | T::ReadViewApplied { arguments, .. } => {
                         pending.extend(arguments.iter().map(|t| (t, depth + 1)))
                     }
@@ -227,6 +233,34 @@ impl<'a> Reader<'a> {
             .read_type_object(digest)?
             .ok_or_else(|| error("canonical type object is absent"))?;
         let ty = match object.form {
+            TypeForm::RegionBrand { callable, binding } => AuthoredType::RegionBrand {
+                callable: declaration(callable),
+                binding: AuthoredLocalReference::LexicalBinding { binding },
+            },
+            TypeForm::Region { region } => AuthoredType::Region {
+                region: Box::new(self.ty_at(region, depth + 1)?),
+            },
+            TypeForm::RelPtr { region, item } => AuthoredType::RelPtr {
+                region: Box::new(self.ty_at(region, depth + 1)?),
+                item: Box::new(self.ty_at(item, depth + 1)?),
+            },
+            TypeForm::RegionSlice { region, item } => AuthoredType::RegionSlice {
+                region: Box::new(self.ty_at(region, depth + 1)?),
+                item: Box::new(self.ty_at(item, depth + 1)?),
+            },
+            TypeForm::RegionCap { region, mode } => AuthoredType::RegionCap {
+                region: Box::new(self.ty_at(region, depth + 1)?),
+                mode: match mode {
+                    k::RegionMode::Unique => crate::platform::change::AuthoredRegionMode::Unique,
+                    k::RegionMode::Frozen => crate::platform::change::AuthoredRegionMode::Frozen,
+                    k::RegionMode::Pinned => crate::platform::change::AuthoredRegionMode::Pinned,
+                    k::RegionMode::Shared { scope } => {
+                        crate::platform::change::AuthoredRegionMode::Shared {
+                            scope: self.read_scope(scope)?,
+                        }
+                    }
+                },
+            },
             TypeForm::ReadViewApplied {
                 declaration: d,
                 arguments,

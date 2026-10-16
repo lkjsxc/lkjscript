@@ -1191,6 +1191,10 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         "read-view-application",
         "associated-read-view-member",
         "associated-read-view-projection",
+        "region",
+        "rel-ptr",
+        "region-slice",
+        "region-cap",
     ] {
         assert_eq!(
             type_section
@@ -1199,7 +1203,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
                     && compact_field(record, "name") == Some(form))
                 .count(),
             1,
-            "exact view type form {form}"
+            "exact type form {form}"
         );
     }
     assert_eq!(
@@ -1729,7 +1733,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     for (name, syntax) in [
         (
             "type_parameter_constraint",
-            "none|capture-safe|owned|transferable|capture-safe transferable|owned transferable|owned shareable|owned transferable shareable",
+            "none|capture-safe|owned|transferable|capture-safe transferable|owned transferable|owned shareable|owned transferable shareable|region",
         ),
         ("reference_alias", "$REFERENCE_ALIAS"),
         ("exact_declaration", "decl_HEX"),

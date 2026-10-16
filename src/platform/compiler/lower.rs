@@ -1754,7 +1754,14 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
         let object = self.with_expression_read(|read| read.type_object(ty))?;
         Ok(match object.map(|t| t.form) {
             Some(
-                TypeForm::ByteBuffer
+                TypeForm::RegionCap {
+                    mode:
+                        crate::platform::kernel::RegionMode::Unique
+                        | crate::platform::kernel::RegionMode::Frozen
+                        | crate::platform::kernel::RegionMode::Pinned,
+                    ..
+                }
+                | TypeForm::ByteBuffer
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
                 | TypeForm::OwnedChoice { .. }
@@ -2456,15 +2463,12 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
             let object = read.type_object(ty)?.ok_or_else(|| {
                 compiler_corrupt("compiler_read_view_type", "missing exact read-view type")
             })?;
-            match object.form {
-                TypeForm::ReadViewApplied { read_scope, .. }
-                | TypeForm::AssociatedReadViewMember { read_scope, .. }
-                | TypeForm::AssociatedReadViewProjection { read_scope, .. } => Ok(read_scope),
-                _ => Err(compiler_corrupt(
+            object.form.read_scope().ok_or_else(|| {
+                compiler_corrupt(
                     "compiler_read_view_type",
                     "view category has no exact symbolic scope",
-                )),
-            }
+                )
+            })
         })?;
         self.application_scopes(std::slice::from_ref(&scope))?;
         Ok(scope)
@@ -2937,6 +2941,13 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                         )
                     })?;
                 let form = match source.form {
+                    TypeForm::RegionCap {
+                        region,
+                        mode: crate::platform::kernel::RegionMode::Shared { .. },
+                    } => TypeForm::RegionCap {
+                        region,
+                        mode: crate::platform::kernel::RegionMode::Shared { scope: read_scope },
+                    },
                     TypeForm::ReadViewApplied {
                         declaration,
                         arguments,
@@ -3889,25 +3900,19 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                                 "owning view binding requires its exact annotation",
                             )
                         })?;
-                        let declared_scope = self.unit.with_expression_read(|read| {
-                            let object = read.type_object(ty)?.ok_or_else(|| {
-                                compiler_corrupt(
-                                    "compiler_read_view_type",
-                                    "missing owning view annotation",
-                                )
-                            })?;
-                            match object.form {
-                                TypeForm::ReadViewApplied { read_scope, .. }
-                                | TypeForm::AssociatedReadViewMember { read_scope, .. }
-                                | TypeForm::AssociatedReadViewProjection { read_scope, .. } => {
-                                    Ok(read_scope)
-                                }
-                                _ => Err(compiler_corrupt(
+                        let declared_scope =
+                            self.unit.with_expression_read(|read| {
+                                let object = read.type_object(ty)?.ok_or_else(|| {
+                                    compiler_corrupt(
+                                        "compiler_read_view_type",
+                                        "missing owning view annotation",
+                                    )
+                                })?;
+                                object.form.read_scope().ok_or_else(|| compiler_corrupt(
                                     "compiler_read_view_type",
                                     "owning binding annotation has no positive ReadView category",
-                                )),
-                            }
-                        })?;
+                                ))
+                            })?;
                         let prospective = declared_scope == read_scope;
                         if prospective {
                             self.enter_read_scope(binding)?;

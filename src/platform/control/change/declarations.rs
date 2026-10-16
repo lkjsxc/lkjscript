@@ -815,6 +815,30 @@ impl Lowering<'_> {
         let label = self.allocate('@')?;
         let mut fields = vec![("as", label.clone())];
         let operation = match form.as_str() {
+            "region" | "rel-ptr" | "region-slice" | "region-cap" => {
+                let arity = if form == "region" { 1 } else { 2 };
+                if args.len() != arity {
+                    return Err(self.error(id, "region type has wrong constructor arity"));
+                }
+                fields.push(("region", self.ty(args[0], scope, depth + 1)?));
+                if form == "region-cap" {
+                    if self.block.head(args[1]) == Some("shared") {
+                        let loan = self.parts(args[1])?.1.to_vec();
+                        if loan.len() != 1 {
+                            return Err(
+                                self.error(args[1], "shared region mode requires one read scope")
+                            );
+                        }
+                        fields.push(("mode", "shared".into()));
+                        fields.push(("read-scope", self.read_scope(loan[0], scope)?));
+                    } else {
+                        fields.push(("mode", self.block.atom(args[1])?.to_owned()));
+                    }
+                } else if arity == 2 {
+                    fields.push(("item", self.ty(args[1], scope, depth + 1)?));
+                }
+                format!("type.{form}")
+            }
             "read-view-application" => {
                 if args.len() != 3 || self.block.head(args[1]) != Some("types") {
                     return Err(self.error(

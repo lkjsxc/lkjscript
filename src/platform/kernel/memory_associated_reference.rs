@@ -1238,6 +1238,13 @@ impl<'a> Resolver<'a> {
     ) -> Result<TypeForm> {
         let mut form = form;
         match &mut form {
+            TypeForm::Region { region } | TypeForm::RegionCap { region, .. } => {
+                *region = apply(self, *region)?
+            }
+            TypeForm::RelPtr { region, item } | TypeForm::RegionSlice { region, item } => {
+                *region = apply(self, *region)?;
+                *item = apply(self, *item)?;
+            }
             TypeForm::Applied { arguments, .. } => {
                 for t in arguments {
                     *t = apply(self, *t)?;

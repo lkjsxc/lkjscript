@@ -1256,6 +1256,13 @@ where
             )
         })?;
         match &object.form {
+            TypeForm::RegionCap {
+                region,
+                mode: super::RegionMode::Shared { scope },
+            } => {
+                scope_edge(edges, source, *scope)?;
+                pending.push(*region);
+            }
             TypeForm::ReadViewApplied {
                 declaration,
                 arguments,

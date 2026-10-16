@@ -184,6 +184,39 @@ struct Schema {
 }
 
 impl Facts {
+    fn identity() -> Self {
+        Self {
+            category: ValueCategory::RegionIdentity,
+            metadata: false,
+            transfer: false,
+            share: false,
+        }
+    }
+    fn region_cap(mode: kernel::RegionMode) -> Self {
+        match mode {
+            kernel::RegionMode::Unique => Self::owned(true, false),
+            kernel::RegionMode::Frozen => Self::owned(true, true),
+            kernel::RegionMode::Pinned => Self::owned(false, false),
+            kernel::RegionMode::Shared { .. } => Self {
+                category: ValueCategory::ReadView,
+                metadata: false,
+                transfer: false,
+                share: true,
+            },
+        }
+    }
+    fn matches_kind(self, constraints: TypeParameterConstraints) -> bool {
+        if constraints.is_region() {
+            self.category == ValueCategory::RegionIdentity
+        } else if constraints.has_owned() {
+            self.category == ValueCategory::Owned
+        } else {
+            matches!(
+                self.category,
+                ValueCategory::OrdinaryData | ValueCategory::Callable
+            )
+        }
+    }
     fn ordinary() -> Self {
         Self {
             category: ValueCategory::OrdinaryData,
@@ -1052,6 +1085,13 @@ impl Resolver<'_, '_> {
             | TypeForm::AssociatedReadViewProjection {
                 read_scope: ReadScopeArgument::Parameter(scope),
                 ..
+            }
+            | TypeForm::RegionCap {
+                mode:
+                    kernel::RegionMode::Shared {
+                        scope: ReadScopeArgument::Parameter(scope),
+                    },
+                ..
             } => Context::binder(scope.binder),
             TypeForm::ReadViewApplied {
                 read_scope: ReadScopeArgument::Lexical { callable, binding },
@@ -1059,6 +1099,13 @@ impl Resolver<'_, '_> {
             }
             | TypeForm::AssociatedReadViewProjection {
                 read_scope: ReadScopeArgument::Lexical { callable, binding },
+                ..
+            }
+            | TypeForm::RegionCap {
+                mode:
+                    kernel::RegionMode::Shared {
+                        scope: ReadScopeArgument::Lexical { callable, binding },
+                    },
                 ..
             } => {
                 if self.proof.lexical_owners.get(&(callable.package, binding)) != Some(&callable) {
@@ -1768,13 +1815,7 @@ impl Resolver<'_, '_> {
         for (parameter, actual) in parameters.iter().zip(arguments) {
             let constraints = self.parameter(*parameter, &Context::declaration(reference))?;
             let facts = self.prove_facts(*actual, context, 0)?.0;
-            if facts.category == ValueCategory::ReadView
-                || constraints.has_owned() != (facts.category == ValueCategory::Owned)
-                || (!constraints.has_owned()
-                    && !matches!(
-                        facts.category,
-                        ValueCategory::OrdinaryData | ValueCategory::Callable
-                    ))
+            if !facts.matches_kind(constraints)
                 || (constraints.requires_transfer() && !facts.transfer)
                 || (constraints.requires_share() && !facts.share)
                 || (constraints.requires_capture_safe()
@@ -1812,14 +1853,7 @@ impl Resolver<'_, '_> {
         for (parameter, actual) in parameters.iter().zip(arguments) {
             let constraints = self.parameter(*parameter, &Context::declaration(reference))?;
             let facts = self.facts_walk(*actual, context, state, depth + 1)?;
-            if facts.category == ValueCategory::ReadView
-                || constraints.has_owned() != (facts.category == ValueCategory::Owned)
-                || (!constraints.has_owned()
-                    && !matches!(
-                        facts.category,
-                        ValueCategory::OrdinaryData | ValueCategory::Callable
-                    ))
-            {
+            if !facts.matches_kind(constraints) {
                 return Err(invalid(
                     "type actual, including phantom actual, violates its exact ordinary/Owned constraint",
                 ));
@@ -2019,6 +2053,8 @@ impl Resolver<'_, '_> {
     }
     fn facts_seed(&mut self, form: &TypeForm, context: &Context) -> Result<Facts> {
         Ok(match form {
+            TypeForm::RegionBrand { .. } => Facts::identity(),
+            TypeForm::RegionCap { mode, .. } => Facts::region_cap(*mode),
             TypeForm::ByteBuffer
             | TypeForm::OwnedI64Cell
             | TypeForm::OwnedSequence { .. }
@@ -2046,7 +2082,9 @@ impl Resolver<'_, '_> {
             },
             TypeForm::TypeParameter { parameter } => {
                 let c = self.parameter(*parameter, context)?;
-                if c.has_owned() {
+                if c.is_region() {
+                    Facts::identity()
+                } else if c.has_owned() {
                     Facts::owned(c.requires_transfer(), c.requires_share())
                 } else {
                     Facts {
@@ -2105,6 +2143,32 @@ impl Resolver<'_, '_> {
         self.facts_search(&active_key, state.active.len(), depth)?;
         state.active.insert(active_key);
         let facts = match form.clone() {
+            TypeForm::RegionBrand { .. } => {
+                self.region_identity(ty, context, depth)?;
+                Facts::identity()
+            }
+            TypeForm::Region { region }
+            | TypeForm::RelPtr { region, .. }
+            | TypeForm::RegionSlice { region, .. }
+            | TypeForm::RegionCap { region, .. } => {
+                self.region_identity(region, context, depth + 1)?;
+                match form {
+                    TypeForm::RegionCap { mode, .. } => {
+                        if let kernel::RegionMode::Shared { scope } = mode {
+                            self.scope(scope, context)?;
+                        }
+                        Facts::region_cap(mode)
+                    }
+                    TypeForm::RelPtr { item, .. } | TypeForm::RegionSlice { item, .. } => {
+                        let item = self.facts_walk(item, context, state, depth + 1)?;
+                        if item.category == ValueCategory::RegionIdentity {
+                            return Err(invalid("region pointee has no runtime value"));
+                        }
+                        Facts::ordinary()
+                    }
+                    _ => Facts::ordinary(),
+                }
+            }
             TypeForm::Unit
             | TypeForm::Bool
             | TypeForm::I64
@@ -2126,7 +2190,9 @@ impl Resolver<'_, '_> {
             TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Facts::owned(true, true),
             TypeForm::TypeParameter { parameter } => {
                 let constraints = self.parameter(parameter, context)?;
-                if constraints.has_owned() {
+                if constraints.is_region() {
+                    Facts::identity()
+                } else if constraints.has_owned() {
                     Facts::owned(
                         constraints.requires_transfer(),
                         constraints.requires_share(),
@@ -2455,6 +2521,33 @@ impl Resolver<'_, '_> {
         }
         Ok(facts)
     }
+    fn region_identity(
+        &mut self,
+        ty: TypeObjectDigest,
+        context: &Context,
+        depth: usize,
+    ) -> Result<()> {
+        self.budget.step(depth)?;
+        match self.object(ty)?.form {
+            TypeForm::TypeParameter { parameter }
+                if self.parameter(parameter, context)?.is_region() =>
+            {
+                Ok(())
+            }
+            TypeForm::RegionBrand { callable, binding } => {
+                if context.owner != Some(callable)
+                    || !context.lexical.contains(&binding)
+                    || !matches!(self.owner(callable.package, OwnerKey::Binding(binding))?, OwnerRecord::Binding(b) if b.kind == kernel::BindingKind::Region)
+                {
+                    return Err(invalid("region brand is outside its live defining binder"));
+                }
+                Ok(())
+            }
+            _ => Err(invalid(
+                "region identity kind differs from its formal position",
+            )),
+        }
+    }
     fn ordinary_child(
         &mut self,
         ty: TypeObjectDigest,
@@ -2465,7 +2558,7 @@ impl Resolver<'_, '_> {
         let facts = self.facts_walk(ty, context, state, depth)?;
         if matches!(
             facts.category,
-            ValueCategory::Owned | ValueCategory::ReadView
+            ValueCategory::Owned | ValueCategory::ReadView | ValueCategory::RegionIdentity
         ) {
             return Err(invalid("ordinary container contains affine type"));
         }
@@ -2478,7 +2571,11 @@ impl Resolver<'_, '_> {
         match self.object(ty)?.form {
             TypeForm::ReadViewApplied { read_scope, .. }
             | TypeForm::AssociatedReadViewMember { read_scope, .. }
-            | TypeForm::AssociatedReadViewProjection { read_scope, .. } => Ok(read_scope),
+            | TypeForm::AssociatedReadViewProjection { read_scope, .. }
+            | TypeForm::RegionCap {
+                mode: crate::platform::kernel::RegionMode::Shared { scope: read_scope },
+                ..
+            } => Ok(read_scope),
             _ => Err(invalid("type has no read-view scope")),
         }
     }
@@ -2706,6 +2803,26 @@ impl Resolver<'_, '_> {
                 declaration,
                 arguments: self.substitute_many_at(&arguments, substitution, depth + 1, stage)?,
             },
+            TypeForm::Region { region } => TypeForm::Region {
+                region: self.substitute_at(region, substitution, depth + 1, stage)?,
+            },
+            TypeForm::RelPtr { region, item } => TypeForm::RelPtr {
+                region: self.substitute_at(region, substitution, depth + 1, stage)?,
+                item: self.substitute_at(item, substitution, depth + 1, stage)?,
+            },
+            TypeForm::RegionSlice { region, item } => TypeForm::RegionSlice {
+                region: self.substitute_at(region, substitution, depth + 1, stage)?,
+                item: self.substitute_at(item, substitution, depth + 1, stage)?,
+            },
+            TypeForm::RegionCap { region, mode } => TypeForm::RegionCap {
+                region: self.substitute_at(region, substitution, depth + 1, stage)?,
+                mode: match mode {
+                    kernel::RegionMode::Shared { scope } => kernel::RegionMode::Shared {
+                        scope: substitute_scope(scope, substitution),
+                    },
+                    other => other,
+                },
+            },
             TypeForm::List { item } => TypeForm::List {
                 item: self.substitute_at(item, substitution, depth + 1, stage)?,
             },
@@ -2916,6 +3033,10 @@ impl Resolver<'_, '_> {
             TypeForm::ReadViewApplied { .. }
                 | TypeForm::AssociatedReadViewMember { .. }
                 | TypeForm::AssociatedReadViewProjection { .. }
+                | TypeForm::RegionCap {
+                    mode: kernel::RegionMode::Shared { .. },
+                    ..
+                }
         );
         match &object.form {
             TypeForm::TypeParameter { parameter } => {
@@ -3138,6 +3259,9 @@ impl Resolver<'_, '_> {
                 ))
             };
             match facts.category {
+                ValueCategory::RegionIdentity => {
+                    return Err(refuse("a region identity cannot be a value parameter"));
+                }
                 ValueCategory::ReadView => {
                     let owner = context
                         .owner
@@ -3200,6 +3324,9 @@ impl Resolver<'_, '_> {
             }
         }
         let result_facts = self.facts(result.ty, context, 0)?;
+        if result_facts.category == ValueCategory::RegionIdentity {
+            return Err(invalid("a region identity cannot be a callable result"));
+        }
         if result_facts.category == ValueCategory::ReadView {
             let owner = context
                 .owner
@@ -3249,11 +3376,14 @@ impl Resolver<'_, '_> {
                         let binder = context
                             .binder
                             .ok_or_else(|| invalid("view result lacks exact binder"))?;
-                        if !self
-                            .proof
-                            .scope_sources(binder)?
-                            .iter()
-                            .any(|s| s.source == source && s.scope == scope)
+                        let inherited = source_facts.category == ValueCategory::ReadView
+                            && self.view_scope(*source_ty)? == scope;
+                        if !inherited
+                            && !self
+                                .proof
+                                .scope_sources(binder)?
+                                .iter()
+                                .any(|s| s.source == source && s.scope == scope)
                         {
                             return Err(invalid(
                                 "ViewFrom result lacks exact source/scope relationship",
@@ -5245,6 +5375,13 @@ impl Resolver<'_, '_> {
                 }
                 self.check_source_scope(&local, read_scope, context)?;
                 let ty = match self.object(local.ty)?.form {
+                    TypeForm::RegionCap {
+                        region,
+                        mode: kernel::RegionMode::Shared { .. },
+                    } => self.intern(TypeForm::RegionCap {
+                        region,
+                        mode: kernel::RegionMode::Shared { scope: read_scope },
+                    })?,
                     TypeForm::ReadViewApplied {
                         declaration,
                         arguments,
@@ -5869,6 +6006,31 @@ impl Resolver<'_, '_> {
             }
             let object = self.object(ty)?;
             let node_free = match object.form {
+                TypeForm::RegionBrand { .. } => true,
+                TypeForm::Region { region } | TypeForm::RegionCap { region, .. } => {
+                    self.resource_edge(
+                        &mut pending,
+                        region,
+                        depth + 1,
+                        context.structural_properties,
+                    )?;
+                    true
+                }
+                TypeForm::RelPtr { region, item } | TypeForm::RegionSlice { region, item } => {
+                    self.resource_edge(
+                        &mut pending,
+                        region,
+                        depth + 1,
+                        context.structural_properties,
+                    )?;
+                    self.resource_edge(
+                        &mut pending,
+                        item,
+                        depth + 1,
+                        context.structural_properties,
+                    )?;
+                    true
+                }
                 TypeForm::CapabilityResource { .. } => false,
                 TypeForm::TypeParameter { parameter } => {
                     self.resource_formal(parameter, context)?;
@@ -6156,6 +6318,10 @@ impl Resolver<'_, '_> {
         active.insert(key);
         let object = self.object(ty)?;
         let safe = match object.form {
+            TypeForm::RegionBrand { .. } | TypeForm::RegionCap { .. } => false,
+            TypeForm::Region { .. } | TypeForm::RelPtr { .. } | TypeForm::RegionSlice { .. } => {
+                !capture
+            }
             TypeForm::Function { .. } | TypeForm::TaskFunction { .. } if capture => true,
             TypeForm::TypeParameter { parameter } => {
                 let constraints = self.parameter(parameter, context)?;

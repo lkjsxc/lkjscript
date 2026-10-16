@@ -10,7 +10,9 @@ use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::owned_associated::{OwnedAssociatedAdmission, OwnedTypeOccurrence};
+use super::owned_associated::{
+    OwnedAssociatedAdmission, OwnedTypeOccurrence, TypeParameterContext,
+};
 
 #[path = "owned_contract/associated_application.rs"]
 mod associated_application;
@@ -984,6 +986,13 @@ pub(crate) fn validate_owned_type(
         .form
     {
         TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Ok(()),
+        TypeForm::RegionCap { region, mode } if !matches!(mode, RegionMode::Shared { .. }) => {
+            super::region::require_identity(
+                read,
+                region,
+                scope.map_or(TypeParameterContext::Closed, TypeParameterContext::Authored),
+            )
+        }
         TypeForm::OwnedProduct { .. }
         | TypeForm::OwnedChoice { .. }
         | TypeForm::OwnedSequence { .. } => {
@@ -1022,6 +1031,9 @@ pub(crate) fn validate_owned_type_at(
         | TypeForm::AssociatedWitnessProjection { .. }
         | TypeForm::ByteBuffer
         | TypeForm::OwnedI64Cell => Ok(()),
+        TypeForm::RegionCap { region, mode } if !matches!(mode, RegionMode::Shared { .. }) => {
+            super::region::require_identity(read, region, occurrence.parameters)
+        }
         TypeForm::TypeParameter { parameter } => {
             associated.validate_owned_parameter_at(read, parameter, occurrence.parameters)
         }
@@ -1085,6 +1097,11 @@ pub(crate) fn validate_type_argument_constraints(
     ty: TypeObjectDigest,
     scope: Option<DeclarationReference>,
 ) -> Result<(), Diagnostic> {
+    let context = scope.map_or(TypeParameterContext::Closed, TypeParameterContext::Authored);
+    if constraints.is_region() {
+        return super::region::require_identity(read, ty, context);
+    }
+    super::region::value_actual(read, ty, context)?;
     if super::owned_associated::read_view_admission::contains(
         read,
         ty,
@@ -1118,6 +1135,10 @@ pub(crate) fn validate_type_argument_constraints_at(
     occurrence: OwnedTypeOccurrence,
     associated: &OwnedAssociatedAdmission,
 ) -> Result<(), Diagnostic> {
+    if constraints.is_region() {
+        return super::region::require_identity(read, ty, occurrence.parameters);
+    }
+    super::region::value_actual(read, ty, occurrence.parameters)?;
     associated.validate_occurrence_at(read, &[ty], occurrence)?;
     if super::owned_associated::read_view_admission::contains(read, ty, associated)? {
         return Err(reject(
@@ -2918,6 +2939,25 @@ pub(super) fn ordinary_with_assumptions_at(
             .type_object(ty)?
             .ok_or_else(|| reject("missing method ordinary type"))?;
         match &t.form {
+            TypeForm::RegionBrand { .. } | TypeForm::RegionCap { .. } => return Ok(false),
+            TypeForm::Region { region }
+            | TypeForm::RelPtr { region, .. }
+            | TypeForm::RegionSlice { region, .. } => {
+                let parameters = match context {
+                    OrdinaryAssumptionContext::Closed => TypeParameterContext::Closed,
+                    OrdinaryAssumptionContext::Function(scope) => {
+                        TypeParameterContext::Authored(scope)
+                    }
+                    OrdinaryAssumptionContext::Nominal(scope) => {
+                        TypeParameterContext::NominalRepresentation(scope)
+                    }
+                };
+                super::region::require_identity(read, *region, parameters)?;
+                if let TypeForm::RelPtr { item, .. } | TypeForm::RegionSlice { item, .. } = t.form {
+                    super::region::value_actual(read, item, parameters)?;
+                }
+                continue;
+            }
             TypeForm::AssociatedContractMember { .. }
             | TypeForm::AssociatedWitnessProjection { .. } => {
                 return Err(super::owned_associated::unsupported_semantics());
@@ -2958,6 +2998,7 @@ pub(super) fn ordinary_with_assumptions_at(
                 if record.declaration != declaration.declaration
                     || record.header.owner != OwnerKey::TypeParameter(*parameter)
                     || record.constraints.has_owned()
+                    || record.constraints.is_region()
                     || matches!(context, OrdinaryAssumptionContext::Function(_))
                         && !record.constraints.requires_transfer()
                 {
@@ -2988,7 +3029,16 @@ pub(super) fn ordinary_with_assumptions_at(
                     return Err(reject("method nominal type arity mismatch"));
                 }
                 let mut nested = BTreeSet::new();
-                for parameter in parameters {
+                let actual_context = match context {
+                    OrdinaryAssumptionContext::Closed => TypeParameterContext::Closed,
+                    OrdinaryAssumptionContext::Function(scope) => {
+                        TypeParameterContext::Authored(scope)
+                    }
+                    OrdinaryAssumptionContext::Nominal(scope) => {
+                        TypeParameterContext::NominalRepresentation(scope)
+                    }
+                };
+                for (parameter, argument) in parameters.into_iter().zip(arguments) {
                     read.validation_work()?;
                     let p = super::owned_record::parameter(read, *declaration, parameter)?;
                     if p.declaration != declaration.declaration
@@ -2999,7 +3049,13 @@ pub(super) fn ordinary_with_assumptions_at(
                         return Ok(false);
                     }
                     read.validation_work()?;
-                    nested.insert(parameter);
+                    if p.constraints.is_region() {
+                        super::region::require_identity(read, *argument, actual_context)?;
+                    } else {
+                        super::region::value_actual(read, *argument, actual_context)?;
+                        todo.push((*argument, context, copy_assumptions(read, &bindings)?));
+                        nested.insert(parameter);
+                    }
                 }
                 for field in fields {
                     read.validation_work()?;
@@ -3045,6 +3101,7 @@ pub(super) fn ordinary_with_assumptions_at(
                         ));
                     }
                 }
+                continue;
             }
             TypeForm::Unit
             | TypeForm::Bool

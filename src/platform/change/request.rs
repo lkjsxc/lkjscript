@@ -30,10 +30,10 @@ pub use creation::{
     AuthoredPortReference, AuthoredReadScopeArgument, AuthoredReadScopeBinder,
     AuthoredReadScopeSource, AuthoredReadViewField, AuthoredReadViewFieldInitializer,
     AuthoredReadViewFieldKind, AuthoredReadViewFieldReference, AuthoredRecordExpressionField,
-    AuthoredRequirement, AuthoredRequirementParameter, AuthoredRequirementReference,
-    AuthoredResourceLimit, AuthoredResultRelation, AuthoredStructuralTypeField,
-    AuthoredTransactionOutcomeContract, AuthoredType, AuthoredTypeParameter,
-    AuthoredTypeParameterReference,
+    AuthoredRegionMode, AuthoredRequirement, AuthoredRequirementParameter,
+    AuthoredRequirementReference, AuthoredResourceLimit, AuthoredResultRelation,
+    AuthoredStructuralTypeField, AuthoredTransactionOutcomeContract, AuthoredType,
+    AuthoredTypeParameter, AuthoredTypeParameterReference,
 };
 pub use precondition::{
     AuthoredExistingOwner, AuthoredOwnerParent, AuthoredPrecondition, AuthoredSelectedPrecondition,

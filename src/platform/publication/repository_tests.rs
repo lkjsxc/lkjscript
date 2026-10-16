@@ -6128,6 +6128,13 @@ fn authored_type_builder_interns_every_unrestricted_graph_nine_type_form() {
         observed_types.insert(parameter.ty);
         let form = view.type_object(parameter.ty).unwrap().value.unwrap().form;
         observed.insert(match form {
+            TypeForm::RegionBrand { .. }
+            | TypeForm::Region { .. }
+            | TypeForm::RelPtr { .. }
+            | TypeForm::RegionSlice { .. }
+            | TypeForm::RegionCap { .. } => {
+                panic!("feature-free fixture cannot acquire region types")
+            }
             TypeForm::AssociatedContractMember { .. }
             | TypeForm::AssociatedWitnessProjection { .. } => {
                 panic!("feature-free fixture cannot acquire associated type forms")

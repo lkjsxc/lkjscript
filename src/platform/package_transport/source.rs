@@ -1259,12 +1259,7 @@ fn admit_read_view_source_profile(
     };
     for object in snapshot.types.values() {
         control.check().map_err(execution_diagnostic)?;
-        if matches!(
-            object.form,
-            TypeForm::ReadViewApplied { .. }
-                | TypeForm::AssociatedReadViewMember { .. }
-                | TypeForm::AssociatedReadViewProjection { .. }
-        ) {
+        if object.form.is_read_view() {
             profile(None)?;
         }
     }
@@ -1320,16 +1315,10 @@ fn admit_read_view_source_profile(
                 binding.kind,
                 BindingKind::ReadView | BindingKind::ReadViewBorrow
             ),
-            OwnerRecord::Parameter(parameter) => {
-                snapshot.types.get(&parameter.ty).is_some_and(|object| {
-                    matches!(
-                        object.form,
-                        TypeForm::ReadViewApplied { .. }
-                            | TypeForm::AssociatedReadViewMember { .. }
-                            | TypeForm::AssociatedReadViewProjection { .. }
-                    )
-                })
-            }
+            OwnerRecord::Parameter(parameter) => snapshot
+                .types
+                .get(&parameter.ty)
+                .is_some_and(|object| object.form.is_read_view()),
             _ => false,
         };
         if present {

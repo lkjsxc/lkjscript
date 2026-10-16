@@ -3367,6 +3367,7 @@ fn oracle_expression_form(operation: &ExpressionOperation) -> &'static str {
 
 fn oracle_binding_kind(kind: BindingKind) -> &'static str {
     match kind {
+        BindingKind::Region => "region",
         BindingKind::Let => "let",
         BindingKind::MatchPayload => "match_payload",
         BindingKind::Transaction => "transaction",

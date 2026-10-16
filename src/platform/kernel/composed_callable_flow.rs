@@ -884,14 +884,13 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
             ));
         }
         self.associated.enabled = true;
-        let scope = match &object.form {
-            TypeForm::ReadViewApplied { read_scope, .. }
-            | TypeForm::AssociatedReadViewMember { read_scope, .. }
-            | TypeForm::AssociatedReadViewProjection { read_scope, .. } => *read_scope,
-            _ => return Err(associated::invalid()),
-        };
+        let scope = object.form.read_scope().ok_or_else(associated::invalid)?;
         self.validate_scope(scope, binder, loans)?;
         match object.form {
+            TypeForm::RegionCap {
+                mode: crate::platform::kernel::RegionMode::Shared { .. },
+                ..
+            } => {}
             TypeForm::AssociatedReadViewProjection {
                 scope,
                 parameter,
@@ -1975,14 +1974,10 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                         return Err(associated::invalid());
                     }
                 }
-                if let ResultRelation::ViewFrom { scope, .. } = function.result.relation {
-                    match result.form {
-                        TypeForm::ReadViewApplied { read_scope, .. }
-                        | TypeForm::AssociatedReadViewMember { read_scope, .. }
-                        | TypeForm::AssociatedReadViewProjection { read_scope, .. }
-                            if read_scope == scope => {}
-                        _ => return Err(associated::invalid()),
-                    }
+                if let ResultRelation::ViewFrom { scope, .. } = function.result.relation
+                    && result.form.read_scope() != Some(scope)
+                {
+                    return Err(associated::invalid());
                 }
                 if result.form.is_read_view()
                     != matches!(function.result.relation, ResultRelation::ViewFrom { .. })
@@ -2030,14 +2025,10 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                     {
                         return Err(associated::invalid());
                     }
-                    if let ResultRelation::ViewFrom { scope, .. } = method.result.relation {
-                        match result.form {
-                            TypeForm::ReadViewApplied { read_scope, .. }
-                            | TypeForm::AssociatedReadViewMember { read_scope, .. }
-                            | TypeForm::AssociatedReadViewProjection { read_scope, .. }
-                                if read_scope == scope => {}
-                            _ => return Err(associated::invalid()),
-                        }
+                    if let ResultRelation::ViewFrom { scope, .. } = method.result.relation
+                        && result.form.read_scope() != Some(scope)
+                    {
+                        return Err(associated::invalid());
                     }
                     if result.form.is_read_view()
                         != matches!(method.result.relation, ResultRelation::ViewFrom { .. })
@@ -2349,14 +2340,8 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                             .read
                             .type_object(info.key.owner.package, ty)?
                             .ok_or_else(associated::invalid)?;
-                        let declared_scope = match object.form {
-                            TypeForm::ReadViewApplied { read_scope, .. }
-                            | TypeForm::AssociatedReadViewMember { read_scope, .. }
-                            | TypeForm::AssociatedReadViewProjection { read_scope, .. } => {
-                                read_scope
-                            }
-                            _ => return Err(associated::invalid()),
-                        };
+                        let declared_scope =
+                            object.form.read_scope().ok_or_else(associated::invalid)?;
                         if declared_scope
                             == (ReadScopeArgument::Lexical {
                                 callable: info.key.owner,

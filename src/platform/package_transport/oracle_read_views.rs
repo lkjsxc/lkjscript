@@ -17,7 +17,11 @@ fn view_scope(form: &TypeForm) -> Option<ReadScopeArgument> {
     match form {
         TypeForm::ReadViewApplied { read_scope, .. }
         | TypeForm::AssociatedReadViewMember { read_scope, .. }
-        | TypeForm::AssociatedReadViewProjection { read_scope, .. } => Some(*read_scope),
+        | TypeForm::AssociatedReadViewProjection { read_scope, .. }
+        | TypeForm::RegionCap {
+            mode: RegionMode::Shared { scope: read_scope },
+            ..
+        } => Some(*read_scope),
         _ => None,
     }
 }
@@ -186,6 +190,10 @@ impl Interpretation<'_, '_> {
 
     fn owned(&self, package: PackageId, digest: TypeObjectDigest) -> Result<bool, Diagnostic> {
         Ok(match &self.ty(package, digest)?.form {
+            TypeForm::RegionCap {
+                mode: RegionMode::Unique | RegionMode::Frozen | RegionMode::Pinned,
+                ..
+            } => true,
             TypeForm::ByteBuffer
             | TypeForm::OwnedI64Cell
             | TypeForm::OwnedProduct { .. }
@@ -435,6 +443,10 @@ impl Interpretation<'_, '_> {
                             ));
                         }
                     }
+                    TypeForm::RegionCap {
+                        region,
+                        mode: RegionMode::Shared { .. },
+                    } => self.region_identity(package, *region, binder.declaration())?,
                     _ => unreachable!("scope is only on view forms"),
                 }
             }
@@ -448,6 +460,52 @@ impl Interpretation<'_, '_> {
                     .into_iter()
                     .map(|ty| (ty, false, depth + 1)),
             );
+        }
+        Ok(())
+    }
+
+    fn region_identity(
+        &self,
+        package: PackageId,
+        ty: TypeObjectDigest,
+        binder: DeclarationReference,
+    ) -> Result<(), Diagnostic> {
+        let TypeForm::TypeParameter { parameter } = self.ty(package, ty)?.form else {
+            return Err(failure("view oracle region identity is not a formal"));
+        };
+        self.reader.charge(2)?;
+        let source = self
+            .sources
+            .get(&package)
+            .ok_or_else(|| failure("view oracle region source is absent"))?;
+        let Some(OwnerRecord::TypeParameter(record)) =
+            source.owners.get(&OwnerKey::TypeParameter(parameter))
+        else {
+            return Err(failure("view oracle region formal is absent"));
+        };
+        let Some(OwnerRecord::Declaration(owner)) = source
+            .owners
+            .get(&OwnerKey::Declaration(binder.declaration))
+        else {
+            return Err(failure("view oracle region binder is absent"));
+        };
+        self.reader.charge(owner.payload.type_parameters().len())?;
+        if package != binder.package
+            || record.header.owner != OwnerKey::TypeParameter(parameter)
+            || record.declaration != binder.declaration
+            || !record.constraints.is_region()
+            || owner.header.owner != OwnerKey::Declaration(binder.declaration)
+            || owner
+                .payload
+                .type_parameters()
+                .iter()
+                .filter(|id| **id == parameter)
+                .count()
+                != 1
+        {
+            return Err(failure(
+                "view oracle region formal has foreign kind or authority",
+            ));
         }
         Ok(())
     }

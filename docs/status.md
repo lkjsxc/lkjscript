@@ -43,12 +43,23 @@ A command project with parallel functions compacted eight packs from 1,339,418 t
 1,318,600 bytes. HEAD and generated artifact bytes were unchanged; all 117
 differential tests passed afterward. Reader exclusion, retained history, corrupt
 compression, read bounds and 21 compaction interruption points are covered.
-These are local results; remote main remains `507efb03`, verified independently,
-and no new publication is claimed. Only this status summary changed after acceptance.
+These receipts precede the Region work below. Phase 2 is committed at `dfc57ac8`.
+The last independent remote-main observation was `507efb03`; no new publication
+is claimed.
 Wall time is measured and reported; acceptance has no three-minute requirement.
 
-Next implement regions, effect/resource analysis, equality optimization, native ELF
-and self-hosting. Region language/runtime integration has not begun.
+Phase 3 is in progress. Region identity kinds, relative-pointer
+and slice types, affine custody modes and scoped Shared signatures now pass public
+authoring, compiler/package preparation and independent canonical checks. Fixed
+64-byte-aligned storage supports bounded allocation, checked relative offsets,
+cycles, zero-copy freeze, scoped parallel reads and complete immutable-image admission.
+The 17 focused tests and 2,525 root-library tests passed; five existing tests remain
+ignored. Generated discovery is current. Workspace acceptance is recorded in the
+bounded `.artifacts/lkjscript-dev/latest-receipt.json`.
+
+Next connect lexical region operations to both evaluators, implement actual mmap
+persistence and worker handoff, and migrate the planner. Effect/resource analysis,
+equality optimization, native ELF and self-hosting remain subsequent work.
 Each increment requires independent semantic and boundary checks before normal main
 integration. [Verification](spec/verification.md) owns gates and evidence;
 [release](release.md) owns exact candidate and publication authority.

@@ -5,7 +5,9 @@
 //! constructor children and proves the origin of every retained reference.
 
 use super::super::owned_associated::read_view_admission as views;
-use super::super::{ReadScopeArgument, ReadViewField, ReadViewFieldKind, ReadViewFieldReference};
+use super::super::{
+    ReadScopeArgument, ReadViewField, ReadViewFieldKind, ReadViewFieldReference, RegionMode,
+};
 use super::*;
 
 impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
@@ -148,6 +150,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 let source_scope = self.require_read_view_type(ty, context, consumer_generation)?;
                 self.require_scope_containment(read_scope, source_scope, context)?;
                 let form = match self.type_object(ty)?.form {
+                    TypeForm::RegionCap {
+                        region,
+                        mode: RegionMode::Shared { .. },
+                    } => TypeForm::RegionCap {
+                        region,
+                        mode: RegionMode::Shared { scope: read_scope },
+                    },
                     TypeForm::ReadViewApplied {
                         declaration,
                         arguments,
@@ -455,7 +464,11 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         let scope = match self.type_object(ty)?.form {
             TypeForm::ReadViewApplied { read_scope, .. }
             | TypeForm::AssociatedReadViewMember { read_scope, .. }
-            | TypeForm::AssociatedReadViewProjection { read_scope, .. } => read_scope,
+            | TypeForm::AssociatedReadViewProjection { read_scope, .. }
+            | TypeForm::RegionCap {
+                mode: crate::platform::kernel::RegionMode::Shared { scope: read_scope },
+                ..
+            } => read_scope,
             _ => {
                 return Err(type_error(
                     "kernel_read_view_source",

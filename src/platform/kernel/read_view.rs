@@ -174,6 +174,8 @@ pub enum ValueCategory {
     ReadView,
     Capability,
     Callable,
+    /// A type-level identity, never an inhabitable runtime value.
+    RegionIdentity,
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]

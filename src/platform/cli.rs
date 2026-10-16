@@ -8582,6 +8582,7 @@ fn definition_resource_unit_name(value: ResourceUnit) -> &'static str {
 
 fn definition_binding_kind_name(value: BindingKind) -> &'static str {
     match value {
+        BindingKind::Region => "region",
         BindingKind::Let => "let",
         BindingKind::MatchPayload => "match_payload",
         BindingKind::Transaction => "transaction",

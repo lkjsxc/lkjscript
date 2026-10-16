@@ -264,6 +264,11 @@ impl<'a> ReferenceEscapeCheck<'a> {
             TypeForm::ReadViewApplied { .. }
             | TypeForm::AssociatedReadViewMember { .. }
             | TypeForm::AssociatedReadViewProjection { .. } => return Err(view_escape()),
+            TypeForm::RegionBrand { .. }
+            | TypeForm::Region { .. }
+            | TypeForm::RelPtr { .. }
+            | TypeForm::RegionSlice { .. }
+            | TypeForm::RegionCap { .. } => return Err(unsupported("region-bound type")),
             TypeForm::Named { .. } | TypeForm::Applied { .. } => {
                 if let TypeForm::Applied { arguments, .. } = &object.form {
                     for argument in arguments {
@@ -559,6 +564,11 @@ fn read_reserved_value(
 ) -> Result<NormalizedValue, Diagnostic> {
     budget.visit(depth, already_charged)?;
     match form(program, ty)? {
+        TypeForm::RegionBrand { .. }
+        | TypeForm::Region { .. }
+        | TypeForm::RelPtr { .. }
+        | TypeForm::RegionSlice { .. }
+        | TypeForm::RegionCap { .. } => Err(unsupported("region-bound type")),
         TypeForm::ReadViewApplied { .. }
         | TypeForm::AssociatedReadViewMember { .. }
         | TypeForm::AssociatedReadViewProjection { .. } => Err(unsupported("ReadView")),
@@ -756,6 +766,11 @@ fn describe_type(
     }
     write_bytes(description, &ty.bytes())?;
     match form(program, ty)? {
+        TypeForm::RegionBrand { .. }
+        | TypeForm::Region { .. }
+        | TypeForm::RelPtr { .. }
+        | TypeForm::RegionSlice { .. }
+        | TypeForm::RegionCap { .. } => return Err(unsupported("region-bound type")),
         TypeForm::ReadViewApplied { .. }
         | TypeForm::AssociatedReadViewMember { .. }
         | TypeForm::AssociatedReadViewProjection { .. } => return Err(unsupported("ReadView")),

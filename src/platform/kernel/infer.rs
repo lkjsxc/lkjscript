@@ -148,8 +148,8 @@ impl<R: ExpressionRead + ?Sized> ExpressionRead for CheckedExpressionRead<'_, R>
         self.read.has_representation_dependency(package)
     }
     fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
-        (self.checkpoint)()?;
-        self.read.validation_checkpoint()
+        self.read.validation_checkpoint()?;
+        (self.checkpoint)()
     }
 }
 
@@ -1846,9 +1846,12 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         let declared_scope = match form {
                             TypeForm::ReadViewApplied { read_scope, .. }
                             | TypeForm::AssociatedReadViewMember { read_scope, .. }
-                            | TypeForm::AssociatedReadViewProjection { read_scope, .. } => {
-                                read_scope
-                            }
+                            | TypeForm::AssociatedReadViewProjection { read_scope, .. }
+                            | TypeForm::RegionCap {
+                                mode:
+                                    crate::platform::kernel::RegionMode::Shared { scope: read_scope },
+                                ..
+                            } => read_scope,
                             _ => {
                                 return Err(type_error(
                                     "kernel_read_view_binding",
@@ -2341,6 +2344,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         // Locals and read projections often have no explicit type roots. Their
         // derived result still consumes associated meaning at this exact owner.
         self.validate_type_occurrence(inferred, context, consumer_generation)?;
+        self.owned_read(|read| super::region::value_actual(read, inferred, occurrence.parameters))?;
         Ok(inferred)
     }
 
@@ -3061,6 +3065,16 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 ));
             }
             let children = match self.type_object(ty)?.form {
+                TypeForm::RegionBrand { .. }
+                | TypeForm::Region { .. }
+                | TypeForm::RelPtr { .. }
+                | TypeForm::RegionSlice { .. }
+                | TypeForm::RegionCap { .. } => {
+                    return Err(type_error(
+                        "kernel_type_bind_capture",
+                        "a region-bound value cannot enter an unscoped closure capture",
+                    ));
+                }
                 TypeForm::AssociatedContractMember { .. }
                 | TypeForm::AssociatedWitnessProjection { .. }
                 | TypeForm::ReadViewApplied { .. }
@@ -4523,6 +4537,15 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             }
         }
         for (ty, source) in roots {
+            if matches!(
+                owner,
+                OwnerRecord::Parameter(_) | OwnerRecord::Field(_) | OwnerRecord::Case(_)
+            ) || matches!(owner, OwnerRecord::Declaration(record) if matches!(record.payload, DeclarationPayload::Function(_) | DeclarationPayload::External(_) | DeclarationPayload::Constant { .. }))
+            {
+                self.owned_read(|read| {
+                    super::region::value_actual(read, ty, occurrence.parameters)
+                })?;
+            }
             self.validate_nominal_type(ty, &context, occurrence, 0)
                 .map_err(|mut diagnostic| {
                     diagnostic.notes.push(format!("semantic owner: {source}"));
@@ -4599,7 +4622,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             self.validate_type_occurrence_at(ty, occurrence)?;
         }
         let object = self.type_object(ty)?;
-        if object.form.is_read_view() {
+        if object.form.is_read_view() && !matches!(object.form, TypeForm::RegionCap { .. }) {
             return self.owned_read_with_associated(|read, admission| {
                 if super::memory::view_at(read, ty, occurrence, admission)? {
                     Ok(())
@@ -4610,6 +4633,30 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     ))
                 }
             });
+        }
+        match &object.form {
+            TypeForm::RegionBrand { callable, binding } => {
+                if context.callable != Some(*callable)
+                    || !matches!(
+                        context.bindings.get(binding),
+                        Some((BindingKind::Region, _))
+                    )
+                {
+                    return Err(type_error(
+                        "kernel_region_scope",
+                        "region brand is outside its live lexical binder",
+                    ));
+                }
+            }
+            TypeForm::Region { region }
+            | TypeForm::RelPtr { region, .. }
+            | TypeForm::RegionSlice { region, .. }
+            | TypeForm::RegionCap { region, .. } => {
+                self.owned_read(|read| {
+                    super::region::require_identity(read, *region, occurrence.parameters)
+                })?;
+            }
+            _ => {}
         }
         let nominal_owned = matches!(
             object.form,
@@ -4644,7 +4691,23 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 super::owned_product::validate_at(read, ty, occurrence, admission)
             })?;
         }
-        for child in object.child_types() {
+        for (position, child) in object.child_types().into_iter().enumerate() {
+            if !matches!(
+                object.form,
+                TypeForm::Applied { .. }
+                    | TypeForm::ReadViewApplied { .. }
+                    | TypeForm::Region { .. }
+                    | TypeForm::RegionCap { .. }
+            ) && !(position == 0
+                && matches!(
+                    object.form,
+                    TypeForm::RelPtr { .. } | TypeForm::RegionSlice { .. }
+                ))
+            {
+                self.owned_read(|read| {
+                    super::region::value_actual(read, child, occurrence.parameters)
+                })?;
+            }
             if !matches!(
                 object.form,
                 TypeForm::OwnedProduct { .. }
@@ -4720,6 +4783,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         "nominal parameter has a foreign declaration owner",
                     )
                 })?;
+                self.owned_read(|read| {
+                    if owner.constraints.is_region() {
+                        super::region::require_identity(read, *argument, occurrence.parameters)
+                    } else {
+                        super::region::value_actual(read, *argument, occurrence.parameters)
+                    }
+                })?;
                 if owner.constraints.requires_capture_safe() {
                     self.require_capture_safe(*argument, context)
                         .map_err(|error| {
@@ -4754,7 +4824,8 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             if object.form.is_read_view()
                 || matches!(
                     object.form,
-                    TypeForm::ByteBuffer
+                    TypeForm::RegionCap { .. }
+                        | TypeForm::ByteBuffer
                         | TypeForm::OwnedI64Cell
                         | TypeForm::OwnedProduct { .. }
                         | TypeForm::OwnedChoice { .. }
@@ -4902,6 +4973,21 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     .into_iter()
                     .map(|argument| self.substitute(argument, substitutions, next))
                     .collect::<Result<_, _>>()?,
+            },
+            TypeForm::Region { region } => TypeForm::Region {
+                region: self.substitute(region, substitutions, next)?,
+            },
+            TypeForm::RelPtr { region, item } => TypeForm::RelPtr {
+                region: self.substitute(region, substitutions, next)?,
+                item: self.substitute(item, substitutions, next)?,
+            },
+            TypeForm::RegionSlice { region, item } => TypeForm::RegionSlice {
+                region: self.substitute(region, substitutions, next)?,
+                item: self.substitute(item, substitutions, next)?,
+            },
+            TypeForm::RegionCap { region, mode } => TypeForm::RegionCap {
+                region: self.substitute(region, substitutions, next)?,
+                mode,
             },
             TypeForm::List { item } => TypeForm::List {
                 item: self.substitute(item, substitutions, next)?,

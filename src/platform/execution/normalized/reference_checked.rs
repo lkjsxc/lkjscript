@@ -2329,6 +2329,15 @@ impl ReferenceState<'_> {
                         "capture stores a secret, stream, resource, or unknown type parameter",
                     ));
                 }
+                TypeForm::RegionBrand { .. }
+                | TypeForm::Region { .. }
+                | TypeForm::RelPtr { .. }
+                | TypeForm::RegionSlice { .. }
+                | TypeForm::RegionCap { .. } => {
+                    return Err(reject(
+                        "capture stores a region-bound value without scoped custody",
+                    ));
+                }
                 TypeForm::List { item } | TypeForm::Option { item } => append(*item)?,
                 TypeForm::Map { key, value }
                 | TypeForm::Result {

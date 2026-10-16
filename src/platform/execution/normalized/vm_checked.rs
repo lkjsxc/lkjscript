@@ -1397,6 +1397,15 @@ impl Admission<'_> {
                         "capture type contains a secret, stream, resource, or unresolved stored parameter",
                     ));
                 }
+                TypeForm::RegionBrand { .. }
+                | TypeForm::Region { .. }
+                | TypeForm::RelPtr { .. }
+                | TypeForm::RegionSlice { .. }
+                | TypeForm::RegionCap { .. } => {
+                    return Err(admission_error(
+                        "capture type outlives its region capability",
+                    ));
+                }
                 TypeForm::Named { .. } | TypeForm::Applied { .. } => {
                     if let Some(index) = program
                         .record_instances
@@ -2007,6 +2016,21 @@ impl Admission<'_> {
                         })
                     })
                     .collect::<Option<_>>()?,
+            },
+            TypeForm::Region { region } => TypeForm::Region {
+                region: descend(*region)?,
+            },
+            TypeForm::RelPtr { region, item } => TypeForm::RelPtr {
+                region: descend(*region)?,
+                item: descend(*item)?,
+            },
+            TypeForm::RegionSlice { region, item } => TypeForm::RegionSlice {
+                region: descend(*region)?,
+                item: descend(*item)?,
+            },
+            TypeForm::RegionCap { region, mode } => TypeForm::RegionCap {
+                region: descend(*region)?,
+                mode: *mode,
             },
             TypeForm::List { item } => TypeForm::List {
                 item: descend(*item)?,

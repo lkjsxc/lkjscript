@@ -409,7 +409,12 @@ impl NormalizedReferenceSchema {
         self.types.get(&ty).is_some_and(|object| {
             matches!(
                 object.form,
-                TypeForm::ByteBuffer
+                TypeForm::RegionCap {
+                    mode: crate::platform::kernel::RegionMode::Unique
+                        | crate::platform::kernel::RegionMode::Frozen
+                        | crate::platform::kernel::RegionMode::Pinned,
+                    ..
+                } | TypeForm::ByteBuffer
                     | TypeForm::OwnedI64Cell
                     | TypeForm::OwnedProduct { .. }
                     | TypeForm::OwnedChoice { .. }
@@ -433,6 +438,10 @@ impl NormalizedReferenceSchema {
                 TypeForm::ReadViewApplied { .. }
                     | TypeForm::AssociatedReadViewMember { .. }
                     | TypeForm::AssociatedReadViewProjection { .. }
+                    | TypeForm::RegionCap {
+                        mode: crate::platform::kernel::RegionMode::Shared { .. },
+                        ..
+                    }
             )
         })
     }
@@ -546,6 +555,21 @@ impl NormalizedReferenceSchema {
                     .copied()
                     .map(descend)
                     .collect::<Option<_>>()?,
+            },
+            TypeForm::Region { region } => TypeForm::Region {
+                region: descend(*region)?,
+            },
+            TypeForm::RelPtr { region, item } => TypeForm::RelPtr {
+                region: descend(*region)?,
+                item: descend(*item)?,
+            },
+            TypeForm::RegionSlice { region, item } => TypeForm::RegionSlice {
+                region: descend(*region)?,
+                item: descend(*item)?,
+            },
+            TypeForm::RegionCap { region, mode } => TypeForm::RegionCap {
+                region: descend(*region)?,
+                mode: *mode,
             },
             TypeForm::List { item } => TypeForm::List {
                 item: descend(*item)?,

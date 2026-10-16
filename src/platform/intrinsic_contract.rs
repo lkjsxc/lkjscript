@@ -647,6 +647,15 @@ fn kernel_type<R: ExpressionRead + ?Sized>(
     }
     let mut child = |digest| kernel_type(read, digest, depth + 1, work, maximum);
     Ok(match &object.form {
+        TypeForm::RegionBrand { .. }
+        | TypeForm::Region { .. }
+        | TypeForm::RelPtr { .. }
+        | TypeForm::RegionSlice { .. }
+        | TypeForm::RegionCap { .. } => {
+            return Err(signature_error(
+                "region-bound types cannot cross an external intrinsic boundary",
+            ));
+        }
         TypeForm::ReadViewApplied { .. }
         | TypeForm::AssociatedReadViewMember { .. }
         | TypeForm::AssociatedReadViewProjection { .. } => {

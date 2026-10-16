@@ -120,6 +120,8 @@ impl Decoder {
         for (symbol, record) in &self.types {
             let mut children = Vec::new();
             let direct: &[&str] = match record.operation.as_str() {
+                "type.region" | "type.region-cap" => &["region"],
+                "type.rel-ptr" | "type.region-slice" => &["region", "item"],
                 "type.list" | "type.option" | "type.stream" | "type.owned-sequence" => &["item"],
                 "type.map" => &["key", "value"],
                 "type.result" => &["ok", "error"],

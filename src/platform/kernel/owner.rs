@@ -664,6 +664,8 @@ pub enum TypeParameterConstraints {
     OwnedTransferable,
     OwnedShareable,
     OwnedTransferableShareable,
+    /// A type-level region identity, never an ordinary or owned value actual.
+    Region,
 }
 
 impl TypeParameterConstraints {
@@ -677,6 +679,7 @@ impl TypeParameterConstraints {
             Self::OwnedTransferable => 5,
             Self::OwnedShareable => 6,
             Self::OwnedTransferableShareable => 7,
+            Self::Region => 8,
         }
     }
 
@@ -690,6 +693,7 @@ impl TypeParameterConstraints {
             Self::OwnedTransferable => "owned transferable",
             Self::OwnedShareable => "owned shareable",
             Self::OwnedTransferableShareable => "owned transferable shareable",
+            Self::Region => "region",
         }
     }
 
@@ -701,6 +705,10 @@ impl TypeParameterConstraints {
                 | Self::OwnedShareable
                 | Self::OwnedTransferableShareable
         )
+    }
+
+    pub const fn is_region(self) -> bool {
+        matches!(self, Self::Region)
     }
 
     pub const fn requires_capture_safe(self) -> bool {
@@ -745,6 +753,7 @@ impl TypeParameterConstraints {
             Self::OwnedTransferable => &["owned", "transferable"],
             Self::OwnedShareable => &["owned", "shareable"],
             Self::OwnedTransferableShareable => &["owned", "transferable", "shareable"],
+            Self::Region => &["region"],
         }
     }
 
@@ -756,6 +765,7 @@ impl TypeParameterConstraints {
                 "owned" => 2,
                 "transferable" => 4,
                 "shareable" => 8,
+                "region" => 16,
                 _ => return None,
             };
             if present & bit != 0 {
@@ -772,6 +782,7 @@ impl TypeParameterConstraints {
             6 => Some(Self::OwnedTransferable),
             10 => Some(Self::OwnedShareable),
             14 => Some(Self::OwnedTransferableShareable),
+            16 => Some(Self::Region),
             _ => None,
         }
     }
@@ -794,6 +805,7 @@ impl<Context> Decode<Context> for TypeParameterConstraints {
             5 => Ok(Self::OwnedTransferable),
             6 => Ok(Self::OwnedShareable),
             7 => Ok(Self::OwnedTransferableShareable),
+            8 => Ok(Self::Region),
             _ => Err(DecodeError::Other("unknown type-parameter constraint set")),
         }
     }
@@ -1009,6 +1021,7 @@ pub enum BindingKind {
     OwnedBorrow,
     ReadView,
     ReadViewBorrow,
+    Region,
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]

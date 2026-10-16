@@ -214,6 +214,22 @@ impl Resolver<'_> {
                 environment.types.caller,
                 depth + 1,
             )?,
+            TypeForm::RegionCap {
+                region,
+                mode: RegionMode::Shared { scope },
+            } => {
+                let scope = self.substitute_scope(
+                    &scope,
+                    environment,
+                    &environment.source_binder,
+                    &environment.caller_binder,
+                )?;
+                let region = self.substitute_view_inner(region, environment, depth + 1)?;
+                self.intern(TypeForm::RegionCap {
+                    region,
+                    mode: RegionMode::Shared { scope },
+                })?
+            }
             form => {
                 let form = self.children(form, |resolver, child| {
                     resolver.substitute_view_inner(child, environment, depth + 1)

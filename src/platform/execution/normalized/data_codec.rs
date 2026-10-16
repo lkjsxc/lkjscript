@@ -338,6 +338,11 @@ fn decode_value_charged(
 ) -> Result<NormalizedValue, Diagnostic> {
     state.enter(depth, precharged)?;
     match type_form(program, ty)? {
+        TypeForm::RegionBrand { .. }
+        | TypeForm::Region { .. }
+        | TypeForm::RelPtr { .. }
+        | TypeForm::RegionSlice { .. }
+        | TypeForm::RegionCap { .. } => Err(unsupported("region-bound type")),
         TypeForm::ReadViewApplied { .. }
         | TypeForm::AssociatedReadViewMember { .. }
         | TypeForm::AssociatedReadViewProjection { .. } => Err(unsupported("ReadView")),
@@ -550,6 +555,11 @@ fn describe_layout(
     }
     append_bytes(output, &ty.bytes())?;
     match type_form(program, ty)? {
+        TypeForm::RegionBrand { .. }
+        | TypeForm::Region { .. }
+        | TypeForm::RelPtr { .. }
+        | TypeForm::RegionSlice { .. }
+        | TypeForm::RegionCap { .. } => return Err(unsupported("region-bound type")),
         TypeForm::ReadViewApplied { .. }
         | TypeForm::AssociatedReadViewMember { .. }
         | TypeForm::AssociatedReadViewProjection { .. } => return Err(unsupported("ReadView")),

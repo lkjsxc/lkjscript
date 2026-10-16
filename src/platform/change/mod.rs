@@ -81,7 +81,7 @@ pub use request::{
     AuthoredReadScopeBinder, AuthoredReadScopeSource, AuthoredReadViewField,
     AuthoredReadViewFieldInitializer, AuthoredReadViewFieldKind, AuthoredReadViewFieldReference,
     AuthoredRecordExpressionField, AuthoredReference, AuthoredReferenceBindings,
-    AuthoredReferenceOrigin, AuthoredReferencePackage, AuthoredRequirement,
+    AuthoredReferenceOrigin, AuthoredReferencePackage, AuthoredRegionMode, AuthoredRequirement,
     AuthoredRequirementParameter, AuthoredRequirementReference, AuthoredResourceLimit,
     AuthoredResultRelation, AuthoredSelectedPrecondition, AuthoredStructuralTypeField,
     AuthoredTransactionOutcomeContract, AuthoredType, AuthoredTypeParameter,

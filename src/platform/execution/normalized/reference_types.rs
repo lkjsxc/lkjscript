@@ -1047,6 +1047,10 @@ impl<'source> Closure<'source, '_> {
     ) -> Result<bool, ExecutionError> {
         self.tick()?;
         match self.types.get(&ty).ok_or_else(failure)?.form {
+            TypeForm::RegionCap { mode, .. } => Ok(!matches!(
+                mode,
+                crate::platform::kernel::RegionMode::Shared { .. }
+            )),
             TypeForm::ByteBuffer
             | TypeForm::OwnedI64Cell
             | TypeForm::OwnedProduct { .. }
@@ -2153,6 +2157,21 @@ impl<'source> Closure<'source, '_> {
                     .into_iter()
                     .map(|ty| self.identity(ty, bindings, depth + 1))
                     .collect::<Result<_, _>>()?,
+            },
+            TypeForm::Region { region } => TypeForm::Region {
+                region: self.identity(region, bindings, depth + 1)?,
+            },
+            TypeForm::RelPtr { region, item } => TypeForm::RelPtr {
+                region: self.identity(region, bindings, depth + 1)?,
+                item: self.identity(item, bindings, depth + 1)?,
+            },
+            TypeForm::RegionSlice { region, item } => TypeForm::RegionSlice {
+                region: self.identity(region, bindings, depth + 1)?,
+                item: self.identity(item, bindings, depth + 1)?,
+            },
+            TypeForm::RegionCap { region, mode } => TypeForm::RegionCap {
+                region: self.identity(region, bindings, depth + 1)?,
+                mode,
             },
             TypeForm::List { item } => TypeForm::List {
                 item: self.identity(item, bindings, depth + 1)?,
@@ -3712,6 +3731,10 @@ fn scoped_owned(
     scope: Option<DeclarationReference>,
 ) -> Result<bool, ExecutionError> {
     match &schema.types.get(&ty).ok_or_else(failure)?.form {
+        TypeForm::RegionCap { mode, .. } => Ok(!matches!(
+            mode,
+            crate::platform::kernel::RegionMode::Shared { .. }
+        )),
         TypeForm::ByteBuffer
         | TypeForm::OwnedI64Cell
         | TypeForm::OwnedProduct { .. }
@@ -3806,6 +3829,10 @@ fn carrier_owned(
 ) -> Result<bool, ExecutionError> {
     meter.tick()?;
     match &schema.types.get(&ty).ok_or_else(failure)?.form {
+        TypeForm::RegionCap { mode, .. } => Ok(!matches!(
+            mode,
+            crate::platform::kernel::RegionMode::Shared { .. }
+        )),
         TypeForm::ByteBuffer
         | TypeForm::OwnedI64Cell
         | TypeForm::OwnedProduct { .. }
@@ -4704,6 +4731,19 @@ fn property_types(
                         || !schema.is_owned_type(child)))
             };
             let accepted = match &object.form {
+                TypeForm::RegionBrand { .. } => false,
+                TypeForm::Region { .. }
+                | TypeForm::RelPtr { .. }
+                | TypeForm::RegionSlice { .. } => retention != Retention::Capture,
+                TypeForm::RegionCap { mode, .. } => match retention {
+                    Retention::Transfer => matches!(
+                        mode,
+                        crate::platform::kernel::RegionMode::Unique
+                            | crate::platform::kernel::RegionMode::Frozen
+                    ),
+                    Retention::Share => matches!(mode, crate::platform::kernel::RegionMode::Frozen),
+                    _ => false,
+                },
                 _ if schema.is_owned_type(*ty) && retention == Retention::BufferFree => false,
                 TypeForm::ByteBuffer
                 | TypeForm::OwnedI64Cell

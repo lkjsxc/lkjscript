@@ -43,6 +43,7 @@ pub(crate) mod parallel;
 pub(crate) mod parallel_types;
 #[cfg(test)]
 mod parallel_types_tests;
+pub(crate) mod region;
 pub(crate) mod share;
 pub(crate) mod transfer;
 pub use owned_contract::*;

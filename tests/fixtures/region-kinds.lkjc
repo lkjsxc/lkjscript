@@ -1,0 +1,14 @@
+declarations.begin
+(units (module create regions
+  (function create identity (visibility public) (effect pure)
+    (type-parameter create R (constraint region))
+    (type-parameter create T (constraint transferable))
+    (parameter create value (type (rel-ptr R T)))
+    (returns (rel-ptr R T)) (body (local value)))
+  (function create relay (visibility public) (effect pure)
+    (type-parameter create R (constraint region))
+    (type-parameter create T (constraint transferable))
+    (parameter create value (type (rel-ptr R T)))
+    (returns (rel-ptr R T))
+    (body (call identity (types R T) (local value))))))
+declarations.end

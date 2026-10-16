@@ -8689,7 +8689,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ("layout-origin", "one-validated-preparation".to_owned()),
                     (
                         "constraints",
-                        "none,capture-safe,owned,transferable,capture-safe transferable,owned transferable,owned shareable,owned transferable shareable; exact declaration scope; transfer/share bounds on graph functions and owned implementation schemes".to_owned(),
+                        "none,capture-safe,owned,transferable,capture-safe transferable,owned transferable,owned shareable,owned transferable shareable,region; exact declaration scope; region is a type-level identity kind; transfer/share bounds on graph functions and owned implementation schemes".to_owned(),
                     ),
                     (
                         "eligibility",
@@ -9235,8 +9235,8 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         ),
         (
             "type-parameter",
-            "(type-parameter MODE BINDING [(constraint none|capture-safe|owned|transferable|capture-safe transferable|owned transferable|owned shareable|owned transferable shareable)])",
-            "Lexically scoped generic type; no escape to unrelated contracts. Shareable requires owned and permits shared reading across a structured child boundary; transferable independently permits ownership movement. Names may be authored in any order but canonical drafts use the displayed order; duplicate and unknown names reject.",
+            "(type-parameter MODE BINDING [(constraint none|capture-safe|owned|transferable|capture-safe transferable|owned transferable|owned shareable|owned transferable shareable|region)])",
+            "Lexically scoped generic type; no escape to unrelated contracts. Region is a type-level identity kind, cannot be a runtime value and cannot combine with value properties. Shareable requires owned and permits shared reading across a structured child boundary; transferable independently permits ownership movement. Names may be authored in any order but canonical drafts use the displayed order; duplicate and unknown names reject.",
         ),
         (
             "effect-parameter",
@@ -9260,8 +9260,8 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         ),
         (
             "types",
-            "Unit|Bool|I64|F64|Text|Bytes|StaticText|Secret|ByteBuffer|OwnedI64Cell|NAME|(NAME TYPE...)|(list TYPE)|(map TYPE TYPE)|(result TYPE TYPE)|(option TYPE)|(stream TYPE)|(record (NAME TYPE)...)|(owned-product (field NAME TYPE)...)|(owned-choice (case NAME TYPE)...)|(owned-sequence TYPE)|(function (TYPE...) TYPE)|(task-function (TYPE...) TYPE ROW)|(resource INTERFACE)|(parameter-type EXACT_PARAMETER)|(associated-contract-member CONTRACT assoc_type_HEX)|(associated-witness-projection SCOPE implparam_HEX CONTRACT assoc_type_HEX)|(read-view-application DECLARATION (types TYPE...) SCOPE)|(associated-read-view-member CONTRACT assoc_type_HEX SCOPE)|(associated-read-view-projection FUNCTION implparam_HEX CONTRACT assoc_type_HEX SCOPE)",
-            "Inline composition; (type-alias NAME TYPE) is scoped notation and is admitted even when unused.",
+            "Unit|Bool|I64|F64|Text|Bytes|StaticText|Secret|ByteBuffer|OwnedI64Cell|NAME|(NAME TYPE...)|(list TYPE)|(map TYPE TYPE)|(result TYPE TYPE)|(option TYPE)|(stream TYPE)|(record (NAME TYPE)...)|(owned-product (field NAME TYPE)...)|(owned-choice (case NAME TYPE)...)|(owned-sequence TYPE)|(function (TYPE...) TYPE)|(task-function (TYPE...) TYPE ROW)|(resource INTERFACE)|(parameter-type EXACT_PARAMETER)|(associated-contract-member CONTRACT assoc_type_HEX)|(associated-witness-projection SCOPE implparam_HEX CONTRACT assoc_type_HEX)|(read-view-application DECLARATION (types TYPE...) SCOPE)|(associated-read-view-member CONTRACT assoc_type_HEX SCOPE)|(associated-read-view-projection FUNCTION implparam_HEX CONTRACT assoc_type_HEX SCOPE)|(region REGION)|(rel-ptr REGION TYPE)|(region-slice REGION TYPE)|(region-cap REGION MODE)",
+            "Inline composition; (type-alias NAME TYPE) is scoped notation and is admitted even when unused. Region arguments have region kind. Region MODE is unique, frozen, pinned or (shared SCOPE).",
         ),
         (
             "effects",

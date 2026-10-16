@@ -17,6 +17,10 @@ fn view_form(form: &TypeForm) -> bool {
         TypeForm::ReadViewApplied { .. }
             | TypeForm::AssociatedReadViewMember { .. }
             | TypeForm::AssociatedReadViewProjection { .. }
+            | TypeForm::RegionCap {
+                mode: RegionMode::Shared { .. },
+                ..
+            }
     )
 }
 
@@ -195,6 +199,24 @@ impl Resolver<'_> {
         self.step(0)?;
         self.current_view(occurrence)?;
         let read_scope = match form {
+            TypeForm::RegionCap {
+                region,
+                mode: RegionMode::Shared { scope },
+            } => {
+                let TypeForm::TypeParameter { parameter } = self.object(*region)?.form else {
+                    return Err(Failure::Authority);
+                };
+                self.parameter_authority(parameter, occurrence)?;
+                let owner = occurrence.parameter_scope.ok_or(Failure::Authority)?;
+                let parameter = Oracle(self.source, Some(owner))
+                    .type_parameter(owner.package, parameter)
+                    .map(|p| p.constraints)
+                    .ok_or(Failure::Authority)?;
+                if !parameter.is_region() {
+                    return Err(Failure::Category);
+                }
+                scope
+            }
             TypeForm::ReadViewApplied {
                 declaration,
                 arguments,

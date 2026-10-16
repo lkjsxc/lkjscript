@@ -333,6 +333,7 @@ enum Category {
     ReadView,
     Other,
     Deferred,
+    RegionIdentity,
 }
 
 #[derive(Clone, Copy)]
@@ -551,6 +552,16 @@ impl<'a, 't> Admission<'a, 't, '_> {
         let properties = self.occurrence(context, ty, false, false, &mut BTreeSet::new(), depth)?;
         if properties.category == Category::Deferred {
             return Ok(());
+        }
+        if constraints.is_region() {
+            return if properties.category == Category::RegionIdentity {
+                Ok(())
+            } else {
+                Err(reject("region formal requires a region identity actual"))
+            };
+        }
+        if properties.category == Category::RegionIdentity {
+            return Err(reject("a region identity cannot fill a value type formal"));
         }
         if constraints.has_owned() {
             if properties.category != Category::Owned {
@@ -815,12 +826,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
                 depth + 1,
             );
         }
-        let view = matches!(
-            form,
-            TypeForm::ReadViewApplied { .. }
-                | TypeForm::AssociatedReadViewMember { .. }
-                | TypeForm::AssociatedReadViewProjection { .. }
-        );
+        let view = form.is_read_view();
         if view && !view_allowed {
             return Err(reject(
                 "read view escaped through a container, ordinary/Owned field, callable, or phantom argument",
@@ -849,6 +855,26 @@ impl<'a, 't> Admission<'a, 't, '_> {
                 depth + 1,
             )?);
         }
+        for (index, property) in child_properties.iter().enumerate() {
+            if property.category == Category::RegionIdentity
+                && !matches!(
+                    form,
+                    TypeForm::Applied { .. } | TypeForm::ReadViewApplied { .. }
+                )
+                && !(index == 0
+                    && matches!(
+                        form,
+                        TypeForm::Region { .. }
+                            | TypeForm::RelPtr { .. }
+                            | TypeForm::RegionSlice { .. }
+                            | TypeForm::RegionCap { .. }
+                    ))
+            {
+                return Err(reject(
+                    "region identity cannot occupy a runtime value position",
+                ));
+            }
+        }
         let all_transfer = child_properties.iter().all(|property| property.transfer);
         let all_share = child_properties.iter().all(|property| property.share);
         let all_capture = child_properties.iter().all(|property| property.capture);
@@ -856,6 +882,63 @@ impl<'a, 't> Admission<'a, 't, '_> {
             .iter()
             .any(|property| property.category == Category::Deferred);
         let properties = match form {
+            TypeForm::RegionBrand { .. } => {
+                return Err(reject("interface cannot export a lexical region brand"));
+            }
+            TypeForm::Region { .. }
+            | TypeForm::RelPtr { .. }
+            | TypeForm::RegionSlice { .. }
+            | TypeForm::RegionCap { .. } => {
+                if child_properties
+                    .first()
+                    .is_none_or(|p| p.category != Category::RegionIdentity)
+                {
+                    return Err(reject(
+                        "region type requires an exact region-constrained formal",
+                    ));
+                }
+                if child_properties
+                    .get(1)
+                    .is_some_and(|p| p.category == Category::RegionIdentity)
+                {
+                    return Err(reject("region pointee must be a value type"));
+                }
+                match form {
+                    TypeForm::RegionCap { mode, .. } => {
+                        use crate::platform::kernel::RegionMode;
+                        match mode {
+                            RegionMode::Shared { scope } => {
+                                self.scope(context, scope, depth)?;
+                                Properties {
+                                    category: Category::ReadView,
+                                    transfer: false,
+                                    share: true,
+                                    capture: false,
+                                }
+                            }
+                            RegionMode::Unique => Properties {
+                                category: Category::Owned,
+                                transfer: true,
+                                share: false,
+                                capture: false,
+                            },
+                            RegionMode::Frozen => Properties {
+                                category: Category::Owned,
+                                transfer: true,
+                                share: true,
+                                capture: false,
+                            },
+                            RegionMode::Pinned => Properties::new(Category::Owned),
+                        }
+                    }
+                    _ => Properties {
+                        category: Category::Ordinary,
+                        transfer: true,
+                        share: true,
+                        capture: false,
+                    },
+                }
+            }
             TypeForm::Unit
             | TypeForm::Bool
             | TypeForm::I64
@@ -866,7 +949,9 @@ impl<'a, 't> Admission<'a, 't, '_> {
             TypeForm::TypeParameter { parameter } => {
                 let constraints = self.formal(context, *parameter, depth)?;
                 Properties {
-                    category: if constraints.has_owned() {
+                    category: if constraints.is_region() {
+                        Category::RegionIdentity
+                    } else if constraints.has_owned() {
                         Category::Owned
                     } else {
                         Category::Ordinary
@@ -1017,6 +1102,11 @@ impl<'a, 't> Admission<'a, 't, '_> {
         let mut deferred = false;
         for ty in roots {
             let properties = self.occurrence(&defining, ty, false, false, path, depth + 1)?;
+            if properties.category == Category::RegionIdentity {
+                return Err(reject(
+                    "region identity cannot occupy a nominal value field",
+                ));
+            }
             if context.finite_layout
                 && owned
                 && !(matches!(properties.category, Category::Owned | Category::Deferred)
@@ -1543,13 +1633,11 @@ impl<'a, 't> Admission<'a, 't, '_> {
             {
                 return Err(reject("scoped signature parameter identity is duplicated"));
             }
-            let view = matches!(
-                self.object(*ty)?.form,
-                TypeForm::ReadViewApplied { .. }
-                    | TypeForm::AssociatedReadViewMember { .. }
-                    | TypeForm::AssociatedReadViewProjection { .. }
-            );
-            self.occurrence(context, *ty, view, false, &mut BTreeSet::new(), 0)?;
+            let view = self.object(*ty)?.form.is_read_view();
+            let properties = self.occurrence(context, *ty, view, false, &mut BTreeSet::new(), 0)?;
+            if properties.category == Category::RegionIdentity {
+                return Err(reject("region identity cannot occupy a value parameter"));
+            }
             if view && *use_mode != ParameterUse::Borrow {
                 return Err(reject("read-view parameters permit borrow use only"));
             }
@@ -1601,6 +1689,9 @@ impl<'a, 't> Admission<'a, 't, '_> {
             &mut BTreeSet::new(),
             0,
         )?;
+        if result_properties.category == Category::RegionIdentity {
+            return Err(reject("region identity cannot occupy a callable result"));
+        }
         let source = match &result.relation {
             ResultRelation::Value => return Ok(()),
             ResultRelation::ReadFrom { source } | ResultRelation::ViewFrom { source, .. } => {
@@ -1674,7 +1765,11 @@ fn view_scope(form: &TypeForm) -> Option<&ReadScopeArgument> {
     match form {
         TypeForm::ReadViewApplied { read_scope, .. }
         | TypeForm::AssociatedReadViewMember { read_scope, .. }
-        | TypeForm::AssociatedReadViewProjection { read_scope, .. } => Some(read_scope),
+        | TypeForm::AssociatedReadViewProjection { read_scope, .. }
+        | TypeForm::RegionCap {
+            mode: crate::platform::kernel::RegionMode::Shared { scope: read_scope },
+            ..
+        } => Some(read_scope),
         _ => None,
     }
 }
@@ -2091,6 +2186,40 @@ pub(crate) fn validate_declaration_resolved_metered<'a>(
         }
     }
     Ok(admission.deferred)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn validate_region_read_resolved_metered<'a>(
+    package: PackageId,
+    source: OwnerKey,
+    region: TypeObjectDigest,
+    read_scope: &ReadScopeArgument,
+    owners: &'a BTreeMap<OwnerKey, PackageInterfaceOwner>,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    resolve: &mut impl FnMut(
+        DeclarationReference,
+    ) -> Result<Option<&'a PackageInterfaceOwner>, Diagnostic>,
+    visit: &mut dyn FnMut(u64) -> Result<(), Diagnostic>,
+) -> Result<(), Diagnostic> {
+    let mut admission = Admission {
+        package,
+        owners,
+        types,
+        resolve,
+        work: 0,
+        storage: RepresentationBudget::default(),
+        deferred: false,
+        visit,
+    };
+    let context = admission.context(source, None)?;
+    admission.scope(&context, read_scope, 0)?;
+    let identity = admission.occurrence(&context, region, false, false, &mut BTreeSet::new(), 0)?;
+    if identity.category != Category::RegionIdentity {
+        return Err(reject(
+            "region read capability requires an exact region identity",
+        ));
+    }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]

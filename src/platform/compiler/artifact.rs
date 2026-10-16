@@ -5230,7 +5230,8 @@ fn memory_result_type(
         )
     })?;
     match read(ty)?.form {
-        TypeForm::ByteBuffer
+        TypeForm::RegionCap { .. }
+        | TypeForm::ByteBuffer
         | TypeForm::OwnedI64Cell
         | TypeForm::OwnedProduct { .. }
         | TypeForm::OwnedChoice { .. }

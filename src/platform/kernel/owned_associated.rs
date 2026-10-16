@@ -779,7 +779,11 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
             }
             TypeForm::ReadViewApplied { read_scope, .. }
             | TypeForm::AssociatedReadViewMember { read_scope, .. }
-            | TypeForm::AssociatedReadViewProjection { read_scope, .. } => {
+            | TypeForm::AssociatedReadViewProjection { read_scope, .. }
+            | TypeForm::RegionCap {
+                mode: crate::platform::kernel::RegionMode::Shared { scope: read_scope },
+                ..
+            } => {
                 read_view_admission::require_generation(consumer_generation)?;
                 match *read_scope {
                     ReadScopeArgument::Lexical { callable, binding } => {

@@ -1575,6 +1575,12 @@ impl FullValidator<'_> {
         binder: Option<ReadScopeBinder>,
     ) {
         match form {
+            TypeForm::RegionCap {
+                mode: super::RegionMode::Shared { scope },
+                ..
+            } => {
+                self.validate_read_scope_argument(source, *scope, binder);
+            }
             TypeForm::ReadViewApplied {
                 declaration,
                 read_scope,

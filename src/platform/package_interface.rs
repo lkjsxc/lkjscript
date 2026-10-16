@@ -1584,7 +1584,14 @@ fn interface_owned_type(
 ) -> bool {
     match types.get(&ty).map(|object| &object.form) {
         Some(
-            TypeForm::ByteBuffer
+            TypeForm::RegionCap {
+                mode:
+                    crate::platform::kernel::RegionMode::Unique
+                    | crate::platform::kernel::RegionMode::Frozen
+                    | crate::platform::kernel::RegionMode::Pinned,
+                ..
+            }
+            | TypeForm::ByteBuffer
             | TypeForm::OwnedI64Cell
             | TypeForm::OwnedProduct { .. }
             | TypeForm::OwnedChoice { .. }
@@ -1649,7 +1656,7 @@ fn interface_borrow_requirement_at(
     let Some(object) = types.get(&ty) else {
         return Ok(None);
     };
-    if object.form.is_associated() || matches!(object.form, TypeForm::ReadViewApplied { .. }) {
+    if object.form.is_associated() || object.form.is_read_view() {
         return admission
             .validate_form(package, source, &object.form, owners, types, &mut |_| {
                 Ok(None)
@@ -1992,6 +1999,23 @@ impl<'v> AssociatedInterfaceAdmission<'v> {
             crate::platform::kernel::DeclarationReference,
         ) -> Result<Option<&'a PackageInterfaceOwner>, Diagnostic>,
     ) -> Result<AssociatedInterfaceProof, Diagnostic> {
+        if let TypeForm::RegionCap {
+            region,
+            mode: crate::platform::kernel::RegionMode::Shared { scope },
+        } = form
+        {
+            read_views::validate_region_read_resolved_metered(
+                package,
+                source,
+                *region,
+                scope,
+                owners,
+                types,
+                resolve,
+                &mut *self.visit,
+            )?;
+            return Ok(AssociatedInterfaceProof::ReadView);
+        }
         if let TypeForm::ReadViewApplied {
             declaration,
             arguments,
@@ -2264,9 +2288,7 @@ impl<'v> AssociatedInterfaceAdmission<'v> {
             let object = types.get(&ty).ok_or_else(|| {
                 associated_interface_error("associated interface type closure is incomplete")
             })?;
-            if object.form.is_associated()
-                || matches!(object.form, TypeForm::ReadViewApplied { .. })
-            {
+            if object.form.is_associated() || object.form.is_read_view() {
                 if projection_free {
                     if matches!(object.form, TypeForm::ReadViewApplied { .. }) {
                         // A family binding is nominal and projection-free, but all of its type
@@ -2466,7 +2488,7 @@ fn validate_type_closure<S: ImmutableObjectStore + ?Sized>(
         let object = objects.get(&digest).ok_or_else(|| {
             associated_interface_error("completed interface type closure lost a visited object")
         })?;
-        if object.form.is_associated() || matches!(object.form, TypeForm::ReadViewApplied { .. }) {
+        if object.form.is_associated() || object.form.is_read_view() {
             match associated_admission.validate_form(
                 package,
                 source,
@@ -2494,6 +2516,17 @@ fn validate_interface_type_reference(
     owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
 ) -> Result<(), Diagnostic> {
     match form {
+        TypeForm::RegionBrand { .. } => {
+            return Err(interface_error(
+                DiagnosticClass::Semantic,
+                "package_interface_region_scope",
+                "a public signature cannot export a lexical region brand",
+            ));
+        }
+        TypeForm::Region { .. }
+        | TypeForm::RelPtr { .. }
+        | TypeForm::RegionSlice { .. }
+        | TypeForm::RegionCap { .. } => {}
         TypeForm::AssociatedContractMember { .. }
         | TypeForm::AssociatedWitnessProjection { .. }
         | TypeForm::AssociatedReadViewMember { .. }

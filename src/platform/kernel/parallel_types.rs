@@ -331,7 +331,12 @@ impl<'a, 'e, R: ExpressionRead + ?Sized> WitnessAppliedTypes<'a, 'e, R> {
         } else {
             let mut child = |ty| self.substitute(ty, depth + 1);
             let mut form = map_children(object.form, &mut child)?;
-            if let TypeForm::ReadViewApplied { read_scope, .. } = &mut form {
+            if let TypeForm::ReadViewApplied { read_scope, .. }
+            | TypeForm::RegionCap {
+                mode: RegionMode::Shared { scope: read_scope },
+                ..
+            } = &mut form
+            {
                 *read_scope = self.substitute_scope(*read_scope)?;
             }
             self.intern(form)?
@@ -416,7 +421,12 @@ impl<'a, R: ExpressionRead + ?Sized> ScopedAppliedTypes<'a, R> {
         self.admission
             .reserve::<TypeObjectDigest>(object.child_type_count())?;
         let mut form = map_children(object.form, &mut |child| self.substitute(child, depth + 1))?;
-        if let TypeForm::ReadViewApplied { read_scope, .. } = &mut form {
+        if let TypeForm::ReadViewApplied { read_scope, .. }
+        | TypeForm::RegionCap {
+            mode: RegionMode::Shared { scope: read_scope },
+            ..
+        } = &mut form
+        {
             *read_scope =
                 owned_associated::read_view_admission::substitute_scope(*read_scope, self.scopes)?;
         }
@@ -816,6 +826,21 @@ fn map_children(
                 .map(&mut *child)
                 .collect::<Result<_, _>>()?,
             read_scope,
+        },
+        TypeForm::Region { region } => TypeForm::Region {
+            region: child(region)?,
+        },
+        TypeForm::RelPtr { region, item } => TypeForm::RelPtr {
+            region: child(region)?,
+            item: child(item)?,
+        },
+        TypeForm::RegionSlice { region, item } => TypeForm::RegionSlice {
+            region: child(region)?,
+            item: child(item)?,
+        },
+        TypeForm::RegionCap { region, mode } => TypeForm::RegionCap {
+            region: child(region)?,
+            mode,
         },
         TypeForm::List { item } => TypeForm::List { item: child(item)? },
         TypeForm::OwnedSequence { item } => TypeForm::OwnedSequence { item: child(item)? },

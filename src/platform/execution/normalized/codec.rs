@@ -312,6 +312,14 @@ fn from_json(
     require_depth(limits, path, depth)?;
     let form = json_form(program, ty, true, path)?;
     match form {
+        TypeForm::RegionBrand { .. }
+        | TypeForm::Region { .. }
+        | TypeForm::RelPtr { .. }
+        | TypeForm::RegionSlice { .. }
+        | TypeForm::RegionCap { .. } => Err(type_error(
+            path,
+            "region identities, offsets and capabilities cannot be decoded from JSON",
+        )),
         TypeForm::ReadViewApplied { .. }
         | TypeForm::AssociatedReadViewMember { .. }
         | TypeForm::AssociatedReadViewProjection { .. } => {

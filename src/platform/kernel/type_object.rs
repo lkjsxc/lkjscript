@@ -7,7 +7,7 @@ use super::name::Name;
 use super::reference::DeclarationReference;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::{
-    AssociatedTypeMemberId, ImplementationParameterId, TypeParameterId,
+    AssociatedTypeMemberId, BindingId, ImplementationParameterId, TypeParameterId,
 };
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
@@ -41,6 +41,11 @@ impl TypeObject {
             ));
         }
         match &self.form {
+            TypeForm::RegionBrand { .. }
+            | TypeForm::Region { .. }
+            | TypeForm::RelPtr { .. }
+            | TypeForm::RegionSlice { .. }
+            | TypeForm::RegionCap { .. } => {}
             TypeForm::Applied { arguments, .. } => {
                 require_count("nominal type arguments", arguments.len(), false)?;
             }
@@ -96,6 +101,8 @@ impl TypeObject {
 
     pub fn child_type_count(&self) -> usize {
         match &self.form {
+            TypeForm::Region { .. } | TypeForm::RegionCap { .. } => 1,
+            TypeForm::RelPtr { .. } | TypeForm::RegionSlice { .. } => 2,
             TypeForm::Applied { arguments, .. } | TypeForm::ReadViewApplied { arguments, .. } => {
                 arguments.len()
             }
@@ -116,6 +123,11 @@ impl TypeObject {
 
     pub fn child_types(&self) -> Vec<TypeObjectDigest> {
         match &self.form {
+            TypeForm::Region { region } | TypeForm::RegionCap { region, .. } => vec![*region],
+            TypeForm::RelPtr { region, item } | TypeForm::RegionSlice { region, item } => {
+                vec![*region, *item]
+            }
+            TypeForm::RegionBrand { .. } => Vec::new(),
             TypeForm::Applied { arguments, .. } | TypeForm::ReadViewApplied { arguments, .. } => {
                 arguments.clone()
             }
@@ -265,6 +277,50 @@ pub enum TypeForm {
         member: AssociatedTypeMemberId,
         read_scope: ReadScopeArgument,
     },
+    /// A generative type-level identity. It has no runtime value inhabitants.
+    RegionBrand {
+        callable: DeclarationReference,
+        binding: BindingId,
+    },
+    /// A copyable region identifier, without storage custody or access rights.
+    Region {
+        region: TypeObjectDigest,
+    },
+    /// A copyable 32-bit offset. Only a matching live capability may dereference it.
+    RelPtr {
+        region: TypeObjectDigest,
+        item: TypeObjectDigest,
+    },
+    /// A copyable pair of 32-bit offset and element count.
+    RegionSlice {
+        region: TypeObjectDigest,
+        item: TypeObjectDigest,
+    },
+    /// Linear storage custody or a scoped read loan over one region identity.
+    RegionCap {
+        region: TypeObjectDigest,
+        mode: RegionMode,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum RegionMode {
+    Unique,
+    Shared { scope: ReadScopeArgument },
+    Frozen,
+    Pinned,
+}
+
+impl RegionMode {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Unique => "unique",
+            Self::Shared { .. } => "shared",
+            Self::Frozen => "frozen",
+            Self::Pinned => "pinned",
+        }
+    }
 }
 
 impl TypeForm {
@@ -284,12 +340,20 @@ impl TypeForm {
     }
 
     pub(crate) fn is_read_view(&self) -> bool {
-        matches!(
-            self,
-            Self::ReadViewApplied { .. }
-                | Self::AssociatedReadViewMember { .. }
-                | Self::AssociatedReadViewProjection { .. }
-        )
+        self.read_scope().is_some()
+    }
+
+    pub(crate) fn read_scope(&self) -> Option<ReadScopeArgument> {
+        match self {
+            Self::ReadViewApplied { read_scope, .. }
+            | Self::AssociatedReadViewMember { read_scope, .. }
+            | Self::AssociatedReadViewProjection { read_scope, .. }
+            | Self::RegionCap {
+                mode: RegionMode::Shared { scope: read_scope },
+                ..
+            } => Some(*read_scope),
+            _ => None,
+        }
     }
 }
 

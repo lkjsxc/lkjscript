@@ -1,5 +1,8 @@
 //! Focused normalized artifact-preparation and dense-execution tests.
 
+#[path = "region_types_tests.rs"]
+mod region_types_tests;
+
 #[path = "recursive_tests.rs"]
 mod recursive_tests;
 

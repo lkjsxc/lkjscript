@@ -259,6 +259,12 @@ fn admit_inner(
                 }
                 layout_budget.extend_types(&mut derived_types, layout.types)?;
             }
+            TypeForm::RegionCap {
+                region,
+                mode: RegionMode::Frozen,
+            } => {
+                super::region::require_identity(read, region, parameters)?;
+            }
             TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => {}
             TypeForm::TypeParameter { parameter }
                 if if let Some((occurrence, associated)) = occurrence {

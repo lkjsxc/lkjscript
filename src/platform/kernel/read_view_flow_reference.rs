@@ -1697,6 +1697,13 @@ impl Engine<'_, '_> {
         scope: ReadScopeArgument,
     ) -> Result<TypeObjectDigest> {
         let form = match self.resolver.object(ty)?.form.clone() {
+            TypeForm::RegionCap {
+                region,
+                mode: RegionMode::Shared { .. },
+            } => TypeForm::RegionCap {
+                region,
+                mode: RegionMode::Shared { scope },
+            },
             TypeForm::ReadViewApplied {
                 declaration,
                 arguments,

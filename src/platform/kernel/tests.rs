@@ -2396,6 +2396,7 @@ fn generic_call_substitutes_the_exact_type_parameter() {
 fn capture_constraint_set_has_stable_tags_and_strict_json() {
     for (constraint, tag, json) in [
         (TypeParameterConstraints::None, 0_u8, "[]"),
+        (TypeParameterConstraints::Region, 8_u8, "[\"region\"]"),
         (
             TypeParameterConstraints::CaptureSafe,
             1,
@@ -2459,7 +2460,7 @@ fn capture_constraint_set_has_stable_tags_and_strict_json() {
             "{json}"
         );
     }
-    for tag in [8_u8, 127, 255] {
+    for tag in [9_u8, 127, 255] {
         assert!(
             bincode::decode_from_slice::<TypeParameterConstraints, _>(
                 &[tag],

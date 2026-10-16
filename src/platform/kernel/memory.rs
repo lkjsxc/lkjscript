@@ -54,7 +54,8 @@ pub(crate) fn direct_in(
             .ok_or_else(|| reject("missing memory type"))?
             .form
         {
-            TypeForm::ByteBuffer
+            TypeForm::RegionCap { .. }
+            | TypeForm::ByteBuffer
             | TypeForm::OwnedI64Cell
             | TypeForm::OwnedProduct { .. }
             | TypeForm::OwnedChoice { .. }
@@ -1367,7 +1368,11 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
         {
             TypeForm::ReadViewApplied { read_scope, .. }
             | TypeForm::AssociatedReadViewMember { read_scope, .. }
-            | TypeForm::AssociatedReadViewProjection { read_scope, .. } => Ok(read_scope),
+            | TypeForm::AssociatedReadViewProjection { read_scope, .. }
+            | TypeForm::RegionCap {
+                mode: crate::platform::kernel::RegionMode::Shared { scope: read_scope },
+                ..
+            } => Ok(read_scope),
             _ => Err(reject("local has no positive read-view scope")),
         }
     }
@@ -3769,22 +3774,14 @@ pub(crate) fn validate_owner_at(
                         state.insert(
                             LocalValueReference::FunctionParameter(id),
                             if read_view {
-                                let scope = match read
+                                let scope = read
                                     .type_object(p.ty)?
                                     .ok_or_else(|| reject("missing view parameter type"))?
                                     .form
-                                {
-                                    TypeForm::ReadViewApplied { read_scope, .. }
-                                    | TypeForm::AssociatedReadViewMember { read_scope, .. }
-                                    | TypeForm::AssociatedReadViewProjection {
-                                        read_scope, ..
-                                    } => read_scope,
-                                    _ => {
-                                        return Err(reject(
-                                            "view parameter lost its positive category",
-                                        ));
-                                    }
-                                };
+                                    .read_scope()
+                                    .ok_or_else(|| {
+                                        reject("view parameter lost its positive category")
+                                    })?;
                                 Slot::read_view(None, scope, true)
                             } else {
                                 Slot::owner(p.use_mode == ParameterUse::Borrow)

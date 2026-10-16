@@ -1742,6 +1742,39 @@ impl Writer {
             }
             let next = depth + 1;
             match value {
+                AuthoredType::RegionBrand { callable, binding } => {
+                    self.tag(30)?;
+                    self.declaration_reference(callable, definitions)?;
+                    self.local_reference(binding, definitions)?;
+                }
+                AuthoredType::Region { region } => {
+                    self.tag(31)?;
+                    pending.push(Frame::Type(region, next));
+                }
+                AuthoredType::RelPtr { region, item }
+                | AuthoredType::RegionSlice { region, item } => {
+                    self.tag(if matches!(value, AuthoredType::RelPtr { .. }) {
+                        32
+                    } else {
+                        33
+                    })?;
+                    pending.push(Frame::Type(item, next));
+                    pending.push(Frame::Type(region, next));
+                }
+                AuthoredType::RegionCap { region, mode } => {
+                    use super::AuthoredRegionMode;
+                    self.tag(34)?;
+                    match mode {
+                        AuthoredRegionMode::Unique => self.tag(0)?,
+                        AuthoredRegionMode::Shared { scope } => {
+                            self.tag(1)?;
+                            self.read_scope_argument(scope, definitions)?;
+                        }
+                        AuthoredRegionMode::Frozen => self.tag(2)?,
+                        AuthoredRegionMode::Pinned => self.tag(3)?,
+                    }
+                    pending.push(Frame::Type(region, next));
+                }
                 AuthoredType::ReadViewApplied {
                     declaration,
                     arguments,

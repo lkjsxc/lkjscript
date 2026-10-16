@@ -25,6 +25,16 @@ impl Resolver<'_> {
         active.insert(ty);
         let form = self.object(ty)?.form.clone();
         self.admit_read_view_form(&form, occurrence)?;
+        if matches!(
+            form,
+            TypeForm::RegionCap {
+                mode: RegionMode::Shared { .. },
+                ..
+            }
+        ) {
+            active.remove(&ty);
+            return Ok(true);
+        }
         let TypeForm::ReadViewApplied {
             declaration,
             arguments,

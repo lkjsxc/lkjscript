@@ -781,6 +781,14 @@ impl Oracle<'_> {
                 return false;
             };
             match form {
+                TypeForm::RegionBrand { .. } | TypeForm::RegionCap { .. } => return false,
+                TypeForm::Region { .. }
+                | TypeForm::RelPtr { .. }
+                | TypeForm::RegionSlice { .. } => {
+                    if capture {
+                        return false;
+                    }
+                }
                 TypeForm::TypeParameter { parameter } => {
                     if !bindings.contains(parameter)
                         && !self.scoped_parameter(*parameter).is_some_and(|p| {

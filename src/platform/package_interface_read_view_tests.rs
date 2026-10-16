@@ -93,6 +93,174 @@ fn fixture() -> (
     )
 }
 
+fn region_form(
+    types: &mut BTreeMap<TypeObjectDigest, TypeObject>,
+    form: TypeForm,
+) -> TypeObjectDigest {
+    let object = TypeObject::new(form).unwrap();
+    let digest = encode_type_object(&object).unwrap().0;
+    types.insert(digest, object);
+    digest
+}
+
+#[test]
+fn region_interface_admits_shared_loans_and_rejects_value_kind_or_scope_erasure() {
+    let (package, mut owners, mut types, function, source) = fixture();
+    let parameter = TypeParameterId::migrate(b"interface-region-kind", 0);
+    let owner = PackageInterfaceOwner {
+        contract_version: PACKAGE_INTERFACE_CONTRACT_VERSION,
+        record: PackageInterfaceRecord::TypeParameter(TypeParameterRecord {
+            header: OwnerHeader::new(OwnerKey::TypeParameter(parameter), OwnerKind::TypeParameter),
+            declaration: function,
+            name: Name::new("R").unwrap(),
+            constraints: TypeParameterConstraints::Region,
+        }),
+    };
+    owners.insert(owner.owner(), owner);
+    let region = region_form(&mut types, TypeForm::TypeParameter { parameter });
+    let PackageInterfaceRecord::Declaration(declaration) = &mut owners
+        .get_mut(&OwnerKey::Declaration(function))
+        .unwrap()
+        .record
+    else {
+        unreachable!()
+    };
+    let PackageInterfaceDeclarationPayload::Function(signature) = &mut declaration.payload else {
+        unreachable!()
+    };
+    signature.type_parameters.push(parameter);
+    let ResultRelation::ViewFrom { scope, .. } = signature.result.relation else {
+        unreachable!()
+    };
+    let shared = region_form(
+        &mut types,
+        TypeForm::RegionCap {
+            region,
+            mode: RegionMode::Shared { scope },
+        },
+    );
+    signature.result.ty = shared;
+    let PackageInterfaceRecord::Parameter(input) =
+        &mut owners.get_mut(&OwnerKey::Parameter(source)).unwrap().record
+    else {
+        unreachable!()
+    };
+    input.ty = shared;
+    validate_owner_closure(package, &owners, &types).unwrap();
+
+    let mut consumed = owners.clone();
+    let PackageInterfaceRecord::Parameter(input) = &mut consumed
+        .get_mut(&OwnerKey::Parameter(source))
+        .unwrap()
+        .record
+    else {
+        unreachable!()
+    };
+    input.use_mode = ParameterUse::Consume;
+    assert!(validate_owner_closure(package, &consumed, &types).is_err());
+
+    let mut escaped = owners.clone();
+    let PackageInterfaceRecord::Declaration(declaration) = &mut escaped
+        .get_mut(&OwnerKey::Declaration(function))
+        .unwrap()
+        .record
+    else {
+        unreachable!()
+    };
+    let PackageInterfaceDeclarationPayload::Function(signature) = &mut declaration.payload else {
+        unreachable!()
+    };
+    signature.result.relation = ResultRelation::Value;
+    assert!(validate_owner_closure(package, &escaped, &types).is_err());
+
+    // Change only the exact result scope. Correct type bytes and a positive
+    // view category cannot replace the declared source-scope relationship.
+    let foreign_scope = ReadScopeArgument::Parameter(ReadScopeReference {
+        binder: ReadScopeBinder::Declaration(DeclarationReference {
+            package,
+            declaration: function,
+        }),
+        parameter: ReadScopeParameterId::migrate(b"absent-region-scope", 0),
+    });
+    let wrong = region_form(
+        &mut types,
+        TypeForm::RegionCap {
+            region,
+            mode: RegionMode::Shared {
+                scope: foreign_scope,
+            },
+        },
+    );
+    let mut wrong_scope = owners.clone();
+    let PackageInterfaceRecord::Declaration(declaration) = &mut wrong_scope
+        .get_mut(&OwnerKey::Declaration(function))
+        .unwrap()
+        .record
+    else {
+        unreachable!()
+    };
+    let PackageInterfaceDeclarationPayload::Function(signature) = &mut declaration.payload else {
+        unreachable!()
+    };
+    signature.result.ty = wrong;
+    assert!(validate_owner_closure(package, &wrong_scope, &types).is_err());
+
+    let unit = region_form(&mut types, TypeForm::Unit);
+    let i64_type = region_form(&mut types, TypeForm::I64);
+    let pointer = region_form(
+        &mut types,
+        TypeForm::RelPtr {
+            region,
+            item: i64_type,
+        },
+    );
+    let PackageInterfaceRecord::Declaration(declaration) = &mut owners
+        .get_mut(&OwnerKey::Declaration(function))
+        .unwrap()
+        .record
+    else {
+        unreachable!()
+    };
+    let PackageInterfaceDeclarationPayload::Function(signature) = &mut declaration.payload else {
+        unreachable!()
+    };
+    signature.result = CallableResult {
+        ty: unit,
+        relation: ResultRelation::Value,
+    };
+    signature.read_scope_parameters.clear();
+    signature.read_scope_sources.clear();
+    let PackageInterfaceRecord::Parameter(input) =
+        &mut owners.get_mut(&OwnerKey::Parameter(source)).unwrap().record
+    else {
+        unreachable!()
+    };
+    input.ty = pointer;
+    input.use_mode = ParameterUse::Unrestricted;
+    validate_owner_closure(package, &owners, &types).unwrap();
+    let identity_list = region_form(&mut types, TypeForm::List { item: region });
+    let identity_item = region_form(
+        &mut types,
+        TypeForm::RelPtr {
+            region,
+            item: region,
+        },
+    );
+    let shared_list = region_form(&mut types, TypeForm::List { item: shared });
+    for ty in [region, identity_list, identity_item, shared_list] {
+        let PackageInterfaceRecord::Parameter(input) =
+            &mut owners.get_mut(&OwnerKey::Parameter(source)).unwrap().record
+        else {
+            unreachable!()
+        };
+        input.ty = ty;
+        assert!(
+            validate_owner_closure(package, &owners, &types).is_err(),
+            "accepted {ty}"
+        );
+    }
+}
+
 #[test]
 fn metadata_only_view_still_retains_its_exact_selected_source() {
     let (package, mut owners, types, function, source) = fixture();

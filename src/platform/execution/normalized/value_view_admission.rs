@@ -125,6 +125,17 @@ impl Guard<'_> {
             TypeForm::ReadViewApplied { .. }
             | TypeForm::AssociatedReadViewMember { .. }
             | TypeForm::AssociatedReadViewProjection { .. } => return Err(escape()),
+            TypeForm::RegionBrand { .. }
+            | TypeForm::Region { .. }
+            | TypeForm::RelPtr { .. }
+            | TypeForm::RegionSlice { .. }
+            | TypeForm::RegionCap { .. } => {
+                return Err(ExecutionError::new(
+                    crate::platform::execution::ExecutionFailureClass::Trap,
+                    "normalized_region_escape",
+                    "a region-bound type cannot cross an unscoped value boundary",
+                ));
+            }
             TypeForm::Named { .. } | TypeForm::Applied { .. } => {
                 // Phantom actuals and inactive variant payloads are still occurrences.
                 if let TypeForm::Applied { arguments, .. } = &object.form {

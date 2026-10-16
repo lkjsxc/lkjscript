@@ -1082,6 +1082,12 @@ fn property_types(
         };
         match &object.form {
             _ if unresolved.contains(root) => admitted = false,
+            TypeForm::RegionBrand { .. } | TypeForm::RegionCap { .. } => admitted = false,
+            TypeForm::Region { .. } | TypeForm::RelPtr { .. } | TypeForm::RegionSlice { .. } => {
+                // Offsets carry no storage. Their live region is proved at each
+                // consuming operation; an unscoped capture cannot retain them.
+                admitted = property != Property::Capture;
+            }
             TypeForm::AssociatedContractMember { .. }
             | TypeForm::AssociatedWitnessProjection { .. }
             | TypeForm::AssociatedReadViewMember { .. }

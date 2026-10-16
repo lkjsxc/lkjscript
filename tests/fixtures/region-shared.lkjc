@@ -1,0 +1,35 @@
+declarations.begin
+(units (module create shared-regions
+  (function create inspect (visibility public) (effect pure)
+    (type-parameter create R (constraint region))
+    (scope-parameter read_scope_b9170000000000000000000000000001 loan)
+    (parameter create cap
+      (type (region-cap R (shared (read-scope (declaration inspect) read_scope_b9170000000000000000000000000001))))
+      (use borrow))
+    (returns Unit) (body (unit)))
+  (function create forward (visibility public) (effect pure)
+    (type-parameter create R (constraint region))
+    (scope-parameter read_scope_b9170000000000000000000000000002 loan)
+    (parameter create cap
+      (type (region-cap R (shared (read-scope (declaration forward) read_scope_b9170000000000000000000000000002))))
+      (use borrow))
+    (returns (region-cap R (shared (read-scope (declaration forward) read_scope_b9170000000000000000000000000002)))
+      (view-from cap (read-scope (declaration forward) read_scope_b9170000000000000000000000000002)))
+    (body (view-reborrow (local cap)
+      (read-scope (declaration forward) read_scope_b9170000000000000000000000000002))))
+  (function create relay (visibility public) (effect pure)
+    (type-parameter create R (constraint region))
+    (scope-parameter read_scope_b9170000000000000000000000000003 loan)
+    (parameter create cap
+      (type (region-cap R (shared (read-scope (declaration relay) read_scope_b9170000000000000000000000000003))))
+      (use borrow))
+    (returns (region-cap R (shared (read-scope (declaration relay) read_scope_b9170000000000000000000000000003)))
+      (view-from cap (read-scope (declaration relay) read_scope_b9170000000000000000000000000003)))
+    (body (borrow-call
+      (call forward (types R)
+        (scopes (read-scope (declaration relay) read_scope_b9170000000000000000000000000003))
+        (local cap))
+      (binding forwarded
+        (type (region-cap R (shared (read-scope (declaration relay) read_scope_b9170000000000000000000000000003)))))
+      (in (view-move (local forwarded))))))))
+declarations.end

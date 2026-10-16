@@ -656,6 +656,16 @@ fn authored_type(
         )
     })?;
     Ok(match &object.form {
+        TypeForm::RegionBrand { .. }
+        | TypeForm::Region { .. }
+        | TypeForm::RelPtr { .. }
+        | TypeForm::RegionSlice { .. }
+        | TypeForm::RegionCap { .. } => {
+            return Err(recipe_error(
+                "new_recipe_region_scope",
+                "starter recipe values cannot import a lexical region identity",
+            ));
+        }
         TypeForm::AssociatedContractMember { .. }
         | TypeForm::AssociatedWitnessProjection { .. } => {
             return Err(crate::platform::kernel::owned_associated::unsupported_semantics());

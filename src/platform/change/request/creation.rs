@@ -326,6 +326,25 @@ pub enum AuthoredFunctionEffect {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredType {
+    RegionBrand {
+        callable: AuthoredDeclarationReference,
+        binding: AuthoredLocalReference,
+    },
+    Region {
+        region: Box<AuthoredType>,
+    },
+    RelPtr {
+        region: Box<AuthoredType>,
+        item: Box<AuthoredType>,
+    },
+    RegionSlice {
+        region: Box<AuthoredType>,
+        item: Box<AuthoredType>,
+    },
+    RegionCap {
+        region: Box<AuthoredType>,
+        mode: AuthoredRegionMode,
+    },
     ReadViewApplied {
         declaration: AuthoredDeclarationReference,
         arguments: Vec<AuthoredType>,
@@ -420,6 +439,14 @@ pub enum AuthoredType {
 pub struct AuthoredStructuralTypeField {
     pub name: Name,
     pub ty: AuthoredType,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum AuthoredRegionMode {
+    Unique,
+    Shared { scope: AuthoredReadScopeArgument },
+    Frozen,
+    Pinned,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1221,6 +1248,43 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         authored: &AuthoredType,
     ) -> Result<TypeObjectDigest, Diagnostic> {
         let form = match authored {
+            AuthoredType::RegionBrand { callable, binding } => {
+                let callable = self.lower_declaration_reference(callable)?;
+                let LocalValueReference::LexicalBinding(binding) =
+                    self.lower_local_reference(binding)?
+                else {
+                    return Err(request_error(
+                        DiagnosticClass::Semantic,
+                        "change_region_binding",
+                        "region brand requires a lexical region binding",
+                    ));
+                };
+                TypeForm::RegionBrand { callable, binding }
+            }
+            AuthoredType::Region { region } => TypeForm::Region {
+                region: self.lower_type(region)?,
+            },
+            AuthoredType::RelPtr { region, item } => TypeForm::RelPtr {
+                region: self.lower_type(region)?,
+                item: self.lower_type(item)?,
+            },
+            AuthoredType::RegionSlice { region, item } => TypeForm::RegionSlice {
+                region: self.lower_type(region)?,
+                item: self.lower_type(item)?,
+            },
+            AuthoredType::RegionCap { region, mode } => TypeForm::RegionCap {
+                region: self.lower_type(region)?,
+                mode: match mode {
+                    AuthoredRegionMode::Unique => crate::platform::kernel::RegionMode::Unique,
+                    AuthoredRegionMode::Frozen => crate::platform::kernel::RegionMode::Frozen,
+                    AuthoredRegionMode::Pinned => crate::platform::kernel::RegionMode::Pinned,
+                    AuthoredRegionMode::Shared { scope } => {
+                        crate::platform::kernel::RegionMode::Shared {
+                            scope: self.lower_read_scope(scope)?,
+                        }
+                    }
+                },
+            },
             AuthoredType::ReadViewApplied {
                 declaration,
                 arguments,

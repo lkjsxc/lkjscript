@@ -106,7 +106,11 @@ fn view_scope(form: &TypeForm) -> Option<&ReadScopeArgument> {
     match form {
         TypeForm::ReadViewApplied { read_scope, .. }
         | TypeForm::AssociatedReadViewMember { read_scope, .. }
-        | TypeForm::AssociatedReadViewProjection { read_scope, .. } => Some(read_scope),
+        | TypeForm::AssociatedReadViewProjection { read_scope, .. }
+        | TypeForm::RegionCap {
+            mode: RegionMode::Shared { scope: read_scope },
+            ..
+        } => Some(read_scope),
         _ => None,
     }
 }

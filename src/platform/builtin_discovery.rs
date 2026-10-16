@@ -1553,6 +1553,23 @@ fn append_type(
         ("form".to_owned(), type_form_name(&ty.form).to_owned()),
     ];
     match &ty.form {
+        TypeForm::RegionBrand { callable, binding } => fields.extend([
+            (
+                "callable".to_owned(),
+                format!("{}/{}", callable.package, callable.declaration),
+            ),
+            ("binding".to_owned(), binding.to_string()),
+        ]),
+        TypeForm::Region { .. } | TypeForm::RelPtr { .. } | TypeForm::RegionSlice { .. } => {}
+        TypeForm::RegionCap { mode, .. } => {
+            fields.push(("mode".to_owned(), mode.name().to_owned()));
+            if let crate::platform::kernel::RegionMode::Shared { scope } = mode {
+                fields.push((
+                    "read-scope".to_owned(),
+                    super::cli::read_scope_coordinate(*scope),
+                ));
+            }
+        }
         TypeForm::AssociatedContractMember { contract, member }
         | TypeForm::AssociatedReadViewMember {
             contract, member, ..
@@ -1706,6 +1723,26 @@ fn append_type(
         }
     }
     match &ty.form {
+        TypeForm::RegionBrand { .. } => {}
+        TypeForm::Region { region } | TypeForm::RegionCap { region, .. } => {
+            append_type(
+                standard,
+                &format!("{path}.region"),
+                *region,
+                records,
+                depth + 1,
+            )?;
+        }
+        TypeForm::RelPtr { region, item } | TypeForm::RegionSlice { region, item } => {
+            append_type(
+                standard,
+                &format!("{path}.region"),
+                *region,
+                records,
+                depth + 1,
+            )?;
+            append_type(standard, &format!("{path}.item"), *item, records, depth + 1)?;
+        }
         TypeForm::AssociatedContractMember { .. }
         | TypeForm::AssociatedWitnessProjection { .. }
         | TypeForm::AssociatedReadViewMember { .. }
@@ -1904,6 +1941,11 @@ fn exact_owner_reference(package: PackageId, owner: OwnerKey) -> String {
 
 fn type_form_name(form: &TypeForm) -> &'static str {
     match form {
+        TypeForm::RegionBrand { .. } => "region-brand",
+        TypeForm::Region { .. } => "region",
+        TypeForm::RelPtr { .. } => "rel-ptr",
+        TypeForm::RegionSlice { .. } => "region-slice",
+        TypeForm::RegionCap { .. } => "region-cap",
         TypeForm::ReadViewApplied { .. } => "read-view-application",
         TypeForm::AssociatedReadViewMember { .. } => "associated-read-view-member",
         TypeForm::AssociatedReadViewProjection { .. } => "associated-read-view-projection",

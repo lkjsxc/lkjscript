@@ -1392,17 +1392,19 @@ impl CompiledSignature {
                 })
             },
         )?;
-        if let crate::platform::kernel::ResultRelation::ViewFrom { source, scope } =
+        if let crate::platform::kernel::ResultRelation::ViewFrom { scope, .. } =
             self.result.relation
-            && !self
-                .read_scope_sources
-                .iter()
-                .any(|r| r.source == source && r.scope == scope)
         {
-            return Err(unit_corrupt(
-                "compiler_unit_read_scope",
-                "view result must retain its exact declared source and scope relationship",
-            ));
+            // A borrowed view parameter inherits its scope from its type and
+            // need not repeat a source relationship. Units contain type digests;
+            // linked canonical admission checks that inherited relationship.
+            crate::platform::kernel::validate_formal_scope(
+                scope,
+                &self.read_scope_parameters,
+                Some(crate::platform::kernel::ReadScopeBinder::Declaration(
+                    source_declaration(source)?,
+                )),
+            )?;
         }
         for requirement in &self.task_requirements {
             require_index(

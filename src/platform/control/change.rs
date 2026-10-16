@@ -397,7 +397,7 @@ impl CompactChangeFieldForm {
             Self::ExternalVisibility => "none|possible",
             Self::ParameterUse => "unrestricted|borrow|consume",
             Self::TypeParameterConstraint => {
-                "none|capture-safe|owned|transferable|capture-safe transferable|owned transferable|owned shareable|owned transferable shareable"
+                "none|capture-safe|owned|transferable|capture-safe transferable|owned transferable|owned shareable|owned transferable shareable|region"
             }
             Self::RequirementReference => "$NAME|pkg_HEX/req_HEX",
             Self::ImplementationName => "dot.separated.name",
@@ -1791,6 +1791,11 @@ pub(crate) const COMPACT_CHANGE_PRECONDITION_FIELDS: &[CompactChangePrecondition
     },
 ];
 pub const COMPACT_TYPE_FORMS: &[&str] = &[
+    "region-brand",
+    "region",
+    "rel-ptr",
+    "region-slice",
+    "region-cap",
     "owned-sequence",
     "owned-choice",
     "owned-product",
@@ -1946,6 +1951,96 @@ pub(crate) struct CompactFormField {
 }
 
 pub(crate) const COMPACT_TYPE_FORM_FIELDS: &[CompactFormField] = &[
+    CompactFormField {
+        form: "region-brand",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "region-brand",
+        name: "callable",
+        required: true,
+        syntax: "declaration-reference",
+    },
+    CompactFormField {
+        form: "region-brand",
+        name: "binding",
+        required: true,
+        syntax: "local-reference",
+    },
+    CompactFormField {
+        form: "region",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "region",
+        name: "region",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "rel-ptr",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "rel-ptr",
+        name: "region",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "rel-ptr",
+        name: "item",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "region-slice",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "region-slice",
+        name: "region",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "region-slice",
+        name: "item",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "region-cap",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "region-cap",
+        name: "region",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "region-cap",
+        name: "mode",
+        required: true,
+        syntax: "unique|shared|frozen|pinned",
+    },
+    CompactFormField {
+        form: "region-cap",
+        name: "read-scope",
+        required: false,
+        syntax: "read-scope-reference",
+    },
     CompactFormField {
         form: "read-view-application",
         name: "as",
@@ -6206,6 +6301,61 @@ impl Decoder {
             )
         })?;
         let ty = match record.operation.as_str() {
+            "type.region-brand" => {
+                check_fields(&record, &["as", "callable", "binding"])?;
+                AuthoredType::RegionBrand {
+                    callable: self.parse_declaration_reference(&record, "callable")?,
+                    binding: self.parse_local_reference(&record, "binding")?,
+                }
+            }
+            "type.region" => {
+                check_fields(&record, &["as", "region"])?;
+                AuthoredType::Region {
+                    region: Box::new(self.decode_type(required(&record, "region")?)?),
+                }
+            }
+            "type.rel-ptr" | "type.region-slice" => {
+                check_fields(&record, &["as", "region", "item"])?;
+                let region = Box::new(self.decode_type(required(&record, "region")?)?);
+                let item = Box::new(self.decode_type(required(&record, "item")?)?);
+                if record.operation == "type.rel-ptr" {
+                    AuthoredType::RelPtr { region, item }
+                } else {
+                    AuthoredType::RegionSlice { region, item }
+                }
+            }
+            "type.region-cap" => {
+                use crate::platform::change::AuthoredRegionMode;
+                check_fields(&record, &["as", "region", "mode", "read-scope"])?;
+                let mode = match required(&record, "mode")? {
+                    "unique" => AuthoredRegionMode::Unique,
+                    "frozen" => AuthoredRegionMode::Frozen,
+                    "pinned" => AuthoredRegionMode::Pinned,
+                    "shared" => AuthoredRegionMode::Shared {
+                        scope: self.decode_read_scope(required(&record, "read-scope")?)?,
+                    },
+                    _ => {
+                        return Err(Diagnostic::new(
+                            DiagnosticClass::Source,
+                            "change_region_mode",
+                            "region mode must be unique, shared, frozen or pinned",
+                        ));
+                    }
+                };
+                if !matches!(mode, AuthoredRegionMode::Shared { .. })
+                    && field(&record, "read-scope").is_some()
+                {
+                    return Err(Diagnostic::new(
+                        DiagnosticClass::Source,
+                        "change_region_mode",
+                        "only shared region mode carries a read scope",
+                    ));
+                }
+                AuthoredType::RegionCap {
+                    region: Box::new(self.decode_type(required(&record, "region")?)?),
+                    mode,
+                }
+            }
             "type.byte-buffer"
             | "type.owned-i64-cell"
             | "type.unit"

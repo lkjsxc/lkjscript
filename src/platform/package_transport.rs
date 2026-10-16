@@ -998,9 +998,7 @@ fn validate_interface_dependencies(
                     "associated discovery count overflow",
                 )
             })?;
-            if object.form.is_associated()
-                || matches!(object.form, TypeForm::ReadViewApplied { .. })
-            {
+            if object.form.is_associated() || object.form.is_read_view() {
                 associated_present = true;
                 break 'discovery;
             }
@@ -1369,9 +1367,7 @@ impl<'a> PackageInterfaceClosure<'a> {
         let mut projected = false;
         for object in interface.type_objects.values() {
             admission.step()?;
-            if object.form.is_associated()
-                || matches!(object.form, TypeForm::ReadViewApplied { .. })
-            {
+            if object.form.is_associated() || object.form.is_read_view() {
                 projected = true;
                 break;
             }
@@ -1604,6 +1600,13 @@ impl<'a> PackageInterfaceClosure<'a> {
             )
         })?;
         Ok(match &object.form {
+            TypeForm::RegionCap {
+                mode:
+                    crate::platform::kernel::RegionMode::Unique
+                    | crate::platform::kernel::RegionMode::Frozen
+                    | crate::platform::kernel::RegionMode::Pinned,
+                ..
+            } => true,
             TypeForm::ByteBuffer
             | TypeForm::OwnedI64Cell
             | TypeForm::OwnedProduct { .. }

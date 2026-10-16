@@ -114,6 +114,21 @@ impl<R: SessionShapeRead> Closure<'_, R> {
                     .collect::<Result<_, Diagnostic>>()?;
                 TypeForm::StructuralRecord { fields }
             }
+            TypeForm::Region { region } => TypeForm::Region {
+                region: self.substitute(region, bindings, next)?,
+            },
+            TypeForm::RelPtr { region, item } => TypeForm::RelPtr {
+                region: self.substitute(region, bindings, next)?,
+                item: self.substitute(item, bindings, next)?,
+            },
+            TypeForm::RegionSlice { region, item } => TypeForm::RegionSlice {
+                region: self.substitute(region, bindings, next)?,
+                item: self.substitute(item, bindings, next)?,
+            },
+            TypeForm::RegionCap { region, mode } => TypeForm::RegionCap {
+                region: self.substitute(region, bindings, next)?,
+                mode,
+            },
             TypeForm::List { item } => TypeForm::List {
                 item: self.substitute(item, bindings, next)?,
             },
@@ -203,6 +218,16 @@ pub(super) fn validate<R: SessionShapeRead>(
         complete.insert(ty);
         let object = closure.object(ty)?;
         match &object.form {
+            TypeForm::RegionBrand { .. }
+            | TypeForm::Region { .. }
+            | TypeForm::RelPtr { .. }
+            | TypeForm::RegionSlice { .. }
+            | TypeForm::RegionCap { .. } => {
+                return Err(session_semantic(
+                    "session_state_region",
+                    "retained session state cannot outlive a region capability",
+                ));
+            }
             TypeForm::AssociatedContractMember { .. }
             | TypeForm::AssociatedWitnessProjection { .. } => {
                 return Err(crate::platform::kernel::owned_associated::unsupported_semantics());

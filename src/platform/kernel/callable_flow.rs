@@ -271,13 +271,8 @@ impl<R: ExpressionRead> Flow<'_, R> {
                         "callable application type object is missing",
                     )
                 })?;
-                match &object.form {
-                    TypeForm::ReadViewApplied { read_scope, .. }
-                    | TypeForm::AssociatedReadViewMember { read_scope, .. }
-                    | TypeForm::AssociatedReadViewProjection { read_scope, .. } => {
-                        self.scope_arguments(std::slice::from_ref(read_scope))?;
-                    }
-                    _ => {}
+                if let Some(read_scope) = object.form.read_scope() {
+                    self.scope_arguments(std::slice::from_ref(&read_scope))?;
                 }
                 if let TypeForm::TypeParameter { parameter } = object.form {
                     let ordinal = parameters

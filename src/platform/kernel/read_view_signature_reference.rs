@@ -333,7 +333,11 @@ impl Resolver<'_> {
         Ok(match self.object(ty)?.form {
             TypeForm::ReadViewApplied { read_scope, .. }
             | TypeForm::AssociatedReadViewMember { read_scope, .. }
-            | TypeForm::AssociatedReadViewProjection { read_scope, .. } => Some(read_scope),
+            | TypeForm::AssociatedReadViewProjection { read_scope, .. }
+            | TypeForm::RegionCap {
+                mode: crate::platform::kernel::RegionMode::Shared { scope: read_scope },
+                ..
+            } => Some(read_scope),
             _ => None,
         })
     }

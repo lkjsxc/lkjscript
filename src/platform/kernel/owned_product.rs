@@ -230,6 +230,10 @@ pub(crate) fn validate_in_scope(
                     pending.push((child_type, depth + 1));
                 }
                 TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => owned = true,
+                TypeForm::RegionCap { .. } => {
+                    super::owned_contract::validate_owned_type(read, child_type, scope)?;
+                    owned = true;
+                }
                 TypeForm::TypeParameter { parameter }
                     if super::memory::direct_in(
                         read,

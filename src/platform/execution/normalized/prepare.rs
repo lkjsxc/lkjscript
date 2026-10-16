@@ -1265,6 +1265,21 @@ impl NormalizedProgram {
                     .collect::<Option<_>>()?,
                 read_scope: *read_scope,
             },
+            TypeForm::Region { region } => TypeForm::Region {
+                region: self.substitute_type(*region, substitutions, next)?,
+            },
+            TypeForm::RelPtr { region, item } => TypeForm::RelPtr {
+                region: self.substitute_type(*region, substitutions, next)?,
+                item: self.substitute_type(*item, substitutions, next)?,
+            },
+            TypeForm::RegionSlice { region, item } => TypeForm::RegionSlice {
+                region: self.substitute_type(*region, substitutions, next)?,
+                item: self.substitute_type(*item, substitutions, next)?,
+            },
+            TypeForm::RegionCap { region, mode } => TypeForm::RegionCap {
+                region: self.substitute_type(*region, substitutions, next)?,
+                mode: *mode,
+            },
             TypeForm::List { item } => TypeForm::List {
                 item: self.substitute_type(*item, substitutions, next)?,
             },
@@ -1318,7 +1333,14 @@ impl NormalizedProgram {
     pub(super) fn is_owned_type(&self, ty: TypeObjectDigest) -> bool {
         match self.types.get(&ty).map(|object| &object.form) {
             Some(
-                TypeForm::ByteBuffer
+                TypeForm::RegionCap {
+                    mode:
+                        crate::platform::kernel::RegionMode::Unique
+                        | crate::platform::kernel::RegionMode::Frozen
+                        | crate::platform::kernel::RegionMode::Pinned,
+                    ..
+                }
+                | TypeForm::ByteBuffer
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
                 | TypeForm::OwnedChoice { .. }
@@ -2407,7 +2429,8 @@ fn validate_normalized_resource_signature(
         proof.step()?;
         Ok(match types.get(&ty).map(|t| &t.form) {
             Some(
-                TypeForm::ByteBuffer
+                TypeForm::RegionCap { .. }
+                | TypeForm::ByteBuffer
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
                 | TypeForm::OwnedChoice { .. }
@@ -2442,10 +2465,7 @@ fn validate_normalized_resource_signature(
             )
         })?;
         let affine = is_memory(parameter.ty, Some(parameter.parameter), proof)?;
-        let view = matches!(
-            form.form,
-            TypeForm::ReadViewApplied { .. } | TypeForm::AssociatedReadViewProjection { .. }
-        );
+        let view = form.form.is_read_view();
         parameter_owned.push(affine && !view);
         memory |= affine;
         match &form.form {

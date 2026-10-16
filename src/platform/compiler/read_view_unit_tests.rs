@@ -144,6 +144,19 @@ fn foreign_unit_schema_is_rejected_before_decoding_payload() {
 fn view_result_keeps_exact_source_and_full_unused_scope_inventory() {
     let signature = signature();
     signature.validate(&tables(), &source()).unwrap();
+    let mut inherited = signature.clone();
+    inherited.read_scope_sources.clear();
+    inherited.validate(&tables(), &source()).unwrap();
+    if let ResultRelation::ViewFrom { scope, .. } = &mut inherited.result.relation {
+        *scope = ReadScopeArgument::Parameter(ReadScopeReference {
+            binder: ReadScopeBinder::Declaration(reference(2)),
+            parameter: scope_parameter().id,
+        });
+    }
+    assert_eq!(
+        inherited.validate(&tables(), &source()).unwrap_err().code,
+        "kernel_read_view_scope"
+    );
     let mut absent = signature.clone();
     absent.result.relation = ResultRelation::ViewFrom {
         source: "param_00000000000000000000000000000003".parse().unwrap(),

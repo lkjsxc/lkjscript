@@ -6,6 +6,7 @@
 
 use super::super::reference_effects;
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
+use crate::platform::kernel;
 use crate::platform::kernel::{
     AssociatedTypeBindingValue, AssociatedTypeBound, CallableResult, DeclarationPayload,
     DeclarationReference, EffectParameterReference, EffectRow, ExpressionOperation,
@@ -755,6 +756,26 @@ impl<'a> Derivation<'a> {
                     .into_iter()
                     .map(|ty| self.ty(ty, env, depth + 1))
                     .collect::<Result<_, _>>()?,
+            },
+            TypeForm::Region { region } => TypeForm::Region {
+                region: self.ty(region, env, depth + 1)?,
+            },
+            TypeForm::RelPtr { region, item } => TypeForm::RelPtr {
+                region: self.ty(region, env, depth + 1)?,
+                item: self.ty(item, env, depth + 1)?,
+            },
+            TypeForm::RegionSlice { region, item } => TypeForm::RegionSlice {
+                region: self.ty(region, env, depth + 1)?,
+                item: self.ty(item, env, depth + 1)?,
+            },
+            TypeForm::RegionCap { region, mode } => TypeForm::RegionCap {
+                region: self.ty(region, env, depth + 1)?,
+                mode: match mode {
+                    kernel::RegionMode::Shared { scope } => kernel::RegionMode::Shared {
+                        scope: self.read_scope(scope, env)?,
+                    },
+                    other => other,
+                },
             },
             TypeForm::List { item } => TypeForm::List {
                 item: self.ty(item, env, depth + 1)?,

@@ -581,12 +581,7 @@ pub(crate) fn lexical(context: AssociatedTypeContext) -> Option<DeclarationRefer
 }
 
 pub(crate) fn direct(form: &TypeForm) -> bool {
-    matches!(
-        form,
-        TypeForm::ReadViewApplied { .. }
-            | TypeForm::AssociatedReadViewMember { .. }
-            | TypeForm::AssociatedReadViewProjection { .. }
-    )
+    form.is_read_view()
 }
 
 pub(crate) struct ViewLayout {
@@ -879,6 +874,18 @@ pub(crate) fn read_shareable_at(
     occurrence: OwnedTypeOccurrence,
     admission: &OwnedAssociatedAdmission,
 ) -> Result<(), Diagnostic> {
+    admission.step(read)?;
+    if let Some(TypeObject {
+        form:
+            TypeForm::RegionCap {
+                region,
+                mode: RegionMode::Shared { .. },
+            },
+        ..
+    }) = read.type_object(ty)?
+    {
+        return super::super::region::require_identity(read, region, occurrence.parameters);
+    }
     let mut active = BTreeSet::new();
     validate_nominal_inner(read, ty, occurrence, admission, &mut active, 0, true)
 }
@@ -1131,7 +1138,11 @@ pub(crate) fn validate_result<S: Copy + Eq>(
                     let result_scope = match object.form {
                         TypeForm::ReadViewApplied { read_scope, .. }
                         | TypeForm::AssociatedReadViewMember { read_scope, .. }
-                        | TypeForm::AssociatedReadViewProjection { read_scope, .. } => read_scope,
+                        | TypeForm::AssociatedReadViewProjection { read_scope, .. }
+                        | TypeForm::RegionCap {
+                            mode: crate::platform::kernel::RegionMode::Shared { scope: read_scope },
+                            ..
+                        } => read_scope,
                         _ => return Err(reject("ViewFrom has no view scope")),
                     };
                     if result_scope != *scope {
@@ -1140,9 +1151,11 @@ pub(crate) fn validate_result<S: Copy + Eq>(
                     let inherited = match source_object.form {
                         TypeForm::ReadViewApplied { read_scope, .. }
                         | TypeForm::AssociatedReadViewMember { read_scope, .. }
-                        | TypeForm::AssociatedReadViewProjection { read_scope, .. } => {
-                            Some(read_scope)
-                        }
+                        | TypeForm::AssociatedReadViewProjection { read_scope, .. }
+                        | TypeForm::RegionCap {
+                            mode: crate::platform::kernel::RegionMode::Shared { scope: read_scope },
+                            ..
+                        } => Some(read_scope),
                         _ => None,
                     };
                     let mut explicit = false;

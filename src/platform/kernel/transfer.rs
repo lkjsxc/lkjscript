@@ -381,6 +381,12 @@ fn admit_inner(
             .type_object(current)?
             .ok_or_else(|| reject("transfer type is absent"))?;
         match object.form {
+            TypeForm::RegionCap {
+                region,
+                mode: RegionMode::Unique | RegionMode::Frozen,
+            } => {
+                super::region::require_identity(read, region, parameters)?;
+            }
             TypeForm::Named { .. } | TypeForm::Applied { .. }
                 if super::owned_record::is_owned(read, package, current)? =>
             {

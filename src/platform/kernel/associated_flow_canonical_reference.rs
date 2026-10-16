@@ -724,6 +724,16 @@ impl<'a, 'b> Adapter<'a, 'b> {
         self.budget.canonical_reserve(object)?;
         let children = Self::type_children(&object.form);
         let (kind, atoms) = match &object.form {
+            TypeForm::RegionBrand { .. } => return Err(model::Refusal::Scope),
+            TypeForm::Region { .. } => ("region", vec![]),
+            TypeForm::RelPtr { .. } => ("rel_ptr", vec![]),
+            TypeForm::RegionSlice { .. } => ("region_slice", vec![]),
+            TypeForm::RegionCap { mode, .. } => {
+                if let RegionMode::Shared { scope } = mode {
+                    self.view_scope(*scope, context)?;
+                }
+                ("region_cap", vec![mode.name().to_owned()])
+            }
             TypeForm::TypeParameter { parameter } => {
                 if matches!(context.mode, TypeMode::Closed) {
                     return Err(model::Refusal::Scope);
@@ -967,6 +977,15 @@ impl<'a, 'b> Adapter<'a, 'b> {
             SignatureTerm::Ordinary(self.term(ty, context, depth)?)
         } else {
             let (kind, fields) = match &object.form {
+                TypeForm::Region { .. } => ("region", vec![]),
+                TypeForm::RelPtr { .. } => ("rel_ptr", vec![]),
+                TypeForm::RegionSlice { .. } => ("region_slice", vec![]),
+                TypeForm::RegionCap { mode, .. } => {
+                    if let RegionMode::Shared { scope } = mode {
+                        self.view_scope(*scope, context)?;
+                    }
+                    ("region_cap", vec![format!("{mode:?}")])
+                }
                 TypeForm::Applied {
                     declaration,
                     arguments,
@@ -1043,6 +1062,10 @@ impl<'a, 'b> Adapter<'a, 'b> {
 
     fn type_children(form: &TypeForm) -> Vec<TypeObjectDigest> {
         match form {
+            TypeForm::Region { region } | TypeForm::RegionCap { region, .. } => vec![*region],
+            TypeForm::RelPtr { region, item } | TypeForm::RegionSlice { region, item } => {
+                vec![*region, *item]
+            }
             TypeForm::Applied { arguments, .. } | TypeForm::ReadViewApplied { arguments, .. } => {
                 arguments.clone()
             }
