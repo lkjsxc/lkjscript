@@ -1,0 +1,41 @@
+declarations.begin
+(units (module create region-expressions
+  (function create scalar (visibility public) (effect pure) (returns I64)
+    (body (region-with
+      (binding arena (as $scalar-region)
+        (type (region-cap (region-brand scalar $scalar-region) unique)))
+      (i64 512)
+      (in (region-read (type (rel-ptr (region-brand scalar $scalar-region) I64)) arena
+        (region-alloc (type (rel-ptr (region-brand scalar $scalar-region) I64)) arena (i64 42)))))))
+  (function create frozen (visibility public) (effect pure) (returns I64)
+    (body (region-with
+      (binding arena (as $frozen-region)
+        (type (region-cap (region-brand frozen $frozen-region) unique)))
+      (i64 512)
+      (in (let
+        (binding pointer (type (rel-ptr (region-brand frozen $frozen-region) I64))
+          (region-alloc (type (rel-ptr (region-brand frozen $frozen-region) I64)) arena (i64 11)))
+        (binding written
+          (region-write (type (rel-ptr (region-brand frozen $frozen-region) I64)) arena (local pointer) (i64 29)))
+        (binding frozen-cap (type (region-cap (region-brand frozen $frozen-region) frozen))
+          (region-freeze (type (region-cap (region-brand frozen $frozen-region) frozen)) arena))
+        (in (region-read (type (rel-ptr (region-brand frozen $frozen-region) I64)) frozen-cap (local pointer))))))))
+  (function create read-frozen (visibility public) (effect pure)
+    (type-parameter create R (constraint region))
+    (parameter create pointer (type (rel-ptr R I64)))
+    (parameter create arena (type (region-cap R frozen)) (use borrow))
+    (returns I64)
+    (body (region-read (type (rel-ptr R I64)) arena (local pointer))))
+  (function create frozen-call (visibility public) (effect pure) (returns I64)
+    (body (region-with
+      (binding arena (as $call-region)
+        (type (region-cap (region-brand frozen-call $call-region) unique)))
+      (i64 512)
+      (in (let
+        (binding pointer (type (rel-ptr (region-brand frozen-call $call-region) I64))
+          (region-alloc (type (rel-ptr (region-brand frozen-call $call-region) I64)) arena (i64 73)))
+        (binding frozen-cap (type (region-cap (region-brand frozen-call $call-region) frozen))
+          (region-freeze (type (region-cap (region-brand frozen-call $call-region) frozen)) arena))
+        (in (call read-frozen (types (region-brand frozen-call $call-region))
+          (local pointer) (local frozen-cap))))))))))
+declarations.end

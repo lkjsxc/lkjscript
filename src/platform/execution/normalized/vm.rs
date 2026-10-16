@@ -28,6 +28,8 @@ use std::sync::Arc;
 
 #[path = "vm_checked.rs"]
 mod checked;
+#[path = "vm_region.rs"]
+mod region;
 use checked::{BorrowResultTarget, BorrowSource, Class, Value as CheckedValue};
 #[path = "vm_intrinsics.rs"]
 mod checked_intrinsics;
@@ -408,7 +410,10 @@ impl<'a> NormalizedVm<'a> {
         control.check()?;
         let list_work = super::list::Work::current();
         let map_work = super::map::Work::current();
+        let regions = super::region_value::Arena::new()?;
         let mut machine = Machine {
+            regions: &regions,
+            region_scopes: Vec::new(),
             shared_budget: None,
             structured_depth: 0,
             ancestor_depth: 0,
@@ -653,6 +658,12 @@ struct ActiveTransaction {
 }
 
 struct Machine<'a> {
+    regions: &'a super::region_value::Arena,
+    region_scopes: Vec<(
+        u64,
+        u32,
+        crate::platform::execution::region::runtime::Identity,
+    )>,
     shared_budget: Option<Arc<super::shared_budget::SharedBudget>>,
     structured_depth: usize,
     ancestor_depth: usize,
@@ -722,6 +733,9 @@ impl Drop for Machine<'_> {
 
 impl Machine<'_> {
     fn clear_execution_values(&mut self) {
+        while let Some((_, _, identity)) = self.region_scopes.pop() {
+            let _ = self.regions.close(identity);
+        }
         while let Some(frame) = self.frames.pop() {
             while self.stack.len() > frame.stack_base {
                 drop(self.stack.pop());
@@ -898,6 +912,7 @@ impl Machine<'_> {
                 None => false,
             };
             match instruction {
+                NormalizedInstruction::Region(operation) => self.region_operation(operation)?,
                 NormalizedInstruction::Parallel {
                     left_types,
                     left_implementations,
@@ -1996,6 +2011,40 @@ impl Machine<'_> {
                             "function result escaped its exact function application",
                         )?;
                         let expected = memory_form.is_some();
+                        let result_template =
+                            match self.program.types.get(&f.result.ty).map(|t| &t.form) {
+                                Some(TypeForm::TypeParameter { parameter }) => self
+                                    .current_frame()?
+                                    .type_arguments
+                                    .get(parameter)
+                                    .copied()
+                                    .unwrap_or(f.result.ty),
+                                _ => f.result.ty,
+                            };
+                        let declared_region = matches!(
+                            self.program.types.get(&result_template).map(|t| &t.form),
+                            Some(TypeForm::RegionCap { .. })
+                        );
+                        if declared_region
+                            || matches!(result.raw(), NormalizedValue::RegionCap { .. })
+                        {
+                            let expected_type = self.resolve_frame_type(
+                                f.result.ty,
+                                "region result escaped its exact application",
+                            )?;
+                            let NormalizedValue::RegionCap { ty, token } = result.raw() else {
+                                return Err(type_error("function region result contract mismatch"));
+                            };
+                            if *ty != expected_type
+                                || !matches!(
+                                    self.program.types.get(&expected_type).map(|t| &t.form),
+                                    Some(TypeForm::RegionCap { .. })
+                                )
+                            {
+                                return Err(type_error("region result changes its exact type"));
+                            }
+                            self.regions.validate(token, self.memory_domain, true)?;
+                        }
                         if (result.class(self.program, &mut self.observation.value_work)?
                             == Class::Memory)
                             != expected
@@ -3298,6 +3347,18 @@ impl Machine<'_> {
             .zip(type_arguments.iter())
         {
             self.control.check()?;
+            let region = matches!(
+                self.program.types.get(ty).map(|t| &t.form),
+                Some(TypeForm::RegionBrand { .. })
+            );
+            if region || constraint.is_region() {
+                if region != constraint.is_region() {
+                    return Err(type_error(
+                        "function region argument changes its exact kind",
+                    ));
+                }
+                continue;
+            }
             let owned = self.program.is_owned_type(*ty);
             if (constraint.has_owned() && !owned)
                 || (!constraint.has_owned() && !self.program.buffer_free_types.contains(ty))
@@ -3565,6 +3626,50 @@ impl Machine<'_> {
                 .types
                 .get(&parameter.ty)
                 .ok_or_else(|| type_error("missing exact call parameter type"))?;
+            if let NormalizedValue::RegionPointer { ty, .. } = argument.raw() {
+                let expected = resolve_runtime_application_type(
+                    self.program,
+                    parameter.ty,
+                    context,
+                    self.control,
+                    "region pointer parameter escaped its exact application",
+                )?;
+                if *ty != expected
+                    || parameter.use_mode != ParameterUse::Unrestricted
+                    || parameter.resource_requirement.is_some()
+                    || argument.class(self.program, &mut self.observation.value_work)?
+                        != Class::Free
+                {
+                    return Err(type_error("region pointer argument changes its exact type"));
+                }
+                continue;
+            }
+            if let NormalizedValue::RegionCap { ty, token } = argument.raw() {
+                let expected = resolve_runtime_application_type(
+                    self.program,
+                    parameter.ty,
+                    context,
+                    self.control,
+                    "region call parameter escaped its exact application",
+                )?;
+                if *ty != expected
+                    || parameter.resource_requirement.is_some()
+                    || parameter.use_mode == ParameterUse::Unrestricted
+                    || (parameter.use_mode == ParameterUse::Borrow) != token.is_borrowed()
+                    || argument.class(self.program, &mut self.observation.value_work)?
+                        != Class::Region
+                {
+                    return Err(type_error(
+                        "region argument changes its exact type or custody",
+                    ));
+                }
+                self.regions.validate(
+                    token,
+                    self.memory_domain,
+                    parameter.use_mode == ParameterUse::Consume,
+                )?;
+                continue;
+            }
             if parameter_type.form.is_read_view() {
                 let resolved = resolve_runtime_application_type(
                     self.program,
@@ -4061,7 +4166,7 @@ impl Machine<'_> {
         {
             if !matches!(
                 value.class(self.program, &mut self.observation.value_work)?,
-                Class::Free | Class::Memory
+                Class::Free | Class::Memory | Class::Region
             ) {
                 return Err(runtime_error(
                     "normalized_tail_resource",
@@ -4322,7 +4427,10 @@ impl Machine<'_> {
         let valid = match use_mode {
             ParameterUse::Unrestricted => class == Class::Free,
             ParameterUse::Borrow => {
-                matches!(class, Class::Direct | Class::Memory | Class::ReadView)
+                matches!(
+                    class,
+                    Class::Direct | Class::Memory | Class::ReadView | Class::Region
+                )
             }
             ParameterUse::Consume => class != Class::Free && class != Class::ReadView,
         };
@@ -4336,6 +4444,10 @@ impl Machine<'_> {
             source
                 .raw()
                 .memory_validate(self.memory_domain, use_mode == ParameterUse::Consume)?;
+        }
+        if let NormalizedValue::RegionCap { token, .. } = source.raw() {
+            self.regions
+                .validate(token, self.memory_domain, use_mode == ParameterUse::Consume)?;
         }
         if let NormalizedValue::ReadView(view) = source.raw() {
             view.validate(self.control)?;
@@ -4373,6 +4485,29 @@ impl Machine<'_> {
                 .and_then(|frame| frame.locals.get_mut(local as usize))
                 .and_then(Option::take)
                 .ok_or_else(|| type_error("validated local disappeared"))?
+        } else if class == Class::Region {
+            let source = self
+                .current_frame()?
+                .locals
+                .get(local as usize)
+                .and_then(Option::as_ref)
+                .ok_or_else(|| type_error("region source disappeared"))?;
+            let NormalizedValue::RegionCap { ty, token } = source.raw() else {
+                return Err(type_error("region class has no capability"));
+            };
+            CheckedValue::region(
+                self.program,
+                self.regions,
+                self.memory_domain,
+                *ty,
+                NormalizedValue::RegionCap {
+                    ty: *ty,
+                    token: self
+                        .regions
+                        .borrow(token, self.memory_domain, self.memory_domain)?,
+                },
+                self.control,
+            )?
         } else if view {
             self.borrow_view_local(local)?
         } else {
@@ -4580,6 +4715,9 @@ fn value_cost(value: &NormalizedValue) -> Result<(u64, u64), ExecutionError> {
     let mut items = 0_u64;
     while let Some(value) = pending.pop() {
         match value {
+            NormalizedValue::RegionCap { .. } | NormalizedValue::RegionPointer { .. } => {
+                return Err(super::region_value::error());
+            }
             NormalizedValue::ByteBuffer(_)
             | NormalizedValue::OwnedI64Cell(_)
             | NormalizedValue::OwnedProduct(_)

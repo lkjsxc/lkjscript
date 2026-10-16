@@ -25,6 +25,8 @@ use std::collections::{BTreeMap, BTreeSet};
 mod nominal_flow;
 #[path = "infer_read_views.rs"]
 mod read_views;
+#[path = "infer_region.rs"]
+mod region_expressions;
 
 #[cfg(test)]
 #[path = "nominal_flow_tests.rs"]
@@ -1133,6 +1135,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             self.validate_nominal_type(ty, context, occurrence, 0)?;
         }
         let inferred = match record.operation {
+            ExpressionOperation::Region { operation } => {
+                self.infer_region(operation, context, consumer_generation, next)
+            }
             operation @ (ExpressionOperation::CreateReadView { .. }
             | ExpressionOperation::BorrowReadView { .. }
             | ExpressionOperation::ReborrowReadView { .. }
@@ -2647,6 +2652,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     LocalValueReference::LexicalBinding(_) => matches!(
                         kind,
                         BindingKind::Let
+                            | BindingKind::Region
                             | BindingKind::OwnedUnpack
                             | BindingKind::OwnedChoicePayload
                             | BindingKind::OwnedBorrow

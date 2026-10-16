@@ -1922,6 +1922,52 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 .map(|_| ())
         };
         let owned = match e.operation {
+            ExpressionOperation::Region { operation } => {
+                use super::RegionExpression as E;
+                match operation {
+                    E::With {
+                        binding,
+                        capacity,
+                        body,
+                    } => {
+                        plain(capacity, state)?;
+                        let local = LocalValueReference::LexicalBinding(binding);
+                        self.associated.reserve::<(LocalValueReference, Slot)>(1)?;
+                        if state.insert(local, Slot::owner(false)).is_some() {
+                            return Err(reject("region binder aliases an existing owner"));
+                        }
+                        let result = self.eval(body, state, mode, next)?;
+                        state.remove(&local);
+                        result
+                    }
+                    operation => {
+                        for child in operation.expressions().into_iter().flatten() {
+                            plain(*child, state)?;
+                        }
+                        if let Some(local) = operation.capability() {
+                            let slot = state
+                                .get_mut(local)
+                                .ok_or_else(|| reject("region capability has no live custody"))?;
+                            let mutable = matches!(
+                                operation,
+                                E::Alloc { .. }
+                                    | E::Write { .. }
+                                    | E::Freeze { .. }
+                                    | E::MmapLoad { .. }
+                            );
+                            if !slot.live || (mutable && (slot.borrowed || slot.loans != 0)) {
+                                return Err(reject(
+                                    "region capability is consumed or mutably aliased",
+                                ));
+                            }
+                            if matches!(operation, E::Freeze { .. } | E::MmapLoad { .. }) {
+                                slot.live = false;
+                            }
+                        }
+                        matches!(operation, E::Freeze { .. } | E::MmapLoad { .. })
+                    }
+                }
+            }
             ExpressionOperation::CreateReadView {
                 declaration,
                 type_arguments,

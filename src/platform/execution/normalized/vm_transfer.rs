@@ -173,8 +173,13 @@ impl TransferArguments {
 
     /// Mode-aware child custody. A borrowed root is certified without walking
     /// its payload; consuming carriers retain the complete recursive boundary.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the lexical arena is independent of program, source and destination custody"
+    )]
     pub(in super::super) fn seal_scoped_applied(
         program: &NormalizedProgram,
+        regions: &super::super::region_value::Arena,
         source: ValueOrigin,
         destination: ValueOrigin,
         application: TaskApplication,
@@ -218,6 +223,28 @@ impl TransferArguments {
                 return Err(reject());
             }
             let (value, lease, memory) = match (parameter.use_mode, argument) {
+                (
+                    mode @ (ParameterUse::Borrow | ParameterUse::Consume),
+                    ScopedArgument::Value(NormalizedValue::RegionCap { ty: actual, token }),
+                ) => {
+                    if actual != ty {
+                        return Err(reject());
+                    }
+                    let token = if mode == ParameterUse::Borrow {
+                        if !token.is_borrowed()
+                            || !validate_shareable_type(program, ty, 0, &mut work)?
+                        {
+                            return Err(reject());
+                        }
+                        regions.borrow(&token, source, destination)?
+                    } else {
+                        if !validate_type(program, ty, 0, &mut work)? {
+                            return Err(reject());
+                        }
+                        regions.transfer(token, source, destination)?
+                    };
+                    (NormalizedValue::RegionCap { ty, token }, None, true)
+                }
                 (ParameterUse::Borrow, ScopedArgument::Read { value, custody }) => {
                     if !validate_shareable_type(program, ty, 0, &mut work)? {
                         return Err(reject());
@@ -315,6 +342,7 @@ impl TransferArguments {
     pub(in super::super) fn adopt_scoped_applied(
         mut self,
         program: &NormalizedProgram,
+        regions: &super::super::region_value::Arena,
         destination: ValueOrigin,
         control: &ExecutionControl,
     ) -> Result<(TaskApplication, Vec<NormalizedValue>, Vec<ScopedReadLease>), ExecutionError> {
@@ -329,6 +357,9 @@ impl TransferArguments {
         let mut work = Work { control, nodes: 0 };
         let mut leases = self.reads.iter().peekable();
         for (index, value) in values.iter_mut().enumerate() {
+            if let NormalizedValue::RegionCap { token, .. } = value {
+                regions.validate(token, destination, false)?;
+            }
             match leases.peek().filter(|lease| lease.position() == index) {
                 Some(lease) => lease.adopt(
                     program,
@@ -576,6 +607,26 @@ fn validate_type(
         return Ok(true);
     }
     match &program.types.get(&ty).ok_or_else(reject)?.form {
+        TypeForm::RegionCap {
+            mode:
+                crate::platform::kernel::RegionMode::Unique
+                | crate::platform::kernel::RegionMode::Frozen,
+            region,
+        } if matches!(
+            program.types.get(region).map(|t| &t.form),
+            Some(TypeForm::RegionBrand { .. })
+        ) =>
+        {
+            Ok(true)
+        }
+        TypeForm::RelPtr { region, .. }
+            if matches!(
+                program.types.get(region).map(|t| &t.form),
+                Some(TypeForm::RegionBrand { .. })
+            ) =>
+        {
+            Ok(false)
+        }
         TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Ok(true),
         TypeForm::OwnedSequence { item } => {
             // Empty storage is still an owner and grants no exemption from the
@@ -604,6 +655,16 @@ fn validate_shareable_type(
     work: &mut Work<'_>,
 ) -> Result<bool, ExecutionError> {
     work.visit(depth)?;
+    if let Some(TypeForm::RegionCap {
+        region,
+        mode: crate::platform::kernel::RegionMode::Frozen,
+    }) = program.types.get(&ty).map(|t| &t.form)
+    {
+        return Ok(matches!(
+            program.types.get(region).map(|t| &t.form),
+            Some(TypeForm::RegionBrand { .. })
+        ));
+    }
     if let Some(layout) = program.read_view_layout(ty) {
         let TypeForm::ReadViewApplied {
             declaration,
@@ -728,6 +789,11 @@ fn inspect_value(
         return Err(reject());
     }
     match (value, &program.types.get(&ty).ok_or_else(reject)?.form) {
+        (NormalizedValue::RegionPointer { ty: actual, .. }, TypeForm::RelPtr { .. })
+            if *actual == ty =>
+        {
+            ordinary(value, ty)
+        }
         (NormalizedValue::ByteBuffer(token), TypeForm::ByteBuffer) => token.validate(source, true),
         (NormalizedValue::OwnedI64Cell(token), TypeForm::OwnedI64Cell) => {
             token.validate(source, true)

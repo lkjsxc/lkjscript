@@ -4,6 +4,59 @@ use std::time::{Duration, Instant};
 
 const WAIT: Duration = Duration::from_secs(5);
 
+#[test]
+fn scoped_regions_borrow_stack_data_and_hold_capacity_until_join() {
+    let mut executor = StructuredExecutor::for_test(1);
+    let handle = executor.handle();
+    let values = [17_i64, 29];
+    let (finished, wait_finished) = mpsc::sync_channel(1);
+    let pair = handle
+        .run_scoped(
+            &ExecutionControl::uncancelled(),
+            || {
+                wait_finished.recv_timeout(WAIT).unwrap();
+                assert_eq!(handle.observe().active_dispatches, 1);
+                let nested = handle
+                    .run_scoped(&ExecutionControl::uncancelled(), || values[0], || values[1])
+                    .unwrap();
+                assert!(!nested.dispatched);
+                nested.left
+            },
+            || {
+                finished.send(()).unwrap();
+                (values[1], values.as_ptr() as usize)
+            },
+        )
+        .unwrap();
+    assert!(pair.dispatched);
+    assert_eq!((pair.left, pair.right.0), (17, 29));
+    assert_eq!(pair.right.1, values.as_ptr() as usize);
+    let receipt = executor.shutdown().unwrap();
+    assert_eq!(receipt.active_dispatches, 0);
+    assert_eq!(receipt.workers_started, 1);
+    assert_eq!(receipt.joined_workers, 1);
+    assert_eq!(receipt.remaining_workers, 0);
+}
+
+#[test]
+fn scoped_region_unwind_cancels_before_join_and_releases_capacity() {
+    let mut executor = StructuredExecutor::for_test(1);
+    let handle = executor.handle();
+    let control = ExecutionControl::uncancelled();
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        handle.run_scoped(
+            &control,
+            || panic!("caller failure"),
+            || wait_cancelled(&control),
+        )
+    }));
+    assert!(result.is_err());
+    let receipt = executor.shutdown().unwrap();
+    assert_eq!(receipt.active_dispatches, 0);
+    assert_eq!(receipt.remaining_workers, 0);
+    assert_eq!(receipt.joined_workers, 1);
+}
+
 fn wait_cancelled(control: &ExecutionControl) {
     let deadline = Instant::now() + WAIT;
     while !control.is_cancelled() && Instant::now() < deadline {

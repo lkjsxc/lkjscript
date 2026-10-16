@@ -35,6 +35,8 @@ use std::sync::Arc;
 
 #[path = "reference_checked.rs"]
 mod checked;
+#[path = "reference_region.rs"]
+mod region;
 use checked::{Ownership, Value as CheckedValue};
 #[path = "reference_associated_runtime.rs"]
 mod associated_runtime;
@@ -612,7 +614,9 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         let type_metadata_bytes = schema.type_metadata_bytes;
         let list_work = super::list::Work::current();
         let map_work = super::map::Work::current();
+        let regions = super::region_value::Arena::new()?;
         let mut state = ReferenceState {
+            regions: &regions,
             reference_witnesses: Arc::new(std::sync::Mutex::new(
                 ReferenceWitnessInterner::default(),
             )),
@@ -793,6 +797,7 @@ enum ReferenceCallRoute<'a> {
 }
 
 struct ReferenceState<'a> {
+    regions: &'a super::region_value::Arena,
     reference_witnesses: Arc<std::sync::Mutex<ReferenceWitnessInterner>>,
     shared_budget: Option<Arc<super::shared_budget::SharedBudget>>,
     structured_depth: usize,
@@ -2368,6 +2373,18 @@ impl ReferenceState<'_> {
             self.type_parameter_constraints(declaration, &function.type_parameters)?;
         for (constraint, ty) in constraints.iter().zip(types) {
             self.control.check()?;
+            let region = matches!(
+                self.schema.types.get(ty).map(|t| &t.form),
+                Some(TypeForm::RegionBrand { .. })
+            );
+            if region || constraint.is_region() {
+                if region != constraint.is_region() {
+                    return Err(reference_type_error(
+                        "canonical region argument changes its kind",
+                    ));
+                }
+                continue;
+            }
             let owned = self.schema.is_owned_type(*ty);
             if owned != constraint.has_owned()
                 || (!owned && !self.schema.buffer_free_types.contains(ty))
@@ -2752,6 +2769,53 @@ impl ReferenceState<'_> {
                     self.control,
                 )?;
                 let expected = memory_form.is_some();
+                let result_template = match self
+                    .schema
+                    .types
+                    .get(&target.function.result.ty)
+                    .map(|t| &t.form)
+                {
+                    Some(TypeForm::TypeParameter { parameter }) => self
+                        .type_scopes
+                        .last()
+                        .and_then(|scope| scope.get(parameter))
+                        .copied()
+                        .unwrap_or(target.function.result.ty),
+                    _ => target.function.result.ty,
+                };
+                let declared_region = matches!(
+                    self.schema.types.get(&result_template).map(|t| &t.form),
+                    Some(TypeForm::RegionCap { .. })
+                );
+                if declared_region || matches!(value.raw(), NormalizedValue::RegionCap { .. }) {
+                    let expected_type = self
+                        .schema
+                        .substitute_type(
+                            target.function.result.ty,
+                            self.type_scopes.last().ok_or_else(|| {
+                                reference_type_error("missing region result application")
+                            })?,
+                            0,
+                        )
+                        .ok_or_else(|| reference_type_error("unclosed region result type"))?;
+                    let NormalizedValue::RegionCap { ty, token } = value.raw() else {
+                        return Err(reference_type_error(
+                            "canonical region result contract mismatch",
+                        ));
+                    };
+                    if *ty != expected_type
+                        || result_borrow.is_some()
+                        || !matches!(
+                            self.schema.types.get(&expected_type).map(|t| &t.form),
+                            Some(TypeForm::RegionCap { .. })
+                        )
+                    {
+                        return Err(reference_type_error(
+                            "canonical region result changes its exact custody",
+                        ));
+                    }
+                    self.regions.validate(token, self.memory_domain, true)?;
+                }
                 if (value.ownership(&self.schema, &mut self.observation.value_work)?
                     == Ownership::Memory)
                     != expected
@@ -2819,6 +2883,29 @@ impl ReferenceState<'_> {
     ) -> Result<(), ExecutionError> {
         let mut resource_seen = false;
         for (index, (parameter, argument)) in parameters.iter().zip(arguments).enumerate() {
+            if let NormalizedValue::RegionCap { ty, token } = argument.raw() {
+                let expected = self
+                    .schema
+                    .substitute_type(parameter.ty(), substitutions, 0)
+                    .ok_or_else(|| reference_type_error("unclosed canonical region parameter"))?;
+                if *ty != expected
+                    || parameter.resource_requirement().is_some()
+                    || parameter.use_mode() == ParameterUse::Unrestricted
+                    || (parameter.use_mode() == ParameterUse::Borrow) != token.is_borrowed()
+                    || argument.ownership(&self.schema, &mut self.observation.value_work)?
+                        != Ownership::Region
+                {
+                    return Err(reference_type_error(
+                        "canonical region argument changes custody or type",
+                    ));
+                }
+                self.regions.validate(
+                    token,
+                    self.memory_domain,
+                    parameter.use_mode() == ParameterUse::Consume,
+                )?;
+                continue;
+            }
             if let Some(proof) = &self.schema.read_view_proof
                 && proof.prepared_category(parameter.ty())?
                     == crate::platform::kernel::ValueCategory::ReadView
@@ -3435,6 +3522,7 @@ impl ReferenceState<'_> {
             (std::mem::size_of::<CheckedValue>() - std::mem::size_of::<NormalizedValue>()) as u64,
         )?;
         match operation {
+            ExpressionOperation::Region { operation } => self.evaluate_region(operation, locals),
             ExpressionOperation::BorrowCall {
                 call,
                 binding,
@@ -4082,6 +4170,14 @@ impl ReferenceState<'_> {
                 CheckedValue::primitive(&self.schema, NormalizedValue::StaticText(value))
             }),
             ExpressionOperation::Local { value } => {
+                if let Some(NormalizedValue::RegionCap { token, .. }) =
+                    locals.get(&value).map(|v| v.raw())
+                {
+                    self.regions.validate(token, self.memory_domain, true)?;
+                    return locals
+                        .remove(&value)
+                        .ok_or_else(|| reference_type_error("missing region owner"));
+                }
                 if locals.get(&value).is_some_and(|v| {
                     matches!(
                         v.raw(),
@@ -4584,6 +4680,32 @@ impl ReferenceState<'_> {
             }
         };
         let mut value = if let Some(local) = local {
+            if let Some(value) = locals.get(&local)
+                && let NormalizedValue::RegionCap { ty, token } = value.raw()
+            {
+                self.regions.validate(
+                    token,
+                    self.memory_domain,
+                    use_mode == ParameterUse::Consume,
+                )?;
+                if use_mode == ParameterUse::Borrow {
+                    return CheckedValue::region(
+                        &self.schema,
+                        self.regions,
+                        self.memory_domain,
+                        *ty,
+                        NormalizedValue::RegionCap {
+                            ty: *ty,
+                            token: self.regions.borrow(
+                                token,
+                                self.memory_domain,
+                                self.memory_domain,
+                            )?,
+                        },
+                        self.control,
+                    );
+                }
+            }
             if use_mode == ParameterUse::Borrow
                 && locals
                     .get(&local)
@@ -4631,7 +4753,7 @@ impl ReferenceState<'_> {
             }
             ParameterUse::Borrow => matches!(
                 ownership,
-                Ownership::Capability | Ownership::Memory | Ownership::ReadView
+                Ownership::Capability | Ownership::Memory | Ownership::ReadView | Ownership::Region
             ),
             ParameterUse::Consume => ownership != Ownership::Ordinary,
         };
@@ -6953,6 +7075,9 @@ fn reference_value_cost(value: &NormalizedValue) -> Result<(u64, u64), Execution
     let mut items = 0_u64;
     while let Some(value) = pending.pop() {
         match value {
+            NormalizedValue::RegionCap { .. } | NormalizedValue::RegionPointer { .. } => {
+                return Err(super::region_value::error());
+            }
             NormalizedValue::ByteBuffer(_)
             | NormalizedValue::OwnedI64Cell(_)
             | NormalizedValue::OwnedProduct(_)

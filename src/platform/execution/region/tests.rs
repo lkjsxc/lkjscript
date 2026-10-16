@@ -83,6 +83,50 @@ fn cyclic_cells_use_relative_offsets_and_no_per_cell_custody() {
 }
 
 #[test]
+fn unique_and_frozen_custody_move_between_workers_without_moving_payloads() {
+    let control = ExecutionControl::uncancelled();
+    with_region(
+        512,
+        &control,
+        |_| Ok(()),
+        |mut region| {
+            let pointer = region.allocate(scalar(), &7_i64.to_le_bytes(), &control)?;
+            let address = region.slab.image().as_ptr() as usize;
+            let (mut region, pointer) = std::thread::scope(|scope| {
+                let control = &control;
+                scope
+                    .spawn(move || {
+                        assert_eq!(region.slab.image().as_ptr() as usize, address);
+                        region.write(scalar(), pointer, &29_i64.to_le_bytes(), control)?;
+                        Ok::<_, ExecutionError>((region, pointer))
+                    })
+                    .join()
+                    .unwrap()
+            })?;
+            region.write(scalar(), pointer, &42_i64.to_le_bytes(), &control)?;
+            let frozen = region.freeze(&control)?;
+            let frozen = std::thread::scope(|scope| {
+                let control = &control;
+                scope
+                    .spawn(move || {
+                        assert_eq!(frozen.image().as_ptr() as usize, address);
+                        assert_eq!(
+                            number(frozen.read_cap().read(scalar(), pointer, control)?),
+                            42
+                        );
+                        Ok::<_, ExecutionError>(frozen)
+                    })
+                    .join()
+                    .unwrap()
+            })?;
+            assert_eq!(frozen.image().as_ptr() as usize, address);
+            Ok(())
+        },
+    )
+    .unwrap();
+}
+
+#[test]
 fn failed_capacity_layout_pointer_and_cancelled_writes_preserve_the_image() {
     let control = ExecutionControl::uncancelled();
     with_region(

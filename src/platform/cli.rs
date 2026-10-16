@@ -6181,6 +6181,39 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
         fields.push(("depth", position.depth.to_string()));
         let mut literal_fragments = None;
         match &record.operation {
+            ExpressionOperation::Region { operation } => {
+                fields.push(("form", operation.name().to_owned()));
+                if let Some(ty) = operation.ty() {
+                    fields.push(("type", ty.to_string()));
+                    self.add_type_reference("region_type", owner, 0, *ty)?;
+                }
+                if let Some(capability) = operation.capability() {
+                    fields.push((
+                        "capability",
+                        local_definition_reference(
+                            self.package,
+                            definition_local_value_owner(*capability),
+                        ),
+                    ));
+                }
+                if let Some((requirement, operation)) = operation.store() {
+                    fields.push((
+                        "requirement",
+                        format!("{}/{}", requirement.package(), requirement.owner()),
+                    ));
+                    fields.push((
+                        "operation",
+                        format!("{}/{}", operation.package, operation.operation),
+                    ));
+                    self.add_requirement_reference(
+                        "region_store_requirement",
+                        owner,
+                        0,
+                        *requirement,
+                    )?;
+                    self.add_operation_reference("region_store_operation", owner, 0, *operation)?;
+                }
+            }
             ExpressionOperation::CreateReadView {
                 declaration,
                 type_arguments,
@@ -6896,6 +6929,36 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
         );
         let borrows_view = matches!(record.operation, ExpressionOperation::BorrowReadView { .. });
         match record.operation {
+            ExpressionOperation::Region { operation } => {
+                if let crate::platform::kernel::RegionExpression::With { binding, .. } = &operation
+                {
+                    self.visit_binding(
+                        *binding,
+                        DefinitionPosition {
+                            parent: owner,
+                            ownership_role: OwnershipRole::ExpressionBinding {
+                                role: BindingContainerRole::Region,
+                                ordinal: 0,
+                            },
+                            slot: "region_binding",
+                            index: 0,
+                            label: None,
+                            depth: child_depth,
+                        },
+                        BindingKind::Region,
+                    )?;
+                }
+                for (index, child) in operation.expressions().into_iter().flatten().enumerate() {
+                    self.visit_expression_child(
+                        owner,
+                        *child,
+                        (ExpressionChildRole::RegionOperand, "region_operand"),
+                        index,
+                        None,
+                        child_depth,
+                    )?;
+                }
+            }
             ExpressionOperation::CreateReadView { fields, .. } => {
                 for (index, field) in fields.into_iter().enumerate() {
                     self.visit_expression_child(

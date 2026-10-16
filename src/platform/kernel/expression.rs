@@ -55,6 +55,11 @@ impl ExpressionRecord {
     ) -> Result<(), Diagnostic> {
         use ExpressionOperation as E;
         match &self.operation {
+            E::Region { operation } => {
+                for child in operation.expressions().into_iter().flatten() {
+                    visit(*child)?;
+                }
+            }
             E::CreateReadView { fields, .. } => {
                 for field in fields {
                     visit(field.value)?;
@@ -196,6 +201,9 @@ impl ExpressionRecord {
 
     pub fn type_roots(&self) -> Vec<TypeObjectDigest> {
         match &self.operation {
+            ExpressionOperation::Region { operation } => {
+                operation.ty().copied().into_iter().collect()
+            }
             ExpressionOperation::PackOwnedRecord { record_type, .. }
             | ExpressionOperation::UnpackOwnedRecord { record_type, .. }
             | ExpressionOperation::BorrowOwnedRecordField { record_type, .. } => vec![*record_type],
@@ -512,6 +520,230 @@ pub enum ExpressionOperation {
         binding: BindingId,
         body: ExpressionId,
     },
+    Region {
+        operation: RegionExpression<ExpressionId, BindingId, LocalValueReference, TypeObjectDigest>,
+    },
+}
+
+/// Region operations keep their complete type and lexical operands in accepted
+/// meaning. The generic form is also used by transient authoring proposals.
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
+pub enum RegionExpression<E, B, L, T, S = (super::RequirementOperand, super::OperationReference)> {
+    With {
+        binding: B,
+        capacity: E,
+        body: E,
+    },
+    Alloc {
+        pointer_type: T,
+        capability: L,
+        value: E,
+    },
+    Read {
+        pointer_type: T,
+        capability: L,
+        pointer: E,
+    },
+    Write {
+        pointer_type: T,
+        capability: L,
+        pointer: E,
+        value: E,
+    },
+    Freeze {
+        frozen_type: T,
+        capability: L,
+    },
+    Resolve {
+        pointer_type: T,
+        capability: L,
+        offset: E,
+    },
+    Offset {
+        pointer: E,
+    },
+    MmapSave {
+        capability: L,
+        store: S,
+        space: E,
+        key: E,
+        expected: E,
+    },
+    MmapLoad {
+        frozen_type: T,
+        capability: L,
+        store: S,
+        space: E,
+        key: E,
+        digest: E,
+    },
+}
+
+impl<E, B, L, T, S> RegionExpression<E, B, L, T, S> {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::With { .. } => "region-with",
+            Self::Alloc { .. } => "region-alloc",
+            Self::Read { .. } => "region-read",
+            Self::Write { .. } => "region-write",
+            Self::Freeze { .. } => "region-freeze",
+            Self::Resolve { .. } => "region-resolve",
+            Self::Offset { .. } => "region-offset",
+            Self::MmapSave { .. } => "region-mmap-save",
+            Self::MmapLoad { .. } => "region-mmap-load",
+        }
+    }
+    pub fn try_map<C, E2, B2, L2, T2, S2, Error>(
+        &self,
+        context: &mut C,
+        mut expression: impl FnMut(&mut C, &E) -> Result<E2, Error>,
+        mut binding: impl FnMut(&mut C, &B) -> Result<B2, Error>,
+        mut local: impl FnMut(&mut C, &L) -> Result<L2, Error>,
+        mut ty: impl FnMut(&mut C, &T) -> Result<T2, Error>,
+        mut store: impl FnMut(&mut C, &S) -> Result<S2, Error>,
+    ) -> Result<RegionExpression<E2, B2, L2, T2, S2>, Error> {
+        Ok(match self {
+            Self::With {
+                binding: b,
+                capacity,
+                body,
+            } => RegionExpression::With {
+                binding: binding(context, b)?,
+                capacity: expression(context, capacity)?,
+                body: expression(context, body)?,
+            },
+            Self::Alloc {
+                pointer_type,
+                capability,
+                value,
+            } => RegionExpression::Alloc {
+                pointer_type: ty(context, pointer_type)?,
+                capability: local(context, capability)?,
+                value: expression(context, value)?,
+            },
+            Self::Read {
+                pointer_type,
+                capability,
+                pointer,
+            } => RegionExpression::Read {
+                pointer_type: ty(context, pointer_type)?,
+                capability: local(context, capability)?,
+                pointer: expression(context, pointer)?,
+            },
+            Self::Write {
+                pointer_type,
+                capability,
+                pointer,
+                value,
+            } => RegionExpression::Write {
+                pointer_type: ty(context, pointer_type)?,
+                capability: local(context, capability)?,
+                pointer: expression(context, pointer)?,
+                value: expression(context, value)?,
+            },
+            Self::Freeze {
+                frozen_type,
+                capability,
+            } => RegionExpression::Freeze {
+                frozen_type: ty(context, frozen_type)?,
+                capability: local(context, capability)?,
+            },
+            Self::Resolve {
+                pointer_type,
+                capability,
+                offset,
+            } => RegionExpression::Resolve {
+                pointer_type: ty(context, pointer_type)?,
+                capability: local(context, capability)?,
+                offset: expression(context, offset)?,
+            },
+            Self::Offset { pointer } => RegionExpression::Offset {
+                pointer: expression(context, pointer)?,
+            },
+            Self::MmapSave {
+                capability,
+                store: target,
+                space,
+                key,
+                expected,
+            } => RegionExpression::MmapSave {
+                capability: local(context, capability)?,
+                store: store(context, target)?,
+                space: expression(context, space)?,
+                key: expression(context, key)?,
+                expected: expression(context, expected)?,
+            },
+            Self::MmapLoad {
+                frozen_type,
+                capability,
+                store: target,
+                space,
+                key,
+                digest,
+            } => RegionExpression::MmapLoad {
+                frozen_type: ty(context, frozen_type)?,
+                capability: local(context, capability)?,
+                store: store(context, target)?,
+                space: expression(context, space)?,
+                key: expression(context, key)?,
+                digest: expression(context, digest)?,
+            },
+        })
+    }
+
+    pub fn expressions(&self) -> [Option<&E>; 3] {
+        match self {
+            Self::With { capacity, body, .. } => [Some(capacity), Some(body), None],
+            Self::Alloc { value, .. } => [Some(value), None, None],
+            Self::Read { pointer, .. } | Self::Offset { pointer } => [Some(pointer), None, None],
+            Self::Write { pointer, value, .. } => [Some(pointer), Some(value), None],
+            Self::Resolve { offset, .. } => [Some(offset), None, None],
+            Self::Freeze { .. } => [None, None, None],
+            Self::MmapSave {
+                space,
+                key,
+                expected,
+                ..
+            } => [Some(space), Some(key), Some(expected)],
+            Self::MmapLoad {
+                space, key, digest, ..
+            } => [Some(space), Some(key), Some(digest)],
+        }
+    }
+
+    pub fn store(&self) -> Option<&S> {
+        match self {
+            Self::MmapSave { store, .. } | Self::MmapLoad { store, .. } => Some(store),
+            _ => None,
+        }
+    }
+
+    pub fn capability(&self) -> Option<&L> {
+        match self {
+            Self::Alloc { capability, .. }
+            | Self::Read { capability, .. }
+            | Self::Write { capability, .. }
+            | Self::Freeze { capability, .. }
+            | Self::MmapSave { capability, .. }
+            | Self::MmapLoad { capability, .. }
+            | Self::Resolve { capability, .. } => Some(capability),
+            Self::With { .. } | Self::Offset { .. } => None,
+        }
+    }
+
+    pub fn ty(&self) -> Option<&T> {
+        match self {
+            Self::Alloc { pointer_type, .. }
+            | Self::Read { pointer_type, .. }
+            | Self::Write { pointer_type, .. }
+            | Self::Resolve { pointer_type, .. } => Some(pointer_type),
+            Self::Freeze { frozen_type, .. } | Self::MmapLoad { frozen_type, .. } => {
+                Some(frozen_type)
+            }
+            Self::With { .. } | Self::Offset { .. } | Self::MmapSave { .. } => None,
+        }
+    }
 }
 
 impl ExpressionOperation {
@@ -750,6 +982,7 @@ pub enum ExpressionChildRole {
     BorrowCallBody,
     ReadViewField,
     ReadViewBody,
+    RegionOperand,
 }
 
 fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic> {
@@ -978,7 +1211,8 @@ fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic>
         ExpressionOperation::CapabilityCall { arguments, .. } => {
             require_count("capability arguments", arguments.len(), true)?;
         }
-        ExpressionOperation::Unit {}
+        ExpressionOperation::Region { .. }
+        | ExpressionOperation::Unit {}
         | ExpressionOperation::BorrowReadView { .. }
         | ExpressionOperation::ReborrowReadView { .. }
         | ExpressionOperation::MoveReadView { .. }
@@ -1056,6 +1290,16 @@ fn require_unique<T: Ord + Copy>(
 fn expression_children(operation: &ExpressionOperation) -> Vec<ExpressionChild> {
     let mut children = Vec::new();
     match operation {
+        ExpressionOperation::Region { operation } => {
+            for (ordinal, child) in operation.expressions().into_iter().flatten().enumerate() {
+                push_child(
+                    &mut children,
+                    *child,
+                    ExpressionChildRole::RegionOperand,
+                    ordinal as u32,
+                );
+            }
+        }
         ExpressionOperation::CreateReadView { fields, .. } => {
             for (ordinal, field) in fields.iter().enumerate() {
                 push_child(

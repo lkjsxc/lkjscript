@@ -815,6 +815,16 @@ impl Lowering<'_> {
         let label = self.allocate('@')?;
         let mut fields = vec![("as", label.clone())];
         let operation = match form.as_str() {
+            "region-brand" => {
+                if args.len() != 2 {
+                    return Err(
+                        self.error(id, "region-brand requires a callable and lexical binding")
+                    );
+                }
+                fields.push(("callable", self.reference(args[0], scope, "declaration")?));
+                fields.push(("binding", self.block.atom(args[1])?.to_owned()));
+                "type.region-brand".into()
+            }
             "region" | "rel-ptr" | "region-slice" | "region-cap" => {
                 let arity = if form == "region" { 1 } else { 2 };
                 if args.len() != arity {

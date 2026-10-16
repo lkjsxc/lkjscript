@@ -245,6 +245,32 @@ fn remap(operation: &mut E, identities: &BTreeMap<OwnerKey, OwnerKey>) {
         _ => {}
     }
     match operation {
+        E::Region { operation } => {
+            let mapped = operation.try_map(
+                &mut (),
+                |_, value| {
+                    let mut value = *value;
+                    expression(&mut value);
+                    Ok::<_, std::convert::Infallible>(value)
+                },
+                |_, value| {
+                    let mut value = *value;
+                    binding(&mut value);
+                    Ok(value)
+                },
+                |_, value| {
+                    let mut value = *value;
+                    map_local(&mut value, identities);
+                    Ok(value)
+                },
+                |_, value| Ok(*value),
+                |_, value| Ok(*value),
+            );
+            *operation = match mapped {
+                Ok(value) => value,
+                Err(never) => match never {},
+            };
+        }
         E::CreateReadView {
             read_scope,
             source,
@@ -546,6 +572,11 @@ fn type_references_discarded_scope<B: CanonicalBaseRead + ?Sized, W: WitnessBase
     charge(lowerer, 1)?;
     let object = lowerer.candidate_type_object(ty)?.ok_or_else(missing)?;
     match object.form {
+        TypeForm::RegionBrand { binding, .. }
+            if identities.contains_key(&OwnerKey::Binding(binding)) =>
+        {
+            return Ok(true);
+        }
         TypeForm::ReadViewApplied { read_scope, .. }
         | TypeForm::AssociatedReadViewMember { read_scope, .. }
         | TypeForm::AssociatedReadViewProjection { read_scope, .. }

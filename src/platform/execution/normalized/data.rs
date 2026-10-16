@@ -582,6 +582,115 @@ struct NormalizedDataTransaction {
 }
 
 impl NormalizedCapabilityTransaction for NormalizedDataTransaction {
+    fn region_save(
+        &mut self,
+        policy: &NormalizedCallPolicy,
+        arguments: &[NormalizedValue],
+        read: crate::platform::execution::region::RegionRead<'_, '_>,
+        control: &ExecutionControl,
+        reserve: &mut dyn FnMut(u64) -> Result<(), ExecutionError>,
+    ) -> Result<crate::platform::execution::region::persistence::RegionImageDigest, ExecutionError>
+    {
+        control.check()?;
+        if self.adapter.operation(policy)? != DataOperation::Put {
+            return Err(data_argument(
+                "region save requires the exact put operation",
+            ));
+        }
+        for argument in arguments {
+            argument.reject_read_view_escape(control)?;
+        }
+        let [NormalizedValue::StaticText(space), key, expected] = arguments else {
+            return Err(data_argument(
+                "region save expects space, key and expectation",
+            ));
+        };
+        let key = admitted_codec(&self.adapter.codecs.key_part)?
+            .decode_key(key, self.adapter.store.limits())?;
+        let expected =
+            admitted_codec(&self.adapter.codecs.expectation)?.decode_expectation(expected)?;
+        let transaction = self.transaction.as_mut().ok_or_else(|| {
+            data_runtime(
+                "normalized_data_transaction_closed",
+                "region transaction is closed",
+            )
+        })?;
+        crate::platform::execution::region::persistence::save(
+            transaction,
+            space,
+            &key,
+            read,
+            expected,
+            control,
+            reserve,
+        )?
+        .ok_or_else(|| {
+            ExecutionError::new(
+                ExecutionFailureClass::Capability,
+                "normalized_region_condition",
+                "region image write condition failed",
+            )
+        })
+    }
+
+    fn region_load(
+        &mut self,
+        policy: &NormalizedCallPolicy,
+        arguments: &[NormalizedValue],
+        control: &ExecutionControl,
+        reserve: &mut dyn FnMut(u64) -> Result<(), ExecutionError>,
+    ) -> Result<crate::platform::execution::region::persistence::RegionImage, ExecutionError> {
+        control.check()?;
+        if self.adapter.operation(policy)? != DataOperation::Get {
+            return Err(data_argument(
+                "region load requires the exact get operation",
+            ));
+        }
+        for argument in arguments {
+            argument.reject_read_view_escape(control)?;
+        }
+        let [
+            NormalizedValue::StaticText(space),
+            key,
+            NormalizedValue::Bytes(digest),
+        ] = arguments
+        else {
+            return Err(data_argument(
+                "region load expects space, key and digest bytes",
+            ));
+        };
+        let digest: [u8; 32] = digest
+            .as_ref()
+            .try_into()
+            .map_err(|_| data_argument("region image digest requires 32 bytes"))?;
+        let expected =
+            crate::platform::execution::region::persistence::RegionImageDigest::from_bytes(digest);
+        let key = admitted_codec(&self.adapter.codecs.key_part)?
+            .decode_key(key, self.adapter.store.limits())?;
+        let transaction = self.transaction.as_ref().ok_or_else(|| {
+            data_runtime(
+                "normalized_data_transaction_closed",
+                "region transaction is closed",
+            )
+        })?;
+        crate::platform::execution::region::persistence::load(
+            transaction,
+            space,
+            &key,
+            expected,
+            transaction.limits().maximum_value_bytes,
+            control,
+            reserve,
+        )?
+        .ok_or_else(|| {
+            ExecutionError::new(
+                ExecutionFailureClass::Capability,
+                "normalized_region_missing",
+                "region image is absent from the transaction snapshot",
+            )
+        })
+    }
+
     fn call(
         &mut self,
         policy: &NormalizedCallPolicy,

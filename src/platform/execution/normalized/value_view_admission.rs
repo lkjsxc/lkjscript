@@ -39,7 +39,9 @@ impl Guard<'_> {
     fn value(&mut self, value: &NormalizedValue, depth: u16) -> Result<(), ExecutionError> {
         self.enter(depth)?;
         match value {
-            NormalizedValue::ReadView(_) => return Err(escape()),
+            NormalizedValue::ReadView(_)
+            | NormalizedValue::RegionCap { .. }
+            | NormalizedValue::RegionPointer { .. } => return Err(escape()),
             NormalizedValue::Record(NormalizedRecord::Nominal { fields, .. }) => {
                 for child in fields.iter() {
                     self.value(child, depth + 1)?;

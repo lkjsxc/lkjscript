@@ -36,6 +36,13 @@ impl Decoder {
         for (symbol, record) in &self.expressions {
             let mut children = Vec::new();
             let direct: &[&str] = match record.operation.as_str() {
+                "expression.region-with" => &["capacity", "body"],
+                "expression.region-alloc" => &["value"],
+                "expression.region-read" | "expression.region-offset" => &["pointer"],
+                "expression.region-write" => &["pointer", "value"],
+                "expression.region-resolve" => &["offset"],
+                "expression.region-mmap-save" => &["space", "key", "expected"],
+                "expression.region-mmap-load" => &["space", "key", "digest"],
                 "expression.if" => &["condition", "when-true", "when-false"],
                 "expression.parallel" => &["left", "right"],
                 "expression.let" | "expression.transaction" | "expression.transaction-outcome" => {

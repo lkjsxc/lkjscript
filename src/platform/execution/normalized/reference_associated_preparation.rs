@@ -1488,6 +1488,26 @@ impl<'a> Derivation<'a> {
         self.budget.object(object)?;
         let form = object.form.clone();
         match form {
+            TypeForm::RegionBrand { .. } => {
+                if data {
+                    Err(reject())
+                } else {
+                    Ok(false)
+                }
+            }
+            TypeForm::Region { .. } | TypeForm::RelPtr { .. } | TypeForm::RegionSlice { .. } => {
+                Ok(false)
+            }
+            TypeForm::RegionCap { mode, .. } => match mode {
+                crate::platform::kernel::RegionMode::Shared { .. } => {
+                    if data {
+                        Err(reject())
+                    } else {
+                        Ok(false)
+                    }
+                }
+                _ => Ok(true),
+            },
             TypeForm::TypeParameter { parameter } => assumptions
                 .get(&parameter)
                 .map(|constraints| constraints.has_owned())
@@ -2105,6 +2125,7 @@ impl<'a> Derivation<'a> {
                 self.current(env.scope.ok_or_else(reject)?, record.contract_version)?;
             }
             let embedded_local = match &record.operation {
+                ExpressionOperation::Region { operation } => operation.capability().copied(),
                 ExpressionOperation::CreateReadView {
                     source,
                     read_scope,
@@ -2174,12 +2195,21 @@ impl<'a> Derivation<'a> {
                 self.root(roots, OwnerKey::Expression(id), ty, env)?;
             }
             let bindings: Vec<_> = match &record.operation {
+                ExpressionOperation::Region {
+                    operation: crate::platform::kernel::RegionExpression::With { binding, .. },
+                } => {
+                    self.budget
+                        .reserve::<crate::platform::semantic_id::BindingId>(1)?;
+                    vec![*binding]
+                }
                 ExpressionOperation::Let { bindings, .. } => {
                     self.budget
                         .reserve::<crate::platform::semantic_id::BindingId>(bindings.len())?;
                     bindings.clone()
                 }
                 ExpressionOperation::BorrowCall { binding, .. }
+                | ExpressionOperation::Transaction { binding, .. }
+                | ExpressionOperation::TransactionOutcome { binding, .. }
                 | ExpressionOperation::BorrowOwnedItem { binding, .. }
                 | ExpressionOperation::BorrowOwnedField { binding, .. }
                 | ExpressionOperation::BorrowOwnedRecordField { binding, .. }

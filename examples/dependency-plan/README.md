@@ -6,6 +6,14 @@ It condenses cycles into explicit units and returns dependency-first stages.
 The [decision](../../docs/decisions/native-dependency-plan.md) owns correctness
 and authority boundaries; [status](../../docs/status.md) owns actual acceptance.
 
+The additive [region witness](region-witness.lkjc) stores a condensed cycle's stage
+cells and edges in one slab, then shares frozen reads through `parallel`. The
+[DataStore witness](region-store-witness.lkjc) saves and loads that representation
+with a digest. Their differential tests live in `region_types_tests.rs` and
+`region_persistence_tests.rs`. These bounded examples retain the existing planner
+entrypoints and all 176 IndexedData/BlockRead expectations. See the
+[region specification](../../docs/spec/regions.md) for layout and custody limits.
+
 ## Edge direction and complete result
 
 Here `node.successors` means **dependencies of that node**, not tasks that should

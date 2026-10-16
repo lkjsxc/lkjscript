@@ -1,0 +1,72 @@
+create.module as=$module name=region-persistence
+create.component as=$component module=$module name=region-store visibility=public
+add.requirement as=$store component=$component name=slabs interface=DATA_INTERFACE
+requirement.operation parent=$store index=0 operation=DATA_GET
+requirement.operation parent=$store index=1 operation=DATA_PUT
+requirement.operation parent=$store index=2 operation=DATA_TRANSACTION
+requirement.limit parent=$store index=0 name=maximum_calls maximum=100 unit=calls
+type.named as=@KeyPart declaration=KEY_PART
+type.structural-record as=@Saved
+type.field parent=@Saved index=0 name=digest type=bytes
+type.field parent=@Saved index=1 name=root type=i64
+type.region-brand as=@SaveRegion callable=$save binding=$save-region
+type.region-cap as=@SaveUnique region=@SaveRegion mode=unique
+type.region-cap as=@SaveFrozen region=@SaveRegion mode=frozen
+type.rel-ptr as=@SavePointer region=@SaveRegion item=i64
+type.structural-record as=@Edge
+type.field parent=@Edge index=0 name=from type=@SavePointer
+type.field parent=@Edge index=1 name=to type=@SavePointer
+type.rel-ptr as=@EdgePointer region=@SaveRegion item=@Edge
+type.region-brand as=@LoadRegion callable=$load binding=$load-region
+type.region-cap as=@LoadUnique region=@LoadRegion mode=unique
+type.region-cap as=@LoadFrozen region=@LoadRegion mode=frozen
+type.rel-ptr as=@LoadPointer region=@LoadRegion item=i64
+
+expression.block as=$save-body
+  (transaction $store (binding save-transaction)
+    (region-with
+      (binding arena (as $save-region) (type @SaveUnique))
+      (i64 1024)
+      (in (let
+        (binding pointer (region-alloc (type @SavePointer) arena (i64 2)))
+        (binding a (region-alloc (type @SavePointer) arena (i64 1)))
+        (binding b (region-alloc (type @SavePointer) arena (i64 1)))
+        (binding ab (region-alloc (type @EdgePointer) arena
+          (record structural (field from (local a)) (field to (local b)))))
+        (binding ba (region-alloc (type @EdgePointer) arena
+          (record structural (field from (local b)) (field to (local a)))))
+        (binding frozen (type @SaveFrozen)
+          (region-freeze (type @SaveFrozen) arena))
+        (in (record structural
+          (field digest (region-mmap-save frozen $store DATA_PUT
+            (static-text "graphs") (list @KeyPart (variant KEY_TEXT (text "cycle")))
+            (variant EXPECT_MISSING)))
+          (field root (region-offset (local pointer)))))))))
+expression.end
+create.function as=$save module=$module name=region-save visibility=public result=@Saved effect=task body=$save-body
+effect.requirement parent=$save index=0 requirement=$store
+
+expression.block as=$load-body
+  (transaction $store (binding load-transaction)
+    (region-with
+      (binding arena (as $load-region) (type @LoadUnique))
+      (i64 0)
+      (in (let
+        (binding loaded (type @LoadFrozen)
+          (region-mmap-load (type @LoadFrozen) arena $store DATA_GET
+            (static-text "graphs") (list @KeyPart (variant KEY_TEXT (text "cycle"))) (local $digest)))
+        (in (region-read (type @LoadPointer) loaded
+          (region-resolve (type @LoadPointer) loaded (local $root))))))))
+expression.end
+create.function as=$load module=$module name=region-load visibility=public result=i64 effect=task body=$load-body
+add.parameter as=$digest function=$load name=digest type=bytes
+add.parameter as=$root function=$load name=root type=i64
+effect.requirement parent=$load index=0 requirement=$store
+effect.row as=@Storage
+effect.requirement parent=@Storage index=0 requirement=$store
+type.task-function as=@SavePort result=@Saved effect=@Storage
+add.port as=$save-port component=$component name=save type=@SavePort function=$save
+type.task-function as=@LoadPort result=i64 effect=@Storage
+type.argument parent=@LoadPort index=0 type=bytes
+type.argument parent=@LoadPort index=1 type=i64
+add.port as=$load-port component=$component name=load type=@LoadPort function=$load

@@ -275,6 +275,10 @@ impl Oracle<'_> {
                 .map(|t| &t.form),
             Some(
                 TypeForm::ByteBuffer
+                    | TypeForm::RegionCap {
+                        mode: RegionMode::Unique | RegionMode::Frozen | RegionMode::Pinned,
+                        ..
+                    }
                     | TypeForm::OwnedI64Cell
                     | TypeForm::OwnedProduct { .. }
                     | TypeForm::OwnedChoice { .. }
@@ -1373,6 +1377,51 @@ impl Oracle<'_> {
                 .map(|_| ())
         };
         let output = match self.expression(id)? {
+            ExpressionOperation::Region { operation } => {
+                use super::RegionExpression as E;
+                match operation {
+                    E::With {
+                        binding,
+                        capacity,
+                        body,
+                    } => {
+                        plain(*capacity, rights)?;
+                        let local = LocalValueReference::LexicalBinding(*binding);
+                        if !rights.memory.insert(local) || !rights.owned.insert(local) {
+                            return None;
+                        }
+                        let result = self.flow(*body, rights, demand, depth + 1)?;
+                        rights.memory.remove(&local);
+                        rights.owned.remove(&local);
+                        result
+                    }
+                    operation => {
+                        for child in operation.expressions().into_iter().flatten() {
+                            plain(*child, rights)?;
+                        }
+                        if let Some(local) = operation.capability() {
+                            if !rights.readable(*local) {
+                                return None;
+                            }
+                            if matches!(
+                                operation,
+                                E::Alloc { .. }
+                                    | E::Write { .. }
+                                    | E::Freeze { .. }
+                                    | E::MmapLoad { .. }
+                            ) && (!rights.owned.contains(local)
+                                || rights.loans.contains_key(local))
+                            {
+                                return None;
+                            }
+                            if matches!(operation, E::Freeze { .. } | E::MmapLoad { .. }) {
+                                rights.consume(*local)?;
+                            }
+                        }
+                        matches!(operation, E::Freeze { .. } | E::MmapLoad { .. })
+                    }
+                }
+            }
             ExpressionOperation::SequenceEmpty { sequence_type } => {
                 if !matches!(
                     self.form(*sequence_type),

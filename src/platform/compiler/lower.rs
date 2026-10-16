@@ -2773,6 +2773,122 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         prospective: Option<BindingId>,
     ) -> Result<(), Diagnostic> {
         match operation {
+            ExpressionOperation::Region { operation } => {
+                use super::unit::RegionInstruction as I;
+                use crate::platform::kernel::RegionExpression as E;
+                match operation {
+                    E::With {
+                        binding,
+                        capacity,
+                        body,
+                    } => {
+                        self.expression(capacity, depth)?;
+                        let record = self.binding(binding, BindingKind::Region)?;
+                        let ty = record.declared_type.ok_or_else(|| {
+                            compiler_corrupt(
+                                "compiler_region",
+                                "region binding has no capability type",
+                            )
+                        })?;
+                        let capability_type = self.unit.tables.ty(ty)?;
+                        let reference = LocalValueReference::LexicalBinding(binding);
+                        let local = self.bind(reference)?;
+                        self.push(CompiledInstruction::Region(I::Begin {
+                            local,
+                            capability_type,
+                        }))?;
+                        self.expression_with_use(body, depth, use_mode)?;
+                        self.push(CompiledInstruction::Region(I::End { local }))?;
+                        self.locals.remove(&reference);
+                    }
+                    E::Offset { pointer } => {
+                        self.expression(pointer, depth)?;
+                        self.push(CompiledInstruction::Region(I::Offset))?;
+                    }
+                    operation @ (E::MmapSave { .. } | E::MmapLoad { .. }) => {
+                        for child in operation.expressions().into_iter().flatten() {
+                            self.expression(*child, depth)?;
+                        }
+                        let capability = *operation.capability().ok_or_else(|| {
+                            compiler_corrupt("compiler_region", "missing persistence custody")
+                        })?;
+                        let (local, _) = self.local_slot(capability)?;
+                        let (requirement, target) = *operation.store().ok_or_else(|| {
+                            compiler_corrupt("compiler_region", "missing persistence authority")
+                        })?;
+                        let requirement = match requirement {
+                            crate::platform::kernel::RequirementOperand::Concrete(requirement) => {
+                                CompiledTransactionRequirement::Concrete(
+                                    self.unit.tables.requirement(requirement)?,
+                                )
+                            }
+                            crate::platform::kernel::RequirementOperand::Parameter(parameter) => {
+                                CompiledTransactionRequirement::Parameter(parameter)
+                            }
+                        };
+                        let store = (requirement, self.unit.tables.operation(target)?);
+                        let instruction = match operation {
+                            E::MmapSave { .. } => I::MmapSave { local, store },
+                            E::MmapLoad { frozen_type, .. } => I::MmapLoad {
+                                local,
+                                store,
+                                frozen_type: self.unit.tables.ty(frozen_type)?,
+                            },
+                            _ => {
+                                return Err(compiler_corrupt(
+                                    "compiler_region",
+                                    "invalid persistence operation",
+                                ));
+                            }
+                        };
+                        self.push(CompiledInstruction::Region(instruction))?;
+                    }
+                    operation => {
+                        for child in operation.expressions().into_iter().flatten() {
+                            self.expression(*child, depth)?;
+                        }
+                        let capability = *operation.capability().ok_or_else(|| {
+                            compiler_corrupt("compiler_region", "region operand is missing custody")
+                        })?;
+                        let (local, _) = self.local_slot(capability)?;
+                        let ty = self.unit.tables.ty(*operation.ty().ok_or_else(|| {
+                            compiler_corrupt(
+                                "compiler_region",
+                                "region operand is missing its type",
+                            )
+                        })?)?;
+                        let operation = match operation {
+                            E::Alloc { .. } => I::Alloc {
+                                local,
+                                pointer_type: ty,
+                            },
+                            E::Read { .. } => I::Read {
+                                local,
+                                pointer_type: ty,
+                            },
+                            E::Write { .. } => I::Write {
+                                local,
+                                pointer_type: ty,
+                            },
+                            E::Freeze { .. } => I::Freeze {
+                                local,
+                                frozen_type: ty,
+                            },
+                            E::Resolve { .. } => I::Resolve {
+                                local,
+                                pointer_type: ty,
+                            },
+                            _ => {
+                                return Err(compiler_corrupt(
+                                    "compiler_region",
+                                    "invalid region operation",
+                                ));
+                            }
+                        };
+                        self.push(CompiledInstruction::Region(operation))?;
+                    }
+                }
+            }
             ExpressionOperation::CreateReadView {
                 declaration,
                 type_arguments,

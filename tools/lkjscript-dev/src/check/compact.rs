@@ -67,6 +67,10 @@ impl Scratch {
 impl Drop for Scratch {
     fn drop(&mut self) {
         let _ = self.cleanup();
+        // A concurrent process spawn can temporarily inherit the open file
+        // description before exec closes it. End the lease explicitly instead
+        // of relying on the last duplicated descriptor being closed.
+        let _ = FileExt::unlock(&self._lease);
     }
 }
 

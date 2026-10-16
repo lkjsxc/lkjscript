@@ -20,6 +20,8 @@ use crate::platform::semantic_id::{
     TypeParameterId,
 };
 use std::collections::{BTreeMap, BTreeSet};
+#[path = "reference_region_admission.rs"]
+mod region_admission;
 
 #[cfg(test)]
 use crate::platform::kernel::Name;
@@ -1074,6 +1076,17 @@ impl Resolver<'_, '_> {
     fn context_for_at(&mut self, ty: TypeObjectDigest, depth: usize) -> Result<Context> {
         self.budget.step(depth)?;
         Ok(match self.object(ty)?.form {
+            TypeForm::RegionBrand { callable, binding } => {
+                if self.proof.lexical_owners.get(&(callable.package, binding)) != Some(&callable)
+                    || !matches!(self.owner(callable.package, OwnerKey::Binding(binding))?, OwnerRecord::Binding(record) if record.kind == BindingKind::Region)
+                {
+                    return Err(invalid("region brand has no proved lexical binder"));
+                }
+                let mut context = Context::declaration(callable);
+                self.budget.reserve(1)?;
+                context.lexical.insert(binding);
+                context
+            }
             TypeForm::ReadViewApplied {
                 read_scope: ReadScopeArgument::Parameter(scope),
                 ..
@@ -4971,6 +4984,9 @@ impl Resolver<'_, '_> {
             );
         }
         let value = match operation {
+            ExpressionOperation::Region { operation } => {
+                self.region_expression(operation, context, locals, syntax, demand, depth + 1)?
+            }
             ExpressionOperation::Unit {} => self.scalar(TypeForm::Unit)?,
             ExpressionOperation::Bool { .. } => self.scalar(TypeForm::Bool)?,
             ExpressionOperation::I64 { .. } => self.scalar(TypeForm::I64)?,
@@ -5545,6 +5561,11 @@ impl Resolver<'_, '_> {
         operation: &ExpressionOperation,
         context: &Context,
     ) -> Result<()> {
+        if let ExpressionOperation::Region { operation } = operation
+            && let Some(ty) = operation.ty()
+        {
+            self.facts(*ty, context, 0)?;
+        }
         let required = match operation {
             ExpressionOperation::PackOwned { product_type, .. }
             | ExpressionOperation::UnpackOwned { product_type, .. }

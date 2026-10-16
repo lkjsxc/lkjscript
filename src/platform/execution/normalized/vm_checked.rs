@@ -23,6 +23,7 @@ use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Class {
+    Region,
     Free,
     Memory,
     ReadView,
@@ -174,6 +175,44 @@ fn grow_read_cursors<'a>(
 }
 
 impl Value {
+    pub(super) fn region(
+        program: &NormalizedProgram,
+        arena: &super::super::region_value::Arena,
+        domain: ValueOrigin,
+        ty: TypeObjectDigest,
+        raw: NormalizedValue,
+        control: &ExecutionControl,
+    ) -> Result<Self, ExecutionError> {
+        let class = if let NormalizedValue::RegionCap { ty: actual, token } = &raw {
+            if *actual != ty {
+                return Err(admission_error("region capability type changed"));
+            }
+            let mode = match program.types.get(&ty).map(|object| &object.form) {
+                Some(TypeForm::RegionCap { mode, .. }) => mode,
+                _ => return Err(admission_error("region capability has no exact type")),
+            };
+            use crate::platform::execution::region::runtime::Access;
+            if !matches!(
+                (mode, token.access()),
+                (crate::platform::kernel::RegionMode::Unique, Access::Unique)
+                    | (crate::platform::kernel::RegionMode::Frozen, Access::Frozen)
+            ) {
+                return Err(admission_error("region capability mode changed"));
+            }
+            arena.validate(token, domain, false)?;
+            Class::Region
+        } else {
+            super::super::region_value::check_plain(&program.types, &raw, ty, control, 0)?;
+            Class::Free
+        };
+        Ok(Self {
+            raw,
+            origin: program.value_origin,
+            class,
+            ordinary_type: (class == Class::Free).then_some(ty),
+            borrow: None,
+        })
+    }
     pub(super) fn read_view_controlled(
         program: &NormalizedProgram,
         raw: NormalizedValue,

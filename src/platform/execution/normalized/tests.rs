@@ -1,5 +1,7 @@
 //! Focused normalized artifact-preparation and dense-execution tests.
 
+#[path = "region_persistence_tests.rs"]
+mod region_persistence_tests;
 #[path = "region_types_tests.rs"]
 mod region_types_tests;
 

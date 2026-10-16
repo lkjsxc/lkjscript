@@ -8,6 +8,7 @@ use super::super::{
     },
 };
 use super::*;
+use crate::platform::kernel::RegionMode;
 
 struct ChildOutcome {
     result: Result<TransferResult, ExecutionError>,
@@ -291,6 +292,10 @@ impl ReferenceState<'_> {
             .form
         {
             TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Ok(true),
+            TypeForm::RegionCap {
+                mode: RegionMode::Unique | RegionMode::Frozen,
+                ..
+            } => Ok(true),
             TypeForm::OwnedSequence { item } => {
                 self.parallel_transfer_type(*item, depth + 1, nodes)?;
                 Ok(true)
@@ -444,6 +449,18 @@ impl ReferenceState<'_> {
             .zip(&types)
             .zip(&signature.type_parameter_constraints)
         {
+            let region = matches!(
+                self.schema.types.get(ty).map(|t| &t.form),
+                Some(TypeForm::RegionBrand { .. })
+            );
+            if region || constraint.is_region() {
+                if region != constraint.is_region() || bindings.insert(*parameter, *ty).is_some() {
+                    return Err(reference_type_error(
+                        "parallel child changes its canonical region kind",
+                    ));
+                }
+                continue;
+            }
             let memory =
                 direct_memory_type(&self.schema, *ty, &BTreeMap::new(), self.control)?.is_some();
             if memory != constraint.has_owned()
@@ -582,7 +599,11 @@ impl ReferenceState<'_> {
                     ));
                 }
             }
-            let scoped = memory || view;
+            let region = matches!(
+                self.schema.types.get(&parameter.ty).map(|t| &t.form),
+                Some(TypeForm::RegionCap { .. })
+            );
+            let scoped = memory || view || region;
             if seen_owned && !scoped {
                 return Err(reference_type_error(
                     "parallel owned parameters must form the final suffix",
@@ -594,7 +615,7 @@ impl ReferenceState<'_> {
                 || parameter.resource_requirement.is_some()
                 || if view {
                     parameter.use_mode != ParameterUse::Borrow
-                } else if memory {
+                } else if memory || region {
                     !matches!(
                         parameter.use_mode,
                         ParameterUse::Borrow | ParameterUse::Consume
@@ -791,6 +812,15 @@ impl ReferenceState<'_> {
         raw: &NormalizedValue,
         ty: TypeObjectDigest,
     ) -> Result<(), ExecutionError> {
+        if matches!(raw, NormalizedValue::RegionPointer { .. }) {
+            return super::super::region_value::check_plain(
+                &self.schema.types,
+                raw,
+                ty,
+                self.control,
+                0,
+            );
+        }
         if !self.schema.comparable_types.contains(&ty)
             || self.inspect_raw(raw, ty, &BTreeMap::new(), None, true)? != Ownership::Ordinary
         {
@@ -1111,6 +1141,7 @@ impl ReferenceState<'_> {
         right_task.argument_sources = right_sources;
         let left = TransferArguments::seal_scoped_applied(
             program,
+            self.regions,
             source,
             left_domain,
             left_application,
@@ -1120,6 +1151,7 @@ impl ReferenceState<'_> {
         )?;
         let right = TransferArguments::seal_scoped_applied(
             program,
+            self.regions,
             source,
             right_domain,
             right_application,
@@ -1240,6 +1272,7 @@ impl ReferenceState<'_> {
             }
         };
         let mut state = ReferenceState {
+            regions: self.regions,
             reference_witnesses: Arc::clone(&self.reference_witnesses),
             shared_budget: Some(budget),
             structured_depth: self.structured_depth + 1,
@@ -1279,8 +1312,12 @@ impl ReferenceState<'_> {
             observation,
         };
         let result = (|| {
-            let (application, values, leases) =
-                envelope.adopt_scoped_applied(self.program, memory_domain, self.control)?;
+            let (application, values, leases) = envelope.adopt_scoped_applied(
+                self.program,
+                self.regions,
+                memory_domain,
+                self.control,
+            )?;
             // These anchors belong to the complete child invocation, outside
             // all replaceable call frames and nested structured groups.
             let read_leases = leases;
@@ -1448,7 +1485,20 @@ impl ReferenceState<'_> {
                 .map(|((value, parameter), source)| {
                     let schema = Arc::clone(&state.schema);
                     let control = state.control;
-                    let mut checked = if let NormalizedValue::ReadView(view) = value {
+                    let mut checked = if matches!(
+                        value,
+                        NormalizedValue::RegionCap { .. } | NormalizedValue::RegionPointer { .. }
+                    ) {
+                        let ty = schema.transfer_type_identity(parameter.ty, &bindings, control)?;
+                        CheckedValue::region(
+                            &schema,
+                            state.regions,
+                            memory_domain,
+                            ty,
+                            value,
+                            control,
+                        )?
+                    } else if let NormalizedValue::ReadView(view) = value {
                         CheckedValue::view(&schema, view, true, control, &mut |bytes| {
                             state.charge_allocation(bytes)
                         })?

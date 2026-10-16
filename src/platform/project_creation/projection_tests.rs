@@ -437,7 +437,8 @@ fn visit_expression(
         panic!("projected expression has another owner kind")
     };
     match &record.operation {
-        ExpressionOperation::PackOwned { .. }
+        ExpressionOperation::Region { .. }
+        | ExpressionOperation::PackOwned { .. }
         | ExpressionOperation::UnpackOwned { .. }
         | ExpressionOperation::PackOwnedRecord { .. }
         | ExpressionOperation::UnpackOwnedRecord { .. }

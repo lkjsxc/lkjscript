@@ -41,6 +41,7 @@ pub(crate) use reference::{
     NormalizedReferenceReadWork,
 };
 pub(crate) use reference_schema::NormalizedReferenceSchema;
+mod region_value;
 mod resident;
 mod resource;
 mod runner;

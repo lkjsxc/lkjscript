@@ -19,6 +19,9 @@ mod receipt;
 #[path = "structured_dispatch.rs"]
 mod dispatch;
 
+#[path = "structured_scoped.rs"]
+mod scoped;
+
 type Job = Box<dyn FnOnce() + Send + 'static>;
 
 enum Command {

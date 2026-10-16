@@ -74,6 +74,7 @@ pub enum BindingContainerRole {
     OwnedBorrow,
     ReadView,
     ReadViewBorrow,
+    Region,
 }
 
 #[derive(Clone, Copy, Debug, Decode, Encode, Eq, Ord, PartialEq, PartialOrd)]

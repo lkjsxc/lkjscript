@@ -981,6 +981,15 @@ pub(crate) fn aggregation_children_with_bindings(
                 )
             }));
             match &record.operation {
+                ExpressionOperation::Region {
+                    operation: crate::platform::kernel::RegionExpression::With { binding, .. },
+                } => children.push((
+                    OwnershipRole::ExpressionBinding {
+                        role: BindingContainerRole::Region,
+                        ordinal: 0,
+                    },
+                    OwnerKey::Binding(*binding),
+                )),
                 ExpressionOperation::BorrowOwnedField { binding, .. }
                 | ExpressionOperation::BorrowOwnedRecordField { binding, .. }
                 | ExpressionOperation::BorrowOwnedItem { binding, .. } => children.push((

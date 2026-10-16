@@ -54,6 +54,18 @@ impl Search<'_> {
                 .ok_or_else(|| invalid("transfer type parameter escaped its exact invocation"));
         }
         Ok(match (&source.form, &target.form) {
+            (TypeForm::Region { region: a }, TypeForm::Region { region: b }) => {
+                self.same(*a, *b, depth + 1)?
+            }
+            (TypeForm::RelPtr { region: a, item: x }, TypeForm::RelPtr { region: b, item: y })
+            | (
+                TypeForm::RegionSlice { region: a, item: x },
+                TypeForm::RegionSlice { region: b, item: y },
+            ) => self.same(*a, *b, depth + 1)? && self.same(*x, *y, depth + 1)?,
+            (
+                TypeForm::RegionCap { region: a, mode: x },
+                TypeForm::RegionCap { region: b, mode: y },
+            ) => x == y && self.same(*a, *b, depth + 1)?,
             (
                 TypeForm::ReadViewApplied {
                     declaration: a,
@@ -184,6 +196,7 @@ impl Search<'_> {
                 | TypeForm::ByteBuffer
                 | TypeForm::OwnedI64Cell
                 | TypeForm::Named { .. }
+                | TypeForm::RegionBrand { .. }
                 | TypeForm::CapabilityResource { .. },
                 _,
             ) => template == candidate,

@@ -389,6 +389,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     LocalValueReference::LexicalBinding(_) => matches!(
                         kind,
                         BindingKind::Let
+                            | BindingKind::Region
                             | BindingKind::OwnedUnpack
                             | BindingKind::OwnedChoicePayload
                             | BindingKind::OwnedBorrow

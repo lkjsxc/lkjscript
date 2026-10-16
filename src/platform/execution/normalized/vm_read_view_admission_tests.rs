@@ -1153,9 +1153,11 @@ fn checked_ordinary_child_refuses_a_real_borrowed_read_view_and_drains_custody()
     let executor = crate::platform::runtime::structured::StructuredExecutor::for_test(1);
     let handle = executor.handle();
     let resources = NormalizedResourceScope::new().unwrap();
-    let mut machine =
-        super::super::self_tail_locals_tests::machine(&program, &handle, &resources, &control)
-            .unwrap();
+    let regions = super::super::super::region_value::Arena::new().unwrap();
+    let mut machine = super::super::self_tail_locals_tests::machine(
+        &program, &handle, &resources, &control, &regions,
+    )
+    .unwrap();
     assert!(machine.checked_product_child(value, ordinary).is_err());
     drop(machine);
     drop(owner);

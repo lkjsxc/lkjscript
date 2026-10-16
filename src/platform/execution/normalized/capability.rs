@@ -191,6 +191,38 @@ impl NormalizedTransactionCompletion {
 }
 
 pub trait NormalizedCapabilityTransaction: Send {
+    /// A slab image uses the same exact DataStore grant and lexical transaction
+    /// as get/put. Other adapters cannot acquire region persistence authority.
+    fn region_save(
+        &mut self,
+        _policy: &NormalizedCallPolicy,
+        _arguments: &[NormalizedValue],
+        _read: crate::platform::execution::region::RegionRead<'_, '_>,
+        _control: &ExecutionControl,
+        _reserve: &mut dyn FnMut(u64) -> Result<(), ExecutionError>,
+    ) -> Result<crate::platform::execution::region::persistence::RegionImageDigest, ExecutionError>
+    {
+        Err(ExecutionError::new(
+            ExecutionFailureClass::Capability,
+            "normalized_region_store",
+            "region persistence requires the first-party DataStore transaction",
+        ))
+    }
+
+    fn region_load(
+        &mut self,
+        _policy: &NormalizedCallPolicy,
+        _arguments: &[NormalizedValue],
+        _control: &ExecutionControl,
+        _reserve: &mut dyn FnMut(u64) -> Result<(), ExecutionError>,
+    ) -> Result<crate::platform::execution::region::persistence::RegionImage, ExecutionError> {
+        Err(ExecutionError::new(
+            ExecutionFailureClass::Capability,
+            "normalized_region_store",
+            "region persistence requires the first-party DataStore transaction",
+        ))
+    }
+
     fn call(
         &mut self,
         policy: &NormalizedCallPolicy,

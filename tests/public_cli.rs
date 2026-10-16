@@ -1268,6 +1268,15 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
 
     let expression_section = compact_success(&["capabilities", "--section", "expression"]);
     let expected_expression_forms = [
+        "region-with",
+        "region-alloc",
+        "region-read",
+        "region-write",
+        "region-freeze",
+        "region-resolve",
+        "region-offset",
+        "region-mmap-save",
+        "region-mmap-load",
         "sequence-empty",
         "sequence-length",
         "sequence-push",

@@ -2152,6 +2152,42 @@ impl Writer {
     ) -> Result<(), Diagnostic> {
         let next = depth.saturating_add(1);
         match value {
+            AuthoredExpressionOperation::Region { operation } => {
+                use crate::platform::kernel::RegionExpression as E;
+                self.tag(61)?;
+                self.tag(match operation {
+                    E::With { .. } => 0,
+                    E::Alloc { .. } => 1,
+                    E::Read { .. } => 2,
+                    E::Write { .. } => 3,
+                    E::Freeze { .. } => 4,
+                    E::Resolve { .. } => 5,
+                    E::Offset { .. } => 6,
+                    E::MmapSave { .. } => 7,
+                    E::MmapLoad { .. } => 8,
+                })?;
+                if let E::With { binding, .. } = operation {
+                    self.symbol(&binding.symbol, definitions)?;
+                    self.name(&binding.name)?;
+                    self.optional(binding.declared_type.as_ref(), |writer, ty| {
+                        writer.authored_type(ty, definitions, 1)
+                    })?;
+                }
+                if let Some(ty) = operation.ty() {
+                    self.authored_type(ty, definitions, 1)?;
+                }
+                if let Some(local) = operation.capability() {
+                    self.local_reference(local, definitions)?;
+                }
+                if let Some((requirement, operation)) = operation.store() {
+                    self.requirement_reference(requirement, definitions)?;
+                    self.operation_reference(operation, definitions)?;
+                }
+                for child in operation.expressions().into_iter().flatten() {
+                    self.expression(child, definitions, next)?;
+                }
+                Ok(())
+            }
             AuthoredExpressionOperation::CreateReadView {
                 declaration,
                 type_arguments,

@@ -1266,6 +1266,11 @@ fn calls_at(
     };
     for instruction in code.instructions.iter() {
         step(work)?;
+        if let NormalizedInstruction::Region(operation) = instruction
+            && let Some(ty) = operation.ty()
+        {
+            substitute_in(types, *ty, application, 0, work)?;
+        }
         match instruction {
             NormalizedInstruction::BeginReadViewScope { read_scope }
             | NormalizedInstruction::EndReadViewScope { read_scope } => {
@@ -1860,6 +1865,38 @@ fn close_effect_applications(
                                 self.work,
                             )?;
                         }
+                    }
+                    NormalizedInstruction::Region(operation) => {
+                        *operation = operation.try_map(
+                            |ty| {
+                                substitute_effect_type(
+                                    self.types,
+                                    *ty,
+                                    bindings,
+                                    requirements,
+                                    0,
+                                    self.work,
+                                )
+                            },
+                            |(requirement, target)| {
+                                let requirement = match requirement {
+                                    NormalizedTransactionRequirement::Parameter(parameter) => {
+                                        let reference = RequirementOperand::Parameter(*parameter)
+                                            .substitute(requirements)?
+                                            .concrete()
+                                            .ok_or_else(missing)?;
+                                        NormalizedTransactionRequirement::Concrete(
+                                            *self
+                                                .requirements
+                                                .get(&reference)
+                                                .ok_or_else(missing)?,
+                                        )
+                                    }
+                                    requirement => *requirement,
+                                };
+                                Ok((requirement, *target))
+                            },
+                        )?;
                     }
                     NormalizedInstruction::PackOwned { product_type, .. }
                     | NormalizedInstruction::UnpackOwned { product_type, .. }
@@ -2499,6 +2536,19 @@ fn substitute_inner(
         Ok(())
     };
     match &mut object.form {
+        TypeForm::Region { region } => descend(region)?,
+        TypeForm::RelPtr { region, item } | TypeForm::RegionSlice { region, item } => {
+            descend(region)?;
+            descend(item)?;
+        }
+        TypeForm::RegionCap { region, mode } => {
+            descend(region)?;
+            if let crate::platform::kernel::RegionMode::Shared { scope } = mode {
+                let resolved = resolve_scope(*scope, application.scopes)?;
+                selected |= resolved != *scope;
+                *scope = resolved;
+            }
+        }
         TypeForm::TypeParameter { parameter } => {
             return application
                 .bindings

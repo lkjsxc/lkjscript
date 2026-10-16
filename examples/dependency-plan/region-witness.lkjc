@@ -1,0 +1,46 @@
+declarations.begin
+(units (module create dependency-plan-region
+  (external create add (visibility private) (implementation core.i64.add)
+    (parameter create left (type I64)) (parameter create right (type I64)) (returns I64))
+  (function create read-stage (visibility private) (effect (task))
+    (type-parameter create R (constraint region))
+    (parameter create node (type (rel-ptr R I64)))
+    (parameter create arena (type (region-cap R frozen)) (use borrow))
+    (returns I64)
+    (body (region-read (type (rel-ptr R I64)) arena (local node))))
+  (function create cycle-stage-sum (visibility private) (effect (task))
+    (type-parameter create R (constraint region))
+    (parameter create ab (type (rel-ptr R (record (from (rel-ptr R I64)) (to (rel-ptr R I64))))))
+    (parameter create ba (type (rel-ptr R (record (from (rel-ptr R I64)) (to (rel-ptr R I64))))))
+    (parameter create arena (type (region-cap R frozen)) (use borrow))
+    (returns I64)
+    (body (call add
+      (region-read (type (rel-ptr R I64)) arena
+        (field (region-read (type (rel-ptr R (record (from (rel-ptr R I64)) (to (rel-ptr R I64))))) arena (local ab)) (name to)))
+      (region-read (type (rel-ptr R I64)) arena
+        (field (region-read (type (rel-ptr R (record (from (rel-ptr R I64)) (to (rel-ptr R I64))))) arena (local ba)) (name to))))))
+  (function create region-plan-witness (visibility public) (effect (task))
+    (returns (record (left I64) (right I64)))
+    (body (region-with
+      (binding arena (as $plan) (type (region-cap (region-brand region-plan-witness $plan) unique)))
+      (i64 2048)
+      (in (let
+        (binding base (region-alloc (type (rel-ptr (region-brand region-plan-witness $plan) I64)) arena (i64 0)))
+        (binding a (region-alloc (type (rel-ptr (region-brand region-plan-witness $plan) I64)) arena (i64 0)))
+        (binding b (region-alloc (type (rel-ptr (region-brand region-plan-witness $plan) I64)) arena (i64 0)))
+        (binding downstream (region-alloc (type (rel-ptr (region-brand region-plan-witness $plan) I64)) arena (i64 0)))
+        (binding ab (region-alloc (type (rel-ptr (region-brand region-plan-witness $plan) (record (from (rel-ptr (region-brand region-plan-witness $plan) I64)) (to (rel-ptr (region-brand region-plan-witness $plan) I64))))) arena
+          (record structural (field from (local a)) (field to (local b)))))
+        (binding ba (region-alloc (type (rel-ptr (region-brand region-plan-witness $plan) (record (from (rel-ptr (region-brand region-plan-witness $plan) I64)) (to (rel-ptr (region-brand region-plan-witness $plan) I64))))) arena
+          (record structural (field from (local b)) (field to (local a)))))
+        (binding stage-a (region-write (type (rel-ptr (region-brand region-plan-witness $plan) I64)) arena (local a)
+          (call add (region-read (type (rel-ptr (region-brand region-plan-witness $plan) I64)) arena (local base)) (i64 1))))
+        (binding stage-b (region-write (type (rel-ptr (region-brand region-plan-witness $plan) I64)) arena (local b)
+          (region-read (type (rel-ptr (region-brand region-plan-witness $plan) I64)) arena (local a))))
+        (binding stage-downstream (region-write (type (rel-ptr (region-brand region-plan-witness $plan) I64)) arena (local downstream)
+          (call add (region-read (type (rel-ptr (region-brand region-plan-witness $plan) I64)) arena (local b)) (i64 1))))
+        (binding frozen (type (region-cap (region-brand region-plan-witness $plan) frozen)) (region-freeze (type (region-cap (region-brand region-plan-witness $plan) frozen)) arena))
+        (in (parallel
+          (call read-stage (types (region-brand region-plan-witness $plan)) (local downstream) (local frozen))
+          (call cycle-stage-sum (types (region-brand region-plan-witness $plan)) (local ab) (local ba) (local frozen)))))))))))
+declarations.end

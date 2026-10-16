@@ -248,6 +248,15 @@ pub(crate) fn ownership_contributions_with_bindings(
                 )?;
             }
             match &record.operation {
+                ExpressionOperation::Region {
+                    operation: crate::platform::kernel::RegionExpression::With { binding, .. },
+                } => insert_binding_parent(
+                    &mut ownership,
+                    *binding,
+                    record.id,
+                    BindingContainerRole::Region,
+                    0,
+                )?,
                 ExpressionOperation::BorrowOwnedField { binding, .. }
                 | ExpressionOperation::BorrowOwnedRecordField { binding, .. }
                 | ExpressionOperation::BorrowOwnedItem { binding, .. } => insert_binding_parent(

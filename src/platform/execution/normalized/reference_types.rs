@@ -2989,7 +2989,9 @@ pub(super) fn complete(
     control: &crate::platform::execution::ExecutionControl,
 ) -> Result<(), ExecutionError> {
     if snapshots.iter().any(|snapshot| {
-        snapshot.types.values().chain(snapshot.dependency_types.values()).any(|object| object.form.is_associated() || matches!(object.form, TypeForm::ReadViewApplied { .. }))
+        snapshot.types.values().chain(snapshot.dependency_types.values()).any(|object| object.form.is_associated() || matches!(object.form, TypeForm::ReadViewApplied { .. }
+            | TypeForm::RegionBrand { .. } | TypeForm::Region { .. } | TypeForm::RelPtr { .. }
+            | TypeForm::RegionSlice { .. } | TypeForm::RegionCap { .. }))
             || snapshot.owners.values().any(|owner| matches!(owner,
                 OwnerRecord::Declaration(owner) if owner.payload.has_read_view_metadata() || matches!(&owner.payload,
                     DeclarationPayload::OwnedContract(contract) if !contract.associated_types.is_empty())
@@ -4095,6 +4097,24 @@ fn parallel_carrier_type_read(
         let form = &schema.types.get(&ty).ok_or_else(failure)?.form;
         let mut edges = Vec::new();
         match form {
+            TypeForm::RelPtr { .. } => {
+                if !schema.transferable_types.contains(&ty) {
+                    return Err(failure());
+                }
+            }
+            TypeForm::RegionCap { mode, .. } if owners_allowed => {
+                if !(if share {
+                    matches!(mode, crate::platform::kernel::RegionMode::Frozen)
+                } else {
+                    matches!(
+                        mode,
+                        crate::platform::kernel::RegionMode::Unique
+                            | crate::platform::kernel::RegionMode::Frozen
+                    )
+                }) {
+                    return Err(failure());
+                }
+            }
             TypeForm::ReadViewApplied { .. }
             | TypeForm::AssociatedReadViewMember { .. }
             | TypeForm::AssociatedReadViewProjection { .. } => {

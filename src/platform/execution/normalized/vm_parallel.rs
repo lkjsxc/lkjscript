@@ -168,6 +168,15 @@ impl Machine<'_> {
         raw: &NormalizedValue,
         ty: TypeObjectDigest,
     ) -> Result<(), ExecutionError> {
+        if matches!(raw, NormalizedValue::RegionPointer { .. }) {
+            return super::super::region_value::check_plain(
+                &self.program.types,
+                raw,
+                ty,
+                self.control,
+                0,
+            );
+        }
         let class = checked::Admission {
             shared_budget: self.shared_budget.as_deref(),
             substitutions: &BTreeMap::new(),
@@ -287,6 +296,7 @@ impl Machine<'_> {
         let right_values = self.prepare_scoped_arguments(&right, right_domain, right_values)?;
         let left = transfer::TransferArguments::seal_scoped_applied(
             program,
+            self.regions,
             source,
             left_domain,
             left,
@@ -296,6 +306,7 @@ impl Machine<'_> {
         )?;
         let right = transfer::TransferArguments::seal_scoped_applied(
             program,
+            self.regions,
             source,
             right_domain,
             right,
@@ -314,16 +325,30 @@ impl Machine<'_> {
         };
         let left_budget = Arc::clone(&budget);
         let left_context = context.clone();
-        let pair = parallel::run(
-            self.executor,
-            control,
-            move || child(left_context, left_budget, left_domain, left),
-            move || {
-                let _lists = super::super::list::WorkScope::enter();
-                let _maps = super::super::map::WorkScope::enter();
-                child(context, budget, right_domain, right)
-            },
-        )?;
+        let pair = if !self.regions.is_empty() {
+            let regions = self.regions;
+            parallel::run_scoped(
+                self.executor,
+                control,
+                move || child(left_context, left_budget, left_domain, left, Some(regions)),
+                move || {
+                    let _lists = super::super::list::WorkScope::enter();
+                    let _maps = super::super::map::WorkScope::enter();
+                    child(context, budget, right_domain, right, Some(regions))
+                },
+            )?
+        } else {
+            parallel::run(
+                self.executor,
+                control,
+                move || child(left_context, left_budget, left_domain, left, None),
+                move || {
+                    let _lists = super::super::list::WorkScope::enter();
+                    let _maps = super::super::map::WorkScope::enter();
+                    child(context, budget, right_domain, right, None)
+                },
+            )?
+        };
         if pair.dispatched {
             self.observation.parallel_worker_dispatches = self
                 .observation
@@ -395,6 +420,7 @@ fn child(
     budget: Arc<SharedBudget>,
     memory_domain: super::super::value::ValueOrigin,
     envelope: transfer::TransferArguments,
+    parent_regions: Option<&super::super::region_value::Arena>,
 ) -> ChildOutcome {
     let ChildContext {
         program,
@@ -424,7 +450,30 @@ fn child(
     // activations before releasing the invocation's lending anchors. These
     // leases outlive tail calls, synchronous forwarding and nested groups.
     let mut read_leases = Vec::new();
+    let local_regions = match parent_regions.map_or_else(
+        || super::super::region_value::Arena::new().map(Some),
+        |_| Ok(None),
+    ) {
+        Ok(regions) => regions,
+        Err(error) => {
+            return ChildOutcome {
+                result: Err(error),
+                observation: NormalizedRunObservation::default(),
+            };
+        }
+    };
+    let regions = match parent_regions.or(local_regions.as_ref()) {
+        Some(regions) => regions,
+        None => {
+            return ChildOutcome {
+                result: Err(type_error("child region arena is absent")),
+                observation: NormalizedRunObservation::default(),
+            };
+        }
+    };
     let mut machine = Machine {
+        regions,
+        region_scopes: Vec::new(),
         shared_budget: Some(budget),
         structured_depth,
         ancestor_depth,
@@ -456,7 +505,7 @@ fn child(
     };
     let result = (|| {
         let (application, values, leases) =
-            envelope.adopt_scoped_applied(program, memory_domain, control)?;
+            envelope.adopt_scoped_applied(program, regions, memory_domain, control)?;
         read_leases = leases;
         let scope_count = read_leases.iter().try_fold(0usize, |count, lease| {
             count
@@ -508,7 +557,19 @@ fn child(
             .zip(parameters.iter())
             .enumerate()
             .map(|(index, (value, _parameter))| {
-                if matches!(value, NormalizedValue::ReadView(_)) {
+                if matches!(
+                    value,
+                    NormalizedValue::RegionCap { .. } | NormalizedValue::RegionPointer { .. }
+                ) {
+                    CheckedValue::region(
+                        program,
+                        regions,
+                        memory_domain,
+                        application.parameter(program, index)?,
+                        value,
+                        control,
+                    )
+                } else if matches!(value, NormalizedValue::ReadView(_)) {
                     let mut checked = CheckedValue::read_view_controlled(program, value, control)?;
                     machine.charge_allocation(CheckedValue::borrow_metadata_allocation_bytes())?;
                     checked.set_view_borrowed();

@@ -476,6 +476,22 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
         self.step(expression, depth)?;
         let record = self.expression(expression)?;
         match record.operation {
+            ExpressionOperation::Region { operation } => {
+                let mut result = EvaluatedValue::Unrestricted;
+                for child in operation.expressions().into_iter().flatten() {
+                    result = self.evaluate(*child, state, depth + 1)?;
+                    if !matches!(operation, super::RegionExpression::With { body, .. } if body == *child)
+                        && !matches!(result, EvaluatedValue::Unrestricted)
+                    {
+                        return Err(affine_error(
+                            "kernel_region_resource",
+                            expression,
+                            "region operands cannot contain capability resources",
+                        ));
+                    }
+                }
+                Ok(result)
+            }
             ExpressionOperation::CreateReadView { source, fields, .. } => {
                 if resource_owner(source).is_some_and(|owner| state.contains_key(&owner)) {
                     return Err(affine_error(

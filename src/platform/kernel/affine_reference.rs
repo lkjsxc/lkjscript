@@ -444,6 +444,18 @@ impl Reference<'_> {
                 *live = left;
                 Ok(left_value)
             }
+            ExpressionOperation::Region { operation } => {
+                let mut result = Value::Plain;
+                for child in operation.expressions().into_iter().flatten() {
+                    result = self.eval(*child, live)?;
+                    if !matches!(operation, super::RegionExpression::With { body, .. } if body == child)
+                        && !matches!(result, Value::Plain)
+                    {
+                        return Err(());
+                    }
+                }
+                Ok(result)
+            }
             ExpressionOperation::Let { bindings, body } => {
                 let mut scoped = Vec::new();
                 for binding in bindings {

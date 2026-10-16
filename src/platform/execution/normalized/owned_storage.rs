@@ -615,7 +615,9 @@ impl<'a> StorageEscapeCheck<'a> {
                 )
             })?;
         match value {
-            NormalizedValue::ReadView(_) => {
+            NormalizedValue::ReadView(_)
+            | NormalizedValue::RegionCap { .. }
+            | NormalizedValue::RegionPointer { .. } => {
                 return Err(view_escape());
             }
             NormalizedValue::OwnedProduct(storage) => self.storage(storage, depth)?,

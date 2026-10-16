@@ -97,6 +97,7 @@ pub struct NormalizedCode {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NormalizedInstruction {
+    Region(NormalizedRegionInstruction),
     BeginReadViewScope {
         read_scope: ReadScopeArgument,
     },
@@ -371,6 +372,11 @@ pub enum NormalizedTransactionRequirement {
     Concrete(RequirementIndex),
     Parameter(crate::platform::kernel::RequirementParameterReference),
 }
+
+pub type NormalizedRegionInstruction = crate::platform::compiler::unit::RegionInstruction<
+    TypeObjectDigest,
+    (NormalizedTransactionRequirement, OperationIndex),
+>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NormalizedTransactionOutcome {
@@ -3729,6 +3735,35 @@ fn translate_code(
                     "view result binding type",
                 )?,
             },
+            CompiledInstruction::Region(operation) => {
+                NormalizedInstruction::Region(operation.try_map(
+                    |ty| index_copy(&unit.tables.types, *ty, "region operation type"),
+                    |(requirement, operation)| {
+                        let requirement = match requirement {
+                            CompiledTransactionRequirement::Concrete(index) => {
+                                NormalizedTransactionRequirement::Concrete(required_index(
+                                    &indexes.requirements,
+                                    index_copy(
+                                        &unit.tables.requirements,
+                                        *index,
+                                        "region requirement",
+                                    )?,
+                                    "region requirement",
+                                )?)
+                            }
+                            CompiledTransactionRequirement::Parameter(parameter) => {
+                                NormalizedTransactionRequirement::Parameter(*parameter)
+                            }
+                        };
+                        let operation = required_index(
+                            &indexes.operations,
+                            index_copy(&unit.tables.operations, *operation, "region operation")?,
+                            "region operation",
+                        )?;
+                        Ok((requirement, operation))
+                    },
+                )?)
+            }
             CompiledInstruction::ReturnView => NormalizedInstruction::ReturnView,
             CompiledInstruction::SequenceEmpty { sequence_type } => {
                 NormalizedInstruction::SequenceEmpty {

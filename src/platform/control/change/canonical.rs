@@ -235,7 +235,7 @@ impl<'a> Reader<'a> {
         let ty = match object.form {
             TypeForm::RegionBrand { callable, binding } => AuthoredType::RegionBrand {
                 callable: declaration(callable),
-                binding: AuthoredLocalReference::LexicalBinding { binding },
+                binding: local(k::LocalValueReference::LexicalBinding(binding)),
             },
             TypeForm::Region { region } => AuthoredType::Region {
                 region: Box::new(self.ty_at(region, depth + 1)?),
@@ -647,6 +647,24 @@ impl<'a> Reader<'a> {
         use k::ExpressionOperation as E;
         let borrowed_choice = matches!(expression.operation, E::MatchBorrowedOwned { .. });
         let operation = match expression.operation {
+            E::Region { operation } => A::Region {
+                operation: operation.try_map(
+                    self,
+                    |this, expression| this.expression_at(*expression, depth + 1).map(Box::new),
+                    |this, binding| this.binding_definition(*binding).map(Box::new),
+                    |_this, reference| Ok(local(*reference)),
+                    |this, ty| this.ty(*ty),
+                    |_this, (r, operation)| {
+                        Ok((
+                            requirement(*r),
+                            AuthoredOperationReference::Exact {
+                                package: operation.package,
+                                operation: operation.operation,
+                            },
+                        ))
+                    },
+                )?,
+            },
             E::CreateReadView {
                 declaration: d,
                 type_arguments,

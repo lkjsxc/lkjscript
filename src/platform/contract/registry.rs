@@ -117,6 +117,39 @@ pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
 
 const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
+    (
+        "region-with",
+        "(region-with (binding NAME (as $BINDING) (type TYPE)) CAPACITY (in BODY))",
+    ),
+    (
+        "region-alloc",
+        "(region-alloc (type POINTER_TYPE) CAPABILITY VALUE)",
+    ),
+    (
+        "region-read",
+        "(region-read (type POINTER_TYPE) CAPABILITY POINTER)",
+    ),
+    (
+        "region-write",
+        "(region-write (type POINTER_TYPE) CAPABILITY POINTER VALUE)",
+    ),
+    (
+        "region-freeze",
+        "(region-freeze (type FROZEN_TYPE) CAPABILITY)",
+    ),
+    (
+        "region-resolve",
+        "(region-resolve (type POINTER_TYPE) CAPABILITY OFFSET)",
+    ),
+    ("region-offset", "(region-offset POINTER)"),
+    (
+        "region-mmap-save",
+        "(region-mmap-save CAPABILITY REQUIREMENT PUT_OPERATION SPACE KEY EXPECTATION)",
+    ),
+    (
+        "region-mmap-load",
+        "(region-mmap-load (type FROZEN_TYPE) CAPABILITY REQUIREMENT GET_OPERATION SPACE KEY DIGEST)",
+    ),
     ("sequence-empty", "(sequence-empty (type SEQUENCE))"),
     (
         "sequence-length",

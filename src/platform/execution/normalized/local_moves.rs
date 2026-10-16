@@ -95,6 +95,7 @@ fn derive_linear(code: &mut NormalizedCode, work: &mut Budget<'_>) -> Result<(),
         // Exhaustive on purpose: new instructions must classify implicit local
         // reads and non-fallthrough successors before they may use this proof.
         let read = match instruction {
+            I::Region(operation) => operation.local(),
             I::LoadLocal { local, .. } | I::MoveLocal(local) => Some(*local),
             // Begin observes whether the slot is occupied before defining its
             // token. The fallback must preserve that guard just like a value read.

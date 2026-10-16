@@ -178,6 +178,85 @@ pub(super) fn layout(
         };
         let mut scoped = false;
         match form {
+            "region-with" => {
+                arity(&block, id, args, 3)?;
+                let (binder, explicit) =
+                    binder_alias(&block, clause(&block, args[0], "binding")?, symbols)?;
+                arity(&block, args[0], &binder, 2)?;
+                let ty = clause(&block, binder[1], "type")?;
+                arity(&block, binder[1], ty, 1)?;
+                let local_name = name(&block, binder[0])?.to_string();
+                let local_symbol = match explicit {
+                    Some(symbol) => symbol,
+                    None => symbols.allocate(&block.syntax[binder[0]].location)?,
+                };
+                let mut record = member_record(&block, args[0]);
+                record.fields.push(block.field(binder[0], "name")?);
+                record.fields.push(block.field(ty[0], "type")?);
+                record.fields.push(CompactField {
+                    name: "as".into(),
+                    value: local_symbol.clone(),
+                    location: record.location.clone(),
+                });
+                node.members.push(record);
+                let body = clause(&block, args[2], "in")?;
+                arity(&block, args[2], body, 1)?;
+                node.children.extend([args[1], body[0]]);
+                work.push(Work::Leave(local_name.clone()));
+                work.push(Work::Expression {
+                    id: body[0],
+                    depth: depth + 1,
+                });
+                work.push(Work::Enter {
+                    name: local_name,
+                    symbol: local_symbol,
+                });
+                work.push(Work::Expression {
+                    id: args[1],
+                    depth: depth + 1,
+                });
+                scoped = true;
+            }
+            "region-alloc" | "region-read" | "region-write" | "region-freeze"
+            | "region-resolve" => {
+                arity(
+                    &block,
+                    id,
+                    args,
+                    match form {
+                        "region-write" => 4,
+                        "region-freeze" => 2,
+                        _ => 3,
+                    },
+                )?;
+                let ty = clause(&block, args[0], "type")?;
+                arity(&block, args[0], ty, 1)?;
+                node.record.fields.push(block.field(ty[0], "type")?);
+                node.lexical = Some(local_operand(&block, args[1], &environment, false)?);
+                node.children.extend_from_slice(&args[2..]);
+            }
+            "region-offset" => {
+                arity(&block, id, args, 1)?;
+                node.children.push(args[0]);
+            }
+            "region-mmap-save" | "region-mmap-load" => {
+                let load = form == "region-mmap-load";
+                arity(&block, id, args, if load { 7 } else { 6 })?;
+                let start = usize::from(load);
+                if load {
+                    let ty = clause(&block, args[0], "type")?;
+                    arity(&block, args[0], ty, 1)?;
+                    node.record.fields.push(block.field(ty[0], "type")?);
+                }
+                node.lexical = Some(local_operand(&block, args[start], &environment, false)?);
+                node.record
+                    .fields
+                    .push(block.field(args[start + 1], "requirement")?);
+                node.record
+                    .fields
+                    .push(block.field(args[start + 2], "operation")?);
+                node.children.extend_from_slice(&args[start + 3..]);
+            }
             "unit" => arity(&block, id, args, 0)?,
             "bool" | "i64" | "f64" | "constant" => {
                 arity(&block, id, args, 1)?;
@@ -1500,6 +1579,101 @@ fn lower_node(
         ));
     }
     let operation = match record.operation.as_str() {
+        "expression.region-with" => {
+            let binding = node
+                .members
+                .first()
+                .ok_or_else(|| inventory_error(record, "region binding was lost"))?;
+            AuthoredExpressionOperation::Region {
+                operation: crate::platform::kernel::RegionExpression::With {
+                    binding: Box::new(AuthoredBindingDefinition {
+                        symbol: symbol_field(binding, "as")?,
+                        name: parse_name(binding, "name")?,
+                        declared_type: Some(decoder.decode_type(required(binding, "type")?)?),
+                    }),
+                    capacity: Box::new(child()?),
+                    body: Box::new(child()?),
+                },
+            }
+        }
+        "expression.region-mmap-save" | "expression.region-mmap-load" => {
+            use crate::platform::kernel::RegionExpression as R;
+            let capability = node
+                .lexical
+                .ok_or_else(|| inventory_error(record, "region capability was lost"))?;
+            let store = (
+                decoder.parse_requirement_reference(record, "requirement")?,
+                decoder.parse_operation_reference(record, "operation")?,
+            );
+            let space = Box::new(child()?);
+            let key = Box::new(child()?);
+            let last = Box::new(child()?);
+            AuthoredExpressionOperation::Region {
+                operation: if record.operation == "expression.region-mmap-save" {
+                    R::MmapSave {
+                        capability,
+                        store,
+                        space,
+                        key,
+                        expected: last,
+                    }
+                } else {
+                    R::MmapLoad {
+                        frozen_type: decoder.decode_type(required(record, "type")?)?,
+                        capability,
+                        store,
+                        space,
+                        key,
+                        digest: last,
+                    }
+                },
+            }
+        }
+        "expression.region-alloc"
+        | "expression.region-read"
+        | "expression.region-write"
+        | "expression.region-freeze"
+        | "expression.region-resolve" => {
+            use crate::platform::kernel::RegionExpression as R;
+            let ty = decoder.decode_type(required(record, "type")?)?;
+            let capability = node
+                .lexical
+                .ok_or_else(|| inventory_error(record, "region capability was lost"))?;
+            AuthoredExpressionOperation::Region {
+                operation: match record.operation.as_str() {
+                    "expression.region-alloc" => R::Alloc {
+                        pointer_type: ty,
+                        capability,
+                        value: Box::new(child()?),
+                    },
+                    "expression.region-read" => R::Read {
+                        pointer_type: ty,
+                        capability,
+                        pointer: Box::new(child()?),
+                    },
+                    "expression.region-write" => R::Write {
+                        pointer_type: ty,
+                        capability,
+                        pointer: Box::new(child()?),
+                        value: Box::new(child()?),
+                    },
+                    "expression.region-freeze" => R::Freeze {
+                        frozen_type: ty,
+                        capability,
+                    },
+                    _ => R::Resolve {
+                        pointer_type: ty,
+                        capability,
+                        offset: Box::new(child()?),
+                    },
+                },
+            }
+        }
+        "expression.region-offset" => AuthoredExpressionOperation::Region {
+            operation: crate::platform::kernel::RegionExpression::Offset {
+                pointer: Box::new(child()?),
+            },
+        },
         "expression.implementation-call" => AuthoredExpressionOperation::ImplementationCall {
             read_scope_arguments: scopes,
             function: decoder.parse_declaration_reference(record, "function")?,

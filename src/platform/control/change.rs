@@ -29,6 +29,9 @@ mod read_view_edit_inventory_tests;
 #[cfg(test)]
 mod read_view_parser_tests;
 mod references;
+#[cfg(test)]
+mod region_parser_tests;
+mod regions;
 mod structural;
 mod tx;
 pub(crate) use tx::{MAXIMUM_TRANSACTION_RESULT_BYTES, decode as decode_transaction};
@@ -1892,6 +1895,15 @@ pub(crate) const COMPACT_EFFECT_FORM_FIELDS: &[CompactFormField] = &[CompactForm
     syntax: "@NAME",
 }];
 pub const COMPACT_EXPRESSION_FORMS: &[&str] = &[
+    "region-with",
+    "region-alloc",
+    "region-read",
+    "region-write",
+    "region-freeze",
+    "region-resolve",
+    "region-offset",
+    "region-mmap-save",
+    "region-mmap-load",
     "sequence-empty",
     "sequence-length",
     "sequence-push",
@@ -2410,6 +2422,264 @@ pub(crate) const COMPACT_TYPE_FORM_FIELDS: &[CompactFormField] = &[
 ];
 
 pub(crate) const COMPACT_EXPRESSION_FORM_FIELDS: &[CompactFormField] = &[
+    CompactFormField {
+        form: "region-with",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "region-with",
+        name: "binding",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "region-with",
+        name: "name",
+        required: true,
+        syntax: "name",
+    },
+    CompactFormField {
+        form: "region-with",
+        name: "type",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "region-with",
+        name: "capacity",
+        required: true,
+        syntax: "$EXPRESSION",
+    },
+    CompactFormField {
+        form: "region-with",
+        name: "body",
+        required: true,
+        syntax: "$EXPRESSION",
+    },
+    CompactFormField {
+        form: "region-alloc",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "region-alloc",
+        name: "type",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "region-alloc",
+        name: "capability",
+        required: true,
+        syntax: "local-reference",
+    },
+    CompactFormField {
+        form: "region-alloc",
+        name: "value",
+        required: true,
+        syntax: "$EXPRESSION",
+    },
+    CompactFormField {
+        form: "region-read",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "region-read",
+        name: "type",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "region-read",
+        name: "capability",
+        required: true,
+        syntax: "local-reference",
+    },
+    CompactFormField {
+        form: "region-read",
+        name: "pointer",
+        required: true,
+        syntax: "$EXPRESSION",
+    },
+    CompactFormField {
+        form: "region-write",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "region-write",
+        name: "type",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "region-write",
+        name: "capability",
+        required: true,
+        syntax: "local-reference",
+    },
+    CompactFormField {
+        form: "region-write",
+        name: "pointer",
+        required: true,
+        syntax: "$EXPRESSION",
+    },
+    CompactFormField {
+        form: "region-write",
+        name: "value",
+        required: true,
+        syntax: "$EXPRESSION",
+    },
+    CompactFormField {
+        form: "region-freeze",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "region-freeze",
+        name: "type",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "region-freeze",
+        name: "capability",
+        required: true,
+        syntax: "local-reference",
+    },
+    CompactFormField {
+        form: "region-resolve",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "region-resolve",
+        name: "type",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "region-resolve",
+        name: "capability",
+        required: true,
+        syntax: "local-reference",
+    },
+    CompactFormField {
+        form: "region-resolve",
+        name: "offset",
+        required: true,
+        syntax: "$EXPRESSION",
+    },
+    CompactFormField {
+        form: "region-offset",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "region-offset",
+        name: "pointer",
+        required: true,
+        syntax: "$EXPRESSION",
+    },
+    CompactFormField {
+        form: "region-mmap-save",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "region-mmap-save",
+        name: "capability",
+        required: true,
+        syntax: "local-reference",
+    },
+    CompactFormField {
+        form: "region-mmap-save",
+        name: "requirement",
+        required: true,
+        syntax: "requirement-reference",
+    },
+    CompactFormField {
+        form: "region-mmap-save",
+        name: "operation",
+        required: true,
+        syntax: "operation-reference",
+    },
+    CompactFormField {
+        form: "region-mmap-save",
+        name: "space",
+        required: true,
+        syntax: "$EXPRESSION",
+    },
+    CompactFormField {
+        form: "region-mmap-save",
+        name: "key",
+        required: true,
+        syntax: "$EXPRESSION",
+    },
+    CompactFormField {
+        form: "region-mmap-save",
+        name: "expected",
+        required: true,
+        syntax: "$EXPRESSION",
+    },
+    CompactFormField {
+        form: "region-mmap-load",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "region-mmap-load",
+        name: "type",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "region-mmap-load",
+        name: "capability",
+        required: true,
+        syntax: "local-reference",
+    },
+    CompactFormField {
+        form: "region-mmap-load",
+        name: "requirement",
+        required: true,
+        syntax: "requirement-reference",
+    },
+    CompactFormField {
+        form: "region-mmap-load",
+        name: "operation",
+        required: true,
+        syntax: "operation-reference",
+    },
+    CompactFormField {
+        form: "region-mmap-load",
+        name: "space",
+        required: true,
+        syntax: "$EXPRESSION",
+    },
+    CompactFormField {
+        form: "region-mmap-load",
+        name: "key",
+        required: true,
+        syntax: "$EXPRESSION",
+    },
+    CompactFormField {
+        form: "region-mmap-load",
+        name: "digest",
+        required: true,
+        syntax: "$EXPRESSION",
+    },
     CompactFormField {
         form: "read-view-create",
         name: "as",
@@ -6613,6 +6883,9 @@ impl Decoder {
                 .lower(self);
         }
         let operation = match record.operation.as_str() {
+            form if form.starts_with("expression.region-") => {
+                self.decode_region_expression(&record)?
+            }
             "expression.read-view-create" => {
                 check_fields(&record, &["as", "declaration", "read-scope", "source"])?;
                 let type_arguments = self

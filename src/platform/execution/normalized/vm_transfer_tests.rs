@@ -298,8 +298,10 @@ fn scoped_sequence_capture_and_adoption_work_does_not_depend_on_stored_length() 
             let outbound = owner.memory_borrow().unwrap();
             let custody = ScopedReadCustody::new(owner.memory_borrow().unwrap());
             let control = ExecutionControl::cancel_after_checks(checks);
+            let regions = super::super::super::region_value::Arena::new().unwrap();
             let result = TransferArguments::seal_scoped_applied(
                 &program,
+                &regions,
                 source,
                 destination,
                 application,
@@ -310,7 +312,9 @@ fn scoped_sequence_capture_and_adoption_work_does_not_depend_on_stored_length() 
                 &control,
                 &mut |_, _| panic!("read lending must not inspect stored payloads"),
             )
-            .and_then(|input| input.adopt_scoped_applied(&program, destination, &control));
+            .and_then(|input| {
+                input.adopt_scoped_applied(&program, &regions, destination, &control)
+            });
             match result {
                 Ok((_, mut values, leases)) => {
                     let NormalizedValue::OwnedSequence(view) = values.pop().unwrap() else {

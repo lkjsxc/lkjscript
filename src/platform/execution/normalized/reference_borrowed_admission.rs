@@ -673,6 +673,9 @@ impl Checker<'_, '_, '_> {
         record: &crate::platform::kernel::ExpressionRecord,
     ) -> Result<Vec<crate::platform::kernel::ExpressionChild>, ExecutionError> {
         let count = match &record.operation {
+            ExpressionOperation::Region { operation } => {
+                operation.expressions().into_iter().flatten().count()
+            }
             ExpressionOperation::Unit { .. }
             | ExpressionOperation::Bool { .. }
             | ExpressionOperation::I64 { .. }

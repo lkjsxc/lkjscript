@@ -1,0 +1,44 @@
+declarations.begin
+(units (module create region-parallel
+  (function create pass-cap (visibility private) (effect pure)
+    (type-parameter create R (constraint region))
+    (parameter create arena (type (region-cap R unique)) (use consume))
+    (returns (region-cap R unique)) (body (local arena)))
+  (function create consume-task (visibility private) (effect (task))
+    (type-parameter create R (constraint region))
+    (parameter create pointer (type (rel-ptr R I64)))
+    (parameter create arena (type (region-cap R unique)) (use consume))
+    (returns I64)
+    (body (let
+      (binding held (type (region-cap R unique)) (call pass-cap (types R) (local arena)))
+      (in (region-read (type (rel-ptr R I64)) held (local pointer))))))
+  (function create five-task (visibility private) (effect (task)) (returns I64) (body (i64 5)))
+  (function create unique-pair (visibility public) (effect (task))
+    (returns (record (left I64) (right I64)))
+    (body (region-with
+      (binding arena (as $U) (type (region-cap (region-brand unique-pair $U) unique)))
+      (i64 512)
+      (in (let
+        (binding pointer (region-alloc (type (rel-ptr (region-brand unique-pair $U) I64)) arena (i64 61)))
+        (in (parallel
+          (call consume-task (types (region-brand unique-pair $U)) (local pointer) (local arena))
+          (call five-task))))))))
+  (function create read-task (visibility public) (effect (task))
+    (type-parameter create R (constraint region))
+    (parameter create pointer (type (rel-ptr R I64)))
+    (parameter create arena (type (region-cap R frozen)) (use borrow))
+    (returns I64)
+    (body (region-read (type (rel-ptr R I64)) arena (local pointer))))
+  (function create frozen-pair (visibility public) (effect (task))
+    (returns (record (left I64) (right I64)))
+    (body (region-with
+      (binding arena (as $R) (type (region-cap (region-brand frozen-pair $R) unique)))
+      (i64 512)
+      (in (let
+        (binding pointer (region-alloc (type (rel-ptr (region-brand frozen-pair $R) I64)) arena (i64 57)))
+        (binding frozen (type (region-cap (region-brand frozen-pair $R) frozen))
+          (region-freeze (type (region-cap (region-brand frozen-pair $R) frozen)) arena))
+        (in (parallel
+          (call read-task (types (region-brand frozen-pair $R)) (local pointer) (local frozen))
+          (call read-task (types (region-brand frozen-pair $R)) (local pointer) (local frozen)))))))))))
+declarations.end

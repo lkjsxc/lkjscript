@@ -172,7 +172,9 @@ impl<'a> ReferenceEscapeCheck<'a> {
     fn value(&mut self, value: &NormalizedValue, depth: usize) -> Result<(), Diagnostic> {
         self.enter(depth)?;
         match value {
-            NormalizedValue::ReadView(_) => return Err(view_escape()),
+            NormalizedValue::ReadView(_)
+            | NormalizedValue::RegionCap { .. }
+            | NormalizedValue::RegionPointer { .. } => return Err(view_escape()),
             NormalizedValue::Record(NormalizedRecord::Nominal { fields, .. }) => {
                 for field in fields.iter() {
                     self.value(field, depth + 1)?;

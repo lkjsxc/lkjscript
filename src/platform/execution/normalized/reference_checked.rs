@@ -10,6 +10,7 @@ mod read_view_checked_tests;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Ownership {
+    Region,
     Ordinary,
     Memory,
     Capability,
@@ -129,6 +130,55 @@ type Invocation = (
 );
 
 impl Value {
+    pub(super) fn region(
+        schema: &BoundReferenceSchema,
+        arena: &super::super::region_value::Arena,
+        domain: ValueOrigin,
+        expected: TypeObjectDigest,
+        datum: NormalizedValue,
+        control: &ExecutionControl,
+    ) -> Result<Self, ExecutionError> {
+        let ownership = match &datum {
+            NormalizedValue::RegionCap { ty, token } => {
+                let Some(TypeForm::RegionCap { mode, .. }) =
+                    schema.types.get(&expected).map(|ty| &ty.form)
+                else {
+                    return Err(reject("canonical region type is missing"));
+                };
+                use crate::platform::execution::region::runtime::Access;
+                let access = match mode {
+                    crate::platform::kernel::RegionMode::Unique => Access::Unique,
+                    crate::platform::kernel::RegionMode::Frozen => Access::Frozen,
+                    _ => return Err(reject("canonical region custody mode is not owning")),
+                };
+                if *ty != expected || token.access() != access {
+                    return Err(reject("canonical region type or mode mismatch"));
+                }
+                arena.validate(token, domain, false)?;
+                Ownership::Region
+            }
+            _ => {
+                super::super::region_value::check_plain(
+                    &schema.types,
+                    &datum,
+                    expected,
+                    control,
+                    0,
+                )?;
+                Ownership::Ordinary
+            }
+        };
+        Ok(Self {
+            datum,
+            preparation: schema.value_origin,
+            ownership,
+            provenance: None,
+            guards: None,
+            reservation: None,
+            source_binding: None,
+            view_borrowed: false,
+        })
+    }
     pub(super) fn memory(
         schema: &BoundReferenceSchema,
         datum: NormalizedValue,

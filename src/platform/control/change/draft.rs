@@ -513,6 +513,29 @@ impl Renderer<'_> {
             return Ok(value.to_owned());
         }
         let value = match ty {
+            T::RegionBrand { callable, binding } => format!(
+                "(region-brand {} {})",
+                self.declaration(callable)?,
+                self.local_token(binding)?
+            ),
+            T::Region { region } => format!("(region {})", self.ty(region)?),
+            T::RelPtr { region, item } => {
+                format!("(rel-ptr {} {})", self.ty(region)?, self.ty(item)?)
+            }
+            T::RegionSlice { region, item } => {
+                format!("(region-slice {} {})", self.ty(region)?, self.ty(item)?)
+            }
+            T::RegionCap { region, mode } => format!(
+                "(region-cap {} {})",
+                self.ty(region)?,
+                match mode {
+                    crate::platform::change::AuthoredRegionMode::Unique => "unique".to_owned(),
+                    crate::platform::change::AuthoredRegionMode::Frozen => "frozen".to_owned(),
+                    crate::platform::change::AuthoredRegionMode::Pinned => "pinned".to_owned(),
+                    crate::platform::change::AuthoredRegionMode::Shared { scope } =>
+                        format!("(shared {})", self.read_scope(scope)?),
+                }
+            ),
             T::TypeParameter {
                 parameter: AuthoredTypeParameterReference::Id { parameter },
             } => format!("(parameter-type {parameter})"),
@@ -1276,6 +1299,82 @@ impl Renderer<'_> {
         self.reader.check()?;
         use AuthoredExpressionOperation as E;
         let value = match &expression.operation {
+            E::Region { operation } => {
+                use crate::platform::kernel::RegionExpression as R;
+                let mut text = format!("({}", operation.name());
+                if let R::With {
+                    binding,
+                    capacity,
+                    body,
+                } = operation
+                {
+                    let ty = binding
+                        .declared_type
+                        .as_ref()
+                        .ok_or_else(|| error("region binder has no exact type"))?;
+                    append(
+                        &mut text,
+                        &format!(
+                            " (binding {} (as {}) (type {})) {}",
+                            binding.name,
+                            binding.symbol,
+                            self.ty(ty)?,
+                            self.expression(capacity, env)?
+                        ),
+                        self.maximum,
+                    )?;
+                    env.entry(binding.name.to_string())
+                        .or_default()
+                        .push(binding.symbol.clone());
+                    append(
+                        &mut text,
+                        &format!(" (in {})", self.expression(body, env)?),
+                        self.maximum,
+                    )?;
+                    if let Some(values) = env.get_mut(binding.name.as_str()) {
+                        values.pop();
+                    }
+                } else {
+                    if let Some(ty) = operation.ty() {
+                        append(
+                            &mut text,
+                            &format!(" (type {})", self.ty(ty)?),
+                            self.maximum,
+                        )?;
+                    }
+                    if let Some(capability) = operation.capability() {
+                        append(
+                            &mut text,
+                            &format!(" {}", self.local_token(capability)?),
+                            self.maximum,
+                        )?;
+                    }
+                    if let Some((requirement, operation)) = operation.store() {
+                        let AuthoredOperationReference::Exact { package, operation } = operation
+                        else {
+                            return Err(error("region storage operation is not exact"));
+                        };
+                        append(
+                            &mut text,
+                            &format!(
+                                " {} {}",
+                                self.requirement(requirement)?,
+                                self.reference("operation", format!("{package}/{operation}"))?
+                            ),
+                            self.maximum,
+                        )?;
+                    }
+                    for child in operation.expressions().into_iter().flatten() {
+                        append(
+                            &mut text,
+                            &format!(" {}", self.expression(child, env)?),
+                            self.maximum,
+                        )?;
+                    }
+                }
+                text.push(')');
+                text
+            }
             E::Parallel { left, right } => format!(
                 "(parallel {} {})",
                 self.expression(left, env)?,

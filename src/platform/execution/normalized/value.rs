@@ -98,6 +98,14 @@ pub enum NormalizedRecord {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NormalizedValue {
+    RegionCap {
+        ty: TypeObjectDigest,
+        token: crate::platform::execution::region::runtime::Capability<ValueOrigin>,
+    },
+    RegionPointer {
+        ty: TypeObjectDigest,
+        pointer: crate::platform::execution::region::runtime::Pointer,
+    },
     /// Affine descriptor custody. Cloning this raw carrier yields an inert observation;
     /// independently admitted storage reborrowing is required to obtain another live read.
     ReadView(super::read_view_storage::ReadView),
@@ -292,6 +300,8 @@ impl NormalizedValue {
     pub fn is_durable(&self) -> bool {
         match self {
             Self::ReadView(_)
+            | Self::RegionCap { .. }
+            | Self::RegionPointer { .. }
             | Self::OwnedProduct(_)
             | Self::OwnedChoice(_)
             | Self::OwnedSequence(_)

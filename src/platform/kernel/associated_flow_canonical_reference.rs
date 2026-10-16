@@ -1969,6 +1969,13 @@ impl<'a, 'b> Adapter<'a, 'b> {
             // This independent exhaustive constructor table deliberately walks
             // both branches, all arms and all unused annotations/actuals.
             match operation {
+                ExpressionOperation::Region { operation } => {
+                    children.extend(operation.expressions().into_iter().flatten().copied());
+                    types.extend(operation.ty().copied());
+                    if let super::RegionExpression::With { binding, .. } = operation {
+                        bindings.push(*binding);
+                    }
+                }
                 ExpressionOperation::If {
                     condition,
                     when_true,

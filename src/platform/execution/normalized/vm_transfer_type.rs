@@ -576,6 +576,57 @@ fn matches_context(
     let mut child =
         |template, actual| matches_context(program, template, actual, context, depth + 1, work);
     match (&template.form, &actual.form) {
+        (
+            TypeForm::RegionBrand {
+                callable: tc,
+                binding: tb,
+            },
+            TypeForm::RegionBrand {
+                callable: ac,
+                binding: ab,
+            },
+        ) => Ok(tc == ac && tb == ab),
+        (TypeForm::Region { region: t }, TypeForm::Region { region: a }) => child(*t, *a),
+        (
+            TypeForm::RelPtr {
+                region: tr,
+                item: ti,
+            },
+            TypeForm::RelPtr {
+                region: ar,
+                item: ai,
+            },
+        )
+        | (
+            TypeForm::RegionSlice {
+                region: tr,
+                item: ti,
+            },
+            TypeForm::RegionSlice {
+                region: ar,
+                item: ai,
+            },
+        ) => Ok(child(*tr, *ar)? && child(*ti, *ai)?),
+        (
+            TypeForm::RegionCap {
+                region: tr,
+                mode: tm,
+            },
+            TypeForm::RegionCap {
+                region: ar,
+                mode: am,
+            },
+        ) => {
+            let mode = match tm {
+                crate::platform::kernel::RegionMode::Shared { scope } => {
+                    crate::platform::kernel::RegionMode::Shared {
+                        scope: context.scopes.resolve(*scope)?,
+                    }
+                }
+                mode => *mode,
+            };
+            Ok(mode == *am && child(*tr, *ar)?)
+        }
         (TypeForm::Unit, TypeForm::Unit)
         | (TypeForm::Bool, TypeForm::Bool)
         | (TypeForm::I64, TypeForm::I64)

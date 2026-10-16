@@ -267,8 +267,11 @@ pub(super) fn machine<'a>(
     executor: &'a StructuredExecutorHandle,
     resources: &'a NormalizedResourceScope,
     control: &'a ExecutionControl,
+    regions: &'a super::super::region_value::Arena,
 ) -> TestResult<Machine<'a>> {
     Ok(Machine {
+        regions,
+        region_scopes: Vec::new(),
         shared_budget: None,
         structured_depth: 0,
         ancestor_depth: 0,
@@ -478,7 +481,8 @@ fn self_tail_locals_clear_dirty_slots_and_keep_fresh_invocation_identity() -> Te
     let handle = executor.handle();
     let resources = NormalizedResourceScope::new()?;
     let control = ExecutionControl::uncancelled();
-    let mut machine = machine(&program, &handle, &resources, &control)?;
+    let regions = super::super::region_value::Arena::new()?;
+    let mut machine = machine(&program, &handle, &resources, &control, &regions)?;
     machine.call_code(
         code.clone(),
         vec![scalar(&program, 3)?, callback(&program, step)?],
@@ -556,7 +560,8 @@ fn self_tail_locals_charge_real_growth_and_cancel_before_retiring_old_frame() ->
     let resources = NormalizedResourceScope::new()?;
     let healthy = ExecutionControl::uncancelled();
     for (maximum, accepted) in [(bytes - 1, false), (bytes, true)] {
-        let mut machine = machine(&program, &handle, &resources, &healthy)?;
+        let regions = super::super::region_value::Arena::new()?;
+        let mut machine = machine(&program, &handle, &resources, &healthy, &regions)?;
         machine.policy.maximum_allocated_bytes = Some(maximum);
         let result = machine.call_code(
             code.clone(),
@@ -593,7 +598,8 @@ fn self_tail_locals_charge_real_growth_and_cancel_before_retiring_old_frame() ->
         "cancellation fixture has intermediate view-scope checkpoints",
     )?;
     let cancelled = ExecutionControl::cancel_after_checks(1);
-    let mut machine = machine(&program, &handle, &resources, &cancelled)?;
+    let regions = super::super::region_value::Arena::new()?;
+    let mut machine = machine(&program, &handle, &resources, &cancelled, &regions)?;
     machine.call_code(
         code.clone(),
         vec![scalar(&program, 3)?],
@@ -669,7 +675,8 @@ fn self_tail_locals_fallback_preserves_application_and_borrow_custody() -> TestR
     let resources = NormalizedResourceScope::new()?;
     let control = ExecutionControl::uncancelled();
     for case in 0..5 {
-        let mut machine = machine(&program, &handle, &resources, &control)?;
+        let regions = super::super::region_value::Arena::new()?;
+        let mut machine = machine(&program, &handle, &resources, &control, &regions)?;
         machine.call_code(
             original.clone(),
             vec![scalar(&program, 3)?],
@@ -922,7 +929,8 @@ fn call_argument_buffer_reuses_actual_storage_and_preserves_stack_boundaries() -
     let resources = NormalizedResourceScope::new()?;
     let control = ExecutionControl::uncancelled();
     let handle = executor.handle();
-    let mut machine = machine(&program, &handle, &resources, &control)?;
+    let regions = super::super::region_value::Arena::new()?;
+    let mut machine = machine(&program, &handle, &resources, &control, &regions)?;
     machine.call_code(
         code(&program, count)?,
         vec![scalar(&program, 0)?],
@@ -1022,7 +1030,8 @@ fn call_template_facts_require_complete_admission_and_poll_cached_reads() -> Tes
     let resources = NormalizedResourceScope::new()?;
     let control = ExecutionControl::uncancelled();
     let handle = executor.handle();
-    let mut machine = machine(&program, &handle, &resources, &control)?;
+    let regions = super::super::region_value::Arena::new()?;
+    let mut machine = machine(&program, &handle, &resources, &control, &regions)?;
     require(
         !machine.call_type_has_associated(scalar)?,
         "I64 acquired an associated type occurrence",
@@ -1178,7 +1187,8 @@ fn checked_owned_child_instruction_refuses_wrong_list_nominal_and_generic_proofs
         for strict in [true, false] {
             let run = || -> TestResult<_> {
                 let storage = super::super::owned_product::StorageObservation::start();
-                let mut machine = machine(&program, &handle, &resources, &control)?;
+                let regions = super::super::region_value::Arena::new()?;
+                let mut machine = machine(&program, &handle, &resources, &control, &regions)?;
                 let admitted = machine.admit(raw.clone(), source_type, None, true)?;
                 require(
                     strict

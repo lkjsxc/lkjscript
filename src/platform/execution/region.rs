@@ -56,6 +56,9 @@ use super::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use std::marker::PhantomData;
 use std::ops::Range;
 
+pub mod persistence;
+pub(crate) mod runtime;
+
 const ALIGNMENT: u32 = 64;
 const HEADER_BYTES: u32 = 64;
 const CELL_BYTES: u32 = 48;
@@ -78,6 +81,9 @@ impl<T> Clone for RegionLayout<T> {
 }
 
 impl<T> RegionLayout<T> {
+    pub(crate) fn key(self) -> [u8; 32] {
+        self.key
+    }
     pub fn new(key: [u8; 32], bytes: u32, alignment: u32) -> Result<Self, ExecutionError> {
         validate_layout(bytes, alignment)?;
         Ok(Self {

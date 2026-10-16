@@ -555,6 +555,15 @@ pub struct AuthoredExpression {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredExpressionOperation {
+    Region {
+        operation: crate::platform::kernel::RegionExpression<
+            Box<AuthoredExpression>,
+            Box<AuthoredBindingDefinition>,
+            AuthoredLocalReference,
+            AuthoredType,
+            (AuthoredRequirementReference, AuthoredOperationReference),
+        >,
+    },
     CreateReadView {
         declaration: AuthoredDeclarationReference,
         type_arguments: Vec<AuthoredType>,
@@ -916,6 +925,14 @@ pub(super) fn collect_expression_symbols(
         let next = depth + 1;
         // Reverse pushes preserve the original preorder and per-kind allocation ordinals.
         match &expression.operation {
+            AuthoredExpressionOperation::Region { operation } => {
+                for child in operation.expressions().into_iter().flatten().rev() {
+                    stack.push(Visit::Expression(child, next));
+                }
+                if let crate::platform::kernel::RegionExpression::With { binding, .. } = operation {
+                    stack.push(Visit::Binding(&binding.symbol, SymbolKind::LexicalBinding));
+                }
+            }
             AuthoredExpressionOperation::CreateReadView { fields, .. } => {
                 for field in fields.iter().rev() {
                     stack.push(Visit::Expression(&field.value, next));
@@ -1651,6 +1668,26 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
     ) -> Result<crate::platform::semantic_id::ExpressionId, Diagnostic> {
         let id = self.expression_identity(authored.symbol.as_deref())?;
         let operation = match &authored.operation {
+            AuthoredExpressionOperation::Region { operation } => ExpressionOperation::Region {
+                operation: operation.try_map(
+                    self,
+                    |this, expression| this.lower_expression(expression),
+                    |this, binding| {
+                        this.lower_view_read_binding(
+                            binding,
+                            crate::platform::kernel::BindingKind::Region,
+                        )
+                    },
+                    |this, local| this.lower_local_reference(local),
+                    |this, ty| this.lower_type(ty),
+                    |this, (requirement, operation)| {
+                        Ok((
+                            this.lower_requirement_operand(requirement)?,
+                            this.lower_operation_reference(operation)?,
+                        ))
+                    },
+                )?,
+            },
             AuthoredExpressionOperation::CreateReadView {
                 declaration,
                 type_arguments,

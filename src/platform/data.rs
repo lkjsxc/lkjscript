@@ -595,6 +595,10 @@ impl DataStore {
 }
 
 impl DataTransaction {
+    pub fn limits(&self) -> &DataLimits {
+        &self.store.limits
+    }
+
     pub fn base_revision(&self) -> String {
         format_revision(self.base)
     }
@@ -642,16 +646,18 @@ impl DataTransaction {
     }
 
     pub fn get(&self, space: &str, key: &DataKey) -> Result<Option<DataEntry>, Diagnostic> {
+        Ok(self.get_ref(space, key)?.cloned())
+    }
+
+    /// Borrow an entry from this immutable transaction snapshot without copying
+    /// its value. The borrow prevents mutation or completion of the transaction.
+    pub fn get_ref(&self, space: &str, key: &DataKey) -> Result<Option<&DataEntry>, Diagnostic> {
         self.validate_selector(space, key)?;
-        Ok(self
-            .snapshot
-            .records
-            .get(&RecordKey {
-                namespace: self.store.namespace.clone(),
-                space: space.to_owned(),
-                key: key.clone(),
-            })
-            .cloned())
+        Ok(self.snapshot.records.get(&RecordKey {
+            namespace: self.store.namespace.clone(),
+            space: space.to_owned(),
+            key: key.clone(),
+        }))
     }
 
     pub fn put(

@@ -211,6 +211,11 @@ impl Collector<'_, '_, '_, '_> {
         };
         let parent = Parent::Expression(expression.id);
         match &expression.operation {
+            ExpressionOperation::Region { operation } => {
+                for child in operation.expressions().into_iter().flatten() {
+                    self.parent(package, *child, parent)?;
+                }
+            }
             ExpressionOperation::If {
                 condition,
                 when_true,

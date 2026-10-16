@@ -1,65 +1,47 @@
 # Current status
 
-Updated 2026-10-16. Integrated source `507efb03` completed hosted
-[Verify](https://github.com/lkjsxc/lkjscript/actions/runs/38762806893) and
-[Release candidate](https://github.com/lkjsxc/lkjscript/actions/runs/38767128052).
-Verify took 128m54s. Candidate success does not establish public promotion.
+Updated 2026-10-16. Accepted typed meaning remains the sole editable authority.
+Production bytecode is checked against an independent canonical interpreter.
+Verification has no three-minute requirement; elapsed time is an observation.
 
 Phase 1 implements one checkout and one shared Cargo target, bounded copy-on-write
-memory graph/data projects, shared admitted standard packages/programs and one current
-schema epoch. Default checks retain a bounded receipt and remove joined scratch;
-release handoffs explicitly retain originals. Previous formats have no fallback reader.
+memory graph/data projects, shared admitted standard packages/programs and one
+current schema epoch. Default checks retain a bounded receipt and remove joined
+scratch. Release handoffs explicitly retain originals; previous formats have no
+fallback reader.
 
 Phase 2 adds `tx` for symbolic upserts with identity preservation, impact-scoped
 differential tests before atomic publication, and one bounded JSON result. `gc`
 retains accepted history and selected package/compiler roots, then compacts disk
 objects into one deflate pack with raw fallback. Memory collection filters a
-copy-on-write index; existing views remain valid. Failed preparation does not publish.
+copy-on-write index; existing views remain valid. Failed preparation cannot publish.
+Its changed and fresh full runs each passed all 29 gates.
 
-## Established capability
+Phase 3 connects lexical region allocation, reads, writes, freeze, relative offsets
+and digest-bound slab persistence to both evaluators. A 64-byte-aligned buffer owns
+the complete slab; nodes have relative pointers and no reference counts. Frozen
+reads share that arena through joined parallel tasks; unique custody can move into
+a child. Runtime generations reject stale custody, and compiler control-flow
+admission prevents bypassing lexical cleanup. DataStore transactions persist exact
+image bytes and load them into an aligned buffer after complete digest/layout
+admission, without node deserialization or external mapping crates.
 
-Accepted typed meaning remains the sole editable authority, with atomic publication,
-exact offline packages, affine ownership, explicit generic witnesses, nominal
-records/sequences, associated owned types, source-tied views, scoped parallel reads
-and shared multi-instance runtime. Production bytecode is checked against an
-independent canonical interpreter. Native dependency validation, component analysis
-and stage planning are maintained consumers.
+Additive planner fixtures cover cyclic stage storage, frozen parallel traversal
+and DataStore persistence. The existing planner entrypoints and all 176 exact
+IndexedData/BlockRead expectations remain unchanged. The
+[region specification](spec/regions.md) states supported cell layouts and boundaries.
 
-All five maintained projects passed the same 477 differential tests before and after
-the epoch reset: standard 116, lkjournal 44, planner 176, policy 62 and guides 79.
-Complete closures were re-admitted through ordinary publication without changing
-pinned dependencies, and their transports and artifacts match independent derivation.
+## Verification and next work
 
-## Local verification and next work
+The bounded `.artifacts/lkjscript-dev/latest-receipt.json` records the latest local
+acceptance result, exact gate inventory and input stability. Required verification
+includes changed, fresh full, complete workspace harnesses, maintained projects,
+independent expectations, real process/network lifecycles and release target policy.
+Generated discovery comes from the supported capabilities operation.
 
-The Phase 2 implementation passed all 29 changed gates in 272.29 seconds and all
-29 fresh full gates in 275.83 seconds, with stable inputs and no reused gate results.
-The full compact receipt was 24,655 bytes. Complete workspace harnesses, independent
-semantic expectations and actual process/network lifecycles remain covered. The
-full receipt digest is
-`verification_101b64c62d520c2fb2f691b9471a800f6ef33bb6ca3a7d72272e2f0da9466655`.
-
-A command project with parallel functions compacted eight packs from 1,339,418 to
-1,318,600 bytes. HEAD and generated artifact bytes were unchanged; all 117
-differential tests passed afterward. Reader exclusion, retained history, corrupt
-compression, read bounds and 21 compaction interruption points are covered.
-These receipts precede the Region work below. Phase 2 is committed at `dfc57ac8`.
-The last independent remote-main observation was `507efb03`; no new publication
-is claimed.
-Wall time is measured and reported; acceptance has no three-minute requirement.
-
-Phase 3 is in progress. Region identity kinds, relative-pointer
-and slice types, affine custody modes and scoped Shared signatures now pass public
-authoring, compiler/package preparation and independent canonical checks. Fixed
-64-byte-aligned storage supports bounded allocation, checked relative offsets,
-cycles, zero-copy freeze, scoped parallel reads and complete immutable-image admission.
-The 17 focused tests and 2,525 root-library tests passed; five existing tests remain
-ignored. Generated discovery is current. Workspace acceptance is recorded in the
-bounded `.artifacts/lkjscript-dev/latest-receipt.json`.
-
-Next connect lexical region operations to both evaluators, implement actual mmap
-persistence and worker handoff, and migrate the planner. Effect/resource analysis,
-equality optimization, native ELF and self-hosting remain subsequent work.
-Each increment requires independent semantic and boundary checks before normal main
-integration. [Verification](spec/verification.md) owns gates and evidence;
-[release](release.md) owns exact candidate and publication authority.
+Next: bounded trap-preserving algebraic optimization and standalone Linux x86_64
+ELF emission, then independent execution checks and normal main integration.
+Effect/resource analysis and self-hosting remain subsequent work.
+Git records integration; local acceptance does not establish hosted release or
+public promotion. [Verification](spec/verification.md) owns proof and gates;
+[release](release.md) owns candidate and publication authority.

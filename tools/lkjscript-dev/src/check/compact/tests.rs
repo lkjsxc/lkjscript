@@ -30,8 +30,10 @@ fn scratch_excludes_concurrent_runs_and_removes_outputs_on_every_exit() -> Resul
     let stale = root.join(".artifacts/lkjscript-dev/check/transient");
     fs::create_dir_all(&stale)?;
     fs::write(stale.join("interrupted-fixture"), b"stale")?;
+    let inherited;
     {
         let scratch = Scratch::at(&root, &target)?;
+        inherited = scratch._lease.try_clone()?;
         assert!(!scratch.path().join("interrupted-fixture").exists());
         assert!(Scratch::at(&root, &target).is_err());
         fs::create_dir(scratch.path().join("outputs"))?;
@@ -44,6 +46,7 @@ fn scratch_excludes_concurrent_runs_and_removes_outputs_on_every_exit() -> Resul
     let second = Scratch::at(&root, &target)?;
     second.cleanup()?;
     assert!(!stale.exists());
+    drop(inherited);
     Ok(())
 }
 

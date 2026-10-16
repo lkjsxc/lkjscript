@@ -120,6 +120,16 @@ impl TaskApplication {
         }
         for (ty, constraint) in types.iter().zip(f.type_parameter_constraints.iter()) {
             work.visit(0)?;
+            let region = matches!(
+                program.types.get(ty).map(|t| &t.form),
+                Some(TypeForm::RegionBrand { .. })
+            );
+            if region || constraint.is_region() {
+                if region != constraint.is_region() {
+                    return Err(reject());
+                }
+                continue;
+            }
             let owned = closed_owned_type(program, *ty, &mut work)?;
             if owned != constraint.has_owned()
                 || (!owned && !program.buffer_free_types.contains(ty))

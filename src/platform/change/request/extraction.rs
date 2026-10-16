@@ -849,6 +849,7 @@ fn walk_binding<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         }
     };
     let expected_kind = match role {
+        BindingContainerRole::Region => BindingKind::Region,
         BindingContainerRole::Let => BindingKind::Let,
         BindingContainerRole::MatchPayload => BindingKind::MatchPayload,
         BindingContainerRole::Transaction => BindingKind::Transaction,
@@ -1585,6 +1586,12 @@ fn replace_expression_reference(
         }
     };
     match operation {
+        ExpressionOperation::Region { .. } => {
+            return Err(extract_error(
+                "change_extract_region_scope",
+                "function extraction requires preserving the lexical region binder",
+            ));
+        }
         ExpressionOperation::CreateReadView { .. }
         | ExpressionOperation::BorrowReadView { .. }
         | ExpressionOperation::ReborrowReadView { .. }

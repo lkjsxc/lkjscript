@@ -2742,6 +2742,30 @@ impl DefinitionOracleWalker<'_> {
                     ExpressionChildRole::OwnedProductBody,
                 )?;
             }
+            ExpressionOperation::Region { operation } => {
+                if let crate::platform::kernel::RegionExpression::With { binding, .. } = operation {
+                    self.visit_binding(
+                        *binding,
+                        owner,
+                        "region_binding",
+                        0,
+                        child_depth,
+                        (BindingKind::Region, BindingContainerRole::Region),
+                    )?;
+                }
+                for (ordinal, expression) in
+                    operation.expressions().into_iter().flatten().enumerate()
+                {
+                    self.visit_expression_child(
+                        *expression,
+                        owner,
+                        "region_operand",
+                        oracle_ordinal(ordinal)?,
+                        child_depth,
+                        ExpressionChildRole::RegionOperand,
+                    )?;
+                }
+            }
             ExpressionOperation::BorrowCall {
                 call,
                 binding,
@@ -3311,6 +3335,7 @@ fn oracle_operation_parameter_uses(
 
 fn oracle_expression_form(operation: &ExpressionOperation) -> &'static str {
     match operation {
+        ExpressionOperation::Region { operation } => operation.name(),
         ExpressionOperation::Parallel { .. } => "parallel",
         ExpressionOperation::ImplementationCall { .. } => "implementation_call",
         ExpressionOperation::MethodCall { .. } => "method_call",
@@ -3381,6 +3406,7 @@ fn oracle_binding_kind(kind: BindingKind) -> &'static str {
 
 fn oracle_child_role(role: ExpressionChildRole) -> &'static str {
     match role {
+        ExpressionChildRole::RegionOperand => "region_operand",
         ExpressionChildRole::ParallelLeft => "parallel_left",
         ExpressionChildRole::ParallelRight => "parallel_right",
         ExpressionChildRole::Condition => "condition",

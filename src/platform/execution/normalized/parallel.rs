@@ -76,6 +76,20 @@ pub(super) fn run<L, R: Send + 'static>(
     })
 }
 
+pub(super) fn run_scoped<L, R: Send>(
+    executor: &StructuredExecutorHandle,
+    control: &ExecutionControl,
+    left: impl FnOnce() -> L,
+    right: impl FnOnce() -> R + Send,
+) -> Result<Pair<L, R>, ExecutionError> {
+    let pair = executor.run_scoped(control, left, right)?;
+    Ok(Pair {
+        left: pair.left,
+        right: pair.right,
+        dispatched: pair.dispatched,
+    })
+}
+
 #[cfg(test)]
 #[path = "parallel_failure_tests.rs"]
 mod failure_tests;

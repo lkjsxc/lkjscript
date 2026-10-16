@@ -79,6 +79,9 @@ impl Scopes {
                         .push(Parent::Expression(expression.id));
                 }
                 let count = match &expression.operation {
+                    ExpressionOperation::Region {
+                        operation: super::RegionExpression::With { .. },
+                    } => 1,
                     ExpressionOperation::Let { bindings, .. } => bindings.len(),
                     ExpressionOperation::BorrowOwnedField { .. }
                     | ExpressionOperation::BorrowOwnedRecordField { .. }
@@ -101,6 +104,9 @@ impl Scopes {
                 resolver.reserve_entries(count)?;
                 let mut bindings = Vec::with_capacity(count);
                 match &expression.operation {
+                    ExpressionOperation::Region {
+                        operation: super::RegionExpression::With { binding, .. },
+                    } => bindings.push(binding),
                     ExpressionOperation::Let { bindings: ids, .. } => bindings.extend(ids),
                     ExpressionOperation::BorrowOwnedField { binding, .. }
                     | ExpressionOperation::BorrowOwnedRecordField { binding, .. }

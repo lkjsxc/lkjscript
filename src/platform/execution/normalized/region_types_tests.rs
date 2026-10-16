@@ -5,6 +5,107 @@ use crate::platform::kernel::{OwnerRecord, TypeParameterConstraints, encode_type
 
 const SOURCE: &str = include_str!("../../../../tests/fixtures/region-kinds.lkjc");
 const SHARED: &str = include_str!("../../../../tests/fixtures/region-shared.lkjc");
+const EXPRESSIONS: &str = include_str!("../../../../tests/fixtures/region-expressions.lkjc");
+
+#[test]
+fn region_planner_witness_traverses_cycles_and_shares_frozen_stages() {
+    let input = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples/dependency-plan/region-witness.lkjc"),
+    )
+    .unwrap();
+    let source = byte_buffer_tests::author_only(&input).unwrap();
+    let program = prepare_snapshot(&source);
+    let declaration = declaration_named(&source, "region-plan-witness");
+    let policy = NormalizedRunPolicy::foreground();
+    let control = ExecutionControl::uncancelled();
+    let (vm, observation) = NormalizedVm::for_test(&program, policy)
+        .invoke(declaration, vec![], None, &control)
+        .unwrap();
+    let (reference, _) = NormalizedReferenceInterpreter::new(&source, &program, policy)
+        .invoke(declaration, vec![], None, &control)
+        .unwrap();
+    assert_eq!(vm, reference);
+    let NormalizedValue::Record(super::super::value::NormalizedRecord::Structural { fields }) = vm
+    else {
+        panic!("pair");
+    };
+    assert_eq!(
+        fields
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.clone()))
+            .collect::<Vec<_>>(),
+        vec![
+            ("left", NormalizedValue::I64(2)),
+            ("right", NormalizedValue::I64(2))
+        ]
+    );
+    assert_eq!(observation.parallel_scopes, 1);
+}
+
+#[test]
+fn region_frozen_parallel_reads_share_the_lexical_arena() {
+    let input = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/region-parallel.lkjc"),
+    )
+    .unwrap();
+    let source = byte_buffer_tests::author_only(&input).unwrap();
+    let program = prepare_snapshot(&source);
+    for (name, left, right) in [("frozen-pair", 57, 57), ("unique-pair", 61, 5)] {
+        let declaration = declaration_named(&source, name);
+        let policy = NormalizedRunPolicy::foreground();
+        let (vm, observation) = NormalizedVm::for_test(&program, policy)
+            .invoke(declaration, vec![], None, &ExecutionControl::uncancelled())
+            .unwrap_or_else(|error| panic!("VM {name}: {error:?}"));
+        let (reference, _) = NormalizedReferenceInterpreter::new(&source, &program, policy)
+            .invoke(declaration, vec![], None, &ExecutionControl::uncancelled())
+            .unwrap_or_else(|error| panic!("reference {name}: {error:?}"));
+        assert_eq!(vm, reference);
+        let NormalizedValue::Record(super::super::value::NormalizedRecord::Structural { fields }) =
+            vm
+        else {
+            panic!("pair");
+        };
+        assert_eq!(
+            fields
+                .iter()
+                .map(|(name, value)| (name.as_str(), value.clone()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("left", NormalizedValue::I64(left)),
+                ("right", NormalizedValue::I64(right))
+            ]
+        );
+        assert_eq!(observation.parallel_scopes, 1);
+        assert_eq!(
+            observation.parallel_worker_dispatches + observation.parallel_inline_fallbacks,
+            1
+        );
+    }
+}
+
+#[test]
+fn region_expressions_execute_from_public_authoring_in_both_evaluators() {
+    let source = byte_buffer_tests::author_only(EXPRESSIONS).unwrap();
+    let control = ExecutionControl::uncancelled();
+    Proof::reconstruct(&[&source], &control).unwrap();
+    let program = prepare_snapshot(&source);
+    for (name, expected) in [("scalar", 42), ("frozen", 29), ("frozen-call", 73)] {
+        let declaration = declaration_named(&source, name);
+        let policy = NormalizedRunPolicy::foreground();
+        let vm = NormalizedVm::for_test(&program, policy)
+            .invoke(declaration, vec![], None, &control)
+            .unwrap()
+            .0;
+        let reference = NormalizedReferenceInterpreter::new(&source, &program, policy)
+            .invoke(declaration, vec![], None, &control)
+            .unwrap()
+            .0;
+        assert_eq!(vm, NormalizedValue::I64(expected));
+        assert_eq!(reference, vm);
+    }
+}
 
 fn check_reference_properties(
     source: &crate::platform::kernel::KernelSnapshot,

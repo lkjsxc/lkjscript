@@ -14,6 +14,9 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
+#[path = "unit_region.rs"]
+mod region_protocol;
+
 pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit";
 pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode";
@@ -537,6 +540,151 @@ pub enum CompiledInstruction {
     EndReadViewScope {
         read_scope: crate::platform::kernel::ReadScopeArgument,
     },
+    Region(RegionInstruction<u32>),
+}
+
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+pub enum RegionInstruction<T, S = (CompiledTransactionRequirement, u32)> {
+    Begin {
+        local: u32,
+        capability_type: T,
+    },
+    End {
+        local: u32,
+    },
+    Alloc {
+        local: u32,
+        pointer_type: T,
+    },
+    Read {
+        local: u32,
+        pointer_type: T,
+    },
+    Write {
+        local: u32,
+        pointer_type: T,
+    },
+    Freeze {
+        local: u32,
+        frozen_type: T,
+    },
+    Resolve {
+        local: u32,
+        pointer_type: T,
+    },
+    Offset,
+    MmapSave {
+        local: u32,
+        store: S,
+    },
+    MmapLoad {
+        local: u32,
+        frozen_type: T,
+        store: S,
+    },
+}
+
+impl<T, S> RegionInstruction<T, S> {
+    pub fn local(&self) -> Option<u32> {
+        match self {
+            Self::Begin { local, .. }
+            | Self::End { local }
+            | Self::Alloc { local, .. }
+            | Self::Read { local, .. }
+            | Self::Write { local, .. }
+            | Self::Freeze { local, .. }
+            | Self::MmapSave { local, .. }
+            | Self::MmapLoad { local, .. }
+            | Self::Resolve { local, .. } => Some(*local),
+            Self::Offset => None,
+        }
+    }
+    pub fn ty(&self) -> Option<&T> {
+        match self {
+            Self::Begin {
+                capability_type, ..
+            } => Some(capability_type),
+            Self::Alloc { pointer_type, .. }
+            | Self::Read { pointer_type, .. }
+            | Self::Write { pointer_type, .. }
+            | Self::Resolve { pointer_type, .. } => Some(pointer_type),
+            Self::Freeze { frozen_type, .. } | Self::MmapLoad { frozen_type, .. } => {
+                Some(frozen_type)
+            }
+            Self::End { .. } | Self::Offset | Self::MmapSave { .. } => None,
+        }
+    }
+    pub fn store(&self) -> Option<&S> {
+        match self {
+            Self::MmapSave { store, .. } | Self::MmapLoad { store, .. } => Some(store),
+            _ => None,
+        }
+    }
+    pub fn try_map<U, S2, E>(
+        &self,
+        mut ty: impl FnMut(&T) -> Result<U, E>,
+        mut store: impl FnMut(&S) -> Result<S2, E>,
+    ) -> Result<RegionInstruction<U, S2>, E> {
+        Ok(match self {
+            Self::Begin {
+                local,
+                capability_type,
+            } => RegionInstruction::Begin {
+                local: *local,
+                capability_type: ty(capability_type)?,
+            },
+            Self::End { local } => RegionInstruction::End { local: *local },
+            Self::Alloc {
+                local,
+                pointer_type,
+            } => RegionInstruction::Alloc {
+                local: *local,
+                pointer_type: ty(pointer_type)?,
+            },
+            Self::Read {
+                local,
+                pointer_type,
+            } => RegionInstruction::Read {
+                local: *local,
+                pointer_type: ty(pointer_type)?,
+            },
+            Self::Write {
+                local,
+                pointer_type,
+            } => RegionInstruction::Write {
+                local: *local,
+                pointer_type: ty(pointer_type)?,
+            },
+            Self::Freeze { local, frozen_type } => RegionInstruction::Freeze {
+                local: *local,
+                frozen_type: ty(frozen_type)?,
+            },
+            Self::Resolve {
+                local,
+                pointer_type,
+            } => RegionInstruction::Resolve {
+                local: *local,
+                pointer_type: ty(pointer_type)?,
+            },
+            Self::Offset => RegionInstruction::Offset,
+            Self::MmapSave {
+                local,
+                store: target,
+            } => RegionInstruction::MmapSave {
+                local: *local,
+                store: store(target)?,
+            },
+            Self::MmapLoad {
+                local,
+                frozen_type,
+                store: target,
+            } => RegionInstruction::MmapLoad {
+                local: *local,
+                frozen_type: ty(frozen_type)?,
+                store: store(target)?,
+            },
+        })
+    }
 }
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
@@ -1609,6 +1757,7 @@ impl CompiledCode {
         }
         verify_borrow_call_protocol(self)?;
         let depths = verify_stack(self)?;
+        region_protocol::verify(self)?;
         verify_owned_borrow_scopes(self, &depths)?;
         verify_read_view_construction(self, &depths)
     }
@@ -1681,6 +1830,29 @@ impl CompiledInstruction {
             }
         }
         match self {
+            Self::Region(operation) => {
+                if let Some(local) = operation.local() {
+                    require_index("region local", local, code.local_count as usize)?;
+                }
+                if let Some(ty) = operation.ty() {
+                    require_index("region type", *ty, tables.types.len())?;
+                }
+                if let Some((requirement, operation)) = operation.store() {
+                    if let CompiledTransactionRequirement::Concrete(requirement) = requirement {
+                        require_index(
+                            "region storage requirement",
+                            *requirement,
+                            tables.requirements.len(),
+                        )?;
+                    }
+                    require_index(
+                        "region storage operation",
+                        *operation,
+                        tables.operations.len(),
+                    )?;
+                }
+                Ok(())
+            }
             Self::BeginReadViewScope { read_scope } | Self::EndReadViewScope { read_scope } => {
                 if !matches!(
                     read_scope,
@@ -3296,6 +3468,17 @@ fn stack_effect(instruction: &CompiledInstruction) -> Result<(usize, usize), Dia
         })
     };
     Ok(match instruction {
+        CompiledInstruction::Region(operation) => match operation {
+            RegionInstruction::MmapSave { .. } | RegionInstruction::MmapLoad { .. } => (3, 1),
+            RegionInstruction::Begin { .. } => (1, 0),
+            RegionInstruction::End { .. } => (0, 0),
+            RegionInstruction::Write { .. } => (2, 1),
+            RegionInstruction::Freeze { .. } => (0, 1),
+            RegionInstruction::Alloc { .. }
+            | RegionInstruction::Read { .. }
+            | RegionInstruction::Resolve { .. }
+            | RegionInstruction::Offset => (1, 1),
+        },
         CompiledInstruction::BorrowOwnedItem { .. }
         | CompiledInstruction::AdoptBorrowResult { .. }
         | CompiledInstruction::AdoptViewResult { .. } => (1, 0),

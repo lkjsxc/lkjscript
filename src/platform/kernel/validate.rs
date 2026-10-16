@@ -63,6 +63,7 @@ pub struct FullValidationReport {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum BindingContainerKind {
+    Region,
     Let,
     MatchPayload,
     Transaction,
@@ -2713,6 +2714,18 @@ impl FullValidator<'_> {
                         });
                 }
             }
+            ExpressionOperation::Region {
+                operation: super::RegionExpression::With { binding, body, .. },
+            } => {
+                self.binding_containers
+                    .entry(*binding)
+                    .or_default()
+                    .push(BindingContainer {
+                        expression,
+                        scope_roots: vec![*body],
+                        kind: BindingContainerKind::Region,
+                    });
+            }
             ExpressionOperation::Let { bindings, body } => {
                 for (index, binding) in bindings.iter().enumerate() {
                     let kind = match self.snapshot.owners.get(&OwnerKey::Binding(*binding)) {
@@ -2952,6 +2965,7 @@ impl FullValidator<'_> {
                 continue;
             }
             let expected = match containers[0].kind {
+                BindingContainerKind::Region => BindingKind::Region,
                 BindingContainerKind::Let => BindingKind::Let,
                 BindingContainerKind::MatchPayload => BindingKind::MatchPayload,
                 BindingContainerKind::Transaction => BindingKind::Transaction,
@@ -3196,6 +3210,35 @@ impl FullValidator<'_> {
             })
         });
         match operation {
+            ExpressionOperation::Region { operation } => {
+                if let Some((requirement, target)) = operation.store() {
+                    self.validate_requirement_operand(
+                        OwnerKey::Expression(expression),
+                        *requirement,
+                    );
+                    self.require_exact_kind(
+                        requirement.package(),
+                        requirement.owner(),
+                        &[OwnerKind::Requirement, OwnerKind::RequirementParameter],
+                        "region storage requirement",
+                    );
+                    self.require_exact_kind(
+                        target.package,
+                        OwnerKey::Operation(target.operation),
+                        &[OwnerKind::Operation],
+                        "region storage operation",
+                    );
+                    if !self.requirement_allows(*requirement, *target) {
+                        self.error(
+                            "kernel_region_storage_authority",
+                            "region storage operation is outside its exact requirement",
+                        );
+                    }
+                }
+                if let Some(capability) = operation.capability() {
+                    self.validate_local_reference(expression, *capability);
+                }
+            }
             ExpressionOperation::Call {
                 read_scope_arguments,
                 ..
@@ -3619,6 +3662,11 @@ impl FullValidator<'_> {
                     return;
                 };
                 let expected = match reference {
+                    LocalValueReference::LexicalBinding(_)
+                        if container.kind == BindingContainerKind::Region =>
+                    {
+                        BindingContainerKind::Region
+                    }
                     LocalValueReference::LexicalBinding(_)
                         if matches!(
                             container.kind,

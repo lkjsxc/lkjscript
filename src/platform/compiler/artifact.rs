@@ -4808,6 +4808,9 @@ fn reference_expression_declarations(operation: &ExpressionOperation) -> Vec<Dec
 fn reference_expression_bindings(operation: &ExpressionOperation) -> Vec<BindingId> {
     let mut bindings = Vec::new();
     match operation {
+        ExpressionOperation::Region {
+            operation: crate::platform::kernel::RegionExpression::With { binding, .. },
+        } => bindings.push(*binding),
         ExpressionOperation::Local {
             value:
                 LocalValueReference::LexicalBinding(binding)

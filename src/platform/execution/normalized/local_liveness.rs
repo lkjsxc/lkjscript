@@ -35,6 +35,16 @@ fn flow(instruction: &I) -> Flow<'_> {
     // Exhaustive on purpose: both implicit local accesses and successors must
     // be classified when an instruction is added. A derived move is still a read.
     let (read, write, edges) = match instruction {
+        I::Region(operation) => {
+            use crate::platform::compiler::unit::RegionInstruction as R;
+            let write = matches!(
+                operation,
+                R::Begin { .. } | R::End { .. } | R::Freeze { .. } | R::MmapLoad { .. }
+            )
+            .then(|| operation.local())
+            .flatten();
+            (operation.local(), write, Edges::Next)
+        }
         I::LoadLocal { local, .. } | I::MoveLocal(local) => (Some(*local), None, Edges::Next),
         I::SequenceLength { source_local, .. }
         | I::SequenceGet { source_local, .. }

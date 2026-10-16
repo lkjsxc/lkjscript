@@ -875,6 +875,32 @@ where
         }
     }
     match operation {
+        ExpressionOperation::Region { operation } => {
+            if let Some((requirement, operation)) = operation.store() {
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::ComponentRequirement,
+                    requirement.package(),
+                    requirement.owner(),
+                )?;
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::CapabilityOperation,
+                    operation.package,
+                    OwnerKey::Operation(operation.operation),
+                )?;
+            }
+            if let Some(capability) = operation.capability() {
+                local_edge(
+                    edges,
+                    source,
+                    RelationKind::LocalValueReference,
+                    *capability,
+                )?;
+            }
+        }
         ExpressionOperation::CreateReadView {
             declaration,
             read_scope,
@@ -1256,6 +1282,25 @@ where
             )
         })?;
         match &object.form {
+            TypeForm::RegionBrand { callable, binding } => {
+                // A lexical brand is a bound type identity. Its defining callable
+                // and binder participate in the same dependency relation as
+                // explicit type parameters.
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::TypeParameterUse,
+                    callable.package,
+                    OwnerKey::Declaration(callable.declaration),
+                )?;
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::TypeParameterUse,
+                    callable.package,
+                    OwnerKey::Binding(*binding),
+                )?;
+            }
             TypeForm::RegionCap {
                 region,
                 mode: super::RegionMode::Shared { scope },
